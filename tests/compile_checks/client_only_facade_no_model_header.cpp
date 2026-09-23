@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Compile/link-check fixture for issue #61: proves that a MORPH_CLIENT_ONLY
+// Compile/link-check fixture: proves that a MORPH_CLIENT_ONLY
 // client's translation unit never needs to see a model's complete class body
 // (and therefore never needs the header for a persistence mixin the model
 // happens to inherit from/embed) merely to dispatch one of its actions.

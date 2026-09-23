@@ -14,7 +14,7 @@ target_link_libraries(morph_soak PRIVATE morph::morph morph_test_main)
 target_include_directories(morph_soak PRIVATE ${CMAKE_SOURCE_DIR}/tests)
 apply_warnings(morph_soak)
 
-# morph#542 left the soak/bench decision explicit rather than assumed. Both are
+# The soak/bench decision is explicit rather than assumed. Both are
 # instrumented: they are opt-in (-DMORPH_BUILD_LOAD_TESTS=ON), so no default
 # sanitizer leg pays for them, and switchBackend/reconnect churn over many
 # cycles is exactly the shape of test whose finding is a leak or a race rather

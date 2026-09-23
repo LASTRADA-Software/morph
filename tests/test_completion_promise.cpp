@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Covers the public "settleable promise" seam for `morph::async::Completion<T>`
-// (issue #55, use case 1): a test-facing way to construct a `Completion<T>` it
+// a test-facing way to construct a `Completion<T>` it
 // can resolve on demand, without reaching into `morph::async::detail::CompletionState<T>`.
 
 #include <catch2/catch_test_macros.hpp>
@@ -92,7 +92,7 @@ TEST_CASE("morph::async::Completion::makeSettleable: Promise<T> does not expose 
     SUCCEED();
 }
 
-// ── Issue #347: a null exception_ptr must not settle the error arm ──────────
+// ── A null exception_ptr must not settle the error arm ─────────────────────
 //
 // `setException(nullptr)` used to set `ready` while leaving `error` falsy — a
 // state neither `attachOnError` (which tests `ready && error`) nor `attachThen`

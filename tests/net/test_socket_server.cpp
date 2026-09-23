@@ -426,7 +426,7 @@ TEST_CASE("SocketServer: each client's models are reclaimed independently", "[ne
 // `SocketServer::close()` has to unblock its accept-loop thread before joining
 // it. Doing that by shutting down the *listening* socket works on Linux but is
 // a no-op on macOS/BSD kernels, where the join then never returns and every
-// destructor of a listening server hangs forever (morph#437). The destruction
+// destructor of a listening server hangs forever. The destruction
 // runs on its own thread here so the deadline can be observed and reported as a
 // failure instead of wedging the whole test binary until ctest's timeout.
 TEST_CASE("SocketServer: destruction completes promptly with the accept loop parked in accept()",
@@ -462,7 +462,7 @@ TEST_CASE("SocketServer: destruction completes promptly with the accept loop par
     if (!morph::testing::waitUntil([destroyed] { return destroyed->load(); },
                                    morph::testing::WaitBudget{std::chrono::seconds{5}})) {
         destroyer.detach();  // still parked in close(); the thread keeps `owned` alive on purpose
-        FAIL("SocketServer destruction did not complete within 5s: the accept loop was never unblocked (morph#437)");
+        FAIL("SocketServer destruction did not complete within 5s: the accept loop was never unblocked");
     }
     destroyer.join();
 }
@@ -686,7 +686,7 @@ TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close
     // gives the accept loop several iterations' worth of draining to do,
     // widening the window during which a concurrent close() can land
     // mid-drain. Repeated, statistical -- matching this file's existing
-    // "destruction completes promptly" precedent for #437-class races.
+    // "destruction completes promptly" precedent for teardown races.
     //
     // A hang is the loop *stopping*, not the loop being slow -- and only the
     // first of those is a bug in SocketServer. What one iteration costs is set
@@ -698,7 +698,7 @@ TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close
     // ~44 s for the structurally identical burst test just below on a
     // GitHub-hosted runner. A wall-clock budget on the *total* therefore
     // measures the runner, not liveness, which is what made a 30 s one fire on
-    // a run where nothing was stuck (morph#476).
+    // a run where nothing was stuck.
     //
     // So: watch progress instead of the total. `progress` ticks once per
     // completed iteration; the loop is only declared hung when it stops
@@ -1133,7 +1133,7 @@ TEST_CASE("SocketServer: sendControlFrame() swallows a send failure when the pee
 // cognitive-complexity threshold -- as in the sibling cases above.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("SocketServer: two threads calling close() concurrently do not both reach join()", "[net][socket_server]") {
-    // Regression coverage for morph#451. close() guarded itself with
+    // A `_closing` flag alone is not enough to serialise close(). Guarded with
     //
     //     bool const wasAlreadyClosing = _closing.exchange(true);
     //     if (wasAlreadyClosing && !_acceptThread.joinable()) { return; }
@@ -1212,7 +1212,7 @@ TEST_CASE("SocketServer: two threads calling close() concurrently do not both re
 // cognitive-complexity threshold -- as in the sibling cases above.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("SocketServer: tearing down a parked accept loop finishes promptly", "[net][socket_server]") {
-    // Regression coverage for morph#437. close() used to interrupt the accept
+    // close() must not interrupt the accept
     // thread with `_listenSocket.shutdownBoth()` -- ::shutdown(fd, SHUT_RDWR)
     // on the *listening* socket -- and then join() it. That works only because
     // Linux chooses to kick a parked accept(2) when its listener is shut down.
@@ -1289,7 +1289,7 @@ TEST_CASE("SocketServer: a parked accept loop survives repeated listen/close cyc
 }
 
 TEST_CASE("SocketServer::close() releases the listening port", "[net][socket_server]") {
-    // close() stops calling shutdownBoth() on the listener (morph#437), so it
+    // close() does not call shutdownBoth() on the listener, so it
     // has to drop the descriptor instead -- left open with no accept thread,
     // the kernel would keep completing handshakes into a backlog nobody drains
     // and a client would hang in the WebSocket Upgrade read rather than fail
@@ -1344,7 +1344,7 @@ TEST_CASE("SocketServer: teardown racing a connecting client still finishes prom
     }
 }
 
-// ── morph#498: finished connections must be reclaimed while the server runs ──
+// ── Finished connections must be reclaimed while the server runs ────────────
 //
 // `_clients` and `_clientThreads` were only ever pushed to in acceptLoop and
 // cleared in close(); nothing removed a connection whose clientLoop had

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // `morph::forms::detail::findMember` -- the checked read over a
-// `glz::generic_u64` object node (morph#706).
+// `glz::generic_u64` object node.
 //
 // The point of this file is the *negative* case, and it is the one no amount
 // of reading the schema output would catch. glaze's `generic_json::at(key)` is

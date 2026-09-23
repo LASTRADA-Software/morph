@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Per-field scalar bounds: `FieldMeta::minimum` / `::maximum` / `::multipleOf`
-// (morph#310).
 //
 // The rule vocabulary compares a field to *another field*; only `equals`
 // accepts a literal, and it expresses equality alone. So "this quantity is at

@@ -654,7 +654,7 @@ TEST_CASE("NamedQuantity slices to a plain Quantity", "[quantity]") {
     CHECK_FALSE(blank.hasValue());
 }
 
-// ── morph#496: rendering an un-canonicalised INT64_MIN numerator ──
+// ── Rendering an un-canonicalised INT64_MIN numerator ──
 //
 // formatRationalDecimal negated the numerator with signed arithmetic, which is
 // UB for INT64_MIN -- confirmed by UBSan at quantity.hpp:101 before the fix.
@@ -671,7 +671,7 @@ TEST_CASE("formatRationalDecimal: an un-canonicalised INT64_MIN numerator render
     REQUIRE(morph::units::detail::formatRationalDecimal(value) == "-9223372036854775808");
 }
 
-// ── morph#574: a deep derivation chain must not overflow the stack ──
+// ── A deep derivation chain must not overflow the stack ──
 //
 // `total = total + one` in a loop records one ASTNode per iteration, chained
 // through `left`, and nothing collapses the chain. Both walks over it used to
@@ -706,7 +706,7 @@ constexpr int kDeepChainNodes = 100000;
 // margin, which is what keeps it from passing vacuously in an optimised build.
 // It used to be priced as well -- rendering the chain in full was quadratic in
 // the depth, 27.7 s at this size under ASan+UBSan and over ctest's 120 s
-// timeout under TSan (morph#589) -- but since morph#582 `combine` appends to
+// timeout under TSan -- but `combine` appends to
 // its left operand instead of copying it, and the same render costs 0.11 s
 // under ASan+UBSan and 1.3 s at -O0 under TSan.
 constexpr int kDeepEquationNodes = 70000;
@@ -742,7 +742,7 @@ TEST_CASE("equation() walks a 70000-node provenance chain without overflowing th
     // `kEquationStepsUnlimited`, not the default limit, and that is what keeps
     // this test load-bearing: under the default the renderer stops 100 steps
     // in and never walks deep enough to have overflowed anything, so it would
-    // pass against the recursive code this test exists to catch (morph#582).
+    // pass against the recursive code this test exists to catch.
     // The chain is still rendered in full here -- 350,001 characters of it.
     auto const lines = total.equation(morph::units::kEquationStepsUnlimited);
     // Formula, substitution, result, and one `where` line: the single `one`
@@ -754,7 +754,7 @@ TEST_CASE("equation() walks a 70000-node provenance chain without overflowing th
     CHECK(lines[3] == "where c1 = 1");
 }
 
-// ── morph#582: the rendered derivation is bounded, the walk is not ──
+// ── The rendered derivation is bounded, the walk is not ──
 //
 // Two separate things, and the tests below hold them apart. The **step limit**
 // bounds what `equation()` writes out (the first two cases); the **append in
@@ -844,14 +844,14 @@ TEST_CASE("equation()'s step limit is the caller's to set", "[quantity][provenan
     }
 }
 
-// ── morph#602: the label walk must count nodes, not root-to-leaf paths ──
+// ── The label walk must count nodes, not root-to-leaf paths ──
 TEST_CASE("equation() renders a derivation shared along many paths in node time",
           "[quantity][provenance][equation][morph602]") {
     // `q = q + q` forty times: 41 distinct nodes, 2^40 root-to-leaf paths.
     // Before `assignLabels` carried a visited set the walk was per-path, and
-    // the measured curve (0.099 s at 25 nodes, x4 per node, morph#602) puts
+    // the measured curve (0.099 s at 25 nodes, x4 per node) puts
     // this run at hours -- so the failure signal here is ctest's 120 s timeout,
-    // as the morph#574 cases' is a segfault. The assertions below cannot tell
+    // as the deep-chain cases' is a segfault. The assertions below cannot tell
     // the two implementations apart; the clock is what does.
     Euro q{Rational{Numerator{1}, Denominator{1}, DecimalPlaces{2}}};
     for (int i = 0; i < 40; ++i) {

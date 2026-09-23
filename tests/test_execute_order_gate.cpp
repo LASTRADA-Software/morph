@@ -8,7 +8,7 @@
 // -- no socket, no ThreadPoolExecutor, no IAuthorizer, no wire envelopes, no
 // RemoteServer at all. Before this extraction, reaching the "gate already
 // erased" defensive branches and the out-of-order-release mechanism
-// (`releasedOutOfOrder`, issue #449) cost `tests/test_remote_execute_ordering.cpp`
+// (`releasedOutOfOrder`) cost `tests/test_remote_execute_ordering.cpp`
 // a full ThreadPoolExecutor, bespoke IAuthorizer subclasses that force
 // deterministic interleaving, a real register round-trip, and hand-encoded
 // envelopes. Here they are a handful of synchronous calls.
@@ -17,7 +17,7 @@
 // it keeps the cases that need RemoteServer's real dispatch path (send-order
 // preservation through handle()/dispatchExecute, and the shutdown-gate/throw
 // interactions that only manifest through that real call sequence) -- but the
-// gate's own internal state machine, including the #449 mechanism, now has
+// gate's own internal state machine, including that mechanism, has
 // its direct coverage here instead of only being reachable by forcing thread
 // interleavings through the whole server.
 
@@ -154,13 +154,13 @@ TEST_CASE("ExecuteOrderGate: awaitTurn and release both cope once a gate has ful
     CHECK(gate.gateCount() == 0U);
 }
 
-// ── out-of-order release (issue #449) ───────────────────────────────────────
+// ── out-of-order release ────────────────────────────────────────────────────
 
 TEST_CASE(
     "ExecuteOrderGate: an out-of-order release is recorded rather than applied, "
     "and resolves once the gap it was waiting on closes",
     "[remote][execute-order-gate][449]") {
-    // Threadless reproduction of the #449 mechanism. Three tickets for one
+    // Threadless reproduction of that mechanism. Three tickets for one
     // model, released out of ticket order:
     //   0 (never released yet -- the "earlier ticket still outstanding")
     //   1 (released first  -- out of order relative to 0)
@@ -224,7 +224,7 @@ TEST_CASE(
     "[remote][execute-order-gate][449]") {
     // Same mechanism as above, but observed through a genuinely blocked
     // awaitTurn call rather than only through gateCount() -- the real-thread
-    // half of the #449 regression, kept minimal (one waiter, one release)
+    // half of the same guarantee, kept minimal (one waiter, one release)
     // since the pure state-machine behavior is already pinned above.
     ExecuteOrderGate gate;
     ModelId const mid{1};
@@ -414,8 +414,7 @@ TEST_CASE(
     // and confirm the second call is inert rather than inserting an
     // already-passed ticket number into releasedOutOfOrder a second time --
     // which would sit there as that set's permanent minimum and silently
-    // block every future out-of-order release for this gate (issue #449's
-    // own mechanism).
+    // block every future out-of-order release for this gate.
     ExecuteOrderGate gate;
     ModelId const mid{1};
     auto t0 = gate.takeTicket(mid);
@@ -430,7 +429,7 @@ TEST_CASE(
     CHECK(gate.gateCount() == 0U);
 }
 
-// ── Cross-model re-entrancy must not deadlock two threads (morph#519) ───────
+// ── Cross-model re-entrancy must not deadlock two threads ──────────────────
 //
 // `takeAndPost` holds an enqueue mutex across `postFn`, and `postFn` is opaque:
 // on a `ThreadPoolExecutor` it only enqueues, but on a synchronous executor it

@@ -25,8 +25,8 @@
 //           reported Catch2 test failure; post-fix, the liveness check gates
 //           the call out before the page is ever touched.
 //
-//           morph#489 changed *how* both call sites are made safe, without
-//           changing what either test observes (both still pass unmodified):
+//           *How* both call sites are made safe is separate from what either
+//           test observes:
 //           `_pendingCalls` and `_subscriptions` are now heap-allocated and
 //           captured by value into the `.then`/`.onError` continuations, so
 //           `hasSubscribers()` in particular no longer dereferences `this` at
@@ -211,7 +211,7 @@ public:
     std::shared_ptr<morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
 };
 
-// ── morph#486 fixtures ───────────────────────────────────────────────────────
+// ── Teardown-race fixtures ──────────────────────────────────────────────────
 
 // Shared bookkeeping for the teardown-race case below. It lives outside the
 // backend on purpose: pre-fix, `~Bridge` destroys the backend while a parked
@@ -602,15 +602,15 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
 }
 #endif  // !defined(_WIN32)
 
-// ── morph#486: ~BridgeHandler racing ~Bridge across threads ──────────────────
+// ── ~BridgeHandler racing ~Bridge across threads ────────────────────────────
 //
 // `docs/spec/core/bridge.md` promises that bridge-vs-handler teardown order
 // does not matter, and `~BridgeHandler` implemented that promise with a bare
 // `CallbackToken::active()` check. Across threads that check is advisory by
 // construction (`docs/spec/core/callback_scope.md`, "Boundary of the
 // guarantee"): it answers for an instant that has already passed by the time
-// `Bridge::deregisterHandler` reads `_handlers`. morph#486 is that window,
-// observed as a use-after-free — a metadata-fetch pass kept its
+// `Bridge::deregisterHandler` reads `_handlers`. That window is
+// observable as a use-after-free — a metadata-fetch pass keeps its
 // `shared_ptr<BridgeHandler>` alive inside the completions it dispatched, a
 // worker-pool thread dropped the last reference while the owning thread was
 // inside `~App`, and `deregisterHandler` then walked a `_handlers` vector whose
@@ -630,7 +630,7 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
 // earns its keep on the plain leg, not the sanitizer ones.** ASan's
 // instrumentation slows `~Bridge` enough that the parked handler wins every
 // round — 0/25 pre-fix failures and no `heap-use-after-free`, which is also why
-// ASan never reproduced morph#486 itself (0/200 runs of the bookmarks case it
+// ASan never reproduces the original race (0/200 runs of the bookmarks case it
 // was reported from, against 26/200 unsanitized).
 TEST_CASE("Bridge teardown does not overlap a handler destructor on another thread",
           "[bridge][lifetime][teardown][issue486]") {

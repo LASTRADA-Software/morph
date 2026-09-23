@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Tests for keying a model on a *strong id* (morph#163).
+// Tests for keying a model on a *strong id*.
 //
 // `examples/IMPLEMENTATION.md` rule 3 requires entity identity to be a
 // per-entity strong id type exposing `hasValue()`. Before this, such a type
@@ -157,7 +157,8 @@ BRIDGE_REGISTER_MODEL(SikRowModel, "SIK_RowModel")
 BRIDGE_REGISTER_ACTION(SikRowModel, SikOpenRow, "SIK_OpenRow")
 BRIDGE_REGISTER_ACTION(SikRowModel, SikBump, "SIK_Bump")
 
-// The line this issue is about: before morph#163 this did not compile, because
+// The load-bearing line: with `ModelKey` admitting raw scalars only, this does
+// not compile, because
 // `SikRowId` satisfied neither arm of `ModelKey`.
 BRIDGE_MODEL_KEY(SikRowModel, SikOpenRow, &SikOpenRow::id);
 

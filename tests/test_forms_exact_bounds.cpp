@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // `x-exactMinimum`/`x-exactMaximum`: exact decimal companions for a numeric bound
-// a double cannot hold (morph#213).
+// a double cannot hold.
 //
 // `mergeSchemaExtras` already reads the schema in u64 number mode so int64
 // bounds are not rounded on the C++ side. They are rounded anyway the moment a
@@ -86,7 +86,8 @@ TEST_CASE("schemaJson emits an exact text companion for a uint64 maximum", "[for
 
 TEST_CASE("schemaJson leaves bounds a double holds exactly untouched", "[forms][bounds]") {
     // The reason this is not emitted unconditionally: an ordinary schema loses
-    // nothing to a double, and stays byte-for-byte what it was before #213.
+    // nothing to a double, and stays byte-for-byte what it would be without
+    // the companion keys.
     //
     // This is named for a boundary and does not reach it: EBNarrowAction's
     // field is a std::int32_t, whose type-range bound (+-2^31) sits 22 binary
@@ -95,7 +96,7 @@ TEST_CASE("schemaJson leaves bounds a double holds exactly untouched", "[forms][
     // compare against. A schema whose bound is anywhere in that 4-quintillion-
     // wide interior would pass this case unchanged no matter where the real
     // comparison's edge sits -- it proves "well inside", not "at the edge"
-    // (morph#484). The four cases below pin the edge itself, in the
+    // The four cases below pin the edge itself, in the
     // tests/test_wire_hardening.cpp style: a control at the limit (no
     // companion) and one step past it on each side (a companion, with the
     // exact digits).

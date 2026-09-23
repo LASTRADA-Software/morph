@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The compiled half of the shared `x-rules` corpus (morph#176).
+// The compiled half of the shared `x-rules` corpus.
 //
 // `x-rules` is evaluated twice — here by `morph::forms::allRulesSatisfied`,
 // and again in JavaScript by `src/qt/forms/qml/DynamicForm.qml`. Before this

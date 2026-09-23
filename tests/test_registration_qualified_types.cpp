@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Regression test for issue #21: BRIDGE_REGISTER_MODEL / BRIDGE_REGISTER_ACTION built the name
+// BRIDGE_REGISTER_MODEL / BRIDGE_REGISTER_ACTION must not build the name
 // of their generated static registrar by token-pasting the model/action type onto a fixed
 // prefix (`bridge_model_reg_##M`, `bridge_action_reg_##M##_##A`). That only produces a valid
 // identifier when both arguments are bare identifiers -- a namespace-qualified type pastes ':'

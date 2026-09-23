@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Regression test for issue #21 (follow-up): keying the generated registrar variable name on
-// `__LINE__` fixed the original namespace-qualified-type bug but introduced a new one --
+// Keying the generated registrar variable name on
+// `__LINE__` fixes the namespace-qualified-type collision but introduces a new one --
 // `__LINE__` is only unique within a single physical file, so two different headers that each
 // invoke BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION on the same line number produce the same
 // generated identifier once both are `#include`d into one translation unit. Since C++ unnamed

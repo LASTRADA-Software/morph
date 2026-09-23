@@ -25,7 +25,7 @@ if(AF_COVERAGE)
 endif()
 
 include(Catch)
-# LABELS "net" is what makes `ctest -L net` mean anything (morph#771).
+# LABELS "net" is what makes `ctest -L net` mean anything.
 #
 # Catch2's own tags -- `[net][tcp]`, `[net][handshake][socket]` -- are not
 # ctest labels: no `catch_discover_tests` call in this repository passes

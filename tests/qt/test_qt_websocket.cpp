@@ -325,9 +325,8 @@ TEST_CASE(
     REQUIRE(result.load() == 99);
 }
 
-TEST_CASE(
-    "morph::qt::QtWebSocketBackend: Config-only constructor overload omits the dispatcher/registry pair (issue #55)",
-    "[qt][ws][issue55]") {
+TEST_CASE("morph::qt::QtWebSocketBackend: Config-only constructor overload omits the dispatcher/registry pair",
+          "[qt][ws][issue55]") {
     // The seam under test: a caller who wants to set Config::asyncRegistrationEnabled
     // (or any other Config field) but has no reason to override the dispatcher/registry
     // pair must not have to name morph::model::detail::defaultDispatcher()/
@@ -366,8 +365,7 @@ TEST_CASE(
 
 #ifndef QT_NO_SSL
 TEST_CASE(
-    "morph::qt::QtWebSocketBackend: (serverUrl, tls, cfg) constructor overload omits the dispatcher/registry pair "
-    "(issue #55)",
+    "morph::qt::QtWebSocketBackend: (serverUrl, tls, cfg) constructor overload omits the dispatcher/registry pair",
     "[qt][ws][issue55]") {
     // The middle of the three constructor overloads: unlike the Config-only
     // one above, this one also lets a caller pass a `tls` configuration
@@ -611,7 +609,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: a keyed bindModel on a never-connected
     CHECK(outcome.failure == "disconnected");
 }
 
-// ── The delivery thread, which is what morph#567 made structural ─────────────
+// ── The delivery thread, which the surface makes structural ─────────────────
 //
 // This is the first *production* backend on the surface, so this is the first
 // test that the guarantee survives a real transport rather than a test double
@@ -718,7 +716,7 @@ TEST_CASE(
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
     // Deliberately do NOT call waitForConnected() before registering -- this is
     // exactly the ordering a single-threaded WASM client must use, since it can
-    // never block waiting for the connection to settle (see issue #54).
+    // never block waiting for the connection to settle.
     auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
         url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), std::nullopt,
         morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
@@ -752,8 +750,8 @@ TEST_CASE(
     "morph::qt::QtWebSocketBackend: a fire-and-forget deregister's reply cannot be misrouted to a following "
     "synchronous register",
     "[qt][ws][issue65]") {
-    // Reproduces issue #65: deregisterModel() is fire-and-forget with callId
-    // 0, and registerModel()'s sendSync path also parks its nested event loop
+    // With callId 0, deregisterModel()'s fire-and-forget reply collides with
+    // registerModel()'s sendSync path, which parks its nested event loop
     // waiting for a callId==0 reply. Back to back on the same connection,
     // whichever callId==0 reply lands first used to be handed to the parked
     // sync loop -- if it was the deregister's stray "ok" (no modelId), the
@@ -1745,8 +1743,8 @@ TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond throttles a burst on 
     // RemoteServer; the rest are refused at the transport.
     //
     // Refused is not the same as ignored: an over-budget frame is answered with
-    // an `err "rate limited"` addressed to its own callId (morph#225). Before
-    // that, it was dropped silently and the caller's Completion had nothing to
+    // an `err "rate limited"` addressed to its own callId. Dropped
+    // silently instead, the caller's Completion has nothing to
     // resolve it -- an execute that hung unless LimitPolicy::executeTimeout was
     // armed, which is off by default.
     std::atomic<int> okReplies{0};
@@ -2462,9 +2460,9 @@ TEST_CASE("Process separation: TLS handshake works across processes", "[qt][wss]
     REQUIRE(runClient(url, {QStringLiteral("--tls")}) == 0);
 }
 
-// Coverage for morph#594: a *private* registration over this transport must
+// A *private* registration over this transport must
 // carry `contextKey` to the server, exactly as `SimulatedRemoteBackend` and
-// `morph::net::SocketBackend` (morph#587) do.
+// `morph::net::SocketBackend` do.
 //
 // The assertion is deliberately on the provider, not on the registration:
 // registration succeeded before this was fixed too. `RemoteServer::
@@ -2507,7 +2505,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: a private registration carries context
         // `asyncRegistrationEnabled` is unset, so this is `IBackend::bindModel`'s
         // default dispatching the empty-`primary`/zero-`current` shape to
         // `registerModelWithContext` — the path a `Bridge` over this backend
-        // takes, and the one morph#594 reported as dropping the key.
+        // takes, and the one that drops the key if it is not forwarded.
         morph::exec::detail::ModelId bound{};
         backend
             .bindModel(morph::backend::detail::BindRequest{.typeId = "WsEchoModel",
@@ -2553,17 +2551,17 @@ int main(int argc, char* argv[]) {
     return result;
 }
 
-// ── morph#495: the non-blocking control paths must stamp the session too ──
+// ── The non-blocking control paths must stamp the session too ──
 //
-// The three optional non-blocking control verbs that existed then (the
-// register-or-attach, re-point and promote twins, all removed by morph#571)
-// each built their envelope and encoded it with no `env.session = _session`,
+// A per-verb non-blocking twin (a register-or-attach, re-point or promote
+// twin beside each synchronous verb)
+// builds its own envelope, and one encoded with no `env.session = _session`
 // while all three synchronous counterparts stamped it. RemoteServer authenticates and
 // authorizes from env.session (remote.hpp: stampVerifiedPrincipal, and the
 // register/attach/assign authorization sites), so a client using the async path
 // -- which is the WASM path, and the only one a WASM main thread can use --
-// reached an authorizing server as an unauthenticated principal. Those three
-// verbs are gone (morph#568); `sendControl` is now the single place a control
+// reaches an authorizing server as an unauthenticated principal. There are no
+// such twins here: `sendControl` is the single place a control
 // envelope is built, so the gap has one place left to reappear in -- and this
 // test still guards it.
 //

@@ -128,7 +128,7 @@ TEST_CASE("A nested Completion chain outliving its QtExecutor does not use it af
 // body, a dropped completion never decrements -- the queued lambda simply
 // releases its `shared_ptr` copy. The counter is therefore only meaningful
 // while its executor is alive, which is what those apps' "pump until false,
-// then destroy" contract already requires of callers (morph#194).
+// then destroy" contract already requires of callers.
 //
 // This is documented as deliberate rather than fixed: see the invariant on
 // `bookmarks::app::App::_fetchInFlight`.

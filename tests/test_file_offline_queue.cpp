@@ -460,7 +460,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: construction throws if the compacti
     REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path), std::runtime_error);
 }
 
-// ── FileIoOps fault injection (LASTRADA-Software/morph#97) ─────────────────
+// ── FileIoOps fault injection ─────────────────────────────────────────────
 //
 // Same seam FileActionLog's own fault-injection tests use (morph/core/
 // file_io_ops.hpp) -- FileOfflineQueue has the identical class of gap:
@@ -506,11 +506,9 @@ TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a short fwrite() to the ap
     std::filesystem::remove(path);
 }
 
-TEST_CASE(
-    "morph::offline::FileOfflineQueue::enqueue: a short write does not brick the queue for the next enqueue "
-    "(morph#530)",
-    "[file_queue][fault-injection]") {
-    // Regression for morph#530: writeLine() used to throw on a short write
+TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a short write does not brick the queue for the next enqueue",
+          "[file_queue][fault-injection]") {
+    // writeLine() must not throw on a short write
     // without rolling the file back. The handle is append-mode, so the next
     // successful write concatenated directly onto the truncated JSON with no
     // separating newline -- merging two records into one line that load()
@@ -622,7 +620,7 @@ TEST_CASE(
     std::filesystem::remove(path);
 }
 
-// ── Directory fsync (morph#532) ──────────────────────────────────────────
+// ── Directory fsync ──────────────────────────────────────────
 //
 // compact() renames a temp file onto `_path` on every construction -- a
 // directory mutation that its own fsync of the temp file's *data* never
@@ -630,7 +628,7 @@ TEST_CASE(
 // after that rename, with the right directory, and that a failure there is
 // surfaced rather than swallowed.
 
-TEST_CASE("morph::offline::FileOfflineQueue: construction syncs the containing directory after compacting (morph#532)",
+TEST_CASE("morph::offline::FileOfflineQueue: construction syncs the containing directory after compacting",
           "[file_queue][fault-injection]") {
     auto path = tempQueuePath();
     std::vector<std::filesystem::path> syncedPaths;
@@ -689,7 +687,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush() during construct
     std::filesystem::remove(path);
 }
 
-// ── Coverage: maxDepth / overflow policy (morph#112) ───────────────────────
+// ── Coverage: maxDepth / overflow policy ───────────────────────
 
 TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError",
           "[file_queue][overflow]") {
@@ -818,8 +816,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: the idempotency-key contract surviv
     std::filesystem::remove(path);
 }
 
-TEST_CASE("morph::offline::FileOfflineQueue: a NUL-bearing payload and key round-trip intact (morph#531)",
-          "[file_queue]") {
+TEST_CASE("morph::offline::FileOfflineQueue: a NUL-bearing payload and key round-trip intact", "[file_queue]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     auto const open = [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(path); };
@@ -827,7 +824,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a NUL-bearing payload and key round
     std::filesystem::remove(path);
 }
 
-// ── An unreadable queue file must not be committed away (morph#494) ──
+// ── An unreadable queue file must not be committed away ──
 //
 // load() read with an unchecked ifstream and the constructor calls compact()
 // straight after, so a failed read produced an empty `_items` that compact()
@@ -869,7 +866,7 @@ TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted 
 }
 #endif  // _WIN32
 
-// ── The rollback must cover the flush, not only a short fwrite (morph#530) ──
+// ── The rollback must cover the flush, not only a short fwrite ──
 //
 // A queue record is far smaller than BUFSIZ, so fwrite is a memcpy into the
 // stdio buffer and returns the full count even when the disk is full; the
@@ -878,7 +875,7 @@ TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted 
 // manifestation of ENOSPC, and a truncated line stayed on disk exactly where
 // the next writeLine would resume.
 
-TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush rolls the partial record back (morph#530)",
+TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush rolls the partial record back",
           "[file_queue][fault-injection]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
@@ -927,14 +924,14 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush rolls the partial 
     std::filesystem::remove(path);
 }
 
-// ── A directory fsync this platform cannot do is not a failure (morph#532) ──
+// ── A directory fsync this platform cannot do is not a failure ──
 //
 // fsync on a directory fd needs a *read* handle on it, a strictly stronger
 // permission than writing a file inside it, and several mounts do not implement
 // it at all. Treating either as fatal made this class unconstructible on
 // layouts where it had always worked.
 
-TEST_CASE("morph::offline::FileOfflineQueue: an unsupported directory fsync warns instead of throwing (morph#532)",
+TEST_CASE("morph::offline::FileOfflineQueue: an unsupported directory fsync warns instead of throwing",
           "[file_queue][fault-injection]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
@@ -964,7 +961,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: an unsupported directory fsync warn
     std::filesystem::remove(path);
 }
 
-TEST_CASE("morph::offline::FileOfflineQueue: a genuine directory-fsync failure still throws (morph#532)",
+TEST_CASE("morph::offline::FileOfflineQueue: a genuine directory-fsync failure still throws",
           "[file_queue][fault-injection]") {
     // The other side of the case above: EIO is a real durability failure and
     // must not be downgraded to a warning along with the unsupported ones.
@@ -977,7 +974,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a genuine directory-fsync failure s
     std::filesystem::remove(path);
 }
 
-TEST_CASE("morph::offline::FileOfflineQueue: a failing fsync rolls the record back too (morph#530)",
+TEST_CASE("morph::offline::FileOfflineQueue: a failing fsync rolls the record back too",
           "[file_queue][fault-injection]") {
     // The third of writeLine's three failure points. fsync failing after a
     // successful flush means the bytes are in the page cache but may not reach
@@ -1026,7 +1023,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fsync rolls the record ba
 #ifndef _WIN32
 TEST_CASE("morph::offline::FileOfflineQueue: a mid-read I/O error throws rather than committing an empty queue",
           "[file_queue][fault-injection]") {
-    // morph#494's other half. load() reads with its own ifstream and the
+    // The other half of the unreadable-file rule. load() reads with its own ifstream and the
     // constructor calls compact() straight after, so a read that fails partway
     // would otherwise commit an empty set over the real backlog -- constructor
     // returning normally, queue reporting no pending work. A directory stands
@@ -1047,7 +1044,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a mid-read I/O error throws rather 
 
 TEST_CASE("morph::offline::FileOfflineQueue: a rollback that cannot truncate refuses every later write",
           "[file_queue][fault-injection]") {
-    // The hole morph#530's rollback left open. When the disk that made the
+    // The hole the rollback leaves open. When the disk that made the
     // write short is still full, `rollBackShortWrite` deliberately truncates
     // nothing and a partial record stays at the end of the file. `load()`
     // tolerates that *only* while it is the trailing line. If the same live

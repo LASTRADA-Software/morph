@@ -30,7 +30,7 @@
 // `include/morph/core/detail/execute_order_gate.hpp`) is wired into
 // `include/morph/core/remote.hpp`, whose comments carry its full design
 // history — including the reverted first attempt. The gate's own internal
-// state machine (including the out-of-order-release mechanism, issue #449)
+// state machine, including the out-of-order-release mechanism,
 // has direct, threadless unit coverage in
 // `tests/test_execute_order_gate.cpp`; what remains here is what only
 // `RemoteServer`'s real dispatch path can prove.
@@ -229,11 +229,11 @@ TEST_CASE(
 // force three same-model executes into an interleaving meant to reach the
 // gate's "already gone" defensive branches.
 //
-// It no longer can. That interleaving was reachable before issue #449's fix:
-// the gate used to erase a model's map entry the moment the *last* ticket
+// It cannot. That interleaving is reachable only if the gate erases a model's
+// map entry the moment the *last* ticket
 // released, even with an earlier ticket still outstanding, which is exactly
-// what let a third, later-arriving ticket find the entry gone. Since #449's
-// fix (a released-out-of-order ticket is now recorded rather than applied,
+// what lets a third, later-arriving ticket find the entry gone. With the
+// current rule (a released-out-of-order ticket is recorded rather than applied,
 // and the entry is erased only once every ticket up to it has released in
 // order), that specific interleaving can no longer surface a missing entry --
 // confirmed directly: instrumenting both defensive branches and re-running
@@ -311,7 +311,7 @@ TEST_CASE(
     "an execute refused by the shutdown gate releases the execute-ordering "
     "ticket it took, so a later ticket already waiting on it is not stranded",
     "[remote][execute-ordering][shutdown]") {
-    // Regression test for #348. `handleImpl` takes the ordering ticket on the
+    // `handleImpl` takes the ordering ticket on the
     // transport thread, in send order; `dispatchMessage`'s shutdown gate then
     // returns *before* `dispatchExecute`, which is the only place a ticket is
     // released. Because the pool may run the two posted tasks in either order,
@@ -569,8 +569,8 @@ TEST_CASE(
     "a throw out of dispatchExecute releases the execute-ordering ticket it took, "
     "so a later ticket already waiting on it is not stranded",
     "[remote][execute-ordering][exceptions]") {
-    // Regression test for #351, the sibling of the shutdown-gate case above
-    // (#348): the same stranded ticket, reached by a different route.
+    // The sibling of the shutdown-gate case above: the same stranded ticket,
+    // reached by a different route.
     // `dispatchExecute` has no try/catch of its own, and its rejectAndRelease
     // helper only covers the *explicit* early returns; an exception unwinds
     // past all of them into `dispatchMessage`'s outer catch, which replies but
@@ -579,7 +579,8 @@ TEST_CASE(
     // release that follows `_strand.post`, so every exit path releases it,
     // including ones nobody has thought of yet.
     //
-    // The interleaving, forced rather than raced (identical to #348's case):
+    // The interleaving, forced rather than raced (identical to the
+    // shutdown-gate case's):
     //   A  handle() -> ticket 0; its pool task is intercepted before it runs.
     //   B  handle() -> ticket 1; runs, passes every gate, parks in
     //      ExecuteOrderGate::awaitTurn(mid, 1) waiting for ticket 0.
@@ -588,7 +589,7 @@ TEST_CASE(
     //
     // The three sections below are the three `IAuthorizer` hooks
     // `dispatchExecute` calls inside the ticketed region. The fourth reachable
-    // throw site named in #351 -- `missingRequiredFields`, under
+    // throw site in that region -- `missingRequiredFields`, under
     // `PayloadCompleteness::RequireDeclaredFields` -- is *not* separately
     // exercised here: it is not a user-supplied virtual, so forcing a throw
     // out of it would mean faulting the dispatcher's own parse rather than
@@ -722,7 +723,7 @@ namespace {
 /// Lets a test hold open the window between one caller's `take()` (or
 /// `takeAndPost`) and its enqueue reaching the real pool, so a second,
 /// concurrent caller gets every chance to run in between -- without touching
-/// production code. See morph#519.
+/// production code.
 class StallFirstPostExecutor : public morph::exec::IExecutor {
 public:
     explicit StallFirstPostExecutor(morph::exec::IExecutor& inner) : _inner{inner} {}
@@ -785,9 +786,8 @@ private:
 
 TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do not deadlock",
           "[remote][execute-ordering][morph-519]") {
-    // Regression test for #519 (part of the sweep tracked in #518, finding F1).
-    // handleImpl used to take an execute-ordering ticket and enqueue the dispatch
-    // work as two separate, unlocked steps. Two threads calling handle() concurrently
+    // `handleImpl` must not take an execute-ordering ticket and enqueue the
+    // dispatch work as two separate, unlocked steps: two threads calling handle() concurrently
     // for the same model could take tickets in order but enqueue out of order: if the
     // later ticket's task reached the pool's FIFO queue first, a pool worker picked it
     // up, called ExecuteOrderGate::awaitTurn and blocked waiting for the earlier
@@ -888,9 +888,9 @@ TEST_CASE(
     "an execute rejected out of ticket order does not strand an earlier ticket "
     "that has not reached ExecuteOrderGate::awaitTurn yet",
     "[remote][execute-ordering]") {
-    // Regression test for #449 -- the third occurrence of the stranded-ticket
-    // bug class #348 and #351 each closed by making the *release* structural.
-    // Making release unmissable was necessary and is not sufficient: the
+    // The third distinct way into the stranded-ticket failure. The other two
+    // are closed by making the *release* structural.
+    // Making release unmissable is necessary and is not sufficient: the
     // remaining hole is in `ExecuteOrderGate::release` itself.
     //
     // `ExecuteOrderGate::release(mid, ticket)` used to assign
@@ -910,7 +910,7 @@ TEST_CASE(
     // process's life, `_inFlightExecutes` stuck above zero (so
     // `drainedWithin()` can never succeed), and `~ThreadPoolExecutor` hanging
     // forever in join(). That is exactly the reported symptom, and it explains
-    // why #449 reproduced under `morph::net` in particular: a dropped
+    // why this reproduces under `morph::net` in particular: a dropped
     // connection reclaims that connection's models, so the executes still in
     // flight for one model split into some that find the model and some that
     // reject with "model not found" -- manufacturing precisely this
@@ -985,7 +985,7 @@ TEST_CASE(
     if (!aCompleted) {
         // A's pool thread is parked in a wait with no deadline and can never
         // be joined; leak the fixture rather than hang the whole binary in
-        // ~ThreadPoolExecutor, exactly as the #348/#351 cases above do.
+        // ~ThreadPoolExecutor, exactly as the two cases above do.
         (void)server.get();
         // NOLINTBEGIN(bugprone-unused-return-value) -- leaking is the point.
         (void)gated.release();

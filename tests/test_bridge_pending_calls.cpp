@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Regression coverage for issue #45: Bridge has no pendingCalls() for
-// client-side quiescence observability. These tests exercise the in-flight
+// `Bridge::pendingCalls()` is the client-side quiescence signal.
+// These tests exercise the in-flight
 // counter tracked by Bridge::executeVia() (dispatched via
 // BridgeHandler::execute()), incremented on dispatch and decremented when the
 // returned Completion resolves — on success, on error, and when the handler
@@ -27,7 +27,7 @@ std::atomic<bool> gPendingCallsSlowRelease{false};
 // A function-local static rather than a namespace-scope one, unlike its two
 // neighbours above: `cppcoreguidelines-avoid-non-const-global-variables` is on
 // for tests/ and fires on the latter. The two above predate the changed-lines
-// clang-tidy gate and are not reported (morph#677).
+// clang-tidy gate and are not reported.
 std::atomic<int>& pcSlowFinished() {
     static std::atomic<int> value{0};
     return value;
@@ -171,7 +171,7 @@ TEST_CASE("Bridge: pendingCalls() does not increment for a synchronously-failed 
     REQUIRE(bridge.pendingCalls() == 0);
 }
 
-// ── morph#502: a throwing backend->execute() must not leak the slot ──
+// ── A throwing backend->execute() must not leak the slot ──
 //
 // executeVia() incremented `_pendingCalls` and armed the client deadline before
 // calling `backend->execute(...)`, which was not wrapped in a try. That call is
@@ -186,7 +186,7 @@ namespace {
 /// Overrides `executeInto`, not `execute`: `Bridge::executeVia` dispatches
 /// through the former, and `LocalBackend::execute` is `final` precisely so a
 /// double written the other way round is a compile error rather than a test
-/// that quietly stops intercepting anything (morph#572, Part B).
+/// that quietly stops intercepting anything.
 struct ThrowingExecuteBackend : morph::backend::LocalBackend {
     using morph::backend::LocalBackend::LocalBackend;
 
@@ -213,7 +213,7 @@ TEST_CASE("Bridge: a throwing backend execute() leaves pendingCalls() at zero", 
     CHECK(bridge.pendingCalls() == 0);
 }
 
-// ── morph#572 Part B: cancelPending racing the real reply settles once ──
+// ── cancelPending racing the real reply settles once ──
 //
 // Before Part B, "exactly one decrement per dispatch" was carried by the fact
 // that `.then` and `.onError` are mutually exclusive on one `CompletionState`:

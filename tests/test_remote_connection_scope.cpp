@@ -1098,7 +1098,7 @@ TEST_CASE("morph::backend::RemoteServer: a shared register on a closed scope is 
     REQUIRE(server->health().liveModels == 0U);
 }
 
-// ── Issue #48: connection-scoped SimulatedRemoteBackend ─────────────────────
+// ── Connection-scoped SimulatedRemoteBackend ────────────────────────────────
 //
 // SimulatedRemoteBackend used to send every register/deregister/attach/assign
 // through the unscoped two-argument RemoteServer::handle/handleInline, so it

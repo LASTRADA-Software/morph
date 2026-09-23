@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Tests for `morph::async::CallbackScope` / `CallbackToken` (issue #138): the
+// Tests for `morph::async::CallbackScope` / `CallbackToken`: the
 // lifetime-and-stop gate a receiver holds as a *data member* (not a base class)
 // and hands to the callbacks it attaches.
 //
-// Verification strategy, carried over from #150 and required by the issue: the
+// Verification strategy: the
 // call counters live in `shared_ptr`s that **outlive the receiver**, so "the
 // callback body did not run" is directly observable rather than resting on a
 // sanitizer noticing UB after the fact. A test that destroys the receiver and
@@ -575,7 +575,7 @@ TEST_CASE("CallbackScope: destroying the scope under a concurrent dispatch loop 
     }
 }
 
-// ── morph#499: what CallbackScope's concurrency contract actually covers ──
+// ── What CallbackScope's concurrency contract actually covers ──
 //
 // The class used to document *every* member as concurrently safe. It is not:
 // `reset()` replaces the `_state` handle, and reading a shared_ptr while another

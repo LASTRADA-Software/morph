@@ -8,7 +8,7 @@
 //
 // A frame refused by QtWebSocketServerConfig::messagesPerSecond used to belong
 // on that list too; it no longer does, since the transport now answers it with
-// an `err "rate limited"` (morph#225). The deadline still covers the cases no
+// an `err "rate limited"`. The deadline still covers the cases no
 // reply can.
 
 #include <catch2/catch_test_macros.hpp>
@@ -212,7 +212,7 @@ TEST_CASE("Bridge::setExecuteDeadline fires ClientTimeoutError when no reply arr
     // TimeoutScheduler's own background thread, which posts to `exec` --
     // give it real wall-clock slack, matching this codebase's other
     // cross-thread test patterns. REQUIRE on the pump's own return, not on
-    // `failed` afterwards (morph#396): if the budget expires first, this
+    // `failed` afterwards: if the budget expires first, this
     // reports "the wait itself timed out" rather than failing a REQUIRE on
     // `failed` that would abort the case before `threwClientTimeout` --
     // naming the wrong half of the answer -- is ever checked.
@@ -310,7 +310,7 @@ TEST_CASE("A real reply that arrives after the deadline already fired is silentl
         });
 
     // REQUIRE on the pump's own return, not on `settleCount` afterwards
-    // (morph#396's own shape): if the 50ms deadline never fires within budget,
+    // (the same shape): if the 50ms deadline never fires within budget,
     // this reports "the wait itself timed out" rather than a `settleCount ==
     // 1` REQUIRE that would abort before `threwClientTimeout` is ever checked.
     REQUIRE(pumpUntil(exec, [&] { return settleCount != 0; }));

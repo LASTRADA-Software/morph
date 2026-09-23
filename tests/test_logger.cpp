@@ -251,7 +251,7 @@ TEST_CASE("concurrent log calls are thread-safe", "[logger]") {
     REQUIRE(count.load() == numThreads * msgsPerThread * 4);
 }
 
-// ── The noexcept guarantee (morph#158) ────────────────────────────────────────
+// ── The noexcept guarantee ──────────────────────────────────────────────────
 
 // Compile-time, and the part that cannot rot: if any entry point loses
 // `noexcept`, this fails to build rather than failing subtly at some call site
@@ -285,8 +285,8 @@ TEST_CASE("morph::log: a throwing sink does not propagate to the caller", "[logg
     });
     morph::log::setLogLevel(morph::log::LogLevel::debug);
 
-    // Every public entry point, both overload families. Before morph#158 each
-    // of these unwound into the caller.
+    // Every public entry point, both overload families. Without the guarantee
+    // each of these unwinds into the caller.
     REQUIRE_NOTHROW(morph::log::logDebug("plain"));
     REQUIRE_NOTHROW(morph::log::logInfo("plain"));
     REQUIRE_NOTHROW(morph::log::logWarn("plain"));

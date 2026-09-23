@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# The Part B regression guard for morph#573: compile-time sensitivity of
+# The regression guard for route-count sensitivity: compile-time sensitivity of
 # `morph::forms::schemaJson<A>()` to *route count* through a nested-aggregate
 # type graph.
 #
@@ -22,14 +22,14 @@
 # writer, leaving route-count sensitivity alone.
 #
 # Measured, g++ 16.2.1, `-std=c++23 -fsyntax-only`, CPU seconds, best of 2 on a
-# shared machine (so treat these as upper bounds, and see morph#573 for the
+# shared machine (so treat these as upper bounds, and see the probe for the
 # spread):
 #
 #   revision                     control   fixture   ratio
 #   master @ a9cb5649 (before)     2.70     26.83     9.9
-#   with morph#573 step 3          2.69      2.98     1.11
+#   with a depth counter           2.69      2.98     1.11
 #
-# morph#703 then removed the depth NTTP entirely, so instantiations are keyed on
+# Carrying nothing at all keys instantiations on
 # the type alone rather than on a (type, depth) pair. This guard is unchanged by
 # that on purpose: it asserts a ratio and does not care how the ratio is
 # achieved, which is what let the second fix be judged by the instrument built
@@ -37,7 +37,7 @@
 #
 # The default threshold of 300% therefore sits roughly 2.7x above the fixed
 # ratio and 3.3x below the unfixed one. **This was verified by reverting step 3
-# and watching this case fail** — see the PR for morph#573 for the output. A
+# and watching this case fail**. A
 # guard that passes with the fix reverted is not evidence (AGENTS.md, "Verify
 # rather than assert"), and this one does not.
 #
@@ -161,7 +161,7 @@ message(STATUS
 
 if(_fixture_ms GREATER _budget_ms)
     message(FATAL_ERROR
-        "forms_dag_budget.cmake: schema generation is route-count sensitive again (morph#573, Part B).\n"
+        "forms_dag_budget.cmake: schema generation is route-count sensitive again.\n"
         "  control (one route per node): ${_control_ms} ms\n"
         "  fixture (6561 routes):        ${_fixture_ms} ms  = ${_ratio_percent}% of control\n"
         "  budget:                       ${MORPH_DAG_MAX_RATIO_PERCENT}% of control (${_budget_ms} ms)\n"

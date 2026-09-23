@@ -407,8 +407,8 @@ TEST_CASE("morph::offline::NetworkMonitor: stop() from inside probe detaches and
 // 489-490, 518-519 and 532-533, and named a type to go with it. By the time
 // anyone checked, that name matched nothing anywhere in the tree and all three
 // ranges had drifted onto unrelated code — mid-sentence in a doc comment, a
-// ModelId load, a parkIfInFrame guard (morph#419, after morph#349 and morph#355
-// in the same shape). The dead name is not repeated here on purpose: a grep for
+// ModelId load, a parkIfInFrame guard -- three separate times, in the same
+// shape. The dead name is not repeated here on purpose: a grep for
 // it must come back empty, or the comment reads as a live reference to whoever
 // runs that grep next. Nothing verifies either half of such a citation, so when
 // a name and a number disagree, believe the name.

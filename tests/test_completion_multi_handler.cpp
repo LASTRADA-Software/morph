@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Regression coverage for issue #59: Completion<T>::onError() (and, symmetrically,
-// then()) used to keep only the last-attached handler in a single field, silently
+// Completion<T>::onError() (and, symmetrically,
+// then()) must not keep only the last-attached handler in a single field, silently
 // discarding any earlier one. These tests pin down the fixed, composing behavior:
 // every handler attached while the state is not yet ready runs when the outcome
 // arrives, in attachment order.
@@ -22,7 +22,7 @@ using LogGuard = morph::log::ScopedLoggerOverride;
 namespace {
 
 /// A value whose *copy* constructor throws on demand. Under the value contract
-/// (morph#553) nothing on the value path copies `T`, so an armed `ThrowOnCopy`
+/// nothing on the value path copies `T`, so an armed `ThrowOnCopy`
 /// settling through `const T&` handlers is a booby trap that must never go off
 /// -- which is what turns "zero copies" from a comment into a test. The flag
 /// travels with the value rather than living in a global so two tests cannot
@@ -123,7 +123,7 @@ TEST_CASE("Completion: onError handlers attached after error is ready all fire (
 }
 
 TEST_CASE("Completion: a second onError attached before ready does not discard the first", "[completion][issue-59]") {
-    // This is the exact reproducer from issue #59.
+    // The minimal reproducer for a single-slot handler field.
     SyncExecutor exec;
     auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
     morph::async::Completion<int> comp{state, &exec};
@@ -232,8 +232,7 @@ TEST_CASE("Completion: mismatched attach (onError on a value-ready state) is sti
     REQUIRE_FALSE(errFired2);
 }
 
-// Regression coverage for morph#520 (part of the sweep tracked in #518, finding F2).
-// setValue() used to move out of its own `value` optional to build the settle-time
+// `setValue()` must not move out of its own `value` optional to build the settle-time
 // fan-out closure for handlers attached *before* settling, leaving `value` engaged
 // but holding a moved-from T. A then() attached *after* settling (attachThen's
 // `ready && value` branch) then copied that husk instead of the real value. The
@@ -280,9 +279,9 @@ TEST_CASE("Completion: settling never copies T -- an armed throwing copy constru
     // `onOk` is erased as `std::function<void(const T&)>` and both dispatch
     // paths read the stored value in place, so settling a state with `const T&`
     // handlers -- attached before *or* after -- copies `T` exactly zero times.
-    // An armed `ThrowOnCopy` therefore settles without incident. Before
-    // morph#553 this threw: `setValue` copied into `savedVal` before draining
-    // `onOk`, and `attachThen`'s fire-now path copied twice more.
+    // An armed `ThrowOnCopy` therefore settles without incident. Under an
+    // erasure that copies, this throws: `setValue` copies into `savedVal` before
+    // draining `onOk`, and the fire-now path copies twice more.
     SyncExecutor exec;
     auto state = std::make_shared<morph::async::detail::CompletionState<ThrowOnCopy>>();
     morph::async::Completion<ThrowOnCopy> comp{state, &exec};

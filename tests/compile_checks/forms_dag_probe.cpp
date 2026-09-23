@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The Part B regression fixture for morph#573: a domain model that is a *DAG*
+// The regression fixture for route-count sensitivity: a domain model that is a *DAG*
 // rather than a tree, compiled through `morph::forms::schemaJson<A>()`.
 //
-// Before morph#573 step 3, the nested-aggregate recursion carried the ancestor
+// A nested-aggregate recursion that carries the ancestor
 // chain as a template parameter pack, so `annotateNestedAggregate<Leaf,
 // Ancestors...>` was a distinct instantiation **per distinct root-to-node
 // route** through the type graph. A tree has one route per node; a DAG has as
 // many as the graph has paths, and that count grows exponentially in the
 // graph's depth. The recursion then carried a depth counter instead, capping
-// instantiations at one per (type, depth) pair; morph#703 removed that too,
+// instantiations at one per (type, depth) pair, and carrying nothing at all
+// keys them on the type alone,
 // leaving one instantiation per type. This fixture measures neither directly
 // -- it measures route sensitivity, which both changes remove.
 //
@@ -36,7 +37,7 @@
 //
 //   revision                     control (tree)   fixture (DAG)   ratio
 //   master @ a9cb5649 (before)        2.70            26.83         9.9
-//   with morph#573 step 3             2.69             2.98         1.11
+//   with a depth counter              2.69             2.98         1.11
 //
 // The spread between runs reached 50% on that machine, which is the other
 // reason the budget script asserts the ratio rather than either absolute
@@ -100,7 +101,7 @@ MORPH_FORMS_DAG_PROBE_LEVEL(8, 7)
 /// The action type the schema is generated for: eight nested-aggregate levels
 /// below it. That was inside `morph::forms::detail::kMaxNestDepth` when this
 /// fixture was written, on purpose — it exists to stress route count and must
-/// not double as a test of the depth limit. morph#703 removed the limit, so
+/// not double as a test of a depth limit. There is no such limit, so
 /// the depth is now only a shape choice; the fixture is left unchanged so its
 /// numbers stay comparable with the ones quoted above.
 using RootAction = A8_0;

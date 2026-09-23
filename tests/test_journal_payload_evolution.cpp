@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for journal payload evolution (issue #174): the payload schema
+// Journal payload evolution: the payload schema
 // fingerprint (morph::model::payloadFingerprint, core/payload_schema.hpp),
 // LogEntry::schema, ActionDispatcher::schemaFor, and replay()'s mismatch gate
 // with its migration seam.
@@ -102,7 +102,7 @@ struct PEShapeNested {
     std::map<std::string, std::int32_t> lookup;
 };
 
-// ── Custom-codec fixtures (issue #245) ───────────────────────────────────────
+// ── Custom-codec fixtures ───────────────────────────────────────────────────
 //
 // A unit system of this file's own: `UnitTraits` is specialised per enum, and
 // two test translation units linking into one binary must not both specialise
@@ -145,7 +145,7 @@ struct PESpecialFields {
     morph::util::Tagged<std::string, "acct"> id;
 };
 
-// The retype #245 filed: two custom-codec fields swapped for one another.
+// The retype that matters: two custom-codec fields swapped for one another.
 struct PESpecialFieldsRetyped {
     morph::time::Timestamp amount;
     morph::math::Rational at;
@@ -499,7 +499,7 @@ TEST_CASE("journal::replay: a migration never rewrites the stored entry", "[jour
     REQUIRE(entries.front().schema == recordedSchema);
 }
 
-// ── Custom-codec types are distinguished from one another (issue #245) ───────
+// ── Custom-codec types are distinguished from one another ───────────────────
 //
 // Every type carrying its own `glz::meta` used to render as the single opaque
 // tag `x`, so swapping `Rational` for `Timestamp` in a recorded action changed

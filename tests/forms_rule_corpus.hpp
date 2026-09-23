@@ -10,7 +10,7 @@
 ///
 /// `x-rules` has two evaluators — `morph::forms::allRulesSatisfied` here, and
 /// a JavaScript reimplementation in `src/qt/forms/qml/DynamicForm.qml` — and
-/// nothing structural pinned them to each other (morph#176). A hand-mirrored
+/// and nothing structural pins them to each other. A hand-mirrored
 /// pair of test files does not fix that: adding a rule kind to one side leaves
 /// the other silently untested, which is how `atLeastOneOf` and
 /// `mutuallyExclusive` could be disabled client-side with the renderer suite
@@ -99,7 +99,7 @@ struct RcNotEngaged {
         morph::forms::requiredWhen(&RcNotEngaged::note, morph::forms::notEngaged(&RcNotEngaged::amount)));
 };
 
-/// @brief `equals` against a `bool` literal — divergence (a) of morph#176.
+/// @brief `equals` against a `bool` literal — divergence (a).
 struct RcEqualsBool {
     std::optional<bool> flag;         ///< Compared against the literal `true`.
     std::optional<std::string> note;  ///< Required while `flag` is true.

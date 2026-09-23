@@ -93,7 +93,7 @@ TEST_CASE("decode accepts an envelope at the size limit boundary", "[wire][harde
 // stays either comfortably under the cap (1 KiB) or comfortably over it
 // (+1024 bytes), which leaves the guard's own boundary untouched: mutating
 // `>` to `>=` -- moving the cap down by one byte and rejecting a legal
-// envelope -- passed the entire suite (morph#405, the first mutation run over
+// envelope -- passes the entire suite (measured by a mutation run over
 // include/morph/core). A cap is one comparison, and a comparison is only
 // tested at the value where changing it changes the answer.
 //

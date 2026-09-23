@@ -303,11 +303,11 @@ TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginS
     REQUIRE(endCalls.load() == 1);
 }
 
-// ── morph::backend::LocalBackend: amortised pending-list compaction (morph#528) ────────────────
+// ── morph::backend::LocalBackend: amortised pending-list compaction ─────────
 
 namespace {
 
-/// Builds an `ActionCall` whose local op is @p op — the two morph#528 cases
+/// Builds an `ActionCall` whose local op is @p op — the two compaction cases
 /// below differ only in that op.
 morph::backend::detail::ActionCall pendingCall(std::function<void()> op) {
     morph::backend::detail::ActionCall call;
@@ -344,7 +344,7 @@ morph::backend::detail::ActionCall pendingCall(std::function<void()> op) {
 // What this does *not* assert is admission latency — the reason the sweep was
 // made amortised in the first place. That is measured by a benchmark, not by a
 // test; a wall-clock assertion on a shared CI runner would be a flake, not
-// evidence. The morph#528 numbers are recorded in docs/spec/core/backend.md.
+// evidence. The measured numbers are in docs/spec/core/backend.md.
 TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the list and keeps cancelPending whole",
           "[backend][local][pending]") {
     constexpr int kRounds = 48;

@@ -12,8 +12,8 @@
 // The suite reaches all of these branches already, through the bridge, the
 // shared-instance directory and the limit policy. What it does not do at most
 // of them is read the reply: it takes the one field it needs and lets the rest
-// go unexamined. morph#405's mutation run measured what that costs -- the
-// `reply(...)` call itself could be deleted at twenty sites in `remote.hpp`
+// go unexamined. A mutation run measures what that costs -- the
+// `reply(...)` call itself can be deleted at twenty sites in `remote.hpp`
 // and `morph_tests` stayed green, because no case at those sites asserts on
 // the envelope the deleted call would have produced.
 //

@@ -208,7 +208,7 @@ TEST_CASE("SectionSet: sections fire independently, in any order", "[sections]")
 
     // Edit the SECOND section first. Under FlowSession this throws
     // std::logic_error -- "field belongs to an action that is not the current
-    // step" -- which is exactly the gap morph#513 reports.
+    // step" -- which is exactly the gap this layer exists to close.
     sections.set<&SecPrefs::theme>("dark");
     drain(cbExec);
 

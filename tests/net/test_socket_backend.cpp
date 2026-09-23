@@ -170,8 +170,8 @@ public:
     // concurrently on its own io thread by the time this is called, so this
     // normally returns promptly -- but "normally" is not a bound. A blocking
     // `accept()` here parks the *main test thread* with nothing else in the
-    // process able to satisfy it if the client never connects, which is how
-    // morph#559 saw a net test hang indefinitely in `accept()` under
+    // process able to satisfy it if the client never connects, which is how a
+    // net test hangs indefinitely in `accept()` under
     // concurrent machine load: a hang costs a whole CI job, where a failure
     // costs one line. Every test in this file goes through here, so bounding
     // it once bounds all of them.
@@ -229,7 +229,7 @@ public:
     // Shrinks the receive buffer to make a subsequent large write from the
     // peer fill the kernel's TCP window quickly. Combined with never calling
     // recv() again, this reliably blocks the peer's `send()` -- for tests
-    // exercising `SO_SNDTIMEO` (morph#536) without needing a multi-megabyte
+    // exercising `SO_SNDTIMEO` without needing a multi-megabyte
     // payload or a multi-second wait.
     void stopReadingWithTinyReceiveBuffer() {
         int const tinyBuf = 2048;
@@ -459,7 +459,7 @@ TEST_CASE("SocketBackend: a plain handler keeps its own instance over the wire",
 
 TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed by a parked sync call",
           "[net][socket_backend]") {
-    // Regression coverage for morph#454 -- morph#65 reintroduced in this
+    // Regression coverage for reply cross-talk in this
     // transport. `deregisterModel` sends fire-and-forget, but the server still
     // answers it with an `ok` (remote.hpp's deregister branch), and that reply
     // carries whatever `callId` the request had. With `callId == 0` -- the
@@ -655,8 +655,8 @@ TEST_CASE("SocketBackend: attachModel with an empty primary and current==0 regis
 
 TEST_CASE("SocketBackend: attachModel's empty-primary path deregisters the instance being given up",
           "[net][socket_backend]") {
-    // Also exercises (and documents) a known cross-talk hazard, filed as
-    // morph#454: deregisterModel()'s fire-and-forget server acknowledgment
+    // Also exercises (and documents) a known cross-talk hazard:
+    // deregisterModel()'s fire-and-forget server acknowledgment
     // and a synchronous control call's reply both travel as callId == 0, so
     // a synchronous call issued immediately after a deregister -- exactly
     // what this branch does (`deregisterModel(current)` followed immediately
@@ -683,19 +683,19 @@ TEST_CASE("SocketBackend: attachModel's empty-primary path deregisters the insta
 
     // current != 0, empty primary: the private-handoff path -- give up the
     // shared instance for a fresh private one. Must not throw or hang even
-    // though the reply it decodes may be the deregister's stray ack (#454).
+    // though the reply it decodes may be the deregister's stray ack.
     REQUIRE_NOTHROW(
         backend.attachModel("SbCounterModel", nullptr, morph::backend::detail::InstanceIdentity{}, shared));
 
     // Let the real (now-orphaned) register reply this call's sendSync did not
     // consume finish draining before starting a fresh synchronous call below
     // -- otherwise it could itself be misdelivered to that call by the same
-    // #454 hazard, corrupting *this* test's own verification step.
+    // cross-talk hazard, corrupting *this* test's own verification step.
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
 
     // The instance held under "handoff-key" must be released -- confirms
     // deregisterModel(current) genuinely ran (the server-side effect, which
-    // #454 does not touch).
+    // the cross-talk hazard does not touch).
     bool released = false;
     for (int i = 0; i < 100 && !released; ++i) {
         auto keys = backend.listInstances("SbCounterModel");
@@ -817,7 +817,7 @@ TEST_CASE("SocketBackend: attachModel on a disconnected socket throws instead of
 
 TEST_CASE("SocketBackend: ~SocketBackend does not hang against a peer that stalls the handshake",
           "[net][socket_backend]") {
-    // Regression coverage for morph#535. A TCP listener need never call
+    // A TCP listener need never call
     // accept() for a connecting client's connect() to succeed -- the kernel
     // completes the three-way handshake into the listen backlog on its own.
     // That gives a peer that is connected at the TCP level but writes
@@ -1068,7 +1068,7 @@ TEST_CASE("SocketBackend: execute resolves with an exception when the server's o
 
 TEST_CASE("SocketBackend: a send blocked past sendTimeout tears the connection down instead of desyncing it",
           "[net][socket_backend][fault-injection]") {
-    // Regression coverage for morph#536. `TcpSocket::sendAll` can throw
+    // `TcpSocket::sendAll` can throw
     // having already written part of a frame -- `SO_SNDTIMEO` firing
     // mid-send is exactly this, reachable whenever a peer stops reading. The
     // old `sendFrame` swallowed that exception without marking the
@@ -1317,10 +1317,10 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
     // would also produce.
     //
     // Deliberately NOT a heavier stress shape (many threads x many calls).
-    // That shape belongs to morph#449 -- a stranded execute-ordering ticket
-    // when a connection with several executes in flight drops -- whose own
+    // That shape belongs to the stranded-execute-ticket case -- a connection
+    // with several executes in flight dropping -- whose own
     // hang would masquerade as a failure of *this* fix instead of the
-    // ticket-ordering issue it actually is. morph#449 is fixed (see
+    // ticket-ordering problem it actually is. That case is covered (see
     // `ExecuteOrderGate::release` in core/detail/execute_order_gate.hpp,
     // extracted out of remote.hpp's own `releaseExecuteTicket` after this
     // fix landed), and its own stress-shaped regression test is "many
@@ -1451,8 +1451,7 @@ TEST_CASE("SocketBackend: sendFrame-triggering calls racing a hard disconnect ne
 TEST_CASE("SocketBackend: executeTimeout surfaces as backend::TimeoutError, not a generic runtime_error",
           "[net][socket_backend][timeout]") {
     // Regression coverage for dispatchIncomingEnvelope's env.message ==
-    // wire::kExecuteTimeoutMessage branch (added alongside the SqliteOfflineQueue
-    // and bridge.hpp fixes in #447): a server-side LimitPolicy::executeTimeout
+    // wire::kExecuteTimeoutMessage branch: a server-side LimitPolicy::executeTimeout
     // reply must resolve the Completion with backend::TimeoutError specifically,
     // the same type QtWebSocketBackend/SimulatedRemoteBackend give callers for
     // this case -- not the generic std::runtime_error the `else` branch below it
@@ -1651,7 +1650,8 @@ TEST_CASE("SocketBackend: a reconnect handler throwing a non-std::exception leav
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no stranded execute ticket",
           "[net][socket_backend][disconnect]") {
-    // Regression coverage for morph#449 at the transport level; the mechanism
+    // Regression coverage for a stranded execute ticket at the transport
+    // level; the mechanism
     // itself is pinned deterministically by
     // tests/test_remote_execute_ordering.cpp's "an execute rejected out of
     // ticket order..." case. This is the shape that actually found it, kept
@@ -1685,8 +1685,8 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
     //
     // It is deliberately the "heavier stress shape" the sibling
     // "execute() racing a disconnect never leaves a Completion unresolved"
-    // case above avoids: kept separate so a morph#449 regression fails here,
-    // where it is diagnosed, rather than masquerading as a failure of that
+    // case above avoids: kept separate so a ticket-ordering regression fails
+    // here, where it is diagnosed, rather than masquerading as a failure of that
     // test's own TOCTOU fix.
     for (int iter = 0; iter < 3; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{4};
@@ -1743,7 +1743,7 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
     }
 }
 
-// ── The structural registration surface (morph#569) ──────────────────────────
+// ── The structural registration surface ─────────────────────────────────────
 //
 // `SocketBackend` overrides `bindModel`/`promoteModel` natively rather than
 // being wrapped in `SynchronousBackendAdapter`. The property that decides that
@@ -1787,7 +1787,7 @@ TEST_CASE(
     // until that join completes. With the reverse order, TSan caught the I/O
     // thread still running -- and still able to call `post()` -- while this
     // executor's own destructor was tearing down its condition variable on the
-    // main thread (morph#586, data race in pthread_cond_destroy).
+    // main thread -- a data race in pthread_cond_destroy.
     morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
     REQUIRE(backend.waitForConnected());
@@ -1886,7 +1886,7 @@ TEST_CASE("SocketBackend: a bindModel continuation does not run until the caller
     REQUIRE(wsServer.listen());
 
     // Declared before `backend` -- see the identical comment on the first
-    // TEST_CASE in this file that needed it (morph#586, data race).
+    // TEST_CASE in this file that needed it: a data race on teardown.
     morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
     REQUIRE(backend.waitForConnected());
@@ -1912,7 +1912,7 @@ TEST_CASE("SocketBackend: a bindModel continuation does not run until the caller
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("SocketBackend: a bind settles while the synchronous control channel is still parked",
           "[net][socket_backend][registration-surface]") {
-    // This is the evidence behind morph#569's choice of a native override over
+    // This is the evidence behind the choice of a native override over
     // `SynchronousBackendAdapter`, and behind the deadlock claim in
     // docs/spec/core/backend.md.
     //
@@ -1937,7 +1937,7 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
     cfg.reconnectEnabled = false;
 
     // Declared before `backend` -- see the identical comment on the first
-    // TEST_CASE in this file that needed it (morph#586, data race).
+    // TEST_CASE in this file that needed it: a data race on teardown.
     morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
     fake.acceptAndHandshake();
@@ -2031,7 +2031,7 @@ TEST_CASE("SocketBackend: several binds are in flight at once and are matched by
     cfg.reconnectEnabled = false;
 
     // Declared before `backend` -- see the identical comment on the first
-    // TEST_CASE in this file that needed it (morph#586, data race).
+    // TEST_CASE in this file that needed it: a data race on teardown.
     morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port())), cfg};
     fake.acceptAndHandshake();
@@ -2129,7 +2129,7 @@ TEST_CASE("SocketBackend: a bind rejected by the server surfaces the server's ow
     REQUIRE(wsServer.listen());
 
     // Declared before `backend` -- see the identical comment on the first
-    // TEST_CASE in this file that needed it (morph#586, data race).
+    // TEST_CASE in this file that needed it: a data race on teardown.
     morph::exec::MainThreadExecutor callerExec;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()))};
     REQUIRE(backend.waitForConnected());
@@ -2152,7 +2152,7 @@ TEST_CASE("SocketBackend: a bind rejected by the server surfaces the server's ow
 TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural surface without waiting",
           "[net][socket_backend][disconnect][registration-surface]") {
     // The shape a reconnect handler takes once its caller is on the structural
-    // surface (morph#570): issue the bind, attach a continuation, return. The
+    // surface: issue the bind, attach a continuation, return. The
     // handler parks on nothing, so it has no reply to wait for and cannot hold
     // up whichever thread runs it.
     //
@@ -2179,7 +2179,7 @@ TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural
     CHECK(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
 }
 
-// ── contextKey on a private registration (morph#587) ─────────────────────────
+// ── contextKey on a private registration ────────────────────────────────────
 //
 // `RemoteServer::attachLogIfConfigured` (core/remote.hpp) returns *without
 // consulting its `LogProvider` at all* when the envelope's `contextKey` is

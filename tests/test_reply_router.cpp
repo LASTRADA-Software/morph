@@ -63,7 +63,7 @@ TEST_CASE("classifyExecuteReply: an ok reply classifies as Value", "[backend][re
 TEST_CASE("classifyExecuteReply: an err reply carrying the timeout message classifies as Timeout",
           "[backend][reply_router][timeout]") {
     // The unit-level half of test_socket_backend.cpp's "executeTimeout surfaces
-    // as backend::TimeoutError" regression case (#447): the server's own
+    // as backend::TimeoutError" regression case: the server's own
     // LimitPolicy::executeTimeout reply must be distinguishable from an
     // arbitrary `err`, so callers can tell "the server gave up on this specific
     // call" from an application error. That case still exists over the real

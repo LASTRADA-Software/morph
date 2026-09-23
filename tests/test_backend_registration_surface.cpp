@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for issue #567: IBackend's structural registration surface
+// IBackend's structural registration surface
 // (`bindModel`/`promoteModel`, `BindRequest`/`PromoteRequest`) and
 // `SynchronousBackendAdapter`.
 //
@@ -136,7 +136,7 @@ struct RecordingBackend : IBackend {
 };
 
 /// @brief A backend whose registration genuinely never blocks — the shape
-///        morph#568 moves `QtWebSocketBackend` onto.
+///        `QtWebSocketBackend` implements natively.
 ///
 /// `bindModel` stores the promise and returns; the reply is delivered later,
 /// from whatever thread the transport happens to use.
@@ -521,7 +521,7 @@ TEST_CASE(
                                      "setConnectHandler", "setDisconnectHandler", "setSession:pal"});
 }
 
-// ── `bindWaitPolicy`: the one bit `Completion` cannot carry (morph#593) ──────
+// ── `bindWaitPolicy`: the one bit `Completion` cannot carry ────────────────
 //
 // Two backends both return an unsettled `Completion` from `bindModel`, and
 // `Bridge::registerHandler` — a synchronous entry point whose caller uses the
@@ -594,8 +594,8 @@ TEST_CASE("morph::bridge::Bridge: registerHandler waits out a kCallerMayBlock ba
     auto binding = bridge.registerHandler<RegistrationSurfaceModel>();
 
     // No polling, no drain: the constructor did not return until the reply
-    // landed. This is the contract every non-Qt embedder had before morph#568
-    // and that morph#586 took away from `SocketBackend`.
+    // landed. This is the contract every non-Qt embedder relies on, and what
+    // `kCallerMayBlock` preserves for a natively non-blocking `SocketBackend`.
     REQUIRE(morph::bridge::Bridge::isBound(binding));
     REQUIRE(binding->currentId.load() == 99U);
     // ...and it was a *wait*, not a synchronous backend: the value was produced
@@ -615,7 +615,7 @@ TEST_CASE("morph::bridge::Bridge: registerHandler does not wait for a kCallerMus
     // Returned while the reply is still 200 ms away. For `QtWebSocketBackend`
     // under `asyncRegistrationEnabled` this is not a preference: the reply is
     // delivered by the Qt event loop of this very thread, so a `registerHandler`
-    // that waited here would never return (morph#568's WASM page abort).
+    // that waited here would never return -- on WASM, a page abort.
     REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
 
     REQUIRE(morph::testing::waitUntil([&] { return morph::bridge::Bridge::isBound(binding); }));
@@ -623,7 +623,7 @@ TEST_CASE("morph::bridge::Bridge: registerHandler does not wait for a kCallerMus
     REQUIRE(backend->settledOffCallerThread.load());
 }
 
-// ── cancelPending and the completions the adapter itself produced (#619) ─────
+// ── cancelPending and the completions the adapter itself produced ──────────
 //
 // `SynchronousBackendAdapter::cancelPending` used to be a one-line forward to
 // the wrapped backend. The two verbs the adapter *reshapes* settle from a task
@@ -753,9 +753,9 @@ TEST_CASE("morph::backend::SynchronousBackendAdapter: cancelPending rejects the 
     REQUIRE(errRan.load() == 1);
 }
 
-// ── cancelPending and the control call the strand has not started yet (#636) ─
+// ── cancelPending and the control call the strand has not started yet ──────
 //
-// #619's case above is about the *completion*: it must be rejected. This one is
+// The case above is about the *completion*: it must be rejected. This one is
 // about the *work behind it*: a task still queued on `_control` when
 // `cancelPending` runs must never make its blocking control call at all.
 // Settling the promise cannot achieve that -- the task's own `resolve` being a

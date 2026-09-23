@@ -266,7 +266,7 @@ TEST_CASE("two AllowShared handlers naming one key reach one instance", "[shared
     REQUIRE(second.primary().value_or(-1) == 42);
 }
 
-// ── Issue #68: executeJson skips the payload-keyed attach step for
+// ── executeJson skips the payload-keyed attach step for
 // AllowShared handlers ───────────────────────────────────────────────────
 //
 // ActionExecuteRegistry::registerAction used to build a single executor that
@@ -1334,7 +1334,7 @@ TEST_CASE("deregistering a poisoned instance evicted from the directory tears it
     REQUIRE(okWaiter.env.kind == "ok");
 }
 
-// ── morph#523: the directory must learn a first action's outcome before any
+// ── The directory must learn a first action's outcome before any
 // ── host code can attach to its key ──────────────────────────────────────────
 //
 // `docs/spec/core/shared_instances.md`'s Failure modes section: an instance
@@ -1480,7 +1480,7 @@ TEST_CASE("the server does not hand out an instance between its first action fai
     REQUIRE(attached.load() != reg.modelId);
 }
 
-// morph#523: an instance that was *created* for a directory key can never be
+// An instance that was *created* for a directory key can never be
 // promoted onto a second one, and "created for a key" outlives being filed
 // under it. `InstanceDirectory::attach` clears the `sharedKey` of an instance it
 // evicts as poisoned, so from the directory's side an evicted instance looks

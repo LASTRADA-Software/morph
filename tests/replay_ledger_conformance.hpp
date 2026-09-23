@@ -2,7 +2,7 @@
 
 /// @file
 /// @brief Shared `IReplayLedger` conformance checks, run against every
-///        implementation morph ships (morph#226).
+///        implementation morph ships.
 ///
 /// Mirrors `tests/offline_queue_conformance.hpp`'s shape: a header of plain
 /// functions rather than `TEST_CASE`s, so a new implementation — including one

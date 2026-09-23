@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// morph::offline::IReplayLedger (morph#226): the op-id/exactly-once replay
+// morph::offline::IReplayLedger: the op-id/exactly-once replay
 // ledger promoted out of seven near-identical hand-written copies across five
 // example rungs. See include/morph/offline/replay_ledger.hpp for the
 // interface's own rationale and docs/spec/offline/offline.md for the

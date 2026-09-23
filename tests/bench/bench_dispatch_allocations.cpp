@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Allocation census for one local `execute` round trip, for morph#572.
+// Allocation census for one local `execute` round trip.
 //
-// morph#572 is a performance ticket whose scope is set by a number -- "19
-// allocations, two CompletionStates, two strings per dispatch", measured on
-// master @ 4017228d. Three pull requests then rewrote the dispatch path
-// (morph#639, morph#649, morph#654), which is exactly the situation where a
-// fix gets built against a figure nobody has re-checked. This program exists
+// Any scoping figure for dispatch cost -- "19 allocations, two
+// CompletionStates, two strings per dispatch" -- goes stale the moment
+// anything on the path changes, and the dispatch path changes often. That is
+// exactly the situation where a fix gets built against a figure nobody has
+// re-checked. This program exists
 // so the figure can be re-checked in one command instead of being rebuilt from
 // a description of how it was once obtained.
 //
@@ -35,8 +35,8 @@
 //   * `--attribute` additionally prints the size of every allocation made
 //     during one steady-state call. For per-*line* attribution, build with
 //     `-g -no-pie -rdynamic` and add a `backtrace()` to `note()`, then resolve
-//     the frames with `llvm-addr2line -a -f -i -C`; that is how the breakdown
-//     in morph#572's re-measurement comment was produced. `-no-pie` matters:
+//     the frames with `llvm-addr2line -a -f -i -C`; that is how a per-frame
+//     breakdown is produced. `-no-pie` matters:
 //     without it the recorded frames are runtime addresses and addr2line
 //     resolves every one of them to `_end`.
 //   * A second group of censuses counts what a *registry lookup* allocates,
@@ -45,8 +45,8 @@
 //     census over one side alone either measures zero or overstates the
 //     saving. `ActionDispatcher` (`coalesce` + `requiredFieldsFor`) and
 //     `journal::PayloadMigrationRegistry::find` decode nothing and execute
-//     nothing, so their figure *is* the key's cost -- morph#572's Part C and
-//     morph#699. `ModelRegistryFactory::create` and
+//     nothing, so their figure *is* the key's cost.
+//     `ModelRegistryFactory::create` and
 //     `BridgeHandler::executeJson` do more than look up, so theirs is a floor
 //     plus the key, and what is comparable between runs is the difference
 //     between a long-id and a short-id run.
@@ -58,12 +58,12 @@
 // vector that the settle then drains; lose it and each takes
 // `CompletionState`'s attach-after-ready path instead. The two cost a
 // different number of allocations -- **17 and 13 per call** on this workload
-// before morph#572 -- so which one a process lands in moves the headline
+// with an unpinned race -- so which one a process lands in moves the headline
 // figure by four allocations for reasons that have nothing to do with the code
 // under measurement. Measured, interleaved, 20 processes per configuration:
 // on an idle machine every process reported ~16.95; with the machine
-// oversubscribed 16 ways, 18 of 20 reported ~13.06. That is morph#687's
-// instability, reproduced and given a cause.
+// oversubscribed 16 ways, 18 of 20 reported ~13.06. That is the instability
+// this gate pins, reproduced and given a cause.
 //
 // `GatedWorkerExecutor` holds the strand task until the caller has attached
 // everything, so this program always measures the attach-before-settle regime:
@@ -75,13 +75,12 @@
 //
 // With the gate in place the figure is *exact*: 8.06 per call in every one of
 // 84 processes across clang Release, clang Debug and gcc Debug, idle and
-// oversubscribed alike (morph#572; it was 14.06 until Part B landed in
-// morph#743). Take more than one run anyway -- a single process is a single
+// oversubscribed alike. Take more than one run anyway -- a single process is a single
 // sample -- but if two runs disagree here, something has changed.
 //
-// ── What the registry censuses measured (morph#699) ─────────────────────────
+// ── What the registry censuses measure ──────────────────────────────────────
 //
-// On `e9dad027`, x86-64 Linux, clang 22.1.8 / libstdc++ 16.2.1, Release,
+// x86-64 Linux, clang 22.1.8 / libstdc++ 16.2.1, Release,
 // before and after making `ActionExecuteRegistry` and
 // `PayloadMigrationRegistry` transparent:
 //
@@ -95,7 +94,7 @@
 // long id and a short one cost the same, which is the property the
 // `--lookup-budget` gate now holds. `create` is unchanged on purpose: it runs
 // per model *instantiation*, not per request, and parking it rather than
-// carrying it along for symmetry is morph#709.
+// carrying it along for symmetry is deliberately not done.
 //
 // Build: `-DMORPH_BUILD_LOAD_TESTS=ON`, target `morph_bench_alloc`. See
 // docs/spec/testing_strategy.md.
@@ -210,9 +209,9 @@ BRIDGE_REGISTER_ACTION(BenchAllocModel, BenchAllocPing, "BenchAlloc_Ping")
 // Two more registered pairs, existing only to be looked up. Their ids sit
 // deliberately on either side of libstdc++'s 15-character SSO threshold, so
 // the lookup census below reports the two cases separately instead of
-// averaging them. morph#529 (folded into morph#572 as Part C) left exactly
-// that question open: it observed that the registry built two `std::string`s
-// per lookup, but not whether morph's own ids are long enough for those
+// averaging them. Observing that the registry builds two `std::string`s per
+// lookup leaves the load-bearing question open: whether morph's own ids are
+// long enough for those
 // constructions to reach the heap. morph's real ids straddle the boundary --
 // this file's own `"BenchAlloc_Model"` is 16 characters and allocates,
 // `"BenchAlloc_Ping"` is 15 and does not -- so the census measures both ends
@@ -343,13 +342,11 @@ constexpr int kWarmup = 50;
 constexpr int kCalls = 200;
 constexpr int kLookups = 200;
 
-// Allocation census for `ActionDispatcher`'s key lookups -- morph#572 Part C,
-// which is about the server-side dispatch path rather than the client-side one
-// `run()` measures. `coalesce` and `requiredFieldsFor` are the two lookups
-// that do nothing *but* look up: no JSON is decoded, no runner executes, and
-// neither returns anything that has to be built. What they allocate is
-// therefore exactly what building the stored `std::pair<std::string,
-// std::string>` key costs, which is the whole of Part C's claim.
+// Allocation census for `ActionDispatcher`'s key lookups -- the server-side
+// dispatch path rather than the client-side one `run()` measures. `coalesce` and `requiredFieldsFor` are the two
+// lookups that do nothing *but* look up: no JSON is decoded, no runner executes, and neither returns anything that has
+// to be built. What they allocate is therefore exactly what building the stored `std::pair<std::string, std::string>`
+// key costs, which is the whole of Part C's claim.
 //
 // Both are warmed first: `requiredFieldsFor` calls a thunk that builds the
 // action's `ActionDescription` on first use and caches it for the process, so
@@ -377,8 +374,8 @@ double lookupCensus(std::string_view modelId, std::string_view actionId) {
     return static_cast<double>(after - before) / (2.0 * kLookups);
 }
 
-// Allocation census for `ModelRegistryFactory::create` -- morph#699's first
-// site. Unlike the two above this is *not* a pure lookup: `create` calls the
+// Allocation census for `ModelRegistryFactory::create`. Unlike the two above
+// this is *not* a pure lookup: `create` calls the
 // registered factory, which news up a holder, and then hands the holder its
 // primary key. So the figure has a floor that has nothing to do with the key,
 // and what a fix moves is the difference between two runs of this, not the
@@ -407,8 +404,8 @@ double registryCreateCensus(std::string_view modelId) {
     return static_cast<double>(after - before) / kLookups;
 }
 
-// Allocation census for `PayloadMigrationRegistry::find` -- morph#699's third
-// site, and the only one of the three that is a pure lookup: `find` hashes,
+// Allocation census for `PayloadMigrationRegistry::find` -- the only one of
+// the three registry sites that is a pure lookup: `find` hashes,
 // probes and returns a pointer. Nothing else in it can allocate, so the figure
 // *is* the key's cost and a fix has to take it to zero.
 //
@@ -433,12 +430,10 @@ double migrationFindCensus(std::string_view actionType, std::string_view fromSch
 }
 
 // Allocation census for one `BridgeHandler::executeJson` round trip --
-// morph#699's second site, `ActionExecuteRegistry::execute`, measured through
-// the only caller it has. Also not a pure lookup: `executeJson` decodes the
-// body, dispatches, runs the action and encodes the result, so most of this
-// figure is the codec. That is why it is measured rather than the lookup
-// alone -- morph#699 asks how hot the site is before it asks for the fix, and
-// "N allocations out of M" is the answer in the form the question wants.
+// `ActionExecuteRegistry::execute`, measured through the only caller it has. Also not a pure lookup: `executeJson`
+// decodes the body, dispatches, runs the action and encodes the result, so most of this figure is the codec. That is
+// why it is measured rather than the lookup alone: how hot the site is decides whether the lookup's cost is worth
+// removing, and "N allocations out of M" is the answer in that form.
 //
 // Gated exactly as `roundTrip` is, for the reason the file header gives.
 //
@@ -545,7 +540,7 @@ int run(bool attribute, double budget, double lookupBudget, double idLengthBudge
               << std::format("  both ids past SSO        : {:.2f} allocations per lookup\n", longIdLookups)
               << std::format("  both ids inside SSO      : {:.2f} allocations per lookup\n", shortIdLookups);
 
-    // morph#699's three sites. Every one is reported for ids past the SSO
+    // The three registry sites. Every one is reported for ids past the SSO
     // buffer and again for ids inside it, because the cost is entirely
     // id-length-dependent and a census over one side only would either
     // measure zero or overstate the saving. morph's real ids straddle the
@@ -584,7 +579,7 @@ int run(bool attribute, double budget, double lookupBudget, double idLengthBudge
         // `ActionDispatcher`'s lookups and `PayloadMigrationRegistry::find`
         // are pure lookups -- they hash, probe and return -- so the figure
         // *is* the key's cost, and zero is the only right answer for it on
-        // any standard library (morph#572 Part C, morph#699). The third
+        // any standard library. The third
         // registry, `ActionExecuteRegistry`, is gated separately by
         // `--id-length-budget` below, because it can only be reached through
         // a whole `executeJson` round trip.
@@ -619,7 +614,7 @@ int run(bool attribute, double budget, double lookupBudget, double idLengthBudge
         //
         // 0.5 separates that residue from the thing being guarded by a wide
         // margin in both directions: the residue is 0.01, and reverting
-        // either half of morph#699's change to this path takes the gap to
+        // either half of the transparent key on this path takes the gap to
         // 3.00 per call (two `std::string`s for the `Key`, one for
         // `executeJson`'s own copy of `ModelTraits<Model>::typeId()`).
         double const idLengthCost = longExecuteJson - shortExecuteJson;

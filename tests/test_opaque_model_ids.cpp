@@ -93,7 +93,7 @@ TEST_CASE("OpaqueIdGenerator is a bijection: 20000 counters produce 20000 distin
     REQUIRE(seen.size() == n);
 }
 
-// ── morph#453: the bijection above cannot see the high 32 bits ──
+// ── The bijection above cannot see the high 32 bits ──
 //
 // Counters 1..20000 all have a zero high half, so the case above passes whether
 // or not `permute` uses `counter >> 32` at all -- it cannot distinguish a

@@ -8,7 +8,7 @@
 #
 # One entry per check, with the reason it cannot fire on anything worth fixing.
 #
-# ── These suppressions are NOT confined to test sources (morph#632) ──────────
+# ── These suppressions are NOT confined to test sources ─────────────────────
 #
 # clang-tidy resolves its configuration from the path of the *translation unit*
 # it is analysing, not from the path of the file a diagnostic lands in. This
@@ -140,7 +140,7 @@
 # `readability-function-cognitive-complexity.IgnoreMacros: true` instead, which
 # stops it counting increments expanded from inside a macro body -- the whole
 # Catch2 assertion vocabulary -- while still scoring everything the test author
-# wrote (morph#778). Measured on 68a30bcc with clang-tidy 22.1.8 over the
+# wrote. Measured with clang-tidy 22.1.8 over the
 # clang-tidy-diff job's own 751-entry database, with the check forced on in
 # every directory: 246 TEST_CASE bodies score over 25 without the option and
 # 4 with it. Three of those four are under tests/ --
@@ -152,8 +152,8 @@
 #
 # -- so narrowing this entry to the option is a real option rather than a
 # theory, but it is not free: it would newly fail those four bodies, two of
-# them in a file another branch is editing. Narrowing it is morph#787, filed
-# with those figures and the order of operations, rather than done here.
+# them in a file another branch is editing. Narrowing it is separate work,
+# not done here.
 
 # readability-convert-member-functions-to-static: fires on the `execute` methods
 # of fixture models. A stub action handler ignores its own state, which is

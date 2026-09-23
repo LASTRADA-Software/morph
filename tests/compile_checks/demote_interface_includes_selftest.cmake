@@ -2,7 +2,7 @@
 #
 # Configure-time self-test for
 # cmake/morph_demote_interface_includes.cmake's
-# morph_demote_interface_includes_to_system() (morph#438).
+# morph_demote_interface_includes_to_system().
 #
 # ── Why a synthetic fixture, and not an assertion about Lightweight ──────────
 #
@@ -23,12 +23,12 @@
 # full. This fails if the function body is removed.
 #
 # It does NOT prove the real Lightweight target is handed a real `-I` on the
-# affected machine -- that is macOS-only and is item 7 of morph#438's
+# affected machine -- that is macOS-only and is item 7 of this helper's own
 # acceptance criteria, for whoever has the hardware. This file proves the
 # transform; that proves the input.
 
 # ── The fixture ──────────────────────────────────────────────────────────────
-# Every case morph#438 names, in one list:
+# Every case the helper has to handle, in one list:
 #   -I/fixture/joined      joined form, one element
 #   -I;/fixture/separated  separated form, two elements
 #   -Ifixture/relative     joined form with a relative directory
@@ -69,7 +69,7 @@ if(NOT "${_morph_selftest_opts}" STREQUAL "${_morph_selftest_want_opts}")
         "    expected: ${_morph_selftest_want_opts}\n"
         "Every non-`-I` option must survive unchanged and in order, and every "
         "`-I` (joined or separated) must be gone. See "
-        "cmake/morph_demote_interface_includes.cmake and morph#438.")
+        "cmake/morph_demote_interface_includes.cmake.")
 endif()
 
 if(NOT "${_morph_selftest_sys}" STREQUAL "${_morph_selftest_want_sys}")
@@ -80,8 +80,7 @@ if(NOT "${_morph_selftest_sys}" STREQUAL "${_morph_selftest_want_sys}")
         "    expected: ${_morph_selftest_want_sys}\n"
         "This is the property morph's three existing SYSTEM demotions read, and "
         "the one an `-isystem` on the command line comes from -- the whole point "
-        "of the move. See cmake/morph_demote_interface_includes.cmake and "
-        "morph#438.")
+        "of the move. See cmake/morph_demote_interface_includes.cmake.")
 endif()
 
 # ── Idempotence ──────────────────────────────────────────────────────────────

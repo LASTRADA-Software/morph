@@ -842,7 +842,7 @@ TEST_CASE(
     (void)midB;
 }
 
-// ── The two re-registration sites and `bindWaitPolicy` (morph#615) ───────────
+// ── The two re-registration sites and `bindWaitPolicy` ─────────────────────
 //
 // `switchBackend`'s phase 1 and the reconnect handler both called the blocking
 // `registerModelShared`/`registerModelWithContext` directly, with no policy
@@ -945,7 +945,7 @@ private:
     // "did the site come back within the polling budget", so a parked legacy
     // verb must still be parked when that budget runs out. A bound near the
     // budget would make the measurement a coin flip -- observed, while
-    // mutation-testing morph#615: with both set to two seconds the mutated
+    // mutation-testing this pair: with both set to two seconds the mutated
     // (blocking) build passed.
     void hold() {
         std::unique_lock lock{_gateMtx};

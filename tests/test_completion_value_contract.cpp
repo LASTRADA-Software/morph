@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// The value-handling contract of morph::async::Completion<T> (morph#553),
+// The value-handling contract of morph::async::Completion<T>,
 // pinned by counting rather than by reading the header:
 //
 //   - `T` need only be move-constructible. `Completion<std::unique_ptr<int>>`
@@ -205,8 +205,8 @@ TEST_CASE("Completion value contract: a mixed handler set charges one copy per b
 }
 
 TEST_CASE("Completion value contract: T need only be move-constructible", "[completion][issue-553]") {
-    // `Completion<std::unique_ptr<int>>` did not compile before morph#553 --
-    // four sites copied `T` on the value path. Instantiating is not evidence on
+    // `Completion<std::unique_ptr<int>>` does not compile if any site copies
+    // `T` on the value path. Instantiating is not evidence on
     // its own, so this fans out to handlers attached on both sides of the
     // settle and checks each one actually ran against the real value.
     SyncExecutor exec;

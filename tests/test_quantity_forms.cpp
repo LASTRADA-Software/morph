@@ -172,7 +172,7 @@ struct QFSchedule {
     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 };
 
-// Three `Choice` fields whose payload types differ (morph#543) -- and, with
+// Three `Choice` fields whose payload types differ -- and, with
 // them, the options action each names, which is what the composed `$defs` key
 // keeps apart. Not registered as an action anywhere -- only its generated
 // schema is under test.
@@ -191,8 +191,8 @@ struct QFTwinSlots {
 // Two `Choice` fields whose value/label names split the same characters
 // differently. A `_`-joined key that did not escape the `_` inside a part
 // would spell both `Choice_QFListRows_id_x_name`, putting the second field
-// back on the first one's definition -- morph#543 reached through two
-// ordinary snake_case wire names.
+// back on the first one's definition -- the shared-`$defs` collision reached
+// through two ordinary snake_case wire names.
 struct QFUnderscoreSplitChoices {
     morph::forms::Choice<std::int64_t, "QFListRows", "id_x", "name"> left;
     morph::forms::Choice<std::string, "QFListRows", "id", "x_name"> right;
@@ -664,8 +664,8 @@ namespace {
 }  // namespace
 
 TEST_CASE("Forms::SchemaJson::DifferentlyTypedChoiceFieldsKeepTheirOwnTypes", "[forms]") {
-    // Before morph#543 every `Choice<...>` instantiation was named "Choice",
-    // so glaze populated one `$defs/Choice` entry from whichever it reached
+    // If every `Choice<...>` instantiation were named "Choice",
+    // glaze would populate one `$defs/Choice` entry from whichever it reached
     // first and had the rest `$ref` it: a `bool` picklist next to an
     // `int64_t` one described the int64 field as a boolean, and
     // DynamicForm.qml resolves the `$ref` and draws a checkbox for a
@@ -1084,7 +1084,7 @@ TEST_CASE("Forms::FieldMeta::FluentBuildersRunAtRuntimeViaNamespaceScopeInlineCo
 }
 
 // ---------------------------------------------------------------------------
-// morph#159: `x-decimalPlaces` is an *enforced* contract, so
+// `x-decimalPlaces` is an *enforced* contract, so
 // reconcileDeclaredPrecision has to re-round the stored value, not just move
 // the precision tag. Before the fix the reproduction below left the payload at
 // exactly 1.23456 while tagging it dp=1 — the form rendered "1.2" over a stored

@@ -40,20 +40,20 @@
 // assumed -- with the pre-fix two-step drain restored in `scheduleNext` (flip
 // `running` under `strand->mtx`, release it, then erase under `_mapMtx` in a
 // separate critical section), this case passed 10/10 under ThreadSanitizer on
-// x86-64 Linux / clang 22.1.8 (morph#668). Short tasks maximise *re-arm*; they do
+// x86-64 Linux / clang 22.1.8. Short tasks maximise *re-arm*; they do
 // not produce a drain. Turning the thread or post counts up makes that worse,
 // not better.
 //
 // The second case below produces the shape this one cannot, and is the one that
 // fails against that mutant. The third covers the node the drain now recycles
-// (morph#670), which neither of the first two can be wrong about. Keep all
+// which neither of the first two can be wrong about. Keep all
 // three: saturation, the drain boundary, and the recycled node's key are
 // different failure modes of the same invariant.
 namespace {
 
 // ── The drain's diagnostic, and why it is a watchdog and not a deadline ──────
 //
-// morph#717 observed this case hang under ThreadSanitizer and be killed by
+// This case has been observed hanging under ThreadSanitizer and killed by
 // ctest's 120 s TIMEOUT having printed nothing but the Catch2 banner: no
 // assertion, no TSan report, no reason. That observation is weak and stays
 // weak -- 1 of 3 full-suite runs, 0 of 40 isolated, and this lane did not
@@ -62,8 +62,8 @@ namespace {
 // The *structural* half of the issue is checkable by reading, and it holds.
 // `~StrandExecutor` waits on
 // `_cv.wait(lock, [this] { return _inFlight == 0; })`
-// (`include/morph/core/strand.hpp:64-66`) with no timeout, and morph#374
-// scoped the strand so that this wait *is* the drain.
+// (`include/morph/core/strand.hpp:64-66`) with no timeout, and the strand is
+// scoped so that this wait *is* the drain.
 //
 // One correction to the issue's framing, because it decides the remedy. The
 // pre-#374 `2000 x 1 ms` budget was never a bound on the hang:
@@ -71,11 +71,11 @@ namespace {
 // iteration regardless, so a lost wakeup hung the pre-#374 binary just as
 // thoroughly. What that budget bounded was the time to the *first diagnostic*
 // -- a failed `REQUIRE` naming `completed` against `kExpected`, printed before
-// the same unbounded wait was entered. morph#374 did not create the hang. It
-// removed the only thing that spoke before it.
+// the same unbounded wait was entered. A deadline there does not create the
+// hang; it is the only thing that speaks before it.
 //
 // So restoring a deadline would be the wrong remedy twice over: it would not
-// bound the hang, and it would re-introduce precisely what morph#374 fixed --
+// bound the hang, and it would re-introduce
 // a `REQUIRE` about how fast the host is, evaluated before the invariant this
 // file exists for. What is restored below is the diagnostic with no verdict
 // attached: a watchdog thread that says where the case is and whether it is
@@ -84,8 +84,8 @@ namespace {
 // and the ctest timeout that follows carries the evidence it used to lack.
 //
 // The `+N since the last report` field is the whole point: it separates "this
-// host is slow" from "this strand is stuck", which is the one thing morph#717
-// could not determine about its own observation.
+// host is slow" from "this strand is stuck", which is the one thing a bare
+// timeout cannot determine about an observed hang.
 //
 // The period is `MORPH_STRAND_DRAIN_WATCHDOG_MS`, default 10000. Ten seconds
 // against a 0.4 s median for the whole case leaves about eleven reports inside
@@ -149,11 +149,10 @@ private:
             // second thread, where Catch2's macros are not safe to call, and
             // the point is to emit something even when the process is about to
             // be killed. Flushed per line so a SIGKILL cannot eat half a report.
-            std::cerr << "morph#717 strand-race watchdog: iteration " << _state->iteration << ", phase '"
-                      << _state->phase.load() << "', " << elapsed << " s into the iteration, completed " << current
-                      << "/" << _state->expected << " (+" << (current - previous)
-                      << " since the last report), inFlight " << _state->inFlight->load() << ", maxInFlight "
-                      << _state->maxInFlight->load() << '\n'
+            std::cerr << "strand-race watchdog: iteration " << _state->iteration << ", phase '" << _state->phase.load()
+                      << "', " << elapsed << " s into the iteration, completed " << current << "/" << _state->expected
+                      << " (+" << (current - previous) << " since the last report), inFlight "
+                      << _state->inFlight->load() << ", maxInFlight " << _state->maxInFlight->load() << '\n'
                       << std::flush;
             previous = current;
         }
@@ -168,7 +167,7 @@ private:
 
 }  // namespace
 
-// `[slow]` (morph#760) is what gives this case its own ctest `TIMEOUT`; see
+// `[slow]` is what gives this case its own ctest `TIMEOUT`; see
 // tests/CMakeLists.txt, where the tag is excluded from the blanket 120 s and
 // registered again with a budget sized from this case's measured loaded
 // runtime. It is a *scheduling* budget, not a performance one -- see the note
@@ -180,7 +179,7 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
     // pool/strand pair sampling the drain-and-re-arm interleaving once; twenty
     // of them is how often this case gets to observe it. Cutting this number
     // is the cheap way to fit a timeout and it makes the case worse at the one
-    // thing it exists for, so the budget was moved instead (morph#760).
+    // thing it exists for, so the budget lives on the ctest entry instead.
     //
     // What the case actually costs is set by the *scheduler*, not by the work:
     // the strand serialises `kThreads * kPostsPerThread` tasks, and each
@@ -264,8 +263,8 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
             // dips to zero across a handoff, so `_inFlight == 0` with no
             // producer left means every queued task has run.
             //
-            // This replaces a fixed budget of 2000 x 1 ms sleeps (morph#374).
-            // That budget was ~2 s of wall clock for 3200 strand-serialised
+            // Not a fixed budget of 2000 x 1 ms sleeps.
+            // That budget is ~2 s of wall clock for 3200 strand-serialised
             // tasks, 20 times over, and could expire with work still queued on
             // a loaded machine. Worse, the deficit was a `REQUIRE` and came
             // first, so Catch2 aborted the case before `maxInFlight` -- the
@@ -301,7 +300,7 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
     }
 }
 
-// The drain-and-re-arm boundary (morph#668), which the case above never reaches.
+// The drain-and-re-arm boundary, which the case above never reaches.
 //
 // Shape, not volume. The defect needs a strand to reach *empty* while a post is
 // arriving, so this case manufactures that rendezvous instead of hoping for it:
@@ -464,7 +463,7 @@ TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain",
     }
 }
 
-// The recycled map node (morph#670), which neither case above can be wrong
+// The recycled map node, which neither case above can be wrong
 // about.
 //
 // When a strand drains, `scheduleNext` no longer `erase`s the map entry: it
@@ -605,7 +604,7 @@ TEST_CASE("ThreadPoolExecutor(0) yields a usable pool", "[executor][race]") {
     // Scoped so ~ThreadPoolExecutor's own drain-before-join (executor.hpp's own
     // doc comment on it) is the wait, not a fixed-iteration poll: the posted
     // task is queued before this block ends, so the destructor's join is
-    // guaranteed not to return until it has run (morph#396).
+    // guaranteed not to return until it has run.
     {
         morph::exec::ThreadPoolExecutor pool{0};
         pool.post([&] { ran.store(true); });

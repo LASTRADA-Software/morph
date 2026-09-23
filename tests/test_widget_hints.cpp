@@ -28,7 +28,7 @@ static_assert(morph::forms::Multiline::widget() == "textarea");
 // The `$defs` key splits exactly where the generated definition differs.
 // `char` earns its own tag because glaze writes it as a JSON *string* while
 // the equally-wide, equally-signed `std::int8_t` is an integer -- sharing one
-// entry would describe only one of them, which is morph#543.
+// entry would describe only one of them.
 static_assert(morph::forms::detail::rangedSchemaName<char> != morph::forms::detail::rangedSchemaName<std::int8_t>);
 static_assert(morph::forms::detail::rangedSchemaName<std::int32_t> == "Ranged_i32");
 static_assert(morph::forms::detail::rangedSchemaName<double> == "Ranged_f64");
@@ -175,7 +175,7 @@ struct WHRealFieldMetaAction {
 };
 
 // Two `Ranged` fields whose payload types differ. Both `$ref`ed the one
-// `$defs/Ranged` entry before morph#543, so whichever glaze populated first
+// `$defs/Ranged` entry under a fixed name, so whichever glaze populated first
 // described the other one too -- an int slider served as a double, or a
 // double slider served as an int whose every legal value fails the type it
 // was handed under.
@@ -276,7 +276,7 @@ TEST_CASE("Forms::SchemaJson::PlainFieldsEmitNoWidgetHint", "[forms][widget-hint
     // form also matched any *longer* key sharing the prefix, so an unrelated
     // key named `x-min...` failed this test with a message pointing at the
     // slider bounds — which is how `x-exactMinimum` was first named, before
-    // this caught it (morph#213).
+    // this caught it.
     auto const schema = morph::forms::schemaJson<WHPlainAction>();
     CHECK_FALSE(schema.contains(R"("x-widget":)"));
     CHECK_FALSE(schema.contains(R"("x-min":)"));
