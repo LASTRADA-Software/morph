@@ -146,7 +146,17 @@
 /// array, the client-side submit gate, and the fielded-action readiness
 /// check. Non-quantity members are not checked — a plain `int64_t` cannot
 /// express "not filled in"; use a `Quantity` (or a custom `validate()`) when
-/// that distinction matters.
+/// that distinction matters. That exclusion covers `std::string` too: a
+/// `std::string` member exposes `empty()`, not `hasValue()`, so a "this text
+/// field must be non-empty" rule is a custom `validate()` body, never
+/// something this helper reports on.
+///
+/// Its walk is **flat**, unlike the schema generation described above: it
+/// inspects the action's own top-level members and does not descend into a
+/// nested aggregate, a `std::vector` of one, or a `std::optional` holding
+/// one. A nested type's own required fields are therefore *not* gated by an
+/// outer `allRequiredEngaged` — delegating to the nested value's `validate()`
+/// is the caller's to write.
 
 #include <algorithm>
 #include <array>
@@ -3324,6 +3334,13 @@ inline void enforceQuantityBounds(const A& action) {
 /// `A::computedFields` entry (a computed field is never something the user
 /// must fill -- see `morph::forms::recomputeAll`). Intended as the body of the
 /// action's `validate()`.
+///
+/// The walk is flat: only @p action's own top-level members are inspected,
+/// never a nested aggregate's, a `std::vector<Sub>`'s, or the value inside a
+/// `std::optional<Sub>`. A member whose type has no `hasValue()` -- a
+/// `std::string`, a plain integer, a nested struct -- is skipped entirely, so
+/// an action needing "this string is non-empty" or "this nested value is
+/// itself valid" writes that in its own `validate()` alongside this call.
 /// @tparam A     Action type (a reflectable aggregate).
 /// @param action Draft whose fields are checked.
 /// @return `true` when no required empty-capable field is empty.
