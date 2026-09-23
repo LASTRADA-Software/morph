@@ -41,8 +41,8 @@
 /// `named()` discards the name — so a build that never set it must not have
 /// that output emptied underneath it. The cost is real and measured, though:
 /// a 200,000-iteration running total took 54,056 KB and 0.034 s with
-/// provenance against 12,236 KB and 0.006 s without (morph#574, clang 22,
-/// `-O2`). **A bulk path that never calls `equation()` should set this to `0`.**
+/// provenance against 12,236 KB and 0.006 s without (clang 22, `-O2`).
+/// **A bulk path that never calls `equation()` should set this to `0`.**
 /// See `docs/spec/util/quantity_type.md`, *Limitations*.
 #ifndef MORPH_QUANTITY_PROVENANCE
 #define MORPH_QUANTITY_PROVENANCE 1
@@ -109,7 +109,7 @@ namespace detail {
     // operation, and INT64_MIN reaches here through the whole-integer
     // `Rational{value, DecimalPlaces{n}}` constructor, which does not
     // canonicalise (and `numerator` is public). `absU64` is the shared helper
-    // that gets this right -- see morph#496.
+    // that gets this right.
     auto const num = ::morph::math::detail::absU64(value.numerator);
     auto const den = static_cast<std::uint64_t>(value.denominator);
     auto const places = static_cast<std::uint32_t>(value.decimalPlaces.value);
@@ -475,8 +475,8 @@ concept SameEnumDistinct = std::same_as<decltype(A), decltype(B)> && (A != B);
 ///
 /// A derivation has no bound — `total = total + row` over a data-driven loop
 /// records one step per iteration — so without a limit `equation()` renders
-/// every one of them into a single line (morph#582: 100,000 steps produced a
-/// 500,001-character line in 58.8 s). This is where a *rendered* formula stops
+/// every one of them into a single line — measured at 100,000 steps: a
+/// 500,001-character line in 58.8 s. This is where a *rendered* formula stops
 /// being something a person reads, not where the cost stops being tolerable:
 /// a caller that wants more passes its own limit, so erring low costs one
 /// argument while erring high costs an unreadable line nobody asked for.
@@ -484,8 +484,8 @@ inline constexpr std::size_t kDefaultEquationSteps = 100;
 
 /// @brief Pass as `equation()`'s limit to write the derivation out in full.
 ///
-/// Restores the pre-morph#582 behaviour: no step is elided, and the cost is
-/// the caller's, taken deliberately. Used by the depth regression tests, which
+/// No step is elided, and the cost is the caller's, taken deliberately. Used
+/// by the depth regression tests, which
 /// exist precisely to walk a derivation deeper than any limit would render.
 inline constexpr std::size_t kEquationStepsUnlimited = std::numeric_limits<std::size_t>::max();
 
@@ -584,8 +584,8 @@ struct ASTNode {
     /// derivation that is a linear chain down `left`, one node per iteration.
     /// The compiler-generated destructor releases that chain recursively —
     /// `~shared_ptr` -> `~ASTNode` -> `~shared_ptr` -> ... — one stack frame
-    /// per node, and a long enough chain runs the stack out. Measured
-    /// (morph#574, clang 22, `-O0`, 8 MiB stack): a 21,000-node chain
+    /// per node, and a long enough chain runs the stack out. Measured with
+    /// clang 22, `-O0`, an 8 MiB stack: a 21,000-node chain
     /// segfaults on destruction, while an optimised build survives 200,000
     /// because clang turns the same chain into a loop. "Crashes in Debug,
     /// survives in Release" is the worst signature a defect can have, so the

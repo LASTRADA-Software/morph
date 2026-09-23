@@ -10,8 +10,8 @@
 /// schema, and they are the part of morph that costs almost nothing to compile.
 /// Nothing here reaches glaze.
 ///
-/// Measured on `master` @ c6f6d953, clang 22.1.8, `-O2 -fsyntax-only`, one
-/// translation unit per header, best of three:
+/// Measured with clang 22.1.8, `-O2 -fsyntax-only`, one translation unit per
+/// header, best of three:
 ///
 /// | header | CPU s | preprocessed lines |
 /// |---|---|---|

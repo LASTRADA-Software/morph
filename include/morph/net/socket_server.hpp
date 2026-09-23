@@ -115,7 +115,7 @@ public:
     /// ordering"): no lock inside this object can outlive the object holding
     /// it.
     void close() {
-        // Serialize the whole body, not just the guard below (morph#451).
+        // Serialize the whole body, not just the guard below.
         // `_closing.exchange` alone cannot exclude a second caller: the loser
         // still sees a *joinable* accept thread — the winner has not joined it
         // yet and cannot have, since that thread is parked in poll() until the
@@ -139,10 +139,10 @@ public:
             return;
         }
         // The accept loop's wakeup, and the reason this teardown terminates at
-        // all (morph#437). It used to be `_listenSocket.shutdownBoth()`, which
-        // works only because Linux happens to kick a parked accept(2) when the
-        // listening socket is shut down -- macOS/BSD do not, so the join below
-        // never returned there. Nothing about that was arranged by this code.
+        // all. `_listenSocket.shutdownBoth()` would not do: it works only
+        // because Linux happens to kick a parked accept(2) when the listening
+        // socket is shut down, and macOS/BSD do not, so the join below would
+        // never return there.
         // The loop now parks in poll() on this pipe as well as on the listener,
         // so one byte here ends it on every platform.
         //
@@ -204,7 +204,7 @@ private:
         std::atomic<bool> closed{false};
         /// Set by `clientLoop` as its last act, so `acceptLoop` can tell a
         /// finished connection from a live one and reclaim both its fd and its
-        /// thread handle. See `reapFinishedClients` (morph#498).
+        /// thread handle. See `reapFinishedClients`.
         std::atomic<bool> finished{false};
 
         /// Writes one reply frame. A failure is never propagated to the caller
@@ -216,9 +216,9 @@ private:
         /// *writes* -- `clientLoop()` is blocked in `recvSome()` and never
         /// consults it, so without the `shutdownBoth()` the connection goes on
         /// draining and dispatching whatever the peer already queued, into a
-        /// `RemoteServer` whose replies this function then silently drops
-        /// (morph#536: *any* caller observing a partial write marks the
-        /// connection unusable, and this is one of them).
+        /// `RemoteServer` whose replies this function then silently drops.
+        /// The rule is that *any* caller observing a partial write marks the
+        /// connection unusable, and this is one of them.
         void sendText(const std::string& payload) {
             std::scoped_lock lock{writeMtx};
             if (closed.load() || !socket.valid()) {
@@ -270,10 +270,10 @@ private:
             if (_closing.load()) {
                 return;
             }
-            // Before taking on another one: nothing else ever removed a
-            // finished connection, so an fd and a joinable thread handle
-            // accumulated per connection *ever accepted*, not per live
-            // connection, until close() (morph#498).
+            // Before taking on another one: nothing else removes a finished
+            // connection, so without this an fd and a joinable thread handle
+            // accumulate per connection *ever accepted*, not per live
+            // connection, until close().
             reapFinishedClients();
 
             auto conn = std::make_shared<ClientConnection>(std::move(*clientSocket), _server.openConnection());
@@ -322,7 +322,7 @@ private:
         // reaper can release the fd and join the thread handle rather than
         // holding both until close(). Declared *before* the scope guard below so
         // it is destroyed last: the flag must not go up until the connection's
-        // models have actually been reclaimed. morph#498.
+        // models have actually been reclaimed.
         struct FinishedFlag {
             explicit FinishedFlag(std::atomic<bool>& target MORPH_LIFETIMEBOUND) : flag{target} {}
             ~FinishedFlag() { flag.store(true, std::memory_order_release); }
@@ -393,7 +393,7 @@ private:
     /// closing it: the read side keeps working, so a future frame written
     /// here would land in the middle of the truncated one. `closed` is
     /// therefore set exactly as `sendText()`'s own catch does, so no later
-    /// write on this connection is attempted (morph#536).
+    /// write on this connection is attempted.
     ///
     /// Marking it closed is not enough on its own, though: `closed` only gates
     /// *writes*, and `clientLoop()` is blocked in `recvSome()` on a socket the
@@ -460,7 +460,7 @@ private:
     }
 
     /// RAII owner of the self-pipe `acceptLoop()` polls alongside the listener
-    /// and `close()` writes one byte to (morph#437).
+    /// and `close()` writes one byte to.
     ///
     /// A pipe rather than an `eventfd`: `eventfd` is Linux-only, and the whole
     /// point of this mechanism is that it is the *same* mechanism on every
@@ -557,7 +557,7 @@ private:
     /// joined, so the two never touch it concurrently.
     WakeupPipe _wakeup;
     /// Serializes `close()` against itself so only one caller ever reaches
-    /// `_acceptThread.join()` (morph#451). Not taken anywhere else.
+    /// `_acceptThread.join()`. Not taken anywhere else.
     std::mutex _closeMtx;
     std::atomic<bool> _closing{true};
     std::thread _acceptThread;

@@ -159,17 +159,14 @@ public:
     explicit FileOfflineQueue(std::filesystem::path path, ::morph::core::FileIoOps ioOps = {},
                               std::optional<std::size_t> maxDepth = std::nullopt)
         : _path{std::move(path)}, _io{std::move(ioOps)}, _maxDepth{maxDepth} {
-        // No constructor-time repairTornTail() here, deliberately.
+        // No constructor-time repairTornTail() here, deliberately. Calling it
+        // before load() would not heal an "interior merge from a doubled-up
+        // short write": repairTornTail only trims bytes after the final
+        // newline, and says so itself -- "Complete records, including a
+        // malformed *interior* line, are left exactly as they are."
         //
-        // An earlier revision of morph#530 called it before load(), to heal an
-        // "interior merge from a doubled-up short write" that load() would
-        // otherwise reject. It cannot do that: repairTornTail only trims bytes
-        // after the final newline, and says so itself -- "Complete records,
-        // including a malformed *interior* line, are left exactly as they are."
-        // So it never fixed the case it was added for.
-        //
-        // It did break two things. It is the constructor's only file mutation
-        // that can run *before* load() throws, which costs morph#494's
+        // It would also break two things. It would be the constructor's only
+        // file mutation that can run *before* load() throws, costing the
         // guarantee that a failed construction leaves the queue file
         // byte-identical (a file with both a malformed interior line and a torn
         // tail would come back truncated *and* throw). And it discards a
@@ -177,11 +174,11 @@ public:
         // -- which load() decodes perfectly well -- wiping the file outright
         // when that is the only line.
         //
-        // What actually prevents the doubled-up short write is the rollback in
+        // What prevents the doubled-up short write is the rollback in
         // writeLine() below, which leaves no partial bytes for a later write to
-        // merge with; load()+compact() heal an ordinary torn tail as they always
-        // have. FileActionLog keeps its own long-standing call: that is
-        // pre-existing behaviour there, not something this change introduced.
+        // merge with; load()+compact() heal an ordinary torn tail.
+        // FileActionLog calls repairTornTail at construction because its own
+        // file shape makes that safe there.
         load();
         compact();
         _file = _io.fopen(_path.string(), "a");
@@ -351,10 +348,11 @@ private:
         // so fwrite is a memcpy into the stdio buffer and returns the full
         // count even on a full disk; the write(2) that actually fails happens
         // inside syncFile's fflush. Wired to the short-write branch alone, an
-        // ENOSPC there threw with a truncated line already on disk, at exactly
-        // the offset the next writeLine resumes from and with no separating
-        // newline -- the identical merge morph#530 exists to prevent, and the
-        // *common* manifestation of a full disk rather than an exotic one.
+        // ENOSPC there would throw with a truncated line already on disk, at
+        // exactly the offset the next writeLine resumes from and with no
+        // separating newline -- the identical merge the rollback exists to
+        // prevent, and the *common* manifestation of a full disk rather than
+        // an exotic one.
         auto const rollBackAndThrow = [&](const std::string& what) {
             if (::morph::core::rollBackShortWrite(_io, _file, _path, offsetBeforeWrite) ==
                 ::morph::core::RollBack::torn) {
@@ -377,7 +375,7 @@ private:
             // no separating newline -- merging into one line load() can only
             // tolerate while it stays the trailing line, and stops being able
             // to the moment a further write pushes it into an interior position
-            // (morph#530). Roll the file back to its pre-write length instead,
+            // at all. Roll the file back to its pre-write length instead,
             // so a failed write leaves no trace at all for the next one to
             // merge with. Best-effort: this is already the failure path, and
             // when the rollback's own flush cannot complete (the disk that made
@@ -565,7 +563,7 @@ private:
         // The rename is a directory mutation, not a file-content one -- fsync
         // on `out` above made the compacted *data* durable, but not the
         // directory entry that now names it `_path` instead of the tmp name
-        // (morph#532). Surfaced rather than swallowed, same as every other
+        // durable. Surfaced rather than swallowed, same as every other
         // fsync failure in this class; safe to throw here, since compact()
         // always runs before `_file` is opened -- nothing left dangling.
         auto const dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path()));
