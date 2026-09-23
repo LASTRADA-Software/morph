@@ -598,7 +598,22 @@ jobs:
           #
           # Harmless on the clang-asan and clang-ubsan legs of this matrix:
           # neither runtime reads TSAN_OPTIONS.
-          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp
+          #
+          # `second_deadlock_stack=1` is colon-separated *into this value*, not
+          # a second `TSAN_OPTIONS:` key -- a second key silently replaces the
+          # first and drops the suppressions file, which is morph#688's failure
+          # one spelling over. It makes TSan print, for a lock-order inversion,
+          # the stacks where the *already-held* mutexes were taken. Measured on
+          # a two-mutex inversion under clang 22.1.8: 36 lines -> 55, the extra
+          # 19 being two `Mutex Mn previously acquired by the same thread here:`
+          # stacks that name the acquiring function and line. Without it TSan
+          # prints only `Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get
+          # more informative warning message` -- advice nobody can take after
+          # the fact, because morph#578 and morph#717 are intermittent and the
+          # run that fires is the only evidence that will ever exist. No
+          # measurable runtime cost: 2M lock acquisitions under TSan took a
+          # median 0.275s without and 0.273s with (morph#736).
+          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp:second_deadlock_stack=1
         run: |
           # morph::testkit::OomInjector (tests/oom_injector.cpp) overrides
           # the process-wide operator new/delete to force std::bad_alloc on
@@ -1027,7 +1042,13 @@ jobs:
           # Without it this leg is a coin toss on a false positive that the
           # other TSan leg already knows is one — and the failure mode of a
           # known false positive is that the next real one is waved past.
-          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp
+          #
+          # `second_deadlock_stack=1` for the reason the linux-sanitizers Test
+          # step above gives at length (morph#736), and appended to the same
+          # value rather than added as a second `TSAN_OPTIONS:` key, which
+          # would silently drop the suppressions file this leg was given in the
+          # first place.
+          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp:second_deadlock_stack=1
         run: ctest --preset clang-tsan -L ladder-kanban -R ThreadSanitizer --output-on-failure
 
       # Cumulative hit/miss for this leg. Without it the cache is
@@ -1412,6 +1433,12 @@ jobs:
       - name: Determine whether the ladder needs to run
         id: filter
         run: |
+          # Not because `echo | grep` can lose a status today -- `echo` does
+          # not fail -- but because this block decides whether a whole job
+          # runs, and the next edit to it is the one that adds a pipeline
+          # that can (morph#730). scripts/check_workflow_pipefail.py enforces
+          # the same rule on every other `run:` block.
+          set -o pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
           else
@@ -1883,6 +1910,12 @@ jobs:
       - name: Determine whether the ladder needs to run
         id: filter
         run: |
+          # Not because `echo | grep` can lose a status today -- `echo` does
+          # not fail -- but because this block decides whether a whole job
+          # runs, and the next edit to it is the one that adds a pipeline
+          # that can (morph#730). scripts/check_workflow_pipefail.py enforces
+          # the same rule on every other `run:` block.
+          set -o pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
           else
@@ -2623,6 +2656,11 @@ jobs:
 
       - name: Check every tracked C++ file against .clang-format
         run: |
+          # Without pipefail the count below is `wc`'s status, not `tr`'s: a
+          # missing or unreadable cpp-files.z yields COUNT=0 rather than an
+          # error (morph#730). The `-lt 100` guard catches that particular
+          # case; pipefail is what keeps the *next* pipeline here honest.
+          set -o pipefail
           git ls-files -z '*.hpp' '*.cpp' > cpp-files.z
           COUNT=$(tr -cd '\0' < cpp-files.z | wc -c)
           # An empty or truncated file list would make this job pass while
@@ -2961,8 +2999,14 @@ jobs:
           else
             BASE_SHA="${{ github.event.before }}"
           fi
+          # The left-hand side of the pipeline below is *expected* to fail:
+          # `find` exits non-zero when one of its two search roots is absent,
+          # and `head -1` closing the pipe SIGPIPEs it. The `-z` test is what
+          # reads the result. This is why the `set -o pipefail` further down is
+          # placed after this line rather than at the top of the step, and why
+          # the line carries the marker scripts/check_workflow_pipefail.py reads.
           CLANG_TIDY_DIFF="$(find /usr/lib/llvm-${{ env.CLANG_VERSION }}/share/clang /usr/share/clang \
-            -name 'clang-tidy-diff.py' 2>/dev/null | head -1)"
+            -name 'clang-tidy-diff.py' 2>/dev/null | head -1)"  # pipefail-ok: find's roots may be absent; head SIGPIPEs it; the -z test below reads the result
           if [ -z "$CLANG_TIDY_DIFF" ]; then
             echo "::error::clang-tidy-diff.py not found"
             exit 1
@@ -3371,6 +3415,47 @@ jobs:
 
       - name: Check every job named in a workflow comment exists
         run: python3 scripts/check_workflow_job_references.py .
+
+  # ── A workflow pipeline must read its left-hand side's status ─────────
+  #
+  # Its own job for the same reason banner-lint and job-reference-lint above
+  # are: it reads workflow text and builds nothing, so it answers in seconds
+  # rather than riding on a leg that takes 26-74 minutes to say the same thing.
+  #
+  # A `run:` block with no `shell:` key runs under `bash -e {0}` -- `-e` but
+  # not `-o pipefail` -- so `cmd | tee log` exits with `tee`'s status and a
+  # failing `cmd` is green. That has now cost this repository two gates:
+  #
+  #   * morph#479: `clang-tidy-diff.py … | tee` could not fail on anything it
+  #     found, for as long as it took someone to notice;
+  #   * morph#730: `scripts/mutation.sh … | tee` reported success for a
+  #     campaign that exited 1 having produced no report, so the mutation score
+  #     went unmeasured for two weeks and the workflow said nothing.
+  #
+  # Between those, three steps set `pipefail` by hand and one carries a comment
+  # about this exact hazard. The guard was known and applied inconsistently,
+  # which is what a gate is for. `shell: bash` -- the explicit spelling -- is
+  # `bash --noprofile --norc -eo pipefail {0}` and does carry the guard; only
+  # the absent key does not, and that asymmetry is most of why this recurs.
+  #
+  # Not vacuous on arrival: it found six unguarded pipelines on the tree it
+  # landed against, one of which was morph#730 itself.
+  pipefail-lint:
+    name: Workflow pipelines read their exit status
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # See scripts/test_check_workflow_pipefail.sh's own comment: this gate
+      # repairs the tree it guards in the same commit that adds it, so it
+      # passes on day one whether it parses a single `run:` block or none at
+      # all. The cases that decide whether it measures anything are the two
+      # vacuity ones, not the defects.
+      - name: Self-test the pipefail checker
+        run: bash scripts/test_check_workflow_pipefail.sh
+
+      - name: Check every workflow pipeline reads its left-hand side's status
+        run: python3 scripts/check_workflow_pipefail.py .
 
   # ── Install / export: find_package(morph CONFIG) must work ─────────────
   #

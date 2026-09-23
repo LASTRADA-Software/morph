@@ -474,6 +474,21 @@ jobs:
       - name: Self-test the mutation-survivor citation gate
         run: python3 scripts/check_mutation_survivors.py --self-test
 
+      # scripts/report_mutation_failure.sh is the campaign's reporting half,
+      # and it runs only on a failed scheduled run -- i.e. a few times a year,
+      # on the day its output matters most. It is self-tested here, per-PR,
+      # against a stub `gh`, because the defect it fixes (morph#731) is the
+      # *absence* of a record: the old step skipped when any issue with the
+      # scope's title was open, so the second, different failure in a scope
+      # produced no issue, no comment and no label -- only a line in a run log.
+      # There is nothing to inspect afterwards, so it has to be driven.
+      #
+      # The self-test is morph#731's acceptance condition executed rather than
+      # argued: two different failures in one scope, both recorded, with the
+      # second record carrying the second failure's own evidence.
+      - name: Self-test the mutation-failure reporter
+        run: bash scripts/test_report_mutation_failure.sh
+
   # ── Every line-cited allowlist's citations, resolved in one place ──────
   # Three files in this repository cite source lines by `{file, line, source}`:
   # scripts/branch_partial_allowlist.json, scripts/error_path_allowlist.json

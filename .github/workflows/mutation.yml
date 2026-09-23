@@ -115,15 +115,41 @@ jobs:
         env:
           CXX: clang++-${{ env.CLANG_VERSION }}
         run: |
-          bash scripts/mutation.sh "${{ inputs.scope || 'core-forms' }}" \
-            | tee "mutation-${{ inputs.scope || 'core-forms' }}.log"
+          # `set -o pipefail`, and it is the whole point of this step
+          # (morph#730). A `run:` with no `shell:` key is `bash -e {0}` --
+          # `-e` but NOT `-o pipefail` -- so this pipeline used to exit with
+          # `tee`'s status, which is 0 unless the disk fills.
+          # scripts/mutation.sh takes deliberate care to exit 1 when
+          # mull-runner writes no report, and that 1 was discarded: the step
+          # went green and the failure surfaced one step later as
+          # check_mutation_regression.py failing to *open* a file. Two weeks
+          # of scheduled runs measured nothing and nothing said so. The same
+          # trap cost morph#479 the clang-tidy gate; scripts/check_workflow_pipefail.py
+          # now fails on an unguarded pipeline in any workflow.
+          #
+          # `tee` stays: the Upload step below publishes the log it writes.
+          set -o pipefail
+          scope="${{ inputs.scope || 'core-forms' }}"
+          bash scripts/mutation.sh "$scope" | tee "mutation-${scope}.log"
+          # An empty log means the campaign produced no output at all, which
+          # `set -o pipefail` cannot see -- a script that prints nothing and
+          # exits 0 is a successful pipeline. Same reason the install steps
+          # above `test -s` what curl wrote (morph#681).
+          test -s "mutation-${scope}.log"
 
       - name: Check for a regression against the recorded baseline
         id: regression
         run: |
+          # Teed to a file for the same reason the campaign step is: the
+          # failure report below quotes the checker's own verdict rather than
+          # paraphrasing it, and a verdict that exists only in the run log is
+          # the state morph#731 describes. `set -o pipefail` first -- this is
+          # the pipeline morph#730 was about.
+          set -o pipefail
           scope="${{ inputs.scope || 'core-forms' }}"
           python3 scripts/check_mutation_regression.py \
-            "build/mutation-${scope}/mutation-${scope}.txt" "$scope"
+            "build/mutation-${scope}/mutation-${scope}.txt" "$scope" \
+            2>&1 | tee "regression-${scope}.log"
 
       # scripts/check_mutation_regression.py updates scripts/mutation_baseline.json
       # in place on a first run or an improvement (never on a regression --
@@ -150,23 +176,27 @@ jobs:
       # have to be noticed by someone comparing by hand" gap
       # docs/spec/testing_charter.md names, closed: something now notices and
       # files it, instead of the campaign's own log being the only record.
-      - name: Open an issue on failure
+      #
+      # The body of this step is scripts/report_mutation_failure.sh, and that
+      # is morph#731's fix rather than a tidy-up. What used to be here built a
+      # fixed title per scope and *skipped* when any issue with that title was
+      # open, so the first failure in a scope silenced the report of every
+      # later, different one -- which is how morph#732 stayed invisible behind
+      # morph#517 for two weeks. The script comments on the open issue instead,
+      # and classifies the cause so the thread reads as distinct events. It
+      # lives in scripts/ because morph#731's acceptance condition is "force
+      # two different failures in one scope and confirm both are recorded",
+      # and a dozen lines inside a `run:` block cannot be driven at all --
+      # scripts/test_report_mutation_failure.sh drives exactly that.
+      - name: Report the failure
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           scope="${{ inputs.scope || 'core-forms' }}"
-          title="Mutation campaign failed or regressed (scope: ${scope})"
-          existing="$(gh issue list --state open --search "in:title \"${title}\"" --json number --jq 'length')"
-          if [ "$existing" != "0" ]; then
-            echo "An open issue already names this failure; not filing a duplicate."
-            exit 0
-          fi
-          body="The scheduled mutation campaign (.github/workflows/mutation.yml) failed or found a regression for scope \`${scope}\`."
-          body="${body}\n\nRun: ${RUN_URL}"
-          body="${body}\n\nSee \`scripts/check_mutation_regression.py\`'s own doc comment for what this compares, \`scripts/mutation_baseline.json\` for the recorded baseline, and \`scripts/mutation_survivors.json\` for the triage process for a genuine new survivor."
-          gh issue create --title "$title" --label "area: ci" --body "$(printf '%b' "$body")"
+          bash scripts/report_mutation_failure.sh "$scope" "$RUN_URL" \
+            "mutation-${scope}.log" "regression-${scope}.log"
 
       - name: Upload the mutation report
         if: always()
@@ -175,5 +205,8 @@ jobs:
           name: mutation-report-${{ inputs.scope || 'core-forms' }}
           path: |
             mutation-*.log
+            regression-*.log
             build/mutation-*/mutation-*.txt
+            build/mutation-*/baseline-*.log
+            build/mutation-*/mull.yml
           retention-days: 30
