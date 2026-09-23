@@ -49,7 +49,7 @@ struct ActionTraits;
 // during static initialisation, and after `main()` begins the maps are
 // read-only. Nothing detected a violation. A `dlopen`ed module registering on
 // a worker thread while another thread dispatches is undefined behaviour whose
-// only symptom is intermittent map corruption (morph#698).
+// only symptom is intermittent map corruption.
 //
 // This latch makes that precondition checkable. It starts open, closes when
 // the program says the registration phase is over, and the three `register*Once`
@@ -143,9 +143,9 @@ inline void noteRegistryRead([[maybe_unused]] bool isProcessRegistry) noexcept {
 /// pair of `std::string`s, because the registry owns its ids; a caller has
 /// `string_view`s, because every id it can name arrives as one — a wire
 /// envelope's decoded field, or a `constexpr` `ModelTraits<M>::typeId()`.
-/// Materialising the stored type just to hash it charged every lookup up to
-/// two `std::string` constructions (morph#572, Part C), so the hash and
-/// equality below are transparent and this is what `find()` is given.
+/// Materialising the stored type just to hash it would charge every lookup up
+/// to two `std::string` constructions, so the hash and equality below are
+/// transparent and this is what `find()` is given.
 using PairKeyView = std::pair<std::string_view, std::string_view>;
 
 /// @brief Transparent hash functor for `(modelId, actionId)` registry keys.
@@ -710,13 +710,13 @@ public:
     std::string dispatch(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
                          std::string_view payload) {
         // A dispatch means the maps are being read, which in the registration
-        // model means the registration phase is over (morph#698). Debug builds
-        // only; see `detail::noteRegistryRead`.
+        // model means the registration phase is over. Debug builds only; see
+        // `detail::noteRegistryRead`.
         detail::noteRegistryRead(this == &defaultDispatcher());
-        // Looked up by view. Building the stored `Key` to hash it cost two
-        // `std::string` constructions per dispatch -- and two heap allocations
-        // whenever an id passed the SSO threshold, which `"CreateSwimlane"`
-        // (14 characters) misses by one. See morph#572, Part C.
+        // Looked up by view. Building the stored `Key` to hash it would cost
+        // two `std::string` constructions per dispatch -- and two heap
+        // allocations whenever an id passes the SSO threshold, which
+        // `"CreateSwimlane"` (14 characters) misses by one.
         auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
         if (iter == _actions.end()) {
             // The concatenation here is the one string cost left, and it is on
@@ -847,13 +847,13 @@ private:
 
     /// @brief Everything registered under one `(modelId, actionId)` pair.
     ///
-    /// One record, not four parallel maps keyed identically. The four were
-    /// filled together by `registerAction` and could not go out of step in
-    /// practice, but nothing said so -- and `RemoteServer::handle` pays for
-    /// three separate lookups of the same key on the way through one request
-    /// (`schemaFor`, `requiredFieldsFor`, `dispatch`). Merging them makes the
-    /// lockstep structural and makes those three one hash each rather than one
-    /// hash into a different table each (morph#572, Part C).
+    /// One record, not four parallel maps keyed identically. Four maps filled
+    /// together by `registerAction` could not go out of step in practice, but
+    /// nothing would say so -- and `RemoteServer::handle` reaches this key
+    /// three times on the way through one request (`schemaFor`,
+    /// `requiredFieldsFor`, `dispatch`). One record makes the lockstep
+    /// structural and makes those three one hash each rather than one hash
+    /// into a different table each.
     struct ActionEntry {
         /// @brief Type-erased decode/execute/encode runner.
         Runner runner;
@@ -924,25 +924,24 @@ public:
     void registerModel(std::string_view modelId, Factory factory) {
         _factories.insert_or_assign(std::string{modelId}, [factory = std::move(factory)]() mutable {
             std::unique_ptr<IModelHolder> holder{factory()};
-            // The fourth site of the morph#742 defect, and the one nothing was guarding.
-            // misc-static-assert fires here too -- `holder` is a runtime
+            // misc-static-assert fires here -- `holder` is a runtime
             // `std::unique_ptr` the factory just returned, so nothing in this condition
             // is a constant expression, and the check's own fix does not compile:
             // "static assertion expression is not an integral constant expression /
             // function parameter 'holder' with unknown value cannot be used in a constant
-            // expression". Same defect, same suppression, same upstream report (morph#742).
+            // expression". Same finding and same suppression as the three
+            // `register*Once` helpers below.
             //
-            // It stayed green only because `clang-tidy-diff` analyses changed lines and
-            // nothing had changed this one, so the next person to edit it inherited a red
-            // build that was not theirs (morph#762).
+            // Note the suppression is needed even though `clang-tidy-diff` analyses
+            // changed lines only: without it, the next person to edit this line
+            // inherits a red build that is not theirs.
             //
             // Last re-checked at clang-tidy 22.1.8, the version CI pins: the diagnostic
             // still fires and the suggested fix still does not compile. The stamp is here
-            // because nothing checks it for you -- morph#755 deleted both
-            // scripts/check_nolint_directives.sh (which would have flagged a directive that
-            // had stopped suppressing anything) and scripts/check_ci_clang_pin.sh (the
-            // natural re-check trigger on a CLANG_VERSION bump). Re-read this when the pin
-            // moves; if the finding is gone, delete all four directives together.
+            // because nothing re-checks it for you -- no script flags a directive that has
+            // stopped suppressing anything, and nothing triggers a re-read on a
+            // CLANG_VERSION bump. Re-read this when the pin moves; if the finding is gone,
+            // delete all four directives together.
             // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
             assert(!holder ||
                    (holder->type() == std::type_index(typeid(Model)) &&
@@ -997,7 +996,7 @@ inline ModelRegistryFactory& defaultRegistry() {
 }
 
 // The three `register*Once` helpers are `noexcept` while allocating, and that
-// is a decision rather than an oversight (morph#698). Their only caller is the
+// is a decision rather than an oversight. Their only caller is the
 // initialiser of a namespace-scope variable generated by `BRIDGE_REGISTER_*`,
 // and [basic.start.dynamic]/[except.terminate] already call `std::terminate`
 // when an exception escapes the dynamic initialisation of a non-local
@@ -1015,20 +1014,19 @@ inline bool registerModelOnce(std::string_view modelId) noexcept {
     // Applying the check's own fix does not compile: `static_assert` on this
     // condition is "static assertion expression is not an integral constant
     // expression / non-constexpr function 'registrationPhaseClosed' cannot be used
-    // in a constant expression". Reported upstream of this repository in morph#742.
+    // in a constant expression". The finding is upstream of this repository.
     //
     // Last re-checked at clang-tidy 22.1.8, the version CI pins: the diagnostic
     // still fires and the suggested fix still does not compile. The stamp is here
-    // because nothing checks it for you -- morph#755 deleted both
-    // scripts/check_nolint_directives.sh (which would have flagged a directive that
-    // had stopped suppressing anything) and scripts/check_ci_clang_pin.sh (the
-    // natural re-check trigger on a CLANG_VERSION bump). Re-read this when the pin
-    // moves; if the finding is gone, delete all four directives together.
+    // because nothing re-checks it for you -- no script flags a directive that has
+    // stopped suppressing anything, and nothing triggers a re-read on a
+    // CLANG_VERSION bump. Re-read this when the pin moves; if the finding is gone,
+    // delete all four directives together.
     // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
     assert(!::morph::model::registrationPhaseClosed() &&
            "registerModelOnce: registration after the registration phase closed. The process-level "
            "registries are unsynchronised and are read-only once dispatch begins -- registering now "
-           "races their internals against concurrent lookups (morph#698; docs/spec/core/registry.md, "
+           "races their internals against concurrent lookups (see docs/spec/core/registry.md, "
            "\"Thread safety\"). Load and register plugin modules before the first dispatch.");
     ModelRegistryFactory::instance().registerModel<Model>(modelId);
     return true;
@@ -1042,20 +1040,19 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     // Applying the check's own fix does not compile: `static_assert` on this
     // condition is "static assertion expression is not an integral constant
     // expression / non-constexpr function 'registrationPhaseClosed' cannot be used
-    // in a constant expression". Reported upstream of this repository in morph#742.
+    // in a constant expression". The finding is upstream of this repository.
     //
     // Last re-checked at clang-tidy 22.1.8, the version CI pins: the diagnostic
     // still fires and the suggested fix still does not compile. The stamp is here
-    // because nothing checks it for you -- morph#755 deleted both
-    // scripts/check_nolint_directives.sh (which would have flagged a directive that
-    // had stopped suppressing anything) and scripts/check_ci_clang_pin.sh (the
-    // natural re-check trigger on a CLANG_VERSION bump). Re-read this when the pin
-    // moves; if the finding is gone, delete all four directives together.
+    // because nothing re-checks it for you -- no script flags a directive that has
+    // stopped suppressing anything, and nothing triggers a re-read on a
+    // CLANG_VERSION bump. Re-read this when the pin moves; if the finding is gone,
+    // delete all four directives together.
     // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
     assert(!::morph::model::registrationPhaseClosed() &&
            "registerActionOnce: registration after the registration phase closed. The process-level "
            "registries are unsynchronised and are read-only once dispatch begins -- registering now "
-           "races their internals against concurrent lookups (morph#698; docs/spec/core/registry.md, "
+           "races their internals against concurrent lookups (see docs/spec/core/registry.md, "
            "\"Thread safety\"). Load and register plugin modules before the first dispatch.");
     ActionDispatcher::instance().registerAction<Model, Action>(modelId, actionId);
     return true;

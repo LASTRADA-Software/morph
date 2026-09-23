@@ -37,7 +37,7 @@
 /// net/` belongs to the optional `morph_net` target (`MORPH_BUILD_NET`,
 /// default `OFF`). A `core/` header including a `net/` one would therefore
 /// install a `remote.hpp` that cannot find its own include whenever net is
-/// off — the same breakage morph#232 fixed for `quantity.hpp`. Living under
+/// off. Living under
 /// `core/detail/` keeps the dependency pointing the one direction it
 /// already points (`net` → `core`).
 

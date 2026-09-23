@@ -343,10 +343,10 @@ private:
     /// same-model `execute`s posted back-to-back always reach the pool's queue
     /// in ticket order — the same order the transport called `handle()` in,
     /// i.e. send order — no matter how the calling threads are scheduled
-    /// relative to each other (morph#519: taking the ticket and enqueueing as
-    /// two separate, unlocked steps let two concurrent transport threads'
-    /// tickets and enqueue order diverge, which could park every pool worker
-    /// in `awaitTurn` permanently). If this peek fails to decode at all, or
+    /// relative to each other. Taking the ticket and enqueueing as two
+    /// separate, unlocked steps would let two concurrent transport threads'
+    /// tickets and enqueue order diverge, which can park every pool worker in
+    /// `awaitTurn` permanently. If this peek fails to decode at all, or
     /// isn't an `execute`, no ticket is taken; `dispatchMessage` still does the
     /// real (only) decode moments later on the pool thread and produces the
     /// canonical error for genuinely malformed input — this peek only ever
@@ -791,8 +791,7 @@ private:
                 // releasing it here cancels out only the redundant reference
                 // that call just took, never the caller's sole hold on the
                 // instance it is "re-pointing" to itself. A genuinely
-                // different-key re-point releases the real old instance, same
-                // as before.
+                // different-key re-point releases the real old instance.
                 if (releaseCurrent.v != 0U) {
                     releaseScopedLocked(releaseCurrent, cid);
                 }
@@ -877,7 +876,7 @@ private:
     /// judged on the **key**, not on the decoded value, because that is the
     /// only question the action codec cannot answer: `fromJson` turns an
     /// absent field and an explicitly-sent zero into the same action, which is
-    /// exactly why a renamed field survives `validate()` today (morph#207).
+    /// exactly why a renamed field survives `validate()`.
     ///
     /// Conservative in both directions. A `body` that is not a JSON object at
     /// all reports nothing missing — malformed JSON is `fromJson`'s error to
@@ -932,9 +931,8 @@ private:
     /// Extracted, verbatim in behavior, to
     /// `morph::backend::detail::ExecuteTicketGuard`
     /// (`include/morph/core/detail/execute_order_gate.hpp`) — see that
-    /// class's own doc comment for the full design rationale (issues #348,
-    /// #351, #449). Aliased here so every existing call site in this class
-    /// keeps reading `ExecuteTicketGuard` unqualified.
+    /// class's own doc comment for the full design rationale. Aliased here so
+    /// every call site in this class reads `ExecuteTicketGuard` unqualified.
     using ExecuteTicketGuard = ::morph::backend::detail::ExecuteTicketGuard;
 
     // One flat switch over the wire's `kind` discriminator. Splitting it would
@@ -955,7 +953,7 @@ private:
         // the outer catch, and any branch a later change adds — releases the
         // ticket, which is what makes `ExecuteOrderGate::release`'s stated
         // rule structurally true rather than a convention each call site has
-        // to remember (issues #348 and #351).
+        // to remember.
         ExecuteTicketGuard ticketGuard{_executeGate, std::move(executeTicket)};
         ::morph::wire::Envelope env;
         try {
@@ -1003,9 +1001,8 @@ private:
             // nothing about it is worth making a later same-model `execute`
             // wait for.
             //
-            // Not merely a leaked map entry on a dying server (which is what
-            // this branch was previously believed to cost): tickets are taken
-            // in send order on the transport thread, but the pool is free to
+            // Not merely a leaked map entry on a dying server: tickets are
+            // taken in send order on the transport thread, but the pool is free to
             // run the two posted tasks in either order. A *later* ticket that
             // passed this gate before `beginShutdown()` is already parked in
             // `ExecuteOrderGate::awaitTurn`, on a `cv.wait` with no deadline,
@@ -1260,9 +1257,9 @@ private:
             // `missingRequiredFields` steps are all reachable, non-`noexcept`
             // code — unwinds past every explicit release to here. `ticketGuard`
             // is what releases the ticket on this path; it is destroyed as this
-            // frame returns. Before it existed, this catch replied and stranded
-            // the ticket, and the next same-model `execute` waited on it
-            // forever (issue #351).
+            // frame returns. Replying here without releasing would strand the
+            // ticket, and the next same-model `execute` would wait on it
+            // forever.
             reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
         }
     }
@@ -1283,7 +1280,7 @@ private:
     // `authorize`/`authenticate`/`authorizeInstance`/`missingRequiredFields`,
     // or out of the post itself — is covered by the guard's destructor back in
     // `dispatchMessage`. See `ExecuteTicketGuard` and the class-private
-    // members' own doc comment for the full design (issue #351).
+    // members' own doc comment for the full design.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply,
                          ExecuteTicketGuard& ticketGuard) {
@@ -1400,7 +1397,7 @@ private:
         // can claim the same completion slot `complete` uses. Everything between
         // the increment and the strand post is non-`noexcept` -- emitMetric, two
         // make_shared, TimeoutScheduler::schedule, awaitTurn's mutex, the post
-        // itself -- and a throw there used to leak the slot permanently.
+        // itself -- and a throw there would otherwise leak the slot permanently.
         auto finished = std::make_shared<std::atomic_flag>();
 
         std::size_t inFlightAfterInc = 0;
@@ -1435,7 +1432,7 @@ private:
         // Without this, one throw left `_inFlightExecutes` permanently
         // over-counted: `drainedWithin()` predicates on it reaching zero, so
         // graceful shutdown could never succeed again for that server, and with
-        // `maxInFlightExecutes` set a slot was lost for good (morph#502).
+        // `maxInFlightExecutes` set a slot would be lost for good.
         struct InFlightReservation {
             RemoteServer* server;
             std::shared_ptr<std::atomic_flag> finished;
@@ -1510,7 +1507,7 @@ private:
                 // (see that function's comment). A timeout callback already
                 // mid-flight when the dispatch finishes therefore still calls
                 // `complete`, and `complete`'s reply-exactly-once flag drops
-                // it rather than double-answering the call (morph#620).
+                // it rather than double-answering the call.
                 timeoutHandle = _timeoutScheduler->schedule(limits.executeTimeout, [complete, callId]() mutable {
                     complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
                 });
@@ -1533,8 +1530,8 @@ private:
         // rejected request was sent after this one, which is why
         // `ExecuteOrderGate::release` advances `nextToRun` over a contiguous
         // run of released tickets rather than jumping to `ticket + 1`: jumping
-        // was what let a rejection skip past this wait's ticket and park it
-        // here for good (issue #449).
+        // would let a rejection skip past this wait's ticket and park it here
+        // for good.
         ticketGuard.awaitTurn();
         _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), hydration = std::move(hydration),
                            complete, timeoutHandle]() mutable {
@@ -1671,9 +1668,9 @@ private:
     // `handleImpl` (called directly from `handle()`, which runs on
     // whatever single thread the transport calls it from -- in true send
     // order, nothing async yet) for every `execute` with a known `modelId`
-    // (see `ExecuteOrderGate::takeAndPost`, morph#519 -- taking the ticket
-    // and posting to `_pool` as two separate, unlocked steps let two
-    // concurrent transport threads' ticket order and enqueue order diverge).
+    // (see `ExecuteOrderGate::takeAndPost` -- taking the ticket and posting
+    // to `_pool` as two separate, unlocked steps would let two concurrent
+    // transport threads' ticket order and enqueue order diverge).
     // `dispatchExecute` waits for its ticket's
     // turn only immediately before the pre-existing `_strand.post(mid, ...)`
     // call, and releases the next ticket's turn either right after posting
@@ -1704,9 +1701,8 @@ private:
     // lookup finding a newer generation can never redirect it.
     //
     // The gate itself -- `take`/`takeAndPost`/`awaitTurn`/`release`, the
-    // out-of-order-release handling that closed issue #449, the atomic
-    // take-and-enqueue step that closed issue #519, and the "gate already
-    // gone" defensive branches for #348/#351 -- is extracted to
+    // out-of-order-release handling, the atomic take-and-enqueue step, and
+    // the "gate already gone" defensive branches -- is extracted to
     // `morph::backend::detail::ExecuteOrderGate`
     // (`include/morph/core/detail/execute_order_gate.hpp`), which has its own
     // direct unit tests (`tests/test_execute_order_gate.cpp`). What stays here
@@ -1722,8 +1718,8 @@ private:
     // Every live instance, private and shared alike, plus the shared-instance
     // directory over them — holder, owner principal, attach count, directory key
     // and hydration state as one record per instance rather than seven parallel
-    // ModelId-keyed containers held in lockstep by convention (morph#523), and
-    // the same type LocalBackend owns rather than a second implementation of it.
+    // ModelId-keyed containers held in lockstep by convention, and the same
+    // type LocalBackend owns rather than a second implementation of it.
     // Guarded by `_regMtx`; `InstanceDirectory` is caller-locked by design,
     // because the admission checks and connection-scope updates in the same
     // critical sections must not be able to straddle a directory change.
@@ -2129,10 +2125,9 @@ private:
     }
 
     RemoteServer& _server;
-    // 0 = unscoped (the default constructor's behavior, unchanged); non-zero
-    // when constructed with a ConnectionId from server.openConnection() (see
-    // issue #48). Threaded through every handle()/handleInline() call this
-    // backend makes.
+    // 0 = unscoped (the default constructor's behavior); non-zero when
+    // constructed with a ConnectionId from server.openConnection(). Threaded
+    // through every handle()/handleInline() call this backend makes.
     ConnectionId _cid{0};
     std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;

@@ -49,9 +49,9 @@ namespace detail {
 /// callables cost up to three allocations per dispatch whichever path the call
 /// takes. Stateless operations parameterised on the action cost none: the
 /// per-`(Model, Action)` behaviour is a compile-time constant, addressed rather
-/// than copied. Measured on `master` @ `a9cb5649` with `morph_bench_alloc`,
-/// this shape and the two `string_view` ids below together removed 3 of 17
-/// allocations per local round trip (morph#572, Part A).
+/// than copied. Measured with `morph_bench_alloc`: this shape and the two
+/// `string_view` ids below together account for 3 of the allocations a local
+/// round trip would otherwise make, out of 17.
 ///
 /// @par Lifetime contract for the callables
 /// `serializeAction` and `localOp` take the action as an opaque pointer and do
@@ -200,17 +200,17 @@ struct PromoteRequest {
 ///        `Completion` may block its own thread until that `Completion`
 ///        settles.
 ///
-/// This is the one thing `bindModel`'s signature cannot say, and morph#593 is
-/// what happens when it is not said: two shipped backends both return an
-/// unsettled `Completion` from `bindModel`, and `Bridge::registerHandlerImpl`
-/// — a synchronous entry point that hands its caller a `BridgeHandler` usable
-/// on the next line — must wait for one of them and must not wait for the
-/// other. From the `Completion` alone the two are indistinguishable.
+/// This is the one thing `bindModel`'s signature cannot say, and it has to be
+/// said: two shipped backends both return an unsettled `Completion` from
+/// `bindModel`, and `Bridge::registerHandlerImpl` — a synchronous entry point
+/// that hands its caller a `BridgeHandler` usable on the next line — must wait
+/// for one of them and must not wait for the other. From the `Completion`
+/// alone the two are indistinguishable.
 ///
-/// It is deliberately **not** the `bool` the surface removed (see "The
-/// structural registration surface" below, point 1). That `bool` chose
-/// *which verb to call*, so every call site carried two paths and a backend
-/// could be half-migrated. This one chooses nothing: there is still exactly
+/// It is deliberately **not** a `bool` selecting a verb (see "The structural
+/// registration surface" below, point 1). Such a `bool` would make every call
+/// site carry two paths and let a backend be half-migrated. This chooses
+/// nothing: there is still exactly
 /// one verb, called unconditionally, and exactly one continuation. It says
 /// only whether the thread that issued the call is allowed to stop and wait
 /// for the continuation it already registered.
@@ -237,7 +237,7 @@ enum class BindWait : std::uint8_t {
     /// - `QtWebSocketBackend` with `Config::asyncRegistrationEnabled` set: the
     ///   reply arrives through the Qt event loop of the thread that issued the
     ///   call, so waiting is a deadlock. On a WASM main thread it aborts the
-    ///   page (morph#568), which is the case that surface exists for.
+    ///   page, which is the case this surface exists for.
     /// - `SynchronousBackendAdapter`: it exists precisely to move a blocking
     ///   call off the caller's thread, so a caller that then waits for it has
     ///   bought nothing — and if the caller happens to be running on the
@@ -375,36 +375,32 @@ struct IBackend {
 
     // ── The structural registration surface ──────────────────────────────
     //
-    // `bindModel`/`promoteModel` are what the five verbs above become once the
-    // continuation stops being optional. Two differences carry the whole
-    // change, and both are visible in the signature rather than in a comment:
+    // `bindModel`/`promoteModel` are the five verbs above with the continuation
+    // made mandatory. Two properties carry the design, and both are visible in
+    // the signature rather than only in a comment:
     //
     //   1. **The continuation is not opt-in.** There is no `bool` saying "I
     //      have no async path, call the other one" — so no call site carries a
     //      second path, and a backend cannot be *half* migrated. A blocking
-    //      backend satisfies the surface unchanged through the default
-    //      implementations below, or without blocking the caller at all
-    //      through `SynchronousBackendAdapter`.
+    //      backend satisfies the surface through the default implementations
+    //      below, or without blocking the caller at all through
+    //      `SynchronousBackendAdapter`.
     //
-    //      What morph#593 established is that removing *that* bool also
-    //      removed something else the call site needed and that is not the
-    //      same question: whether the thread that called `bindModel` is
-    //      allowed to wait for the continuation it just registered. Two
+    //      Whether the *calling thread* may wait for that continuation is a
+    //      separate question, and the signature cannot answer it either: two
     //      shipped backends return an unsettled `Completion` and give opposite
     //      answers (`SocketBackend`: yes, its I/O thread settles it;
     //      `QtWebSocketBackend` under `asyncRegistrationEnabled`: no, waiting
     //      deadlocks the event loop the reply arrives on). `bindWaitPolicy()`
-    //      below restores exactly that one bit and nothing else — it never
-    //      selects a verb, so the "second path" the removed bool created does
-    //      not come back with it.
+    //      below carries exactly that one bit and nothing else — it never
+    //      selects a verb, so it creates no second path.
     //
     //   2. **The delivery thread is a parameter.** `Completion<T>` posts its
     //      handlers to the executor it was built with, so the continuation runs
     //      where @p cbExec says and nowhere else — the backend does not choose.
-    //      That is the whole of the threading contract the four `*Async`
-    //      twins morph#571 removed could only state in prose: they asked
-    //      every backend author to deliver on a thread from which `~Bridge`
-    //      could not run concurrently, and nothing could check it. See
+    //      A threading contract stated only in prose would ask every backend
+    //      author to deliver on a thread from which `~Bridge` cannot run
+    //      concurrently, and nothing could check it. See
     //      docs/spec/core/backend.md, "The threading contract, and the half
     //      the surface does not close".
     //      It does not by itself make a `~Bridge` race impossible: it moves the
@@ -414,13 +410,11 @@ struct IBackend {
     //      nowhere" cannot be expressed — a null executor would silently drop
     //      every continuation (see `Completion`'s constructor).
     //
-    // morph#571 retired the four optional `*Async` twins. The synchronous
-    // verbs above remain, but no longer as a surface any caller chooses:
-    // they are what `bindModelBlocking` — and therefore the *default*
-    // `bindModel` — dispatches to, one request shape at a time. Nothing in
-    // the tree calls them directly any more, which is why a backend that
-    // overrides only `registerModel` still works through `bindModel`
-    // unchanged.
+    // The synchronous verbs above remain, but not as a surface any caller
+    // chooses: they are what `bindModelBlocking` — and therefore the *default*
+    // `bindModel` — dispatches to, one request shape at a time. Nothing in the
+    // tree calls them directly, which is why a backend that overrides only
+    // `registerModel` still works through `bindModel`.
 
     /// @brief Acquires a model instance: the structural counterpart of
     ///        `registerModelWithContext` / `registerModelShared` / `attachModel`.
@@ -432,7 +426,7 @@ struct IBackend {
     /// anything keeps its current behaviour bit for bit, including its current
     /// blocking behaviour: the default **blocks the calling thread** for as
     /// long as the underlying synchronous verb does. A backend with a genuine
-    /// non-blocking path (morph#568's `QtWebSocketBackend`) overrides this and
+    /// non-blocking path (`QtWebSocketBackend`) overrides this and
     /// settles the `Completion` when its reply arrives; a blocking backend that
     /// must not block its caller is wrapped in `SynchronousBackendAdapter`,
     /// which moves the blocking call to an executor it names.
@@ -502,8 +496,8 @@ struct IBackend {
     /// `Bridge::switchBackend`'s staging phase, and
     /// `Bridge::installReconnectHandler`'s handler, which is the one that runs
     /// on the backend's own transport thread and so is the one a wrong answer
-    /// deadlocks outright (morph#615). The asynchronous entry points never wait
-    /// and never consult it.
+    /// deadlocks outright. The asynchronous entry points never wait and never
+    /// consult it.
     ///
     /// A backend that returns `kCallerMayBlock` (the default) commits to
     /// settling every `Completion` it returns exactly once without any further
@@ -574,11 +568,10 @@ struct IBackend {
     /// The same dispatch as `execute`, with the result delivered to a sink the
     /// caller already owns instead of to a fresh `Completion` the caller then
     /// has to forward into its own. `Bridge::executeVia` hands down a sink that
-    /// **is** the typed completion state the caller was given, which is what
-    /// removes the six-allocation forwarding block between the two (morph#572,
-    /// Part B): the erased `CompletionState`, the `.then` and `.onError`
-    /// closures, their two handler vectors, and one of the two posted settle
-    /// tasks.
+    /// **is** the typed completion state the caller was given, so there is no
+    /// forwarding block between the two — no erased `CompletionState`, no
+    /// `.then`/`.onError` closures, no second pair of handler vectors, and one
+    /// posted settle task instead of two.
     ///
     /// @par Why this has a default rather than being pure
     /// `IBackend::execute` is implemented by five production backends and
@@ -596,7 +589,7 @@ struct IBackend {
     /// answer `cancelPending` must track the sink, not a state of its own.
     /// Throwing out of this call is permitted and means the dispatch never
     /// started — `Bridge::executeVia` undoes its pending count and its deadline
-    /// on that path, exactly as it does for `execute` (morph#502).
+    /// on that path, exactly as it does for `execute`.
     ///
     /// @param mid    Target model id.
     /// @param call   Bundled action; moved from.
@@ -767,10 +760,9 @@ struct ClientTimeoutError : std::runtime_error {
 /// every verb to it, overriding only `bindModel`/`promoteModel` to run the
 /// wrapped backend's *synchronous* control call on an executor this adapter
 /// names, then settle the returned `Completion`. That is the whole trick, and
-/// it is why migrating the rest of morph#522's set is a set of migrations
-/// rather than a set of rewrites: a backend with no non-blocking path of its
-/// own (every backend in the tree except `QtWebSocketBackend`) reaches the new
-/// surface by being wrapped, not by being rewritten.
+/// it is why a backend with no non-blocking path of its own (every backend in
+/// the tree except `QtWebSocketBackend`) reaches the structural surface by
+/// being wrapped rather than by being rewritten.
 ///
 /// @par What it does and does not change
 /// The wrapped backend still blocks — nothing here makes a nested event loop
@@ -779,7 +771,7 @@ struct ClientTimeoutError : std::runtime_error {
 /// caller's thread returns from `bindModel` immediately with an unresolved
 /// `Completion`. A single-threaded WASM main thread has no such executor to
 /// offer and is therefore not what this adapter is for; that case needs a
-/// backend with a genuinely non-blocking path (morph#568).
+/// backend with a genuinely non-blocking path.
 ///
 /// @par Why the executor is required rather than optional
 /// "Where does the blocking happen" is the only question this class exists to
@@ -802,7 +794,7 @@ struct ClientTimeoutError : std::runtime_error {
 /// the wrapped backend's transport thread, so a backend whose reply can only
 /// be delivered by the thread that is running the reconnect handler does not
 /// wait on itself. Whether that is enough to settle `SocketBackend`'s
-/// documented reconnect hazard is morph#569's question, not a claim made here.
+/// documented reconnect hazard is not a claim made here.
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class SynchronousBackendAdapter : public detail::IBackend {
 public:
@@ -885,9 +877,9 @@ public:
 
     // ── Everything else is forwarded unchanged ───────────────────────────
     //
-    // A decorator has to forward every verb it does not reshape. Since
-    // morph#571 those are the synchronous verbs only: a wrapped backend has
-    // no non-blocking path of its own left to forward, because the one verb
+    // A decorator has to forward every verb it does not reshape. Those are the
+    // synchronous verbs only: a wrapped backend has no non-blocking path of
+    // its own left to forward, because the one verb
     // that could carry one — `bindModel` — is the verb this adapter
     // reshapes, and a backend that already has a non-blocking `bindModel`
     // has no reason to be wrapped.
@@ -976,8 +968,8 @@ public:
     /// same reason `bindWaitPolicy()` is not: the two verbs this adapter
     /// reshapes produce completions the wrapped backend has never heard of.
     /// A `bindModel` here settles from a task on `_control`, so
-    /// `_inner->cancelPending` reaches nothing of it — before morph#619 a bind
-    /// dispatched through this adapter went on to resolve **successfully**
+    /// `_inner->cancelPending` reaches nothing of it: without this override a
+    /// bind dispatched through this adapter goes on to resolve **successfully**
     /// after cancellation, which is the exact opposite of what
     /// `IBackend::cancelPending` promises ("after this call, any later
     /// `setValue`/`setException` on those states is a no-op").
@@ -995,10 +987,10 @@ public:
     /// cancellation flag next to its promise, and this verb **sets that flag
     /// before rejecting**: a task still queued on `_control` sees it when it
     /// reaches the head of the strand and returns without calling `op()`, so
-    /// the blocking control call never reaches the wrapped backend at all
-    /// (morph#636). Without it the caller was told the bind was cancelled while
-    /// the registration went through anyway — a live instance on a backend
-    /// whose `Bridge` is gone, which nothing will ever `deregisterModel`.
+    /// the blocking control call never reaches the wrapped backend at all.
+    /// Without the flag the caller is told the bind was cancelled while the
+    /// registration goes through anyway — a live instance on a backend whose
+    /// `Bridge` is gone, which nothing will ever `deregisterModel`.
     ///
     /// **What this still does not do:** a task already *inside* `op()` cannot
     /// be recalled. Only the queued-but-not-started window is closed, which is
@@ -1019,8 +1011,8 @@ public:
             if (auto pending = pendingWeak.lock()) {
                 // Flag first, promise second. A task that reads the flag after
                 // this store declines to run; one that read it just before
-                // finds its promise already rejected by the line below, which
-                // is the pre-morph#636 outcome and the narrowest window left.
+                // finds its promise already rejected by the line below. That
+                // is the narrowest window this ordering leaves.
                 pending->cancelled.store(true, std::memory_order_release);
                 pending->promise.reject(exc);
             }
@@ -1047,10 +1039,10 @@ public:
 private:
     /// @brief One dispatched control call: its promise and its cancellation flag.
     ///
-    /// The two travel together because `cancelPending` has to act on both, and
-    /// acting on only the promise is the defect morph#636 recorded — the queued
-    /// task went on to make the blocking control call the caller had just been
-    /// told was cancelled. The strand task holds the only `shared_ptr` to this
+    /// The two travel together because `cancelPending` has to act on both:
+    /// acting on the promise alone leaves the queued task free to make the
+    /// blocking control call the caller has just been told was cancelled.
+    /// The strand task holds the only `shared_ptr` to this
     /// record; `_pending` holds `weak_ptr`s, so an entry expires by itself when
     /// the task is destroyed.
     struct PendingControl {
@@ -1092,10 +1084,10 @@ private:
         // between would otherwise find an empty list and leave a completion
         // that is genuinely pending uncancelled. Rejecting a promise whose task
         // has not started yet is safe — the task's own `resolve` then finds the
-        // state ready and returns (morph#619).
+        // state ready and returns.
         trackPending(pending);
         _control.post(kControlStrand, [pending, op = std::move(op)]() mutable {
-            // Checked *before* `op()`, which is the whole of morph#636: a
+            // Checked *before* `op()`: a
             // promise settled by `cancelPending` makes the reply a no-op but
             // says nothing about the call, and this task is the last place that
             // can decline to make it. Read with acquire against
@@ -1120,8 +1112,8 @@ private:
     /// here expires exactly when that task is destroyed — "still pending" needs
     /// no separate bookkeeping and no erase on the success path.
     ///
-    /// Swept on the same amortised schedule as `LocalBackend::trackPending`
-    /// (morph#528): dead entries are reclaimed only when the list reaches
+    /// Swept on the same amortised schedule as `LocalBackend::trackPending`:
+    /// dead entries are reclaimed only when the list reaches
     /// `_compactAt`, which each sweep re-arms at twice the surviving count, so
     /// the per-dispatch cost is O(1) and the list stays bounded at twice the
     /// live count plus the floor. Control calls are serialised onto one strand,
@@ -1318,7 +1310,7 @@ public:
     /// one definition of what a local dispatch does whichever entry point a
     /// caller uses. The extra `CompletionState` and its adapter sink are the
     /// price of the `Completion`-returning shape — which is exactly the cost
-    /// `executeInto` exists to let `Bridge` stop paying (morph#572, Part B).
+    /// `executeInto` exists to let `Bridge` avoid.
     ///
     /// @par Why this is `final`
     /// `Bridge::executeVia` calls `executeInto`, not `execute`. A subclass that
@@ -1540,9 +1532,9 @@ private:
     /// correspondingly bounded at twice the live count (plus the floor), which
     /// is the whole price of dropping the per-dispatch scan.
     ///
-    /// Before morph#528 this swept on *every* append, so admitting one call with
-    /// `n` in flight cost `n` atomic `weak_ptr::expired()` loads under
-    /// `_pendingMtx` and a burst of `n` cost O(n²) — measured at 362ms of pure
+    /// Sweeping on *every* append instead would cost `n` atomic
+    /// `weak_ptr::expired()` loads under `_pendingMtx` to admit one call with
+    /// `n` in flight, so a burst of `n` costs O(n²) — measured at 362ms of pure
     /// admission time for 32k queued executes against one slow model, against
     /// 7.6ms without the sweep.
     ///
@@ -1565,7 +1557,7 @@ private:
     // Every live instance, private and shared alike, plus the shared-instance
     // directory over them — holder, attach count, directory key and hydration
     // state as one record per instance rather than five parallel ModelId-keyed
-    // maps held in lockstep by convention (morph#523). Guarded by `_regMtx`;
+    // maps held in lockstep by convention. Guarded by `_regMtx`;
     // `InstanceDirectory` is caller-locked by design, see its doc comment.
     detail::InstanceDirectory _instances;
     // Ids of models whose holder answered `isBackendChangeAware() == true` at
@@ -1585,13 +1577,12 @@ private:
     static constexpr std::size_t kPendingCompactFloor = 32;
     mutable std::mutex _pendingMtx;
     // Sinks, not completion states: a dispatch's settle point is whatever the
-    // caller handed down, which for `Bridge` is its own typed completion state
-    // (morph#572, Part B). A `weak_ptr` still, for the same reason as before --
-    // this list must not keep a finished dispatch alive.
+    // caller handed down, which for `Bridge` is its own typed completion state.
+    // A `weak_ptr`, so this list cannot keep a finished dispatch alive.
     std::vector<std::weak_ptr<::morph::async::detail::ISettleSink>> _pending;
     // Size at which `trackPending` next sweeps `_pending` for expired entries;
     // re-armed at twice the surviving count after each sweep. Guarded by
-    // `_pendingMtx` along with `_pending` itself. See `trackPending` (morph#528).
+    // `_pendingMtx` along with `_pending` itself. See `trackPending`.
     std::size_t _compactAt = kPendingCompactFloor;
     // Concurrent in-flight executes, for the executeInFlight metric. A
     // shared_ptr (not a plain atomic member) so strand tasks hold their own
