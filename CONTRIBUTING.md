@@ -149,12 +149,40 @@ Substitute `clang-asan`/`asan` or `clang-ubsan`/`ubsan` throughout for the
 other two. Two things that recipe hides, both of which used to have to be
 rediscovered:
 
-- **The suppressions file is wired into the test preset, absolutely.**
-  `cmake/tsan.supp` holds the known-false-positive entries for libstdc++'s
-  refcounted exception teardown (morph#476); the file itself carries the
-  evidence for each. The `clang-tsan` **test** preset sets
-  `TSAN_OPTIONS=suppressions=${sourceDir}/cmake/tsan.supp`, so `ctest --preset
-  clang-tsan` resolves it from any working directory. Spelling it relatively —
+- **`TSAN_OPTIONS` is wired into the test preset, absolutely, and it carries
+  two settings rather than one.** The authoritative value is the one in
+  `CMakePresets.json` on the `clang-tsan` **test** preset — read it there
+  rather than from a copy, because this paragraph quoting a *prefix* of it is
+  the mistake that produced morph#783. What the two settings are for:
+
+  - `suppressions=${sourceDir}/cmake/tsan.supp` — the known-false-positive
+    entries for libstdc++'s refcounted exception teardown (morph#476); the
+    file itself carries the evidence for each. `${sourceDir}` makes the path
+    absolute, so `ctest --preset clang-tsan` resolves it from any working
+    directory.
+  - `second_deadlock_stack=1` — without it a `lock-order-inversion` report
+    names only where each mutex was acquired *in the inverting thread*. With
+    it, TSan also prints a `Mutex Mn previously acquired by the same thread
+    here:` stack for each **already-held** mutex, which is what names the
+    fixture or short-lived object holding it. Measured on a two-mutex
+    inversion under clang 22.1.8: the report goes from 36 lines to 55, the
+    extra 19 being those two stacks (morph#736). Without the flag TSan prints
+    only `Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more
+    informative warning message` — advice nobody can act on after the fact,
+    because morph#578 and morph#717 are intermittent and the run that fires is
+    the only evidence there will ever be. CI's two TSan legs pass it, so a
+    local reproduction that did not would be less informative than the run it
+    is reproducing.
+
+  Both live in **one** `TSAN_OPTIONS` value, colon-separated, and that is
+  load-bearing: the variable is a single string, so a second `TSAN_OPTIONS`
+  assignment **replaces** the first rather than extending it. Exporting your
+  own `TSAN_OPTIONS=suppressions=/some/other.supp` therefore drops
+  `second_deadlock_stack=1` silently — you get a weaker TSan than CI runs with
+  nothing saying so. If you must add a setting, append it to the preset's
+  value; do not set the variable alongside it.
+
+  Spelling the suppressions path relatively —
   `TSAN_OPTIONS=suppressions=cmake/tsan.supp`, which is what copying CI's line
   by hand tends to produce — breaks test *discovery*, not the tests:
   `catch_discover_tests` runs each binary with its own build directory as the
