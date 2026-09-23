@@ -294,6 +294,17 @@ static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep, WaitStep>);
 
 }  // namespace
 
+// This TEST_CASE drives four concurrent writers through a shared board and
+// asserts on the interleaving, so its body is one long sequence of setup,
+// spawn, join and verification -- the shape `tests/.clang-tidy:132` describes
+// when it subtracts this check for the framework's own tests: it "measures a
+// whole TEST_CASE body". The example rungs' test configs subtract only the
+// Catch2 chained-comparison finding (scripts/check_rung_filters.sh validates
+// that one claim per file), so the suppression goes here rather than widening
+// theirs. The finding is pre-existing; morph#750 only made it visible by
+// editing a waitUntil call inside the body, which pulls the whole function
+// into clang-tidy-diff's changed-line scope (morph#677).
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run under ThreadSanitizer",
           "[kanban][stress][tsan]") {
     morph::ladder::testkit::DbFixture fixture;
