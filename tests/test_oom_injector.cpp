@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Self-test for morph::testkit::OomInjector (oom_injector.hpp), the same way
-// scripts/test_check_deprecated_markers.sh and
-// scripts/test_check_test_type_names.sh self-test their own checkers before
+// a gate removed on 2026-09-23 and
+// a gate removed on 2026-09-23 self-test their own checkers before
 // anything else relies on them: a fault-injection seam nobody tests reports
 // "it works" whether or not it actually fires the failure it claims to.
 

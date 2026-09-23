@@ -88,8 +88,7 @@ env:
   # The Catch2 the `clang-tidy` job analyses against, through the
   # clang-tidy-diff.py run inside it. (Until morph#645 this sentence named
   # clang-tidy-diff.py where the job id belongs -- the same substitution
-  # morph#637 was, and the one live reference
-  # scripts/check_workflow_job_references.py found when it landed.) Not a
+  # morph#637 was.) Not a
   # version this
   # workflow installs -- `apt-get install -y catch2` takes whatever
   # ubuntu-24.04 ships -- but a record of what that has been measured to be,
@@ -1436,8 +1435,9 @@ jobs:
           # Not because `echo | grep` can lose a status today -- `echo` does
           # not fail -- but because this block decides whether a whole job
           # runs, and the next edit to it is the one that adds a pipeline
-          # that can (morph#730). scripts/check_workflow_pipefail.py enforces
-          # the same rule on every other `run:` block.
+          # that can (morph#730). The checker that enforced the same rule on
+          # every other `run:` block was removed with the meta-gates, so this
+          # is a convention now rather than something CI holds you to.
           set -o pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -1913,8 +1913,9 @@ jobs:
           # Not because `echo | grep` can lose a status today -- `echo` does
           # not fail -- but because this block decides whether a whole job
           # runs, and the next edit to it is the one that adds a pipeline
-          # that can (morph#730). scripts/check_workflow_pipefail.py enforces
-          # the same rule on every other `run:` block.
+          # that can (morph#730). The checker that enforced the same rule on
+          # every other `run:` block was removed with the meta-gates, so this
+          # is a convention now rather than something CI holds you to.
           set -o pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -2317,9 +2318,9 @@ jobs:
           # GUI needs Qml/Quick/QuickControls2 at 6.5+, which the distro Qt the
           # other bank jobs use cannot give) and already installs the
           # ODBC/SQLite/yaml-cpp/libzip set the bank example's Lightweight
-          # fetch requires. The option-coverage job below, which runs
-          # scripts/check_workflow_option_coverage.py, is what keeps the next
-          # option from repeating this.
+          # fetch requires. Nothing now checks that the next option is added
+          # here too -- the option-coverage job that did was removed with the
+          # meta-gates.
           # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
           # Configure steps for why leaving it unset is what lets
           # fastcache-cc be selected.
@@ -3004,7 +3005,8 @@ jobs:
           # and `head -1` closing the pipe SIGPIPEs it. The `-z` test is what
           # reads the result. This is why the `set -o pipefail` further down is
           # placed after this line rather than at the top of the step, and why
-          # the line carries the marker scripts/check_workflow_pipefail.py reads.
+          # the line carries a `pipefail-ok:` marker. The checker that read it was
+              # removed with the meta-gates; the marker stays as the explanation.
           CLANG_TIDY_DIFF="$(find /usr/lib/llvm-${{ env.CLANG_VERSION }}/share/clang /usr/share/clang \
             -name 'clang-tidy-diff.py' 2>/dev/null | head -1)"  # pipefail-ok: find's roots may be absent; head SIGPIPEs it; the -z test below reads the result
           if [ -z "$CLANG_TIDY_DIFF" ]; then

@@ -526,16 +526,16 @@ gold-specific, heuristic on this exact template-instantiation shape, and not
 wired into any preset here.)
 
 This is why the fix is a **source-level static check**
-(`scripts/check_test_type_names.sh`, above) rather than a build flag: it is
+(a gate removed on 2026-09-23, above) rather than a build flag: it is
 the only layer that can see both TUs' declarations before they are ever
 compiled down to symbols a linker or sanitizer could reason about.
 
-**CI-enforced**: `scripts/check_test_type_names.sh` scans every
+**CI-enforced**: a gate removed on 2026-09-23 scans every
 `tests/**/*.cpp` file for file-scope `struct`/`class` declarations (template
 specializations, which qualify their own name and specialize an existing
 template rather than declaring a new one, are excluded) and fails if the
 same simple name appears at file scope in more than one file. Self-tested by
-`scripts/test_check_test_type_names.sh` against the fixtures in
+a gate removed on 2026-09-23 against the fixtures in
 `tests/lint/test_type_names/` before the real scan runs, following the same
 "test the checker first" pattern as the deprecation-marker lint.
 

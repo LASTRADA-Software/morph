@@ -4,7 +4,7 @@
 # fact a docs/spec/*.md file states in prose; tests/test_pinned_facts.cpp
 # asserts the *real* code symbol equals the value pinned here (via the header
 # cmake/pinned_facts.cmake renders from this file at CMake configure time),
-# and scripts/check_spec_citations.sh asserts the cited spec file still
+# and a gate removed on 2026-09-23 asserts the cited spec file still
 # mentions it. Change a value here only in the same commit that changes the
 # code and the spec prose that cites it.
 #

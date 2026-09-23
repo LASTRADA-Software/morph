@@ -534,7 +534,7 @@ endfunction()
 # AddressSanitizer already halts on its own findings, so only the UB half
 # needs saying. `tsan` carries no UB checks and is left alone.
 #
-# scripts/check_sanitizer_can_fail.sh drives this function and asserts the
+# a gate removed on 2026-09-23 drives this function and asserts the
 # behaviour end to end, so a flag that stops reaching the compile line is
 # caught rather than assumed.
 function(apply_sanitizers target mode)

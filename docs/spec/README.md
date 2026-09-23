@@ -160,7 +160,7 @@ or not at all.
 drift guard: each entry pins a mechanical fact some spec states in words (a
 buffer size, a limit, a default) to the real symbol, and
 `tests/test_pinned_facts.cpp` fails if they diverge, while
-`scripts/check_spec_citations.sh` fails if the citing spec stops mentioning
+a gate removed on 2026-09-23 fails if the citing spec stops mentioning
 it. Change a pinned value only in the same commit that changes both the code
 and the prose. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) under "Quality
 gates".

@@ -30,7 +30,7 @@
 /// It is deliberately **not** a Catch2 translation unit and deliberately not
 /// in `examples/common/testkit/`: that directory's `.clang-tidy` subtracts
 /// `bugprone-chained-comparison` on an argument about Catch2's `REQUIRE`
-/// expansion, `scripts/check_rung_filters.sh` enforces that every `.cpp`
+/// expansion, a gate removed on 2026-09-23 enforces that every `.cpp`
 /// under it really is a Catch2 source, and morph#652 is the record of what
 /// happened the last time library code sat there. The audit's behavioural
 /// tests live in `testkit/test_pool_transaction_audit.cpp`, where they

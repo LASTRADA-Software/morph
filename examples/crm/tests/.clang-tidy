@@ -28,9 +28,9 @@
 # entry is subtracted, and only here.
 #
 # One copy per test directory rather than one shared file, because no directory
-# contains every example's tests and nothing else. scripts/check_rung_filters.sh
-# fails if a test directory on the application ladder has no such file, so a new
-# rung cannot arrive without one.
+# contains every example's tests and nothing else. A gate used to fail if a test
+# directory on the application ladder had no such file; it was removed with the
+# meta-gates, so a new rung now needs this file added by hand.
 
 Checks: '-bugprone-chained-comparison'
 

@@ -93,7 +93,7 @@
 # This file covers tests/ only. The application ladder's suites need the same
 # entry and have their own copies (examples/*/tests/.clang-tidy,
 # examples/bank/tests/, examples/common/testkit/), kept in step with
-# examples/rungs.txt by scripts/check_rung_filters.sh.
+# examples/rungs.txt by hand (the gate that checked this was removed).
 
 # bugprone-unchecked-optional-access: clang-tidy's dataflow model cannot see
 # through Catch2's REQUIRE. Verified directly: in a file where

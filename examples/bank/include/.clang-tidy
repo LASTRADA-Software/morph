@@ -88,8 +88,8 @@
 # nothing.
 #
 # One directory up, at `examples/`, is not available and should not be:
-# scripts/check_rung_filters.sh fails outright if `examples/.clang-tidy`
-# exists, because a config there governs every rung's src/, include/ and
+# a gate (since removed) failed outright if `examples/.clang-tidy`
+# existed, because a config there governs every rung's src/, include/ and
 # gui_lib/ together and is the shape in which a narrow suppression quietly
 # becomes a wide one. That gate was written about the Catch2 suppression, and
 # the reasoning holds here regardless of how narrow this key is: the file would
@@ -125,8 +125,9 @@
 # against `6 warnings treated as errors` from the same command with the key in
 # place. So dropping the key is a red build with a message naming the problem,
 # not a quietly unlinted directory. The conclusion is unchanged -- the key is
-# required, and scripts/check_rung_filters.sh is right to check for it in every
-# examples/<rung>/tests/.clang-tidy -- but the reason is a loud failure caught
+# required, and the gate that checked for it in every
+# examples/<rung>/tests/.clang-tidy was right to -- it has since been removed,
+# and the reason is a loud failure caught
 # early rather than a silent one caught never, and a reader deciding whether
 # some other config needs the same protection should be reasoning from the
 # former.

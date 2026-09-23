@@ -59,8 +59,8 @@
 #
 # clang-tidy resolves configuration by walking up from the file it is
 # analysing and offers no finer granularity than a directory, so the only
-# choice is which directory. One up, at `examples/`, is refused outright by
-# scripts/check_rung_filters.sh, because a config there governs every rung's
+# choice is which directory. One up, at `examples/`, was refused outright by a
+# gate (since removed), because a config there governs every rung's
 # src/, include/ and gui_lib/ together -- a narrow suppression in the shape
 # that quietly becomes a wide one.
 #

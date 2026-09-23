@@ -40,12 +40,12 @@ struct LadderTestkitProbe {
     // covers twelve declarations in a header-only tree, reached as main files
     // and nothing else. This directory is the opposite shape. It holds
     // twenty-one Catch2 translation units (the count
-    // scripts/check_rung_filters.sh reads back) and exactly two of these
+    // a gate removed on 2026-09-23 reads back) and exactly two of these
     // declarations, and a .clang-tidy here is resolved for every one of them —
     // including for the include/morph/** headers they reach, which *do* match
     // the root `HeaderFilterRegex` (morph#632). It also already carries a
     // .clang-tidy whose whole justification is "this finding is Catch2 idiom",
-    // a claim scripts/check_rung_filters.sh re-checks against every .cpp that
+    // a claim a gate removed on 2026-09-23 re-checks against every .cpp that
     // file governs; `TableName` is ORM protocol rather than Catch2 idiom, so
     // adding it there would put a second claim into a file whose gate
     // validates only the first. Two directives subtract one check on one line

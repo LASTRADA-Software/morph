@@ -56,26 +56,33 @@ floor means anything.
 
 ## Adopted techniques
 
+> **2026-09-23 — the meta-gates were removed.** The checks that policed other
+> checks (`drift-guard.yml`, the mutation campaign, `spec-sync.yml` and seven
+> `ci.yml` lint jobs) were deleted: 57 checks per PR had become more maintenance
+> than signal, and more than half the open backlog was CI maintaining itself.
+> Rows for mutation testing, the sanitizer-can-fail probe, error-path
+> instrumentation and the two citation gates are gone from the table below
+> because their instruments no longer exist. **No compile, test, sanitizer,
+> coverage or platform coverage was removed** — every build leg, all four
+> sanitizer legs, Valgrind, the coverage floor, both Windows legs and both WASM
+> legs still run. What is given up is drift detection: pins, citations and
+> workflow self-consistency are now conventions rather than gates.
+
 | Technique | morph's instrument | Where it runs | What fails when it regresses |
 |---|---|---|---|
 | Statement coverage | `scripts/coverage.sh`, Codecov | `linux-coverage` CI job | Codecov's per-component status checks (`codecov.yml`) |
 | Branch coverage | `scripts/check_branch_coverage.py` (aggregated LCOV, morph#404) | `linux-coverage` CI job | The gate itself: `ok: 91.19% over 2588 arms` or a hard failure below the floor |
-| Mutation testing | `scripts/mutation.sh` (Mull, morph#405) | Local / on demand (46+ minutes; not yet a CI leg) | Nothing today — see "What is unenforced" below |
 | Out-of-memory injection | `tests/oom_injector.{hpp,cpp}` | `tests/` suites that opt in, under plain (non-sanitizer) legs | Those tests' own assertions |
 | I/O error injection (ladder only) | `examples/common/testkit/fault_proxy.hpp` | Ladder Qt test suites | Those tests' own assertions |
 | Fuzzing | `tests/fuzz/` (`fuzz_wire_decode`, `fuzz_dispatch_execute`), libFuzzer | Local / on demand (`-DMORPH_BUILD_FUZZERS=ON`; not a CI leg) | A crash, hang, or sanitizer trip during a campaign; regression cases preserved under `tests/fuzz/findings/` |
 | AddressSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-asan`), `ladder-sanitizers` | The CI job (nonzero exit on any diagnostic) |
 | UndefinedBehaviorSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-ubsan`), `ladder-sanitizers`, `bank-sanitizers` | The CI job |
 | ThreadSanitizer | Compiler instrumentation | `linux-sanitizers` (`clang-tsan`), `kanban-tsan` | The CI job |
-| A sanitizer leg can fail at all | `scripts/check_sanitizer_can_fail.sh` | `drift-guard` | The check: real undefined behaviour compiled with `apply_sanitizers()`'s own flags must make the process exit non-zero, and an unknown `AF_SANITIZER` must fail the configure (morph#541) |
-| Every sanitized binary is really sanitized | `scripts/check_sanitizer_instrumentation.sh` | `linux-sanitizers`, `ladder-sanitizers`, `kanban-tsan` (self-tested in `drift-guard.yml`) | The check: every binary `ctest` will run on a sanitizer leg must carry that sanitizer's runtime symbols (morph#542). Its `--binary <file> <mode>` mode answers the same question about one named file, with no floor, and is refused under `GITHUB_ACTIONS` so it cannot stand in for the sweep on a CI leg (morph#675) |
+| Every sanitized binary is really sanitized | `scripts/check_sanitizer_instrumentation.sh` | `linux-sanitizers`, `ladder-sanitizers`, `kanban-tsan` | The check: every binary `ctest` will run on a sanitizer leg must carry that sanitizer's runtime symbols (morph#542). Its `--binary <file> <mode>` mode answers the same question about one named file, with no floor, and is refused under `GITHUB_ACTIONS` so it cannot stand in for the sweep on a CI leg (morph#675) |
 | Valgrind (memcheck) | Runtime instrumentation | `valgrind` CI job | The CI job |
 | Long-running / soak | `tests/soak/` | Local / on demand (`-DMORPH_BUILD_LOAD_TESTS=ON`; not a CI leg — see `docs/spec/testing_strategy.md`) | Those tests' own assertions over many cycles |
 | Compile-time contract checks | `tests/compile_checks/` | Every configure that reaches `tests/CMakeLists.txt` | `FATAL_ERROR` at configure time |
-| Multiple independent harnesses | Catch2 suite + `scripts/scenario/` (wire-level scenario corpus against real rung servers) | `tests/`, local scenario runs | Catch2 assertions; `scripts/scenario/scenario_coverage.py`'s drift gate (self-tested in `drift-guard.yml`) |
-| Error-path instrumentation | `scripts/check_error_path_coverage.py` (morph#406) | Local / on demand; self-test only in `drift-guard.yml` today | Its own self-test; not yet wired as a build-blocking gate (see "What is unenforced") |
-| Mutation-triage citations still point at the code they triage | `scripts/check_mutation_survivors.py` (morph#608) | `drift-guard` (the gate itself, per-PR — it needs no build and no Mull report) | The gate: every `{file, line, source}` entry in `scripts/mutation_survivors.json` must resolve to the line it names, via `check_branch_coverage.py`'s `resolve_allowlist_source_line()`. Audits the structured entries only; the same file's free-text citations are counted and reported, not gated (morph#613). A `source` text that appears more than once in its file resolves only when the entry also carries a `context` — a second verbatim line, within 40 lines of the occurrence meant and beside no other; without one the citation is refused rather than accepted for matching *an* occurrence (morph#701) |
-| Every line-cited allowlist is resolved in one invocation | `scripts/check_allowlist_citations.py` (morph#705) | `drift-guard` (the gate itself, per-PR — JSON and headers only, no build) | The gate: every `{file, line, source}` citation in `branch_partial_allowlist.json`, `error_path_allowlist.json` and `mutation_survivors.json` must resolve, and all of them are named by the same run. Before it, the first two were audited by different jobs — one per-PR, one 20 minutes into the coverage leg — so a single edit that staled both was discovered across two CI cycles. It also audits `PENDING_CONTEXT` in both directions, so morph#701's migration list can only shrink |
+| Multiple independent harnesses | Catch2 suite + `scripts/scenario/` (wire-level scenario corpus against real rung servers) | `tests/`, local scenario runs | Catch2 assertions |
 
 ## Declined techniques, and why
 
@@ -133,55 +140,27 @@ hand later.
   path in this subsystem is exercised only by whatever a real socket can be
   made to do in a test (closing the peer end, binding a taken port), not by
   injecting a specific `errno` on demand.
-- **Mutation testing runs in CI now, but scheduled, not per-PR, and only over
-  `core-forms` (morph#408).** `.github/workflows/mutation.yml` installs Mull
-  on a dedicated `ubuntu-26.04` runner (the only OS version Mull 0.34.0
-  ships an LLVM-22 package for) and runs `scripts/mutation.sh core-forms`
-  weekly. `net`, `offline`, `journal`, `util`, and `session` are not covered
-  by that scheduled run and have never had a score taken; a local
-  `scripts/mutation.sh net` invocation is the only way to measure them today.
-  What is *not* a mismatch: CI pins clang 22
-  (`.github/workflows/ci.yml`, enforced by `scripts/check_ci_clang_pin.sh`)
-  and Mull's own LLVM-22 package is what the scheduled job installs, so the
-  mutant set Mull derives from LLVM IR is the one the compiler CI itself uses
-  would emit — the 64.06% figure (`scripts/mutation_survivors.json`,
-  morph#429) was measured on that same major, clang 22.1.8, though under the
-  larger mutator set that included the now-excluded `cxx_remove_void_call`
-  (morph#434) and is not comparable to a current run.
-- **Error-path coverage (morph#406) measures execution, not assertion
-  quality.** `scripts/check_error_path_coverage.py` answers "did a test drive
-  this specific `throw` statement or enter this specific `catch` arm", cross-
-  referencing the aggregated coverage LCOV against every throw/catch site
-  under `include/morph`. It cannot tell a `catch (...) { /* swallow */ }`
-  that ran because a test drove it apart from one that ran and asserted
-  nothing about what it caught — that second question is mutation testing's,
-  not this instrument's, and is why both exist rather than one standing in
-  for the other.
+- **Mutation testing was removed on 2026-09-23.** `scripts/mutation.sh`, its
+  scheduled workflow and the survivor/baseline records went with the
+  meta-gates. No mutation score is taken now, on any scope. The 64.06% figure
+  quoted elsewhere in this charter is historical.
+
+- **Error-path coverage was removed on 2026-09-23.**
+  a gate removed on 2026-09-23 and its allowlist went with the
+  meta-gates, so no instrument answers "did a test drive this `throw`" today.
 
 ## What is unenforced
 
 Named honestly rather than folded into the table above as if a check existed:
 
-- **Mutation score now has a floor, on a schedule rather than per-PR
-  (morph#408).** `.github/workflows/mutation.yml` runs `scripts/mutation.sh`
-  weekly (plus `workflow_dispatch` on demand) and fails --  opening an issue
-  if it does -- when `scripts/check_mutation_regression.py` finds more
-  survivors than `scripts/mutation_baseline.json`'s recorded baseline for
-  that scope. A per-PR gate was considered and rejected: the tool is
-  known-defective for one mutator family (morph#434), the per-PR economics
-  are bad (a ~30-minute instrumented build plus 46+ minutes of runner time
-  against a ~24-minute existing critical path), and a gate nobody can afford
-  to run is not a gate. What this still does not do: attribute a regression
-  to the PR that caused it (a scheduled job reports on a window of commits,
-  not one), and PRs stay ungated in the interim between runs.
-- **Error-path coverage (morph#406) has no build-blocking gate yet.**
-  `scripts/check_error_path_coverage.py --self-test` runs in `drift-guard.yml`
-  (proving the *instrument* still detects what it is meant to), but the
-  instrument itself is not yet wired into `scripts/coverage.sh` to fail a
-  build over an uncovered, unallowlisted throw/catch site. `core`'s 50 sites
-  being covered first (morph#406's own stated priority) is the work that
-  would make turning this into a hard gate survivable rather than an
-  immediate wall of red.
+- **Mutation score has no floor, and no instrument.** The scheduled campaign
+  and its regression check were removed on 2026-09-23 (see "Instrument
+  reach"). Nothing measures mutation score.
+
+- **Error-path coverage has no instrument at all**, as of 2026-09-23. It never
+  became a build-blocking gate, and the instrument itself has now been
+  removed.
+
 - **Fuzzing has no continuous campaign.** `tests/fuzz/`'s two harnesses run
   locally, on demand, seeded from `tests/fuzz/corpus/`. Nothing runs them
   automatically against new commits (no OSS-Fuzz integration, no scheduled CI
@@ -198,6 +177,6 @@ Named honestly rather than folded into the table above as if a check existed:
 | [testing_strategy.md](testing_strategy.md) | The opt-in test categories this charter's table cites in detail — fuzz harness, soak tests, load benchmark, adversarial cross-socket run. |
 | [error_handling.md](error_handling.md) | The propagation design morph#406's error-path instrument measures test coverage of. |
 | `codecov.yml` | The per-subsystem coverage targets and the artifact-audit allowlists (`branch_partial_allowlist.json`, `error_path_allowlist.json`) this charter's guarantee is enforced through. |
-| `scripts/mutation_survivors.json` | The triaged survivor list behind this charter's 64.06% mutation-score figure. Its structured `{file, line, source}` entries — plus the optional `context` disambiguator morph#701 added for a `source` that is not unique — are audited per-PR by `scripts/check_mutation_survivors.py` (morph#608); its free-text citations are not (morph#613). |
+| `scripts/mutation_survivors.json` *(removed 2026-09-23)* | The triaged survivor list behind this charter's historical 64.06% figure. Its structured `{file, line, source}` entries — plus the optional `context` disambiguator morph#701 added for a `source` that is not unique — are audited per-PR by `scripts/check_mutation_survivors.py` (morph#608); its free-text citations are not (morph#613). |
 | `tests/oom_injector.hpp` | The OOM-injection limitation this charter states under "Instrument reach". |
 | `examples/common/testkit/fault_proxy.hpp` | The ladder-only fault-injection seam this charter states has no `include/morph`-side equivalent. |

@@ -100,7 +100,7 @@ the six are ladder rungs; `bank` is not one, which is why the column below says
 "server" rather than "rung".
 
 That asymmetry is deliberate and is not drift to be tidied away. `bank` appears
-in `run_scenarios.py`'s `RUNGS` and in `scenario_coverage.py`'s `SERVER_RUNGS`,
+in `run_scenarios.py`'s `RUNGS` and in a gate removed on 2026-09-23's `SERVER_RUNGS`,
 and is absent from [`examples/rungs.txt`](../../examples/rungs.txt) — the
 ladder's authoritative rung list — because those lists answer different
 questions. `rungs.txt` decides what the ladder *builds and gates on*: every
@@ -295,14 +295,14 @@ what a failure report looks like.
 ## Measuring what the corpus covers
 
 A corpus grows by whoever last added a file, and "have we covered everything?"
-has no answer unless the universe is countable. `scenario_coverage.py` makes it
+has no answer unless the universe is countable. a gate removed on 2026-09-23 makes it
 countable: it enumerates every envelope kind `RemoteServer::dispatchMessage`
 handles and every refusal string it can put on the wire, straight out of
 `include/morph/core/remote.hpp`, then diffs that against what the scenario
 files actually send and assert.
 
 ```bash
-python3 scripts/scenario/scenario_coverage.py
+python3 scripts/scenario/a gate removed on 2026-09-23
 ```
 
 Exit `0` if every kind and refusal is covered or exempt *and* the workflow
@@ -318,7 +318,7 @@ list can only shrink deliberately.
 The report is itself a control, so it is built not to pass while measuring
 nothing: it refuses to run if it extracts an implausibly small surface (rename
 `makeErr` and it fails loudly rather than reporting full coverage over an empty
-universe), and `test_morph_scenario.py` drives it against fixtures whose right
+universe), and a gate removed on 2026-09-23 drives it against fixtures whose right
 answers are known, including one where the correct exit code is non-zero.
 
 ### The workflow axis
@@ -326,7 +326,7 @@ answers are known, including one where the correct exit code is non-zero.
 Protocol coverage answers "did some scenario ever send this envelope kind or
 assert this refusal?" — it says nothing about whether scenarios exercise real
 *journeys* through a rung's domain actions, as opposed to a flat list of
-independent calls that happen to share a socket. `scenario_coverage.py` also
+independent calls that happen to share a socket. a gate removed on 2026-09-23 also
 measures that, per rung, against the registered `BRIDGE_REGISTER_ACTION`
 surface under `examples/<rung>/`.
 
@@ -378,7 +378,7 @@ apart from the entries the per-rung `(n exempt)` count actually reflects.
 ### In CI
 
 `.github/workflows/drift-guard.yml`'s `scenario-coverage` job runs
-`test_morph_scenario.py` and then `scenario_coverage.py` on every push and
+a gate removed on 2026-09-23 and then a gate removed on 2026-09-23 on every push and
 pull request. Both read source and scenario files only — they compile nothing
 and start nothing — which is what lets them sit in a workflow whose every job
 is fast and dependency-free.
@@ -414,18 +414,18 @@ worse, by being quietly left out of a run that then reports green.
 (`scripts/ladder_rungs.sh ci-path-regex`), so a pull request touching only the
 corpus still reaches the job that runs it.
 
-`scenario_coverage.py --floors` is a **testing-only** override for this tool's
+a gate removed on 2026-09-23 --floors` is a **testing-only** override for this tool's
 own fixtures (it lets them satisfy a floor without authoring dozens of
 throwaway workflow files); CI and any real run pass it nothing and get the
 shipped `WORKFLOW_FLOORS`.
 
 ## Self-test
 
-`test_morph_scenario.py` covers the parser, the value syntax, the path reader
+a gate removed on 2026-09-23 covers the parser, the value syntax, the path reader
 and the comparison rules. It needs no server:
 
 ```bash
-python3 scripts/scenario/test_morph_scenario.py
+python3 scripts/scenario/a gate removed on 2026-09-23
 ```
 
 ## What this deliberately does not do

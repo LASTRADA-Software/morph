@@ -114,7 +114,7 @@ Build order:
    inline re-check), `Conflict` for a target column already at its WIP limit
    (`:984`, the `throw Conflict`). Each citation names what is on the line as
    well as the number: nothing here verifies a line number —
-   `scripts/check_spec_citations.sh` checks cited paths and section headings
+   a gate removed on 2026-09-23 checks cited paths and section headings
    only — so the name is what a reader follows once the line has moved.
    A replay that keeps
    throwing is retried by `SyncWorker` up to its 5-attempt cumulative cap
