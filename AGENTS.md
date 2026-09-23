@@ -73,6 +73,49 @@ running the `triage-issue` skill (`.claude/skills/triage-issue/`). An author
 labelling their own issue `triage: valid` records only that they thought it
 worth filing, which every open issue already implies.
 
+## Comments and documentation
+
+A comment, and a page under `docs/`, states **what the code does now and why**.
+Nothing else.
+
+- **No history.** Not what the code used to do, not what was tried and
+  abandoned, not what a change replaced. `git blame` and `git log` hold that
+  accurately and permanently; a comment holds a copy that starts rotting the
+  moment the next change lands. Reach for blame when you need the story.
+- **No issue numbers, no commit hashes.** A reader should not have to leave the
+  file — or reach a tracker — to understand the line in front of them. If a
+  ticket's reasoning is worth keeping, keep the *reasoning*, in the reader's
+  own words, at the place it applies.
+- **Reasoning stays, and is the point.** "Why this and not the obvious
+  alternative", "this bound is what the hardware gives us", "this order matters
+  because the lock is held" — none of that is history. It is a current fact
+  about a current constraint, and it is the most valuable thing a comment
+  carries.
+
+Length follows from the rules rather than from a limit: once the history and the
+citations are gone, a block that ran for eighty lines is usually five.
+
+The one exception is **public API documentation**, which is exempt from brevity
+and not from the rules above. Doxygen runs with `WARN_AS_ERROR =
+FAIL_ON_WARNINGS`, so every public symbol keeps complete
+`@param`/`@tparam`/`@return` — write those fully, and still without a ticket
+number in them.
+
+A worked contrast:
+
+```cpp
+// BAD — history, a citation, and a reader sent elsewhere
+// Until morph#604 this used notify_one, which lost a wakeup when two
+// waiters blocked on different predicates (see also morph#489's comment).
+// Restored to notify_all in a1b2c3d.
+_cv.notify_all();
+
+// GOOD — the current constraint, in place
+// notify_all, not notify_one: waiters block on different predicates, so a
+// single wakeup can land on one whose predicate is still false and be lost.
+_cv.notify_all();
+```
+
 ## Verify rather than assert
 
 A control that reports success while measuring nothing is the failure mode this
