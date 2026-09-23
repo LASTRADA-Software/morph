@@ -612,6 +612,32 @@ endfunction()
 # the cost of rewriting the filter mechanism whose silent shrinkage this issue
 # is about was the worse trade.
 #
+# The same trade, on the same flag family, for __FILE__ (morph#775). `__FILE__`
+# is expanded at compile time and baked into the object, Catch2 records it per
+# TEST_CASE, and a cache hit served across worktrees therefore reports failures
+# against a directory that may hold a different revision of the file or no
+# longer exist at all. Not reachable in CI -- one checkout per runner -- but a
+# real hazard in the several-worktrees-one-daemon configuration this repository
+# is developed in. -ffile-prefix-map (or -fmacro-prefix-map for __FILE__ alone)
+# is the obvious remedy and it is NOT applied here, for the measured reason
+# above rather than an assumed one. Two directories holding byte-identical
+# sources, compiled through `fastcache-cc clang++` with FASTCACHE_SOURCE_DIR set
+# to each in turn, second compile is the measurement:
+#
+#   no flag                         wtA MISS, wtB HIT   <- the cache works
+#                                   wtB's object bakes in ".../wtA/src/tu.cpp"
+#   -ffile-prefix-map=<root>=.      wtA MISS, wtB MISS  <- the cache is gone
+#                                   wtB's object bakes in "src/tu.cpp"
+#
+# Two distinct keys for identical sources (fc776d3b… vs d43ea282…), because the
+# flag carries the absolute source root and fastcache-cc's path canonicalisation
+# does not normalise an arbitrary command-line argument the way it normalises
+# the source operand. Reproduced twice. So the flag fixes the paths by
+# destroying the cross-worktree hit rate that is the whole reason
+# cmake/CompileCache.cmake prefers fastcache-cc over ccache here -- a worse
+# trade than the defect. Treat an absolute path in a multi-lane test failure as
+# untrusted instead; CONTRIBUTING.md's "Quality gates" says how.
+#
 # scripts/check_coverage_roots.sh is the second half of this, and is not
 # redundant with it: the default above is overridable, and the failure is a
 # silence that no exit code reports.

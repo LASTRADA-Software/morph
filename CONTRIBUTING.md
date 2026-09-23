@@ -148,6 +148,27 @@ serialising independent rungs behind one file.
   The sites carry a one-line pointer back here rather than repeating this
   paragraph — it used to be copy-pasted at all seventeen of them, and two of
   those copies had drifted into describing code that was not there.
+- **Do not trust an absolute path in a test failure when several worktrees
+  share one compiler cache.** `__FILE__` is expanded at compile time and baked
+  into the object; Catch2 records it per `TEST_CASE`. `fastcache-cc` serves
+  entries across checkouts — that cross-worktree hit rate is why
+  `cmake/CompileCache.cmake` prefers it to `ccache` — so a cache hit hands you
+  an object carrying **the path of whichever worktree compiled it**. The
+  failure report then names a directory that may hold a different revision of
+  that file, or that a landed lane has already pruned. Nothing in the output
+  says so; the path looks plausible.
+
+  Reproduced deliberately: two directories with byte-identical sources, the
+  second compile served from the cache, and the object it received baked in
+  the *first* directory's path. CI is unaffected — one checkout per runner.
+
+  `-ffile-prefix-map` is not the fix, and that is measured rather than
+  assumed: it does normalise the path, and it takes the cross-worktree hit
+  rate to zero doing it, because the flag carries the absolute source root
+  into the cache key. The numbers are in `cmake/compiler_options.cmake` beside
+  the same trade for coverage (morph#426, morph#775). So: read the line number,
+  not the directory, and re-run in your own worktree before believing where a
+  failure points.
 - **Keep mechanical facts honest:** `docs/spec/pinned_facts.toml` pins the
   mechanical facts that recur across specs — enum cardinalities, key
   constants (`kMaxEnvelopeBytes`, `kMaxDecimalPlaces`, `kClockSkewMs`),
