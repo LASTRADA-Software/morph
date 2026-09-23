@@ -5,6 +5,54 @@
 // kanban::BoardModel::execute(MoveTaskPosition)'s validate/idempotency-ledger/
 // re-check/journal sequence.
 
+// ── GCC 16's -Warray-bounds false positive inside libstdc++'s shared_ptr ────
+//
+// morph#725. On `g++ (GCC) 16.2.1` at -O2/-O3 with -Werror, this translation
+// unit and `test_offline_sync.cpp` are the only two in the tree that fail to
+// compile, on a diagnostic raised entirely inside libstdc++:
+//
+//     /usr/include/c++/16/bits/shared_ptr_base.h:1165:32: error: array
+//     subscript 14 is outside array bounds of 'void [112]'
+//     [-Werror=array-bounds=]
+//     /usr/include/c++/16/bits/unique_ptr.h:1105:30: note: at offset 112 into
+//     object of size 112 allocated by 'operator new'
+//
+// It is a false positive, measured rather than assumed. The store GCC reports
+// is inside `ModelHolder<crm::OpportunityModel>::onActionLogAttached`; the
+// allocation it bounds that store against is
+// `make_unique<ModelHolder<crm::AccountModel>>`, a *different* type. GCC gets
+// there by speculatively devirtualizing the `IModelHolder::attachActionLog`
+// call in `ModelFactory::create<crm::AccountModel>()`
+// (`include/morph/core/model.hpp:166`) to `OpportunityModel`'s override -- a
+// dispatch that cannot occur, since a `ModelHolder<AccountModel>*` reaches
+// only `ModelHolder<AccountModel>`'s. Sizes measured on this revision with the
+// same compiler:
+//
+//     sizeof(ModelHolder<crm::AccountModel>)     = 112
+//     sizeof(ModelHolder<crm::OpportunityModel>) = 136
+//
+// and subscript 14 of a `void[]` is byte offset 112 -- in bounds of the object
+// the code actually writes to (136), out of bounds only of the one GCC
+// substituted. crm is the only rung whose models carry a `SelfJournal`
+// (48 bytes), which is where the two holders diverge, and that is why only
+// crm's TUs hit it.
+//
+// Scope, deliberately: the push/pop wraps the `#include` block and nothing
+// else, so the suppression reaches code written inside those headers and no
+// code written here. Measured, not asserted -- with this pragma in place,
+// adding `int p[4] = {1,2,3,4}; CHECK(p[7] == 0);` to a TEST_CASE below still
+// fails the build with `array subscript 7 is above array bounds of 'int [4]'
+// [-Werror=array-bounds=]`.
+//
+// The guard is `== 16`, not `>= 16`, so it lapses rather than accumulating: a
+// GCC 17 that still warps this chain breaks the build and forces someone to
+// re-measure instead of inheriting an unverified suppression. No CI leg sees
+// any of this -- `ci.yml` installs gcc-15 on every Linux leg.
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 16
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
+
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -17,6 +65,10 @@
 #include "crm/models/opportunity_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 16
+#pragma GCC diagnostic pop
+#endif
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;

@@ -14,6 +14,21 @@
 // own two-legged structure exactly (its own comment explains why the durable
 // leg is opt-in — MORPH_BUILD_OFFLINE_SQLITE, off by default).
 
+// ── GCC 16's -Warray-bounds false positive inside libstdc++'s shared_ptr ────
+//
+// morph#725, and the same block as `test_pipeline.cpp`'s -- which carries the
+// full measurement, the sizes, and the reason this wraps only the `#include`
+// block. Short form: at -O2/-O3, GCC 16 speculatively devirtualizes
+// `ModelFactory::create<crm::AccountModel>()`'s `IModelHolder::attachActionLog`
+// to `ModelHolder<crm::OpportunityModel>`'s override, then bounds an offset-112
+// store against the 112-byte `AccountModel` holder instead of the 136-byte
+// `OpportunityModel` one. `== 16` so the suppression lapses rather than
+// accumulates; CI is on gcc-15 and has never seen this.
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 16
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
+
 #include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -28,6 +43,10 @@
 #include "crm/models/opportunity_model.hpp"
 #include "crm/offline/field_outbox.hpp"
 #include "crm_test_support.hpp"
+
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 16
+#pragma GCC diagnostic pop
+#endif
 #include "testkit/db_fixture.hpp"
 
 #ifdef MORPH_LADDER_HAVE_OFFLINE_SQLITE
