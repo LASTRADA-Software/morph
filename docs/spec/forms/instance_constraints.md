@@ -19,8 +19,8 @@ That is worse than either key alone: a renderer is handed two numbers for one
 concept with no way to know which is true. Bounds fared worse still. A
 specification range could only be served as an `x-specHigh` no framework code
 read, so a value outside the range a form had just advertised passed
-`validate()` and was stored with nothing anywhere recording that it was out of
-range (issue #164).
+`validate()` and is stored with nothing anywhere recording that it was out of
+range.
 
 ## What it is
 

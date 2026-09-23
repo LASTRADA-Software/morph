@@ -325,25 +325,25 @@ forwards to inserts a default-constructed member for a missing key
 So the checking depends on the constness of the DOM, not on the spelling, and
 these walkers are mutating by construction. A mechanical `operator[]` → `at()`
 sweep over them would silence ~70 findings while changing a read into a write
-on exactly the inputs the check warns about (morph#706).
+on exactly the inputs the check warns about.
 `tests/test_forms_dom_access.cpp` asserts both halves — that `findMember` leaves
 the document byte-identical on a miss, and that `at()` on the pinned glaze does
 not — so a glaze release that gives `at()` real checked semantics turns that
 file red rather than leaving this rationale quietly stale.
 
-The sites that still carry a standing
+The sites that carry a standing
 `NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)` are the
-writes, and the directive now says so.
+writes, and the directive says so.
 
-**Not every read** (morph#714). `views.hpp` reads a *const* DOM, where
+**Not every read is converted.** `views.hpp` reads a *const* DOM, where
 `operator[]` throws rather than inserts — a different and louder failure than
-the mutating walkers', but still one the caller cannot see coming. Its reads
-were converted with one deliberate exception, stated here because the
-exception is the interesting part: **a read whose key is guaranteed present by
-construction keeps its subscript.** Turning such a read into a null check adds
+the mutating walkers', but still one the caller cannot see coming. Its reads are
+checked with one deliberate exception, stated here because the exception is the
+interesting part: **a read whose key is guaranteed present by construction keeps
+its subscript.** Turning such a read into a null check adds
 a branch nothing can take — untestable code, and a branch-coverage allowlist
 entry someone must later write a justification for. That is a cost, not a
-safety improvement, and it is the lesson morph#706 paid for.
+safety improvement.
 
 Two reads of `rowDom["properties"]` are that exception. glaze's schema writer
 emits `"properties"` unconditionally for every reflectable aggregate, including
@@ -368,8 +368,8 @@ now carry a
 converting a read moved the *write* beside it onto a changed line and
 `clang-tidy-diff` reports on changed lines. Those three are the first
 suppressions of this check in `views.hpp`, and each says in one word what it
-is: a write. The other 18 writes are untouched and still unsuppressed, which is
-the piecemeal bill morph#677 describes and does not try to settle here.
+is: a write. The other 18 writes are unsuppressed, because only a changed line
+is reported; converting the tree in one sweep is a separate job from this one.
 
 Counted a second way as well, through `tests/test_views.cpp`, a translation unit
 that actually *instantiates* the templates: the two measurements agree exactly,
@@ -998,8 +998,8 @@ An enum **without** a `glz::meta` is refused at compile time. Without the
 declaration, glaze would emit a `$ref` to a `$defs` entry that is the six-way
 wildcard `{"type": ["number", "string", "boolean", "object", "array", "null"]}`,
 naming neither the enumerators nor even a single type — the shipped
-`DynamicForm` drew that wildcard as a checkbox, reporting the form ready for a
-value nobody chose (morph#392). `schemaJson<A>()` now `static_assert`s on
+`DynamicForm` draws that wildcard as a checkbox, reporting the form ready for a
+value nobody chose. `schemaJson<A>()` therefore `static_assert`s on
 `glz::glaze_enum_t` for every `enum class` member it reaches, so a rung that
 declares one without `glz::meta`/`glz::enumerate` fails to build rather than
 shipping a form that lies about being ready.
@@ -1134,9 +1134,9 @@ not one, because only one of the two signals is universal:
   **target** on the signal being declared — `form.controller.optionsReceived
   !== undefined`, else `null` — so a controller that omits it is never connected
   to and the absence is not a warning. Without the split, every form instance
-  warned once about `onOptionsReceived` as soon as a conforming choiceless
-  controller was attached (morph#387), which forced any GUI test asserting "no
-  QML warnings" to tolerate that exact text.
+  warns once about `onOptionsReceived` as soon as a conforming choiceless
+  controller is attached, which forces any GUI test asserting "no QML warnings"
+  to tolerate that exact text.
 
   The gate is what makes the block optional, **not** `ignoreUnknownSignals`. A
   controller that does declare `optionsReceived` is connected to strictly, so a
@@ -1427,7 +1427,7 @@ Display formatting is the renderer's duty; the wire stays canonical:
   — the conversion happens at the control edge only.
 
   **The locale facts travel as one aggregate, not as a row of positional
-  views** (morph#591):
+  views**:
 
   ```cpp
   struct NumericLocale {
@@ -1453,16 +1453,16 @@ Display formatting is the renderer's duty; the wire stays canonical:
   defaulted member rather than a seventh parameter. Third, and the reason it is
   worth the churn: **the two edges take the same type**, so "these two must
   agree" is structural rather than a convention a caller can get half right —
-  which is the drift morph#591 and morph#599 both came from. There is
+  and that convention is exactly what the two edges drift apart on. There is
   deliberately no back-compatible positional overload: two spellings of one call
-  is how the edges drifted apart to begin with. The QML mirror takes the
+  is how they drift. The QML mirror takes the
   parallel shape, an object literal with the same member names, so the two
   mirrors stay structurally identical.
 
   Every member is defaulted to its `"C"`-locale spelling, so a caller that names
   none of them gets the identity transform in both directions.
 
-  **The digits are locale data too, carried as a base** (morph#591). A Unicode
+  **The digits are locale data too, carried as a base.** A Unicode
   decimal digit set *is* ten contiguous code points — UAX #44 assigns `Nd`
   with `Numeric_Value` 0 through 9 in code point order — so a single
   `zeroDigit` is sufficient and a ten-element table is not needed. Measured with
@@ -1520,8 +1520,7 @@ Display formatting is the renderer's duty; the wire stays canonical:
   `src/qt/forms/tests/tst_i18n.qml`.
 
   **Entry accepts the locale's digits *and* ASCII ones; display emits only the
-  locale's.** That asymmetry is the rule morph#596 already set for signs,
-  applied to digits: an ASCII `'+'` is accepted in every locale because the
+  locale's.** That asymmetry is the rule the signs follow, applied to digits: an ASCII `'+'` is accepted in every locale because the
   locale's own spelling is on no keyboard, and an ASCII `'5'` is accepted in an
   `ar_EG` locale for the same reason — a user with an ASCII keyboard has to be
   able to type a number. It costs nothing, because the canonical output spells
@@ -1544,7 +1543,7 @@ Display formatting is the renderer's duty; the wire stays canonical:
   every caller that does not name it is byte-identical to the
   five-positional-parameter version — asserted rather than assumed: a 1680-case
   sweep (14 locale configurations × 60 entries × both edges) run against the
-  pre-morph#591 header and against this one produced identical output.
+  positional spelling and against this one produces identical output.
 
   All the locale facts are `std::string_view`, not `char`, because a real
   locale's
@@ -1555,9 +1554,9 @@ Display formatting is the renderer's duty; the wire stays canonical:
   French user normalised to `std::nullopt` and the control reported it
   malformed. An empty view means "this locale has no such separator".
 
-  **So is the negative sign** (morph#583). The same argument applies to the
-  sign, and was missing here: both edges read `NumericLocale::negativeSign`,
-  matched and emitted as a whole string the way the separators are. Of the 711
+  **So is the negative sign.** The same argument applies to the sign: both edges
+  read `NumericLocale::negativeSign`, matched and emitted as a whole string the
+  way the separators are. Of the 711
   locales `QLocale::matchingLocales`
   reports under Qt 6.11.2, 77 spell it as something other than a bare ASCII
   `'-'`:
@@ -1593,7 +1592,7 @@ Display formatting is the renderer's duty; the wire stays canonical:
   group separator there is no locale without a negative sign, so empty cannot
   mean absence — and on the display edge it must not, because a sign that
   formatted to nothing would turn `-5` into `5`: a valid number of the wrong
-  sign, which is the morph#574 failure mode rather than a rejection.
+  sign, which is silent corruption rather than a rejection.
 
   The renderer passes the locale's own sign: `DynamicForm.qml` already binds
   `qtLocale: Qt.locale(displayLocale)` and forwards
@@ -1601,8 +1600,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   `qtLocale.negativeSign` from the same object at all three call sites. The
   member is defaulted, so a caller that names only the separators is unchanged.
 
-  **`displayLocale` is a `QLocale` *name*; Qt resolves it, and morph does not**
-  (morph#629). `DynamicForm.displayLocale` (`src/qt/forms/qml/DynamicForm.qml`)
+  **`displayLocale` is a `QLocale` *name*; Qt resolves it, and morph does
+  not.** `DynamicForm.displayLocale` (`src/qt/forms/qml/DynamicForm.qml`)
   is a plain string, and every locale fact the two numeric edges receive comes
   out of the `QLocale` that `Qt.locale(displayLocale)` returns — not out of the
   string. That resolution is Qt's, and it is **not** an identity: a name with no
@@ -1650,7 +1649,7 @@ Display formatting is the renderer's duty; the wire stays canonical:
   keyed on as well.
 
   **A leading positive sign is accepted on entry and never emitted on
-  display** (morph#596). `normalizeLocaleNumber` reads
+  display.** `normalizeLocaleNumber` reads
   `NumericLocale::positiveSign`, matched exactly as `negativeSign` is —
   the locale's own spelling as a whole string, plus a bare ASCII `'+'` in every
   locale — and **drops** what it matches: `"+5"` normalises to `"5"`, not to
@@ -1682,11 +1681,11 @@ Display formatting is the renderer's duty; the wire stays canonical:
   somewhere to put an accepted `'+'`: nowhere, which costs nothing. The display
   edge has no such option: `positiveSign` is `'+'` in 657 of the 711 locales, so
   emitting it would turn every positive number in every form from `5` into `+5`,
-  a visible change to the product with no reported need behind it. morph#583 had
-  a forced hand — the display edge emitted a sign the entry edge rejected, so
-  the pair *was* broken and something had to give. Here nothing is broken: this
-  is new acceptance, which is why it is an enhancement and why it stops at the
-  one edge where acceptance is free. Rejecting text the display edge produced is
+  a visible change to the product with no reported need behind it. The negative
+  sign is a different case: there the display edge would emit a sign the entry
+  edge rejects, so the pair would be broken and something has to give. Nothing
+  is broken for the positive sign, which is why acceptance stops at the one edge
+  where it is free. Rejecting text the display edge produced is
   a defect; accepting text no display edge produces is not.
 
   **Grouping is validated, never merely stripped.** A group separator is
@@ -1696,10 +1695,10 @@ Display formatting is the renderer's duty; the wire stays canonical:
   normalise; `"1.5"`, `"1.50"`, `"1.05"` and `"1.2.3.4"` in a de-DE locale are
   malformed, and so is the en-US mirror image `"1,5"`. This is not
   strictness for its own sake: dropping every occurrence unconditionally, as
-  both control edges used to, turns a de-DE user's US-style `"1.5"` into `15` —
+  a naive edge does, turns a de-DE user's US-style `"1.5"` into `15` —
   a perfectly valid number, ten times too large, that no downstream check can
   recognise as wrong, so the user is charged ten times with no diagnostic
-  anywhere (morph#574). The field's job at this edge is to report a fact to the
+  anywhere. The field's job at this edge is to report a fact to the
   layer that owns the policy, not to produce a number at any price.
 
   **The two separators must differ.** A non-empty `groupSeparator` equal to
@@ -1724,14 +1723,13 @@ Display formatting is the renderer's duty; the wire stays canonical:
   sites that already forward `qtLocale.negativeSign`, and nothing changes at the
   display call site. All three call sites now also forward
   `qtLocale.zeroDigit`, the display one included — that is what "both edges, or
-  neither" costs for morph#591.
+  neither" costs for the digit base.
 
   **The two separators are matched the same way, for consistency rather than
-  for a locale** (morph#599). Both sign conversions above left the mirror's
-  *separator* branches spelled `ch === groupSeparator` and
-  `ch === decimalSeparator` — a one-code-unit comparison, a few lines from the
-  whole-string sign match, with nothing saying why. They are now
-  `text.startsWith(sep, i)` as well, advancing the index by the separator's
+  for a locale.** Spelling the mirror's *separator* branches as
+  `ch === groupSeparator` and `ch === decimalSeparator` would be a
+  one-code-unit comparison sitting a few lines from the whole-string sign match,
+  with nothing saying why. They are `text.startsWith(sep, i)` as well, advancing the index by the separator's
   length the way the sign branches already do.
 
   Unlike the signs, **no locale reaches this**, and the rule rather than a user
@@ -2249,9 +2247,8 @@ rule list directly, has no such "unrecognised kind" case.
 #### "Cannot evaluate" means defer, not block
 
 "Cannot evaluate" is a **third** answer, alongside true and false, and the two
-shipped clients of this sentence once read it in opposite directions — one
-blocked submission on an unknown `kind`, the other deferred (morph#176). The
-contract is *defer*:
+shipped clients of this sentence can read it in opposite directions — block
+submission on an unknown `kind`, or defer. The contract is *defer*:
 
 | Question a renderer asks | Answer when the condition cannot be evaluated |
 |---|---|
@@ -2621,17 +2618,17 @@ instantiation for every distinct root-to-node route through the type graph. A
 domain model shaped like a tree has one route per node; a model shaped like a
 DAG — an `Address` under both a `Customer` and a `Supplier`, a `Money`
 everywhere — has as many as it has paths, and that count grows exponentially in
-the graph's depth. morph#573 step 3 replaced the chain with a depth counter,
-collapsing that to one instantiation per (type, depth) pair. Measured on a
+the graph's depth. A depth counter in place of the chain collapses that to one
+instantiation per (type, depth) pair. Measured on a
 fixture with 27 types over 8 levels, where
 6,561 routes reach the deepest node (`tests/compile_checks/forms_dag_probe.cpp`,
 g++ 16.2.1, `-std=c++23 -fsyntax-only`, CPU seconds): 26.8 s with the ancestor
 chain against a 2.7 s control that has one route per node, and 3.0 s against
 the same control with the depth counter. `tests/compile_checks/forms_dag_budget.cmake`
 is the ctest guard that keeps it that way, asserting the DAG fixture costs no
-more than three times its one-route control (morph#573, Part B).
+more than three times its one-route control.
 
-The depth counter is now gone too (morph#703), and the recursion carries **no**
+The depth counter is gone too, and the recursion carries **no**
 template argument that varies down it. `recurseIntoNestedAggregateIfAny<Member>`
 reaches `annotateNestedAggregate<Sub>` reaches
 `recurseIntoNestedAggregateIfAny<Member'>`: every specialisation is keyed on a
@@ -2665,9 +2662,9 @@ which a cyclic type always reaches: glaze inlines a nested type only when it is
 used exactly once in the whole schema, and a type reachable from itself never
 is.
 
-Measured (morph#703), clang 22.1.8, `-std=c++23`, glaze v7.4.0 — three actions
-that were each a hard `static_assert` before this change now compile, and the
-generated schema is annotated correctly:
+Measured with clang 22.1.8, `-std=c++23`, glaze v7.4.0 — three actions that a
+depth-carrying recursion rejects with a hard `static_assert` compile here, and
+the generated schema is annotated correctly:
 
 ```cpp
 struct TreeNode { std::string name; std::vector<TreeNode> children; };
@@ -2698,10 +2695,9 @@ what says the change is responsible for the difference, rather than the fixture
 having been compilable all along.
 
 `kMaxNestDepth`, the `static_assert` and the 16-level cap are therefore gone.
-The cap existed only because a depth counter cannot tell a cycle from a deep
-graph; with nothing carried in the type system there is nothing to bound. It
-was introduced by morph#573 step 3 where previously there had been no limit at
-all, so removing it restores the older contract rather than inventing a new one.
+A cap is needed only because a depth counter cannot tell a cycle from a deep
+graph; with nothing carried in the type system there is nothing to bound, and
+so no limit to state.
 
 #### Nesting depth in practice
 
@@ -2730,10 +2726,10 @@ Two things about MSVC's number. It is **specific to an instantiated template**:
 the same chain initialised at namespace scope compiled at 120 levels without
 complaint, so it is not a limit on aggregate nesting as such but on the
 initialiser MSVC builds while instantiating. And it is **lower than the
-16-level cap this change removed** — a 15- or 16-level chain would have hit
-C1054 on MSVC even before morph#703, ahead of the `static_assert` that was
-supposed to be the diagnostic. Nothing in the repository had ever nested more
-than three levels, so nobody found out.
+16-level cap a depth counter would impose** — a 15- or 16-level chain hits
+C1054 on MSVC ahead of any `static_assert` meant to be the diagnostic. Nothing
+in the repository nests more than three levels, so nothing in the tree reaches
+either limit.
 
 The action type counts as one of the 15, so `cl` accepts a chain of **14**
 below it. `tests/test_nested_forms.cpp` uses 20 (four past the removed cap)
@@ -2758,7 +2754,7 @@ measurement plus one link of margin, and is confirmed or refuted by the next
 Nothing *executes* these numbers: they are a record, not a check, so a
 toolchain upgrade that moves MSVC's limit down would be found by a red
 `Windows / cl-*` leg rather than by a named guard. A compile-check on the model
-of `forms_dag_budget.cmake` is filed as morph#744.
+of `forms_dag_budget.cmake` would close that, and does not exist.
 
 A "diamond" was never affected and still is not — the same type reused from two
 unrelated places in the schema, e.g. an `Address` nested under both a `Company`
@@ -2775,8 +2771,8 @@ separate contract, stated next.
 The shipped `MorphForms` renderer **renders flat actions**. A nested-aggregate
 member — `$ref`-cyclic or not — is not drawn as a sub-form; it is flattened to
 a single scalar control at the parent level, and its own members reach no
-control at all. This was undefined until morph#727; it is now measured, and
-pinned by `src/qt/forms/tests/tst_DynamicFormNestedAggregate.qml`.
+control at all. That is measured, and pinned by
+`src/qt/forms/tests/tst_DynamicFormNestedAggregate.qml`.
 
 Four statements, each asserted by that suite:
 
@@ -2808,8 +2804,8 @@ Point 4 is a description of today's behaviour, **not** an endorsement of it: a
 `ready` that is `true` for a payload the action must reject is the one part of
 this contract that is arguably wrong, and whether the renderer should draw the
 sub-form, decline the schema with a diagnostic, or keep flattening it is
-tracked as morph#759. Nothing in this repository has a nested-aggregate member
-today, so nothing depends on the answer yet.
+undecided. Nothing in this repository has a nested-aggregate member today, so
+nothing depends on the answer yet.
 
 So: an action with a nested-aggregate member — cyclic or otherwise — is a
 document morph generates completely and a form morph draws only down to the
@@ -2827,11 +2823,9 @@ no nested-aggregate member has nothing here to trigger on, so its generated
 schema is byte-for-byte unchanged. A pre-existing action that *does* have a
 nested-aggregate member sees its schema gain annotations it previously
 lacked — the whole point of this feature — with no change to any of its flat
-top-level members. The one exception is now historical: between morph#573 and
-morph#703, an action nested more than 16 levels deep, or with a self- or
-mutually-referential nested-aggregate member, failed to *compile*. Neither does
-any longer, and no action in this repo was ever in that position — it could not
-have been, since it would not have built.
+top-level members. Neither a deeply nested action nor a self- or
+mutually-referential nested-aggregate member fails to compile, and no action in
+this repository is in that position in any case.
 
 Every nested-aggregate type in the chain must be **default-constructible**,
 exactly like the top-level action type (see below): the recursion builds its

@@ -29,10 +29,10 @@ no new execution mode.
 `std::logic_error` on a field belonging to any other. That is right for a
 wizard and wrong for a screen whose blocks have no order — a settings page, a
 tab strip, a column of cards — where a user may edit the third block first and
-never touch the second. Before this layer such a screen either hand-wired one
-`BridgeHandler::execute` call site per block, re-implementing draft
-accumulation and the readiness gate each time, or misused a wizard and got a
-`logic_error` for editing its own form out of order (morph#513).
+never touch the second. Without this layer such a screen must either hand-wire
+one `BridgeHandler::execute` call site per block, re-implementing draft
+accumulation and the readiness gate each time, or misuse a wizard and take a
+`logic_error` for editing its own form out of order.
 
 `SectionSet` keeps everything `FlowSession` does per action — per-action draft
 accumulation, the readiness gate, result capture, error routing, the callback
@@ -267,8 +267,9 @@ make a member field wrong to set.
 
 - `sectionGroupSchemaJson` emits `s-id`, `s-title`, each section's `action`
   and `title`, `prefill` only where a `Bind` is declared, and no `index` key.
-- Sections fire independently in any order — the morph#513 regression: the
-  same edit sequence throws `std::logic_error` under `FlowSession`.
+- Sections fire independently in any order — the case that separates this
+  layer from a wizard: the same edit sequence throws `std::logic_error` under
+  `FlowSession`.
 - A not-ready draft is not sent at all, observed through `onError` (a missing
   gate is visible as a spurious validation failure, not as a bad execution).
 - An already-fired section fires again on the next edit (the no-latch rule).

@@ -94,38 +94,37 @@ them live in **`journal/action_log_json.hpp`**, not in `action_log.hpp`.
 `action_log.hpp` is on `core/model.hpp`'s include path — `model.hpp` needs
 `IActionLog` for the holder's log slot and nothing else — so while the codec
 sat there, **every consumer that reached a model compiled
-`<glaze/glaze.hpp>`**, whether or not it ever serialised anything. That is the
-cliff morph#521 measured and morph#573 step 4 names. Measured on
-`master` @ c6f6d953, clang 22.1.8, `-O2 -fsyntax-only`, one translation unit per
-header, best of three:
+`<glaze/glaze.hpp>`**, whether or not it ever serialised anything. Measured
+with clang 22.1.8, `-O2 -fsyntax-only`, one translation unit per header, best
+of three, with the codec in `action_log.hpp` and with it split out:
 
-| header | before | after |
+| header | codec in `action_log.hpp` | codec split out |
 |---|---|---|
 | `journal/action_log.hpp` | 2.67 CPU-s, 252,559 preprocessed lines | **0.39 CPU-s, 70,568 lines** |
 | `core/model.hpp` | 2.86 CPU-s, 256,954 lines | **1.30 CPU-s, 135,367 lines** |
-| `core/strand.hpp` (the floor, for scale) | 1.20 CPU-s, 127,217 lines | unchanged |
+| `core/strand.hpp` (the floor, for scale) | 1.20 CPU-s, 127,217 lines | unaffected |
 
-`model.hpp` is now within 0.10 CPU-s of the async primitives it sits beside,
-where it used to cost more than twice as much.
+Split, `model.hpp` is within 0.10 CPU-s of the async primitives it sits beside;
+unsplit it costs more than twice as much.
 
 **What this costs.** Dropping a transitive include from a header-only library is
 a source-breaking change for consumers, and this one is: a translation unit that
-included `action_log.hpp` and called `journal::toJson` must now also include
+includes `action_log.hpp` and calls `journal::toJson` must also include
 `action_log_json.hpp`. Inside morph exactly one header does
-(`file_action_log.hpp`); four tests and one ladder-rung test did. That price was
-judged worth paying here and *not* worth paying for `model.hpp`'s
-`strand.hpp` include (see that file's comment), and the difference is the
-measurement above: `strand.hpp` is a transitive include that costs a consumer
-nothing, and this one cost 1.56 CPU-s per translation unit.
+(`file_action_log.hpp`), plus four tests and one ladder-rung test. That price is
+worth paying here and *not* worth paying for `model.hpp`'s `strand.hpp` include
+(see that file's comment), and the difference is the measurement above:
+`strand.hpp` is a transitive include that costs a consumer nothing, and this one
+costs 1.56 CPU-s per translation unit.
 
-**What it does not buy, stated plainly.** The build-level figure morph#573 step 4
-is argued over — ~90 CPU-s, ~8.7% of a kanban rung — is **not** realised by this
-change alone, and this comment should not be read as claiming it. Inside morph,
-every path to a `Bridge` goes through `core/registry.hpp`, which includes
-`forms/forms.hpp`, which includes glaze regardless; a TU that dispatches still
-pays. What this change does is make the *model-only* and *journal-only* include
-paths cheap, which is a precondition for that figure rather than a down payment
-on it. The remaining half — splitting `forms/forms.hpp` — is untouched.
+**What it does not buy, stated plainly.** The build-level saving this points at
+— ~90 CPU-s, ~8.7% of a kanban rung — is **not** realised by the split alone,
+and this section should not be read as claiming it. Inside morph, every path to
+a `Bridge` goes through `core/registry.hpp`, which includes `forms/forms.hpp`,
+which includes glaze regardless; a TU that dispatches still pays. What the
+split does is make the *model-only* and *journal-only* include paths cheap,
+which is a precondition for that figure rather than a down payment on it. The
+remaining half — splitting `forms/forms.hpp` — is untouched.
 
 `SerializationError` deliberately stays in `action_log.hpp`: a caller catching
 it needs only `<stdexcept>`, and making that catch drag in glaze would put the
@@ -419,13 +418,12 @@ PayloadMigrationRegistry& defaultPayloadMigrations();
 
 The backing store is
 `unordered_map<pair<string, string>, Migration, model::detail::PairKeyHash,
-model::detail::PairKeyEqual>`, and **both functors matter** (morph#699). This
-map named `PairKeyHash` alone for as long as it existed;
+model::detail::PairKeyEqual>`, and **both functors matter**.
 `std::unordered_map` enables heterogeneous lookup only when the hash *and* the
-equality are transparent, so `find` silently built a `pair<string, string>` to
-probe with while looking like it did not. With `PairKeyEqual` in place `find`
-takes a `detail::PairKeyView` directly. `add` still builds a key, because it
-inserts one.
+equality are transparent, so naming `PairKeyHash` alone leaves `find` silently
+building a `pair<string, string>` to probe with while looking like it does not.
+With `PairKeyEqual` in place `find` takes a `detail::PairKeyView` directly.
+`add` still builds a key, because it inserts one.
 
 **Measured** with `morph_bench_alloc`'s migration census (clang 22.1.8 /
 libstdc++ 16.2.1, 200 lookups, 50 warm-up excluded): for a pair whose ids both
@@ -461,7 +459,7 @@ the journal that needs it can be read again.
 | **Warn and reconstruct anyway** | The failure mode being fixed is *confident wrongness*. Handing back a suspect holder plus a log line reproduces it with extra steps. |
 | **Full per-action version numbers with a registered decoder per version** | Strictly more expressive, and strictly more machinery: an author must remember to bump the version, which is the same discipline the additive-only rule already asks for and does not get. A fingerprint is derived, so it cannot be forgotten. Migrations recover the expressiveness where it is actually needed. |
 
-### Relationship to the wire path (#207)
+### Relationship to the wire path
 
 The identical leniency exists on the live wire path, and is **not** addressed
 here. It is a different decision with a different answer: `docs/spec/core/wire.md`
@@ -469,7 +467,7 @@ publishes an "Action-evolution policy" whose first bullet is additive-only
 *within* a deployment window, and the handshake (`kProtocolVersion`) is its
 designed defence. The journal's scope is retention, not deployment — a journal
 can outlive every peer that ever wrote to it — which is why the two paths get
-different mechanisms. See issue #207.
+different mechanisms.
 
 ## Data-at-rest contract
 
@@ -523,9 +521,8 @@ the append-only rule so much as a boundary of it:
 `FileActionLog::`[`rotate()`](#rotation-and-retention), which seals the active
 file and reopens an empty one, and `morph::core::repairTornTail()`, which
 discards a truncated trailing record and runs only from this class's
-constructor. It was private to `FileActionLog` until morph#530 lifted it into
-`core/file_io_ops.hpp` so the logic has one home; `FileOfflineQueue`
-deliberately does not call it (see `docs/spec/offline/offline.md`). An `IActionLog` implementation over another sink
+constructor. It lives in `core/file_io_ops.hpp` rather than here so the logic
+has one home; `FileOfflineQueue` deliberately does not call it (see `docs/spec/offline/offline.md`). An `IActionLog` implementation over another sink
 owes neither.
 
 | Method | Signature | Purpose |
@@ -561,7 +558,7 @@ defaulting to the real syscalls, letting a test force the failure branches that
 otherwise need a real OS-level I/O error to reach. A normal caller never passes
 one. Throws `std::runtime_error` if the file cannot be opened, or if the
 containing directory's fsync fails for a reason that is a genuine I/O failure
-(morph#532) — a directory fsync the platform or mount simply cannot perform
+— a directory fsync the platform or mount simply cannot perform
 warns and continues instead; see
 [Directory durability](#directory-durability). Closes the file in the
 destructor. Copy and move are deleted.
@@ -613,7 +610,7 @@ surfaced to the caller.
 write; `flush()` throws if either `fflush` or the `fsync`/`_commit` fails;
 `rotate()` throws if its pre-rotation flush fails, before anything is closed or
 renamed. `rotate()` also throws *after* a fully successful rename and reopen if
-either affected directory's fsync fails for a genuine I/O reason (morph#532):
+either affected directory's fsync fails for a genuine I/O reason:
 the entries are all present and the rotation did happen, but the directory
 entries naming them are not yet durable, and this class's contract is that an
 unreported I/O failure is the one thing it never does. An unsupported directory
@@ -630,9 +627,9 @@ anywhere.
 Creating or renaming a file is a **directory** mutation. An `fsync` on the file
 itself makes its *contents* durable and says nothing about the directory entry
 that names it, so a crash can leave a fully-fsynced file that no longer appears
-in its directory. morph#532 closed that gap: `FileActionLog` fsyncs the
-containing directory after its constructor creates the file, and after
-`rotate()`'s rename and reopen.
+in its directory. `FileActionLog` therefore fsyncs the containing directory
+after its constructor creates the file, and after `rotate()`'s rename and
+reopen.
 
 It is a **ceiling, not a guarantee**, and this spec says so rather than leaving
 it to be discovered:
@@ -1277,9 +1274,9 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 | `FileActionLog::seq` is process-local | **Fresh per process, not resumed from disk** | `seq` is a monotonic order key within one process instance, not a cross-restart durable identifier. On-disk order is append order; `entries()` returns in that order regardless of `seq` gaps. |
 | `FileActionLog` uses C stdio + `fsync` | **`fopen`/`fwrite`/`fflush`/`fsync`** | `fwrite` is buffered; `flush()` calls `fflush` then `fsync` (or `_commit` on Windows) for real durability. POSIX `write`/`fsync` would bypass stdio buffering entirely; C stdio gives buffering by default with explicit flush control. |
 | `FileActionLog::entries` tolerates a torn trailing line | **Skip + warn on the last line only; re-throw mid-file** | A crash between `append`'s `fwrite` and the next flush can truncate the final line. Skipping it keeps the log readable after a crash; re-throwing on interior damage refuses to silently hide real corruption. |
-| An **unreadable** journal is not an empty or torn one | **`repairTornTail()` leaves the file untouched; `entries()` throws** | Both scan with an `ifstream`. When that open fails — or a read errors mid-scan — nothing was read, so `repairTornTail()`'s safety argument ("whatever follows the final newline is by construction an incomplete record") does not hold, and truncating to the scan's `intactEnd` discarded the whole journal while logging it as a successful repair. `entries()` distinguishes *absent* (legitimately empty, which the constructor's dedup rebuild depends on) from *present but unreadable*: returning `{}` for the second silently emptied the `idempotencyKey` dedup set `OutboxRelay` relies on. See morph#493. |
+| An **unreadable** journal is not an empty or torn one | **`repairTornTail()` leaves the file untouched; `entries()` throws** | Both scan with an `ifstream`. When that open fails — or a read errors mid-scan — nothing was read, so `repairTornTail()`'s safety argument ("whatever follows the final newline is by construction an incomplete record") does not hold, and truncating to the scan's `intactEnd` would discard the whole journal while logging it as a successful repair. `entries()` distinguishes *absent* (legitimately empty, which the constructor's dedup rebuild depends on) from *present but unreadable*: returning `{}` for the second would silently empty the `idempotencyKey` dedup set `OutboxRelay` relies on. |
 | `InMemoryActionLog`/`FileActionLog` dedup on `idempotencyKey` | **Non-empty key only; `SessionLog` excluded** | Makes both safe default choices for `OutboxRelay::sink` without changing behavior for callers that never set the key (empty key never dedups). `SessionLog` is excluded because its contract is full fidelity — nothing coalesced or dropped. |
-| Payload evolution is **detected**, not prevented | **Fingerprint stamped per entry; `replay()` refuses a mismatch** | The additive-only [data-at-rest contract](#data-at-rest-contract) was already published and already unenforced. Strict decode would reject the additive change the contract permits; a lint sees one commit while a journal outlives the deployment that wrote it. A derived fingerprint cannot be forgotten the way a hand-maintained version number can. |
+| Payload evolution is **detected**, not prevented | **Fingerprint stamped per entry; `replay()` refuses a mismatch** | The additive-only [data-at-rest contract](#data-at-rest-contract) is a published rule that nothing else enforces. Strict decode would reject the additive change the contract permits; a lint sees one commit while a journal outlives the deployment that wrote it. A derived fingerprint cannot be forgotten the way a hand-maintained version number can. |
 | A mismatch throws rather than warning | **`SchemaMismatchError` out of `replay()`** | The defect is confident wrongness. A suspect holder plus a log line reproduces it with extra steps, and puts the burden of noticing on the code path that demonstrably did not notice. |
 | The fingerprint is order-insensitive and compiler-independent | **Key-sorted shape rendering from `std::` traits and reflected key strings** | Reordering members changes nothing about which JSON bytes decode where, so an order-sensitive digest would break replay for a cosmetic edit. A `glz::name_v`-derived tag would be compiler-spelled, making a journal readable only by the compiler that wrote it. |
 | A custom-codec type is distinguished by a name it declares, not one the compiler spells | **Opt-in `PayloadShapeTag<T>` specialisation, defaulting to the opaque `x`** | The portability requirement rules out the only *derived* per-type name available, so the name has to be author-written. Opt-in keeps that cost on the handful of types that need it, at the price of a new type silently starting out undeclared — stated as a boundary rather than assumed away. |
@@ -1444,9 +1441,9 @@ Honest boundaries of the current design:
   renamed and an added field, run in order as the `journal_skew_old_build_writes`
   / `journal_skew_new_build_replays` ctest pair. The wire path cannot be tested
   the same way, because nothing mechanically enforces the action-evolution
-  policy there yet — a per-action fingerprint exchanged at `hello` is issue
-  #207's unimplemented proposal, and until it exists a client/server skew test
-  has nothing to assert on.
+  policy there — a per-action fingerprint exchanged at `hello` would be the
+  mechanism, and until one exists a client/server skew test has nothing to
+  assert on.
 - **`replay()` refuses an additive change, not only a breaking one.** The gate
   is fingerprint equality, so an entry written before a field was *added*
   throws exactly as a renamed one does, even though the

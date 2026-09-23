@@ -162,13 +162,13 @@ aliases silently — rename the wire field to use it in a `Choice`.
 
 **The name has to vary, because glaze populates a `$defs` entry only once.**
 Its schema writer does `auto& def = defs[name_v<T>]; if (!def.type) { … }`, so
-when two instantiations shared the single name `"Choice"`, the second one was
-skipped and `$ref`ed the *first* one's definition. An action holding a `bool`
-picklist and an `int64_t` picklist described the int64 field as a boolean —
+if two instantiations shared the single name `"Choice"`, the second one would be
+skipped and `$ref` the *first* one's definition. An action holding a `bool`
+picklist and an `int64_t` picklist would describe the int64 field as a boolean —
 and `DynamicForm.qml` resolves the `$ref`, reads `type`, and draws a checkbox
 for `"boolean"`. A generic validating client is misled the same way, since the
 document ships `additionalProperties: false` and a standard `required` array,
-i.e. it is presented as validatable. That was morph#543.
+i.e. it is presented as validatable.
 
 Two properties of the composed name are deliberate:
 
@@ -311,7 +311,7 @@ dense id sequence collapses pairwise — two option rows reduce to the same
 `valueJson`, the combo box shows two entries the UI cannot tell apart, and the
 staleness guard matches happily against either. A sparse id usually rounds to a
 value naming no row at all, which either throws in the model or is stored as
-garbage, depending on whether the action looks the id up (morph#190).
+garbage, depending on whether the action looks the id up.
 
 Values a double *does* hold exactly — the overwhelmingly common case — remain
 ordinary JSON numbers, so nothing about the wire shape changes for them.

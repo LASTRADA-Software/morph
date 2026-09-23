@@ -9,8 +9,8 @@ member is a `std::function` defaulting to the real syscall/stdlib call it
 stands in for.
 
 The header also hosts four **free functions** that are not part of the struct
-and are not injectable — shared file-handling logic that had been duplicated
-across the two classes, or that exists to paper over a platform difference:
+and are not injectable — shared file-handling logic common to both classes,
+or logic that exists to paper over a platform difference:
 `wideFtell`, `positionAtEnd`, `rollBackShortWrite`, `repairTornTail`, plus the
 `classifyDirectorySync` helper and its `DirectorySync` enum. See
 [Free functions](#free-functions).
@@ -31,9 +31,7 @@ run when a real OS-level file-I/O call fails partway through an
 otherwise-successful operation — disk full, a file descriptor closed
 underneath, a permission change racing an exact window between two library
 calls. None of those are reachable from a portable unit test without a way
-to fail one specific call on demand (see `LASTRADA-Software/morph#97`,
-which requested exactly this for `FileActionLog`; `FileOfflineQueue` has the
-identical gap).
+to fail one specific call on demand; the gap is identical in both classes.
 
 `FileIoOps` is that seam. A test constructs one, overrides the one member it
 wants to fail (optionally gated behind a `std::shared_ptr<bool>` or a call
@@ -57,7 +55,7 @@ underlying call:
 | `resizeFile` | `std::filesystem::resize_file` | `void(const std::filesystem::path&, uintmax_t, std::error_code&)` |
 | `syncPath` | `open(dir, O_RDONLY\|O_DIRECTORY)` + `fsync` (POSIX); no-op on Windows | `int(const std::filesystem::path&)` |
 
-`syncPath` (morph#532) commits a directory's own metadata — a new or
+`syncPath` commits a directory's own metadata — a new or
 renamed entry within it — to durable storage; `fsync` on a *file* makes
 only that file's data durable, not the directory entry that names it. Both
 `FileActionLog` and `FileOfflineQueue` call it after every directory
@@ -65,7 +63,7 @@ mutation (file creation at construction, `rotate()`'s seal rename, and
 `compact()`'s rewrite-in-place rename), surfacing a failure rather than
 swallowing it — see `docs/spec/journal/journal.md` and
 `docs/spec/offline/offline.md` for the call sites. `rollBackShortWrite()`
-(morph#530) is the other seam-driven addition in this header: on a short
+is the other seam-driven member of this header: on a short
 `fwrite`, it truncates the file back to its pre-write length using the
 same injectable `resizeFile`/`fflush` this struct provides, so a partial
 write never sits where the next append would otherwise merge with it.
@@ -99,7 +97,7 @@ resize_file` to an offset **beyond** the current size does not shrink the file;
 it **grows** it, padding with NUL bytes, and a later flush then appends the
 buffered record after that padding. The result is a NUL-bearing *interior* line
 that the caller's reader rejects for the life of the file — the exact bricking
-morph#530 exists to prevent, manufactured by the rollback meant to prevent it.
+the rollback exists to prevent, manufactured by the rollback itself.
 (Measured: `ftell` 30 against an on-disk size of 10, `resize_file(30)` yielding
 a 30-byte file, and a final 50-byte file of data + 20 NULs + the flushed
 record.)
@@ -123,8 +121,8 @@ Measured against a queue, with the write short and the rollback's own flush
 failing (one full disk produces both), then space freed and one more enqueue
 succeeding: the merged line makes the next open throw a raw parse error instead
 of loading, so every record in the file — including ones written long before the
-failure — becomes unreachable. That is the same bricking morph#530 exists to
-prevent, reached *through* the rollback rather than around it. Both callers
+failure — becomes unreachable. That is the same bricking, reached *through*
+the rollback rather than around it. Both callers
 therefore latch the `torn` result and throw from every subsequent
 `append()`/`writeLine()`, which keeps the partial record trailing and so
 recoverable at the next open.
@@ -190,4 +188,3 @@ already have their own well-defined thread-safety.
   own design, including the branches this seam closes.
 - [`docs/spec/offline/offline.md`](../offline/offline.md) — `FileOfflineQueue`'s
   own design, including the identical class of branch this seam closes.
-- `LASTRADA-Software/morph#97` — the issue that requested this seam.

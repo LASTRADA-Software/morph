@@ -188,19 +188,17 @@ site when that exact value reaches it:
   straight into the canonicalising constructor.
 - **`reciprocal`** — negates the numerator in the `numerator < 0` branch;
   `INT64_MIN` there overflows.
-- **Rendering** (`morph::units::detail::formatRationalDecimal`) — *was* one of
-  these and no longer is. It negated the numerator in `int64_t` under a comment
-  claiming it widened first; UBSan confirmed the report. It now goes through
-  `detail::absU64`, which negates in unsigned arithmetic. This mattered because
-  the whole-integer `Rational{value, DecimalPlaces{n}}` constructor does not
-  canonicalise, so the clamp never ran on that path and `numerator` is public
-  (morph#496).
-- **`canonicalise`** — **no longer one of these.** It clamps an `INT64_MIN`
+- **Rendering** (`morph::units::detail::formatRationalDecimal`) — **not one of
+  these.** It takes the numerator's magnitude through `detail::absU64`, which
+  negates in unsigned arithmetic. Negating in `int64_t` there is UB that UBSan
+  catches, and it is reachable: the whole-integer
+  `Rational{value, DecimalPlaces{n}}` constructor does not canonicalise, so the
+  clamp never runs on that path, and `numerator` is public.
+- **`canonicalise`** — **not one of these either.** It clamps an `INT64_MIN`
   numerator to `-INT64_MAX` (with an `error`-level log, `reportClamp`) *before*
   any sign flip, and computes the gcd through `detail::absU64`, which negates in
-  unsigned arithmetic. There is no `absoluteNumerator` local any more. Since it
-  is the shared sink for every constructor and operator, a value that reaches it
-  is safe.
+  unsigned arithmetic. Since it is the shared sink for every constructor and
+  operator, a value that reaches it is safe.
 
 The wire codec (`setWire`) also defends independently: it maps an `INT64_MIN`
 `num`/`den` to `-INT64_MAX` *before* constructing, so untrusted input never
@@ -208,8 +206,8 @@ reaches the trap value at all.
 
 The entry points that do **not** canonicalise are where the hazard remains — the
 whole-integer `Rational{value, DecimalPlaces{n}}` constructor retains its
-numerator verbatim, and `numerator` is a public member. See morph#496 for a
-confirmed UB site reached that way.
+numerator verbatim, and `numerator` is a public member. A UB site reached that
+way is a confirmed, not a hypothetical, shape.
 
 ### Checked arithmetic
 
@@ -236,17 +234,16 @@ they need no local guard to do it: `morph::log`'s helpers are themselves
 `noexcept` (`docs/spec/core/logger.md`, "Failure modes"), so an arithmetic
 operator cannot begin failing because logging failed. If the record cannot be
 emitted, the logging layer counts it in `morph::log::droppedLogRecords()`
-rather than propagating. Both this function and `CompletionState`'s destructor
-carried a local `try`/`catch` for this until morph#158 moved the guarantee to
-where it belongs.
+rather than propagating. Neither this function nor `CompletionState`'s
+destructor needs a local `try`/`catch` for it: the guarantee belongs to the
+logging layer, not to each of its callers.
 
-`canonicalise` is total for the same reason. It previously negated the
-numerator unguarded, so a component of `INT64_MIN` was undefined behaviour —
-reachable both by constructing such a value directly and by *ordinary
-arithmetic landing on it exactly* (`-INT64_MAX - 1` is a legal subtraction
-whose result is `INT64_MIN`). Such a component is now clamped to `-INT64_MAX`
-and logged, matching what `setWire` already did for the same values arriving
-off the wire.
+`canonicalise` is total for the same reason. Negating the numerator unguarded
+would make a component of `INT64_MIN` undefined behaviour — reachable both by
+constructing such a value directly and by *ordinary arithmetic landing on it
+exactly* (`-INT64_MAX - 1` is a legal subtraction whose result is `INT64_MIN`).
+Such a component is instead clamped to `-INT64_MAX` and logged, matching what
+`setWire` does for the same values arriving off the wire.
 
 `checkedAdd`, `checkedSub`, `checkedMul` and `checkedDiv` return
 `std::expected<Rational, RationalError>`, yielding `RationalError::Overflow`
@@ -274,11 +271,11 @@ well (`INT64_MAX/2 * 2/1` reduces to `INT64_MAX/1`).
 `checkedDiv` is the division member of the family, and it exists because
 division was the one operation with no exact-or-nothing form: `dividedBy`
 already returns `std::expected`, but only for the zero divisor, so a caller who
-checked the result was told a clamped quotient had succeeded (morph#206). It is
+checks *its* result is told a clamped quotient succeeded. `checkedDiv` is
 `checkedMul` against `rhs.reciprocal()` — the same operand pair `dividedBy`
 forms internally — and it folds both failure modes into the one channel:
 `DivisionByZero` propagated from `reciprocal`, `Overflow` from `checkedMul`.
-`dividedBy` itself is unchanged and still saturates: `Quantity` already folds a
+`dividedBy` itself saturates: `Quantity` already folds a
 failed division to `nullopt` (`docs/spec/error_handling.md`), and making `/` the
 sole operation that refuses to saturate would impose "overflow is fatal" on
 every caller, in-tree and out.
@@ -552,7 +549,7 @@ fingerprint to decompose. Without a tag it would render as the same opaque
 placeholder every other custom-codec type renders as, and a field retyped
 between two of them -- `Rational` to `DateTime`, say -- would leave the
 fingerprint unchanged, so the journal would replay a recorded payload into a
-type that no longer matches it (morph#245).
+type that no longer matches it.
 
 See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
 

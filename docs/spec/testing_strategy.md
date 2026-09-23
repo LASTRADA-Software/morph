@@ -189,7 +189,7 @@ their pass/fail signal never depends on how (or whether) a host application
 has wired up observability.
 
 Both `morph_soak` and `morph_bench` are sanitizer-instrumented when
-`AF_SANITIZER` is set (morph#542). They are opt-in, so no default sanitizer leg
+`AF_SANITIZER` is set. They are opt-in, so no default sanitizer leg
 pays for them; the reason to instrument them rather than exempt them is that
 churn over thousands of cycles is exactly the shape of test whose finding is a
 leak or a race and not a failed assertion. Under a sanitizer preset the
@@ -209,10 +209,10 @@ overhead from business logic):
   executes/second (`MORPH_BENCH_WINDOW_MS`, default 200 ms).
 - **Both phases run `MORPH_BENCH_TRIALS` times (default 5)**, and the run
   reports the best, median and worst trial of every figure rather than one
-  number — morph#687, below.
+  number — see below.
 - Writes `bench_dispatch_latency.json` into the build directory. The
-  `p50_ms`/`p95_ms`/`p99_ms`/`throughput` keys of the old schema are still
-  there and now carry the *best* trial; `trials`,
+  `p50_ms`/`p95_ms`/`p99_ms`/`throughput` keys carry the *best* trial;
+  `trials`,
   `latency_samples_per_trial`, `throughput_window_ms`,
   `p99_ms_median_trial`, `p99_ms_worst_trial`, each throughput point's
   `executes_per_sec_worst_trial`, and a `trial_detail` array with every
@@ -225,10 +225,10 @@ overhead from business logic):
   environment-variable-overridable so CI hardware differences don't need a
   code change, and both read the **best** trial — see below.
 
-**The serial phase used to report the test harness's polling step (morph#687).**
-It waited on each reply with `morph::testing::WaitReply`, whose `await()` calls
-`waitUntil`, which sleeps 5 ms between predicate checks. Measured on
-`e9dad027`, same binary, 20 processes per configuration, Release:
+**The serial phase must not wait on a polling step, or it reports the poll.**
+Waiting on each reply with `morph::testing::WaitReply` does exactly that: its
+`await()` calls `waitUntil`, which sleeps 5 ms between predicate checks.
+Measured that way, same binary, 20 processes per configuration, Release:
 
 | | idle | 16-way oversubscribed |
 | --- | --- | --- |
@@ -236,20 +236,19 @@ It waited on each reply with `morph::testing::WaitReply`, whose `await()` calls
 | c=1 executes/sec | 171467 / 175928 / 178855 | 311.9 / 1749.9 / 18627.1 |
 
 A **302x** swing in the headline figure, selected by machine load, and neither
-mode was the dispatch latency: the same idle processes reported ~176k
-executes/sec at concurrency 1, i.e. a round trip of about 5.7 µs. An idle
-machine reported one whole sleep step per call; a busy one reported the case
-where the reply beat the caller's first predicate check. 311.9 executes/sec is
-also *below* the 500/sec floor the file has always enforced, so the gate was
-already firing on machine load rather than on morph. The benchmark now uses a
-local condition-variable reply sink, and a blocking drain at the end of each
-throughput window for the same reason — the old polling drain sat inside the
-window's own elapsed time.
+mode is the dispatch latency: the same idle processes report ~176k executes/sec
+at concurrency 1, i.e. a round trip of about 5.7 µs. An idle machine reports one
+whole sleep step per call; a busy one reports the case where the reply beats the
+caller's first predicate check. 311.9 executes/sec is also *below* the 500/sec
+floor this file enforces, so the gate would fire on machine load rather than on
+morph. The benchmark therefore uses a local condition-variable reply sink, and a
+blocking drain at the end of each throughput window for the same reason — a
+polling drain sits inside the window's own elapsed time.
 
 **It reports a distribution because a wall-clock figure has no regime to pin.**
-`morph_bench_alloc` answers morph#687 by pinning its race, and an allocation
-count then comes out exact. Contention is not a mode, it is a tax, so this
-benchmark takes morph#687's other option and reports the spread over trials.
+`morph_bench_alloc` can pin its race, and an allocation count then comes out
+exact. Contention is not a mode, it is a tax, so this benchmark reports the
+spread over trials instead.
 The gates read the best trial: contention can only make latency worse and
 throughput lower, so the best of N is the least contaminated estimate of what
 the code costs, while a real regression moves every trial including the best.
@@ -270,12 +269,12 @@ timidity**: Debug-under-load still spans 28x on throughput and 57x on p99 for
 the same binary, so no pair of constants separates a regression from a
 contended runner. 50 ms is ~27x the worst best-trial p99 measured and 500/sec
 ~3.1x below the worst best-trial throughput — a dispatch path made three times
-slower passes both. That limit is morph#707; setting the floor from a 12-core
-box was tried and turned 3 of 20 Debug-under-load processes red.
+slower passes both. Setting the floor from a 12-core box instead turns 3 of 20
+Debug-under-load processes red, so that is not the way out of it either.
 
-**The property those ceilings were feared to be leaving ungated is gated
-elsewhere, tightly.** morph#707 asks that an allocation gate be weighed before
-any wall-clock ceiling is tightened. It already exists: `bench.alloc_budget`
+**The property those loose ceilings look like they leave ungated is gated
+elsewhere, tightly.** An allocation gate is what to weigh before tightening any
+wall-clock ceiling, and it exists: `bench.alloc_budget`
 (below) is set by rule at one allocation above the figure the benchmark
 measures — not a tolerance band — and that figure came out identical on every
 one of 20 processes across three toolchains, idle and loaded alike: a
@@ -283,10 +282,10 @@ one-allocation margin, on a quantity machine load cannot move.
 **The two numbers are deliberately not restated here.** Both live in
 `tests/bench/CMakeLists.txt` — the ceiling as `MORPH_ALLOC_BUDGET_PER_CALL`,
 the measured figure in the comment that derives it — and they move together
-every time the dispatch path gets cheaper. When this paragraph carried copies
-of them they went stale twice in three days (morph#743, morph#758), while the
-argument they were quoted for survived both unchanged; so the argument is what
-this paragraph keeps, and the file above is where the current values are.
+every time the dispatch path gets cheaper. Copies of them in this paragraph went
+stale twice in three days, while the argument they were quoted for survived both
+unchanged; so the argument is what this paragraph keeps, and the file above is
+where the current values are.
 So "dispatch does not get more expensive" is already gated to a resolution no
 wall-clock constant on any host can approach. What the two ceilings gate is the
 residue: a regression that costs time without costing allocations — a spin, a
@@ -297,15 +296,14 @@ they are for.
 
 - **A cross-process distribution** (`bench_dispatch_latency.jsonl`, beside the
   per-process `.json`, overridable with `MORPH_BENCH_LEDGER`, `off` to
-  disable). This is morph#687's remaining half: `MORPH_BENCH_TRIALS` gives a
-  distribution over trials *within* a process, which mitigates the spread but
-  does not record it — one process still prints one triple and cannot say
+  disable). `MORPH_BENCH_TRIALS` gives a distribution over trials *within* a
+  process, which mitigates the spread but does not record it — one process still prints one triple and cannot say
   where it sits among others. Each run appends one line (`pid`, the headline
   percentiles, concurrency-1 throughput, `load_1m`, `inject_delay_us`) and
   prints its own rank among every line already there, so N unorchestrated runs
   produce the distribution a candidate ceiling would be read off. The load
-  average is on the row and not only on stdout, because morph#710's sweeps put
-  the same binary 28x apart on throughput between an idle box and a loaded one:
+  average is on the row and not only on stdout, because load sweeps put the same
+  binary 28x apart on throughput between an idle box and a loaded one:
   a figure without its load is not comparable with another figure. Rows are
   appended `O_APPEND` in one write and a row that cannot be parsed is skipped,
   because a diagnostic ledger must never redden a benchmark.
@@ -331,15 +329,14 @@ they are for.
 This is the first time either `CHECK` has been shown firing on anything. The
 baseline round trip is ~5.9 µs, so the throughput floor — the tighter of the
 two — first speaks at roughly a **340×** regression and the p99 ceiling at
-roughly **8500×**, confirming morph#707's ~800× estimate by measurement and
-understating it for the p99 half. The ratio, not the time, is the portable
-part: reproduce the table on any host with `MORPH_BENCH_INJECT_DELAY_US`.
+roughly **8500×**. The ratio, not the time, is the portable part: reproduce the
+table on any host with `MORPH_BENCH_INJECT_DELAY_US`.
 
-What is still **not** done, and is why morph#707 stays open: nobody has
+What is **not** established, and is why the ceilings stay loose: nobody has
 characterised the CI runner. Both sets of figures above come from a
-workstation, which morph#707 identifies as exactly the misleading
-configuration, so the ceilings are not tightened here. Guessing a second time
-from the same box would be the first mistake with a different number.
+workstation, which is exactly the misleading configuration to set a CI ceiling
+from. Guessing a second time from the same box would be the first mistake with a
+different number.
 
 The echo model/action (`BenchEchoModel`/`BenchEchoAction`) are declared at
 file scope, not inside the file's anonymous namespace with its other local
@@ -362,22 +359,22 @@ ids inside it — the cost is entirely id-length-dependent, so a census over one
 side alone either measures zero or overstates the saving, and morph's real ids
 straddle the line (`"CreateSwimlane"` is 14 characters, one under):
 
-| census | before | after | pure lookup? |
+| census | opaque key | transparent key | pure lookup? |
 | --- | --- | --- | --- |
-| `ActionDispatcher::coalesce` + `requiredFieldsFor` | 2.00 / 0.00 | 0.00 / 0.00 | yes (morph#572 Part C) |
-| `PayloadMigrationRegistry::find` | 2.00 / 0.00 | 0.00 / 0.00 | yes (morph#699) |
-| `BridgeHandler::executeJson` | 24.07 / 21.06 | 21.07 / 21.06 | no — a whole round trip (morph#699) |
-| `ModelRegistryFactory::create` | 2.00 / 1.00 | unchanged | no — constructs a holder (morph#709, parked) |
+| `ActionDispatcher::coalesce` + `requiredFieldsFor` | 2.00 / 0.00 | 0.00 / 0.00 | yes |
+| `PayloadMigrationRegistry::find` | 2.00 / 0.00 | 0.00 / 0.00 | yes |
+| `BridgeHandler::executeJson` | 24.07 / 21.06 | 21.07 / 21.06 | no — a whole round trip |
+| `ModelRegistryFactory::create` | 2.00 / 1.00 | 2.00 / 1.00 | no — constructs a holder; parked |
 
 The first two decode nothing and execute nothing, so what they allocate is
 exactly what looking a registry key up costs. The last two do more than look
 up, so their figure is a floor plus the key and what is comparable between runs
 is the *difference* between the long-id and short-id columns.
 
-It exists because morph#572 is scoped by a number that three later pull
-requests invalidated, and re-deriving such a number from a prose description of
-how it was once taken is how a fix ends up built against a figure nobody
-re-checked.
+It exists because a scoping number goes stale the moment anything on the path
+changes, and re-deriving one from a prose description of how it was once taken
+is how a fix ends up built against a figure nobody re-checked. The census
+re-takes it on demand instead.
 
 **It is both an instrument and a control, and which one it is at any moment
 depends on the flags.** Run bare, it asserts nothing and the number it prints
@@ -396,9 +393,9 @@ toolchains that actually build this target in CI (Linux `clang-debug` and
 to 0 to disable the gate. `tests/bench/CMakeLists.txt` carries the
 measurements the default was chosen from and the headroom argument.
 
-The `--lookup-budget` half takes no headroom at all: after morph#572's Part C
-and morph#699 a *pure* registry lookup allocates **nothing**, for ids of any
-length, and that is a property which either holds or has regressed. The ctest
+The `--lookup-budget` half takes no headroom at all: with transparent keys a
+*pure* registry lookup allocates **nothing**, for ids of any length, and that is
+a property which either holds or has regressed. The ctest
 case passes `--lookup-budget=0`, and it covers `ActionDispatcher` and
 `PayloadMigrationRegistry`.
 
@@ -408,11 +405,10 @@ gated is the gap between an `executeJson` over long ids and one over short
 ones. **0.5 rather than 0, and the 0.5 is measured**: the figure reads 0.01
 because of a deterministic two-allocation one-off across a census's 200 calls,
 shown to follow census *order* rather than id length by swapping the two
-censuses, and identical in all of 10 processes. Reverting either half of
-morph#699's change to that path takes the gap to 3.00 (the `Key`'s two
-`std::string`s, plus the one `executeJson` built from
-`ModelTraits<Model>::typeId()`), so 0.5 separates the residue from the thing
-guarded with wide margin on both sides. Like the lookup half it needs no
+censuses, and identical in all of 10 processes. Making either half of that key
+opaque again takes the gap to 3.00 (the `Key`'s two `std::string`s, plus the one
+`executeJson` builds from `ModelTraits<Model>::typeId()`), so 0.5 separates the
+residue from the thing guarded with wide margin on both sides. Like the lookup half it needs no
 per-toolchain default: it is a difference between two runs of one build.
 
 All three ceilings were checked against a reverted fix. Removing
@@ -421,31 +417,29 @@ turns the case red; restoring `ActionExecuteRegistry`'s `Key{...}` temporary
 takes `--id-length-budget` to 2.01; restoring `executeJson`'s
 `std::string{typeId()}` alone takes it to 1.01.
 
-**Both halves were checked against a reverted fix rather than only against
-themselves** — see morph#572's pull request for the red runs. A budget that has
-never been seen to fail is the control-that-measures-nothing this document's
-own charter warns about.
+**Both halves are checked against a reverted fix rather than only against
+themselves**: each was run with the transparent keys taken back out, and each
+went red. A budget that has never been seen to fail is the
+control-that-measures-nothing this document's own charter warns about.
 
 **The dispatch census pins a race, and without that pin it is not comparable
 between runs.** A dispatch and the handlers attached to it race: win, and each
 handler joins a vector the settle drains; lose, and each takes
-`CompletionState`'s attach-after-ready path, which costs differently. Before
-the benchmark gated its worker thread, that made the headline figure bimodal —
-measured, interleaved, 20 processes per configuration: **~16.95 on an idle
-machine, ~13.06 with the machine 16-way oversubscribed**, same binary. That is
-morph#687's instability with a cause attached. The benchmark now holds the
-worker across `execute()` and both attaches, so it always measures the
-attach-before-settle regime: the more expensive of the two, and the one a real
+`CompletionState`'s attach-after-ready path, which costs differently. Ungated,
+that makes the headline figure bimodal — measured, interleaved, 20 processes
+per configuration: **~16.95 on an idle machine, ~13.06 with the machine 16-way
+oversubscribed**, same binary. The benchmark therefore holds the worker across
+`execute()` and both attaches, so it always measures the attach-before-settle
+regime: the more expensive of the two, and the one a real
 GUI client is in.
 
-With the race pinned, measured on `a9cb5649` before morph#572's Parts A and C,
-x86-64 Linux, clang 22.1.8 / libstdc++ 16.2.1: **17.06 allocations per local
-round trip**, and 2.00 allocations per registry lookup for ids past the SSO
-buffer. After: **14.06** and 0.00 per lookup — exactly 3.00 removed, in every
-one of 40 processes, idle and loaded, on clang Release, clang Debug and gcc
-Debug alike. Note the "before" figure is not morph#572's own 19.2: that was
-taken at `4017228d`, before morph#689 changed the strand's map-node handling,
-and on an ungated benchmark. See morph#572 for the per-line attribution.
+With the race pinned, x86-64 Linux, clang 22.1.8 / libstdc++ 16.2.1, the
+opaque-key build costs **17.06 allocations per local round trip** and 2.00
+allocations per registry lookup for ids past the SSO buffer; the transparent-key
+build costs **14.06** and 0.00 per lookup — exactly 3.00 removed, in every one
+of 40 processes, idle and loaded, on clang Release, clang Debug and gcc Debug
+alike. A figure from an ungated benchmark, or from before the strand's map-node
+handling was changed, is not comparable with either.
 
 ## Adversarial cross-socket run (`tests/qt/test_qt_websocket_adversarial.cpp`)
 
@@ -491,7 +485,7 @@ compiler nor the linker diagnoses, since each translation unit only ever
 sees its own definition. Which definition the linker keeps for a given call
 site is link-order dependent, so the bug can pass locally and fail in CI (or
 the reverse), with no diagnostic pointing at the cause. This happened for
-real: see issue #84 — a bare `OrderModel` stub in one file silently won over
+real in this tree: a bare `OrderModel` stub in one file silently won over
 another file's real `OrderModel` in some builds, so the real one's
 `onBackendChanged()` was never invoked and its offline queue never drained.
 
@@ -501,9 +495,10 @@ linkage (`BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION`) needs it — and in
 that case, prefer a short, file/feature-specific prefix over a generic name
 (`StepILOrderModel`, not `OrderModel`; see `tests/test_remote_step_interleaving.cpp`).
 A type declared inside a *named* namespace is also safe, since its linker
-symbol is namespace-qualified (e.g. `namespace issue21::models { struct
-Report { ... }; }`, used for `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION`
-per issue #21).
+symbol is namespace-qualified (e.g. `namespace registration::models { struct
+Report { ... }; }`, which is how a test that needs
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` at namespace scope keeps its
+types distinct).
 
 **Why UndefinedBehaviorSanitizer (`clang-ubsan`, `cmake/compiler_options.cmake`'s
 `-fsanitize=undefined`) does not catch this.** UBSan instruments individual
@@ -551,12 +546,13 @@ a gate removed on 2026-09-23 against the fixtures in
 ## Install / export consumability (`scripts/check_install_export.sh`)
 
 Every other suite in this document builds morph from *inside* the tree, where
-`include/` is on the include path because the build put it there. That is how
-morph#232 survived: `cmake --install` exited 0 having installed Glaze's headers
-and a working `glazeConfig.cmake` — Glaze carries its own install/export rules
-and gets them for free through `FetchContent` — while installing zero morph
-headers and no `morphConfig.cmake`. No CI leg installed morph, so nothing
-noticed. A consumer following the standard CMake workflow got a prefix holding
+`include/` is on the include path because the build put it there. That hides a
+whole class of defect: `cmake --install` can exit 0 having installed Glaze's
+headers and a working `glazeConfig.cmake` — Glaze carries its own
+install/export rules and gets them for free through `FetchContent` — while
+installing zero morph headers and no `morphConfig.cmake`. Unless a CI leg
+installs morph, nothing notices. A consumer following the standard CMake
+workflow then gets a prefix holding
 someone else's dependency and none of the library they meant to install.
 
 **CI-enforced** by a dedicated job (`install-export` in `ci.yml`), which

@@ -256,11 +256,11 @@ a value reads identically everywhere. There is a single formatting path and
 in-code references to one are references to `std::formatter<Quantity>`.
 
 `formatRationalDecimal` takes the numerator's magnitude through
-`math::detail::absU64`, in unsigned arithmetic. It negated in `int64_t` until
-morph#496, which is undefined for `INT64_MIN` — reachable because the
+`math::detail::absU64`, in unsigned arithmetic. Negating in `int64_t` instead
+is undefined for `INT64_MIN`, and that value is reachable here: the
 whole-integer `Rational{value, DecimalPlaces{n}}` constructor does not
 canonicalise, so the clamp that would otherwise remove the trap value never
-ran.
+runs.
 
 **The decimal form.** `formatRationalDecimal` renders the exact `Rational` as a
 fixed decimal at its **runtime `DecimalPlaces`** and then trims trailing zeros
@@ -469,11 +469,11 @@ the stack, so none of the walks is recursive:
   The labelling walk carries a **visited set**, like the reference count. Both
   are walks of a DAG rather than a tree, and without one a node reachable by
   several paths is walked once per *path*: a derivation of 31 nodes built by
-  repeated `q = q + q` has 2³⁰ root-to-leaf paths and took **10.3 s** to render
-  33 short lines before the set was added, 0.000 s after (morph#602).
+  repeated `q = q + q` has 2³⁰ root-to-leaf paths and takes **10.3 s** to render
+  33 short lines without the visited set, 0.000 s with it.
 
-Measured against the recursive code (morph#574, 8 MiB stack, clang 22.1.8 and
-gcc 16.2.1):
+Recursive walks of the same structure, measured with an 8 MiB stack, clang
+22.1.8 and gcc 16.2.1, are why both walks are iterative:
 
 | walk | build | last depth that returned | first that segfaulted |
 |---|---|---|---|
@@ -484,12 +484,12 @@ gcc 16.2.1):
 | `equation()` | gcc `-O2` | — | 40,000 |
 
 Two things follow, and both are why the flattening is a specified property of
-the type rather than something left to the optimiser. Destruction *had no
-failing depth at all* under `-O2`, because clang rewrites that particular
-`shared_ptr` chain into a loop — so the defect crashed in Debug and survived in
+the type rather than something left to the optimiser. Recursive destruction has
+*no failing depth at all* under `-O2`, because clang rewrites that particular
+`shared_ptr` chain into a loop — so the crash appears in Debug and hides in
 Release, the worst signature a defect can have. `equation()`, whose frames hold
-live `Rendered` strings across the call, could not be rewritten that way:
-optimisation only moved its limit, and gcc's limit was lower than clang's
+live `Rendered` strings across the call, cannot be rewritten that way:
+optimisation only moves its limit, and gcc's limit is lower than clang's
 unoptimised one.
 
 **Nodes are immutable once built.** No operation ever mutates an existing
@@ -532,10 +532,10 @@ so a caller emits them verbatim), in this fixed order:
 
 Depth is unbounded (see *Provenance*), and for a while `equation()` rendered
 whatever depth it was handed: a 100,000-iteration running total produced four
-lines whose first was **500,001 characters** of `0 + c1 + c1 + …`, built in
-58.8 s (morph#582, clang 22.1.8, `-O1` under ASan+UBSan). That is not an
-explanation of anything, and a caller printing it emits a single half-megabyte
-line. So `equation()` takes a **step limit**:
+lines whose first is **500,001 characters** of `0 + c1 + c1 + …`, built in
+58.8 s (clang 22.1.8, `-O1` under ASan+UBSan). That is not an explanation of
+anything, and a caller printing it emits a single half-megabyte line. So
+`equation()` takes a **step limit**:
 
 ```cpp
 std::vector<std::string> equation(std::size_t maxSteps = kDefaultEquationSteps) const;
@@ -590,9 +590,8 @@ folds into one number.
 Two things decide it:
 
 - *A rendered formula stops being an explanation long before it stops being
-  affordable.* morph#574's phrasing — "an explanation 200,000 steps deep is not
-  an explanation" — is the defect; 100 written-out steps is already more than a
-  person reads, and it is two orders of magnitude above any derivation this
+  affordable.* An explanation 200,000 steps deep is not an explanation; 100
+  written-out steps is already more than a person reads, and it is two orders of magnitude above any derivation this
   repository's own examples build. Setting the default where the *cost* becomes
   intolerable instead (thousands of steps) would keep producing output nobody
   can use.
@@ -610,7 +609,7 @@ than a fixed constant. Two named values sit at the ends of its range:
 | Argument | Meaning |
 |---|---|
 | `kDefaultEquationSteps` (100) | The default. |
-| `kEquationStepsUnlimited` | Write the derivation out in full — the pre-morph#582 behaviour, unbounded in output size, with the cost taken deliberately. The depth regression tests use it, since they exist to walk deeper than any limit would render. |
+| `kEquationStepsUnlimited` | Write the derivation out in full — unbounded in output size, with the cost taken deliberately. The depth regression tests use it, since they exist to walk deeper than any limit would render. |
 | `0` | Write no step out: the one-element formatted value, the same answer a build with tracing compiled out gives. |
 
 **Rendering a derivation in full is affordable but not linear in every shape.**
@@ -1304,7 +1303,7 @@ different payloads: replaying grams into a field that now means kilograms is
 exactly the silent corruption the journal's payload fingerprint exists to
 catch. A custom codec leaves no reflected members to decompose, so without this
 tag every `Quantity` -- and every other custom-codec type -- would render
-identically (morph#245).
+identically.
 
 See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
 
@@ -1369,7 +1368,7 @@ deliberately not attempted):
   the API stays callable and no nodes are allocated.
 
   The cost is measured, not estimated. A 200,000-iteration running total
-  (morph#574, clang 22, `-O2`, Linux): **54,056 KB** max RSS and 0.034 s with
+  (clang 22, `-O2`, Linux): **54,056 KB** max RSS and 0.034 s with
   the default, against **12,236 KB** and 0.006 s with `MORPH_QUANTITY_PROVENANCE=0`
   — 4.4x the memory and 5.7x the time, for a loop that adds integers. The
   retained chain is proportional to the loop bound, so a loop whose bound comes
@@ -1377,9 +1376,9 @@ deliberately not attempted):
   that input. **An application that puts `Quantity` on a bulk path, and does not
   need `equation()` on it, should build with the macro set to `0`.**
 
-  morph#574 proposed flipping the default to `0` on those numbers. It stays at
-  `1`, and the reasoning is recorded here rather than left implicit, because the
-  two readings are both defensible and the disagreement is the interesting part:
+  Those numbers argue for defaulting the macro to `0`. It stays at `1`, and the
+  reasoning is recorded here rather than left implicit, because the two readings
+  are both defensible and the disagreement is the interesting part:
 
   - *For flipping.* Nobody opts into a cost they do not know about, and the
     price of the default is paid by every build that never calls `equation()`.
@@ -1394,12 +1393,12 @@ deliberately not attempted):
     distinguishing feature off, silently, to buy speed on paths that can already
     opt out of it with one flag, trades the wrong way round.
 
-  The crash that report also found is a separate matter and was **not** left to
-  the toggle: a deep chain used to overflow the stack in *either* setting, which
-  is not an acceptable failure mode for a default, and both the destructor and
-  every `equation()` traversal are now iterative (see *Provenance*, "Depth is
-  unbounded"). If the default is ever revisited, it should be revisited on the
-  behaviour argument above, not on the crash — that is fixed.
+  Stack depth is a separate matter and is **not** left to the toggle: a deep
+  chain would overflow the stack in *either* setting, which is not an acceptable
+  failure mode for a default, so both the destructor and every `equation()`
+  traversal are iterative (see *Provenance*, "Depth is unbounded"). If the
+  default is ever revisited, it should be revisited on the behaviour argument
+  above, not on stack depth.
 - **`int64` ratio overflow for wide-range unit systems.** Conversion ratios are
   exact `Rational`s of 64-bit integers. A unit system spanning many orders of
   magnitude (pico- to tera-, say) risks overflowing a composed chained ratio —

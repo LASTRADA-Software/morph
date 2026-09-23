@@ -114,7 +114,7 @@ surviving handler had before the disconnect. A non-shared binding is
 unaffected and still re-registers through the `registerModelWithContext`
 shape.
 
-Since morph#615 the handler reaches the backend through
+The handler reaches the backend through
 `IBackend::bindModel` — the structural registration surface — and consults
 `IBackend::bindWaitPolicy()` exactly as `registerHandlerImpl` does. It matters
 here more than anywhere: the handler runs on the backend's *transport* thread,
@@ -229,15 +229,15 @@ in this change:
 
 | Invariant | Where it lives now |
 |---|---|
-| The deadline is disarmed **first**, before any forwarding work, so a slow `onResult`/`publishResult` cannot give the timer a window to resolve the completion with `ClientTimeoutError` while the real result is in hand (morph#620) | `BridgeSink::settleOnce`, called at the top of both settle methods |
-| `pendingCalls()` is decremented on **exactly one** of two mutually-exclusive paths, whether or not the forwarding that follows then throws (morph#489) | `settleOnce`'s latch |
-| `lifetime->alive` is read **once**, and that one snapshot decides both `onResult` and `publishResult` (morph#486/#489) | `BridgeSink::settleValue` |
-| The value forwarding is `try`/`catch`-guarded, so a throwing move of `R` reaches the error sink rather than the callback executor (morph#502) | `BridgeSink::settleValue` |
-| A throw out of the backend undoes both the pending count and the deadline (morph#502) | `BridgeSink::abandon`, routed through the same latch |
+| The deadline is disarmed **first**, before any forwarding work, so a slow `onResult`/`publishResult` cannot give the timer a window to resolve the completion with `ClientTimeoutError` while the real result is in hand | `BridgeSink::settleOnce`, called at the top of both settle methods |
+| `pendingCalls()` is decremented on **exactly one** of two mutually-exclusive paths, whether or not the forwarding that follows then throws | `settleOnce`'s latch |
+| `lifetime->alive` is read **once**, and that one snapshot decides both `onResult` and `publishResult` | `BridgeSink::settleValue` |
+| The value forwarding is `try`/`catch`-guarded, so a throwing move of `R` reaches the error sink rather than the callback executor | `BridgeSink::settleValue` |
+| A throw out of the backend undoes both the pending count and the deadline | `BridgeSink::abandon`, routed through the same latch |
 
-The latch is new, and it is load-bearing. Before `BridgeSink`, "exactly one
-decrement per dispatch" was carried by `.then` and `.onError` being mutually
-exclusive on one `CompletionState`. A sink has no such guarantee:
+The latch is load-bearing. With a plain `Completion`, "exactly one decrement per
+dispatch" is carried by `.then` and `.onError` being mutually exclusive on one
+`CompletionState`. A sink has no such guarantee:
 `IBackend::cancelPending` settles it from one thread while a reply may be
 settling it from another. Without the latch the second settle decrements
 `_pendingCalls` again, and the counter is a `std::size_t` — a second decrement
@@ -274,10 +274,10 @@ only the two bridge-touching side effects are skipped when the token has
 expired.
 
 **`switchBackend(newBackend)`** replaces the active backend atomically: the
-switch either fully succeeds or leaves everything exactly as it was. Since
-morph#615 phase 1 acquires each instance through `IBackend::bindModel` and
-consults `IBackend::bindWaitPolicy()`, and **atomicity is exactly as strong as
-the wait is**:
+switch either fully succeeds or leaves everything exactly as it was. Phase 1
+acquires each instance through `IBackend::bindModel` and consults
+`IBackend::bindWaitPolicy()`, and **atomicity is exactly as strong as the wait
+is**:
 
 - `kCallerMayBlock` (every backend in the tree that is not a
   `SynchronousBackendAdapter` or a WASM-configured `QtWebSocketBackend`): the
@@ -429,7 +429,7 @@ cancelled/backend-changed/disconnected completion, all of which resolve
 through `.onError`). The synchronous "handler not bound" early return in
 `executeVia()` never increments the counter in the first place (it resolves
 before any dispatch), so it needs no matching decrement. Heap-allocated and
-captured by value into both continuations (morph#489) rather than reached
+captured by value into both continuations rather than reached
 through `this`: a completion can resolve after `~Bridge()` runs on another
 thread, and touching `this` on a dangling `Bridge` would be a use-after-free,
 so the counter is pinned independently of the `Bridge` and decremented
@@ -462,8 +462,8 @@ deregistration, a reconnect can call into a backend's synchronous
 `registerModelWithContext`/`registerModelShared`, which blocks on a nested
 event loop for `QtWebSocketBackend` — holding the lifetime gate across that
 would let `~Bridge` block for the same round trip, and if the reconnect and the
-destructor ever land on the same thread, deadlock rather than a slow teardown
-(morph#489, tracked as still open for this one call site).
+destructor ever land on the same thread, deadlock rather than a slow teardown.
+This one call site therefore keeps the weaker guard.
 
 **`liveness()`** (private, exposed only to `BridgeHandler` via friendship)
 returns a `morph::async::CallbackToken` issued from the bridge's `_callbacks`
@@ -481,7 +481,7 @@ half — it never calls `requestStop()`, so its tokens go inactive only when the
 ### The bridge's own executor
 
 `Bridge`'s constructor takes an optional second argument, `IExecutor*
-bridgeExec` (morph#588). Every other completion in the framework is delivered
+bridgeExec`. Every other completion in the framework is delivered
 on an executor its caller named — `BridgeHandler` supplies `guiExec`,
 `executeVia` takes a `cbExec`. The registrations the bridge issues *on its own
 behalf* had no such executor, and its five dispatch sites
@@ -498,8 +498,7 @@ settles while the dispatch call is still on the stack is parked by
 dispatching thread, whatever `bridgeExec` says.
 
 The `bindModel`/`promoteModel` calls therefore keep naming `inlineExecutor()`.
-That is a decision, not an omission left over from morph#568, and two things
-break if it is changed:
+That is a decision, not an omission, and two things break if it is changed:
 
 - **`registerHandler()` stops being synchronous.** For every backend that binds
   inline — `LocalBackend`, `SimulatedRemoteBackend`, any `kCallerMayBlock`
@@ -518,15 +517,15 @@ the bridge *and* every registration still in flight when the bridge is
 destroyed, because a late reply can land after `~Bridge` (the same requirement
 `BridgeHandler`'s `guiExec` already carries).
 
-**What it buys, stated exactly.** The morph#486 window in these callbacks is
+**What it buys, stated exactly.** The window in these callbacks is
 "check `CallbackToken::active()`, then touch the bridge". It is closed only if
 `bridgeExec` runs its tasks on a thread that cannot run `~Bridge` concurrently
 — for a Qt embedder, the GUI thread that both owns the `Bridge` and pumps the
 executor; the callback and the destructor are then two tasks on one thread and
 cannot interleave. An executor on some *other* thread satisfies the type and
 closes nothing. It makes nothing worse either: the callbacks' existing
-`CallbackToken`/`detail::BridgeLifetime` gates are unchanged, and with the null
-default the delivery is inline, byte for byte the pre-morph#588 behaviour.
+`CallbackToken`/`detail::BridgeLifetime` gates still apply, and with the null
+default the delivery is inline.
 
 `tests/test_async_registration.cpp` pins all three halves: a late reply is
 queued on the executor and publishes nothing until it is drained (restoring
@@ -551,8 +550,8 @@ if the gate still reports `alive`. If the `Bridge` was already destroyed the
 flag is clear, so the destructor skips deregistration instead of dereferencing a
 dangling `Bridge&`; and if it was not, `~Bridge` cannot start while this call is
 in progress. Holding the lock rather than merely reading a flag is the point:
-a bare check answers for an instant that has already passed, which is what made
-issue #486 a use-after-free. Destroying the bridge before its handlers is still
+a bare check answers for an instant that has already passed, which is what turns
+this shape into a use-after-free. Destroying the bridge before its handlers is
 discouraged (see [Lifetime & ownership](#lifetime--ownership)), but it is
 defined behaviour on any thread, not a use-after-free.
 
@@ -727,7 +726,7 @@ an ordinary interleaving rather than an exotic race. `CompletionState` now
 refuses to settle on a null at all
 ([completion.md](completion.md#setting-a-value-or-exception)); this site
 supplies the specific message because the meaning of *this* failure is known
-here and nowhere else. See issue #347.
+here and nowhere else.
 
 Scope limits worth knowing, because each is a question `whenBound()` looks like
 it answers and does not:
@@ -735,11 +734,11 @@ it answers and does not:
 - **It tracks the initial registration, plus a re-registration that could not
   be waited for.** `registerHandlerImpl` sets `registrationInFlight` on every
   path. `switchBackend()` and the reconnect handler set it only when the new
-  backend answers `kCallerMustNotBlock` (morph#615) — the one case where they
-  leave a binding unbound with a reply still to come, which is exactly the
-  state `whenBound()` exists to describe. Against a `kCallerMayBlock` backend
-  both still settle every outcome inside their own frame and set nothing, so
-  `whenBound()` says nothing about a swap or reconnect there, as before.
+  backend answers `kCallerMustNotBlock` — the one case where they leave a
+  binding unbound with a reply still to come, which is exactly the state
+  `whenBound()` exists to describe. Against a `kCallerMayBlock` backend both
+  settle every outcome inside their own frame and set nothing, so `whenBound()`
+  says nothing about a swap or reconnect there.
 - **It does not track the shared attach path.** `attachHandler`/`ensureBound`
   and their async counterparts bind a shared handler without going through
   `registerHandlerImpl`, so for an `AllowShared` handler `whenBound()` is only
@@ -764,10 +763,10 @@ the server-side `ActionDispatcher` uses over the two strings alone. Populated by
 `registerActionExecutorOnce<Model, Action>()`, which
 `BRIDGE_REGISTER_ACTION` calls during static initialization.
 
-**No key is built to look one up** (morph#699). `KeyHash` and `KeyEqual` are
+**No key is built to look one up.** `KeyHash` and `KeyEqual` are
 both transparent, so `execute` probes with `KeyView`
-(`{string_view modelId; string_view actionId; std::type_index sharing;}`) and
-the two `std::string`s the old `Key{...}` temporary constructed are gone.
+(`{string_view modelId; string_view actionId; std::type_index sharing;}`)
+rather than constructing a `Key{...}` temporary and its two `std::string`s.
 `KeyView` is a type of its own rather than a reuse of
 `morph::model::detail::PairKeyView`: this key carries the sharing tag as well
 as the two ids, and a reuse would have to drop it. Both `KeyHash` overloads
@@ -964,7 +963,7 @@ already-registered binding, while this read happens *during* registration. The
 pre-built-binding `registerHandler(binding)` overload hands the caller the
 binding first, so the requirement falls on the caller: **set `contextKey` before
 calling `registerHandler()`, and do not mutate it concurrently with that call.**
-Afterwards the ordinary `_attachMtx` rule applies. See morph#505.
+Afterwards the ordinary `_attachMtx` rule applies.
 
 The guarantee is unconditional, including for a backend that completes its
 `bindModel` completion **inline** — from inside
@@ -1015,7 +1014,7 @@ on the next `publishResult` call, not the moment the handler dies — rather
 than dangling. The intended usage remains **single-GUI-thread affinity**: a
 handler and its subscriptions belong to one GUI thread.
 
-Heap-allocated behind a `shared_ptr` (morph#489) rather than a plain member for
+Heap-allocated behind a `shared_ptr` rather than a plain member for
 the same reason `_pendingCalls` is: `executeVia()`'s `.then` continuation calls
 `hasSubscribers()`/`publishResult()` from a context that can run after
 `~Bridge()`, and the registry's own "snapshot under lock, invoke outside it"
@@ -1059,10 +1058,10 @@ does not run, so a check that has gone stale costs nothing. It cannot gate a
 *member call on the `Bridge`*, because `CallbackToken::active()` is explicitly
 advisory across threads ([callback_scope.md](callback_scope.md), "Boundary of
 the guarantee") — the bridge can be destroyed between the check and the call.
-`~BridgeHandler` used a bare `active()` check until issue #486, where a
-`shared_ptr<BridgeHandler>` kept alive by its own completions was released on a
-worker-pool thread while the owning thread ran `~App`: the check passed, the
-`Bridge` finished being destroyed, and `deregisterHandler` then walked the freed
+A bare `active()` check in `~BridgeHandler` admits exactly that: a
+`shared_ptr<BridgeHandler>` kept alive by its own completions is released on a
+worker-pool thread while the owning thread runs `~App`, the check passes, the
+`Bridge` finishes being destroyed, and `deregisterHandler` then walks the freed
 `_handlers`. The gate replaces the check with something that holds.
 
 **Blocking, and why it is safe.** `~Bridge` waits for an in-flight
@@ -1100,13 +1099,13 @@ make teardown order-independent.)
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor | `explicit Bridge(unique_ptr<IBackend>, IExecutor* bridgeExec = nullptr)` | Installs reconnect handler on the backend, then pushes the (initially empty) default session via `setSession`. `bridgeExec` is where a registration reply that arrived after its dispatch frame is delivered; null (the default) delivers it inline, exactly as before morph#588. See [The bridge's own executor](#the-bridges-own-executor). |
+| ctor | `explicit Bridge(unique_ptr<IBackend>, IExecutor* bridgeExec = nullptr)` | Installs reconnect handler on the backend, then pushes the (initially empty) default session via `setSession`. `bridgeExec` is where a registration reply that arrived after its dispatch frame is delivered; null (the default) delivers it inline. See [The bridge's own executor](#the-bridges-own-executor). |
 | dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
 | `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Dispatches `IBackend::bindModel`; see `backend.md`. |
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Stages all re-registrations through `bindModel` on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Atomic exactly when the new backend answers `kCallerMayBlock`; a `kCallerMustNotBlock` backend's binds are deferred and the switch is not all-or-nothing (see above). Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its staging and commit, and resolves `whenBound()` waiters after releasing them. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Dispatches through `IBackend::executeInto`, handing the backend a `detail::BridgeSink<R>` that is simultaneously the caller's typed completion state and the backend's settle sink — one allocation where the erased-completion forwarding block cost six (morph#572, Part B). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the bridge's `CallbackToken`, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Dispatches through `IBackend::executeInto`, handing the backend a `detail::BridgeSink<R>` that is simultaneously the caller's typed completion state and the backend's settle sink — one allocation where an erased-completion forwarding block costs six. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the bridge's `CallbackToken`, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 | `setExecuteDeadline` | `void setExecuteDeadline(std::chrono::milliseconds)` | Opt-in client-side execute deadline; `0` (the default) disables it. Lazily creates the backing `TimeoutScheduler` thread on first enable. |
@@ -1155,7 +1154,7 @@ make teardown order-independent.)
 | Decision | Choice | Why |
 |---|---|---|
 | Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. (Handler *teardown* after the bridge is made safe separately, by the `detail::BridgeLifetime` gate — not by this weak storage.) |
-| Teardown order | **`shared_ptr<detail::BridgeLifetime>` — a `shared_mutex` + `alive` flag, shared with every handler** | Makes bridge-vs-handler destruction order-independent on any thread: `~BridgeHandler` holds the gate shared across its whole deregistration, `~Bridge`'s first statement takes it exclusively and clears `alive`, so the two can never overlap. Normal `execute`/`subscribe` still require the bridge to outlive its handlers. This replaced a per-handler `CallbackToken` from `_callbacks`, whose `active()` is advisory across threads — check-then-call, which issue #486 hit as a use-after-free. The `CallbackScope` stays for what it is right for: gating *delivery* of the bridge's own callbacks ([callback_scope.md](callback_scope.md)). |
+| Teardown order | **`shared_ptr<detail::BridgeLifetime>` — a `shared_mutex` + `alive` flag, shared with every handler** | Makes bridge-vs-handler destruction order-independent on any thread: `~BridgeHandler` holds the gate shared across its whole deregistration, `~Bridge`'s first statement takes it exclusively and clears `alive`, so the two can never overlap. Normal `execute`/`subscribe` still require the bridge to outlive its handlers. A per-handler `CallbackToken` from `_callbacks` cannot do this job: its `active()` is advisory across threads, so the check-then-call it permits is a use-after-free. The `CallbackScope` stays for what it is right for: gating *delivery* of the bridge's own callbacks ([callback_scope.md](callback_scope.md)). |
 | Backend pointer | **Short snapshot under the dedicated `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under `_backendMtx` (never `_mtx`), so it never blocks on `switchBackend()`'s `_mtx`. |
 | Session storage | **Separate `_sessionMtx` from `_mtx`** | Session access is a hot path (every `executeVia` reads it). A separate mutex avoids contention with handler registration/switchBackend. |
 | Attach-path locking | **Separate `_attachMtx` from `_mtx`** | `attachHandler`/`ensureBound`/`assignHandlerPrimary` can block on a full network round-trip for a remote backend. A dedicated mutex means that round-trip never blocks unrelated `registerHandler`/`deregisterHandler`/`switchBackend` calls on the same `Bridge`, closing a deadlock hazard if the thread expected to deliver the pending reply itself needs `_mtx`. `HandlerBinding::primary`/`contextKey` are mutated only under `_attachMtx`; `switchBackend()` and the reconnect handler, which also touch them, take both mutexes together. |
@@ -1167,7 +1166,7 @@ make teardown order-independent.)
 | `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map` keyed on registered ids lets any translation unit register its actions without central registration or RTTI. |
 | Executor keying | **`(modelId, actionId, typeid(Sharing))` — one executor per sharing policy** | The executor is the only place a typed handler is recovered from a `void*`, and `BridgeHandler<M, NoSharing>` / `BridgeHandler<M, AllowShared>` are unrelated types. A single `NoSharing`-only executor handed a shared handler would `static_cast` to the wrong instantiation, so its `kShared` — which gates a payload-/result-keyed action's attach-or-promote step — would answer for the wrong one and that step would silently never run. No runtime type information survives to check it by then, so the key carries the distinction instead: two entries per action, built from one generic-lambda template so they cannot diverge, and `execute` templated on `Sharing` so each call site selects its own. Costs one closure per registered action at static-init time, not per call. |
 | `registerActionExecutorOnce` | **`inline` definition in header** | The function is forward-declared in `registry.hpp` (`morph::model::detail`) but defined `inline` in `bridge.hpp`, after `ActionExecuteRegistry`. `inline` lets that definition be instantiated in every TU that transitively includes `bridge.hpp` without an ODR/link violation. The registration runs from the anonymous-namespace initializer the macro emits. Because the definition lives only in `bridge.hpp`, any TU expanding `BRIDGE_REGISTER_ACTION` must include it (directly or transitively) or the link fails with an unresolved symbol. |
-| `pendingCalls()` counter placement | **One `std::atomic<size_t>` on `Bridge`, not per-`HandlerBinding` or per-backend** | Issue #45 asks for client-side quiescence — "has everything settled" — which is a property of the `Bridge` as a whole (the thing the GUI actually holds one of), not of any single handler or backend. A per-binding counter would force a caller wanting a global "still loading" signal to sum across every live `BridgeHandler`; a per-backend counter (mirroring `LocalBackend::_inFlight`/`RemoteServer`'s `_inFlightExecutes`, both server/backend-side) would miss calls dispatched before a `switchBackend()` mid-flight. Incrementing/decrementing directly in `executeVia()` — the one chokepoint every dispatch path (`execute<Action>`, `executeJson`) funnels through — needs no cooperation from `IBackend` implementations at all. |
+| `pendingCalls()` counter placement | **One `std::atomic<size_t>` on `Bridge`, not per-`HandlerBinding` or per-backend** | Client-side quiescence — "has everything settled" — is a property of the `Bridge` as a whole (the thing the GUI actually holds one of), not of any single handler or backend. A per-binding counter would force a caller wanting a global "still loading" signal to sum across every live `BridgeHandler`; a per-backend counter (mirroring `LocalBackend::_inFlight`/`RemoteServer`'s `_inFlightExecutes`, both server/backend-side) would miss calls dispatched before a `switchBackend()` mid-flight. Incrementing/decrementing directly in `executeVia()` — the one chokepoint every dispatch path (`execute<Action>`, `executeJson`) funnels through — needs no cooperation from `IBackend` implementations at all. |
 
 ## Limitations
 

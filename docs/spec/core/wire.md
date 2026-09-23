@@ -106,8 +106,9 @@ turn it into an `"err"` reply rather than propagating it (see
 
 `Envelope` is a union of all kinds: an `ok` reply uses three of its thirteen
 members and a `deregister` request uses two. glaze writes every member of a
-struct it is handed, so before morph#524 a minimal `ok` reply carrying an
-8-byte payload was **255 bytes, 213 of them fields the kind does not use**:
+struct it is handed, so without the omission rule below a minimal `ok` reply
+carrying an 8-byte payload is **255 bytes, 213 of them fields the kind does not
+use**:
 
 ```
 {"kind":"ok","callId":7,"typeId":"","contextKey":"","primary":"","shared":false,
@@ -222,12 +223,12 @@ one of the reflected keys — a rename would otherwise make glaze report
 that emptiness test would be silently dropped from every envelope whose other
 session fields are empty.
 
-What this does **not** address is the other half of morph#524: `body` still
-holds JSON that is escaped as a JSON string, so a payload is expanded on the
-way out and re-parsed on the way in. That change (`glz::raw_json`) *is* a
-retype, does need a version bump, and interacts with the
+What omitting defaults does **not** address is `body`: it still holds JSON
+escaped as a JSON string, so a payload is expanded on the way out and re-parsed
+on the way in. Carrying it as `glz::raw_json` instead *is* a retype, does need a
+version bump, and interacts with the
 [`body` double-parse hazard](#the-body-double-parse-hazard) and the size cap
-that exists to bound it. It is deliberately not in this change.
+that exists to bound it — which is why the two are kept separate.
 
 ### Control bytes in string fields
 
@@ -299,10 +300,10 @@ every `encode` at runtime. The arm is still unreachable through any `Envelope`
 
 That left a branch guarding a real invariant permanently uncovered.
 `WireCodecOps` closes it the way this repository already closes the identical
-problem for file I/O (`morph::core::FileIoOps`, added for
-LASTRADA-Software/morph#97): an injectable strategy whose single member
-defaults to the real call, so a default-constructed `WireCodecOps` is
-byte-for-byte the previous behaviour, and a test injects a failing one.
+problem for file I/O (`morph::core::FileIoOps`): an injectable strategy whose
+single member defaults to the real call, so a default-constructed
+`WireCodecOps` is byte-for-byte the real codec, and a test injects a failing
+one.
 
 `defaultWireCodecOps()` is a function-local static rather than a
 default-constructed temporary in the signature: `encode` runs on every outbound
@@ -439,11 +440,11 @@ no version check, `protocolVersion` stays `0` on every envelope.
 
 `morph::forms::schemaJson<A>()` renders one action as a JSON Schema document —
 properties, a derived `required` array, `x-decimalPlaces`, `x-rules`, layout
-hints. It is a *compile-time* function over a reflected action struct, so until
-the `"schemas"` kind existed the document was reachable only from a caller
-linked against the model's own C++. A WASM page, a third-party client, or a
-scenario runner that wants to name the offending field *before* a round trip
-had no way to ask (LASTRADA-Software/morph#234).
+hints. It is a *compile-time* function over a reflected action struct, so
+without the `"schemas"` kind the document is reachable only from a caller
+linked against the model's own C++ — leaving a WASM page, a third-party client,
+or a scenario runner that wants to name the offending field *before* a round
+trip with no way to ask.
 
 ### The `"schemas"` control kind
 
@@ -513,8 +514,8 @@ kept in step with it.
 
 ### Why this, and not a fingerprint exchange at `"hello"`
 
-morph#207 proposes exchanging per-action fingerprints during the `"hello"`
-handshake. The fingerprints are the same either way — this reuses
+The obvious alternative is to exchange per-action fingerprints during the
+`"hello"` handshake. The fingerprints are the same either way — this reuses
 `morph::model::payloadFingerprint<A>()` rather than defining a wire-specific
 scheme — but the *carrier* is `"schemas"` for one reason: `"hello"` is
 deliberately unauthorized ("carries no `session` and is not authorized —
@@ -602,7 +603,7 @@ skipped the mandated `kProtocolVersion` bump was accepted silently, because the
 lenient inner decode reads an unknown key as absent and an absent one as
 default-constructed. `validate()` cannot close that gap — it sees a
 zero-valued action and cannot tell "the client sent nothing" from "the client
-sent a legitimate zero" (LASTRADA-Software/morph#207).
+sent a legitimate zero".
 
 **What is mechanically checkable, and what is not.** Only the first bullet
 states a machine-readable predicate: *new fields must be optional, so an older
@@ -727,7 +728,7 @@ client.
 | Decision | Choice | Why |
 |---|---|---|
 | Single struct vs. discriminated union | **One `Envelope` struct; every kind's fields are members of it** | The C++ shape is fixed and predictable; callers populate only what their kind needs. Avoids a tagged-union complexity that would add no benefit over a single struct with a `kind` string. |
-| Shrinking the serialized form | **Omit members at their default, rather than reshaping `Envelope`** | The 255-byte minimal reply was a *serialization* problem, not a struct problem. Omitting defaults needs no `std::optional` members (which would change every call site's `env.typeId = ...`), no variant, and no `kProtocolVersion` bump — a default-initialising, unknown-key-tolerant decoder cannot tell the two forms apart. 255 B → 44 B on a minimal reply. See [Omitted default fields](#omitted-default-fields) (morph#524). |
+| Shrinking the serialized form | **Omit members at their default, rather than reshaping `Envelope`** | The 255-byte minimal reply was a *serialization* problem, not a struct problem. Omitting defaults needs no `std::optional` members (which would change every call site's `env.typeId = ...`), no variant, and no `kProtocolVersion` bump — a default-initialising, unknown-key-tolerant decoder cannot tell the two forms apart. 255 B → 44 B on a minimal reply. See [Omitted default fields](#omitted-default-fields). |
 | `kind` as a string vs. enum | **`std::string`** | JSON naturally discriminates by string; avoids an enum-to-string mapping. The factory functions (`makeRegister`, etc.) ensure callers never set `kind` manually. |
 | `"execute"` has no factory | **No factory** | `"execute"` envelopes are typically constructed by higher-level APIs (`Client`, `RemoteServer`), not by end users. Adding a factory would be dead code at the wire layer. |
 | Factory functions are `inline` | **Header-only** | The entire wire module lives in the header. Wrapping each factory as a named function keeps construction safe (correct `kind`, no forgotten fields) without a separate compilation unit. |

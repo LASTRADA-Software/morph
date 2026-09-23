@@ -626,15 +626,15 @@ transport above is not a matter of degree:
   `std::system_category().message()`, which returns an owned `std::string` and
   carries the library's ordinary "shall not introduce a data race" guarantee,
   rather than `std::strerror`, which is permitted to hand every caller a
-  pointer to one shared static buffer (morph#625). Stated precisely, because
-  the distinction matters: what was repaired is the data race the
-  specification of `std::strerror` permits, inferred from the code. No
-  interleaved or corrupted message was ever observed, and on the glibc/Linux
-  configuration this project tests, the two spellings render an `errno` to
-  identical bytes. The property gained is that the guarantee now holds by
-  specification rather than by the implementation happening to be safe.
-  `TcpSocket::connect`'s `::gai_strerror` is deliberately untouched, for two
-  separate reasons that morph#640 asked to be kept apart. The first is that no
+  pointer to one shared static buffer. Stated precisely, because the
+  distinction matters: what this avoids is the data race the specification of
+  `std::strerror` permits, inferred from that specification rather than
+  observed. No interleaved or corrupted message has been seen, and on the
+  glibc/Linux configuration this project tests, the two spellings render an
+  `errno` to identical bytes. The property gained is that the guarantee holds
+  by specification rather than by the implementation happening to be safe.
+  `TcpSocket::connect`'s `::gai_strerror` is deliberately left as it is, for
+  two reasons that are worth keeping apart. The first is that no
   substitution exists: it renders `EAI_*` resolver codes, which are not `errno`
   values, so `std::system_category().message()` would describe them
   confidently and wrongly. The second is that it does not have

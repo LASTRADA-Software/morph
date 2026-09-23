@@ -191,13 +191,11 @@ it, and a host must pick one:
 
 ### `IReplayLedger`: the promoted replay-consumer half
 
-The two paragraphs above define the *contract* — dedup on a shared key — but
-for five rungs and seven call sites, morph supplied no *mechanism*: each host
-hand-wrote its own op-id-keyed table answering "has this already been
-applied?" ([morph#226](https://github.com/LASTRADA-Software/morph/issues/226),
-`examples/IMPLEMENTATION.md`'s promotion rule fired three rungs past its own
-trigger point). `morph::offline::IReplayLedger`
-(`include/morph/offline/replay_ledger.hpp`) is the promoted answer:
+The two paragraphs above define the *contract* — dedup on a shared key. The
+mechanism is `morph::offline::IReplayLedger`
+(`include/morph/offline/replay_ledger.hpp`), and it lives in the framework
+because five rungs across seven call sites otherwise each hand-write the same
+op-id-keyed table answering "has this already been applied?":
 
 ```cpp
 struct IReplayLedger {
@@ -219,8 +217,8 @@ SQL dependency to open a connection with. Every existing occurrence stores its
 ledger row in the *same database and the same transaction* as the write it
 guards, so the check-then-set commits atomically with the operation's effect;
 a morph-owned store opening its own connection would break exactly that
-atomicity (morph#458 was this defect, shipped in two rungs, before this
-interface existed). So the table, the connection, and the transaction stay
+atomicity — a defect that has shipped in two rungs when the ledger was written
+by hand. So the table, the connection, and the transaction stay
 app-side, per rung — a concrete `IReplayLedger` is constructed over the
 model's *already-open* mapper/transaction (see `BookmarksReplayLedger` in
 `examples/bookmarks/src/models/bookmark_model.cpp` for the reference shape —
@@ -257,15 +255,14 @@ constructed in exactly one file in this tree
 `IReplayLedger::lookup()` call site
 (`examples/bookmarks/src/models/bookmark_model.cpp`, once per
 `ImportBookmarks`) runs against `BookmarksReplayLedger`, whose `doLookup` is a
-SQL round-trip. Measured on `d03c66f3` (clang 22 `-O2`, counting
-`operator new`, 2e6 iterations): 2.00 allocations per lookup with both key
-halves past libstdc++'s 15-character SSO buffer, 1.00 with one past it, 0.00
-with both inside — costing 3.4 ns of a 31.6 ns uncontended lookup, and 55 ns
-of a 740 ns lookup with eight threads on the mutex. This is
-[morph#728](https://github.com/LASTRADA-Software/morph/issues/728), parked on
-the same grounds and with the same kind of number as morph#709. It becomes
-worth doing the moment a per-request caller of this class exists; the header's
-own `doLookup` comment carries the full table and the shape of the fix.
+SQL round-trip. Measured with clang 22 `-O2`, counting `operator new`, 2e6
+iterations: 2.00 allocations per lookup with both key halves past libstdc++'s
+15-character SSO buffer, 1.00 with one past it, 0.00 with both inside — costing
+3.4 ns of a 31.6 ns uncontended lookup, and 55 ns of a 740 ns lookup with eight
+threads on the mutex. It is parked on that census rather than on the size of
+the number, and becomes worth doing the moment a per-request caller of this
+class exists; the header's own `doLookup` comment carries the full table and
+the shape of the fix.
 
 ### `IOfflineQueue`
 
@@ -336,10 +333,10 @@ promises monotonicity nor rules out an id minted from a GUID, a content hash,
 or a sharded sequence, and a store that reuses the id of a removed row does not
 order correctly either. An implementation over such a store carries its own
 insertion sequence and orders on that. This is written down because an
-ORM-backed queue is the first implementation for which the choice was a
-*choice* rather than the only option available (morph#549); the ordering is
-asserted by `tests/offline_queue_conformance.hpp`, so getting it wrong fails
-there rather than in production.
+ORM-backed queue is the first implementation for which the ordering is a
+*choice* rather than the only option available; the ordering is asserted by
+`tests/offline_queue_conformance.hpp`, so getting it wrong fails there rather
+than in production.
 
 Both `enqueue` overloads, `drain`, `size`, and `maxDepth` are `[[nodiscard]]`
 on the interface and on every shipped override (`InMemoryOfflineQueue`,
@@ -446,7 +443,7 @@ completed and acknowledged item. Mutations also raise rather than swallow I/O
 failures: a short write or a failed `fflush`/`fsync` throws, since every
 mutation is documented as a committed transaction by the time the call returns.
 
-A **failed write is rolled back before it throws** (morph#530). The file is
+A **failed write is rolled back before it throws**. The file is
 opened `"a"`, so a partial line's bytes sit exactly where the next `writeLine`
 would resume, with no separating newline — the two merge into a single line that
 `load()` tolerates only while it remains the *trailing* one, and stops
@@ -482,21 +479,20 @@ later writes keeps the torn record trailing, which is exactly the shape the next
 open's `load()` skips and `compact()` rewrites away. See
 [file_io_ops.md](../core/file_io_ops.md), "Rolling back a short write".
 
-**No constructor-time `repairTornTail`.** An earlier revision of morph#530 ran
-it before `load()`, to heal "an interior merge from a doubled-up short write".
-It cannot do that — it only trims bytes after the final newline, and says so
-itself — so it never fixed the case it was added for. It did cost two things:
-it is the constructor's only file mutation that can run *before* `load()`
-throws, which breaks morph#494's guarantee that a failed construction leaves the
-file byte-identical, and it discards a complete final record whose only missing
-byte is the trailing newline, wiping the file outright when that is the only
-line. What prevents the doubled-up short write is the rollback above; `load()` +
-`compact()` heal an ordinary torn tail as they always have. `FileActionLog`
-keeps its own long-standing call — pre-existing behaviour there, not something
-morph#530 introduced.
+**No constructor-time `repairTornTail`.** Running it before `load()` looks like
+a way to heal an interior merge from a doubled-up short write. It cannot do
+that — it only trims bytes after the final newline, and says so itself — and it
+would cost two things: it would be the constructor's only file mutation able to
+run *before* `load()` throws, breaking the guarantee that a failed construction
+leaves the file byte-identical, and it discards a complete final record whose
+only missing byte is the trailing newline, wiping the file outright when that is
+the only line. What prevents the doubled-up short write is the rollback above;
+`load()` + `compact()` heal an ordinary torn tail. `FileActionLog` does call it,
+from its own constructor, where its trimming rule is part of that class's
+contract.
 
 `compact()` additionally fsyncs the **containing directory** after its
-`rename()` (morph#532): the fsync on the temporary file makes the compacted
+`rename()`: the fsync on the temporary file makes the compacted
 *data* durable and says nothing about the directory entry that now names it
 `_path`. A directory fsync the platform or mount cannot perform is logged at
 `warn` and construction continues; only a genuine I/O failure throws. See
@@ -505,17 +501,17 @@ exists and which cases fall on each side.
 
 Mutations are also ordered **durable-first**: `markDone()` appends the tombstone
 before erasing from `_items`, and `setAttempts()` writes before updating memory.
-The reverse order meant a throwing append left the item gone from memory with no
-tombstone on disk, so this process never replayed it and a restart resurrected
-and re-applied it; durable-first fails the other way, replaying once too often at
-worst, which `idempotencyKey` exists to absorb (morph#494).
+The reverse order would let a throwing append leave the item gone from memory
+with no tombstone on disk, so this process never replays it and a restart
+resurrects and re-applies it; durable-first fails the other way, replaying once
+too often at worst, which `idempotencyKey` exists to absorb.
 
 An **unreadable** queue file is not an empty queue. `load()` reads with its own
 `ifstream`, and the constructor calls `compact()` immediately after — which
 rewrites the file from whatever `load()` produced. A failed open or a mid-file
-read error therefore committed an empty set over the real backlog, with the
-constructor returning normally and the queue reporting no pending work. Both now
-throw, so `compact()` cannot run on a load that did not succeed (morph#494). A
+read error would therefore commit an empty set over the real backlog, with the
+constructor returning normally and the queue reporting no pending work. Both
+throw instead, so `compact()` cannot run on a load that did not succeed. A
 keyed `enqueue`'s dedup is a linear scan over pending items — fine at modest
 queue depths; `SqliteOfflineQueue` is the index-backed alternative for
 high-volume keyed enqueues. Not safe for multiple processes to open the same
@@ -567,12 +563,12 @@ and `markDone()` loses nothing; every write is its own committed statement
 under `PRAGMA journal_mode=WAL`. All operations serialise on an internal
 mutex, so the queue is safe to share between the write and drain/replay paths.
 
-**Durability settings, set once at construction** (morph#532), in this order —
-the order is load-bearing:
+**Durability settings, set once at construction**, in this order — the order is
+load-bearing:
 
 | Order | Pragma | Value | Why |
 |---|---|---|---|
-| 1 | `busy_timeout` | `busyTimeout` ctor param, default 5000 ms | Must come **first**: converting a database to WAL needs an exclusive lock, so `journal_mode=WAL` is itself a `SQLITE_BUSY` candidate. Set last, as an earlier revision did, the multi-opener case it was added for failed exactly as before (measured: 12 ms to throw "database is locked" with no timeout, a full 1001 ms wait with a 1000 ms timeout set first). |
+| 1 | `busy_timeout` | `busyTimeout` ctor param, default 5000 ms | Must come **first**: converting a database to WAL needs an exclusive lock, so `journal_mode=WAL` is itself a `SQLITE_BUSY` candidate. Set last, the multi-opener case it exists for fails exactly as if it were unset (measured: 12 ms to throw "database is locked" with no timeout, against a full 1001 ms wait with a 1000 ms timeout set first). |
 | 2 | `synchronous` | `Synchronous` ctor param, default `normal` | Before `journal_mode`, and unconditional: SQLite's rollback-journal default is already `FULL`, and it is WAL that lowers it to `NORMAL`. Setting it first means the level holds whether or not WAL takes. |
 | 3 | `journal_mode` | `WAL` | Read back and **warned about**, not enforced. |
 
@@ -624,14 +620,14 @@ at all wherever that fsync genuinely fails. `sqlite3_db_filename` reports an
 empty name for exactly those spellings, so an empty result means "no backing
 file, nothing to sync" and the step is skipped.
 
-**A NUL byte inside a payload or idempotency key survives a round trip**
-(morph#531). `payload` and `idempotencyKey` are opaque strings whose
-serialisation the caller owns, so an embedded NUL is legitimate. Both halves
-previously truncated at the first one: `sqlite3_bind_text` was called with
-length `-1`, telling SQLite to measure to the first NUL, and the read side
-constructed a `std::string` from the bare `const char*`. Writes now pass an
-explicit `value.size()` (throwing if it exceeds `INT_MAX`, which the `int`
-parameter cannot represent) and reads use `sqlite3_column_bytes()` for the
+**A NUL byte inside a payload or idempotency key survives a round trip.**
+`payload` and `idempotencyKey` are opaque strings whose serialisation the caller
+owns, so an embedded NUL is legitimate. Both halves truncate at the first one
+unless this is handled: `sqlite3_bind_text` with length `-1` tells SQLite to
+measure to the first NUL, and a `std::string` constructed from the bare
+`const char*` stops there too. Writes therefore pass an explicit `value.size()`
+(throwing if it exceeds `INT_MAX`, which the `int` parameter cannot represent)
+and reads use `sqlite3_column_bytes()` for the
 stored length.
 
 ## Ownership: who enqueues
@@ -685,7 +681,7 @@ The example above puts domain-adjacent code in a free function at the dispatch
 site. `examples/IMPLEMENTATION.md` rule 1 would otherwise forbid exactly that
 placement — "nothing domain-shaped may live in presenters, QML, `main()`, or
 free functions." The placement is deliberate, and this section is its recorded
-disposition (morph#197), so a reader who finds
+disposition, so a reader who finds
 `if (!monitor.isOnline()) queue.enqueue(...)` outside a model knows it is a
 sanctioned exception rather than an oversight.
 
@@ -798,7 +794,7 @@ and calls a caller-supplied `ReplayFunction` for each item.
   make that reachable rather than theoretical: `ReconnectCoordinator::onOnline()`
   holds its mutex for the whole retry loop, so a flap back offline cannot
   preempt an in-progress replay; and nothing in the framework wires a
-  `NetworkMonitor` transition to `SyncWorker::stop()`. See issue #343.
+  `NetworkMonitor` transition to `SyncWorker::stop()`.
 
   A caller that cannot tell the two apart must report `Rejected`. "I don't know"
   is not `Undelivered`: reading it that way retries a genuinely poisonous

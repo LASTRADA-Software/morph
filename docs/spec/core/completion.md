@@ -69,19 +69,21 @@ with that instead, so `ready == true` always implies exactly one of `value` or
 `error` is engaged.
 
 That substitution closes a defect rather than tidying an edge case. Storing the
-null set `ready` while leaving `error` falsy, and neither attach could act on
-the result: `attachOnError` tests `ready && error`, `attachThen` tests `ready &&
-value`, so both fell through and a handler attached afterwards was neither
-fired nor queued — the completion was dead in both directions for every later
-caller, and silently, since `attachOnError` sets `onErrAttached` on entry and so
-suppressed the destructor's orphan logger too. A handler attached *before* such
-a settlement did fire, but with a null `exception_ptr`, which is undefined
-behaviour to `std::rethrow_exception` — the idiomatic handler body, this file's
-own orphan logger included. The guard lives here rather than at any one producer
-because `Completion<T>::Promise::reject()` is public and around ten sites
-forward an `exception_ptr` through untouched (`.onError([state](auto e) {
+null would set `ready` while leaving `error` falsy, and neither attach could
+then act on the result: `attachOnError` tests `ready && error`, `attachThen`
+tests `ready && value`, so both fall through and a handler attached afterwards
+is neither fired nor queued — the completion is dead in both directions for
+every later caller, and silently, since `attachOnError` sets `onErrAttached` on
+entry and so suppresses the destructor's orphan logger too. A handler attached
+*before* such a settlement does fire, but with a null `exception_ptr`, which is
+undefined behaviour to `std::rethrow_exception` — the idiomatic handler body,
+this file's own orphan logger included. The guard lives here rather than at any
+one producer because `Completion<T>::Promise::reject()` is public and around ten
+sites forward an `exception_ptr` through untouched (`.onError([state](auto e) {
 state->setException(e); })`), so a per-producer guard would leave every other
-one able to reintroduce it. See issue #347. When one or more callbacks are already registered
+one able to reintroduce it.
+
+When one or more callbacks are already registered
 (via `attachThen` / `attachOnError`), a fire-once closure invoking every
 registered callback, in attachment order, is built under the lock and posted to
 the executor outside the lock, so no callback ever runs under the mutex. The
@@ -130,8 +132,8 @@ stored value in place, and neither copies nor moves it:
 
 **The value is observed, never consumed.** No dispatch path can move out of
 `value`, so a `then()` attached after a set-after-attach dispatch already ran
-still fires against the genuine result rather than a moved-from husk (morph#520;
-see [Failure modes](#failure-modes)), and no handler in a fan-out can leave a
+still fires against the genuine result rather than a moved-from husk (see
+[Failure modes](#failure-modes)), and no handler in a fan-out can leave a
 husk for its siblings. A handler that wants to consume takes `T` **by value** and
 moves out of its own copy. Errors behave the same way for a different reason —
 an `exception_ptr` is a refcounted handle, cheap to copy, and is copied for every
@@ -178,20 +180,19 @@ Settling itself moves `T` exactly twice for a prvalue argument — into
 `resolve`'s by-value parameter, then into `setValue`'s, then into `value`, with
 the first elided — and dispatch adds none.
 
-This replaces a budget of **N + 2M** copies per settle (N handlers attached
-before settling, M after) in which `T` was additionally forced to be
-copy-constructible: `onOk` was erased as `std::function<void(T)>`, so every
-handler was charged a copy whether or not it wanted one, and `attachThen`'s
-fire-now path copied `*value` into a local and then captured that local *by
-copy* before moving it into the handler — two copies where the handler asked
-for at most one. See morph#553.
+The obvious alternative — erasing `onOk` as `std::function<void(T)>` — costs
+**N + 2M** copies per settle (N handlers attached before settling, M after) and
+additionally forces `T` to be copy-constructible. Every handler is charged a
+copy whether or not it wants one, and a fire-now path under that erasure has to
+copy `*value` into a local and capture that local *by copy* before moving it
+into the handler: two copies where the handler asked for at most one.
 
 **What this costs.** A cheap `T` pays a little more per settle: the dispatch
 closure holds a `shared_ptr` to the state and so pays an atomic refcount pair
-where it used to copy a small value. Against the JSON encode/decode — and often
+rather than a copy of a small value. Against the JSON encode/decode — and often
 a socket write — that surrounds a settle, that is noise, and it buys a large `T`
 its per-handler copies back. It is recorded here rather than hidden, because it
-is a real regression on the cheap case.
+is a real cost on the cheap case.
 
 **The large-`T` win requires `const T&` handlers.** The handler signature is the
 lever a caller pulls, which is why it is documented as contract rather than left
@@ -265,7 +266,7 @@ backends do internally (see [Shared state](#shared-state--completionstatet)) —
 useful for test code (or any caller outside the framework's own producer code)
 that needs a `Completion<T>` it can resolve or reject on demand, without a full
 `Bridge`/`IBackend` round trip and without ever naming
-`morph::async::detail::CompletionState<T>` (issue #55).
+`morph::async::detail::CompletionState<T>`.
 
 ```cpp
 auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&exec);
@@ -322,10 +323,10 @@ throw — they are silent by construction.
   success handlers (`onOk`) and a `std::vector` of error handlers (`onErr`). A
   second, third, ... `then()` (or `onError()`) attached while the state is not
   yet ready is *appended*, not swapped in — every handler attached before
-  readiness runs when the result arrives, in the order it was attached. This
-  closes the earlier "last-writer-wins" foot-gun (issue #59), where a second
-  `onError()` on the same still-pending `Completion` silently discarded the
-  first handler and, because `onErrAttached` was still set, suppressed the
+  readiness runs when the result arrives, in the order it was attached. A
+  single-slot field instead would be a "last-writer-wins" foot-gun: a second
+  `onError()` on the same still-pending `Completion` would silently discard the
+  first handler and, because `onErrAttached` is set on attach, suppress the
   orphan logger too — losing the error's diagnostic entirely.
 
 - **Mismatched attach on a ready state is a silent no-op.** `then()` on a state
@@ -338,12 +339,11 @@ throw — they are silent by construction.
 
   Both arms silently doing nothing is *only* safe because a ready state always
   has exactly one of `value`/`error` engaged, so at most one arm can mismatch.
-  A `ready` state with neither engaged made **both** arms no-ops, and the
-  completion could then never resolve for anybody — which is what
-  `setException(nullptr)` used to produce before it was made to substitute
-  (issue #347, and see [Setting a value or
-  exception](#setting-a-value-or-exception)). That state is now unreachable,
-  and this bullet depends on it staying so.
+  A `ready` state with neither engaged would make **both** arms no-ops, and the
+  completion could then never resolve for anybody. `setException(nullptr)`
+  substituting a `std::runtime_error` is what keeps that state unreachable (see
+  [Setting a value or exception](#setting-a-value-or-exception)); this bullet
+  depends on it staying so.
 
 - **Null-executor error drop, but no silencing.** With `cbExec == nullptr`, any
   attached or pending error handlers are never delivered — there is no executor
@@ -362,7 +362,7 @@ throw — they are silent by construction.
   [Shared state](#shared-state--completionstatet)), so no fire-now dispatch
   consumes it and a handler taking `const T&` pays nothing for it. This holds
   regardless of which dispatch path originally delivered the value: `value` is
-  never moved out of (morph#520, morph#553 — see
+  never moved out of (see
   [Value-handling contract](#value-handling-contract)), so a `then()` attached
   after a set-after-attach dispatch fires against the same genuine result the
   earlier handlers saw, not a moved-from husk.
@@ -409,7 +409,7 @@ with the caller; `cancel()` releases the callback immediately but leaves the
 underlying browser timer to elapse harmlessly rather than clearing it; and
 `cancel()` there really does mean "no callback runs after this returns",
 whereas the threaded build's `cancel()` returns while an *already-started*
-callback goes on running on the scheduler thread (morph#620). A caller that
+callback goes on running on the scheduler thread. A caller that
 must work in both builds gets the weaker of the two: every scheduled callback
 has to stay safe to run after its own `cancel()`, which the deadline callback
 here does by settling a write-once `CompletionState` it holds a `shared_ptr`
@@ -588,8 +588,7 @@ the two calls a backend actually makes on the completion it produced.
   would turn a `bad_alloc` into a `std::terminate` that today it is not.
 
 See [`backend.md`, `IBackend::executeInto`](backend.md#executeinto--settling-the-callers-own-completion) and
-[`bridge.md`, "`BridgeSink`"](bridge.md#bridgesink--the-typed-state-the-backend-settles)
-(morph#572, Part B).
+[`bridge.md`, "`BridgeSink`"](bridge.md#bridgesink--the-typed-state-the-backend-settles).
 
 ## `morph/core/async.hpp` — the cheap include
 
@@ -600,7 +599,7 @@ them — it declares nothing of its own, so including it is exactly equivalent t
 including all four.
 
 It exists because the obvious header to reach for is `bridge.hpp`, and that
-costs roughly three times as much. Measured on `master` @ c6f6d953, clang
+costs roughly three times as much. Measured with clang
 22.1.8, `-O2 -fsyntax-only`, one translation unit per header, best of three:
 
 | header | CPU s | preprocessed lines |
@@ -612,9 +611,9 @@ costs roughly three times as much. Measured on `master` @ c6f6d953, clang
 | `core/bridge.hpp` | 3.76 | 267,827 |
 
 The whole async surface costs what one of its headers costs, because they
-already share almost all of their own includes. See morph#573, step 4, and
+already share almost all of their own includes. See
 [`journal.md`, "Why the codec is a separate header"](../journal/journal.md#why-the-codec-is-a-separate-header)
-for the other half of that step.
+for the same argument applied to the journal codec.
 
 ## Design decisions
 
@@ -628,9 +627,9 @@ for the other half of that step.
 | Move-only handle | **`Completion` is move-only, `CompletionState` is shared via `shared_ptr`** | The handle is owned by one consumer at a time; the shared state is owned jointly by the producer and any consumer that has moved the handle. |
 | Empty completion | **Null state pointer makes `then`/`onError` no-ops** | Default-constructed `Completion` is a safe placeholder that never signals. |
 | Value handling on dispatch | **Both paths read `*value` in place; neither copies nor moves it** | Handlers are erased as `std::function<void(const T&)>` and the dispatch closures capture `shared_from_this()`, so the copy budget is exactly one per by-value handler and zero per `const T&` handler, whenever it attached. `value` is never consumed, so a `then()` attached after settling still sees the genuine result, and `T` need only be move-constructible. See [Value-handling contract](#value-handling-contract). |
-| Handler fan-out | **`onOk`/`onErr` are `std::vector`s, appended to on each attach** | Fixes issue #59: a second `onError()` (or `then()`) on the same still-pending `Completion` used to silently replace the first handler in a single-slot field. Composing (invoking every attached handler, in order) matches the mental model of an observer list and is what most call sites composing behavior via repeated attach actually expect. |
+| Handler fan-out | **`onOk`/`onErr` are `std::vector`s, appended to on each attach** | A single-slot field would let a second `onError()` (or `then()`) on the same still-pending `Completion` silently replace the first handler. Composing (invoking every attached handler, in order) matches the mental model of an observer list and is what call sites composing behaviour via repeated attach expect. |
 | Per-handler exception isolation | **Each composed handler invocation is wrapped in its own `try`/`catch (...)`, logged via `logError` and swallowed** | Fan-out means every attached handler should get its turn regardless of what an earlier one does. Without per-handler isolation, one throwing handler would unwind the whole posted closure and silently skip every handler attached after it — turning a single misbehaving consumer into an outage for unrelated ones sharing the same `Completion`. |
-| Public settleable-promise seam | **`Completion<T>::Promise`, reachable only via `makeSettleable()`** | Fixes issue #55: test code needing a `Completion<T>` it can resolve/reject on demand had no seam except reaching into `morph::async::detail::CompletionState<T>` directly. `Promise`'s constructor is private and `friend`ed only to `Completion<T>`, so `detail::CompletionState<T>` never has to appear in a caller's own code. |
+| Public settleable-promise seam | **`Completion<T>::Promise`, reachable only via `makeSettleable()`** | Without it, test code needing a `Completion<T>` it can resolve/reject on demand has no seam except reaching into `morph::async::detail::CompletionState<T>` directly. `Promise`'s constructor is private and `friend`ed only to `Completion<T>`, so `detail::CompletionState<T>` never has to appear in a caller's own code. |
 
 ## Limitations
 
@@ -654,7 +653,7 @@ future/promise or a monadic async type. Its scope is narrow by design:
   **Delivery**, by contrast, *can* be stopped — see
   [Lifetime and stop gating](#lifetime-and-stop-gating). The distinction is
   sharp and deliberate: a `CallbackScope` says "do not hand me this result",
-  never "stop producing it". Work-side cancellation is issue #116.
+  never "stop producing it". Work-side cancellation is not offered at all.
 - **Single consumer handle, but multiple handlers per outcome.** The
   `Completion<T>` handle itself is move-only — only one owner at a time — but
   each state's `onOk`/`onErr` are vectors, so repeated `then()`/`onError()`

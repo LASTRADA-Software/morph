@@ -107,7 +107,7 @@ reproduction (a header invoking `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION`
 included by `tu_a.cpp` and `tu_b.cpp`, both resolving the model through
 `ModelRegistryFactory`) compiles, links and runs clean with **zero
 diagnostics** on Clang 22.1.8 and GCC 15.3.0, and on Clang 22.1.3 and
-MSVC 19.51 in morph#231.
+MSVC 19.51.
 
 Item (2) is what actually differs, and the cost is small. The anonymous
 namespace makes each initialiser object internal to its TU, so the model is
@@ -550,19 +550,19 @@ Maps `(modelId, actionId)` pairs to type-erased runner functions. Used by
 **One map, looked up by view.** Everything registered under a pair lives in one
 `ActionEntry` record — `runner`, `coalesce`, `schema`, `describe` — in a single
 `unordered_map<pair<string, string>, ActionEntry, PairKeyHash, PairKeyEqual>`.
-Two things follow, both of them morph#572 Part C:
+Two things follow:
 
 - *No key is built to look one up.* `PairKeyHash` and `PairKeyEqual` are
   transparent, so `find` takes a `detail::PairKeyView` — a pair of
-  `string_view`s — directly. Constructing the stored key instead cost two
-  `std::string`s per lookup, and reached the heap for any id past the
+  `string_view`s — directly. Constructing the stored key instead costs two
+  `std::string`s per lookup, and reaches the heap for any id past the
   15-character SSO buffer. **Measured** with `morph_bench_alloc`
-  (clang 22.1.8 / libstdc++ 16.2.1): for a pair whose ids both exceed the
-  buffer, **2.00 → 0.00** allocations per lookup; for a pair whose ids both fit
-  it, **0.00 → 0.00** — which is the part morph#529 flagged as unverified and
-  is now measured. morph's real ids straddle that boundary, so the saving is
-  real but id-dependent: `"BenchAlloc_Model"` (16 characters) allocated,
-  `"BenchAlloc_Ping"` (15) did not.
+  (clang 22.1.8 / libstdc++ 16.2.1), stored key against transparent lookup: for
+  a pair whose ids both exceed the buffer, **2.00 → 0.00** allocations per
+  lookup; for a pair whose ids both fit it, **0.00 → 0.00**. morph's real ids
+  straddle that boundary, so the saving is real but id-dependent:
+  `"BenchAlloc_Model"` (16 characters) allocates, `"BenchAlloc_Ping"` (15) does
+  not.
 - *The four sub-maps cannot go out of step.* They were filled together by
   `registerAction` and could not diverge in practice, but nothing said so.
   `RemoteServer::handle` also reached three of them per request; that is now
@@ -857,7 +857,7 @@ diagnosable failure.
 Each of the three builds `std::string` keys and grows a map, so each can throw
 `std::bad_alloc` through a `noexcept` boundary and call `std::terminate`. That
 is recorded in [Failure modes](#failure-modes) and is **deliberate, not an
-oversight** (morph#698).
+oversight**.
 
 The only caller of any of them is the initialiser of a namespace-scope
 `const bool` that `BRIDGE_REGISTER_MODEL` / `BRIDGE_REGISTER_ACTION` emit. An
@@ -1211,8 +1211,8 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `ModelFactory::create` attaches the default log | **Single construction path for all topologies** | "Set the log once in `main()`" works uniformly across local and remote topologies. Callers that need a specific identity call `attachActionLog` again afterward. |
 | `setOutboxManaged` opt-out | **Suppress `recordIfAttached`, not `hasActionLog()`** | A store-backed model that logs inside its own transaction (see `journal.md`'s transactional outbox) must stop the framework's auto-append without losing "a log is attached" as a fact holders can still query. |
 | `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `morph::flows::FlowSession::set`) opt in. |
-| `ActionDispatcher` keeps one record per pair, not four maps | **`ActionEntry` in a single `unordered_map`** | The four sub-maps were keyed identically and filled by one function, so the lockstep was real but unstated; and `RemoteServer::handle` reached three of them per request. One record makes the invariant structural and the three reads one table each (morph#572, Part C). |
-| Enforcing the "no registration after `main`" precondition | **A debug-build latch and an `assert`, not a mutex** | The constraint was documented and unenforceable; a violation's only symptom was intermittent map corruption. A latch closed by the first singleton read costs nothing in a release build and turns the `dlopen` scenario into an abort with a message. Synchronising the registries instead would put a lock on a per-request read path to legalise a startup-only operation — a trade nobody has measured (morph#698). |
+| `ActionDispatcher` keeps one record per pair, not four maps | **`ActionEntry` in a single `unordered_map`** | The four sub-maps were keyed identically and filled by one function, so the lockstep was real but unstated; and `RemoteServer::handle` reached three of them per request. One record makes the invariant structural and the three reads one table each. |
+| Enforcing the "no registration after `main`" precondition | **A debug-build latch and an `assert`, not a mutex** | Documented alone the constraint is unenforceable, and a violation's only symptom is intermittent map corruption. A latch closed by the first singleton read costs nothing in a release build and turns the `dlopen` scenario into an abort with a message. Synchronising the registries instead would put a lock on a per-request read path to legalise a startup-only operation — a trade nobody has measured. |
 | `register*Once` stays `noexcept` | **Keep it, and record why** | The only caller is a namespace-scope initialiser, where an escaping exception already calls `std::terminate` ([basic.start.dynamic]). Removing `noexcept` changes nothing about an OOM at static init and adds a dead unwind path. See ["Why all three are `noexcept` while allocating"](#why-all-three-are-noexcept-while-allocating). |
 | Registry lookups are heterogeneous | **Transparent `PairKeyHash`/`PairKeyEqual`, `find(PairKeyView)`** | Every caller already holds `string_view`s; materialising the stored `pair<string, string>` to hash it allocated for any id past the SSO buffer, measured at 2 allocations per lookup. The transparent hash routes both overloads through one `string_view` body so lookup and stored hashes cannot drift apart — a drift that would report a registered action as unknown with no diagnostic. |
 
@@ -1242,10 +1242,9 @@ quiesced with respect to dispatch, before exposing them.
 
 ### The registration-phase latch
 
-The constraint above was, until morph#698, documented and unenforced: nothing
-in the tree detected a post-`main` registration, so a caller could violate it
-silently and discover it as intermittent map corruption with no diagnostic
-anywhere.
+Documented alone, the constraint above is unenforced: nothing would detect a
+post-`main` registration, so a caller could violate it silently and discover it
+as intermittent map corruption with no diagnostic anywhere.
 
 `registry.hpp` now carries a one-way latch over the registration phase:
 
@@ -1280,10 +1279,10 @@ of corrupting a map on a release build with no message at all.
   latch itself. `closeRegistrationPhase()` and `registrationPhaseClosed()`
   exist and work on both builds; only the *automatic* closing is conditional.
 - *The latch is not synchronisation.* It detects the violation; it does not
-  make the violating call safe. Option (b) of morph#698 — an actual mutex or
-  concurrent map on the registries — remains explicitly out of scope, because
-  the read path is per-request on the server and no cost measurement has been
-  taken for locking it.
+  make the violating call safe. The alternative — an actual mutex or concurrent
+  map on the registries — is explicitly out of scope, because the read path is
+  per-request on the server and no cost measurement has been taken for locking
+  it.
 
 The enforcement is proven rather than asserted, per `AGENTS.md`:
 `tests/test_registration_phase.cpp` `fork()`s a child that closes the latch and
