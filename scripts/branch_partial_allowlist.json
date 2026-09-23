@@ -103,7 +103,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 1302,
+      "line": 1294,
       "source": "if (const auto* inst = _instances.find(modelId)) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_instances` invariant (core audit finding BK2). `_changeAware` is an index over the instance directory: an id enters it in `createHolder` (this file, when the holder answers `isBackendChangeAware()`) in the same `_regMtx`-held critical section that files the instance, and leaves it in `deregisterModel` only when `InstanceDirectory::release` reports the instance actually destroyed. `notifyBackendChanged()` (this function) holds the same `_regMtx` while walking `_changeAware` and looking each id up at this line, so every id it walks is still live -- the null arm cannot occur without a code change that breaks that subset invariant."
     },
@@ -115,19 +115,19 @@
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1416,
+      "line": 1413,
       "source": "if (_inFlightExecutes.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {",
       "reason": "Real but requires genuine thread contention to trigger -- accepted as documented rather than closed with a flaky test (core audit finding RM11). The false arm (the CAS lost the race and must retry) needs two threads to genuinely collide on the same atomic increment at the same instant; it is a real, reachable hazard the retry loop correctly handles, not dead code, but inherently non-deterministic to trigger from a test without exact thread-timing control. Same disposition class as `strand.hpp`'s ST1 above, and as core audit finding O1 (`observability.hpp`'s `endSpan`), whose entry left this file once a coverage run showed its arm taken: a stress test with many concurrent `execute()` calls against a tight `maxInFlightExecutes` limit would probably eventually hit it, but flakily. RE-READ under -fprofile-update=atomic, without which this disposition is not safe to trust: the corruption direction is untaken -> appears taken, so an entry arguing \"real but never observed\" is exactly the kind that can rest on a wrapped count. It does not, and the reading below is a spread rather than a single figure -- one run cannot tell a flag effect from run order. Five CI-equivalent coverage runs, same binaries, same 2962 tests, atomic counters, on this line: `Branch (1416:21): [True: 3, False: 0]` in all five, identical to the digit. The false arm is taken by nothing in any run, so the disposition stands unchanged; had it read a wrapped 18.4E the entry would have been retired instead. What would retire it now: any run reporting a non-zero False here, which would mean the retry arm is reachable from the suite after all."
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 2041,
+      "line": 2012,
       "source": "if (_executeDeadline.count() > 0 && _timeoutScheduler) {",
       "reason": "Unreachable by construction (core audit finding B6). `setExecuteDeadline` (this file) is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and always creates `_timeoutScheduler` in the same call that sets `_executeDeadline` positive (`_executeDeadline = deadline; if (_executeDeadline.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_shared<...>(); }`, both under `_executeDeadlineMtx`); nothing anywhere resets `_timeoutScheduler` back to null -- the class's own doc comment on `setExecuteDeadline` says so explicitly (\"setting the deadline back to 0 stops new calls from arming it but does not tear the thread down\"). So `_executeDeadline > 0 && !_timeoutScheduler` cannot happen at this line once any positive deadline has ever been set."
     },
     {
       "file": "include/morph/core/remote.hpp",
-      "line": 1494,
+      "line": 1491,
       "source": "if (_timeoutScheduler) {",
       "reason": "Unreachable by construction, mirrors `bridge.hpp`'s B6 (core audit finding RM10). `setLimitPolicy` (this file) is the only writer of both `_limits.executeTimeout` and `_timeoutScheduler`: `_limits = policy; if (_limits.executeTimeout.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_unique<...>(); }`, both under `_limitsMtx` -- the same lock this line's enclosing block holds. Nothing anywhere nulls `_timeoutScheduler` afterward, so `dispatchExecute`'s `limits.executeTimeout.count() > 0` guard (this line's enclosing `if`, a few lines above) already guarantees `_timeoutScheduler` is non-null whenever this line runs."
     },
@@ -151,19 +151,19 @@
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 146,
+      "line": 145,
       "source": "if (_ioThread.joinable()) {",
       "reason": "Unreachable by construction (net audit, `socket_backend.hpp` extra finding #5). `_ioThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else in the file resets, joins, or detaches it, so at destructor time it is always joinable."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 158,
+      "line": 157,
       "source": "if (_handlerThread.joinable()) {",
       "reason": "Unreachable by construction, same shape as `_ioThread`'s entry above (net audit, `socket_backend.hpp` extra finding #6). `_handlerThread` is started unconditionally in the constructor and has exactly one join site: this line, in the destructor. Nothing else resets, joins, or detaches it, so at destructor time it is always joinable."
     },
     {
       "file": "include/morph/net/socket_backend.hpp",
-      "line": 826,
+      "line": 823,
       "source": "default:",
       "reason": "Unreachable except via the adjacent `Error` case it deliberately shares a body with (net audit, `socket_backend.hpp` extra finding #7). `detail::ExecuteReplyKind` is a closed 3-value enum (`Value`/`Timeout`/`Error`), all three handled explicitly above this label; `default:` exists only to satisfy this project's `-Wswitch-default`, per the source's own inline comment directly below this line. Reaching it via any value other than through the `Error` case falling through would require an out-of-range `static_cast` producing a value outside the enum's domain -- undefined behavior, not a legitimate test target."
     }
