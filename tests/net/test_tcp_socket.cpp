@@ -169,6 +169,60 @@ TEST_CASE("TcpSocket: listen on port 0 gets an OS-assigned port", "[net][tcp]") 
     REQUIRE(listener.boundPort() != 0U);
 }
 
+// ── Why the blocking accept()s below carry no deadline of their own (morph#772) ─────
+//
+// morph#559 recorded a run parked indefinitely in `__accept` with nothing in
+// the process able to satisfy it, and morph#773 bounded the one site that has
+// that shape: `FakeWsServer::acceptAndHandshake()` in test_socket_backend.cpp,
+// where the *main test thread* blocks in `accept()` while the only thing that
+// could satisfy it is the io thread of the `SocketBackend` under test -- i.e.
+// the very component whose failure to connect those tests exist to provoke.
+//
+// The six blocking `accept()`s in this file have the opposite shape, and it is
+// the shape, not a timeout, that keeps them bounded:
+//
+//     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
+//     auto clientSide = TcpSocket::connect("127.0.0.1", port, 2000ms);   // (1)
+//     acceptThread.join();                                               // (2)
+//
+// `accept()` runs on a helper thread; the connection that satisfies it is made
+// by the *main* thread at (1), under `connect()`'s own deadline -- which
+// throws rather than returning on expiry -- and that happens before the main
+// thread waits for anything at (2). So the `join()` is only ever reached with
+// a connection already established against this listener: loopback, a 64-deep
+// backlog, one consumer, nothing that can take it away. A deadline here would
+// be a path nothing can take, and an untakeable timeout path is worse than
+// none: it reads as a hazard that was found and handled.
+//
+// If (1) throws instead, the helper thread stays parked and `~std::thread`
+// calls `std::terminate` -- an abort in 0.09s that names the test, not a hang.
+// The error it discards while doing so is morph#781, filed separately.
+//
+// **Verification status.** The reasoning is inferred from reading plus
+// `tcp_socket.hpp`'s own `accept()` contract; it is not a measurement that
+// these sites cannot park. What *was* measured, on this file at 80e6ad74 (gcc
+// 16.2.1 Debug, Linux), is that (1) is the load-bearing step. Redirect it to a
+// second, decoy listener -- so `connect()` still succeeds and this listener's
+// `accept()` is never satisfied -- and the test parks in `join()` until ctest's
+// own per-test cap fires:
+//
+//     1/1 Test #1696: TcpSocket: connect/accept/send/recv round-trip ...***Timeout 120.08 sec
+//     The following tests FAILED:
+//     	1696 - TcpSocket: connect/accept/send/recv round-trip (Timeout) net
+//
+// That is also the backstop if this reasoning is ever wrong: `TIMEOUT 120` in
+// tests/net/CMakeLists.txt turns a park into a named ctest failure. It is a
+// worse name than morph#773's (`accept()` timed out, versus "this test was
+// slow") and six times the wall clock, which is why a site that genuinely can
+// starve gets its own bound -- and why a site that cannot does not.
+//
+// Also bounded, and the two exceptions to the pattern above, both `accept()`ing
+// on the main thread: "accept hands back a blocking connection" gates its
+// `accept()` on a 2s `poll()` over a *non-blocking* listener, where `accept()`
+// fails with EAGAIN rather than parking; and the EMFILE test gates its own on a
+// 5s `poll()` that both establishes the precondition it used to assume and
+// bounds the wait (morph#773).
+
 TEST_CASE("TcpSocket: connect/accept/send/recv round-trip", "[net][tcp]") {
     auto listener = TcpSocket::listen(0);
     std::uint16_t const port = listener.boundPort();
@@ -204,6 +258,7 @@ TEST_CASE("TcpSocket: shutdownBoth unblocks a concurrent recvSome", "[net][tcp]"
     std::uint16_t const port = listener.boundPort();
 
     TcpSocket serverSide;
+    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
     acceptThread.join();
@@ -227,6 +282,7 @@ TEST_CASE("TcpSocket: recvSome returns 0 when the peer closes cleanly", "[net][t
     std::uint16_t const port = listener.boundPort();
 
     TcpSocket serverSide;
+    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     {
         auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
@@ -511,6 +567,7 @@ TEST_CASE("TcpSocket::recvSome: throws for a real socket error distinct from ECO
     auto listener = TcpSocket::listen(0);
     std::uint16_t const port = listener.boundPort();
     TcpSocket serverSide;
+    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
     acceptThread.join();
@@ -540,6 +597,7 @@ TEST_CASE("TcpSocket::sendAll: throws when the peer resets the connection", "[ne
     std::uint16_t const port = listener.boundPort();
 
     TcpSocket serverSide;
+    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     {
         auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
@@ -589,6 +647,7 @@ TEST_CASE("TcpSocket: setSendTimeout bounds a send against a peer that never rea
     // Accepts and then does nothing at all -- never reads a byte. Held open for
     // the duration of the test so the connection stays established.
     TcpSocket serverSide;
+    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
     acceptThread.join();
