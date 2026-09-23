@@ -195,6 +195,14 @@ inline bool registerActionExecutorOnce(std::string_view modelId, std::string_vie
     // condition is "static assertion expression is not an integral constant
     // expression / non-constexpr function 'registrationPhaseClosed' cannot be used
     // in a constant expression". Reported upstream of this repository in morph#742.
+    //
+    // Last re-checked at clang-tidy 22.1.8, the version CI pins: the diagnostic
+    // still fires and the suggested fix still does not compile. The stamp is here
+    // because nothing checks it for you -- morph#755 deleted both
+    // scripts/check_nolint_directives.sh (which would have flagged a directive that
+    // had stopped suppressing anything) and scripts/check_ci_clang_pin.sh (the
+    // natural re-check trigger on a CLANG_VERSION bump). Re-read this when the pin
+    // moves; if the finding is gone, delete all three directives together.
     // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
     assert(!::morph::model::registrationPhaseClosed() &&
            "registerActionExecutorOnce: registration after the registration phase closed. The "
