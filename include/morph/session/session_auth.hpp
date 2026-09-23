@@ -523,7 +523,7 @@ public:
     /// Receives the verified token plus the target ids; return `false` to deny.
     /// The action id is **empty** for the `instances` and `schemas` envelopes --
     /// see `IAuthorizer::authorize`'s own doc comment for why, and handle that
-    /// case explicitly rather than letting it reach a default arm (morph#500).
+    /// case explicitly rather than letting it reach a default arm.
     /// The default (empty) admits any validly-signed, unexpired token.
     using Policy =
         std::function<bool(const SessionToken& claims, std::string_view modelType, std::string_view actionType)>;

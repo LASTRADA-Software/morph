@@ -18,8 +18,7 @@ namespace morph::journal {
 /// A null `drainOutbox`/`markRelayed` already throws a catchable
 /// `std::bad_function_call` (invoking a null `std::function`); this makes a
 /// null `sink` consistent with that instead of a raw null-`shared_ptr`
-/// dereference (real undefined behavior, not portably catchable — see
-/// `LASTRADA-Software/morph#95`).
+/// dereference, which is real undefined behavior and not portably catchable.
 struct NullSinkError : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -134,11 +133,10 @@ private:
             ::morph::log::logError("[journal::OutboxRelay] null sink");
         }
         // This branch itself is unit-tested (test_outbox.cpp asserts the
-        // warning fires). relay() itself throws NullSinkError right after
-        // this call if sink is null and there is at least one row to relay
-        // (see LASTRADA-Software/morph#95) -- a null drainOutbox/markRelayed
-        // still throws std::bad_function_call as usual, invoking a null
-        // std::function.
+        // warning fires). relay() throws NullSinkError right after this call
+        // if sink is null and there is at least one row to relay -- a null
+        // drainOutbox/markRelayed still throws std::bad_function_call as
+        // usual, invoking a null std::function.
     }
 };
 

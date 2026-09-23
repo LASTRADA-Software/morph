@@ -13,24 +13,17 @@
 /// `.`-decimal text), and a renderer calls `normalizeLocaleNumber` once, at
 /// the point text leaves the control, before handing it to those routines.
 ///
-/// @par One aggregate, not a row of swappable views (morph#591)
-/// Both functions take a single `NumericLocale`. They used to take the locale
-/// facts as four and five positional `std::string_view`s, every one of which
-/// was silently swappable with its neighbours -- the header carried a
-/// clang-tidy suppression block for `bugprone-easily-swappable-parameters`,
-/// with a paragraph of justification, on each of the two functions and on the
-/// sign helper below. (Spelling the marker out here would suppress nothing and
-/// trip `clang-tidy-nolint`'s unmatched-begin check, which is why this
-/// paragraph names the check instead.) Adding a digit base would have made
-/// six adjacent views. With the aggregate a call site
-/// names each fact (`{.decimalSeparator = ",", .groupSeparator = "."}`), no two
-/// parameters of either function share a type, and all three suppressions are
-/// deleted rather than widened. The next locale fact -- a percent sign, an
-/// exponent separator -- is then a new defaulted member rather than a seventh
+/// @par One aggregate, not a row of swappable views
+/// Both functions take a single `NumericLocale` rather than a row of positional
+/// `std::string_view`s. Six adjacent views of the same type are silently
+/// swappable with each other, which is what `bugprone-easily-swappable-parameters`
+/// exists to catch; with the aggregate a call site names each fact
+/// (`{.decimalSeparator = ",", .groupSeparator = "."}`) and no two parameters of
+/// either function share a type. The next locale fact -- a percent sign, an
+/// exponent separator -- is a new defaulted member rather than a seventh
 /// parameter. The two edges taking the *same* type is the point as much as the
-/// naming is: "these two must agree" becomes structural instead of a convention
-/// a caller can get half right, which is the drift morph#591 and morph#599 were
-/// both about.
+/// naming is: "these two must agree" is structural instead of a convention a
+/// caller can get half right.
 ///
 /// @par Separators are strings, not characters
 /// The locale facts are `std::string_view`, because a real locale's separator
@@ -39,8 +32,7 @@
 /// as `char`, those cannot be expressed at all: the caller can only pass some
 /// single byte that never matches, so a perfectly valid `"1 050,25"` typed by a
 /// French user normalises to `std::nullopt` and the entry is reported
-/// malformed. An empty view means "this locale has no such separator" (the role
-/// `'\0'` used to play).
+/// malformed. An empty view means "this locale has no such separator".
 ///
 /// @par So is the negative sign
 /// For the same reason, and measured rather than assumed: of the 711 locales
@@ -49,13 +41,13 @@
 /// control -- U+061C ARABIC LETTER MARK, U+200E LEFT-TO-RIGHT MARK or U+200F
 /// RIGHT-TO-LEFT MARK -- making it two or three code points, and ar_DZ does so
 /// even though its sign is the ordinary hyphen. Matched as a single `char`,
-/// none of those round-trips: the display edge emitted a sign the entry edge
-/// then rejected. So `negativeSign` is matched as a whole string too,
-/// defaulting to `"-"` so that every existing caller is unchanged (morph#583).
+/// none of those round-trips as a single `char`: the display edge would emit a
+/// sign the entry edge then rejected. So `negativeSign` is matched as a whole
+/// string too, defaulting to the ASCII `"-"`.
 ///
 /// @par And so is the positive sign, on the entry edge only
 /// `normalizeLocaleNumber` reads `NumericLocale::positiveSign` and *drops* what
-/// it matches, because canonical text has no `'+'` in it (morph#596).
+/// it matches, because canonical text has no `'+'` in it.
 /// `formatCanonicalNumber` never emits one: a positive number displays unsigned
 /// in every locale, and changing that would alter every positive number the
 /// product shows. So the two functions are inverse across the decimal
@@ -63,7 +55,7 @@
 /// not across a positive sign -- entry accepts a spelling display never
 /// produces.
 ///
-/// @par The digits are locale data too (morph#591)
+/// @par The digits are locale data too
 /// `NumericLocale::zeroDigit` is the locale's DIGIT ZERO, and the ten digits
 /// are the ten code points contiguous from it. One base is sufficient rather
 /// than a ten-element table because a Unicode decimal digit set *is* ten
@@ -77,9 +69,9 @@
 ///
 /// @par Entry accepts more digit spellings than display emits
 /// `normalizeLocaleNumber` accepts a digit in `[zeroDigit, zeroDigit + 9]` *or*
-/// in `['0', '9']`; `formatCanonicalNumber` emits only the former. That
-/// asymmetry is the rule morph#596 already set for signs, applied to digits: an
-/// ASCII `'+'` is accepted in every locale because the locale's own spelling is
+/// in `['0', '9']`; `formatCanonicalNumber` emits only the former. That is the
+/// same asymmetry the signs have, applied to digits: an ASCII `'+'` is
+/// accepted in every locale because the locale's own spelling is
 /// on no keyboard, and an ASCII `'5'` is accepted in an `ar_EG` locale for
 /// exactly the same reason. A user with an ASCII keyboard in a native-digit
 /// locale would otherwise be unable to enter a number at all. As with the
@@ -101,7 +93,7 @@ namespace morph::render {
 /// Every member is defaulted to its `"C"`-locale spelling, so a
 /// default-constructed `NumericLocale` is the identity transform in both
 /// directions and a caller naming only the members it cares about gets the
-/// previous five-parameter defaults exactly.
+/// `"C"` spelling for the rest.
 struct NumericLocale {
     /// The locale's decimal-point string, e.g. `","`. Empty means the locale
     /// has no decimal separator (an integer-only entry).
@@ -140,9 +132,8 @@ struct CodePoint {
 /// rather than some salvaged value. That strictness is load-bearing rather than
 /// pedantic. The digit test below is a *range* test on the decoded value, so a
 /// lenient decoder that let the overlong `C0 B5` through would read it as
-/// U+0035 and accept it as the digit `'5'` -- in the default ASCII locale,
-/// where the previous byte-range scan rejected that input. Rejecting it here is
-/// what keeps the default behaviour byte-identical.
+/// U+0035 and accept it as the digit `'5'` -- including in the default ASCII
+/// locale, where that input is not a digit at all.
 /// @param text The remainder of the entry, starting at the scan position.
 /// @return The decoded code point, or a `length` of `0` when @p text does not
 ///         start with a well-formed sequence.
@@ -223,12 +214,10 @@ inline void appendUtf8(std::string& out, char32_t value) {
 ///        digit rewritten into the locale's set.
 ///
 /// Anything that is not an ASCII digit is copied through verbatim. That arm is
-/// not dead code for a caller that honours the contract, but it is what keeps
-/// `formatCanonicalNumber` byte-identical for one that does not: the function
-/// has always passed non-digits out unchanged, so a `"12.34.56"` handed to the
-/// display edge kept its second `'.'` rather than becoming some code point
-/// below the digit base. morph#591 widened what a digit *is*, not what the
-/// function does with text that has none.
+/// not dead code for a caller that honours the contract, but it is what bounds
+/// the damage for one that does not: a `"12.34.56"` handed to the display edge
+/// keeps its second `'.'` rather than becoming some code point below the digit
+/// base. Only digits are rewritten; text that has none passes through.
 /// @param out  The display string to append to.
 /// @param base The locale's DIGIT ZERO code point (see `digitBase`).
 /// @param chr  One byte of canonical text.
@@ -327,12 +316,12 @@ struct DigitMatch {
 /// separate statements about the entry, and reading them as one made neither
 /// clear.
 ///
-/// It counts *digits*, not bytes, in the locale's set as well as in ASCII
-/// (morph#591). Scanning byte by byte was correct only while a digit was one
-/// byte: a two-byte U+0665 would have reset the run-length counter on its own
-/// continuation byte, so `"\u0661\u066c\u0660\u0665\u0660"` -- what
-/// `formatCanonicalNumber` emits for `1050` in an `ar_EG` locale -- would be
-/// rejected as badly grouped and the pair would not round-trip.
+/// It counts *digits*, not bytes, in the locale's set as well as in ASCII. A
+/// byte-by-byte scan is only correct while a digit is one byte: a two-byte
+/// U+0665 would reset the run-length counter on its own continuation byte, so
+/// `"\u0661\u066c\u0660\u0665\u0660"` -- what `formatCanonicalNumber` emits
+/// for `1050` in an `ar_EG` locale -- would be rejected as badly grouped and the
+/// pair would not round-trip.
 ///
 /// Characters this function does not recognise are simply not digits — the
 /// normalising scan is what rejects them, and it rejects them whatever this
@@ -388,9 +377,9 @@ struct DigitMatch {
 /// The empty case is why this is a function and not an inline `starts_with`:
 /// `rest.starts_with("")` is `true` at every index, so an empty separator
 /// matched inline would swallow the whole entry one zero-length step at a time.
-/// Every call site used to spell the guard as `!sep.empty() && ...`, and two of
-/// those conjunctions were what put `normalizeLocaleNumber` over clang-tidy's
-/// cognitive-complexity threshold once the digit scan arrived.
+/// Spelling the guard as `!sep.empty() && ...` at each call site instead adds
+/// two conjunctions to `normalizeLocaleNumber`, which is enough to put it over
+/// clang-tidy's cognitive-complexity threshold.
 /// @param rest      The remainder of the entry, starting at the scan position.
 /// @param separator The locale's spelling of this separator; empty means the
 ///                  locale has none, and matches nothing.
@@ -404,8 +393,8 @@ struct DigitMatch {
 ///
 /// Two spellings count. @p localeSign is the locale's own, matched as a whole
 /// string so that U+2212 and the bidi-control-prefixed forms -- two and three
-/// code points -- match at all; a single `char` could express none of them
-/// (morph#583, morph#596). @p asciiSign counts as well, in every locale: U+2212
+/// code points -- match at all; a single `char` can express none of them.
+/// @p asciiSign counts as well, in every locale: U+2212
 /// and the bidi marks are on no keyboard, so matching only the locale's
 /// spelling would reject the sign the user can actually type. Neither `'-'` nor
 /// `'+'` has a second reading in a numeric entry, so this is not the kind of
@@ -435,7 +424,7 @@ struct SignMatch {
     /// The number of bytes the sign occupies; `0` when there is no sign there.
     std::size_t length = 0;
     /// What the canonical text gains: `"-"` for a negative, empty for a
-    /// positive, which is accepted and dropped (morph#596).
+    /// positive, which is accepted and dropped.
     std::string_view emits;
 };
 
@@ -444,10 +433,10 @@ struct SignMatch {
 /// Both signs in one function, and the emitted text carried back with the
 /// length, so the normalising scan below has a *single* sign branch with no
 /// inner "which sign was it" test. That is not only tidier: two branches with
-/// two inner tests each took `normalizeLocaleNumber` from a cognitive
-/// complexity of 23 to 28, over clang-tidy's threshold of 25. The asymmetry
-/// between the two signs lives here, in the one place that decides it, rather
-/// than in the scan.
+/// two inner tests each put `normalizeLocaleNumber` at a cognitive complexity
+/// of 28, over clang-tidy's threshold of 25; with the single branch it sits at
+/// 23. The asymmetry between the two signs lives here, in the one place that
+/// decides it, rather than in the scan.
 ///
 /// The negative sign is tried first. The order is not load-bearing for any
 /// locale Qt 6.11.2 reports -- `starts_with` is an exact prefix match and no
@@ -483,17 +472,17 @@ struct SignMatch {
 /// yields `std::nullopt` rather than a best-effort guess. The decimal point
 /// counts as output, so a sign placed straight after the separator ("`,-5`" in
 /// a de-DE locale) is rejected -- matching the QML mirror in
-/// `src/qt/forms/qml/DynamicForm.qml`, which has always rejected it (morph#497).
+/// `src/qt/forms/qml/DynamicForm.qml`, which rejects it too.
 ///
-/// @par Grouping is validated, not stripped (morph#574)
+/// @par Grouping is validated, not stripped
 /// A group separator is only dropped where a group separator can legally be:
 /// preceded by one to three digits, followed by exactly three more, and never
 /// after the decimal separator. Anything else is malformed and reported as
-/// such. Stripping unconditionally instead is a wrong *value*, not a rejected
-/// one: a de-DE user typing the US form `"1.5"` into a price field submitted
-/// `15`, and nothing downstream could tell -- the result is a perfectly valid
-/// number, ten times too large. `"1.50"` gave `150`, `"1.2.3.4"` gave `1234`,
-/// and the en-US mirror image `"1,5"` gave `15`.
+/// such. Stripping unconditionally instead yields a wrong *value*, not a
+/// rejected one, and nothing downstream can tell: a de-DE user typing the US
+/// form `"1.5"` into a price field would submit `15` -- a perfectly valid
+/// number, ten times too large. `"1.50"` would give `150`, `"1.2.3.4"` would
+/// give `1234`, and the en-US mirror image `"1,5"` would give `15`.
 ///
 /// @par The two separators must differ
 /// When `groupSeparator` is non-empty and equal to `decimalSeparator` the entry
@@ -507,19 +496,19 @@ struct SignMatch {
 /// The result is `.`-decimal and digit-only, but is **not** narrowed to
 /// `-?[0-9]+(\.[0-9]+)?`: a bare "`.`", a leading "`.5`" and a trailing "`5.`"
 /// are passed through, exactly as that same QML mirror passes them. Tightening
-/// one side alone would put the two control edges back out of step, so the shape
-/// is documented here rather than changed.
+/// one side alone would put the two control edges out of step, so the shape is
+/// documented here rather than narrowed.
 ///
 /// Separators are matched as whole strings, so a multi-byte one (e.g. U+202F)
 /// works; matching them before the digit scan is what keeps their continuation
 /// bytes from being mistaken for stray non-digit characters.
 ///
-/// @par The negative sign is matched as a whole string too (morph#583)
+/// @par The negative sign is matched as a whole string too
 /// `negativeSign` is matched the same way, which is what lets a locale whose
 /// sign is U+2212, or is prefixed by a bidi control mark, be entered at all --
-/// 77 of the 711 locales Qt 6.11.2 knows. Before this the sign was the literal
-/// byte `'-'`, so `formatCanonicalNumber` emitted a sign this function then
-/// rejected, and the pair was not inverse for those locales.
+/// 77 of the 711 locales Qt 6.11.2 knows. Matched as a literal byte `'-'`
+/// instead, `formatCanonicalNumber` would emit a sign this function rejected
+/// and the pair would not be inverse for those locales.
 ///
 /// @par ASCII `'-'` stays accepted whatever the locale
 /// A bare `'-'` is accepted in the leading position in addition to
@@ -527,8 +516,8 @@ struct SignMatch {
 /// only the locale's own spelling would reject the sign the user can actually
 /// type and leave them no way to enter a negative number at all. The hyphen has
 /// no second reading in a numeric entry, so accepting it is not the kind of
-/// guess morph#574 forbids -- that was about producing a wrong *value*, and
-/// this produces the only value the input can mean.
+/// guess the grouping rule forbids -- that one is about producing a wrong
+/// *value*, and this produces the only value the input can mean.
 ///
 /// @par An empty `negativeSign` means the ASCII default, not "no sign"
 /// Unlike a group separator, there is no locale without a negative sign, so an
@@ -538,7 +527,7 @@ struct SignMatch {
 /// nothing would turn `-5` into `5` silently -- a wrong value, not a rejected
 /// one.
 ///
-/// @par A leading positive sign is accepted and dropped (morph#596)
+/// @par A leading positive sign is accepted and dropped
 /// `positiveSign` is matched exactly like `negativeSign` -- the locale's own
 /// spelling as a whole string, plus a bare ASCII `'+'` in every locale. Of the
 /// 711 locales Qt 6.11.2 knows, 54 spell it as more than one code point
@@ -546,9 +535,9 @@ struct SignMatch {
 /// `ckb_IQ`); the other 657 use the bare `'+'`. Unlike the negative side there
 /// is no U+2212 analogue, so *every* non-ASCII spelling here is multi-code-point
 /// and whole-string matching is the only thing that can match any of them.
-/// Before this, a leading `'+'` fell through to the "any other character is
-/// malformed" arm and an explicitly-positive entry was rejected in every
-/// locale, `"C"` included.
+/// Without this branch a leading `'+'` falls through to the "any other
+/// character is malformed" arm, and an explicitly-positive entry is rejected in
+/// every locale, `"C"` included.
 ///
 /// @par The sign is **dropped**, and `formatCanonicalNumber` never emits one
 /// This is a deliberate asymmetry with the negative sign, not an oversight.
@@ -558,9 +547,8 @@ struct SignMatch {
 /// form looks like -- `5` would become `+5` on screen. So the two functions are
 /// *not* strict inverses across a positive sign: entry accepts a spelling
 /// display never produces. That is the only shape that adds acceptance without
-/// changing a single rendered value, and it is why morph#596 is an enhancement
-/// rather than the repaired round trip morph#583 was. Written down in
-/// `docs/spec/forms/forms.md` as well, under "Locale data formatting".
+/// changing a single rendered value. Written down in `docs/spec/forms/forms.md`
+/// as well, under "Locale data formatting".
 ///
 /// @par An empty `positiveSign` leaves the ASCII `'+'`
 /// Here empty really can mean "match nothing extra", because there is no
@@ -568,14 +556,14 @@ struct SignMatch {
 /// reject an entry, never produce a value of the wrong sign. The bare ASCII
 /// `'+'` stays accepted regardless.
 ///
-/// @par The locale's own digits are accepted, and so are ASCII ones (morph#591)
+/// @par The locale's own digits are accepted, and so are ASCII ones
 /// A digit is accepted when its code point is in
 /// `[zeroDigit, zeroDigit + 9]` -- a Unicode decimal digit set is ten
 /// contiguous code points by definition (UAX #44) -- *or* in `['0', '9']`. 76
-/// of the 711 locales Qt 6.11.2 knows use a non-ASCII `zeroDigit`; before this
-/// their users could not enter a number at all, because the scan compared a
-/// single byte against the ASCII range and the very first byte of U+0665
-/// failed it. The second acceptance is the same rule as the ASCII `'-'` and
+/// of the 711 locales Qt 6.11.2 knows use a non-ASCII `zeroDigit`; without the
+/// first acceptance their users could not enter a number at all, because a scan
+/// comparing a single byte against the ASCII range fails on the very first byte
+/// of U+0665. The second acceptance is the same rule as the ASCII `'-'` and
 /// `'+'` above, for the same reason: a user with an ASCII keyboard in an
 /// `ar_EG` locale has to be able to type `5`. It costs nothing, because the
 /// canonical output spells every digit in ASCII whatever the input spelled it,
@@ -585,11 +573,10 @@ struct SignMatch {
 /// `"\u06655"` -- one Arabic-Indic digit and one ASCII digit -- is malformed,
 /// not `"55"`. The two families are each accepted whole; interleaving them is
 /// not a spelling any keyboard or any display edge produces, and rejecting it
-/// matches the existing strictness about a sign anywhere but the leading
-/// position. It is a choice rather than a consequence, so it is stated here and
-/// pinned by a test on both edges. Note that when `zeroDigit` is the ASCII
-/// `"0"` the two families are the same set, so nothing can mix and the rule is
-/// invisible -- which is why it costs no existing caller anything.
+/// matches the strictness about a sign anywhere but the leading position. It is
+/// a choice rather than a consequence, so it is stated here and pinned by a
+/// test on both edges. When `zeroDigit` is the ASCII `"0"` the two families are
+/// the same set, so nothing can mix and the rule is invisible.
 ///
 /// @param text The locale-formatted entry, e.g. `"1.050,25"`.
 /// @param loc  The locale facts. Designated initialisers are the intended
@@ -630,7 +617,6 @@ struct SignMatch {
             // guard in the sign branch below still believes nothing has been
             // emitted, and a sign placed straight after the separator
             // ("`,-5`" in a de-DE locale) is accepted as if it were leading.
-            // morph#497.
             sawAnyOutput = true;
             i += point;
             continue;
@@ -644,10 +630,10 @@ struct SignMatch {
             if (sawAnyOutput) {
                 return std::nullopt;  // sign injection past the leading position
             }
-            // Empty for a positive sign, which is dropped rather than carried
-            // (morph#596). `sawAnyOutput` is set either way, so "+-5", "++5"
-            // and "1+2" stay malformed: consuming a sign counts as output even
-            // when it contributes no character.
+            // Empty for a positive sign, which is dropped rather than
+            // carried. `sawAnyOutput` is set either way, so "+-5", "++5" and
+            // "1+2" stay malformed: consuming a sign counts as output even when
+            // it contributes no character.
             canonical += sign.emits;
             sawAnyOutput = true;
             i += sign.length;
@@ -687,34 +673,21 @@ struct SignMatch {
 /// it (see "Grouping is validated, not stripped" on that function). A
 /// default-constructed `NumericLocale` is the identity transform.
 ///
-/// @par What this paragraph used to say, and why it was wrong (morph#597)
-/// It claimed grouping was "never accepted back on entry" and that
-/// `normalizeLocaleNumber` "strips it unconditionally" -- the pre-morph#574
-/// behaviour, and false in two opposite directions at once. Measured on
-/// `be64026a`: `normalizeLocaleNumber("1.050,25", ",", ".")` is `"1050.25"`,
-/// so grouping *is* accepted back; `normalizeLocaleNumber("1.5", ",", ".")` is
-/// `std::nullopt`, so it is *not* stripped unconditionally -- unconditional
-/// stripping is exactly what would have made that entry `15`, the silent
-/// ten-times-wrong value morph#574 exists to prevent. The spec
-/// (`docs/spec/forms/forms.md`, "Grouping is validated, never merely
-/// stripped") and the code already agreed; only this comment was stale.
-///
 /// The sign is emitted as `NumericLocale::negativeSign`, matching what
-/// `normalizeLocaleNumber` accepts back (morph#583); an empty view is read as
+/// `normalizeLocaleNumber` accepts back; an empty view is read as
 /// `"-"` rather than as "no sign", because formatting a negative to no sign at
 /// all is a silently wrong value.
 ///
-/// @par The digits are emitted in the locale's set (morph#591)
+/// @par The digits are emitted in the locale's set
 /// Each canonical `'0'`-`'9'` is emitted as the code point that far above
 /// `NumericLocale::zeroDigit`, so an `ar_EG` caller sees `"\u0665"` where the
-/// canonical text said `'5'`. This edge *had* to move with the entry edge: it
-/// used to copy the canonical ASCII bytes out unchanged, so teaching entry to
-/// accept U+0665 while display kept emitting `'5'` would have left the pair no
-/// longer inverse, which is the round trip `docs/spec/forms/forms.md` requires.
-/// With the default `zeroDigit` of `"0"` the offset is zero and every byte is
-/// the one this function emitted before.
+/// canonical text said `'5'`. This edge has to match the entry edge: entry
+/// accepts U+0665, so display emitting a plain `'5'` would leave the pair not
+/// inverse, and `docs/spec/forms/forms.md` requires that round trip. With the
+/// default `zeroDigit` of `"0"` the offset is zero and the canonical ASCII
+/// bytes are copied out unchanged.
 ///
-/// @par There is no positive-sign emission, deliberately (morph#596)
+/// @par There is no positive-sign emission, deliberately
 /// A positive number is displayed with no sign at all, in every locale, and
 /// this function ignores `NumericLocale::positiveSign` entirely.
 /// `normalizeLocaleNumber` *accepts* a leading positive sign and drops it, so
@@ -722,9 +695,9 @@ struct SignMatch {
 /// never produces. Emitting it is what would be the defect --
 /// `QLocale::positiveSign()` is `'+'` in 657 of the 711 locales Qt 6.11.2
 /// knows, so emitting it would turn every positive number in every form from
-/// `5` into `+5`, a visible product change with no reported need behind it.
-/// Rejecting text the display edge produced is the morph#583 shape and is not
-/// what happens here; producing text no display edge asked for would be.
+/// `5` into `+5`, a visible product change with no need behind it. The failure
+/// this pair guards against is one edge producing text the other rejects;
+/// emitting a sign nothing asks for would create exactly that.
 /// @param canonicalText Canonical `-?[0-9]+(\.[0-9]+)?` text.
 /// @param loc           The locale facts; `positiveSign` is not read.
 /// @return The locale-formatted display text.

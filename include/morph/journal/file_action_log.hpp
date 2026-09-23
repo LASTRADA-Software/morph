@@ -107,8 +107,8 @@ public:
             throw std::runtime_error("FileActionLog: failed to open " + _path.string());
         }
         // "a" mode creates the file if it did not already exist -- a fresh
-        // directory entry that `_file`'s own later fsyncs never make durable
-        // (morph#532). Unconditional: harmless when the file already existed,
+        // directory entry that `_file`'s own later fsyncs never make durable.
+        // Unconditional: harmless when the file already existed,
         // since syncing an unchanged directory is a cheap no-op: a failure
         // here is surfaced rather than swallowed, the same discipline
         // `flush()`/`rotate()` already apply to the file-content fsync.
@@ -183,7 +183,7 @@ public:
         line.push_back('\n');
         long long const offsetBeforeWrite = ::morph::core::wideFtell(_file);
         if (_io.fwrite(line.data(), line.size(), _file) != line.size()) {
-            // See FileOfflineQueue::writeLine's identical comment (morph#530):
+            // See FileOfflineQueue::writeLine's identical comment:
             // "a"-mode means a short write's partial bytes sit exactly where the
             // next append() would resume, merging into one line repairTornTail()
             // can only heal at construction, before this can happen. Roll the
@@ -374,7 +374,7 @@ public:
 
         // Two directory mutations just happened -- the seal rename and, on
         // success, a brand-new active file -- and neither is durable until
-        // its directory entry is fsynced (morph#532). Run regardless of what
+        // its directory entry is fsynced. Run regardless of what
         // failed above, so a rotation that is about to throw still leaves
         // whatever succeeded as durable as it can be made; the failure is
         // surfaced below rather than swallowed, same as the pre-rotation
@@ -383,9 +383,9 @@ public:
         // constructor's own directory fsync -- but it is not silent either:
         // the contract is that it warns, so an operator knows the rotated
         // names are only as durable as the filesystem makes them. Collapsing
-        // the tri-state to a bool here used to drop that warning on the floor
-        // for both directories, leaving `rotate()` quieter than the
-        // construction path that documents the same classification.
+        // the tri-state to a bool here would drop that warning on the floor for
+        // both directories, leaving `rotate()` quieter than the construction
+        // path that documents the same classification.
         auto const classifyAndWarn = [this](const std::filesystem::path& dir) {
             auto const outcome = ::morph::core::classifyDirectorySync(_io.syncPath(dir));
             if (outcome == ::morph::core::DirectorySync::unsupported) {

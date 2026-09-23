@@ -11,12 +11,12 @@
 /// @brief The `LogEntry` JSON codec, kept apart from `action_log.hpp`.
 ///
 /// `action_log.hpp` defines `LogEntry`, `Outcome`, `IActionLog` and the
-/// process-wide log slot; `core/model.hpp` includes it for `IActionLog` alone,
-/// and every consumer that reaches a model therefore used to compile
-/// `<glaze/glaze.hpp>` whether or not it ever serialised anything. That is the
-/// cliff morph#521 measured and morph#573 step 4 names: `action_log.hpp` was
-/// 252,559 preprocessed lines and 2.67 CPU-s against `core/strand.hpp`'s
-/// 127,217 and 1.20.
+/// process-wide log slot; `core/model.hpp` includes it for `IActionLog` alone.
+/// Were the codec declared there too, every consumer that reaches a model would
+/// compile `<glaze/glaze.hpp>` whether or not it ever serialised anything, and
+/// that is a measured cliff rather than a tidiness point: with glaze included,
+/// `action_log.hpp` is 252,559 preprocessed lines and 2.67 CPU-s, against
+/// `core/strand.hpp`'s 127,217 and 1.20.
 ///
 /// Include this header instead when you need `toJson`/`fromJson`. Inside
 /// morph, exactly one header does: `file_action_log.hpp`.
