@@ -95,20 +95,59 @@ env:
   # which the "Assert the Catch2 this job analyses against" step below reads
   # back off the runner and fails on if it has moved.
   #
-  # It is worth recording because it is load-bearing and invisible. Which
-  # Catch2 is on the include path decides whether
-  # readability-function-cognitive-complexity findings on a TEST_CASE body
-  # reach this job at all, so a workstation with a different one can run the
-  # same clang-tidy over the same diff with the same flags and exit 0 where
-  # this job exits 1 -- silently, reporting nothing rather than reporting less
-  # (morph#666). An unpinned package that decides a gate's outcome and moves
-  # without notice is the shape this repository keeps getting caught by.
+  # It is worth recording because it is load-bearing and invisible, but NOT
+  # for the reason recorded here until morph#777. The check the version
+  # actually decides is `bugprone-chained-comparison`, not
+  # `readability-function-cognitive-complexity`. Measured on 68a30bcc with
+  # clang-tidy 22.1.8, one TEST_CASE of twelve `REQUIRE`s, both releases
+  # reached the same way (-isystem, i.e. as a system header, which is how this
+  # runner and a workstation both reach theirs):
   #
-  # ubuntu-24.04's package is 3.4.0-1build1 (Launchpad, noble Release pocket),
-  # and the clang-tidy-report artifact of run 35581623269 prints
-  # `/usr/include/catch2/internal/catch_test_registry.hpp:121` with
-  # `INTERNAL_CATCH_TESTCASE2( INTERNAL_CATCH_UNIQUE_NAME( dummyFunction ) )`
-  # and no `, __VA_ARGS__` -- v3.4.0's text exactly, and not v3.5.3's.
+  #     bugprone-chained-comparison               3.4.0: 12    3.16.0: 0
+  #     readability-function-cognitive-complexity 3.4.0: 48    3.16.0: 48
+  #
+  # Catch2 added `/* NOLINT(bugprone-chained-comparison) */` to
+  # INTERNAL_CATCH_TEST in 3.15.3; 3.4.0 predates it. That is a pure property
+  # of the release, it is exactly what the nine examples/*/tests/.clang-tidy
+  # files subtract the check for, and if the runner's package moves past
+  # 3.15.3 those nine subtractions become dead suppressions with nothing
+  # saying so. Half B of scripts/check_catch2_pin.sh under `--strict` is what
+  # turns that silent move into a failed job.
+  #
+  # The cognitive-complexity score is the same 48 under both releases and
+  # under `-I` and `-isystem` alike, so the version does not decide it. What
+  # decides whether such a finding is *reported* is whether the diagnostic or
+  # any of its increment notes lands outside a system header: clang-tidy drops
+  # a finding all of whose locations are in system headers or system macros. A
+  # TEST_CASE whose increments come only from Catch2 macro *bodies* is dropped
+  # here and on a workstation alike; one with an increment spelled in the test
+  # source -- a hand-written `if`, or a lambda inside a `REQUIRE` argument,
+  # since macro arguments are spelled in the caller's file -- is reported on
+  # both. Verified against this job's own red report, run 35581623269:
+  #
+  #     .../test_bank_gui_qml_behaviour.cpp:115:1: error: function
+  #     'dummyFunction72' has cognitive complexity of 87 (threshold 25)
+  #     /usr/include/catch2/catch_test_macros.hpp:142:28: note: expanded from
+  #         macro 'TEST_CASE'
+  #     .../test_bank_gui_qml_behaviour.cpp:121:23: note: nesting level
+  #         increased to 2
+  #
+  # -- the last line is the lambda in `REQUIRE(pumpUntil([&app] { ... }))`,
+  # spelled in the test file, and it is why that finding survived the system
+  # filter. So there is no local/CI asymmetry left to pin on this check, and
+  # morph#666's "exit 0 where this job exits 1" was really morph#776: a local
+  # `git diff -U0 HEAD` that analysed zero files.
+  #
+  # Which artefact this names, checked rather than assumed (morph#777):
+  # ubuntu-24.04's package is 3.4.0-1build1 and it ships /usr/lib/cmake/Catch2,
+  # so `find_package(Catch2 CONFIG QUIET)` at CMakeLists.txt:557 SUCCEEDS on
+  # this runner and the FetchContent v3.8.1 fallback never runs -- reproduced
+  # in a clean ubuntu:24.04 container, and corroborated by this job's own log
+  # (no `_deps/catch2-*`, no dep-cache line for Catch2) and by the report above
+  # naming /usr/include. The pin therefore guards the installation this job
+  # really analyses against. Catch2 reaches the translation units through the
+  # compiler's implicit /usr/include with no include flag at all: over the 751
+  # entries this job's configure produces, none names catch2.
   CATCH2_VERSION: "3.4.0"
   # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
   QT_VERSION: "6.8.1"
