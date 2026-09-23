@@ -184,6 +184,56 @@ template <typename Call>
     return {};
 }
 
+/// @brief What a journalled failure's entry must say, for `checkFailedEntry`.
+///
+/// A struct rather than three `std::string_view` parameters: three adjacent
+/// parameters of one type are `bugprone-easily-swappable-parameters`, which
+/// `.clang-tidy` enables and `WarningsAsErrors: "*"` makes fatal (reproduced:
+/// `2 adjacent parameters of 'checkFailedEntry' of similar type
+/// ('std::string_view') are easily swapped by mistake`). Designated
+/// initialisers at the call site name each value anyway, which is what the
+/// check is asking for.
+struct FailedEntry {
+    /// @brief The `ActionTraits<A>::typeId()` the entry must name.
+    std::string_view actionType;
+    /// @brief The principal the entry must be attributed to.
+    std::string_view principal;
+    /// @brief Text `entry.error` must start with. This is what pins *which*
+    ///        clause of `logFailureForCurrentException` wrote the entry:
+    ///        `LogEntry` has no field separating "the board refused you" from
+    ///        "the board fell over", so the non-domain clause prefixes its
+    ///        text, and without this a case would pass just as well on an
+    ///        entry written by the domain-refusal clause.
+    std::string_view errorPrefix;
+};
+
+/// @brief Asserts everything a journalled failure's entry must say beyond
+///        "there is one".
+///
+/// A free function for the same reason `classify` above is one, and measured
+/// rather than assumed: every Catch2 assertion macro expands to a
+/// `do { try { ... } catch (...) { ... } } while (... && ...)`, which
+/// `readability-function-cognitive-complexity` scores at 4. Six of them
+/// written out in the `TEST_CASE` below put it at 32 against a threshold of
+/// 25 and failed `clang-tidy-diff` on morph#768. The assertions are the same
+/// assertions and there are the same number of them -- they are reported
+/// against this function's lines instead of the caller's, which is the whole
+/// of the difference.
+///
+/// `error` is deliberately not also checked for emptiness: @p errorPrefix is
+/// non-empty at every call site, and a string that starts with a non-empty
+/// prefix is not empty. A separate `CHECK_FALSE(entry.error.empty())` would
+/// be an assertion that cannot fail while the one below passes.
+/// @param entry The entry the refused or failed attempt left.
+/// @param expected What it must say, named at the call site.
+void checkFailedEntry(const morph::journal::LogEntry& entry, const FailedEntry& expected) {
+    CHECK(entry.outcome == morph::journal::Outcome::Failed);
+    CHECK(entry.result.empty());
+    CHECK(entry.actionType == expected.actionType);
+    CHECK(entry.principal == expected.principal);
+    CHECK(entry.error.starts_with(expected.errorPrefix));
+}
+
 }  // namespace
 
 TEST_CASE("A WIP-limit Conflict on MoveTaskPosition leaves a Failed journal entry", "[kanban][journal][outcome]") {
@@ -277,18 +327,14 @@ TEST_CASE("A non-KanbanError pre-commit failure leaves a Failed journal entry", 
     // named `KanbanError` and this exception is not one, so it left with the
     // journal untouched.
     const auto entries = log->entries();
+    // The headline assertion of morph#757, kept in the case body rather than
+    // moved into the helper below: on the tree this ticket started from it
+    // reads `0 == 1`, and that number *is* the defect.
     REQUIRE(entries.size() == 1);
-    CHECK(entries.front().outcome == morph::journal::Outcome::Failed);
-    CHECK_FALSE(entries.front().error.empty());
-    CHECK(entries.front().result.empty());
-    CHECK(entries.front().actionType == std::string{morph::model::ActionTraits<kanban::CreateColumn>::typeId()});
-    CHECK(entries.front().principal == "alice");
-    // Pins *which* clause wrote the entry. `LogEntry` has no field separating
-    // "the board refused you" from "the board fell over", so the non-domain
-    // clause prefixes its text; without this the case would pass just as well
-    // on an entry written by the domain-refusal clause, which is not what
-    // happened here.
-    CHECK(entries.front().error.starts_with("unexpected failure: "));
+    checkFailedEntry(entries.front(),
+                     FailedEntry{.actionType = morph::model::ActionTraits<kanban::CreateColumn>::typeId(),
+                                 .principal = "alice",
+                                 .errorPrefix = "unexpected failure: "});
 }
 
 TEST_CASE("A journal that throws on the failure path does not replace the refusal", "[kanban][journal][morph#757]") {
