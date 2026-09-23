@@ -85,7 +85,12 @@ env:
   # the cache itself -- jobs still read each other's entries.
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
-  # The Catch2 the clang-tidy-diff job analyses against. Not a version this
+  # The Catch2 the `clang-tidy` job analyses against, through the
+  # clang-tidy-diff.py run inside it. (Until morph#645 this sentence named
+  # clang-tidy-diff.py where the job id belongs -- the same substitution
+  # morph#637 was, and the one live reference
+  # scripts/check_workflow_job_references.py found when it landed.) Not a
+  # version this
   # workflow installs -- `apt-get install -y catch2` takes whatever
   # ubuntu-24.04 ships -- but a record of what that has been measured to be,
   # which the "Assert the Catch2 this job analyses against" step below reads
@@ -556,6 +561,18 @@ jobs:
       # which is the same "control that measures nothing" it exists to prevent.
       # This walks what ctest will actually run and keys the expected symbol on
       # the preset, so none of the three legs can pass on a blind build.
+      #
+      # No `QT_QPA_PLATFORM: offscreen` here, unlike the identical step in
+      # bank-sanitizers, kanban-tsan and ladder-sanitizers, and the absence is
+      # deliberate rather than an omission (morph#691). The sweep's first act is
+      # `ctest --show-only=json-v1`, which *executes* every DISCOVERY_MODE
+      # PRE_TEST binary to enumerate its cases; a Qt-linked one aborts headless
+      # and takes the whole listing with it. This matrix's Configure above sets
+      # neither MORPH_BUILD_QT nor MORPH_BUILD_LADDER, so it builds no Qt-linked
+      # suite for that to happen to, and its own Test step does not declare the
+      # variable either. Adding it for symmetry would be a line protecting
+      # against nothing, which invites the next reader to look for what it
+      # protects. Revisit the moment this matrix gains a Qt target.
       - name: Every ctest binary is instrumented
         run: |
           case "${{ matrix.preset }}" in
@@ -974,7 +991,21 @@ jobs:
       # claim while proving nothing. Keyed on `__tsan_`, not `__asan_` — an
       # ASan-only assertion on a TSan leg is itself a control that measures
       # nothing.
+      #
+      # QT_QPA_PLATFORM=offscreen, matching the Build step above and the Test
+      # step below, because this step sits between them and enumerates the same
+      # binaries they do (morph#691). The sweep begins with `ctest
+      # --show-only=json-v1`, and listing a DISCOVERY_MODE PRE_TEST suite *runs*
+      # its binary. Nothing this job builds is both Qt-linked and PRE_TEST
+      # today -- ladder_kanban_tests is POST_BUILD (cmake/morph_add_rung.cmake),
+      # so its enumeration already happened inside the Build step's environment
+      # -- which is why this step is green without the variable and not why it
+      # is safe. Changing one word to PRE_TEST on any Qt-linked rung suite would
+      # make this step fail with `ctest listed no tests`, naming neither Qt nor
+      # the display; that is morph#690, which cost three sessions over two days.
       - name: Every ctest binary is instrumented
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: bash scripts/check_sanitizer_instrumentation.sh build/clang-tsan tsan
 
       # Every ladder ctest case only ever carries the "ladder"/"ladder-<rung>"
@@ -1974,8 +2005,22 @@ jobs:
       # reaches (morph#542). The shared script walks what ctest will actually
       # run instead of a pattern, so a suite added tomorrow is covered by
       # having been added.
+      #
+      # QT_QPA_PLATFORM=offscreen, matching the Build step above and the Test
+      # step below, for the reason morph#691 gives: this sweep opens with `ctest
+      # --show-only=json-v1`, and listing a DISCOVERY_MODE PRE_TEST suite *runs*
+      # its binary -- so a Qt-linked PRE_TEST suite in this configure would
+      # abort headless and take the entire listing down, every other suite
+      # included. Today every Qt-linked suite this job builds is POST_BUILD
+      # (cmake/morph_add_rung.cmake, examples/common/CMakeLists.txt,
+      # tests/qt/CMakeLists.txt), so discovery already happened under the Build
+      # step's copy of this variable. That is an accident of one keyword, not a
+      # property of this step, and it is the accident bank-sanitizers did not
+      # have (morph#690).
       - name: Every ctest binary is instrumented
         if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: bash scripts/check_sanitizer_instrumentation.sh build/clang-asan asan
 
       # detect_leaks=0: LeakSanitizer reports allocations the Qt platform
@@ -2288,10 +2333,58 @@ jobs:
       # Includes the fuzz *replay* tests on the clang leg: each committed seed
       # and crash reproducer is replayed once and must not crash. This is a
       # deterministic regression check, not a fuzzing campaign.
-      - name: Test (offscreen Qt platform)
+      #
+      # ── --parallel: the one leg in this repository that runs ctest in
+      #    parallel, deliberately (morph#685) ─────────────────────────────────
+      #
+      # Every other ctest invocation in .github/workflows/ is serial, and until
+      # this line all sixteen of them were. That made a whole class of defect
+      # invisible to CI by construction: two ctest cases sharing an on-disk
+      # database, a port, or a temp path cannot collide when only one runs at a
+      # time. morph#682 is the measured instance -- bank's suites were 0/21 at
+      # `ctest -j 12` on a workstation and 21/21 serially, and CI was green
+      # throughout, on every leg, for as long as the defect existed.
+      #
+      # This leg and not another: it is the only one whose ctest covers the
+      # bank suites morph#682 was about *and* every ladder rung *and* Qt *and*
+      # the core suites, so it is the only place where one flag exposes the
+      # whole class rather than one corner of it. It also costs no new leg --
+      # a second job would add its own configure and build to every future PR,
+      # for the same coverage this already has.
+      #
+      # Measured, with the caveat stated rather than smoothed over. On a
+      # 12-core workstation, clang-debug with MORPH_BUILD_NET, MORPH_BUILD_QT
+      # and MORPH_BUILD_OFFLINE_SQLITE on -- 1898 tests, which is this tree's
+      # core/forms/net/qt/offline set but *not* the ladder or bank:
+      #
+      #     ctest                   1898/1898 passed, 275.06 s
+      #     ctest --parallel 12     1898/1898 passed,  98.25 s
+      #     ctest --parallel 12     1898/1898 passed, 127.53 s
+      #     ctest --parallel 12     1898/1898 passed,  78.80 s
+      #     ctest --parallel 4      1898/1898 passed, 109.38 s   (hosted vCPU count)
+      #
+      # So for the part that could be measured locally this is a saving, not a
+      # cost: the test step gets faster, and the leg's wall time with it.
+      # morph#685 separately measured bank at 21/21 in 1.1 s parallel against
+      # 5.7 s serial after morph#686's per-case databases landed.
+      #
+      # NOT measured, and this is the risk: the ladder rungs in parallel with
+      # each other. They declare RESOURCE_LOCK (cmake/morph_add_rung.cmake),
+      # which is what ctest --parallel consults to serialise the cases that
+      # need it -- a mechanism that exists precisely for this and that no leg
+      # has ever exercised. morph#658 (`SQLite database is locked`, ledger
+      # corpus) is the reason to expect a first bill here.
+      #
+      # If this leg goes red or flaky on contention rather than on a real
+      # regression, the failing case is the finding -- file it, fix the
+      # isolation, and keep the flag. Dropping `--parallel` again puts the
+      # whole class back out of CI's sight, which is the state morph#685 exists
+      # to end. $(nproc) rather than a literal: hosted runners give 4, the
+      # self-hosted fleet gives more, and the point is contention, not a number.
+      - name: Test (offscreen Qt platform, ctest in parallel)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+        run: ctest --preset ${{ matrix.preset }} --parallel "$(nproc)" --output-on-failure
 
       # A guard that never fires is indistinguishable from one that works, so
       # assert the fuzz replay actually ran the committed crash reproducers
@@ -3239,6 +3332,45 @@ jobs:
 
       - name: Check every workflow section banner introduces its job
         run: python3 scripts/check_workflow_job_banners.py .
+
+  # ── A workflow comment may not name a job that does not exist ───────
+  #
+  # Its own job for the same reason banner-lint above is: it reads workflow
+  # text and builds nothing, so it answers in seconds instead of riding on a
+  # leg that takes 26-74 minutes to say the same thing.
+  #
+  # morph#637 was a comment in this file that named the script
+  # check_workflow_option_coverage.py where the job id `option-coverage`
+  # belonged. YAML comments are inert, so nothing could notice, and a reader
+  # searching the workflows for that name found nothing.
+  #
+  # The rule is narrow on purpose and the narrowness is measured: a token before
+  # the word "job" must resolve to a declared job id, but only if it is
+  # lowercase and hyphenated. This file's comments contain 207 occurrences of
+  # "<token> job", 193 of which are English ("this job", "a sanitizer job"); the
+  # hyphen is what separates the 13 references from the prose. The cost is that
+  # a stale reference to a single-word id -- `valgrind`, `windows` -- stays
+  # invisible, which the checker's header states rather than leaves to be found.
+  #
+  # It was not vacuous on arrival: the CLANG_VERSION block at the top of this
+  # file named clang-tidy-diff.py where `clang-tidy` belonged, which is
+  # morph#637's defect still live. Rewording that is part of the same commit.
+  job-reference-lint:
+    name: Workflow comments name jobs that exist
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # See scripts/test_check_workflow_job_references.sh's own comment: this
+      # gate reads prose, so the case that decides whether it measures anything
+      # is not a wrong reference but a tree whose comments have drifted out of
+      # the one phrase shape it reads -- which it would pass, silently, having
+      # matched nothing.
+      - name: Self-test the job-reference checker
+        run: bash scripts/test_check_workflow_job_references.sh
+
+      - name: Check every job named in a workflow comment exists
+        run: python3 scripts/check_workflow_job_references.py .
 
   # ── Install / export: find_package(morph CONFIG) must work ─────────────
   #

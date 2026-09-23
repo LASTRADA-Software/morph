@@ -133,54 +133,10 @@ def discover_allowlists(repo_root):
     return found
 
 
-def audit_pending_context(repo_root, cited_without_context, cited_at_all, failures):
-    """Audit check_branch_coverage.PENDING_CONTEXT in both directions.
-
-    A grandfathering list is a suppression unless it can only shrink, so each
-    pin has to earn its place on every run:
-
-      * its file must exist and its text must still appear more than once --
-        otherwise the ambiguity it exempts is gone and the pin is noise;
-      * some entry must still cite it -- otherwise the entry it was written for
-        has been deleted or rewritten;
-      * some entry citing it must still lack a `context` -- otherwise the
-        migration this list exists to schedule has already happened.
-    """
-    for (path, wanted), reason in sorted(check_branch_coverage.PENDING_CONTEXT.items()):
-        pin = f"{path} :: {wanted!r}"
-        source_file = os.path.join(repo_root, path)
-        if not os.path.exists(source_file):
-            failures.append(
-                f"PENDING_CONTEXT pins {pin}, but that file does not exist. Delete "
-                f"the pin: it exempts nothing. ({reason})")
-            continue
-        with open(source_file, encoding="utf-8") as handle:
-            occurrences = sum(1 for text in handle.read().splitlines()
-                              if text.strip() == wanted)
-        if occurrences < 2:
-            failures.append(
-                f"PENDING_CONTEXT pins {pin}, which now appears {occurrences} time(s) "
-                f"in that file. The ambiguity it exempts is gone -- delete the pin "
-                f"rather than leaving a carve-out nothing needs. ({reason})")
-            continue
-        if (path, wanted) not in cited_at_all:
-            failures.append(
-                f"PENDING_CONTEXT pins {pin}, which no allowlist entry cites any more. "
-                f"Delete the pin. ({reason})")
-            continue
-        if (path, wanted) not in cited_without_context:
-            failures.append(
-                f"PENDING_CONTEXT pins {pin}, but every entry citing it now carries a "
-                f"`context`. The migration is done -- delete the pin, so the next "
-                f"ambiguous entry on this text is refused. ({reason})")
-
-
 def check(repo_root, out=sys.stdout, allowlists=ALLOWLISTS, check_registry=True):
     failures = []
     audited = 0
     empty = []
-    cited_at_all = set()
-    cited_without_context = set()
 
     registered = {path for path, _ in allowlists}
     if check_registry:
@@ -223,17 +179,12 @@ def check(repo_root, out=sys.stdout, allowlists=ALLOWLISTS, check_registry=True)
                                 f"code moves.")
                 continue
             context = str(entry.get("context", "") or "").strip()
-            cited_at_all.add((file_path, wanted))
-            if not context:
-                cited_without_context.add((file_path, wanted))
             resolved = check_branch_coverage.resolve_allowlist_source_line(
                 repo_root, file_path, hint, wanted, path, failures, context=context)
             if resolved is not None:
                 audited += 1
         print(f"{path}: {len(entries)} citation(s), "
               f"{len(failures) - before} unresolved", file=out)
-
-    audit_pending_context(repo_root, cited_without_context, cited_at_all, failures)
 
     for path in empty:
         print(f"{path}: 0 citations (the file is present and its entry list is empty)",
@@ -280,13 +231,6 @@ def self_test():
         print(f"error: {message}", file=sys.stderr)
         if output:
             print(output, file=sys.stderr)
-
-    # The fixture tree is not this repository, so the real pins -- which name
-    # real headers -- would every one of them fail their "the file exists"
-    # direction here. Swap the whole constant for the duration and restore it,
-    # rather than testing the gate against a tree it was not written about.
-    saved_pins = dict(check_branch_coverage.PENDING_CONTEXT)
-    check_branch_coverage.PENDING_CONTEXT.clear()
 
     work = tempfile.mkdtemp()
     try:
@@ -409,8 +353,14 @@ def self_test():
         else:
             fail("an empty allowlist was not reported by name", output)
 
-        # ── PENDING_CONTEXT, audited in both directions (morph#701) ──────────
-        write_both()
+        # ── Ambiguity is refused here too, not only in the resolver ────────
+        #
+        # These three replace the four PENDING_CONTEXT cases morph#711 deleted
+        # with the constant. The grandfathering list is gone; what has to stay
+        # tested is that the aggregate still *reaches* the ambiguity rule, since
+        # this script is the only caller CI runs over the live allowlists. A
+        # migration that removed the exemption and the coverage together would
+        # leave morph#701's rule enforced by nothing anyone runs.
         ambiguous_body = (
             "void handler() {\n"
             "    out.reserve(text.size());\n"   # line 2
@@ -419,74 +369,51 @@ def self_test():
             "void fallback() {\n"
             "    out.reserve(text.size());\n"   # line 55
             "}\n"
-            "void g() {\n"
-            "    if (deadline && scheduler) {\n"
-            "    }\n"
-            "}\n"
         )
-        pin = ("include/morph/core/x.hpp", "out.reserve(text.size());")
 
-        def with_pin(reason="fixture pin"):
-            check_branch_coverage.PENDING_CONTEXT[pin] = reason
+        # 7. An ambiguous citation with no `context` is refused outright. Until
+        #    morph#711 four live entries were exempt from this by name.
+        write_header(ambiguous_body)
+        write(alpha, {"entries": [{
+            "file": "include/morph/core/x.hpp", "line": 2,
+            "source": "out.reserve(text.size());",
+            "reason": "fixture"}]})
+        write(beta, {"classes": {"equivalent": {"entries": []}}})
+        code, output = run()
+        if code != 0 and "does not say which occurrence is meant" in output:
+            note("ok: an ambiguous citation with no `context` is refused")
+        else:
+            fail("an ambiguous citation without a `context` was accepted", output)
 
-        def without_pin():
-            check_branch_coverage.PENDING_CONTEXT.pop(pin, None)
+        # 8. The same entry with a `context` beside exactly one occurrence
+        #    resolves -- the shape the five migrated entries now have.
+        write(alpha, {"entries": [{
+            "file": "include/morph/core/x.hpp", "line": 2,
+            "source": "out.reserve(text.size());",
+            "context": "void handler() {",
+            "reason": "fixture"}]})
+        code, output = run()
+        if code == 0:
+            note("ok: an ambiguous citation with a disambiguating `context` resolves")
+        else:
+            fail("a correctly disambiguated citation was refused", output)
 
-        try:
-            # 7. A pin whose text is no longer ambiguous is an error: it exempts
-            #    nothing, and a carve-out that outlives its cause is a
-            #    suppression.
-            write_header(body)
-            write_both(beta_line=5)
-            with_pin()
-            code, output = run()
-            if code != 0 and "The ambiguity it exempts is gone" in output:
-                note("ok: a PENDING_CONTEXT pin whose text became unique is refused")
-            else:
-                fail("an obsolete PENDING_CONTEXT pin was accepted", output)
-
-            # 8. A pin nothing cites is an error -- the direction that stops the
-            #    list outliving the entries it was written for.
-            write_header(ambiguous_body)
-            write(alpha, {"entries": []})
-            write(beta, {"classes": {"equivalent": {"entries": [{
-                "file": "include/morph/core/x.hpp", "line": 58,
-                "source": "if (deadline && scheduler) {",
-                "reason": "fixture"}]}}})
-            code, output = run()
-            if code != 0 and "no allowlist entry cites any more" in output:
-                note("ok: a PENDING_CONTEXT pin nothing cites is refused")
-            else:
-                fail("an uncited PENDING_CONTEXT pin was accepted", output)
-
-            # 9. A pin every citing entry has already migrated past is an error
-            #    too, so the list shrinks the moment the work is done rather
-            #    than when someone remembers.
-            write(alpha, {"entries": [{
-                "file": "include/morph/core/x.hpp", "line": 2,
-                "source": "out.reserve(text.size());",
-                "context": "void handler() {",
-                "reason": "fixture"}]})
-            code, output = run()
-            if code != 0 and "The migration is done" in output:
-                note("ok: a PENDING_CONTEXT pin every entry has migrated past is refused")
-            else:
-                fail("a redundant PENDING_CONTEXT pin was accepted", output)
-
-            # 10. And with the pin gone, the migrated entry stands on its own.
-            without_pin()
-            code, output = run()
-            if code == 0:
-                note("ok: a migrated entry resolves with no pin at all")
-            else:
-                fail("a migrated entry did not resolve once its pin was deleted", output)
-        finally:
-            without_pin()
+        # 9. The non-vacuous half: the *other* occurrence, with the same
+        #    `context`, must fail. A migration that only makes the right answer
+        #    pass leaves exactly the defect morph#701 closed.
+        write(alpha, {"entries": [{
+            "file": "include/morph/core/x.hpp", "line": 55,
+            "source": "out.reserve(text.size());",
+            "context": "void handler() {",
+            "reason": "fixture"}]})
+        code, output = run()
+        if code != 0 and "resolves through its `context` to line 2" in output:
+            note("ok: a `context` pointing at the other occurrence is refused")
+        else:
+            fail("a citation whose `context` names a different occurrence passed", output)
 
     finally:
         shutil.rmtree(work, ignore_errors=True)
-        check_branch_coverage.PENDING_CONTEXT.clear()
-        check_branch_coverage.PENDING_CONTEXT.update(saved_pins)
 
     if failures:
         print(f"\n{failures} self-test check(s) failed", file=sys.stderr)

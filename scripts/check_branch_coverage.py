@@ -203,48 +203,33 @@ ALLOWLIST = "scripts/branch_partial_allowlist.json"
 # the field would resolve nothing. Forty lines is wide enough to reach the
 # enclosing function's signature for the shapes this repository actually cites
 # (the deepest live case, include/morph/core/bridge.hpp's continuation lambdas,
-# is 14 lines from its `catch`), and narrow enough that two occurrences of the
-# same statement in neighbouring overloads do not both fall inside it. When they
-# do, the resolution is refused as still-ambiguous rather than guessed at, so the
-# failure direction of a badly chosen window is a demand for a better `context`,
-# never a wrong answer.
+# is 14 lines from its `catch`).
+#
+# The second half of that sentence used to read "and narrow enough that two
+# occurrences of the same statement in neighbouring overloads do not both fall
+# inside it". **That is not true of any of the five citations morph#711
+# migrated**, and it is recorded here rather than left for the next person to
+# rediscover. Measured on each pair, as the gap between the two occurrences:
+#
+#     include/morph/core/backend.hpp   registerCount        1149 / 1168   19
+#     include/morph/core/backend.hpp   executeInFlight      1318 / 1371   53
+#     include/morph/util/rational.hpp  is_constant_evaluated 697 / 731    34
+#     include/morph/core/bridge.hpp    deadlineHandle guard 1920 / 1944   24
+#
+# When the gap is under 2 * CONTEXT_WINDOW the two windows overlap, and *every*
+# line in the overlap disambiguates neither -- including every line of the
+# enclosing function, which is the thing the window was sized to reach. Three of
+# these four pairs are in that state, so their `context` lines necessarily sit
+# outside the construct being cited (a class declaration 26 lines up, the
+# following function's signature 18 lines down). Only the executeInFlight pair,
+# at 53 lines, can be disambiguated by the statement immediately above it.
+#
+# The failure direction is still the safe one -- an unusable window is refused
+# as still-ambiguous, never resolved to a guess -- so this is a usability defect
+# in `context`, not a correctness one. Widening the window makes it worse and
+# narrowing it makes `context` unable to reach a function signature at all;
+# morph#701's design note is where a better disambiguator belongs.
 CONTEXT_WINDOW = 40
-
-# (file, source text) pairs whose citations predate the `context` requirement
-# below, with the ticket that migrates them.
-#
-# These are the entries that were already ambiguous when morph#701 was fixed, in
-# two files this change is not allowed to touch while morph#710 is open. Each is
-# pinned by its *text*, not by a line number, deliberately: the lines move (that
-# is the whole complaint), the text is what the exemption is about, and a pin
-# that went stale every time a header shifted would be a third thing to maintain
-# rather than a migration list.
-#
-# It is a migration list, not a permanent carve-out. It is audited in both
-# directions by scripts/check_allowlist_citations.py -- a pin nothing cites any
-# more is an error, and so is a pin whose text has stopped being ambiguous -- so
-# it can only shrink. Removing the last one removes this constant with it.
-PENDING_CONTEXT = {
-    ("include/morph/core/backend.hpp",
-     "::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);"):
-        "morph#701: registerModel vs. registerModelShared; the entry's reason already "
-        "names the arm in prose. Migrate to a `context` once morph#710 releases "
-        "scripts/mutation_survivors.json.",
-    ("include/morph/core/backend.hpp",
-     "::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,"):
-        "morph#701: the increment side vs. its decrement twin in the posted task. "
-        "Same file, same release condition as the registerCount pin above.",
-    ("include/morph/util/rational.hpp",
-     "if (!std::is_constant_evaluated()) {"):
-        "morph#701: both occurrences are allowlisted, one entry each, so the pair is "
-        "already accounted for -- but neither entry says which is which. Migrate to a "
-        "`context` once morph#710 releases scripts/branch_partial_allowlist.json.",
-    ("include/morph/core/bridge.hpp",
-     "if (deadlineHandle && schedulerRef) {"):
-        "morph#701: the `catch` arm that undoes _pendingCalls, not the .then()/"
-        ".onError() continuations. Same file, same release condition as the "
-        "rational.hpp pin above.",
-}
 
 
 def context_matches(source_lines, occurrence, context):
@@ -308,8 +293,11 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
     `source` that has, and one that resolves to a *different* occurrence than the
     `line` hint is the defect itself.
 
-    PENDING_CONTEXT grandfathers the pairs that were already ambiguous when this
-    rule arrived, keyed by text; see that constant.
+    There is no grandfathering list. PENDING_CONTEXT held the four (file, text)
+    pairs that were already ambiguous when this rule arrived, in two files
+    morph#701 was not allowed to touch; morph#711 migrated all five entries to a
+    `context` and deleted the constant. A migration list with nothing left in it
+    is an invitation to repopulate.
     """
     source_file = os.path.join(repo_root, path)
     if not os.path.exists(source_file):
@@ -348,7 +336,7 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
             )
             return None
         matches = narrowed
-    elif len(matches) > 1 and (path, wanted) not in PENDING_CONTEXT:
+    elif len(matches) > 1:
         failures.append(
             f"{path}:{hint} is allowlisted by a source line that appears "
             f"{len(matches)} times (lines {matches}), so the `line` hint alone does "
@@ -888,21 +876,6 @@ def self_test():
         note("ok: a `context` beside several occurrences is refused as still ambiguous")
     else:
         fail("a non-disambiguating `context` was accepted", output)
-
-    # 17. A PENDING_CONTEXT pin accepts the pre-existing citation unchanged --
-    #     the migration path for entries written before this rule, in files a
-    #     given change is not allowed to touch. Audited in both directions by
-    #     scripts/check_allowlist_citations.py, so it can only shrink.
-    pin = (AMBIGUOUS_PATH, "if (!std::is_constant_evaluated()) {")
-    PENDING_CONTEXT[pin] = "fixture"
-    try:
-        code, output = run_ambiguous(ambiguous_entry())
-    finally:
-        del PENDING_CONTEXT[pin]
-    if code == 0:
-        note("ok: a PENDING_CONTEXT pin accepts a citation that predates the rule")
-    else:
-        fail("a grandfathered ambiguous citation was refused", output)
 
     # ── The manifest-aware vacuity rule (morph#404 follow-up) ───────────────
     # `cmake --preset clang-coverage` with nothing else profiles morph_tests
