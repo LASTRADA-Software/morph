@@ -2767,13 +2767,53 @@ the `$defs` set above, is annotated once rather than twice.
 
 **What is not claimed here: that `DynamicForm` draws a recursive form.** This
 section is about schema generation, and the measurement above is about schema
-generation. `resolveRef` (`src/qt/forms/qml/DynamicForm.qml`) follows a `$ref`
-one level and does not recurse, so a `$ref` cycle cannot loop it — but that is a
-reading of nine lines, not a run, and what the renderer should *do* with an
-unbounded nested collection is a design question nobody has answered. It is
-tracked as morph#727. Until it is answered, an action with a cyclic
-nested-aggregate member is a document morph will generate and a form morph does
-not promise to render.
+generation. What the shipped renderer does with the document it produces is a
+separate contract, stated next.
+
+#### What `DynamicForm` does with a nested aggregate
+
+The shipped `MorphForms` renderer **renders flat actions**. A nested-aggregate
+member — `$ref`-cyclic or not — is not drawn as a sub-form; it is flattened to
+a single scalar control at the parent level, and its own members reach no
+control at all. This was undefined until morph#727; it is now measured, and
+pinned by `src/qt/forms/tests/tst_DynamicFormNestedAggregate.qml`.
+
+Four statements, each asserted by that suite:
+
+1. **A `$ref` cycle neither loops, hangs nor crashes the renderer.**
+   `resolveRef` (`src/qt/forms/qml/DynamicForm.qml`) follows a `$ref` exactly
+   one level and merges the `$def` under the property; it never recurses, so a
+   cycle is not a loop. The `TreeNode`/`SelfAction` schema quoted above builds
+   a two-field form.
+2. **An object-typed member becomes one plain text field.** For that schema the
+   renderer produces `field_id` and `field_root`, both `TextField`s, and no
+   control for `TreeNode`'s own `name`/`children`.
+3. **An acyclic nested aggregate is flattened identically.** An inlined
+   `address` object with `street`/`city` members yields `field_address` and
+   nothing for `street` or `city`. The cycle is not what stops the renderer —
+   nesting is.
+4. **The payload is wrong and the form reports itself ready.** The object-typed
+   member is submitted as a JSON *string* (`{"id":7,"root":"anything"}`), and a
+   recursive collection member takes the `type: "array"` control and submits an
+   array of strings (`{"name":"top","children":["a","b"]}`) where the schema
+   asks for an array of objects. `ready` is `true` in both cases.
+
+Measured on Qt 6.11.2, `QT_QPA_PLATFORM=offscreen`, against the real
+`DynamicForm` with a mock controller. The suite was shown to measure the
+renderer rather than pass vacuously: filtering object-typed properties out of
+`DynamicForm.qml`'s `fields` builder — the "decline" alternative — turns 4 of
+its 5 cases red.
+
+Point 4 is a description of today's behaviour, **not** an endorsement of it: a
+`ready` that is `true` for a payload the action must reject is the one part of
+this contract that is arguably wrong, and whether the renderer should draw the
+sub-form, decline the schema with a diagnostic, or keep flattening it is
+tracked as morph#759. Nothing in this repository has a nested-aggregate member
+today, so nothing depends on the answer yet.
+
+So: an action with a nested-aggregate member — cyclic or otherwise — is a
+document morph generates completely and a form morph draws only down to the
+nesting.
 
 Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
 only** regardless of nesting depth: a nested aggregate declaring any of those
