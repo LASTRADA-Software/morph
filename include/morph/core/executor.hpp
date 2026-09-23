@@ -219,7 +219,6 @@ private:
             // drain(), each of which documents that a throwing task is logged
             // and the pump continues -- runOnce() promises to return `true`
             // "whether or not that task threw", and would not return at all.
-            // morph#501.
             ::morph::log::logError("[main-thread] callback threw unknown exception");
         }
     }

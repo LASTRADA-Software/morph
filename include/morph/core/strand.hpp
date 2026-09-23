@@ -143,8 +143,8 @@ private:
     /// dispatches one action at a time against a model builds a fresh queue on
     /// every call and puts exactly one task in it. libstdc++'s `std::deque`
     /// allocates its node map *and* a first 512-byte buffer in its default
-    /// constructor, so that came to 576 bytes of the 760 the strand cost per
-    /// local dispatch (morph#660). Holding the head task in the strand makes
+    /// constructor, which comes to 576 bytes of the 760 a deque-only strand
+    /// costs per local dispatch. Holding the head task in the strand makes
     /// that case allocation-free; the overflow deque is constructed only when
     /// a second task is genuinely queued behind a running one, after which the
     /// cost is the deque's as before.
@@ -215,9 +215,9 @@ private:
     /// This is a pure allocation optimisation and changes no lifetime or
     /// locking rule. The drain step in `scheduleNext` removes the whole map
     /// entry as soon as the queue empties, so a workload that dispatches one
-    /// action at a time against a model paid for a fresh map node *and* a
-    /// fresh `make_shared<Strand>` on every call — the 2 allocations / 152
-    /// bytes that were left after morph#660 took the container's share.
+    /// action at a time against a model would otherwise pay for a fresh map
+    /// node *and* a fresh `make_shared<Strand>` on every call — 2 allocations
+    /// and 152 bytes on top of the queue's own share.
     /// Rather than keep the slot alive across the drain (which would need a
     /// deregistration hook and would trade this churn for a per-model entry
     /// nothing reclaims), the drain `extract`s the node instead of erasing it
