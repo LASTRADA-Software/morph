@@ -8,8 +8,10 @@
 // Ancestors...>` was a distinct instantiation **per distinct root-to-node
 // route** through the type graph. A tree has one route per node; a DAG has as
 // many as the graph has paths, and that count grows exponentially in the
-// graph's depth. The recursion now carries a depth counter instead, which caps
-// instantiations at one per (type, depth) pair.
+// graph's depth. The recursion then carried a depth counter instead, capping
+// instantiations at one per (type, depth) pair; morph#703 removed that too,
+// leaving one instantiation per type. This fixture measures neither directly
+// -- it measures route sensitivity, which both changes remove.
 //
 // This file is compiled twice by tests/compile_checks/forms_dag_budget.cmake,
 // and the whole point is that the two compilations differ *only* in route
@@ -96,9 +98,11 @@ MORPH_FORMS_DAG_PROBE_LEVEL(7, 6)
 MORPH_FORMS_DAG_PROBE_LEVEL(8, 7)
 
 /// The action type the schema is generated for: eight nested-aggregate levels
-/// below it, which is inside `morph::forms::detail::kMaxNestDepth` on purpose —
-/// this fixture exists to stress route count, and must not double as a test of
-/// the depth limit.
+/// below it. That was inside `morph::forms::detail::kMaxNestDepth` when this
+/// fixture was written, on purpose — it exists to stress route count and must
+/// not double as a test of the depth limit. morph#703 removed the limit, so
+/// the depth is now only a shape choice; the fixture is left unchanged so its
+/// numbers stay comparable with the ones quoted above.
 using RootAction = A8_0;
 
 }  // namespace morph_forms_dag_probe

@@ -224,7 +224,7 @@ output of `glz::write_json_schema<A>()` to add seven annotation groups:
 
 | Annotation | Scope | Contents |
 |---|---|---|
-| `required` | Top-level, and every nested-aggregate object schema (see [Nested aggregates (recursive, depth-bounded)](#nested-aggregates-recursive-depth-bounded)) | Array of field names that are **not** `std::optional<...>` and not listed in `A::optionalFields`. Always written, overwriting whatever glaze produced: glaze never derives `required` from member types — it emits one only where a type declares `meta<V>::required` (and for a tagged variant's discriminator) — so morph does not rely on its absence. |
+| `required` | Top-level, and every nested-aggregate object schema (see [Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe)) | Array of field names that are **not** `std::optional<...>` and not listed in `A::optionalFields`. Always written, overwriting whatever glaze produced: glaze never derives `required` from member types — it emits one only where a type declares `meta<V>::required` (and for a tagged variant's discriminator) — so morph does not rely on its absence. |
 | `x-order` | Every property | The member's declaration index (0‑based), so a renderer lays fields out in declaration order regardless of JSON key ordering. |
 | `x-decimalPlaces` | `Quantity` properties | The field's declared precision (`Quantity<U, Dec>::declaredDecimals`). |
 | `x-unitAlternatives` | `Quantity` properties | Convertible display/entry units derived from `UnitTraits::relations`, each with `{id, display, decimals, num, den}` — `id`/`display`/`decimals` come from the alternative unit's `UnitMeta`, and `num`/`den` are the exact alternative-to-canonical ratio. Omitted entirely when the field's unit declares no convertible units. |
@@ -298,7 +298,8 @@ same syntax, and only one of them is safe to leave unchecked:
 member, or `nullptr` when `node` is not an object or holds no such key; the
 caller branches on that instead of subscripting. It replaces a
 `contains(key)` + `operator[](key)` pair, which probed the same map twice, at
-every read site in `forms.hpp` and `instance_constraints.hpp`. The pointer is
+every read site in `forms.hpp`, `instance_constraints.hpp` and `views.hpp`
+whose key is not guaranteed present — see "Not every read" below. The pointer is
 into `node`'s own storage, so a caller may write through it — and, exactly like
 the reference `operator[]` returns, it is invalidated by any insertion into
 `node`.
@@ -333,6 +334,51 @@ file red rather than leaving this rationale quietly stale.
 The sites that still carry a standing
 `NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)` are the
 writes, and the directive now says so.
+
+**Not every read** (morph#714). `views.hpp` reads a *const* DOM, where
+`operator[]` throws rather than inserts — a different and louder failure than
+the mutating walkers', but still one the caller cannot see coming. Its reads
+were converted with one deliberate exception, stated here because the
+exception is the interesting part: **a read whose key is guaranteed present by
+construction keeps its subscript.** Turning such a read into a null check adds
+a branch nothing can take — untestable code, and a branch-coverage allowlist
+entry someone must later write a justification for. That is a cost, not a
+safety improvement, and it is the lesson morph#706 paid for.
+
+Two reads of `rowDom["properties"]` are that exception. glaze's schema writer
+emits `"properties"` unconditionally for every reflectable aggregate, including
+a zero-member one (measured with a standalone `glz::write_json_schema<T>()`
+probe; `llvm-cov` reports 0 hits on `deriveColumns`'s `!contains("properties")`
+early return across all ten instantiations the suite exercises), and
+`deriveColumns` has already tested the key before `buildColumnEntry` can read
+it. So the split in `views.hpp` is six reads converted and two left, against
+21 writes untouched — measured with
+
+```
+clang-tidy -p build/clang-debug --extra-arg=-std=c++23 \
+    --extra-arg=-Wno-missing-include-dirs --quiet \
+    --checks='-*,cppcoreguidelines-pro-bounds-avoid-unchecked-container-access' \
+    include/morph/forms/views.hpp
+```
+
+which reports 29 findings in the file before (21 writes + 8 reads) and 20
+after, with no new category. 23 of those 29 remain in the source; three of them
+now carry a
+`NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)`, because
+converting a read moved the *write* beside it onto a changed line and
+`clang-tidy-diff` reports on changed lines. Those three are the first
+suppressions of this check in `views.hpp`, and each says in one word what it
+is: a write. The other 18 writes are untouched and still unsuppressed, which is
+the piecemeal bill morph#677 describes and does not try to settle here.
+
+Counted a second way as well, through `tests/test_views.cpp`, a translation unit
+that actually *instantiates* the templates: the two measurements agree exactly,
+site for site, before and after. That is worth recording because it does
+**not** generalise — `forms.hpp` under-reports when analysed as a main
+file, because a subscript inside an uninstantiated template body is dependent
+and the check cannot see it. `views.hpp`'s subscripts are all on the
+non-dependent `glz::generic_u64`, so there is nothing for instantiation to
+reveal.
 
 ## Field metadata — `FieldMeta`
 
@@ -698,7 +744,7 @@ must resolve the `$ref` to see both:
   `quantity_kg_per_m3`-style def shown above never gets `x-order`/`required`/
   title — only `ExtUnits` and glaze's own `type`/bounds/`description` live
   there). It is **not** true for a *nested-aggregate* member's `$def`: see
-  [Nested aggregates (recursive, depth-bounded)](#nested-aggregates-recursive-depth-bounded)
+  [Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe)
   below — that `$def` **does** get `required`/`x-order`/title/etc. patched
   directly into it, the same as any other object schema.
 
@@ -710,7 +756,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
-| `required` | top-level (object), and every nested-aggregate object schema (inlined property or `$defs` entry) — see [Nested aggregates (recursive, depth-bounded)](#nested-aggregates-recursive-depth-bounded) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
+| `required` | top-level (object), and every nested-aggregate object schema (inlined property or `$defs` entry) — see [Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
 | `x-order` | property node (sibling of `$ref`) | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
 | `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path *rounds* each submitted `Quantity` to this precision before storing it — the stored value, not just its tag, is reduced (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). A model serving one *instance* of an action may overwrite this with a value from data — see [Per-instance constraints](#per-instance-constraints--values-that-live-in-data); `x-instanceConstraints` (below) says when it did. |
 | `x-unitAlternatives` | property node (sibling of `$ref`) | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
@@ -1555,6 +1601,54 @@ Display formatting is the renderer's duty; the wire stays canonical:
   `qtLocale.negativeSign` from the same object at all three call sites. The
   member is defaulted, so a caller that names only the separators is unchanged.
 
+  **`displayLocale` is a `QLocale` *name*; Qt resolves it, and morph does not**
+  (morph#629). `DynamicForm.displayLocale` (`src/qt/forms/qml/DynamicForm.qml`)
+  is a plain string, and every locale fact the two numeric edges receive comes
+  out of the `QLocale` that `Qt.locale(displayLocale)` returns — not out of the
+  string. That resolution is Qt's, and it is **not** an identity: a name with no
+  script subtag resolves to the language/territory's *default* script, which for
+  a script-split locale need not be the script whose digits the caller wanted.
+  Measured with Qt 6.11.2 by enumerating
+  `QLocale::matchingLocales(AnyLanguage, AnyScript, AnyTerritory)` — 711
+  locales, eleven distinct `zeroDigit` values — and then reconstructing a
+  `QLocale` from each group's own reported `name()`:
+
+  ```
+  mni_IN       zeroDigit U+09E6    matchingLocales entry named mni_IN: U+ABF0
+  ff_BF        zeroDigit U+0030    matchingLocales entry named ff_BF:  U+1E950 (Adlam)
+  ff_Adlm_BF   zeroDigit U+1E950
+  ```
+
+  Nine of the eleven representative names round-trip; those two do not.
+  `QLocale("ff_BF")` is the Latin-script Fulah and reports ASCII digits, while
+  the `matchingLocales` entry whose `name()` is `ff_BF` is the Adlam-script one.
+  The third row is the remedy and was measured through QML's `Qt.locale(...)`,
+  so the QML path resolves identically.
+
+  **The contract, therefore: the name is the caller's and its resolution is
+  Qt's.** A caller that wants a particular script passes the script-qualified
+  form — `ff_Adlm_BF`, not `ff_BF`. morph neither validates nor normalises
+  `displayLocale`, and deliberately does not warn when
+  `Qt.locale(displayLocale).name() !== displayLocale`: Qt normalises names for
+  many reasons unrelated to scripts, so such a warning would fire on callers
+  with nothing wrong with them, and there is no measured consumer to protect.
+  Measured on this revision, the complete set of names anything in this tree
+  puts through `Qt.locale(displayLocale)` is `{C, de, eu_ES}` — the property's
+  default, the two entries of the example's `ComboBox` model
+  (`examples/forms/gui_qml/qml/Main.qml`), and one test locale. None is
+  script-split, so nothing here can reach the behaviour above. A rung or example
+  that adopts a script-split name is the trigger to revisit this paragraph.
+
+  Two consequences worth stating rather than leaving to be re-derived. First,
+  the round trip is safe under a mis-resolution: both edges read their facts
+  from the *same* `qtLocale` object, so entry and display agree on whatever Qt
+  resolved, and the failure mode is "quietly the wrong locale", never "the
+  display edge emits text the entry edge rejects". Second, `displayLocale` is
+  also the **translation catalog key** (`catalog.lookup(displayLocale, …)`), and
+  there it is used *unresolved* — the raw string. So the one property is read
+  two ways, and a script-qualified name is the spelling the catalog must be
+  keyed on as well.
+
   **A leading positive sign is accepted on entry and never emitted on
   display** (morph#596). `normalizeLocaleNumber` reads
   `NumericLocale::positiveSign`, matched exactly as `negativeSign` is —
@@ -1725,7 +1819,7 @@ the `required`-array derivation in `mergeSchemaExtras`, which checks
 `isStdOptional` **explicitly** — see [Required-ness rule](#required-ness-rule).)
 The predicate is `noexcept` and `constexpr`, and it inspects only the action's
 **own top-level members**; unlike `schemaJson<A>()`'s schema generation (see
-[Nested aggregates (recursive, depth-bounded)](#nested-aggregates-recursive-depth-bounded)),
+[Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe)),
 it does **not** recurse into a nested aggregate member's own fields.
 
 ## Cross-field rules — the `x-rules` vocabulary
@@ -2478,16 +2572,15 @@ for the exhaustive tables and design rationale.
 
 ## Failure modes
 
-### Nested aggregates (recursive, depth-bounded)
+### Nested aggregates (recursive, cycle-safe)
 
 A member whose type is itself a reflectable aggregate — a plain nested
 struct, or `std::vector<Sub>` (a repeated aggregate) — gets its **own**
 members annotated too: `x-order`, `title`/`FieldMeta`, `required`, and the
 `Quantity`/`Choice`/widget/ranged-bounds rules the top level already applies.
 Unlike the top level, this recurses **into the type graph** — a nested
-aggregate's own nested-aggregate member is annotated in turn, and so on, down
-to `morph::forms::detail::kMaxNestDepth` (16) levels below the action type —
-rather than stopping after one level. This
+aggregate's own nested-aggregate member is annotated in turn, and so on, to
+whatever depth the type graph has — rather than stopping after one level. This
 closes the gap a flat-only generator has for domains that are naturally
 nested (a measurement with a repeated specimen sub-record, a document with a
 nested address, a category tree), including domains nested more than one
@@ -2506,10 +2599,10 @@ Two schema shapes exist for a nested aggregate, and both are recursed into:
 `mergeSchemaExtras` resolves whichever form applies (`annotateNestedAggregateRef`,
 `forms.hpp`) and hands the resolved node to the same per-member annotation
 logic the top level uses (`annotateBasicMemberProperty`), applied against the
-nested type's own reflection. Each recursive step passes along two things: a
-**depth counter** as a non-type template parameter, which is what bounds the
-recursion, and a **runtime set of the `$defs` keys already annotated**, which
-is what keeps a shared nested type from being annotated once per route to it.
+nested type's own reflection. Each recursive step passes along one piece of
+state: a **runtime set of the `$defs` keys already annotated**. That set is what
+stops the walk, and it is also what keeps a shared nested type from being
+annotated once per route to it. Nothing is carried in the type system.
 
 Each step also carries the **whole DOM** alongside the node it is annotating,
 because resolving a `$ref` means looking its key up under the DOM's `$defs`.
@@ -2521,21 +2614,38 @@ is to be a *different type* from a node, which turns that transposition into a
 compile error. It is the remedy for what `bugprone-easily-swappable-parameters`
 reports on this signature, rather than a suppression of the report.
 
-**Instantiations are per (type, depth), not per route.** The recursion
-originally carried the ancestor *chain* as a variadic template parameter pack,
+**Instantiations are per type, and that is the whole termination argument.**
+The recursion originally carried the ancestor *chain* as a variadic template parameter pack,
 which made `annotateNestedAggregate<Leaf, Ancestors...>` a distinct
 instantiation for every distinct root-to-node route through the type graph. A
 domain model shaped like a tree has one route per node; a model shaped like a
 DAG — an `Address` under both a `Customer` and a `Supplier`, a `Money`
 everywhere — has as many as it has paths, and that count grows exponentially in
-the graph's depth. A depth counter collapses that to one instantiation per
-(type, depth) pair. Measured on a fixture with 27 types over 8 levels, where
+the graph's depth. morph#573 step 3 replaced the chain with a depth counter,
+collapsing that to one instantiation per (type, depth) pair. Measured on a
+fixture with 27 types over 8 levels, where
 6,561 routes reach the deepest node (`tests/compile_checks/forms_dag_probe.cpp`,
 g++ 16.2.1, `-std=c++23 -fsyntax-only`, CPU seconds): 26.8 s with the ancestor
 chain against a 2.7 s control that has one route per node, and 3.0 s against
 the same control with the depth counter. `tests/compile_checks/forms_dag_budget.cmake`
 is the ctest guard that keeps it that way, asserting the DAG fixture costs no
 more than three times its one-route control (morph#573, Part B).
+
+The depth counter is now gone too (morph#703), and the recursion carries **no**
+template argument that varies down it. `recurseIntoNestedAggregateIfAny<Member>`
+reaches `annotateNestedAggregate<Sub>` reaches
+`recurseIntoNestedAggregateIfAny<Member'>`: every specialisation is keyed on a
+type alone, the reachable type set of any program is finite, and a
+specialisation already on the instantiation stack is not instantiated again. So
+instantiation terminates *even for a cyclic type graph*, and the count drops
+from one per (type, depth) pair to one per type — a further factor of the
+graph's depth on a DAG. The `forms_dag_budget.cmake` guard is unchanged and
+still passes: it asserts a ratio and does not care how the ratio is achieved.
+Run back to back on one (loaded) machine, clang 22.1.8, best of 2: 108% of
+control with the depth counter, 66% without it. The absolute millisecond counts
+in those two runs differ by a factor of two in the *control*, which is the whole
+reason this guard asserts a ratio and takes a minimum — read the two percentages
+as "unchanged or better", not as a 1.6x speedup.
 
 The `$defs` set is the runtime half of the same observation: a nested
 aggregate's annotations are a function of its own type alone, so a shared
@@ -2544,39 +2654,126 @@ byte-identical content once per route. It is now annotated by the first route
 to reach it, and later routes return immediately. The emitted schema is
 unchanged either way — that is what makes the skip safe.
 
-**Nesting past `kMaxNestDepth` is a compile error, not infinite recursion.**
-The recursion is driven by the member types themselves, so a cyclic type graph
-— a self-referential type such as `struct Node { std::vector<Node> children; };`,
-or a mutual reference between two distinct types — would re-enter it forever.
-`kMaxNestDepth` (16, in `forms.hpp`) bounds it: the seventeenth level down trips
-a `static_assert` at the point that specific instantiation would occur, and the
-`if constexpr` around that assert is what stops the deeper instantiation from
-being created at all. The message names both possible causes, because a depth
-counter cannot tell them apart: a cycle, which cannot be supported at any limit
-(the schema it describes has no bottom), or a genuinely acyclic graph that is
-simply nested deeper than 16. For a cycle, restructure the domain type — flatten
-the self-reference, or represent the recursive edge as an opaque id instead of a
-nested value; there is no runtime opt-out. For a graph that really is that deep,
-raise `kMaxNestDepth`: it is there to turn a runaway instantiation into a
-diagnostic, not to cap legitimate nesting, and raising it costs nothing that is
-not actually reached, because instantiations are only created for the (type,
-depth) pairs the graph really has.
+**There is no depth limit, and a cyclic type is described rather than
+rejected.** This paragraph used to say the opposite — that a cycle "cannot be
+supported at all: the schema it describes has no bottom" — and that claim was
+measurably wrong about the *schema*. glaze emits a finite, well-formed document
+for a self-referential type by pointing `$ref` back at the `$defs` entry, and
+morph's annotator walks that document rather than the type graph, so it visits
+the entry once and stops. What stops it is the runtime `$defs` visited set,
+which a cyclic type always reaches: glaze inlines a nested type only when it is
+used exactly once in the whole schema, and a type reachable from itself never
+is.
 
-A "diamond" is not affected — the same type reused from two unrelated places in
-the schema, e.g. an `Address` nested under both a `Company` and a `Person`
-member of the same action, is at whatever depth each of those members puts it
-and recurses normally into both (and, per the `$defs` set above, is annotated
-once rather than twice). The `static_assert` only fires where the offending type
-is actually reached as a nested-aggregate member of some `schemaJson<A>()` (or
-`mergeSchemaExtras<A>()`) instantiation — a self-referential type that is never
-nested under an action this way compiles and works fine on its own.
+Measured (morph#703), clang 22.1.8, `-std=c++23`, glaze v7.4.0 — three actions
+that were each a hard `static_assert` before this change now compile, and the
+generated schema is annotated correctly:
 
-*History:* before morph#573, the bound was the ancestor chain rather than a
-depth counter, so the error fired on the cycle itself and named it as one, and
-depth was otherwise unlimited. The exchange is deliberate: the ancestor chain
-made the instantiation count the *route* count (see above), and no in-tree or
-example type nests anywhere near 16 deep — the deepest in this repository is
-two.
+```cpp
+struct TreeNode { std::string name; std::vector<TreeNode> children; };
+struct Bee;
+struct Ay  { std::string tag; std::vector<Bee> bees; };
+struct Bee { std::string tag; std::vector<Ay>  ays;  };
+```
+
+`schemaJson<SelfAction>()`, for an action with a `TreeNode` member, emits
+
+```json
+"$defs":{"probe::TreeNode":{"type":"object","properties":{
+  "children":{"type":"array","items":{"$ref":"#/$defs/probe::TreeNode"},
+              "x-order":1,"title":"Children"},
+  "name":{"type":"string","x-order":0,"title":"Name"}},
+  "additionalProperties":false,"required":["name","children"]}}
+```
+
+— one `$defs` entry, self-referential by `$ref`, with `x-order`, `title` and
+`required` applied exactly as for an acyclic nested aggregate. The mutually
+referential `Ay`/`Bee` pair behaves the same way, and a straight 20-level
+acyclic chain — four levels past the old cap — compiles too, on this toolchain
+(see [Nesting depth in practice](#nesting-depth-in-practice): MSVC stops
+lower). Compiled against
+the previous revision, the identical fixture fails with three
+`static assertion failed ... '16UL < kMaxNestDepth'` errors. That control is
+what says the change is responsible for the difference, rather than the fixture
+having been compilable all along.
+
+`kMaxNestDepth`, the `static_assert` and the 16-level cap are therefore gone.
+The cap existed only because a depth counter cannot tell a cycle from a deep
+graph; with nothing carried in the type system there is nothing to bound. It
+was introduced by morph#573 step 3 where previously there had been no limit at
+all, so removing it restores the older contract rather than inventing a new one.
+
+#### Nesting depth in practice
+
+morph imposes no depth limit. **The compiler does**, and on one of the three
+supported toolchains the ceiling is low enough to matter, so it is recorded
+here rather than discovered again from a build failure.
+
+`mergeSchemaExtras<A>` opens with `A probe{}`, and for an action rooted at a
+chain of nested aggregates that single initialiser is as deeply nested as the
+chain. MSVC caps that. Measured by bisecting a reduced
+
+```cpp
+struct Deep0 { int leaf = 0; };
+struct Deep1 { Deep0 inner; };   // ... through DeepN
+template <typename A> int make() { A probe{}; return 0; }
+int sink = make<DeepN>();
+```
+
+| toolchain | deepest accepted | how it fails |
+| --- | --- | --- |
+| `cl` 19.44, 19.50, 19.51 (`/std:c++20` and `/std:c++latest`) | **15** nested initialiser levels | 16 → `fatal error C1054: compiler limit: initializers nested too deeply` |
+| clang 22.1.8, and clang-cl | ≥ 700 | segfaults at 800 (stack exhaustion, machine-dependent) |
+| g++ 16.2.1 | ≥ 800 | not reached |
+
+Two things about MSVC's number. It is **specific to an instantiated template**:
+the same chain initialised at namespace scope compiled at 120 levels without
+complaint, so it is not a limit on aggregate nesting as such but on the
+initialiser MSVC builds while instantiating. And it is **lower than the
+16-level cap this change removed** — a 15- or 16-level chain would have hit
+C1054 on MSVC even before morph#703, ahead of the `static_assert` that was
+supposed to be the diagnostic. Nothing in the repository had ever nested more
+than three levels, so nobody found out.
+
+The action type counts as one of the 15, so `cl` accepts a chain of **14**
+below it. `tests/test_nested_forms.cpp` uses 20 (four past the removed cap)
+everywhere and 12 on MSVC — one link of margin — selected at `kDeepChainLevels`
+with the measurement in a comment beside it.
+
+C1054 is a worse diagnostic than the `static_assert` it replaced: it names
+neither the action type nor the nesting, and points at `forms.hpp`'s `A probe{}`
+rather than at the domain type responsible. That is a real cost of removing the
+cap, and it is not recoverable — morph cannot detect a limit the compiler does
+not expose. What is recoverable is knowing the number, which is what this
+section is for.
+
+**Verification status.** The per-toolchain numbers above are *measured*, on the
+reduced probe, not on morph's own headers: `cl` via Compiler Explorer's
+19.44/19.50/19.51 (CI runs 19.51.36256.0), clang and g++ locally. The
+consequence for morph's real fixture — that a 12-link chain under
+`DeeplyNestedAction` compiles on `cl` — is *inferred* from the reduced
+measurement plus one link of margin, and is confirmed or refuted by the next
+`Windows / cl-*` run.
+
+Nothing *executes* these numbers: they are a record, not a check, so a
+toolchain upgrade that moves MSVC's limit down would be found by a red
+`Windows / cl-*` leg rather than by a named guard. A compile-check on the model
+of `forms_dag_budget.cmake` is filed as morph#744.
+
+A "diamond" was never affected and still is not — the same type reused from two
+unrelated places in the schema, e.g. an `Address` nested under both a `Company`
+and a `Person` member of the same action, recurses normally into both and, per
+the `$defs` set above, is annotated once rather than twice.
+
+**What is not claimed here: that `DynamicForm` draws a recursive form.** This
+section is about schema generation, and the measurement above is about schema
+generation. `resolveRef` (`src/qt/forms/qml/DynamicForm.qml`) follows a `$ref`
+one level and does not recurse, so a `$ref` cycle cannot loop it — but that is a
+reading of nine lines, not a run, and what the renderer should *do* with an
+unbounded nested collection is a design question nobody has answered. It is
+tracked as morph#727. Until it is answered, an action with a cyclic
+nested-aggregate member is a document morph will generate and a form morph does
+not promise to render.
 
 Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
 only** regardless of nesting depth: a nested aggregate declaring any of those
@@ -2590,10 +2787,11 @@ no nested-aggregate member has nothing here to trigger on, so its generated
 schema is byte-for-byte unchanged. A pre-existing action that *does* have a
 nested-aggregate member sees its schema gain annotations it previously
 lacked — the whole point of this feature — with no change to any of its flat
-top-level members. The one exception: an action nested more than
-`kMaxNestDepth` levels deep, or with a self- or mutually-referential
-nested-aggregate member (see the depth-bound paragraph above), fails to
-*compile*. No such action exists in this repo today.
+top-level members. The one exception is now historical: between morph#573 and
+morph#703, an action nested more than 16 levels deep, or with a self- or
+mutually-referential nested-aggregate member, failed to *compile*. Neither does
+any longer, and no action in this repo was ever in that position — it could not
+have been, since it would not have built.
 
 Every nested-aggregate type in the chain must be **default-constructible**,
 exactly like the top-level action type (see below): the recursion builds its
@@ -2605,7 +2803,7 @@ own probe instance purely to enumerate its members via reflection.
 `formRules` ([Cross-field rules](#cross-field-rules--the-x-rules-vocabulary)) are read only
 from the top-level action type — they are not consulted on a nested
 aggregate, no matter how deep `mergeSchemaExtras` otherwise recurses (see
-[Nested aggregates (recursive, depth-bounded)](#nested-aggregates-recursive-depth-bounded)
+[Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe)
 above). Computed fields (`computedFields`) are likewise top-level only.
 
 The action type must also be **default-constructible**: `mergeSchemaExtras`
