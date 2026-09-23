@@ -4,7 +4,7 @@
 # Fails if any file in the coverage mapping lies outside this checkout, so that
 # a report cannot be silently computed over a subset of the tree.
 #
-# Why this gate exists (morph#426). A coverage build ran through the shared
+# Why this gate exists. A coverage build run through the shared
 # compiler cache, the cache served objects compiled in a *different* worktree,
 # and clang had embedded that worktree's absolute source paths into their
 # coverage mappings. scripts/coverage.sh filters by *relative* path
@@ -33,8 +33,8 @@
 # having), the hazard returns the moment any cache is configured to key
 # path-independently, and the failure it produces is a *silence* -- a report
 # that shrinks while every command in the pipeline exits 0. That is the same
-# failure mode scripts/coverage.sh's own comments record for morph#141 and
-# morph#179, and it is the reason a derived list beat a hand-written one there.
+# failure mode scripts/coverage.sh's own comments record for its rung and
+# object lists, and it is the reason a derived list beats a hand-written one.
 #
 # The check is on the *unfiltered* mapping, and it has to be: the filtered
 # export contains only records that matched a relative SOURCES entry, so every
@@ -55,10 +55,10 @@
 # header-only template library instantiates the same function differently in
 # each binary and llvm-cov reconciles function records by (name, structural
 # hash). That is a property of measuring several binaries at once, not of where
-# their sources came from, so a nonzero count here says nothing about morph#426
-# either way. What it does mean is that some records are discarded, which is
-# why coverage.sh's figure is not simply the sum of its parts; morph#403's
-# object list is what decides which binaries are in the sum.
+# their sources came from, so a nonzero count here says nothing about a
+# cross-checkout mapping either way. What it does mean is that some records are
+# discarded, which is why coverage.sh's figure is not simply the sum of its
+# parts; the coverage object list is what decides which binaries are in the sum.
 #
 # EXPORT_JSON (second argument) supplies `llvm-cov export -summary-only` output
 # from a file instead of running llvm-cov, which is what
@@ -79,7 +79,7 @@ readonly profdata="${build_dir}/merged.profdata"
 readonly source_root="$(pwd -P)"
 
 # Third-party dependency sources are legitimately outside the checkout
-# (morph#552). `cmake/DepCache.cmake` points FetchContent at a shared cache so a
+# `cmake/DepCache.cmake` points FetchContent at a shared cache so a
 # CI run clones once instead of a dozen times, and those trees then sit under
 # the runner's home rather than under `build/*/_deps`, where they used to be
 # only because FetchContent happened to put them there.
@@ -179,7 +179,7 @@ if not filenames:
           file=sys.stderr)
     print("  A gate that passes over an empty mapping is the defect it exists",
           file=sys.stderr)
-    print("  to find, committed by the detector (morph#426).", file=sys.stderr)
+    print("  to find, committed by the detector.", file=sys.stderr)
     raise SystemExit(1)
 
 foreign = sorted({f for f in filenames if not is_allowed(f)})
@@ -195,7 +195,7 @@ if foreign:
     print("  These records cannot match coverage.sh'"'"'s relative source filters, so", file=sys.stderr)
     print("  they are dropped and the report is computed over what is left.", file=sys.stderr)
     print("  Their most likely origin is a compiler cache serving objects built", file=sys.stderr)
-    print("  in another checkout (morph#426). Reconfigure the coverage build with", file=sys.stderr)
+    print("  in another checkout. Reconfigure the coverage build with", file=sys.stderr)
     print("  -DUSE_COMPILER_CACHE=OFF, or delete the build tree and rebuild.", file=sys.stderr)
     raise SystemExit(1)
 

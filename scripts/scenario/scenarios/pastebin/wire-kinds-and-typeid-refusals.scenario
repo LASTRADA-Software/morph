@@ -67,7 +67,8 @@ expect ok field @body ~ "GetPaste"
 expect ok field @body ~ "ExpirePaste"
 expect ok field @body ~ "\"type\":\"object\""
 # CreatePaste's declared burn-budget bounds reach the client as standard
-# JSON-Schema keys -- morph#310's whole point.
+# JSON-Schema keys, which is what makes the served document usable by a
+# generic client.
 expect ok field @body ~ "burnAfterReads"
 expect ok field @body ~ "minimum"
 expect ok field @body ~ "multipleOf"

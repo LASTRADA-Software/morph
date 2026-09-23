@@ -5,7 +5,7 @@
 #
 # A sanitizer job whose binaries are not actually instrumented is worse than no
 # job: it runs the whole suite, reports success, and every reader treats that as
-# evidence the suite was checked (morph#542).
+# evidence the suite was checked.
 #
 # CI already asserted this, but only for the ladder's own binaries and only for
 # `__asan_`. Everything else was on trust, and the trust was misplaced: measured
@@ -22,7 +22,7 @@
 # vacuous on the ubsan and tsan legs, which is the same "control that measures
 # nothing" this check exists to prevent.
 #
-# ── The two questions, and why --binary exists (morph#675) ───────────────────
+# ── The two questions, and why --binary exists ───────────────────────────────
 #
 # The sweep above answers "did this check examine a representative set?", and
 # its floor (below) is what makes that answer mean something. A developer who
@@ -80,7 +80,7 @@ count_symbols() {
     nm -C "$1" 2>/dev/null | grep -c -- "${symbol}" || true
 }
 
-# ── Narrow mode: one named file, no floor, never in CI (morph#675) ───────────
+# ── Narrow mode: one named file, no floor, never in CI ───────────────────────
 #
 # The refusal below is what keeps the floor intact. Everything after it is a
 # statement about a single file, so there is no set for a floor to be about --
@@ -130,7 +130,7 @@ allowlist=()
 #
 # `2>/dev/null` made the two ways this list can come back empty
 # indistinguishable: "ctest enumerated the tree and it registers no tests" and
-# "ctest itself failed before printing any JSON". morph#690 was the second one,
+# "ctest itself failed before printing any JSON". The second is the one that
 # and it cost three CI runs and two local sessions to name, because the
 # sentence that named it was being discarded one pipe away from the error
 # message. What ctest actually wrote, reproduced locally against a

@@ -2,7 +2,7 @@
 # Usage: bash scripts/test_check_ctest_name_collisions.sh
 #
 # Self-test for scripts/check_ctest_name_collisions.sh, the gate that fails
-# when two ctest tests in one build tree share a name (morph#464).
+# when two ctest tests in one build tree share a name.
 #
 # A lint gate nobody tests reports green whether or not it still detects
 # anything, and this one guards a defect that is *already* silent: two
@@ -86,7 +86,7 @@ else
 fi
 
 # ── 2. one name registered twice -> fail, naming it and both binaries ────────
-# This is morph#464 itself, in miniature: two rung binaries defining a
+# This is the defect itself, in miniature: two rung binaries defining a
 # TEST_CASE of the same name, each registered under that bare name.
 dir="$(case_dir duplicate_pair)"
 json="$(ctest_json "$dir" \

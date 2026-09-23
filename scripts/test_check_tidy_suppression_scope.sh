@@ -2,7 +2,7 @@
 # Usage: bash scripts/test_check_tidy_suppression_scope.sh [CLANG_TIDY_BINARY]
 #
 # Self-test for scripts/check_tidy_suppression_scope.sh, the gate that keeps
-# tests/.clang-tidy's record of its own reach true (morph#632).
+# tests/.clang-tidy's record of its own reach true.
 #
 # A lint gate nobody tests reports green whether or not it still detects
 # anything. This one is exposed to that twice over: the record it checks is

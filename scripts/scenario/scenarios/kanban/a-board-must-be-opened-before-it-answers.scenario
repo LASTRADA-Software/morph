@@ -14,12 +14,12 @@
 # `what()` of the `std::invalid_argument` `std::stoull("")` throws -- even
 # though all fifteen `execute()` overloads already opened with a
 # `_projectIdStr.has_value()` guard carrying the correct message. The optional
-# was *engaged with an empty string* on an unattached handler, so `has_value()`
-# was true, every guard fell through to `requireRole`, and `std::stoull("")`
-# threw. `_projectIdStr` was written by `attachActionLog` as well as by
+# is *engaged with an empty string* on an unattached handler, `has_value()` is
+# true, every guard falls through to `requireRole`, and `std::stoull("")`
+# throws. `_projectIdStr` is written by `attachActionLog` as well as by
 # `OpenBoard`, and `ModelFactory::create` calls it with an empty `entityKey` on
-# every newly constructed holder. Fixed in morph#368 by declining the empty
-# key: an empty string identifies no project, so it no longer poses as one.
+# every newly constructed holder -- so the empty key has to be declined rather
+# than stored: an empty string identifies no project and must not pose as one.
 #
 # Asserted here per action because this is the wire surface a client sees, and
 # because the in-process tests all attach before acting -- the two writers of
@@ -63,8 +63,8 @@ expect err message == "AddComment: handler was never attached via OpenBoard"
 do GetEventsSince lastEventId=0
 expect err message == "GetEventsSince: handler was never attached via OpenBoard"
 
-# ...including the two morph#368 singled out, whose guard was written, was
-# correct, and was the last thing on this rung anyone expected to be dead.
+# ...including the two whose guard is written, is correct, and is the last
+# thing on this rung anyone would expect to be dead.
 do GetActivity
 expect err message == "GetActivity: handler was never attached via OpenBoard"
 expect err message ~ "OpenBoard"
@@ -84,8 +84,8 @@ expect err message !~ "stoull"
 # `Remote::attachLogIfConfigured` forwards it to the model verbatim off the
 # wire, so it is arbitrary text. `foo` used to be adopted as the board id and
 # answer `stoull` from `std::stoull("foo")` -- the same defect one step over
-# from the empty key, and the reason morph#368's guard checks that the key
-# parses whole rather than merely that it is non-empty.
+# from the empty key, and the reason the guard checks that the key parses whole
+# rather than merely that it is non-empty.
 client garbage model=BoardModel contextKey=foo
 session principal=$who token=$token
 

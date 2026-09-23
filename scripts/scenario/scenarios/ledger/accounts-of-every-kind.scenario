@@ -13,7 +13,7 @@
 # not have.
 #
 # Wire shapes: both enums travel as their *enumerator names*, not as their
-# underlying integers (morph#444 gave each a `glz::meta`/`glz::enumerate`) --
+# underlying integers (each carries a `glz::meta`/`glz::enumerate`) --
 # AccountKind is "Asset"/"Expense"/"Revenue"/"Liability" and Currency is its
 # ISO code, "USD"/"EUR"/"JPY"/"KRW".
 #

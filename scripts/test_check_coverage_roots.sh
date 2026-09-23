@@ -2,7 +2,7 @@
 # Usage: bash scripts/test_check_coverage_roots.sh
 #
 # Self-test for scripts/check_coverage_roots.sh, the gate that fails when the
-# coverage mapping names a file outside this checkout (morph#426).
+# coverage mapping names a file outside this checkout.
 #
 # The defect that gate exists to catch is a silence: a compiler cache serves an
 # object built in another worktree, its coverage records carry that worktree's
@@ -20,7 +20,7 @@
 # Asserts five directions:
 #
 #   1. every file under the checkout                   -> pass
-#   1b. a file in the configured dependency cache      -> pass (morph#552)
+#   1b. a file in the configured dependency cache      -> pass
 #   1c. a foreign worktree, cache also configured      -> still fail
 #   2. one file under another worktree                 -> fail, naming it
 #   3. a sibling directory sharing the root's prefix   -> fail
@@ -86,7 +86,7 @@ else
     cat "$tmp/1.out" >&2
 fi
 
-# 2. One record from another worktree -- the morph#426 shape exactly.
+# 2. One record from another worktree -- the shape this gate exists for.
 write_export "$tmp/foreign.json" \
     "${repo_root}/include/morph/core/bridge.hpp" \
     "/home/somebody/repo/morph-wt/999/examples/crm/src/models/account_model.cpp"
@@ -101,7 +101,7 @@ else
     fi
 fi
 
-# 2b. The dependency cache is admitted (morph#552): its trees are third-party
+# 2b. The dependency cache is admitted: its trees are third-party
 # sources that coverage.sh filters out anyway, and they live outside the
 # checkout only because DepCache.cmake shares them across a run's dozen
 # configures instead of re-cloning each time.

@@ -14,7 +14,7 @@
 #     of that name in the tree and CTest *appends* the labels, so the first
 #     registration of a duplicated name accumulates the second's labels too.
 #     In this repository that made `ctest -L ladder-<rung>` over-select: it ran
-#     another rung's binary alongside its own (morph#464 -- crm reported on 180
+#     another rung's binary alongside its own (measured once as crm reporting on 180
 #     cases while owning 168).
 #   * a failure line, `--output-junit` and CDash all identify a test by name,
 #     so a duplicated name does not say which binary failed.
@@ -116,7 +116,7 @@ if duplicates:
     sys.stderr.write(
         "\nGive the registrations distinct names: TEST_PREFIX/TEST_SUFFIX on the\n"
         "catch_discover_tests call (cmake/morph_add_rung.cmake does this per rung),\n"
-        "or rename the TEST_CASE. See this script\x27s header and morph#464.\n")
+        "or rename the TEST_CASE. See this script\x27s header.\n")
     raise SystemExit(1)
 
 print("ok: {} ctest test names under {} are unique".format(len(by_name), build_dir))

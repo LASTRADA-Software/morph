@@ -40,7 +40,7 @@
 # the block below. That alone still leaves a genuinely clean machine uncached,
 # because a launcher with no daemon to talk to caches nothing —
 # -DFASTCACHE_AUTO_START=ON additionally stages and starts a fastcached daemon
-# in the background when none answers at FASTCACHE_ADDR (issue #90); off by
+# in the background when none answers at FASTCACHE_ADDR; off by
 # default, and independently of auto-install, since starting a background
 # process is a bigger side effect than downloading a file and CI relies on no
 # daemon answering by default. To disable everything: -DUSE_COMPILER_CACHE=OFF.
@@ -79,7 +79,7 @@ if(DEFINED CMAKE_CXX_COMPILER_LAUNCHER OR DEFINED CMAKE_C_COMPILER_LAUNCHER)
     # all: the preset re-applies its cacheVariables on the reconfigure that
     # --fresh triggers, so the launcher comes back pinned and the tree is gone
     # for nothing. -U clears it there too, until the preset is next run.
-    # All of the above measured on an isolated harness, morph#592.
+    # All of the above measured on an isolated harness.
     if(DEFINED CACHE{CMAKE_CXX_COMPILER_LAUNCHER} OR DEFINED CACHE{CMAKE_C_COMPILER_LAUNCHER})
         message(STATUS "[cache] That value comes from the CMake cache (a -D, a preset, or an older configure); "
                        "to let this module choose instead, reconfigure the same build directory with "
@@ -775,7 +775,7 @@ endfunction()
 
 # Stage and start a fastcached daemon in the background when FASTCACHE_ADDR is
 # otherwise unreachable, so FASTCACHE_AUTO_INSTALL's launcher has something to
-# talk to on a genuinely clean machine (issue #90). Nothing here may fail a
+# talk to on a genuinely clean machine. Nothing here may fail a
 # configure, exactly like _fc_auto_install_fastcache_cc: every failure is one
 # status line and a fall-through to the probe finding no daemon, which is the
 # behaviour without FASTCACHE_AUTO_START at all.

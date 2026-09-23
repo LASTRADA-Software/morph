@@ -29,10 +29,10 @@ MANIFEST="$OUT/coverage_objects.txt"
 # lines, 42 of the library's 148 throw sites, eight test files driving it --
 # contributed zero files to the uploaded report, and both
 # sqlite_offline_queue.hpp's 57.04% and include/morph/qt's 13 lines were
-# measured with their own suites absent (morph#403). It was the third time:
-# morph#141 (rungs 2-4 never added) and morph#179 (the rung list had drifted
-# past ledger and lims) were the same defect in the same file, and both were
-# fixed by deleting the copy and reading an authoritative list instead.
+# measured with their own suites absent. That was the third time: rungs 2-4
+# were never added, and the rung list drifted past ledger and lims -- the same
+# defect in the same file, both times fixed by deleting the copy and reading an
+# authoritative list instead.
 #
 # So the list is no longer here. cmake/compiler_options.cmake's
 # apply_coverage() registers every instrumented test binary as it instruments
@@ -50,7 +50,7 @@ MANIFEST="$OUT/coverage_objects.txt"
 # -- The profile set this run merges: bounded, not discovered ---------------
 #
 # `find "$OUT" -name '*.profraw'` used to be unbounded and had no cleanup of
-# its own (morph#430). `LLVM_PROFILE_FILE`'s `%p` (process id) template means
+# its own. `LLVM_PROFILE_FILE`'s `%p` (process id) template means
 # a stale file is never overwritten by a later run -- it just sits there and
 # the next `find` picks it up alongside the current run's output, with no
 # upper bound on how old "alongside" can be. 2,445 such files were found
@@ -59,7 +59,7 @@ MANIFEST="$OUT/coverage_objects.txt"
 # name pattern. A stale line's counts joining the current report is wrong in
 # the flattering direction -- a line covered by a since-deleted test still
 # reads as covered -- and it is the same failure shape this script's own
-# comments already document twice over for morph#141 and morph#179: the
+# comments already document twice over for the rung and object lists: the
 # script runs, the report uploads, and the figure is computed over the wrong
 # input.
 #
@@ -87,7 +87,7 @@ MANIFEST="$OUT/coverage_objects.txt"
 # to merge and to delete), and a space-joined string word-splits a path
 # containing a space into fragments -- `rm -f` then silently no-ops on the
 # fragments (its whole point is to not fail on a missing file) and leaves the
-# real .profraw undeleted, which is morph#430's own staleness shape
+# real .profraw undeleted, which is the same staleness shape
 # reappearing through the one script meant to close it. Nothing in this
 # repository's own paths triggers this today, but the fix costs nothing and
 # matches COVERAGE_OBJECTS' own array-of-paths shape below.
@@ -162,7 +162,7 @@ coverage_object_built() {
 # hand-written form silently rotted: rungs 2, 3 and 4 shipped without ever
 # being added here, leaving ~15k lines of models, presenters and QML adapters
 # outside the coverage number entirely while the percentage still looked
-# healthy (morph#141). Nothing fails when a rung is forgotten -- the script
+# healthy. Nothing fails when a rung is forgotten -- the script
 # runs, the report uploads, and the figure is simply computed over a
 # shrinking fraction of the ladder. A loop over the known rungs cannot be
 # forgotten in the same way; a new rung needs its name added here and
@@ -177,7 +177,7 @@ coverage_object_built() {
 # files the report did not contain. A component that matches nothing does not
 # fail; it silently reports nothing, which is the same shape of defect this
 # list's own comment above warns about, and the same one that left CI's ladder
-# path filter a rung behind (morph#179). Reading the list removes the copy.
+# path filter a rung behind. Reading the list removes the copy.
 #
 # A rung that was not configured in this build contributes nothing, exactly as
 # before, via the coverage_object_built() guard.
@@ -248,7 +248,7 @@ done
 # bar means to hold to that standard — only the real testkit/GUI code is.
 # The library's own two TUs are not in that directory at all any more: they
 # live in examples/common/testkit_src/ so that testkit/.clang-tidy's Catch2
-# suppression cannot reach them (morph#652). They stay measured -- SOURCES
+# suppression cannot reach them. They stay measured -- SOURCES
 # names examples/common, and this regex matches only testkit/test_*.cpp.
 IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
 
@@ -262,7 +262,7 @@ ${LLVM_PROFDATA} merge -sparse "${PROFILES[@]}" -o "$MERGED"
 # whatever a rerun of `ctest` also wrote. That second merge would not be
 # additive counting error (llvm-profdata's counts are absolute per process
 # execution, not deltas), but it is the same "profile set for a run is
-# discovered, not defined" shape morph#430 exists to remove, just triggered
+# discovered, not defined" shape the manifest exists to remove, just triggered
 # by a retry instead of an old worktree. See PROFILES' own assignment above
 # for the full account.
 rm -f "${PROFILES[@]}"
@@ -273,7 +273,7 @@ rm -f "${PROFILES[@]}"
 # this tree by construction. A shared compiler cache can serve objects built in
 # another worktree, and their coverage mappings name that worktree -- 246 of
 # 688 records in the run that found it, taking the whole of crm's src models
-# out of the report while its tests ran and passed (morph#426). The cause is
+# out of the report while its tests ran and passed. The cause is
 # removed at configure time (cmake/compiler_options.cmake defaults
 # USE_COMPILER_CACHE to OFF under AF_COVERAGE); this is the check that the
 # removal held, because the failure it guards against reports nothing.
@@ -320,7 +320,7 @@ ${LLVM_COV} export "$PRIMARY_OBJECT" \
 python3 scripts/aggregate_lcov_branches.py \
     "$OUT/coverage.lcov.raw" "$OUT/coverage.json" "$OUT/coverage.lcov"
 
-# The branch half of the number, which until morph#404 was produced, preserved,
+# The branch half of the number, which is easily produced, preserved,
 # uploaded and scored by nothing: every status and every component in
 # codecov.yml measures lines, and Codecov has no branch target to set. A line
 # is covered the moment control reaches it, whatever the condition on it

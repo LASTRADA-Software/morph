@@ -5,8 +5,8 @@ Usage:
     python3 scripts/check_branch_coverage.py [LCOV] [--objects coverage_objects.txt]
     python3 scripts/check_branch_coverage.py --self-test
 
-Why this exists (morph#404)
----------------------------
+Why this exists
+---------------
 This repository measures branch coverage and then gates on lines. Branch data is
 produced and deliberately preserved -- scripts/coverage.sh exports LCOV BRDA
 records and runs scripts/aggregate_lcov_branches.py to collapse llvm-cov's
@@ -95,8 +95,8 @@ import tempfile
 # Previously measured on 2026-09-02, over the CI coverage leg's full
 # configure (MORPH_BUILD_NET/OFFLINE_SQLITE/QT/LADDER=ON,
 # MORPH_LADDER_RUNGS=all) with all 2435 ctest cases passing -- and,
-# critically, after morph#403: include/morph/net contributed zero files to
-# every report before that, so its 338 branches and 66 partial lines were
+# critically, with include/morph/net present in the report: it contributed
+# zero files to earlier ones, so its 338 branches and 66 partial lines were
 # new to the denominator rather than new to the code. Kept here as the
 # prior data point; the floors below are all from the 2026-09-07 run.
 FLOORS = {
@@ -112,8 +112,8 @@ FLOORS = {
     "include/morph/util": (93.0, 96.39),
 }
 
-# The library as a whole, which is what morph#404 asks to be "reported as its own
-# number and carry a target".
+# The library as a whole, reported as its own number and carrying its own
+# target.
 TOTAL_FLOOR = 92.0
 TOTAL_MEASURED = 95.95
 
@@ -125,15 +125,15 @@ TOTAL_MEASURED = 95.95
 # morph_tests compiles nothing under include/morph/net or include/morph/qt:
 # those come from tests/net and tests/qt, gated behind MORPH_BUILD_NET and
 # MORPH_BUILD_QT, both `option(... OFF)`. Without this table the vacuity check
-# below fails that configure while blaming morph#403 -- a fixed defect -- for an
-# option simply being off, which is the same shape of wrong diagnosis as a
+# below fails that configure and blames a dropped subsystem for an option simply
+# being off -- a wrong diagnosis that costs whoever reads it the same as a
 # citation that has drifted.
 #
 # The mapping is checked in both directions rather than trusted, so it cannot
 # rot into a permanent skip: a subsystem whose binary is absent must have *no*
 # records (otherwise the mapping is stale and this gate says so), and one whose
-# binary is present must have records (which is the morph#403 shape and stays
-# fatal). A subsystem not named here is required unconditionally, so a new
+# binary is present must have records (a subsystem silently absent from the
+# report, which stays fatal). A subsystem not named here is required unconditionally, so a new
 # directory under include/morph defaults to the strict side.
 OPTIONAL_SUBSYSTEMS = {
     "include/morph/net": "morph_net_tests",
@@ -207,8 +207,8 @@ ALLOWLIST = "scripts/branch_partial_allowlist.json"
 #
 # The second half of that sentence used to read "and narrow enough that two
 # occurrences of the same statement in neighbouring overloads do not both fall
-# inside it". **That is not true of any of the five citations morph#711
-# migrated**, and it is recorded here rather than left for the next person to
+# inside it". **That is not true of any of the five citations in this
+# allowlist**, and it is recorded here rather than left for the next person to
 # rediscover. Measured on each pair, as the gap between the two occurrences:
 #
 #     include/morph/core/backend.hpp   registerCount        1149 / 1168   19
@@ -227,8 +227,8 @@ ALLOWLIST = "scripts/branch_partial_allowlist.json"
 # The failure direction is still the safe one -- an unusable window is refused
 # as still-ambiguous, never resolved to a guess -- so this is a usability defect
 # in `context`, not a correctness one. Widening the window makes it worse and
-# narrowing it makes `context` unable to reach a function signature at all;
-# morph#701's design note is where a better disambiguator belongs.
+# narrowing it makes `context` unable to reach a function signature at all. A
+# better disambiguator than a window would be a separate design.
 CONTEXT_WINDOW = 40
 
 
@@ -250,15 +250,12 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
     """Resolve one allowlist entry's `source` text to its current line number.
 
     Used by this module's resolve_allowlist(), keyed on partial branch lines.
-    A second caller keyed on throw/catch sites (morph#406) shared it until the
-    meta-gates were removed; this is the only caller now.
-
-    The sharing was deliberate while it lasted, and the reason it existed is
-    still the reason this function is worth keeping correct: the "moved line"/
-    "ambiguous match" resolution here is exactly the fix for a defect this
-    repository has found three times over in an allowlist keyed by line number
-    alone (morph#349, morph#355, morph#419), and a second, independently
-    maintained copy of that fix is how the class gets a fourth chance.
+    It is the only caller. Any second allowlist keyed on source text belongs
+    here too rather than in a copy of this logic: the "moved line"/"ambiguous
+    match" resolution below is the fix for a defect this repository has found
+    three separate times in an allowlist keyed by line number alone, and a
+    second, independently maintained copy of that fix is how the class gets a
+    fourth chance.
 
     Returns the resolved line number on success. Returns `None` and appends
     to `failures` on any failure: a missing source file, `wanted` text that
@@ -269,12 +266,12 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
     an update is still needed before the entry should be trusted -- see the
     "has moved to line" message below.
 
-    Ambiguity, and the `context` field (morph#701)
-    ----------------------------------------------
-    Until morph#701 this function answered an ambiguous citation with whatever
-    the entry had already said: `if hint in matches: return hint` accepted *any*
-    occurrence of the text, so a hint that named the wrong one of three passed
-    exactly as a right one did. That is a gate that stops measuring at the moment
+    Ambiguity, and the `context` field
+    ----------------------------------
+    An ambiguous citation must not be answered with whatever the entry already
+    said. `if hint in matches: return hint` accepts *any*
+    occurrence of the text, so a hint that names the wrong one of three passes
+    exactly as a right one does. That is a gate that stops measuring at the moment
     someone interacts with it, and it fired twice in one week -- on
     include/morph/core/backend.hpp's two `emitMetric(registerCount)` arms and on
     include/morph/core/bridge.hpp's three `if (deadlineHandle && schedulerRef)`
@@ -293,11 +290,9 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
     `source` that has, and one that resolves to a *different* occurrence than the
     `line` hint is the defect itself.
 
-    There is no grandfathering list. PENDING_CONTEXT held the four (file, text)
-    pairs that were already ambiguous when this rule arrived, in two files
-    morph#701 was not allowed to touch; morph#711 migrated all five entries to a
-    `context` and deleted the constant. A migration list with nothing left in it
-    is an invitation to repopulate.
+    There is no grandfathering list, deliberately: every ambiguous entry carries
+    a `context`, and a migration list with nothing left in it is an invitation
+    to repopulate.
     """
     source_file = os.path.join(repo_root, path)
     if not os.path.exists(source_file):
@@ -341,7 +336,7 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
             f"{path}:{hint} is allowlisted by a source line that appears "
             f"{len(matches)} times (lines {matches}), so the `line` hint alone does "
             f"not say which occurrence is meant -- and this gate would accept any of "
-            f"them (morph#701). Add a `context`: a verbatim source line within "
+            f"them. Add a `context`: a verbatim source line within "
             f"{CONTEXT_WINDOW} lines of the occurrence you mean, and beside no other."
         )
         return None
@@ -375,10 +370,9 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
 def resolve_allowlist(repo_root, partial_lines, allowlist_path, failures):
     """Audit the allowlist in both directions; return the set it accounts for.
 
-    `source`, not `line`, is the key. A comment citing a bare line number is the
-    defect this repository has found three times (morph#349, morph#355,
-    morph#419), and an allowlist keyed that way would rot the same way while
-    still suppressing something. The line number is carried as a hint and
+    `source`, not `line`, is the key. A comment citing a bare line number is a
+    defect this repository has found three separate times, and an allowlist keyed
+    that way would rot the same way while still suppressing something. The line number is carried as a hint and
     reported back when it has moved.
 
     Both directions are audited because only one of them is obvious. An entry
@@ -470,10 +464,9 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None, objects_pat
     allowlisted = resolve_allowlist(repo_root, partial_lines, allowlist_path, failures)
 
     # Vacuity, in both directions. A subsystem this gate names but the report
-    # does not contain is morph#403 happening again -- include/morph/net was
-    # absent from every uploaded report for exactly that reason, and a gate that
-    # reports "ok" over a missing subsystem is the silence that let it last
-    # through three occurrences. A subsystem the report contains but this gate
+    # does not contain has been dropped from the report -- include/morph/net was
+    # absent from every uploaded one for exactly that reason -- and a gate that
+    # reports "ok" over a missing subsystem is the silence that lets it last. A subsystem the report contains but this gate
     # does not name is the same defect mirrored: a new directory under
     # include/morph would be scored by nothing.
     profiled = read_profiled_binaries(objects_path)
@@ -499,7 +492,7 @@ def check(lcov_path, repo_root, out=sys.stdout, allowlist_path=None, objects_pat
         if subsystems.get(name, [0])[0] == 0:
             failures.append(
                 f"{name} contributes no branch records to {lcov_path}. Either it was "
-                f"dropped from the report -- which is morph#403's defect -- or it no "
+                f"dropped from the report, or it no "
                 f"longer exists and this gate's table is stale. Both are errors."
             )
     for name in subsystems:
@@ -697,8 +690,8 @@ def self_test():
         note("ok: a subsystem below its branch floor is rejected")
 
     # 3. A subsystem missing from the report fails rather than being skipped.
-    #    This is morph#403 in this gate's own terms: include/morph/net was absent
-    #    from every uploaded report, and absence read as nothing to check.
+    #    In this gate's own terms: include/morph/net was once absent from every
+    #    uploaded report, and absence read as nothing to check.
     without_net = {k: v for k, v in _every_subsystem().items()
                    if not k.startswith("include/morph/net/")}
     code, output = run(without_net)
@@ -756,7 +749,7 @@ def self_test():
 
     # 8. An entry whose source text no longer exists fails, rather than
     #    suppressing whatever now happens to sit at that line number. This is the
-    #    rot morph#349, morph#355 and morph#419 are each an instance of.
+    #    rot a line-number-keyed allowlist decays into.
     edited = "// header\nvoid f() {\n    if (somethingElseEntirely()) {\n    }\n}\n"
     code, output = run(with_partial_line(), allowlist=entry,
                        sources={UNCOVERABLE_PATH: edited})
@@ -777,7 +770,7 @@ def self_test():
     else:
         fail("an allowlist entry whose line moved was not reported", output)
 
-    # 10. An entry with no reason fails. morph#404: a bare suppression is not a
+    # 10. An entry with no reason fails: a bare suppression is not a
     #     disposition, and an allowlist that accepts one becomes a list of things
     #     nobody has to justify.
     reasonless = [dict(entry[0], reason="")]
@@ -788,12 +781,12 @@ def self_test():
     else:
         note("ok: an allowlist entry with no stated reason is rejected")
 
-    # ── The `context` disambiguator (morph#701) ────────────────────────────
-    # Before morph#701 the resolver returned the hint whenever the hint was *a*
-    # match, so cases 11 and 12 below both passed -- including 12, which names
-    # the occurrence the entry's own reason excludes. These seven cases are the
-    # fix, and the pair 11/12 is what makes them non-vacuous: a change that only
-    # let the right answer through would still pass 13.
+    # ── The `context` disambiguator ────────────────────────────────────────
+    # A resolver that returns the hint whenever the hint is *a* match passes
+    # cases 11 and 12 below alike -- including 12, which names the occurrence
+    # the entry's own reason excludes. The pair 11/12 is what makes these seven
+    # cases non-vacuous: a change that only let the right answer through would
+    # still pass 13.
     AMBIGUOUS_PATH = "include/morph/util/ambiguous.hpp"
     AMBIGUOUS_SOURCE = (
         "// header\n"                                  # 1
@@ -834,7 +827,7 @@ def self_test():
         fail("an ambiguous citation with no `context` was accepted", output)
 
     # 12. The *wrong* occurrence, with no disambiguator -> refused identically.
-    #     This is the case that passed before morph#701.
+    #     This is the case a hint-accepting resolver lets through.
     code, output = run_ambiguous(ambiguous_entry(line=57))
     if code != 0 and "does not say which occurrence is meant" in output:
         note("ok: the wrong duplicate is refused, not accepted for matching something")
@@ -877,11 +870,11 @@ def self_test():
     else:
         fail("a non-disambiguating `context` was accepted", output)
 
-    # ── The manifest-aware vacuity rule (morph#404 follow-up) ───────────────
+    # ── The manifest-aware vacuity rule ────────────────────────────────────
     # `cmake --preset clang-coverage` with nothing else profiles morph_tests
     # alone, and morph_tests compiles nothing under include/morph/net or
-    # include/morph/qt. Before these four cases the gate failed that configure
-    # while naming morph#403 -- a fixed defect -- as the cause.
+    # include/morph/qt. Without these four cases the gate fails that configure
+    # and blames a dropped subsystem for an option being off.
     partial_build = {name: recs for name, recs in _every_subsystem().items()
                      if not name.startswith(("include/morph/net/", "include/morph/qt/"))}
 
@@ -893,7 +886,7 @@ def self_test():
 
     code, output = run(partial_build, profiled=["morph_tests", "morph_net_tests",
                                                 "morph_qt_tests"])
-    if code != 0 and "morph#403" in output:
+    if code != 0 and "contributes no branch records" in output:
         note("ok: a subsystem missing while its suite WAS profiled still fails")
     else:
         fail("a profiled-but-absent subsystem was accepted", output)
@@ -905,7 +898,7 @@ def self_test():
         fail("a stale OPTIONAL_SUBSYSTEMS mapping was accepted", output)
 
     code, output = run(partial_build)
-    if code != 0 and "morph#403" in output:
+    if code != 0 and "contributes no branch records" in output:
         note("ok: with no manifest the gate still enforces every subsystem")
     else:
         fail("omitting the manifest silently disabled the vacuity check", output)

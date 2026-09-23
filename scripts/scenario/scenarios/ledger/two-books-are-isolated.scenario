@@ -79,14 +79,14 @@ expect ok
 # The *second* book's account under the *first* book's category. Both rows
 # exist and both ids are well-formed -- category and account ids are
 # table-wide autoincrements, so a lookup by id alone finds the foreign row --
-# and until morph#373 the link was written. The report still did not count it,
-# because it filters journals by the budget's own ledger; but that made the
-# whole isolation rest on an invariant nothing stated and nothing bound a
-# future report kind to. Refused at the write instead.
+# so without a check at the write the link is simply written. The report still
+# would not count it, because it filters journals by the budget's own ledger;
+# but that leaves the whole isolation resting on an invariant nothing states
+# and nothing binds a future report kind to. Refused at the write instead.
 #
 # These books are unowned (the driver seeds them by raw `INSERT`), which is
-# exactly the case morph#382's ownership gate admits: every principal passes
-# the owner check on both, so this refusal is the only one left.
+# exactly the case the ownership gate admits: every principal passes the owner
+# check on both, so this refusal is the only one left.
 do LinkAccountToCategory accountId=$secondSpend categoryId=$category
 expect err message == "LinkAccountToCategory: category does not belong to this ledger"
 
@@ -134,8 +134,8 @@ expect ok field limit.num == 100000
 #
 # Each book gets its own job, and each job id answers for itself.
 #
-# Why neither assertion below says `status == "Pending"`, which is what they
-# used to say (morph#765): `ledger::app::App` starts a timer that sweeps for
+# Why neither assertion below says `status == "Pending"`, which is the obvious
+# thing to assert: `ledger::app::App` starts a timer that sweeps for
 # `Pending` rows every second -- its `runInterval` default, in
 # examples/ledger/include/ledger/app/app.hpp -- and dispatches `RunReportJob`
 # under its own service principal. So a job's status is a *race* against that
@@ -143,8 +143,8 @@ expect ok field limit.num == 100000
 # milliseconds between the `SubmitReport` above and the `GetReportStatus`
 # below makes the status `Done` and fails the file through no fault of the
 # code under test. That is wall-clock timing through the back door, which is
-# what this runner exists not to do (morph#147). It is not a newly noticed
-# hazard either: `submit-a-report-and-poll-it.scenario` documents this exact
+# what this runner exists not to do. It is not a hypothetical hazard either:
+# `submit-a-report-and-poll-it.scenario` documents this exact
 # race in its own header and records a `status != "Pending"` mutant surviving
 # there, because by the time the mutant ran the job had genuinely completed.
 #
@@ -153,7 +153,7 @@ expect ok field limit.num == 100000
 # `RunReportJob` settles a job `Failed`, terminally, when the ledger it is
 # dispatched with is not the ledger the job's own row names -- the scope guard
 # in `LedgerModel::execute(const RunReportJob&)`, which exists because without
-# it book two's job was settled `Done` carrying book one's totals (morph#371).
+# it book two's job settles `Done` carrying book one's totals.
 # The runner reads `jobId` and `ledgerId` off one row, so a job that stays out
 # of `Failed` across however many sweeps have happened is a job that was not
 # run against the other book. Whether it has run at all is the sweeper's

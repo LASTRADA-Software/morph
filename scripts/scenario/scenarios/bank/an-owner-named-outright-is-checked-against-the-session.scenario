@@ -23,14 +23,12 @@
 #     `ListBudgets`, `ListNotifications`, `GenerateStatement`, `OpenAccount`
 #     and `MarkAllRead`. Every one of them is exercised below.
 #
-# This file used to assert the opposite. Until morph#471 was fixed
-# (https://github.com/LASTRADA-Software/morph/issues/471) `resolveOwner`
-# returned whatever string the caller put in the `owner` field and only fell
-# back to the session principal when that field was empty — nothing compared
-# the two — so every refusal below was an `expect ok` recording a
-# confused-deputy read of another customer's data. Flipping those assertions is
-# that issue's regression test; the shape of the file is unchanged so the two
-# revisions read against each other.
+# Every assertion below inverts if the comparison goes: a `resolveOwner` that
+# returns whatever string the caller put in the `owner` field and only falls
+# back to the session principal when that field is empty — comparing the two
+# nowhere — turns every refusal below into an `expect ok` recording a
+# confused-deputy read of another customer's data. That is what makes this file
+# a test of the comparison rather than of the actions it covers.
 #
 # The field is **verified, not ignored**. Naming yourself still works and is
 # asserted below, twice: `owner` is `CustomerModel`'s bridge routing key
@@ -135,8 +133,8 @@ expect err message == "owner does not match the session principal"
 # `resolveOwner` never sees it and the comparison above cannot be the thing
 # that refuses it. It goes through `db::loadOwned` instead, the same guard the
 # id-addressed actions use, which is why its message is the other shape. It
-# lives on `BudgetModel`. Before morph#471 it consulted no owner whatsoever and
-# reported on any account in the database.
+# lives on `BudgetModel`. Without that guard it consults no owner whatsoever
+# and reports on any account in the database.
 use s-plan
 do SpendingByKind accountId=$qAcct sinceMs=0
 expect err message == "account belongs to a different owner"

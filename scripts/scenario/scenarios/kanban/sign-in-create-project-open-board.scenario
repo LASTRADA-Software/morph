@@ -18,13 +18,13 @@
 #     `OpenBoard` before any other action will answer -- and a handler that
 #     was never opened is refused by name, "<Action>: handler was never
 #     attached via OpenBoard", which is asserted per action in
-#     a-board-must-be-opened-before-it-answers.scenario (it answered the raw
-#     text `stoull` until morph#368);
+#     a-board-must-be-opened-before-it-answers.scenario (an unguarded key
+#     answers the raw text `stoull` instead);
 #   * `AuthModel`/`Login` is the one model/action pair a tokenless caller may
 #     reach (`KanbanAuthorizer::kAnonymousModelType`). Everything else needs
 #     the token it mints, installed with a `session` step -- `client`'s own
 #     principal=/token= options take literal text and are not
-#     capture-expanded (morph#360).
+#     capture-expanded.
 #
 # Re-runnable: the project is created by this file, so its board is empty in
 # every run and every id below is captured from the reply that minted it.

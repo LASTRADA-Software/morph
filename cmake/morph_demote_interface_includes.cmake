@@ -8,7 +8,7 @@
 # morph_demote_lightweight_odbc_includes()
 #   The one caller that matters, applied to the fetched `Lightweight` target.
 #
-# ── Why this exists (morph#438) ──────────────────────────────────────────────
+# ── Why this exists ──────────────────────────────────────────────────────────
 #
 # The pinned Lightweight (bbb972a78e1962b968a2c6ad93f7dade736eaa01) resolves
 # unixODBC with `pkg_check_modules(ODBC REQUIRED odbc)` and then propagates the

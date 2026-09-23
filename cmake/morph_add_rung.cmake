@@ -27,7 +27,7 @@
 # -L takes a regex, not an exact label. End-to-end journeys additionally get
 # "journey" from a small generated post-pass. See the catch_discover_tests
 # call below for why the label cannot be a two-value LABELS, and why the rung
-# label is not applied by the post-pass (morph#173).
+# label is not applied by the post-pass.
 #
 # The name prefix is what makes each case's ctest entry unique. A ctest name
 # is global to the build tree -- not scoped to the target or the directory it
@@ -36,9 +36,9 @@
 # one name are both reached by every by-name operation, and
 # `set_tests_properties(<name> PROPERTIES LABELS ...)` is one of them: CTest
 # *appends* labels, so the first-registered entry accumulated later rungs'
-# labels too and `ctest -L ladder-<rung>` over-selected -- running another
-# rung's binary alongside its own, with nothing to say so (morph#464: crm
-# selected 180 cases while owning 168). A failure line, `--output-junit` and
+# labels too and `ctest -L ladder-<rung>` over-selects -- running another
+# rung's binary alongside its own, with nothing to say so (measured once as crm
+# selecting 180 cases while owning 168). A failure line, `--output-junit` and
 # CDash also identify a test by name alone, so a duplicate could not say which
 # binary failed. scripts/check_ctest_name_collisions.sh is the gate that keeps
 # this property true; ci.yml's ladder-tests job runs it on the all-rungs
@@ -531,16 +531,16 @@ function(morph_add_rung)
             catch_discover_tests(ladder_${_rung}_tests
                 DISCOVERY_MODE POST_BUILD
                 # "<rung>." on every discovered ctest name, so no two rungs'
-                # entries can share one (morph#464 -- see the header comment
-                # for what a shared name did to `ctest -L ladder-<rung>`).
+                # entries can share one (see the header comment for what a
+                # shared name does to `ctest -L ladder-<rung>`).
                 # One word, no space and no `;`: TEST_PREFIX rides the same
                 # `-D VAR=...` channel as PROPERTIES below, whose flattening
                 # the comment there documents. Catch2 prefixes the *ctest*
                 # name only -- the filter argument it passes back to the
                 # binary stays the unprefixed test name
                 # (CatchAddTests.cmake's `escaped_name`), so this changes
-                # nothing about which case each entry runs, and it is not a
-                # fix for the `~`-prefix hazard morph#466 covers.
+                # nothing about which case each entry runs, and it does not
+                # address the `~`-prefix hazard.
                 TEST_PREFIX "${_rung}."
                 DL_PATHS "${_qt_bin_dir}"
                 # One label, not two, and the *rung* one. catch_discover_tests
@@ -564,9 +564,9 @@ function(morph_add_rung)
                 # (`list(APPEND tests "${prefix}${plain_name}${suffix}")`), so
                 # a TEST_CASE whose name contains a `;` is flattened into two
                 # fragments that name no test, and set_tests_properties then
-                # silently applies to nothing. That was morph#173: the case
-                # kept `ladder` and never gained `ladder-<rung>`, so
-                # `ctest -L ladder-<rung>` under-selected without saying so.
+                # silently applies to nothing: the case keeps `ladder` and
+                # never gains `ladder-<rung>`, so `ctest -L ladder-<rung>`
+                # under-selects without saying so.
                 PROPERTIES LABELS ladder-${_rung} TIMEOUT 120 RESOURCE_LOCK morph_ladder_test_db
             )
             # `journey` still needs a post-pass: it applies to some cases and
@@ -574,12 +574,12 @@ function(morph_add_rung)
             # express. It therefore inherits the flattening limitation
             # described above — a journey case whose name contained a `;` would
             # keep its rung label but never gain `journey`. Rather than let
-            # that go quiet the way morph#173 did, it is rejected at configure
-            # time by the guard below.
+            # that go quiet, it is rejected at configure time by the guard
+            # below.
             #
             # set_tests_properties *appends* to LABELS rather than replacing
             # them -- the same append that let two same-named ctest entries
-            # accumulate each other's rung labels (morph#464). The journey
+            # accumulate each other's rung labels. The journey
             # branch restates the rung label alongside `journey` anyway: the
             # resulting repeat of `ladder-<rung>` is inert (`-L` asks whether
             # a label is present, not how often), and restating it keeps the
@@ -592,8 +592,8 @@ function(morph_add_rung)
                     message(FATAL_ERROR
                         "morph_add_rung(${_rung}): a \"Journey: \" TEST_CASE name contains a "
                         "semicolon. CMake cannot round-trip that through Catch2's discovered "
-                        "test list, so the case would silently never gain its `journey` label "
-                        "(morph#173). Rename it.\n  File: ${_journey_src}\n  Name: ${_bad_journey_names}")
+                        "test list, so the case would silently never gain its `journey` label. "
+                        "Rename it.\n  File: ${_journey_src}\n  Name: ${_bad_journey_names}")
                 endif()
             endforeach()
             file(GENERATE
@@ -634,8 +634,8 @@ endforeach()
         # LLVM_PROFILE_FILE through QProcess and exit normally, so they do
         # write profile data -- which llvm-cov could not map to anything until
         # this registration existed, while scripts/coverage.sh named
-        # examples/<rung>/src among its SOURCES regardless. Exactly the
-        # morph#403 shape, and invisible to
+        # examples/<rung>/src among its SOURCES regardless -- a coverage
+        # figure computed over sources no registered binary reaches. Invisible to
         # scripts/check_coverage_objects.sh, because a binary reached through a
         # compile definition appears in no ctest command. Same reasoning, and
         # the same TEST keyword, as tests/qt's qt_test_server/qt_test_client.

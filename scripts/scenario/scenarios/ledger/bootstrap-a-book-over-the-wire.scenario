@@ -7,10 +7,11 @@
 # This is the one ledger file that starts from nothing. Every other file in
 # this directory uses `ledgerId=1` or `2`, which the driver seeds
 # (`run_scenarios.py`'s `RungSpec.seed`) — fixture ids, not ids any client
-# produced. Until morph#361 that seed was unavoidable: `ledgers` rows were
-# created by no registered action, so `OpenAccount ledgerId=1` against a
-# genuinely empty database was refused with "OpenAccount: no such ledger" and
-# a fresh `ladder_ledger_server` served a book nobody could open. `CreateLedger`
+# produced. Without an action that creates one, that seed is unavoidable:
+# `ledgers` rows reachable from no registered action mean `OpenAccount
+# ledgerId=1` against a genuinely empty database is refused with "OpenAccount:
+# no such ledger", and a fresh `ladder_ledger_server` serves a book nobody can
+# open. `CreateLedger`
 # is what closed that, and this file is what proves it: nothing below names a
 # seeded id, so it would pass unchanged against a database the driver never
 # touched.
@@ -44,7 +45,7 @@ expect ok capture who=$.principal
 client books model=LedgerModel
 session principal=$who token=$token
 
-# ── The step that was impossible before morph#361 ───────────────────────────
+# ── The step that needs no seeded id ────────────────────────────────────────
 do CreateLedger name="Bootstrapped book"
 expect ok capture book=$.id
 

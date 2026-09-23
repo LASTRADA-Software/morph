@@ -2,7 +2,7 @@
 # Usage: bash scripts/test_check_coverage_objects.sh
 #
 # Self-test for scripts/check_coverage_objects.sh, the gate that fails when
-# ctest runs a binary llvm-cov is never handed (morph#403). A lint gate that is
+# ctest runs a binary llvm-cov is never handed. A lint gate that is
 # never itself tested reports green whether or not it still detects anything --
 # and this one is especially exposed to that, because the defect it guards
 # against is *already* a silence: an unprofiled suite makes the coverage run
@@ -110,7 +110,7 @@ else
 fi
 
 # ── 2. an unprofiled, unexplained binary -> fail, naming it ──────────────────
-# This is morph#403 itself, in miniature: morph_net_tests runs under ctest and
+# This is the defect itself, in miniature: morph_net_tests runs under ctest and
 # is absent from the object list. A nonzero exit alone is not enough -- the
 # gate has other failure paths, and one of them firing for an unrelated reason
 # would look like a pass of this case -- so the message must name the binary.

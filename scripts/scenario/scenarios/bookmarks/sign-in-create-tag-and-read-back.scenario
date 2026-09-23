@@ -22,7 +22,7 @@
 #   * AuthModel is the one model an unauthenticated caller may reach. The
 #     token it mints is real and server-signed, and it has to be installed
 #     with a `session` step -- `client`'s own principal=/token= options take
-#     literal text and are not capture-expanded (morph#360).
+#     literal text and are not capture-expanded.
 #
 # Re-runnable: every bookmark here is created by this file and read back by
 # the id its own create returned, so nothing depends on the database being

@@ -7,8 +7,8 @@ include(CheckCXXCompilerFlag)
 # gate written `$<CXX_COMPILER_ID:Clang>` matches nothing on a default macOS
 # toolchain. That is not hypothetical: it is how this project's *entire*
 # warning set -- -Weverything, every suppression under it, and -Werror --
-# silently stopped reaching the compile line on macOS, with no diagnostic of
-# any kind (issue #298). A generator expression that fails to match is
+# can silently stop reaching the compile line on macOS, with no diagnostic of
+# any kind. A generator expression that fails to match is
 # indistinguishable from one that matches nothing on purpose.
 #
 # The shape of this file is the fix for that failure mode, not just the extra
@@ -158,7 +158,7 @@ elseif(MORPH_COMPILER_FAMILY STREQUAL "Clang")
     _morph_clang_suppression_if_supported(-Wno-missing-designated-field-initializers)
     _morph_clang_suppression_if_supported(-Wno-nrvo)  # not eliding a trivial-type copy on return
     # -Wshadow-uncaptured-local does NOT mean "a lambda parameter shadowing an
-    # uncaptured local", which is what this line claimed until morph#662. It is
+    # uncaptured local", which is the obvious reading and the wrong one. It is
     # clang's group for *any* declaration inside a lambda with no
     # capture-default that shadows an enclosing local the lambda did not
     # capture — the parameter case is one of four. Measured on clang 22.1.8,
@@ -195,14 +195,13 @@ elseif(MORPH_COMPILER_FAMILY STREQUAL "Clang")
     # -isystem). That cleanup is tracked separately; do not fold it into an
     # unrelated change.
     #
-    # One consequence is recorded rather than fixed here (morph#662, still
-    # open): emsdk 3.1.56's older clang files `declaration shadows a structured
-    # binding` under plain -Wshadow instead, so the WASM leg is the only leg
-    # that enforces that one row of the table above. That statement is read off
-    # the CI log of run 35573507189, not reproduced locally — no emsdk
-    # toolchain is available here. It also currently enforces nothing in
-    # practice: morph#661 fixed the only four structured-binding shadows in the
-    # tree, and the measurement above found zero remaining.
+    # One consequence is recorded rather than fixed here: emsdk 3.1.56's older
+    # clang files `declaration shadows a structured binding` under plain
+    # -Wshadow instead, so the WASM leg is the only leg that enforces that one
+    # row of the table above. That statement is read off a CI log, not
+    # reproduced locally — no emsdk toolchain is available here. It also
+    # enforces nothing in practice: the measurement above finds zero
+    # structured-binding shadows left in the tree.
     list(APPEND MORPH_WARNING_FLAGS
         -Wno-shadow-uncaptured-local
         -Wno-documentation-unknown-command
@@ -228,7 +227,7 @@ elseif(MORPH_COMPILER_FAMILY STREQUAL "Clang")
         #     annotate the mutex-guarded members throughout, suppress the
         #     diagnostic rather than let an unrelated libc++ upgrade break
         #     every downstream target that transitively includes these
-        #     headers (issue #64).
+        #     headers.
         -Wno-thread-safety-negative
     )
 
@@ -380,8 +379,8 @@ if(MORPH_COMPILER_FAMILY STREQUAL "unknown")
     # MORPH_ENABLE_STRICT_COMPILATION is a promise the build cannot keep on a
     # compiler nothing here recognises: strict mode means warnings-as-errors,
     # and there are no warnings to make errors of. Refuse rather than configure
-    # a build that reports strict and enforces nothing — the exact shape of
-    # issue #298. Turning strict off downgrades this to a warning.
+    # a build that reports strict and enforces nothing. Turning strict off
+    # downgrades this to a warning.
     set(_morph_unknown_id_message
         "morph: warnings: CMAKE_CXX_COMPILER_ID='${CMAKE_CXX_COMPILER_ID}' matches no "
         "warning set in cmake/compiler_options.cmake, so this build would get the "
@@ -439,7 +438,7 @@ endif()
 #
 # once per moc'd class, and -Werror (above) turns every AUTOMOC target in the
 # project into a build failure -- ladder_<rung>_gui_lib, and with it every
-# ladder_<rung>_tests binary that links one (issue #372).
+# ladder_<rung>_tests binary that links one.
 #
 # AUTOMOC_PATH_PREFIX makes moc emit the header path relative to the include
 # directory it was found under instead ("budget_presenter.hpp",
@@ -447,9 +446,9 @@ endif()
 # own -I set and never ascends out of the build tree. That removes the
 # ambiguity rather than the diagnostic: -Wno-shadow-header would silence this
 # case, but it is also the only thing that reports a genuine cross-checkout
-# header pickup, which in this layout is a reachable state (issue #372's triage
-# demonstrates a moc TU compiling against the *outer* checkout's header once
-# the diagnostic is suppressed). scripts/check_automoc_includes.sh is the
+# header pickup, which in this layout is a reachable state: with the diagnostic
+# suppressed, a moc TU has been observed compiling against the *outer*
+# checkout's header. scripts/check_automoc_includes.sh is the
 # regression gate: it fails on any generated moc include that ascends.
 #
 # It only reaches headers that actually sit under one of their target's
@@ -487,9 +486,9 @@ endfunction()
 # @brief Assert the warning set actually reached every apply_warnings() target.
 #
 # Call once from the top-level CMakeLists.txt, after every add_subdirectory().
-# This is the guard issue #298 asked for: the original bug was a *silent*
-# mismatch, so the fix is not only to name AppleClang but to make "the flags
-# did not arrive" a configure-time failure. Reads COMPILE_OPTIONS back off
+# The failure this guards is *silent*, so naming every compiler id correctly is
+# not enough on its own: "the flags did not arrive" has to be a configure-time
+# failure. Reads COMPILE_OPTIONS back off
 # each target rather than trusting that apply_warnings() did what it looks
 # like it does.
 function(morph_verify_warning_flags)
@@ -510,7 +509,7 @@ function(morph_verify_warning_flags)
                 "morph: warnings: target '${_target}' went through apply_warnings() but "
                 "its COMPILE_OPTIONS do not contain '${MORPH_WARNING_SENTINEL}'. The "
                 "warning set is not reaching the compile line — see "
-                "cmake/compiler_options.cmake (issue #298).")
+                "cmake/compiler_options.cmake.")
         endif()
     endforeach()
     list(LENGTH _targets _morph_target_count)
@@ -519,14 +518,14 @@ function(morph_verify_warning_flags)
         "${_morph_target_count} target(s)")
 endfunction()
 
-# `-fno-sanitize-recover=undefined` is load-bearing, not tuning (morph#541).
+# `-fno-sanitize-recover=undefined` is load-bearing, not tuning.
 # UndefinedBehaviorSanitizer *recovers* by default: it prints the diagnostic
 # and lets the program carry on to exit 0, so a job that judges a run by its
 # exit status reports success over a build full of undefined behaviour.
 # Measured: a TU constructing `Rational{INT64_MIN, DecimalPlaces{2}}` printed
 # three `runtime error: negation of -9223372036854775808` lines on the
-# `clang-ubsan` leg and exited 0 -- which is how morph#537's defect survived a
-# sanitizer job that was green throughout.
+# `clang-ubsan` leg and exited 0 -- which is how a real defect survives a
+# sanitizer job that is green throughout.
 #
 # It belongs here rather than in a per-job `UBSAN_OPTIONS=halt_on_error=1`
 # because the asan arm is `-fsanitize=address,undefined` and so carries
@@ -554,9 +553,9 @@ function(apply_sanitizers target mode)
         target_link_options(${target} PRIVATE
             -fsanitize=undefined -fno-sanitize-recover=undefined)
     else()
-        # No silent fall-through (morph#541). Without this arm, -DAF_SANITIZER=msan,
-        # =ASAN or a typo produced a *fully uninstrumented* build that configured,
-        # compiled and ran the entire suite green -- a sanitizer job reporting
+        # No silent fall-through. Without this arm, -DAF_SANITIZER=msan,
+        # =ASAN or a typo produces a *fully uninstrumented* build that configures,
+        # compiles and runs the entire suite green -- a sanitizer job reporting
         # success having sanitized nothing, which is the failure mode this
         # repository has hit most often. A configure-time error is the only place
         # the mistake is still cheap: by build time every binary looks normal, and
@@ -570,7 +569,7 @@ function(apply_sanitizers target mode)
     endif()
 endfunction()
 
-# ── A coverage build does not share a compiler cache (morph#426) ─────────────
+# ── A coverage build does not share a compiler cache ─────────────────────────
 #
 # Set before cmake/CompileCache.cmake is included, so its option() -- which
 # honours a normal variable of the same name under CMP0077 -- picks this up as
@@ -612,7 +611,7 @@ endfunction()
 # the cost of rewriting the filter mechanism whose silent shrinkage this issue
 # is about was the worse trade.
 #
-# The same trade, on the same flag family, for __FILE__ (morph#775). `__FILE__`
+# The same trade, on the same flag family, for __FILE__. `__FILE__`
 # is expanded at compile time and baked into the object, Catch2 records it per
 # TEST_CASE, and a cache hit served across worktrees therefore reports failures
 # against a directory that may hold a different revision of the file or no
@@ -656,14 +655,14 @@ if(AF_COVERAGE)
             "(CXX='${CMAKE_CXX_COMPILER_LAUNCHER}'), so this build caches "
             "regardless of USE_COMPILER_CACHE. Safe on a single checkout; on a "
             "machine with several worktrees of this repository a cache hit can "
-            "carry another worktree's source paths into the coverage mapping "
-            "(morph#426), which scripts/check_coverage_roots.sh will catch.")
+            "carry another worktree's source paths into the coverage mapping, "
+            "which scripts/check_coverage_roots.sh will catch.")
     elseif(NOT DEFINED USE_COMPILER_CACHE)
         set(USE_COMPILER_CACHE OFF)
         message(STATUS
             "morph: coverage: compiler cache disabled by default -- a shared cache "
             "can serve objects built in another worktree, whose absolute source "
-            "paths then match none of scripts/coverage.sh's filters (morph#426). "
+            "paths then match none of scripts/coverage.sh's filters. "
             "Pass -DUSE_COMPILER_CACHE=ON to override where the cache is known "
             "not to be shared across checkouts.")
     elseif(USE_COMPILER_CACHE)
@@ -680,8 +679,8 @@ if(AF_COVERAGE)
             "morph: coverage: USE_COMPILER_CACHE is ON for a coverage build. If it "
             "is shared across checkouts it can serve objects compiled in another "
             "worktree, whose absolute source paths match none of "
-            "scripts/coverage.sh's filters and are dropped from the report "
-            "(morph#426). This is expected on a single-checkout CI runner; on a "
+            "scripts/coverage.sh's filters and are dropped from the report. "
+            "This is expected on a single-checkout CI runner; on a "
             "developer machine with several worktrees, reconfigure with "
             "-DUSE_COMPILER_CACHE=OFF, or delete this build tree so the coverage "
             "default applies.")
@@ -700,12 +699,12 @@ endif()
 # data that was merged and then dropped on the floor, and morph_qt_tests,
 # morph_offline_sqlite_tests and morph_net_qt_interop_tests were not even
 # instrumented, so include/morph/net contributed zero files to the uploaded
-# report while eight test files drove it (morph#403).
+# report while eight test files drove it.
 #
-# That is the third time a hand-maintained list in scripts/coverage.sh has
-# rotted -- morph#141 (rungs 2-4 never added) and morph#179 (the rung list had
-# drifted past ledger and lims) were the first two, and both were fixed by
-# deleting the copy and deriving the list instead. This is the same fix for the
+# A hand-maintained list in scripts/coverage.sh has rotted three times this way
+# -- rungs never added, a rung list drifting behind examples/rungs.txt, and this
+# one -- and each time the repair was to delete the copy and derive the list
+# instead. This is that fix for the
 # test-executable list: the build system already knows which binaries it
 # instrumented, so it writes them out (see
 # morph_write_coverage_object_manifest below) and coverage.sh reads them. A
@@ -724,7 +723,7 @@ endif()
 # (morph_tests, morph_net_tests, morph_qt_tests, morph_offline_sqlite_tests,
 # morph_net_qt_interop_tests, ladder_common_tests, ladder_<rung>_tests) is a
 # test binary. Deriving it from the name rather than from a per-call flag is
-# the same move that fixed morph#179: a new test executable is registered by
+# the same move: a new test executable is registered by
 # being named like one, with nothing to remember and nothing to forget.
 #
 # `TEST` forces registration for a binary the convention cannot reach, and the
@@ -749,7 +748,7 @@ function(apply_coverage target)
     endif()
 
     # -fcoverage-mcdc is deliberately absent, and this is the record of that
-    # decision (morph#404 asks for one either way).
+    # decision.
     #
     # It works. Measured on clang 22.1.8 against tests/test_bridge_local.cpp,
     # compiled with this exact flag set plus -fcoverage-mcdc: the compile takes
@@ -783,7 +782,7 @@ function(apply_coverage target)
     # a question of the two reasons above, not of toolchain availability.
     # `-fprofile-update=atomic` is not a tuning knob here -- without it the
     # branch numbers this build produces over multithreaded code are wrong,
-    # and wrong in the direction that reports coverage nobody has (morph#754).
+    # and wrong in the direction that reports coverage nobody has.
     #
     # llvm-cov does not count the second operand of a short-circuit `||`
     # directly. It *derives* that arm by subtracting one counter from another,
@@ -856,7 +855,7 @@ endfunction()
 # exist on disk. An AF_COVERAGE build that *does* build the test suite and
 # still registered nothing is a configuration error rather than an empty
 # report, because an object list with nothing in it is exactly the
-# silently-shrinking figure morph#403 was about.
+# silently-shrinking figure this manifest exists to prevent.
 function(morph_write_coverage_object_manifest)
     if(NOT AF_COVERAGE)
         return()
@@ -867,7 +866,7 @@ function(morph_write_coverage_object_manifest)
             "morph: coverage: AF_COVERAGE is ON and the test suite is being "
             "built, but no target was registered as a coverage object. "
             "scripts/coverage.sh would then have no binary to map profile "
-            "data through and would report coverage over nothing (morph#403). "
+            "data through and would report coverage over nothing. "
             "A test executable registers itself by being named <name>_tests, "
             "or explicitly with apply_coverage(<target> TEST).")
     endif()
@@ -933,7 +932,8 @@ endfunction()
 
 # Registered here rather than called from CMakeLists.txt so the manifest and the
 # function that fills it stay in one file: a writer that has to be invoked by
-# hand from another directory is the same shape of coupling morph#403 was about.
+# hand from another directory is the same coupling that lets the object list
+# shrink unnoticed.
 # DEFER on this directory runs the call after every add_subdirectory() of the
 # scope that included this file completes, which is when the last
 # apply_coverage() has run.

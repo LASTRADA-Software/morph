@@ -86,19 +86,15 @@ env:
   FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
   CLANG_VERSION: "22"
   # The Catch2 the `clang-tidy` job analyses against, through the
-  # clang-tidy-diff.py run inside it. (Until morph#645 this sentence named
-  # clang-tidy-diff.py where the job id belongs -- the same substitution
-  # morph#637 was.) Not a
-  # version this
+  # clang-tidy-diff.py run inside it. Not a version this
   # workflow installs -- `apt-get install -y catch2` takes whatever
   # ubuntu-24.04 ships -- but a record of what that has been measured to be,
   # which the "Assert the Catch2 this job analyses against" step below reads
   # back off the runner and fails on if it has moved.
   #
-  # It is worth recording because it is load-bearing and invisible, but NOT
-  # for the reason recorded here until morph#777. The check the version
-  # actually decides is `bugprone-chained-comparison`, not
-  # `readability-function-cognitive-complexity`. Measured on 68a30bcc with
+  # It is worth recording because it is load-bearing and invisible. The check
+  # the version decides is `bugprone-chained-comparison`, not
+  # `readability-function-cognitive-complexity`. Measured with
   # clang-tidy 22.1.8, one TEST_CASE of twelve `REQUIRE`s, both releases
   # reached the same way (-isystem, i.e. as a system header, which is how this
   # runner and a workstation both reach theirs):
@@ -133,12 +129,12 @@ env:
   #         increased to 2
   #
   # -- the last line is the lambda in `REQUIRE(pumpUntil([&app] { ... }))`,
-  # spelled in the test file, and it is why that finding survived the system
-  # filter. So there is no local/CI asymmetry left to pin on this check, and
-  # morph#666's "exit 0 where this job exits 1" was really morph#776: a local
-  # `git diff -U0 HEAD` that analysed zero files.
+  # spelled in the test file, and it is why that finding survives the system
+  # filter. So there is no local/CI asymmetry to pin on this check: a local run
+  # that exits 0 where this job exits 1 is almost always a `git diff -U0 HEAD`
+  # that analysed zero files, not a Catch2 difference.
   #
-  # Which artefact this names, checked rather than assumed (morph#777):
+  # Which artefact this names, checked rather than assumed:
   # ubuntu-24.04's package is 3.4.0-1build1 and it ships /usr/lib/cmake/Catch2,
   # so `find_package(Catch2 CONFIG QUIET)` at CMakeLists.txt:557 SUCCEEDS on
   # this runner and the FetchContent v3.8.1 fallback never runs -- reproduced
@@ -322,14 +318,14 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y ninja-build catch2
           # Download, check, then execute -- not
-          # `wget -qO- https://apt.llvm.org/llvm.sh | sudo bash` (morph#681).
+          # `wget -qO- https://apt.llvm.org/llvm.sh | sudo bash`.
           # `wget -q` writes no error document, so on an HTTP 4xx/5xx it exits
           # 8 having written zero bytes. `bash` then reads an empty script,
           # does nothing, and exits 0 -- and GitHub runs `run:` under `bash -e`
           # without pipefail, so the pipeline's status is bash's, not wget's.
-          # The step therefore reported success having installed no compiler,
-          # and the leg went red several steps later at Configure, naming a
-          # missing compiler rather than the download that never happened.
+          # That step reports success having installed no compiler, and the leg
+          # goes red several steps later at Configure, naming a missing
+          # compiler rather than the download that never happened.
           #
           # Measured against apt.llvm.org itself, on a path that 404s:
           #
@@ -339,7 +335,7 @@ jobs:
           #     curl: (22) The requested URL returned error: 404
           #     exit=22
           #
-          # Same three lines as the `Install sccache` steps (morph#672), so the
+          # Same three lines as the `Install sccache` steps, so the
           # repository has one download idiom rather than two: `--fail` so the
           # download reports its own failure, a file so nothing downstream runs
           # when it does, and `test -s` for the 200-with-empty-body case that
@@ -378,28 +374,26 @@ jobs:
       - name: Install sccache
         if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
-          # `--fail`, and a file rather than a pipe into tar (morph#672). On
-          # 2026-09-21 both GCC legs of PR #671 died in this step with
+          # `--fail`, and a file rather than a pipe into tar. Piped, a host
+          # that serves an error page instead of a tarball kills the step with
           #
           #     gzip: stdin: not in gzip format
           #     tar: Child returned status 1
           #     tar: Error is not recoverable: exiting now
           #
-          # The download host had served something that is not a tarball --
-          # an error page -- and plain `curl` reports an HTTP 4xx/5xx as a
-          # *successful* transfer of that page, exit 0, straight down the
-          # pipe. So the only diagnostic anyone saw named the decompressor,
-          # and the event that actually happened (the download failed, with a
-          # status) appeared nowhere in the log. The step could not be
-          # salvaged by `set -o pipefail` either: GitHub runs `run:` under
-          # `bash -e`, without pipefail, so the pipeline's status is tar's
-          # regardless of what curl did.
+          # because plain `curl` reports an HTTP 4xx/5xx as a *successful*
+          # transfer of that page, exit 0, straight down the pipe. The only
+          # diagnostic anyone sees names the decompressor, and the event that
+          # actually happened -- the download failed, with a status -- appears
+          # nowhere in the log. `set -o pipefail` cannot salvage it either:
+          # GitHub runs `run:` under `bash -e`, without pipefail, so the
+          # pipeline's status is tar's regardless of what curl did.
           #
           # `--fail` makes curl exit non-zero and print `curl: (22) The
           # requested URL returned error: 503`; writing to a file means tar
           # never runs at all when it does. This is not a retry policy and it
           # does not make the outage less likely -- it makes the log name the
-          # thing that happened, which is the half of morph#672 that needs no
+          # thing that happened, which is the half of the problem that needs no
           # CI-wide decision. The rest of that class -- a retry policy, or a
           # marker that distinguishes "the environment failed" from "the
           # change failed" in the check list, and the apt/PPA outages that
@@ -492,10 +486,11 @@ jobs:
       # per-commit entry, and with 16 cache-writing legs at 1 GB each one
       # generation already exceeds GitHub's 10 GB per-repo budget -- so
       # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
+      # Restricting writes to master keeps the property that makes the cache
+      # usable at all (only one branch ever writes, so no branch can delete
+      # another's entry) while collapsing the generations that actually blow
+      # the budget. Pull requests still restore, read-only, and get the full
+      # benefit.
       - name: Save sccache
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
         uses: actions/cache/save@v4
@@ -536,7 +531,7 @@ jobs:
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
-          # form reported success having installed nothing (morph#681).
+          # form reports success having installed nothing.
           curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
@@ -564,8 +559,7 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
@@ -574,7 +568,7 @@ jobs:
       # morph::net and the SQLite offline queue are opt-in, but they are also
       # where the memory/threading/UB risk actually lives (raw sockets, an I/O
       # thread, a hand-rolled frame reader, a C API). Left off, the sanitizers
-      # silently skipped them. QML, the fuzzers, and the ladder stay out of
+      # silently skip them. QML, the fuzzers, and the ladder stay out of
       # this matrix entirely — they are covered by linux-coverage and
       # linux-all-features, and "a GUI stack under TSan is mostly noise".
       #
@@ -593,16 +587,16 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
 
       # A sanitizer job whose binaries are not instrumented runs the whole suite
-      # and learns nothing, while reporting success (morph#542). CI already
-      # asserted this, but only over the ladder's binaries and only for
-      # `__asan_` -- an assertion that is vacuous on the tsan and ubsan legs,
-      # which is the same "control that measures nothing" it exists to prevent.
-      # This walks what ctest will actually run and keys the expected symbol on
-      # the preset, so none of the three legs can pass on a blind build.
+      # and learns nothing, while reporting success. Asserting this over one
+      # job's binaries, or for `__asan_` alone, is vacuous on the tsan and
+      # ubsan legs -- the same "control that measures nothing" it exists to
+      # prevent. This walks what ctest will actually run and keys the expected
+      # symbol on the preset, so none of the three legs can pass on a blind
+      # build.
       #
       # No `QT_QPA_PLATFORM: offscreen` here, unlike the identical step in
       # bank-sanitizers, kanban-tsan and ladder-sanitizers, and the absence is
-      # deliberate rather than an omission (morph#691). The sweep's first act is
+      # deliberate rather than an omission. The sweep's first act is
       # `ctest --show-only=json-v1`, which *executes* every DISCOVERY_MODE
       # PRE_TEST binary to enumerate its cases; a Qt-linked one aborts headless
       # and takes the whole listing with it. This matrix's Configure above sets
@@ -629,8 +623,8 @@ jobs:
           # exception_ptr's, and the COW string holding the message -- both
           # decremented inside an uninstrumented libstdc++.so.6, so TSan
           # gets no happens-before edge between the last thread to read a
-          # shared exception's what() and the thread whose release frees it
-          # (morph#476). The file itself carries the measured evidence and
+          # shared exception's what() and the thread whose release frees it.
+          # The file itself carries the measured evidence and
           # says why each of the three frames it names still resolves
           # against the runner's stripped libstdc++.
           #
@@ -639,18 +633,18 @@ jobs:
           #
           # `second_deadlock_stack=1` is colon-separated *into this value*, not
           # a second `TSAN_OPTIONS:` key -- a second key silently replaces the
-          # first and drops the suppressions file, which is morph#688's failure
-          # one spelling over. It makes TSan print, for a lock-order inversion,
+          # first and drops the suppressions file, leaving the job green and
+          # unsuppressed. It makes TSan print, for a lock-order inversion,
           # the stacks where the *already-held* mutexes were taken. Measured on
           # a two-mutex inversion under clang 22.1.8: 36 lines -> 55, the extra
           # 19 being two `Mutex Mn previously acquired by the same thread here:`
           # stacks that name the acquiring function and line. Without it TSan
           # prints only `Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get
           # more informative warning message` -- advice nobody can take after
-          # the fact, because morph#578 and morph#717 are intermittent and the
-          # run that fires is the only evidence that will ever exist. No
-          # measurable runtime cost: 2M lock acquisitions under TSan took a
-          # median 0.275s without and 0.273s with (morph#736).
+          # the fact, because the races this job catches are intermittent and
+          # the run that fires is the only evidence that will ever exist. No
+          # measurable runtime cost: 2M lock acquisitions under TSan take a
+          # median 0.275s without and 0.273s with.
           TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp:second_deadlock_stack=1
         run: |
           # morph::testkit::OomInjector (tests/oom_injector.cpp) overrides
@@ -660,20 +654,20 @@ jobs:
           # under either sanitizer rather than linking a second definition
           # beside theirs.
           #
-          # This comment used to say the link failed with "multiple definition
-          # of `operator new(unsigned long)'", and called that confirmed in CI.
-          # It is not what happens (morph#718): the link succeeds, and the
-          # tests fail at *runtime* instead, because OomInjector's constructor
-          # throws when its overrides are compiled out --
+          # The link does *not* fail with "multiple definition of
+          # `operator new(unsigned long)'", which is the obvious guess. It
+          # succeeds, and the tests fail at *runtime* instead, because
+          # OomInjector's constructor throws when its overrides are compiled
+          # out --
           #
           #     OomInjector: unusable under ASan/TSan (operator new/delete
           #     overrides are compiled out)
           #
           # -- which is precisely what a ctest-level exclusion handles, and is
-          # why the exclusion below works at all. With it bypassed, morph#719's
-          # lane measured six failures on each of the two legs (the five
-          # OomInjector cases plus the morph#108 one). Deleting the -E filter
-          # on the strength of the old wording would turn both legs red.
+          # why the exclusion below works at all. Measured with the filter
+          # bypassed: six failures on each of the two legs, the five
+          # `OomInjector` cases plus the one whose name the second alternative
+          # matches. Deleting the -E filter turns both legs red.
           #
           # Excluded by test name on exactly these two legs; every other CI leg
           # (plain clang/gcc, Windows, ubsan, coverage) runs these tests
@@ -749,7 +743,7 @@ jobs:
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
-          # form reported success having installed nothing (morph#681).
+          # form reports success having installed nothing.
           curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
@@ -803,8 +797,7 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
@@ -844,7 +837,7 @@ jobs:
           LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
 
       # Deliberately left on the implicit `success()`, unlike the three test
-      # steps morph#618 moved to `!cancelled()` (ladder-tests' scenario corpus,
+      # steps that carry `!cancelled()` (ladder-tests' scenario corpus,
       # ladder-sanitizers' Qt transport suites, linux-all-features' fuzz-replay
       # verification). This is a decision, not an oversight, and it is written
       # down so it is not "fixed" later: this step and the two below it consume
@@ -865,8 +858,8 @@ jobs:
           # other *.lcov/coverage.* file under the build tree too (its own
           # log says so: "Found 5 coverage files to report") -- including
           # coverage.lcov.raw, the *pre-aggregation* file
-          # aggregate_lcov_branches.py's morph#93/#92 fixes rewrite away
-          # from, plus unrelated fetched-dependency fixtures
+          # aggregate_lcov_branches.py rewrites away from, plus unrelated
+          # fetched-dependency fixtures
           # (_deps/nlohmann_json-src/.../coverage.test). Codecov then merges
           # all of them, silently re-introducing every record `coverage.lcov`
           # was built to remove. `files:` alone does not disable that scan --
@@ -874,14 +867,11 @@ jobs:
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      # No `if:` guard. This step used to carry `if: matrix.preset ==
-      # 'clang-coverage'`, left behind when this job was split out of
-      # linux-sanitizers' matrix (see this job's own header comment). The job has
-      # no matrix, so `matrix.preset` evaluates to the empty string, the
-      # condition is false on every run, and the HTML report has never been
-      # uploaded -- a step that is skipped and a step that succeeded are rendered
-      # the same way, which is why nothing reported it. Found while fixing
-      # morph#403.
+      # No `if:` guard, and none may be added that names `matrix`. This job has
+      # no matrix, so `matrix.preset` evaluates to the empty string and any
+      # condition testing it is false on every run -- the step is then skipped
+      # forever, and a skipped step and a successful one are rendered the same
+      # way, so nothing reports it.
       - name: Upload coverage HTML
         uses: actions/upload-artifact@v4
         with:
@@ -890,7 +880,7 @@ jobs:
           # llvm-cov show emits one page per source file across include/morph,
           # examples/common and every rung -- a few thousand small files, which
           # upload-artifact pays per-file overhead on. Bounded rather than kept
-          # forever, since the step now actually runs on every coverage build.
+          # forever, since the step runs on every coverage build.
           retention-days: 14
 
       # Cumulative hit/miss for this leg. Without it the cache is
@@ -901,14 +891,14 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
+      # Save only on a push to master. Writing a new per-commit entry from
+      # every run does not work here: with 16 cache-writing legs at 1 GB each,
+      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
+      # each other and entries rarely survive to be reused. Restricting writes
+      # to master keeps the property that makes the cache usable at all (only
+      # one branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that blow the budget. Pull requests still
+      # restore, read-only, and get the full benefit.
       - name: Save sccache
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
@@ -928,14 +918,13 @@ jobs:
   # requires -- to keep it a minimal, fast, TSan-clean addition rather than
   # pulling every rung's Qt Quick/QML code into the sanitizer matrix.
   #
-  # (History: an earlier version of this test drove the same scenario through
-  # BackendRig{Mode::Local, ...}, whose Mode::Local unconditionally
-  # constructs a real morph::qt::QtExecutor for client-facing callback
-  # delivery -- morph#128 found 165 ThreadSanitizer warnings bottoming out in
-  # genuine Qt-internal frames reached through it, undetectable as real bugs
-  # or false positives from outside a TSan-instrumented Qt build. Rewriting
-  # the test to never construct a QtExecutor at all sidesteps the ambiguity
-  # entirely rather than resolving it.)
+  # The test must not reach a QtExecutor, and the constraint is load-bearing
+  # rather than stylistic: driving the same scenario through
+  # BackendRig{Mode::Local, ...} constructs a real morph::qt::QtExecutor for
+  # client-facing callback delivery, and that produces 165 ThreadSanitizer
+  # warnings bottoming out in genuine Qt-internal frames -- undetectable as
+  # real bugs or false positives from outside a TSan-instrumented Qt build.
+  # Never constructing one sidesteps the ambiguity rather than resolving it.
   kanban-tsan:
     name: Kanban / ThreadSanitizer
     runs-on: ubuntu-24.04
@@ -973,7 +962,7 @@ jobs:
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
-          # form reported success having installed nothing (morph#681).
+          # form reports success having installed nothing.
           curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
@@ -1004,8 +993,7 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
@@ -1039,7 +1027,7 @@ jobs:
         run: cmake --build --preset clang-tsan
 
       # The same assertion linux-sanitizers and ladder-sanitizers make, for the
-      # same reason (morph#542): this job's whole claim is that kanban's stress
+      # same reason: this job's whole claim is that kanban's stress
       # test ran under ThreadSanitizer, and an uninstrumented binary makes that
       # claim while proving nothing. Keyed on `__tsan_`, not `__asan_` — an
       # ASan-only assertion on a TSan leg is itself a control that measures
@@ -1047,7 +1035,7 @@ jobs:
       #
       # QT_QPA_PLATFORM=offscreen, matching the Build step above and the Test
       # step below, because this step sits between them and enumerates the same
-      # binaries they do (morph#691). The sweep begins with `ctest
+      # binaries they do. The sweep begins with `ctest
       # --show-only=json-v1`, and listing a DISCOVERY_MODE PRE_TEST suite *runs*
       # its binary. Nothing this job builds is both Qt-linked and PRE_TEST
       # today -- ladder_kanban_tests is POST_BUILD (cmake/morph_add_rung.cmake),
@@ -1055,7 +1043,7 @@ jobs:
       # -- which is why this step is green without the variable and not why it
       # is safe. Changing one word to PRE_TEST on any Qt-linked rung suite would
       # make this step fail with `ctest listed no tests`, naming neither Qt nor
-      # the display; that is morph#690, which cost three sessions over two days.
+      # the display -- a diagnostic that points nowhere near its cause.
       - name: Every ctest binary is instrumented
         env:
           QT_QPA_PLATFORM: offscreen
@@ -1073,16 +1061,16 @@ jobs:
       - name: Test (kanban's TSan-tagged stress test only)
         env:
           QT_QPA_PLATFORM: offscreen
-          # The suppression file linux-sanitizers' Test step already passes,
-          # missing here (morph#542). Both entries are libstdc++ refcounts for
-          # a shared exception, decremented inside an uninstrumented
-          # libstdc++.so.6 (morph#476); the evidence is in cmake/tsan.supp.
+          # The same suppression file linux-sanitizers' Test step passes. Both
+          # entries are libstdc++ refcounts for a shared exception, decremented
+          # inside an uninstrumented libstdc++.so.6; the evidence is in
+          # cmake/tsan.supp.
           # Without it this leg is a coin toss on a false positive that the
           # other TSan leg already knows is one — and the failure mode of a
           # known false positive is that the next real one is waved past.
           #
           # `second_deadlock_stack=1` for the reason the linux-sanitizers Test
-          # step above gives at length (morph#736), and appended to the same
+          # step above gives at length, and appended to the same
           # value rather than added as a second `TSAN_OPTIONS:` key, which
           # would silently drop the suppressions file this leg was given in the
           # first place.
@@ -1097,14 +1085,14 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
+      # Save only on a push to master. Writing a new per-commit entry from
+      # every run does not work here: with 16 cache-writing legs at 1 GB each,
+      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
+      # each other and entries rarely survive to be reused. Restricting writes
+      # to master keeps the property that makes the cache usable at all (only
+      # one branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that blow the budget. Pull requests still
+      # restore, read-only, and get the full benefit.
       - name: Save sccache
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
@@ -1113,53 +1101,46 @@ jobs:
           key: sccache-clang-tsan-${{ github.sha }}
 
   # ── Linux: the bank example under UndefinedBehaviorSanitizer ──────────
-  # Until morph#679, no sanitizer leg built the bank example at all. Measured
-  # on 5fc5e788: linux-sanitizers, kanban-tsan, ladder-sanitizers and valgrind
-  # set zero MORPH_BUILD_BANK_* flags, against eight places elsewhere in this
-  # file that set MORPH_BUILD_BANK_EXAMPLE=ON. Bank is not a rung (it is absent
-  # from examples/rungs.txt and never calls morph_add_rung(), for the reasons
-  # that file gives), so MORPH_BUILD_LADDER=ON does not reach it either, and
-  # nothing in those four jobs' comments argued for excluding it -- it was an
-  # option nobody turned on rather than a decision anybody made.
+  # No other sanitizer leg builds the bank example: linux-sanitizers,
+  # kanban-tsan, ladder-sanitizers and valgrind set zero MORPH_BUILD_BANK_*
+  # flags, against eight places elsewhere in this file that set
+  # MORPH_BUILD_BANK_EXAMPLE=ON. Bank is not a rung (it is absent from
+  # examples/rungs.txt and never calls morph_add_rung(), for the reasons that
+  # file gives), so MORPH_BUILD_LADDER=ON does not reach it either. This job is
+  # the only instrumented build bank gets.
   #
-  # The cost of that was paid in morph#663: an out-of-range double ->
-  # std::int64_t conversion in examples/bank/gui/controllers/Format.hpp, on the
-  # path of every amount typed into the bank GUI, found by a lane reading the
-  # code. Rebuilding that header as it stood before the fix, in this job's
-  # exact configuration, bank_gui_tests exits 1 with
+  # What that covers, stated exactly, because the obvious claim is too strong.
+  # An out-of-range double -> std::int64_t conversion in
+  # examples/bank/gui/controllers/Format.hpp -- on the path of every amount
+  # typed into the bank GUI -- exits bank_gui_tests 1 here with
   #
   #     examples/bank/gui/controllers/Format.hpp:76:38: runtime error:
   #     9.2e+19 is outside the range of representable values of type 'long'
   #
-  # -- but only because morph#663's fix also added the test that calls
-  # parseMinor with such a value. Measured too: with the pre-morph#663 header
-  # *and* the pre-morph#663 test set, this leg is green. The sanitizer gap was
-  # real and is what this job closes; it was not on its own what let morph#663
-  # survive, and this job's reach is bounded by how much of bank the suites
-  # actually drive.
+  # but only because a test calls parseMinor with such a value. Measured: with
+  # that test absent, the same defective header leaves this leg green. A
+  # sanitizer leg reaches only what the suites drive, and this one's reach is
+  # bounded by how much of bank they drive.
   #
   # Why a job of its own rather than a flag on linux-sanitizers' clang-ubsan
-  # leg -- the shape the ticket proposed. Two measured reasons. (1) That leg
-  # builds no Qt, and its own comment reserves the matrix against GUI stacks;
-  # bank's GUI is where the UB was, so covering it means adding Qt there. (2)
-  # Cold, cacheless, 12 cores, clang 22.1.8: the leg's current shape
-  # (core + net + offline_sqlite, no Qt) is 36s configure / 144s build over 144
-  # ninja edges, and this job's shape is 64s / 391s over 287. Folding one into
-  # the other roughly triples the slowest leg of a three-leg matrix, whose
-  # duration is then the matrix's. Split out, the three existing legs are
-  # untouched -- their flags are not changed by morph#679 at all -- and this
-  # runs beside them. Same precedent, and the same argument, as kanban-tsan
-  # above.
+  # leg. Two measured reasons. (1) That leg builds no Qt, and its own comment
+  # reserves the matrix against GUI stacks; bank's GUI is where this class of
+  # UB lives, so covering it means adding Qt there. (2) Cold, cacheless, 12
+  # cores, clang 22.1.8: that leg's shape (core + net + offline_sqlite, no Qt)
+  # is 36s configure / 144s build over 144 ninja edges, and this job's shape is
+  # 64s / 391s over 287. Folding one into the other roughly triples the slowest
+  # leg of a three-leg matrix, whose duration is then the matrix's. Split out,
+  # the three existing legs are untouched and this runs beside them. Same
+  # argument as kanban-tsan above.
   #
-  # ubsan rather than asan: UBSan is the sanitizer that diagnoses morph#663's
-  # class, and an ASan run over a Qt GUI needs the detect_leaks=0 and
-  # suppression story ladder-sanitizers already carries, which this job would
-  # have to acquire before it could be believed. Bank under ASan is worth
-  # having and is not closed by this job.
+  # ubsan rather than asan: UBSan is the sanitizer that diagnoses the
+  # conversion class above, and an ASan run over a Qt GUI needs the
+  # detect_leaks=0 and suppression story ladder-sanitizers already carries,
+  # which this job would have to acquire before it could be believed. Bank
+  # under ASan is worth having and is not covered here.
   #
-  # The first bill was measured before this landed, per morph#646 (84 findings)
-  # and morph#656 (97): turning bank on and instrumenting every one of its
-  # targets produced **zero** UBSan findings. bank_tests (145 assertions in 21
+  # The bill was measured: turning bank on and instrumenting every one of its
+  # targets produces **zero** UBSan findings. bank_tests (145 assertions in 21
   # cases), bank_gui_tests (19 in 5) and bank_gui_qml_tests (32 in 2) all pass
   # clean, and so does the full 1696-test suite of this configure. Nothing is
   # suppressed here and there is no allowlist entry.
@@ -1193,7 +1174,7 @@ jobs:
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
-          # form reported success having installed nothing (morph#681).
+          # form reports success having installed nothing.
           curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
@@ -1223,18 +1204,17 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
             sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
       # MORPH_BUILD_BANK_GUI=ON, not MORPH_BUILD_BANK_EXAMPLE alone: the
-      # controllers and Format.hpp -- where morph#663 was -- live in
-      # bank_gui_lib, which only exists when the GUI option adds gui/. Without
-      # it this job would instrument bank_lib and the ORM and miss the half of
-      # bank the defect was in. No MORPH_BUILD_LADDER: bank is not a rung, so
+      # controllers and Format.hpp -- the numeric-conversion surface this job
+      # exists for -- live in bank_gui_lib, which only exists when the GUI
+      # option adds gui/. Without it this job instruments bank_lib and the ORM
+      # and misses the half of bank that does the arithmetic. No MORPH_BUILD_LADDER: bank is not a rung, so
       # it would add every rung's tree for nothing.
       - name: Configure (clang-ubsan, bank example + GUI)
         run: |
@@ -1253,18 +1233,18 @@ jobs:
       # own Build step. In this configure that is morph_qt_tests
       # (tests/qt/CMakeLists.txt:91); it is *not* bank's three suites, which
       # are PRE_TEST and therefore enumerate at ctest time instead. The step
-      # below is where that matters (morph#690).
+      # below is where that matters.
       - name: Build
         env:
           QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset clang-ubsan
 
       # The same assertion linux-sanitizers, ladder-sanitizers and kanban-tsan
-      # make (morph#542). It is not a formality here: before morph#679, bank's
-      # targets carried no apply_sanitizers() call except ladder_bank_server's,
-      # and this sweep is what says so rather than letting the leg report a
-      # clean bank run over uninstrumented binaries. Measured on the tree as it
-      # stood, with bank configured on and the AF_SANITIZER blocks absent:
+      # make. It is not a formality here: bank's targets need an
+      # apply_sanitizers() call of their own, and this sweep is what says so
+      # rather than letting the leg report a clean bank run over uninstrumented
+      # binaries. Measured with bank configured on and the AF_SANITIZER blocks
+      # absent:
       #
       #     ::error::check_sanitizer_instrumentation: 3 of 9 ctest binaries
       #     are not ubsan-instrumented
@@ -1273,8 +1253,7 @@ jobs:
       # blocks in place the same sweep reports 9 of 9.
       #
       # QT_QPA_PLATFORM=offscreen, and this is the step that cannot do without
-      # it (morph#690 — this job was red on every run from the day it landed,
-      # here). The sweep's first act is `ctest --show-only=json-v1`, and ctest
+      # it. The sweep's first act is `ctest --show-only=json-v1`, and ctest
       # is exactly where bank's PRE_TEST discovery runs: listing the tests
       # *executes* `bank_gui_qml_tests --list-tests`, whose main constructs a
       # QGuiApplication (examples/common/testkit/testkit_main.cpp) before
@@ -1282,9 +1261,9 @@ jobs:
       # aborts; Catch2's CatchAddTests.cmake raises a message(FATAL_ERROR) on a
       # nonzero discovery, and ctest then exits 8 having printed no JSON at all
       # — not bank's entries missing, the entire listing, every other suite
-      # included. The sweep correctly refused to pass having examined nothing
-      # (morph#675's floor), so the symptom was the guard and the cause was
-      # this missing line. The Test step below already declares the same value,
+      # included. The sweep correctly refuses to pass having examined nothing,
+      # so the symptom is the guard and the cause is the missing variable --
+      # a diagnostic worth expecting. The Test step below declares the same value,
       # which is the point: this sweep's subject is the binaries that step will
       # run, so it has to enumerate them in that step's environment.
       #
@@ -1347,7 +1326,7 @@ jobs:
         run: sccache --show-stats || true
 
       # Save only on a push to master, for the cache-budget reason every other
-      # leg's identical step gives (morph#109).
+      # leg's identical step gives.
       - name: Save sccache
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
@@ -1396,8 +1375,7 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
@@ -1413,7 +1391,7 @@ jobs:
       - name: Build
         run: cmake --build --preset gcc-debug
 
-      # ── moc output that climbs out of the build tree (issue #372) ────
+      # ── moc output that climbs out of the build tree ─────────────────
       # Runs here rather than alongside the repo's other lint gates because
       # what it inspects is generated: it needs an AUTOMOC target to have
       # actually been built. The checker's own self-test needs none of that and
@@ -1435,14 +1413,14 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
+      # Save only on a push to master. Writing a new per-commit entry from
+      # every run does not work here: with 16 cache-writing legs at 1 GB each,
+      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
+      # each other and entries rarely survive to be reused. Restricting writes
+      # to master keeps the property that makes the cache usable at all (only
+      # one branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that blow the budget. Pull requests still
+      # restore, read-only, and get the full benefit.
       - name: Save sccache
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
@@ -1474,9 +1452,8 @@ jobs:
           # Not because `echo | grep` can lose a status today -- `echo` does
           # not fail -- but because this block decides whether a whole job
           # runs, and the next edit to it is the one that adds a pipeline
-          # that can (morph#730). The checker that enforced the same rule on
-          # every other `run:` block was removed with the meta-gates, so this
-          # is a convention now rather than something CI holds you to.
+          # that can. Nothing enforces this rule across the file's other `run:`
+          # blocks, so it is a convention rather than something CI holds you to.
           set -o pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -1489,13 +1466,13 @@ jobs:
           fi
           changed=$(git diff --name-only "$base" HEAD)
           # The pattern is generated from examples/rungs.txt, never written
-          # here. It used to be a hand-copied rung alternation, and it had
-          # drifted a full rung behind: it stopped at kanban, so a change
-          # confined to examples/ledger/ (rung 5) or examples/lims/ (rung 6)
-          # matched nothing and skipped this job -- silently, because a filter
-          # that matches nothing looks exactly like one that correctly decided
-          # there was nothing to do (morph#179). See scripts/ladder_rungs.sh
-          # for what the non-rung half of the pattern covers and why.
+          # here. A hand-copied rung alternation drifts behind the file it
+          # copies, and the drift is silent: a change confined to a rung the
+          # pattern has not caught up with matches nothing and skips this job,
+          # and a filter that matches nothing looks exactly like one that
+          # correctly decided there was nothing to do. See
+          # scripts/ladder_rungs.sh for what the non-rung half of the pattern
+          # covers and why.
           pattern="$(bash scripts/ladder_rungs.sh ci-path-regex)"
           echo "ladder path filter: $pattern"
           if echo "$changed" | grep -qE "$pattern"; then
@@ -1517,13 +1494,13 @@ jobs:
       #     case (find_server), which is correct and deliberately not softened
       #     into a skip -- but it only says so after a full Qt + ladder build.
       #
-      # Both are morph#462's own failure one level down: a gate that quietly
+      # Both are the same failure one level down: a gate that quietly
       # runs five corpora out of six reports green exactly as loudly as one
       # that ran them all. So they are checked here instead, on a bare
       # checkout, in seconds, before anything is installed or compiled.
       #
       # A corpus can also arrive for something that is not a ladder rung at
-      # all. examples/bank is the live case (morph#87/#470): its server comes
+      # all. examples/bank is the live case: its server comes
       # from a local add_executable() rather than morph_add_rung(), and bank is
       # deliberately absent from examples/rungs.txt. So the check has a third
       # arm for a corpus whose server is declared that way, and this job
@@ -1565,8 +1542,8 @@ jobs:
 
           # The third way a corpus can have a server this job builds: a plain
           # add_executable(ladder_<rung>_server) in examples/<rung>/CMakeLists.txt,
-          # with no line in examples/rungs.txt at all. bank is that case
-          # (morph#87/#470) -- it predates the ladder, carries no rung number,
+          # with no line in examples/rungs.txt at all. bank is that case --
+          # it predates the ladder, carries no rung number,
           # and listing it in rungs.txt would enrol it in every consumer that
           # derives from that file rather than describe it, which rungs.txt's
           # own comment settles at length. So the `configured` arm below cannot
@@ -1687,8 +1664,7 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
@@ -1745,25 +1721,25 @@ jobs:
           # configure.
           cmake --build --preset gcc-debug --target ladder_bank_server
 
-      # ── moc output that climbs out of the build tree (issue #372) ────
+      # ── moc output that climbs out of the build tree ─────────────────
       # Same gate as linux-qt above, and for the same reason -- see its
       # comment. This job is the one that matters most: ladder_<rung>_gui_lib
-      # is where #372 actually bit, and it is the AUTOMOC target every
-      # ladder_<rung>_tests binary links, so this build tree is the one
-      # carrying the output that stopped compiling.
+      # is the AUTOMOC target every ladder_<rung>_tests binary links, so this
+      # build tree is the one carrying the output that stops compiling when a
+      # generated include ascends.
       - name: Check no generated moc include ascends
         if: steps.filter.outputs.run == 'true'
         run: bash scripts/check_automoc_includes.sh build/gcc-debug
 
-      # ── Two ctest entries under one name (morph#464) ──────────────────
+      # ── Two ctest entries under one name ──────────────────────────────
       # A ctest name is global to the build tree, not scoped to the target it
       # was discovered from, and rung test binaries share TEST_CASE names
       # freely. Every by-name operation then addresses both entries at once:
       # `set_tests_properties(<name> PROPERTIES LABELS ...)` reaches both and
-      # CTest *appends*, so one entry accumulated the other rung's label and
-      # `ctest -L ladder-<rung>` ran another rung's binary alongside its own
-      # (crm reported on 180 cases while owning 168); a failure line named a
-      # test that existed twice. cmake/morph_add_rung.cmake's TEST_PREFIX makes
+      # CTest *appends*, so one entry accumulates the other rung's label and
+      # `ctest -L ladder-<rung>` runs another rung's binary alongside its own
+      # (measured once as crm reporting on 180 cases while owning 168); a
+      # failure line then names a test that exists twice. cmake/morph_add_rung.cmake's TEST_PREFIX makes
       # those names unique by construction -- this is what keeps them that way
       # the next time a rung is template-copied or a suite is registered by
       # hand.
@@ -1785,13 +1761,13 @@ jobs:
         run: ctest --preset gcc-debug -L ladder -LE stress --output-on-failure
 
       # ── The scenario corpus, against the servers just built ────────────
-      # Nothing in CI ran scripts/scenario/run_scenarios.py until this step
-      # (morph#462). The corpus could therefore be refused wholesale by a real
-      # server with every workflow still green -- and was: sixteen of sixteen
-      # ledger scenarios refused for five days and through a merge (morph#460),
-      # while drift-guard.yml's scenario-coverage job reported "ledger actions
-      # 18/18 dispatched, workflows 16/16" throughout. That job parses the
-      # corpus; only running it can see a refusal.
+      # This step is the only place in CI that runs
+      # scripts/scenario/run_scenarios.py. Without it the corpus can be refused
+      # wholesale by a real server with every workflow still green: measured
+      # once as sixteen of sixteen ledger scenarios refused for five days and
+      # through a merge, while drift-guard.yml's scenario-coverage job reported
+      # "ledger actions 18/18 dispatched, workflows 16/16" throughout. That job
+      # parses the corpus; only running it can see a refusal.
       #
       # Here rather than in drift-guard.yml, for the reason drift-guard.yml's
       # own comment gives for deferring it: running the corpus needs the
@@ -1819,8 +1795,8 @@ jobs:
       # a full 26-74 minute cycle to discover it. Not `always()`, which also
       # fires during teardown of a *cancelled* run and manufactures a leg that
       # stopped within seconds of its siblings looking like a defect rather
-      # than a cancellation. The job's conclusion is unchanged either way: a
-      # red step keeps the job red (morph#618).
+      # than a cancellation. The job's conclusion is the same either way: a
+      # red step keeps the job red.
       - name: Run the scenario corpus against the built servers
         if: "!cancelled() && steps.filter.outputs.run == 'true'"
         env:
@@ -1888,10 +1864,11 @@ jobs:
       # per-commit entry, and with 16 cache-writing legs at 1 GB each one
       # generation already exceeds GitHub's 10 GB per-repo budget -- so
       # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
+      # Restricting writes to master keeps the property that makes the cache
+      # usable at all (only one branch ever writes, so no branch can delete
+      # another's entry) while collapsing the generations that actually blow
+      # the budget. Pull requests still restore, read-only, and get the full
+      # benefit.
       - name: Save sccache
         if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/save@v4
@@ -1914,9 +1891,9 @@ jobs:
   # every path, and against an uninstrumented system Qt that produces warnings
   # bottoming out in Qt-internal frames which cannot be classified as real
   # races or false positives from outside a TSan-instrumented Qt build —
-  # morph#128 hit exactly that, 165 warnings deep. The resolution there was to
-  # rewrite the one test that mattered to construct no QtExecutor at all and
-  # run only it under TSan, which is what kanban-tsan above does. Thread-
+  # measured at 165 warnings deep. The way through is to write the one test
+  # that matters so it constructs no QtExecutor at all and run only it under
+  # TSan, which is what kanban-tsan above does. Thread-
   # sanitising a rung means following that pattern per test, not adding a
   # blanket -DAF_SANITIZER=tsan leg here.
   #
@@ -1944,17 +1921,17 @@ jobs:
       # identical tree and differ only in instrumentation, so a change that
       # warrants running one warrants running the other, and the two patterns
       # must not be able to diverge. This job is the only one in the repository
-      # that sanitizer-instruments a rung, which is what the drifted filter
-      # actually cost (morph#179).
+      # that sanitizer-instruments a rung, so a filter that drifts behind
+      # examples/rungs.txt silently stops sanitising whatever it has not caught
+      # up with.
       - name: Determine whether the ladder needs to run
         id: filter
         run: |
           # Not because `echo | grep` can lose a status today -- `echo` does
           # not fail -- but because this block decides whether a whole job
           # runs, and the next edit to it is the one that adds a pipeline
-          # that can (morph#730). The checker that enforced the same rule on
-          # every other `run:` block was removed with the meta-gates, so this
-          # is a convention now rather than something CI holds you to.
+          # that can. Nothing enforces this rule across the file's other `run:`
+          # blocks, so it is a convention rather than something CI holds you to.
           set -o pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -1995,7 +1972,7 @@ jobs:
             unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
-          # form reported success having installed nothing (morph#681).
+          # form reports success having installed nothing.
           curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
@@ -2031,8 +2008,7 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
@@ -2070,17 +2046,18 @@ jobs:
       # -DAF_SANITIZER=asan instrumented morph_tests and nothing under
       # examples/.
       #
-      # This used to be a hand-rolled `nm | grep __asan_` over
-      # `examples/*/ladder_*_tests` alone, which is the same shape of blind
-      # spot one level up: it asserted the instrumentation of the binaries
+      # Not a hand-rolled `nm | grep __asan_` over
+      # `examples/*/ladder_*_tests`, which is the same shape of blind
+      # spot one level up: it asserts the instrumentation of the binaries
       # someone thought to name, and this job also builds tests/qt,
-      # examples/qt_tls_client and examples/concepts, none of which the glob
-      # reaches (morph#542). The shared script walks what ctest will actually
+      # examples/qt_tls_client and examples/concepts, none of which that glob
+      # reaches. The shared script walks what ctest will actually
       # run instead of a pattern, so a suite added tomorrow is covered by
       # having been added.
       #
       # QT_QPA_PLATFORM=offscreen, matching the Build step above and the Test
-      # step below, for the reason morph#691 gives: this sweep opens with `ctest
+      # step below, for the reason the identical step elsewhere gives: this
+      # sweep opens with `ctest
       # --show-only=json-v1`, and listing a DISCOVERY_MODE PRE_TEST suite *runs*
       # its binary -- so a Qt-linked PRE_TEST suite in this configure would
       # abort headless and take the entire listing down, every other suite
@@ -2088,8 +2065,8 @@ jobs:
       # (cmake/morph_add_rung.cmake, examples/common/CMakeLists.txt,
       # tests/qt/CMakeLists.txt), so discovery already happened under the Build
       # step's copy of this variable. That is an accident of one keyword, not a
-      # property of this step, and it is the accident bank-sanitizers did not
-      # have (morph#690).
+      # property of this step: flip any of those suites to PRE_TEST and the
+      # variable becomes load-bearing here too.
       - name: Every ctest binary is instrumented
         if: steps.filter.outputs.run == 'true'
         env:
@@ -2109,9 +2086,9 @@ jobs:
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: ctest --preset clang-asan -L ladder -LE stress --output-on-failure
 
-      # The Qt transport suites, which no sanitizer leg ran. They were not even
-      # instrumented until morph#542, and instrumenting a suite nothing runs
-      # would swap one vacuous control for another: this is the only leg that
+      # The Qt transport suites, which no other sanitizer leg runs.
+      # Instrumenting a suite nothing runs swaps one vacuous control for
+      # another, so both halves belong here: this is the only leg that
       # builds Qt under a sanitizer, so if these run anywhere it is here.
       # linux-sanitizers deliberately keeps Qt out of its matrix (see its
       # Configure comment), and kanban-tsan runs exactly one named stress test.
@@ -2124,9 +2101,8 @@ jobs:
       #
       # `--no-tests=error` because `-R` over test names is exactly the filter
       # that goes stale silently: a renamed TEST_CASE would otherwise leave
-      # ctest reporting success having run nothing (morph#466 is the same trap
-      # one level down).
-      # `!cancelled()`, for the reason morph#618 gives and which bites hardest
+      # ctest reporting success having run nothing.
+      # `!cancelled()`, for the reason the other test steps give, which bites hardest
       # here: this is the only leg in CI that runs the Qt transport suites
       # under any sanitizer, so if the ladder step above goes red and this one
       # is skipped, that surface is measured nowhere at all. Not `always()` --
@@ -2197,10 +2173,11 @@ jobs:
       # per-commit entry, and with 16 cache-writing legs at 1 GB each one
       # generation already exceeds GitHub's 10 GB per-repo budget -- so
       # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
+      # Restricting writes to master keeps the property that makes the cache
+      # usable at all (only one branch ever writes, so no branch can delete
+      # another's entry) while collapsing the generations that actually blow
+      # the budget. Pull requests still restore, read-only, and get the full
+      # benefit.
       - name: Save sccache
         if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/save@v4
@@ -2280,7 +2257,7 @@ jobs:
           else
             # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
             # bash`: see linux-compilers' identical install step for why the piped
-            # form reported success having installed nothing (morph#681).
+            # form reports success having installed nothing.
             curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
             test -s /tmp/llvm.sh
             sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
@@ -2318,8 +2295,7 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
@@ -2351,8 +2327,8 @@ jobs:
           # bank example's own subdirectory) was, until this line, the single
           # MORPH_BUILD_* option no job in .github/workflows/ enabled at all:
           # the `linux-everything` preset that sets it is named by no workflow.
-          # morph#604 is what that costs -- bank_gui stopped compiling on
-          # master with every gate green. This is the one leg that can host it:
+          # What that costs is a target that stops compiling on master with
+          # every gate green. This is the one leg that can host it:
           # it already installs Qt ${{ env.QT_VERSION }} from aqtinstall (the
           # GUI needs Qml/Quick/QuickControls2 at 6.5+, which the distro Qt the
           # other bank jobs use cannot give) and already installs the
@@ -2394,7 +2370,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset ${{ matrix.preset }}
 
-      # ── moc output that climbs out of the build tree (issue #372) ────
+      # ── moc output that climbs out of the build tree ─────────────────
       # Same gate as linux-qt, and for the same reason -- see its comment.
       # This is the widest build it reaches: the clang leg is the only one that
       # compiles moc output under -Weverything, where -Wshadow-header is what
@@ -2408,18 +2384,17 @@ jobs:
       # deterministic regression check, not a fuzzing campaign.
       #
       # ── --parallel: the one leg in this repository that runs ctest in
-      #    parallel, deliberately (morph#685) ─────────────────────────────────
+      #    parallel, deliberately ─────────────────────────────────────────────
       #
-      # Every other ctest invocation in .github/workflows/ is serial, and until
-      # this line all sixteen of them were. That made a whole class of defect
-      # invisible to CI by construction: two ctest cases sharing an on-disk
-      # database, a port, or a temp path cannot collide when only one runs at a
-      # time. morph#682 is the measured instance -- bank's suites were 0/21 at
-      # `ctest -j 12` on a workstation and 21/21 serially, and CI was green
-      # throughout, on every leg, for as long as the defect existed.
+      # Every other ctest invocation in .github/workflows/ is serial, which
+      # makes a whole class of defect invisible to CI by construction: two
+      # ctest cases sharing an on-disk database, a port, or a temp path cannot
+      # collide when only one runs at a time. Measured instance: bank's suites
+      # at 0/21 under `ctest -j 12` on a workstation and 21/21 serially, with
+      # CI green throughout, on every leg, for as long as the defect existed.
       #
       # This leg and not another: it is the only one whose ctest covers the
-      # bank suites morph#682 was about *and* every ladder rung *and* Qt *and*
+      # bank suites *and* every ladder rung *and* Qt *and*
       # the core suites, so it is the only place where one flag exposes the
       # whole class rather than one corner of it. It also costs no new leg --
       # a second job would add its own configure and build to every future PR,
@@ -2437,22 +2412,22 @@ jobs:
       #     ctest --parallel 4      1898/1898 passed, 109.38 s   (hosted vCPU count)
       #
       # So for the part that could be measured locally this is a saving, not a
-      # cost: the test step gets faster, and the leg's wall time with it.
-      # morph#685 separately measured bank at 21/21 in 1.1 s parallel against
-      # 5.7 s serial after morph#686's per-case databases landed.
+      # cost: the test step gets faster, and the leg's wall time with it. Bank,
+      # measured separately once its suites took per-case databases, is 21/21
+      # in 1.1 s parallel against 5.7 s serial.
       #
       # NOT measured, and this is the risk: the ladder rungs in parallel with
       # each other. They declare RESOURCE_LOCK (cmake/morph_add_rung.cmake),
       # which is what ctest --parallel consults to serialise the cases that
-      # need it -- a mechanism that exists precisely for this and that no leg
-      # has ever exercised. morph#658 (`SQLite database is locked`, ledger
-      # corpus) is the reason to expect a first bill here.
+      # need it -- a mechanism that exists precisely for this and that no other
+      # leg exercises. A `SQLite database is locked` in the ledger corpus is
+      # the shape of first bill to expect here.
       #
       # If this leg goes red or flaky on contention rather than on a real
       # regression, the failing case is the finding -- file it, fix the
       # isolation, and keep the flag. Dropping `--parallel` again puts the
-      # whole class back out of CI's sight, which is the state morph#685 exists
-      # to end. $(nproc) rather than a literal: hosted runners give 4, the
+      # whole class back out of CI's sight, which is what this flag exists to
+      # prevent. $(nproc) rather than a literal: hosted runners give 4, the
       # self-hosted fleet gives more, and the point is contention, not a number.
       - name: Test (offscreen Qt platform, ctest in parallel)
         env:
@@ -2462,7 +2437,7 @@ jobs:
       # A guard that never fires is indistinguishable from one that works, so
       # assert the fuzz replay actually ran the committed crash reproducers
       # rather than silently matching nothing (the `.txt`-vs-`.bin` glob bug).
-      # `!cancelled()`, per morph#618: this checks something the ctest step
+      # `!cancelled()`: this checks something the ctest step
       # above cannot report on -- whether the replay matched the committed
       # reproducers at all, the `.txt`-vs-`.bin` glob bug -- so skipping it
       # when some unrelated test fails hides a guard going vacuous behind an
@@ -2534,10 +2509,11 @@ jobs:
       # per-commit entry, and with 16 cache-writing legs at 1 GB each one
       # generation already exceeds GitHub's 10 GB per-repo budget -- so
       # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
+      # Restricting writes to master keeps the property that makes the cache
+      # usable at all (only one branch ever writes, so no branch can delete
+      # another's entry) while collapsing the generations that actually blow
+      # the budget. Pull requests still restore, read-only, and get the full
+      # benefit.
       - name: Save sccache
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
         uses: actions/cache/save@v4
@@ -2583,8 +2559,7 @@ jobs:
         run: |
           # `--fail` and a file rather than a pipe into tar: see
           # linux-compilers' identical Install sccache step for why an
-          # unchecked download reported itself as "not in gzip format"
-          # (morph#672).
+          # unchecked download reports itself as "not in gzip format".
           curl -sSL --fail -o /tmp/sccache.tar.gz \
             https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
           tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
@@ -2646,14 +2621,14 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
+      # Save only on a push to master. Writing a new per-commit entry from
+      # every run does not work here: with 16 cache-writing legs at 1 GB each,
+      # one generation exceeds GitHub's 10 GB per-repo budget, so legs evict
+      # each other and entries rarely survive to be reused. Restricting writes
+      # to master keeps the property that makes the cache usable at all (only
+      # one branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that blow the budget. Pull requests still
+      # restore, read-only, and get the full benefit.
       - name: Save sccache
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
@@ -2663,8 +2638,8 @@ jobs:
 
   # ── clang-format (whole tree) ─────────────────────────────────────────
   #
-  # .clang-format has always been in the tree, and nothing enforced it: 471 of
-  # 677 tracked .hpp/.cpp files did not match it (morph#210). An unenforced
+  # .clang-format is in the tree, and an unenforced one drifts fast: measured
+  # once at 471 of 677 tracked .hpp/.cpp files not matching it. An unenforced
   # config is worse than none, because every editor with format-on-save obeys it
   # faithfully -- so touching one file rewrites parts the author never meant to
   # change, and the reviewer's job becomes separating intent from churn.
@@ -2688,7 +2663,7 @@ jobs:
         run: |
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
-          # form reported success having installed nothing (morph#681).
+          # form reports success having installed nothing.
           curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
@@ -2698,7 +2673,7 @@ jobs:
         run: |
           # Without pipefail the count below is `wc`'s status, not `tr`'s: a
           # missing or unreadable cpp-files.z yields COUNT=0 rather than an
-          # error (morph#730). The `-lt 100` guard catches that particular
+          # error. The `-lt 100` guard catches that particular
           # case; pipefail is what keeps the *next* pipeline here honest.
           set -o pipefail
           git ls-files -z '*.hpp' '*.cpp' > cpp-files.z
@@ -2765,7 +2740,7 @@ jobs:
             libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
-          # form reported success having installed nothing (morph#681).
+          # form reports success having installed nothing.
           curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
@@ -2790,7 +2765,7 @@ jobs:
       # This step reads the version out of the headers the step above just
       # installed and fails if it is not the one CATCH2_VERSION records, so a
       # move in the runner image is a red job rather than a quiet change of
-      # what this gate measures (morph#666). Its self-test runs first, for the
+      # what this gate measures. Its self-test runs first, for the
       # same reason the suppression-scope checker's does.
       - name: Self-test the catch2-pin checker
         run: bash scripts/test_check_catch2_pin.sh
@@ -2798,13 +2773,13 @@ jobs:
       - name: Assert the Catch2 this job analyses against
         run: bash scripts/check_catch2_pin.sh . --strict
 
-      # Catches morph#632's bug class: tests/.clang-tidy's thirteen
-      # suppressions are argued as Catch2 and raw-syscall idiom, which is true
-      # of test sources and says nothing about include/morph/** -- yet
+      # Catches a bug class this file's own layout invites: tests/.clang-tidy's
+      # thirteen suppressions are argued as Catch2 and raw-syscall idiom, which
+      # is true of test sources and says nothing about include/morph/** -- yet
       # clang-tidy resolves configuration from the translation unit's path, so
-      # they are off for every header a tests/ TU reaches as well. Measured on
-      # a8511aa6: 333 findings inside include/morph/**, across 25 headers,
-      # reported from those 134 TUs only once that file is removed. The reach
+      # they are off for every header a tests/ TU reaches as well. Measured:
+      # 333 findings inside include/morph/**, across 25 headers, reported from
+      # those 134 TUs once that file is removed. The reach
       # cannot be narrowed, so it is written down in tests/.clang-tidy -- and
       # this step is what keeps the record from going stale.
       - name: Check tests/.clang-tidy records the reach it actually has
@@ -2826,10 +2801,10 @@ jobs:
       # the one gate in this workflow that reads code rather than running it.
       #
       # MORPH_BUILD_LADDER + MORPH_BUILD_BANK_EXAMPLE are the two that make that
-      # claim true rather than aspirational (morph#481). Both default OFF and
+      # claim true rather than aspirational. Both default OFF and
       # gate `add_subdirectory(examples)` / `add_subdirectory(examples/bank)`,
-      # so until they were passed here the database held 261 entries of which
-      # 16 were under examples/ — four directories, none of them a ladder rung.
+      # so without them the database holds 261 entries of which
+      # 16 are under examples/ — four directories, none of them a ladder rung.
       # examples/ is 69% of the repository's C/C++ files (524 of 793 were
       # outside the database, against 60 under include/morph), and clang-tidy
       # does not skip a file it has no compile command for: clang tooling
@@ -2862,25 +2837,25 @@ jobs:
       # output, while reading as though it had settled the question. It has
       # not: AUTOMOC's output is the other kind -- a build-time
       # add_custom_command -- and two sources #include it by name. See the
-      # AUTOMOC step below (morph#624), which is why this now says "no full
-      # Build step" rather than "no Build step".
+      # AUTOMOC step below, which is why this says "no full Build step" rather
+      # than "no Build step".
       #
       # Compiler caching (sccache/fastcache-cc) is still not set up here. That
       # step compiles 67 objects; a real build of this configure would compile
       # the database's 737, so the caching steps would cost more setup than
       # they could save.
       #
-      # MORPH_BUILD_BANK_GUI is the last of the two flags "every optional
-      # feature is ON here" was not actually true about (morph#651). It
+      # MORPH_BUILD_BANK_GUI is the second flag "every optional feature is ON
+      # here" is easy to be wrong about. It
       # defaults OFF (CMakeLists.txt), gates `add_subdirectory(gui)` in
       # examples/bank/CMakeLists.txt, and the bank GUI's *tests* are gated on
       # it too -- bank_gui_tests only exists `if(TARGET bank_gui_lib)`, which
-      # is that option's target. Eleven tracked sources therefore had no
-      # compile command in this job's database and were dropped, unanalysed,
+      # is that option's target. Without it, eleven tracked sources have no
+      # compile command in this job's database and are dropped, unanalysed,
       # by the filter below: nine under examples/bank/gui/ and two under
       # examples/bank/tests/gui/.
       #
-      # Measured locally on 4563aff3, clang 22.1.8, Qt 6, this job's own flag
+      # Measured locally with clang 22.1.8, Qt 6, this job's own flag
       # set, cold build directory each time:
       #
       #   without BANK_GUI: 703 entries, 695 distinct in-workspace sources,
@@ -2897,8 +2872,8 @@ jobs:
       # This needs nothing new installed: linux-all-features already builds
       # this option on the same runner image with the same
       # `jurplel/install-qt-action@v4 modules: qtwebsockets` install and the
-      # same apt set (morph#604 is why it is there), so the GUI's
-      # Qml/Quick/QuickControls2 requirement is already known to be met.
+      # same apt set, so the GUI's Qml/Quick/QuickControls2 requirement is
+      # already known to be met.
       #
       # What it does *not* do is clear the eleven files' existing findings.
       # Measured on the same configure, whole-file, with this step's own
@@ -2908,8 +2883,8 @@ jobs:
       # readability-identifier-length, 13 others), across ten of them --
       # BankController.cpp is clean. clang-tidy-diff only reports on *changed*
       # lines, so none of that goes red until someone edits one of these files
-      # on a line that carries a finding. That is morph#656, filed rather than
-      # folded in here; morph#646 is the precedent for keeping the two apart.
+      # on a line that carries a finding. Clearing them is separate work from
+      # putting them in the database, and is deliberately not folded in here.
       - name: Configure (generates compile_commands.json over every optional feature)
         run: |
           cmake --preset clang-debug \
@@ -2934,10 +2909,10 @@ jobs:
       # does not exist and clang-tidy dies on the whole translation unit --
       # `error: 'tst_main.moc' file not found [clang-diagnostic-error]` -- with
       # WarningsAsErrors:"*" turning it into a failed job, before a single
-      # changed line is analysed (morph#624). Reproduced locally on c55ea5b7
-      # with this job's own configure flags and clang-tidy 22.1.8: one line
-      # added to each of the two files, and clang-tidy-diff.py exits 1 with
-      # exactly those two diagnostics and nothing else.
+      # changed line is analysed. Reproduced locally with this job's own
+      # configure flags and clang-tidy 22.1.8: one line added to each of the
+      # two files, and clang-tidy-diff.py exits 1 with exactly those two
+      # diagnostics and nothing else.
       #
       # Suppressing the diagnostic instead is not available, not merely
       # unattractive. -Wno-missing-include-dirs below covers an include
@@ -2948,8 +2923,7 @@ jobs:
       # `-checks=-clang-diagnostic-*` and `--warnings-as-errors=''` each still
       # exit 1 reporting the same line. The only remaining way to "filter" it
       # would be to grep clang-tidy-diff.py's output and override its exit
-      # code, which is morph#479's defect -- a gate that cannot fail -- rebuilt
-      # deliberately.
+      # code -- a gate that cannot fail, built deliberately.
       #
       # So the headers get generated, for these two targets only. Not `cmake
       # --build` over everything, and not every *_autogen target either:
@@ -3007,7 +2981,7 @@ jobs:
                   if command is None:
                       # Not in this configure's database: clang-tidy cannot
                       # analyse the file at all, which is a different problem
-                      # (morph#481) and not one this step can fix.
+                      # and not one this step can fix.
                       print(f"::warning::{name} self-includes {moc} but has no "
                             f"compile command in this configure")
                       continue
@@ -3060,7 +3034,7 @@ jobs:
           # `-o pipefail` -- so a pipeline exits with its *last* command's
           # status. Ending in `tee`, which always succeeds, discarded
           # clang-tidy-diff.py's exit code and left this gate unable to fail on
-          # anything it found (morph#479). `tee` stays: the Upload step below
+          # anything it found. `tee` stays: the Upload step below
           # publishes the file it writes. Set here and not at the top, and not
           # via `shell: bash` (which is `bash --noprofile --norc -eo pipefail
           # {0}`), because the `find ... | head -1` above would then fail the
@@ -3069,26 +3043,26 @@ jobs:
           set -o pipefail
 
           # No -regex narrowing here, deliberately: every changed C/C++ file in
-          # the diff is analysed. The `-regex` that used to exclude
-          # examples/{bank,common,<every rung>} existed only because the
-          # Configure step left MORPH_BUILD_LADDER and MORPH_BUILD_BANK_EXAMPLE
-          # at their OFF defaults, so those files had no compile command and
-          # could only ever produce `'ledger/core/errors.hpp' file not found`.
-          # The Configure step now passes both, so they do (morph#481) --
-          # deleting that regex is what turns the ladder configure from pure
-          # cost into coverage. Restoring any exclusion here silently undoes 276
-          # of the database's 690 entries.
+          # the diff is analysed. A `-regex` excluding
+          # examples/{bank,common,<every rung>} is only defensible while the
+          # Configure step leaves MORPH_BUILD_LADDER and MORPH_BUILD_BANK_EXAMPLE
+          # at their OFF defaults, since those files then have no compile command
+          # and can only produce `'ledger/core/errors.hpp' file not found`.
+          # The Configure step passes both, which is what turns the ladder
+          # configure from pure cost into coverage. Restoring any exclusion here
+          # silently undoes 276 of the database's 690 entries.
           #
           # Deliberately NOT clang-tidy-diff.py's own -only-check-in-db either,
           # which filters on literal membership of compile_commands.json: no
           # header is ever a compilation unit, so it would silently drop all of
-          # include/morph/** -- morph#479's own defect one directory over.
+          # include/morph/** -- the same gate-measures-nothing failure one
+          # directory over.
           #
-          # -extra-arg is appended to the *compiler* command line, so the
-          # -extra-arg=-warnings-as-errors=* that used to sit here reached clang
-          # as an unknown argument and made every translation unit fail with
-          # `error: unknown argument` -- i.e. clang-tidy-diff.py exited 1 on
-          # every non-empty diff, clean or not. Dropped rather than corrected:
+          # -extra-arg is appended to the *compiler* command line, so an
+          # -extra-arg=-warnings-as-errors=* here reaches clang as an unknown
+          # argument and makes every translation unit fail with
+          # `error: unknown argument` -- i.e. clang-tidy-diff.py exits 1 on
+          # every non-empty diff, clean or not. There is nothing to add:
           # .clang-tidy already carries `WarningsAsErrors: "*"`.
           #
           # -Wno-missing-include-dirs: this job configures but never builds (see
@@ -3110,55 +3084,52 @@ jobs:
           # *by name*. This flag says nothing about `#include "tst_main.moc"`:
           # the directory it would be found in is one of the 90, but the error
           # raised is the file not being there, not the directory. That is what
-          # the AUTOMOC step above generates, and why this job now builds two
-          # targets (morph#624).
+          # the AUTOMOC step above generates, and why this job builds two
+          # targets.
           # And it is not sufficient for a source this configure does not
-          # build at all. That is the third instance of one structural
-          # problem, after morph#624 (a generated header) and morph#650
-          # (tests/lint/ text fixtures): clang-tidy-diff.py analyses every
+          # build at all. That is one structural problem with three faces --
+          # a generated header, tests/lint/ text fixtures, and an
+          # unbuilt source: clang-tidy-diff.py analyses every
           # changed C/C++ line, a changed *comment* line is a changed line,
           # and clang tooling does not skip a file it has no compile command
           # for -- it interpolates a neighbouring entry's command. What comes
           # back is a clang-diagnostic-error about this job's configure, not a
           # lint finding about the diff, and WarningsAsErrors:"*" makes it a
-          # failed job. Measured on morph#649's branch, which edits five such
+          # failed job. Measured on a branch editing five such
           # sources in comments only: 21 clang-diagnostic-errors from the four
           # WASM mains (no Emscripten/Qt-WASM toolchain here) and from
           # tests/compile_checks/client_only_facade_no_model_header.cpp (built
           # by a configure-time try_run() with -DMORPH_CLIENT_ONLY, and
           # deliberately incomplete without it).
           #
-          # Reverting the comment edits is not a general answer and in that
-          # case was not even a local one: those four comments cite a
-          # docs/spec/core/backend.md section the same branch renames, so
-          # leaving them alone turns the spec-citation gate red instead
-          # (reproduced -- four "dangling section citation" errors).
+          # Not editing the comments is no answer either: a comment that cites
+          # a docs/spec section a branch renames has to change with it, or the
+          # spec-citation gate goes red instead.
           #
           # So the diff is filtered first: a changed *source* with no entry in
           # compile_commands.json is dropped, and every drop is printed. A
           # changed *header* cannot be dropped on that test -- a header is
           # never a translation unit, so -only-check-in-db's literal
           # membership test would silently discard all of include/morph/**,
-          # which is morph#479's own defect one directory over (see above).
+          # which is the same gate-measures-nothing failure (see above).
           # The filter refuses to run at all unless the database is still the
           # wide one the Configure step builds, because a filter consulting a
           # narrowed database would quietly stop analysing everything the
           # narrowing dropped.
           #
-          # A changed header used to be kept and handed to clang-tidy with no
-          # command at all, which is not the same as being analysed: clang
+          # Keeping a changed header and handing it to clang-tidy with no
+          # command at all is not the same as analysing it: clang
           # falls back to InterpolatingCompilationDatabase, borrows the
           # nearest entry's flags, and reports whatever the resulting broken
-          # parse produces as findings *in the contributor's file*. morph#753
-          # reproduced it on a new header in a directory with no .cpp:
+          # parse produces as findings *in the contributor's file*. Reproduced
+          # on a new header in a directory with no .cpp:
           # 'Lightweight/SqlConnection.hpp' file not found, plus a
           # cppcoreguidelines-pro-type-member-init and a
           # readability-identifier-naming that are both false -- the
           # constructor does initialise those fields, and `_previous` is
-          # spelled like every other private member here. Three lanes hit the
-          # same fallback in one week from three directions.
+          # spelled like every other private member there.
           #
-          # So a changed header is now *pinned*: the filter takes candidate
+          # So a changed header is *pinned*: the filter takes candidate
           # commands from the database nearest-first, actually runs each one
           # (`-fsyntax-only -x c++` on the header, with this job's own
           # -extra-args), and writes the first that parses into an augmented
@@ -3185,7 +3156,7 @@ jobs:
           # Floors, not equalities. This filter is only trustworthy while the
           # database it consults is the wide one the Configure step builds: if
           # that configure regresses -- MORPH_BUILD_LADDER back to its OFF
-          # default is the concrete way, morph#481 -- every examples/ source
+          # default is the concrete way -- every examples/ source
           # would silently become "not built by this configure" and stop being
           # analysed, and this gate would go green having read 40% less code.
           MIN_ENTRIES = 600
@@ -3358,10 +3329,10 @@ jobs:
           if not sections:
               # A diff with no file sections at all means clang-tidy-diff.py
               # would be handed nothing, analyse nothing and exit 0 -- a green
-              # gate over an empty input, which is exactly morph#776's shape
-              # one level up (there it was `git diff -U0 HEAD` on a committed
-              # branch; here it would be a BASE_SHA that does not name this
-              # branch's fork point). Neither a pull_request nor a push event
+              # gate over an empty input. The same shape one level up is a
+              # local `git diff -U0 HEAD` on a committed branch; here it would
+              # be a BASE_SHA that does not name this branch's fork point.
+              # Neither a pull_request nor a push event
               # can legitimately produce an empty diff, so this is loud rather
               # than silent.
               print(
@@ -3387,7 +3358,7 @@ jobs:
           # The augmented database: every original entry, plus one pinned entry per
           # changed header. clang-tidy is pointed at this one, so it never reaches
           # InterpolatingCompilationDatabase for a header and never analyses one with a
-          # command nobody checked (morph#753).
+          # command nobody checked.
           out_db = pathlib.Path(sys.argv[4])
           out_db.mkdir(parents=True, exist_ok=True)
           (out_db / "compile_commands.json").write_text(json.dumps(database))
@@ -3404,7 +3375,7 @@ jobs:
                   f"::warning file={name}::not analysed by clang-tidy-diff: none of the "
                   f"{MAX_HEADER_CANDIDATES} nearest compile commands in this configure can "
                   f"parse this header, so clang-tidy would report the failed parse as "
-                  f"findings in your code (morph#753). Build this header from some "
+                  f"findings in your code. Build this header from some "
                   f"translation unit to have it analysed."
               )
           for name, donor in pinned:
@@ -3430,7 +3401,8 @@ jobs:
 
           # -path /tmp/tidy-db, not build/clang-debug: that is the augmented
           # database, and pointing clang-tidy at it is the whole fix for
-          # morph#753. The floors above are still evaluated against
+          # the interpolated-command problem. The floors above are still
+          # evaluated against
           # build/clang-debug's own database, so narrowing cannot hide behind
           # the augmentation.
           if ! python3 "$CLANG_TIDY_DIFF" \

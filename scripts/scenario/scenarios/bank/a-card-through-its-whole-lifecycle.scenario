@@ -12,8 +12,8 @@
 # The card's PAN is also worth noting for what is *absent*: bank stores only the
 # last four digits (`panLast4`) and there is no action anywhere on this model
 # that returns a full number. That is a property of the schema, not a masking
-# step some client remembered to apply — see morph#86, where the proposed
-# `QQmlPropertyMap` projection was rejected partly for undoing it.
+# step some client remembered to apply. A client-side projection that exposed
+# the full number would undo that property, which is one reason none exists.
 
 model AuthModel
 client front

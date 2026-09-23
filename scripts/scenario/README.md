@@ -89,8 +89,8 @@ Ledger is seeded with two `ledgers` rows before its scenarios run — the only
 rung that gets any. They are fixture books for the fourteen ledger files
 written against the fixed ids `1` and `2`, one of which
 (`two-books-are-isolated`) needs two books to exist before its first step.
-They are no longer a statement that a book cannot be created over the wire:
-`CreateLedger` (morph#361) does that, and
+They are not a statement that a book cannot be created over the wire:
+`CreateLedger` does that, and
 `ledger/bootstrap-a-book-over-the-wire.scenario` names no seeded id at all, so
 it would pass against a database the driver never touched. Every other rung
 creates its own root entity over the wire and is seeded with nothing.
@@ -134,12 +134,11 @@ is the opposite arrangement from `broken-on-purpose.scenario`, which fails today
 by design.
 
 `bank/an-owner-named-outright-is-checked-against-the-session.scenario` is what
-that arrangement looks like after the fix lands. It was
-[morph#471](https://github.com/LASTRADA-Software/morph/issues/471)'s inventory,
-written entirely `expect ok` because `bank::resolveOwner()` preferred a
-caller-supplied owner name over the session principal and ten actions therefore
-served a signed-in customer another customer's data. Flipping those assertions
-to `expect err` was that issue's regression test, and the file now pins the
+that arrangement looks like when the ownership gate holds. Were
+`bank::resolveOwner()` to prefer a caller-supplied owner name over the session
+principal, ten actions would serve a signed-in customer another customer's
+data, and every assertion in that file would have to read `expect ok`. It reads
+`expect err` instead, and pins the
 enforcement in the same shape it once pinned the defect.
 
 The rung a scenario belongs to is its parent directory name — that is how
@@ -268,10 +267,10 @@ already authenticated.
 
 The credentials may equally be written on the `client` line that opens the
 connection — `client books model=LedgerModel principal=$who token=$token` — and
-mean the same thing as the two-line `client` then `session` form. Until
-morph#360 they did not: `client` read its options raw, so `$token` went to the
-server as six literal characters and the run failed several steps later with a
-bare `unauthorized` that named neither the step nor the cause.
+mean the same thing as the two-line `client` then `session` form. That equality
+is load-bearing: were `client` to read its options raw, `$token` would go to
+the server as six literal characters and the run would fail several steps later
+with a bare `unauthorized` naming neither the step nor the cause.
 
 ## Proving a scenario's assertions are real
 
@@ -432,23 +431,18 @@ python3 scripts/scenario/a gate removed on 2026-09-23
 
 - **No `sleep`, and no wall-clock waits.** Every assertion is on a reply to a
   request this file sent. A scenario cannot become a source of flaky timing the
-  way [morph#147](https://github.com/LASTRADA-Software/morph/issues/147) once
-  did, because there is nothing to wait *on*.
+  way a polling loop does, because there is nothing to wait *on*.
 - **No server lifecycle.** It drives a server someone else started. Starting,
   waiting for the port and tearing down belong to whatever runs it.
-- **No schema validation of inputs.** [morph#171](https://github.com/LASTRADA-Software/morph/issues/171)
-  proposed checking a scenario's inputs against the server's served JSON Schema
-  before sending. The runner does not do that, and this entry used to say it
-  *could* not, because "morph does not serve schemas over the wire … no
-  envelope `kind` exposes them to a remote client". That is not true: the
-  `schemas` kind serves exactly that document, and
-  `scenarios/pastebin/wire-kinds-and-typeid-refusals.scenario` reads
+- **No schema validation of inputs.** The runner does not check a scenario's
+  inputs against the server's served JSON Schema before sending, and the reason
+  is *not* that it could not: the `schemas` kind serves exactly that document,
+  and `scenarios/pastebin/wire-kinds-and-typeid-refusals.scenario` reads
   `PasteModel`'s out of a live server, `required` array, declared bounds and
-  all. What remains true is the narrower statement: this runner sends what the
+  all. The narrower statement is the true one: this runner sends what the
   file says without consulting it, which is also what makes deliberately
   malformed payloads expressible. Validating against the served schema is
-  therefore now *possible* and merely not done — see
-  [morph#234](https://github.com/LASTRADA-Software/morph/issues/234).
+  therefore *possible* and merely not done.
 - **It does not replace the C++ tests.** Model behaviour is tested in-process
   and stays there. This covers the seam those tests assume away.
 
@@ -456,7 +450,6 @@ python3 scripts/scenario/a gate removed on 2026-09-23
 
 `docs/spec/core/wire.md`'s envelope tables omit the `primary` and `shared`
 fields and the `attach`, `assign` and `instances` kinds that
-`include/morph/core/wire.hpp` and `RemoteServer::dispatchMessage` actually carry
-— see [morph#233](https://github.com/LASTRADA-Software/morph/issues/233). A
-client written from the spec alone gets an incomplete envelope; this one sends
-the full field set taken from the header.
+`include/morph/core/wire.hpp` and `RemoteServer::dispatchMessage` actually
+carry. A client written from the spec alone gets an incomplete envelope; this
+one sends the full field set taken from the header.

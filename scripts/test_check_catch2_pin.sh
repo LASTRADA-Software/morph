@@ -148,7 +148,7 @@ expect_caught "a doc asserting CI pins catch2 3.5.3 while ci.yml pins 3.4.0" \
         >> docs/spec/testing_strategy.md" \
     "states 'CI pins catch2 3.5.3', but .github/workflows/ci.yml pins catch2 3.4.0"
 
-# The direction morph#666 will actually take: the runner image moves, someone
+# The direction this actually moves in: the runner image changes, someone
 # updates CATCH2_VERSION, and the nine .clang-tidy copies stay where they are.
 expect_caught "ci.yml bumped to 3.5.3 while the nine copies still say 3.4.0" \
     "edit .github/workflows/ci.yml -e 's/^  CATCH2_VERSION: \"3.4.0\"/  CATCH2_VERSION: \"3.5.3\"/'" \
@@ -205,7 +205,7 @@ expect_caught "--strict with no Catch2 installed at all" \
 
 # Without --strict -- a workstation run -- a divergence is reported rather than
 # failed, because a workstation is not required to carry the runner's package.
-# But it must be *reported*: silence here is the defect morph#666 is about.
+# But it must be *reported*: silence here is the defect this gate is about.
 expect_accepted "a workstation whose Catch2 differs is warned, not failed" \
     "true" \
     "A local clang-tidy-diff run is therefore NOT the measurement" \

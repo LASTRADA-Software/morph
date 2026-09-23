@@ -4,9 +4,9 @@
 # Fails if ctest runs a binary that llvm-cov is never handed, so that
 # everything the binary executed is measured as if it had never run.
 #
-# Why this gate exists (morph#403). scripts/coverage.sh used to name the
-# binaries it profiles by hand. It named three families while the tree built
-# nine. morph_net_tests was instrumented, ran, and wrote profile data that
+# Why this gate exists. A hand-written list of the binaries scripts/coverage.sh
+# profiles falls behind the tree: it once named three families while the tree
+# built nine. morph_net_tests was instrumented, ran, and wrote profile data that
 # llvm-profdata dutifully merged -- and then llvm-cov, which resolves counters
 # through a *binary*'s coverage mapping, was never given the binary, so the
 # whole of include/morph/net (955 lines, 42 of the library's 148 throw sites,
@@ -17,12 +17,11 @@
 # (the library's worst file) and include/morph/qt's 13 lines were measured with
 # their own suites absent.
 #
-# That was the third occurrence. morph#141 (rungs 2-4 shipped without ever
-# being added to coverage.sh, leaving ~15k lines outside the number) and
-# morph#179 (the hand-copied rung list had drifted past ledger and lims) were
-# the same defect in the same file. Both were fixed by deleting the copy and
-# reading an authoritative list instead, and coverage.sh's own comment named
-# the failure mode exactly:
+# That is the third occurrence of one shape in this file. Rungs 2-4 shipped
+# without ever being added to coverage.sh, leaving ~15k lines outside the
+# number; and the hand-copied rung list drifted past ledger and lims. Both were
+# fixed by deleting the copy and reading an authoritative list instead, and
+# coverage.sh's own comment names the failure mode exactly:
 #
 #     Nothing fails when a rung is forgotten -- the script runs, the report
 #     uploads, and the figure is simply computed over a shrinking fraction.
@@ -89,7 +88,7 @@ coverage_exclusion_reason() {
             echo "GAP: a real Catch2 suite (22 ctest cases driving include/morph's journal, offline queue, validation, transport-limit, versioning, connection-scope, observability and shutdown paths) whose target in examples/concepts/CMakeLists.txt has no apply_coverage() call at all, so it is not instrumented and contributes nothing. Fix: an if(AF_COVERAGE) apply_coverage(morph_concepts_tests) block there; the name already ends in _tests, so nothing else is needed"
             ;;
         morph_forms_demo)
-            echo "GAP: instrumented by examples/forms/CMakeLists.txt and driven by two ctest tests (forms_html_math, forms_repl_roundtrip), so it writes profile data that llvm-profdata merges and llvm-cov then drops -- morph#403's defect exactly. Fix: apply_coverage(morph_forms_demo TEST) there, TEST because a demo binary driven by tests is not named like a test"
+            echo "GAP: instrumented by examples/forms/CMakeLists.txt and driven by two ctest tests (forms_html_math, forms_repl_roundtrip), so it writes profile data that llvm-profdata merges and llvm-cov then drops -- this gate's whole subject. Fix: apply_coverage(morph_forms_demo TEST) there, TEST because a demo binary driven by tests is not named like a test"
             ;;
         morph_qt_tls_example)
             echo "GAP: run by the qt_tls_example_runs ctest test and never instrumented, so the pinned-certificate and insecure-verify paths it exercises through include/morph/qt score nothing. Fix: an if(AF_COVERAGE) apply_coverage(morph_qt_tls_example TEST) block in examples/qt_tls_client/CMakeLists.txt"
@@ -276,8 +275,7 @@ if [ "${#unexplained[@]}" -gt 0 ]; then
     echo "Either instrument the target -- if(AF_COVERAGE) apply_coverage(<target>) in its" >&2
     echo "CMakeLists.txt, with a name ending in _tests or with the TEST option -- or add it" >&2
     echo "to coverage_exclusion_reason() in this script together with the reason it stays" >&2
-    echo "out. See the header comment: the three previous occurrences of this defect" >&2
-    echo "(morph#141, morph#179, morph#403) were all silent." >&2
+    echo "out. See the header comment: all three previous occurrences were silent." >&2
     exit 1
 fi
 

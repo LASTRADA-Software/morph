@@ -15,10 +15,10 @@
 #      workstation is not required to carry the runner's package, only to know
 #      that it does not.
 #
-# Why this gate exists, corrected by morph#777. The check the runner's Catch2
+# Why this gate exists. The check the runner's Catch2
 # release decides is `bugprone-chained-comparison`, which every
 # examples/*/tests/.clang-tidy subtracts on the strength of that decision.
-# Measured on 68a30bcc, clang-tidy 22.1.8, one TEST_CASE of twelve `REQUIRE`s,
+# Measured with clang-tidy 22.1.8, one TEST_CASE of twelve `REQUIRE`s,
 # both releases reached identically (-isystem, i.e. as system headers, which is
 # how the runner and a workstation both reach theirs):
 #
@@ -40,16 +40,15 @@
 # the runner and on a workstation alike; one with an increment spelled in the
 # test source (a hand-written `if`, or a lambda inside a `REQUIRE` argument --
 # macro arguments are spelled in the caller's file) is reported on both. So
-# there is no version-driven asymmetry on that check to pin, and morph#666's
-# "a local run exits 0 where CI exits 1" was morph#776: a `git diff -U0 HEAD`
-# on a committed branch, which hands clang-tidy-diff.py nothing at all.
-#
-# morph#656's branch shipping a NOLINT reason that asserted a neighbouring
-# TEST_CASE "scores under the threshold" while it scored 87 is still a real
-# event; what it was evidence of was the empty diff, not the package.
+# there is no version-driven asymmetry on that check to pin. "A local run exits
+# 0 where CI exits 1" is almost always a `git diff -U0 HEAD` on a committed
+# branch, which hands clang-tidy-diff.py nothing at all -- not a Catch2
+# difference. A NOLINT reason asserting a neighbouring TEST_CASE "scores under
+# the threshold" while it scores 87 is evidence of that empty diff, not of the
+# package.
 #
 # What this gate does and does not do, stated plainly, because the distinction
-# is the whole point of the ticket:
+# is the whole point:
 #
 #   * It makes CI's own Catch2 a *decision* rather than an accident. `apt-get
 #     install -y catch2` is unpinned; if the runner image's package moves, the
@@ -62,7 +61,7 @@
 #     measurements are not the same one. Every other check agrees across
 #     releases; a local run that disagrees with CI on one of those has a
 #     different cause, and the first one to rule out is the diff base
-#     (morph#776 -- see CONTRIBUTING.md's "Formatting/linting" gate).
+#     (see CONTRIBUTING.md's "Formatting/linting" gate).
 #
 # Requires git and grep; compiles nothing.
 set -euo pipefail
@@ -228,7 +227,7 @@ else
     printf '         comparison, which Catch2 NOLINTed out of its own REQUIRE macro in\n' >&2
     printf '         3.15.3. Against a release at or past that point it reports nothing\n' >&2
     printf '         on any TEST_CASE, and the nine examples/*/tests/.clang-tidy files\n' >&2
-    printf '         subtract it for findings you will never see here (morph#777).\n' >&2
+    printf '         subtract it for findings you will never see here.\n' >&2
     printf '         A green local run is not evidence for that check. It IS evidence\n' >&2
     printf '         for every other one, including readability-function-cognitive-\n' >&2
     printf '         complexity, which scores identically under both releases.\n' >&2
