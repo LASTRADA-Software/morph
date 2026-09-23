@@ -20,7 +20,8 @@
 #
 # Consumers that genuinely cannot call this (GitHub evaluates a workflow's
 # `on.*.paths` before any step runs; codecov.yml is read by Codecov, not by us)
-# are checked against the list by scripts/check_rung_filters.sh instead.
+# were checked against the list by a drift-guard job, removed with the
+# meta-gates. They are kept in step by hand now.
 set -euo pipefail
 
 readonly repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

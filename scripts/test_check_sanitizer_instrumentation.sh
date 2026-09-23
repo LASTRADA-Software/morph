@@ -65,9 +65,9 @@ trap 'rm -rf "$work"' EXIT
 # make the fixture depend on a sanitizer runtime being installed, and would
 # test clang instead of this script.
 #
-# scripts/check_sanitizer_can_fail.sh is the complementary gate and does
-# compile real instrumentation, behaviourally, against the flags
-# apply_sanitizers() actually emits. Neither replaces the other.
+# A complementary gate (a gate removed on 2026-09-23) did compile real
+# instrumentation behaviourally, against the flags apply_sanitizers() emits.
+# It was removed with the meta-gates, so nothing covers that half now.
 
 case_dir() {
     local dir="${work}/$1"

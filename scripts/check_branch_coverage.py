@@ -249,16 +249,16 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
                                   context=None):
     """Resolve one allowlist entry's `source` text to its current line number.
 
-    Shared by this module's own resolve_allowlist() (keyed on partial branch
-    lines) and scripts/check_error_path_coverage.py's (keyed on throw/catch
-    sites, morph#406) -- both audit an allowlist entry the same way up to the
-    point where they check the resolved line against their own kind of site,
-    which is where the two callers diverge and this function stops. Factored
-    out rather than left as two copies: the "moved line"/"ambiguous match"
-    resolution here is exactly the fix for a defect this repository has found
-    three times over in an allowlist keyed by line number alone (morph#349,
-    morph#355, morph#419), and a second, independently-maintained copy of the
-    fix is how that class of defect gets a fourth chance.
+    Used by this module's resolve_allowlist(), keyed on partial branch lines.
+    A second caller keyed on throw/catch sites (morph#406) shared it until the
+    meta-gates were removed; this is the only caller now.
+
+    The sharing was deliberate while it lasted, and the reason it existed is
+    still the reason this function is worth keeping correct: the "moved line"/
+    "ambiguous match" resolution here is exactly the fix for a defect this
+    repository has found three times over in an allowlist keyed by line number
+    alone (morph#349, morph#355, morph#419), and a second, independently
+    maintained copy of that fix is how the class gets a fourth chance.
 
     Returns the resolved line number on success. Returns `None` and appends
     to `failures` on any failure: a missing source file, `wanted` text that

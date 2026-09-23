@@ -1493,7 +1493,7 @@ private:
             std::scoped_lock const lock{_limitsMtx};
             if (_timeoutScheduler) {
                 // The literal, not wire::kExecuteTimeoutMessage, on purpose:
-                // scripts/scenario/scenario_coverage.py statically scans this
+                // a scenario-coverage script (since removed) statically scanned this
                 // file for a string literal passed directly to makeErr to
                 // enumerate every refusal a scenario can assert against, and
                 // does not follow named constants across headers (see that

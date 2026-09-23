@@ -596,7 +596,7 @@ root `CMakeLists.txt` — don't repeat that eight times):
     `scripts/coverage.sh` and `wasm-ladder.yml`'s named-target build loop
     read it too.
   - Three consumers cannot read it, and are checked against it from outside by
-    `scripts/check_rung_filters.sh`, run unconditionally by
+    a gate removed on 2026-09-23, run unconditionally by
     `.github/workflows/drift-guard.yml`: `wasm-ladder.yml`'s
     `on.push.paths`/`on.pull_request.paths` (GitHub evaluates these to decide
     whether to start the workflow, before any step exists to generate them),
@@ -607,7 +607,7 @@ root `CMakeLists.txt` — don't repeat that eight times):
     The checks are behavioural where the semantics can be reproduced — a
     rung passes only if a real path under its directory actually matches the
     filter — because a grep for the rung's name would pass on a filter that
-    had been rewritten into one matching nothing. `scripts/test_check_rung_filters.sh`
+    had been rewritten into one matching nothing. a gate removed on 2026-09-23
     reintroduces each drift into a scratch copy of the tree, one at a time,
     and asserts the gate catches it for the stated reason.
 
@@ -625,7 +625,7 @@ root `CMakeLists.txt` — don't repeat that eight times):
   same reason. `examples/bank/tests/` and `examples/common/testkit/` carry it
   too. There is deliberately **no** `examples/.clang-tidy`: one file there
   would cover every rung's `src/`, `include/` and `gui_lib/` as well, where a
-  hand-written `a < b < c` is a real defect — `check_rung_filters.sh` fails if
+  hand-written `a < b < c` is a real defect — a gate removed on 2026-09-23 fails if
   one appears. It also fails if any `.cpp` in one of those directories is not
   a Catch2 translation unit: clang-tidy resolves configuration from the TU's
   path, so a library source living beside the tests gets a suppression argued

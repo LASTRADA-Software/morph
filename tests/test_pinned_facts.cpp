@@ -5,7 +5,7 @@
 // strings, glaze parsing behavior) against the real code, so a future edit to
 // one without the other fails this build. See docs/spec/pinned_facts.toml
 // (the single source of truth for expected values) and
-// scripts/check_spec_citations.sh (the complementary prose-vs-manifest lint).
+// a gate removed on 2026-09-23 (the complementary prose-vs-manifest lint).
 //
 // Two extraction mechanisms, matching what each fact class allows:
 //  - static_assert / an exhaustive switch, for anything visible to the type

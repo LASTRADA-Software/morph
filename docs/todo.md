@@ -287,7 +287,7 @@ behaves byte-for-byte as before. See `spec/core/backend.md#graceful-shutdown-beg
 A CI check pins the mechanical facts that had drifted before (enum
 cardinalities, key constants, canonical error-message strings, glaze
 `error_on_unknown_keys` behavior) via `docs/spec/pinned_facts.toml`,
-`tests/test_pinned_facts.cpp`, and `scripts/check_spec_citations.sh` — future
+`tests/test_pinned_facts.cpp`, and a gate removed on 2026-09-23 — future
 drift now fails the build. See `CONTRIBUTING.md`, "Quality gates".
 
 ### D2 — API stability / 1.0 commitment · P2 · shipped

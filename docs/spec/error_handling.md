@@ -217,7 +217,7 @@ those two headers: `unknown model type: <id>`, thrown by
 `ModelRegistryFactory::create` in `registry.hpp`, and the `exc.what()`
 passthrough, which carries every application-level refusal.
 
-That count is not a hand tally. `scripts/scenario/scenario_coverage.py`
+That count is not a hand tally. `scripts/scenario/a gate removed on 2026-09-23
 extracts it from `remote.hpp`'s server half — the part above
 `class SimulatedRemoteBackend`, since everything below is the in-process client
 stub whose throws no peer ever sees — plus the body of `wire::decode` alone,

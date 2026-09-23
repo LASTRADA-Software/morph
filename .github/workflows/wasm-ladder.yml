@@ -20,10 +20,10 @@ name: WASM ladder gate
 # other consumer derives from. That is exactly how they fell a rung behind:
 # both stopped at kanban, so ledger and lims matched nothing (morph#179).
 #
-# They are therefore checked against examples/rungs.txt from the outside, by
-# scripts/check_rung_filters.sh in .github/workflows/drift-guard.yml, which
-# fails the build naming any rung missing from either list. Adding a rung means
-# adding two lines here; forgetting is caught on the same PR.
+# They were checked against examples/rungs.txt from the outside by a
+# drift-guard job, removed with the meta-gates. Adding a rung still means
+# adding two lines here -- but nothing catches forgetting any more, so the
+# two lists have to be kept in step by hand.
 on:
   push:
     branches:

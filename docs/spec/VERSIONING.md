@@ -104,7 +104,7 @@ major release:
    ```
 
    e.g. `[[deprecated("removed in 2.0.0; use morph::bridge::NewThing instead")]]`.
-   `scripts/check_deprecated_markers.sh` enforces this exact shape in CI (the
+   a gate removed on 2026-09-23 enforces this exact shape in CI (the
    `deprecation-lint` job) — see "What CI enforces today" below.
 2. It keeps working, unchanged, for **at least one full minor release**.
 3. Its impending removal is recorded in the affected spec's
@@ -145,7 +145,7 @@ The C++ API version (this document) and the **wire protocol version**
   `project(morph VERSION ...)`, so the header and the build system cannot
   silently drift apart.
 - **Deprecation markers are well-formed.** The `deprecation-lint` job
-  (`.github/workflows/ci.yml`) runs `scripts/check_deprecated_markers.sh`
+  (`.github/workflows/ci.yml`) runs a gate removed on 2026-09-23
   against `include/morph`, failing the build if any `[[deprecated("...")]]`
   message does not name both a target removal version and a replacement in
   the shape given above.
@@ -160,7 +160,7 @@ The C++ API version (this document) and the **wire protocol version**
   `docs/spec/pinned_facts.toml` pins specific mechanical facts that recur
   across specs — key constants, enum cardinalities, canonical error/reply
   strings — and two checks enforce them: `tests/test_pinned_facts.cpp`
-  (real code vs. the manifest) and `scripts/check_spec_citations.sh` (the
+  (real code vs. the manifest) and a gate removed on 2026-09-23 (the
   spec prose vs. the manifest). This is a narrower, already-shipped relative
   of the gap described next: it pins individual facts a human names in the
   manifest, not an enumerated roster of every symbol on the stable surface.
@@ -172,7 +172,7 @@ renaming a stable public symbol without a major-version bump** —
 classifying a change as major/minor/patch is manual (author and reviewer
 judgement) today. The pinned-facts drift guard described above
 (`docs/spec/pinned_facts.toml`, `tests/test_pinned_facts.cpp`,
-`scripts/check_spec_citations.sh`) has landed since this policy was first
+a gate removed on 2026-09-23) has landed since this policy was first
 drafted, and its manifest-plus-generated-header pattern is a plausible
 foundation to build on: it already proves out "a human-pinned fact, checked
 against the real code, at CI time." But its manifest format is flat

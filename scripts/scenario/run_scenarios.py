@@ -152,10 +152,10 @@ class RungSpec:
             connection.close()
 
 
-#: Exactly the rungs `scenario_coverage.py` measures (`SERVER_RUNGS`), which
-#: is exactly the set with a `src/server/main.cpp`. The self-test asserts the
-#: two lists agree, so a rung added there without being added here fails
-#: loudly rather than being skipped in silence.
+#: Exactly the set of rungs with a `src/server/main.cpp`. A coverage script
+#: measured the same set and a self-test asserted the two agreed; both were
+#: removed with the meta-gates, so a rung added elsewhere but not here is now
+#: skipped in silence rather than failing loudly.
 RUNGS: dict[str, RungSpec] = {
     "pastebin": RungSpec(
         binary="ladder_pastebin_server", port_var="PASTEBIN_PORT", db_var="PASTEBIN_DB"

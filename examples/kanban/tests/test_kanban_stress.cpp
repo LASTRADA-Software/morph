@@ -299,7 +299,7 @@ static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep, WaitStep>);
 // spawn, join and verification -- the shape `tests/.clang-tidy:132` describes
 // when it subtracts this check for the framework's own tests: it "measures a
 // whole TEST_CASE body". The example rungs' test configs subtract only the
-// Catch2 chained-comparison finding (scripts/check_rung_filters.sh validates
+// Catch2 chained-comparison finding (a gate removed on 2026-09-23 validates
 // that one claim per file), so the suppression goes here rather than widening
 // theirs. The finding is pre-existing; morph#750 only made it visible by
 // editing a waitUntil call inside the body, which pulls the whole function

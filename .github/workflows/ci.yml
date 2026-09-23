@@ -88,8 +88,7 @@ env:
   # The Catch2 the `clang-tidy` job analyses against, through the
   # clang-tidy-diff.py run inside it. (Until morph#645 this sentence named
   # clang-tidy-diff.py where the job id belongs -- the same substitution
-  # morph#637 was, and the one live reference
-  # scripts/check_workflow_job_references.py found when it landed.) Not a
+  # morph#637 was.) Not a
   # version this
   # workflow installs -- `apt-get install -y catch2` takes whatever
   # ubuntu-24.04 ships -- but a record of what that has been measured to be,
@@ -1436,8 +1435,9 @@ jobs:
           # Not because `echo | grep` can lose a status today -- `echo` does
           # not fail -- but because this block decides whether a whole job
           # runs, and the next edit to it is the one that adds a pipeline
-          # that can (morph#730). scripts/check_workflow_pipefail.py enforces
-          # the same rule on every other `run:` block.
+          # that can (morph#730). The checker that enforced the same rule on
+          # every other `run:` block was removed with the meta-gates, so this
+          # is a convention now rather than something CI holds you to.
           set -o pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -1913,8 +1913,9 @@ jobs:
           # Not because `echo | grep` can lose a status today -- `echo` does
           # not fail -- but because this block decides whether a whole job
           # runs, and the next edit to it is the one that adds a pipeline
-          # that can (morph#730). scripts/check_workflow_pipefail.py enforces
-          # the same rule on every other `run:` block.
+          # that can (morph#730). The checker that enforced the same rule on
+          # every other `run:` block was removed with the meta-gates, so this
+          # is a convention now rather than something CI holds you to.
           set -o pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -2317,9 +2318,9 @@ jobs:
           # GUI needs Qml/Quick/QuickControls2 at 6.5+, which the distro Qt the
           # other bank jobs use cannot give) and already installs the
           # ODBC/SQLite/yaml-cpp/libzip set the bank example's Lightweight
-          # fetch requires. The option-coverage job below, which runs
-          # scripts/check_workflow_option_coverage.py, is what keeps the next
-          # option from repeating this.
+          # fetch requires. Nothing now checks that the next option is added
+          # here too -- the option-coverage job that did was removed with the
+          # meta-gates.
           # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
           # Configure steps for why leaving it unset is what lets
           # fastcache-cc be selected.
@@ -3004,7 +3005,8 @@ jobs:
           # and `head -1` closing the pipe SIGPIPEs it. The `-z` test is what
           # reads the result. This is why the `set -o pipefail` further down is
           # placed after this line rather than at the top of the step, and why
-          # the line carries the marker scripts/check_workflow_pipefail.py reads.
+          # the line carries a `pipefail-ok:` marker. The checker that read it was
+              # removed with the meta-gates; the marker stays as the explanation.
           CLANG_TIDY_DIFF="$(find /usr/lib/llvm-${{ env.CLANG_VERSION }}/share/clang /usr/share/clang \
             -name 'clang-tidy-diff.py' 2>/dev/null | head -1)"  # pipefail-ok: find's roots may be absent; head SIGPIPEs it; the -z test below reads the result
           if [ -z "$CLANG_TIDY_DIFF" ]; then
@@ -3231,243 +3233,6 @@ jobs:
 
   # ── Deprecation-marker format lint ────────────────────────────────────
 
-  deprecation-lint:
-    name: Deprecation marker format
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # The checker itself is tested first. A lint gate nobody tests reports
-      # green whether or not it still detects anything — this one was blind to
-      # both the bare `[[deprecated]]` form and any message wrapped across
-      # lines, which is exactly what VERSIONING.md forbids.
-      - name: Self-test the deprecation-marker checker
-        run: bash scripts/test_check_deprecated_markers.sh
-
-      # The runner fleet's scripts are not exercised by any build, so their
-      # self-tests are the only thing standing between a typo and a fleet
-      # that silently stops registering. See each test's own header.
-      - name: Self-test the runner launch contract
-        run: bash scripts/test_run_runner.sh
-
-      - name: Self-test the runner entrypoint token resolution
-        run: bash scripts/test_runner_entrypoint.sh
-
-      - name: Self-test the runner job-started hook
-        run: bash scripts/test_runner_job_hook.sh
-
-      - name: Self-test the runner systemd units
-        run: bash scripts/test_runner_units.sh
-
-      - name: Check [[deprecated]] markers cite a replacement and removal version
-        run: bash scripts/check_deprecated_markers.sh include/morph
-
-  # ── Test file-scope type name collision lint ───────────────────────────
-  test-type-name-lint:
-    name: Test file-scope type name collisions
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # See scripts/test_check_test_type_names.sh's own comment: a lint gate
-      # nobody tests reports green whether or not it still detects anything.
-      - name: Self-test the test-type-name checker
-        run: bash scripts/test_check_test_type_names.sh
-
-      # Catches issue #84's bug class: two file-scope (external-linkage)
-      # struct/class declarations with the same name in different test
-      # files is an ODR violation that neither the compiler nor the linker
-      # diagnoses, and which resolves link-order-dependently per build.
-      - name: Check for file-scope struct/class name collisions across tests/
-        run: bash scripts/check_test_type_names.sh
-
-  # ── Journal payload-fingerprint stamp lint ─────────────────────────────
-  journal-stamp-lint:
-    name: Hand-rolled LogEntry stamps its payload fingerprint
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # See scripts/test_check_journal_stamps.sh's own comment: a lint gate
-      # nobody tests reports green whether or not it still detects anything.
-      # This checker has two specific ways to go blind, and the self-test
-      # pins both.
-      - name: Self-test the journal-stamp checker
-        run: bash scripts/test_check_journal_stamps.sh
-
-      # Catches issue #244's bug class: a model that hand-rolls its own
-      # journaling records entries with no `LogEntry::schema`, which
-      # `journal::replay()` can only replay unverified -- so a later renamed
-      # field decodes to its default and the reconstruction is confidently
-      # wrong, which is precisely the failure the fingerprint exists to make
-      # loud. See docs/spec/journal/journal.md, "Payload schema fingerprint".
-      - name: Check hand-rolled LogEntry constructions stamp schema
-        run: bash scripts/check_journal_stamps.sh examples
-
-  # ── Every MORPH_BUILD_* option is built by some job ────────────────────
-  #
-  # Its own job, and deliberately a cheap one: it reads CMake files and
-  # workflow files and builds nothing, so it reports in seconds rather than
-  # riding on a leg that takes 26-74 minutes to say the same thing.
-  #
-  # (drift-guard.yml is the more natural home and is where this belongs once
-  # PR #614 lands; it is held there now, so the step lives here.)
-  #
-  # Catches morph#605's bug class: MORPH_BUILD_BANK_GUI was set ON by a
-  # CMakePresets.json preset no workflow ever names, so it was compiled by no
-  # native job at all -- and bank_gui duly stopped compiling on master with
-  # every gate green (morph#604), while the job named "all optional features"
-  # went on passing. Adding the missing flag closes that hole once; only a
-  # check that *derives* the option list closes the class, because nothing
-  # stops the next option from being declared and enabled by nobody.
-  option-coverage:
-    name: Every MORPH_BUILD_* option is built by some job
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # See scripts/test_check_workflow_option_coverage.sh's own comment: a
-      # lint gate nobody tests reports green whether or not it still detects
-      # anything, and this one is maximally exposed to that -- the tree it
-      # guards is correct the day it lands, so it passes on day one whether it
-      # parses anything at all. Its whole value is what it does on a day that
-      # has not happened yet.
-      - name: Self-test the option-coverage checker
-        run: bash scripts/test_check_workflow_option_coverage.sh
-
-      - name: Check every declared MORPH_BUILD_* option is enabled by some job
-        run: python3 scripts/check_workflow_option_coverage.py .
-
-  # ── Every job's section banner introduces that job ────────────────────
-  #
-  # Its own job, and deliberately a cheap one: it reads workflow files and
-  # builds nothing, so it reports in seconds rather than riding on a leg that
-  # takes 26-74 minutes to say the same thing.
-  #
-  # (drift-guard.yml is the more natural home and is where this belongs once
-  # PR #635 lands; it is held there now, so the job lives here -- the same
-  # arrangement the option-coverage job above is in.)
-  #
-  # Catches morph#621's bug class: seven of the seventeen banners in this file
-  # sat above the *previous* job's trailing `sccache stats` / `Save sccache`
-  # steps, so each banner's multi-paragraph rationale -- for several jobs the
-  # only written record of why the job exists -- described a job that began
-  # 6-31 lines further down, behind another job's steps. YAML comments are
-  # inert, so nothing else in this repository can notice, and the displacement
-  # recurs every time a step is appended to the end of a job.
-  #
-  # Checking "no banner is displaced" alone would be vacuous: a file with every
-  # banner deleted scores zero displacements. The gate pairs both ways -- every
-  # banner introduces a job, and every job is introduced by a banner -- so a
-  # deletion fails it instead of satisfying it.
-  banner-lint:
-    name: Every job's section banner introduces that job
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # See scripts/test_check_workflow_job_banners.sh's own comment: a lint
-      # gate nobody tests reports green whether or not it still detects
-      # anything, and this one repairs the defect it guards in the same commit
-      # that adds it, so it passes on day one whether it parses anything at
-      # all.
-      - name: Self-test the job-banner checker
-        run: bash scripts/test_check_workflow_job_banners.sh
-
-      - name: Check every workflow section banner introduces its job
-        run: python3 scripts/check_workflow_job_banners.py .
-
-  # ── A workflow comment may not name a job that does not exist ───────
-  #
-  # Its own job for the same reason banner-lint above is: it reads workflow
-  # text and builds nothing, so it answers in seconds instead of riding on a
-  # leg that takes 26-74 minutes to say the same thing.
-  #
-  # morph#637 was a comment in this file that named the script
-  # check_workflow_option_coverage.py where the job id `option-coverage`
-  # belonged. YAML comments are inert, so nothing could notice, and a reader
-  # searching the workflows for that name found nothing.
-  #
-  # The rule is narrow on purpose and the narrowness is measured: a token before
-  # the word "job" must resolve to a declared job id, but only if it is
-  # lowercase and hyphenated. This file's comments contain 207 occurrences of
-  # "<token> job", 193 of which are English ("this job", "a sanitizer job"); the
-  # hyphen is what separates the 13 references from the prose. The cost is that
-  # a stale reference to a single-word id -- `valgrind`, `windows` -- stays
-  # invisible, which the checker's header states rather than leaves to be found.
-  #
-  # It was not vacuous on arrival: the CLANG_VERSION block at the top of this
-  # file named clang-tidy-diff.py where `clang-tidy` belonged, which is
-  # morph#637's defect still live. Rewording that is part of the same commit.
-  job-reference-lint:
-    name: Workflow comments name jobs that exist
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # See scripts/test_check_workflow_job_references.sh's own comment: this
-      # gate reads prose, so the case that decides whether it measures anything
-      # is not a wrong reference but a tree whose comments have drifted out of
-      # the one phrase shape it reads -- which it would pass, silently, having
-      # matched nothing.
-      - name: Self-test the job-reference checker
-        run: bash scripts/test_check_workflow_job_references.sh
-
-      - name: Check every job named in a workflow comment exists
-        run: python3 scripts/check_workflow_job_references.py .
-
-  # ── A workflow pipeline must read its left-hand side's status ─────────
-  #
-  # Its own job for the same reason banner-lint and job-reference-lint above
-  # are: it reads workflow text and builds nothing, so it answers in seconds
-  # rather than riding on a leg that takes 26-74 minutes to say the same thing.
-  #
-  # A `run:` block with no `shell:` key runs under `bash -e {0}` -- `-e` but
-  # not `-o pipefail` -- so `cmd | tee log` exits with `tee`'s status and a
-  # failing `cmd` is green. That has now cost this repository two gates:
-  #
-  #   * morph#479: `clang-tidy-diff.py … | tee` could not fail on anything it
-  #     found, for as long as it took someone to notice;
-  #   * morph#730: `scripts/mutation.sh … | tee` reported success for a
-  #     campaign that exited 1 having produced no report, so the mutation score
-  #     went unmeasured for two weeks and the workflow said nothing.
-  #
-  # Between those, three steps set `pipefail` by hand and one carries a comment
-  # about this exact hazard. The guard was known and applied inconsistently,
-  # which is what a gate is for. `shell: bash` -- the explicit spelling -- is
-  # `bash --noprofile --norc -eo pipefail {0}` and does carry the guard; only
-  # the absent key does not, and that asymmetry is most of why this recurs.
-  #
-  # Not vacuous on arrival: it found six unguarded pipelines on the tree it
-  # landed against, one of which was morph#730 itself.
-  pipefail-lint:
-    name: Workflow pipelines read their exit status
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # See scripts/test_check_workflow_pipefail.sh's own comment: this gate
-      # repairs the tree it guards in the same commit that adds it, so it
-      # passes on day one whether it parses a single `run:` block or none at
-      # all. The cases that decide whether it measures anything are the two
-      # vacuity ones, not the defects.
-      - name: Self-test the pipefail checker
-        run: bash scripts/test_check_workflow_pipefail.sh
-
-      - name: Check every workflow pipeline reads its left-hand side's status
-        run: python3 scripts/check_workflow_pipefail.py .
-
-  # ── Install / export: find_package(morph CONFIG) must work ─────────────
-  #
-  # Its own job rather than a step on an existing leg. It configures, installs
-  # and consumes morph three times over (once for the checker, twice more for
-  # the self-test's slow cases) and would add several minutes to whichever
-  # matrix leg it was bolted onto; here it runs in parallel with them and
-  # costs nothing on the critical path.
-  #
-  # Nothing else in CI installs morph at all, which is how morph#232 survived:
-  # every ladder rung builds from inside the tree, so `cmake --install`
-  # exiting 0 with none of morph in the prefix was invisible to all ~16 legs.
   install-export:
     name: find_package(morph CONFIG) consumability
     runs-on: ubuntu-24.04

@@ -1871,7 +1871,7 @@ calls, the `kind` string the schema carries, and the `RuleKind` enumerator the
 framework switches on. They are listed together because a reader emitting JSON
 and a reader writing C++ read the same table, and the C++ capitalisation is not
 derivable from the wire spelling by any rule stated anywhere.
-`scripts/check_spec_citations.sh` (check 6) reads `ruleKindName()`'s switch and
+a gate removed on 2026-09-23 (check 6) reads `ruleKindName()`'s switch and
 requires each enumerator and its wire spelling to appear in one row here, so a
 kind added to the enum cannot reach the wire undocumented.
 

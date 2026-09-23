@@ -218,8 +218,7 @@ fi
 # an empty test list satisfies all of them by having nothing to satisfy. That
 # is what an unconfigured build directory, or a test registration that silently
 # produced nothing, looks like from here -- and reporting it as clean would be
-# this gate committing the failure it exists to detect. scripts/
-# check_rung_filters.sh guards its own end the same way.
+# this gate committing the failure it exists to detect.
 dir="$(case_dir empty_ctest)"
 tests_exe="$(binary "$dir" morph_tests)"
 manifest "$dir" "$tests_exe"

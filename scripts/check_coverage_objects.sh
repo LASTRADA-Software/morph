@@ -285,8 +285,8 @@ fi
 # against a build directory that was never configured for tests, or whose test
 # registration silently produced an empty list, returns a valid JSON document
 # with zero tests -- and every check below it then passes by having nothing to
-# check. That is the same vacuous green scripts/check_rung_filters.sh guards
-# against at its own end, and it is worth guarding here twice over, because a
+# check. That is the vacuous green any gate has to guard against, and it is
+# worth guarding here twice over, because a
 # coverage report over a suite ctest does not know about is precisely the
 # shape of failure this gate was written for.
 if [ "$checked" -eq 0 ]; then

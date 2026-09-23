@@ -189,7 +189,7 @@ component_management:
     # offline sliding from 96% to 60% moves the whole-library figure by
     # about two and a half points and names no subsystem while doing it.
     # This is the same hole this file already records one level down for the
-    # rungs ("scripts/check_rung_filters.sh checks that each rung has a
+    # rungs ("a gate, since removed, checked that each rung has a
     # `component_id`, not that it has these, so the omission was
     # unguarded"), and the fix is the same: a component per thing you want
     # to be able to see move.
@@ -468,8 +468,9 @@ component_management:
     # The components in this file are the other half of that pair, and are the
     # one thing here that still has to be written by hand -- Codecov reads this
     # file on its own service, so nothing in the repository can generate it.
-    # scripts/check_rung_filters.sh therefore fails the build if any rung in
-    # examples/rungs.txt has no `component_id` here.
+    # A gate used to fail the build if any rung in examples/rungs.txt had no
+    # `component_id` here. It was removed with the meta-gates, so the two are
+    # kept in step by hand now.
     #
     # Measured ceiling, from `llvm-cov export`'s JSON (covered/total, not the
     # rounded report percentage) over the full lims suite:
@@ -655,8 +656,8 @@ ignore:
   # main() shells into a report for these lines to exclude -- which is exactly
   # the point of writing them down: the entries state the intent rather than
   # leaving the exclusion to be an accident of what the other script happens to
-  # name. scripts/check_rung_filters.sh checks that each rung has a
-  # `component_id`, not that it has these, so the omission was unguarded.
+  # name. A gate (since removed) checked that each rung has a `component_id`,
+  # not that it has these, so the omission was unguarded then and is now.
   - "examples/crm/tests/**"
   - "examples/crm/gui/**"
   - "examples/crm/gui_wasm/**"

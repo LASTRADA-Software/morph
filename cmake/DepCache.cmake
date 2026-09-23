@@ -46,7 +46,7 @@ include(FetchContent)
 #
 # `morph_declare_dep` is what call sites use; `morph_cache_dep` below is the
 # caching half and is called only by it (and directly by
-# scripts/test_dep_cache.sh, which asserts that half's four properties on their
+# a gate removed on 2026-09-23, which asserts that half's four properties on their
 # own before asserting that declaring survives all four).
 #
 # The split is not stylistic. `morph_cache_dep` has three early returns -- no

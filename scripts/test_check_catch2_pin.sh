@@ -145,7 +145,7 @@ fi
 # -- A. The textual half -----------------------------------------------------
 expect_caught "a doc asserting CI pins catch2 3.5.3 while ci.yml pins 3.4.0" \
     "printf '%s\n' 'The lint leg reproduces because CI pins catch2 3.5.3 there.' \
-        >> docs/spec/testing_charter.md" \
+        >> docs/spec/testing_strategy.md" \
     "states 'CI pins catch2 3.5.3', but .github/workflows/ci.yml pins catch2 3.4.0"
 
 # The direction morph#666 will actually take: the runner image moves, someone
@@ -159,12 +159,12 @@ expect_caught "ci.yml bumped to 3.5.3 while the nine copies still say 3.4.0" \
 # how the number went unchecked in the first place.
 expect_caught "a CI Catch2 claim in an unrecognised phrasing, even with the right version" \
     "printf '%s\n' 'The CI lint job installs catch2 3.4.0 from apt.' \
-        >> docs/spec/testing_charter.md" \
+        >> docs/spec/testing_strategy.md" \
     "phrasing this gate cannot check"
 
 expect_caught "a CI Catch2 claim in an unrecognised phrasing with the wrong version" \
     "printf '%s\n' 'Measured against Catch2 3.16.0 while CI has catch2-3.5.3.' \
-        >> docs/spec/testing_charter.md" \
+        >> docs/spec/testing_strategy.md" \
     "phrasing this gate cannot check"
 
 expect_caught "every canonical assertion removed from the tree" \
@@ -183,11 +183,11 @@ expect_caught "ci.yml with no CATCH2_VERSION to read" \
 # document recording a local measurement or a FetchContent tag.
 expect_accepted "a Catch2 version named with no CI reference on the line" \
     "printf '%s\n' 'Reproduced against Catch2 3.16.0 on this workstation.' \
-        >> docs/spec/testing_charter.md"
+        >> docs/spec/testing_strategy.md"
 
 expect_accepted "a historical record carrying the documented marker" \
     "printf '%s\n' 'Before noble, CI had catch2 2.13.10 (catch2-pin: historical).' \
-        >> docs/spec/testing_charter.md"
+        >> docs/spec/testing_strategy.md"
 
 # -- B. The behavioural half -------------------------------------------------
 # The whole reason this gate is not just another prose checker: the runner's

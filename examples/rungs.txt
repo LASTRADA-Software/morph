@@ -22,8 +22,8 @@
 #   .github/workflows/wasm-ladder.yml  its named-target build loop
 #   scripts/coverage.sh              which rung test binaries are profiled
 #
-# Consumers that CANNOT read it, and are therefore checked against it by
-# scripts/check_rung_filters.sh (run by .github/workflows/drift-guard.yml):
+# Consumers that CANNOT read it. A drift-guard job checked them against it
+# until the meta-gates were removed; keep them in step by hand:
 #   .github/workflows/wasm-ladder.yml  on.push.paths / on.pull_request.paths
 #                                      (GitHub evaluates these before any
 #                                      step runs, so they must be literal)
