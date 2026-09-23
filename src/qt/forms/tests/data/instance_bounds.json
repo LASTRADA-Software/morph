@@ -1,6 +1,6 @@
 {
   "readme": [
-    "The per-instance constraints corpus (morph#164). ONE file, TWO readers:",
+    "The per-instance constraints corpus. ONE file, TWO readers:",
     "  tests/test_forms_instance_constraints.cpp -- InstanceConstraints::checkValue",
     "  src/qt/forms/tests/tst_DynamicFormInstanceBounds.qml -- a real DynamicForm",
     "",

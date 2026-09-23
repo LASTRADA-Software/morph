@@ -47,7 +47,7 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
             _connectHandler();
         }
         // Send every bind request that arrived before this connect (the first
-        // connect included) -- see issue #54. Runs before the reconnect handler
+        // connect included). Runs before the reconnect handler
         // below so a caller that gates UI on the bind's continuation sees it
         // fire promptly on first connect too.
         flushQueuedRegistrations();
@@ -187,7 +187,7 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
         if (!_connected) {
             // Queue rather than fail: this is exactly the ordering a
             // single-threaded WASM client must use, since it can never block
-            // waiting for the connection to settle (see issue #54). The queued
+            // waiting for the connection to settle. The queued
             // request is sent -- with a call-id assigned then, not now -- the
             // moment `connected` fires next (first connect included), from
             // flushQueuedRegistrations(). No call-id is assigned yet; if the
@@ -229,10 +229,10 @@ void QtWebSocketBackend::sendControl(::morph::wire::Envelope env,
     uint64_t const callId = ++_nextCallId;
     env.callId = callId;
     // Stamped exactly as every synchronous control verb stamps it: RemoteServer
-    // authenticates and authorizes from env.session, so omitting it reached the
-    // server as an unauthenticated principal on the non-blocking (WASM) path
-    // only. morph#495 -- and now unmissable, because this is the only place a
-    // control envelope is sent from.
+    // authenticates and authorizes from env.session, so omitting it would reach
+    // the server as an unauthenticated principal on the non-blocking (WASM)
+    // path. Unmissable here, because this is the only place a control envelope
+    // is sent from.
     env.session = _session;
     QString encoded;
     try {
@@ -374,7 +374,7 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     if (!_connected) {
         return;
     }
-    // A real, non-zero callId (issue #65): callId == 0 is the wire's
+    // A real, non-zero callId: callId == 0 is the wire's
     // "parked sendSync waiter" sentinel, and this request's reply -- though
     // nobody waits on it -- would otherwise be indistinguishable from one a
     // synchronous register/attach/assign/instances call is genuinely parked
@@ -443,14 +443,13 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     }
     for (auto& [ignoredCallId, promise] : drainedRegistrations) {
         // The exception itself, not a message rebuilt from it: a control call
-        // rejected by a dropped socket now delivers the very
-        // `backend::DisconnectedError` an execute() call delivers, instead of
-        // the `runtime_error` the `*Async` verbs' string channel flattened it
-        // into.
+        // rejected by a dropped socket delivers the very
+        // `backend::DisconnectedError` an execute() call delivers, so a caller
+        // can catch one type for both.
         promise.reject(exc);
     }
-    // A private bind queued while the socket had never yet connected (issue
-    // #54) never got a call-id, so it cannot be found in _pendingRegistrations
+    // A private bind queued while the socket had never yet connected never got
+    // a call-id, so it cannot be found in _pendingRegistrations
     // above -- drain it here instead, on the same cancelPending path that
     // already handles a connection that goes away (or never comes up) before a
     // queued reply, so its continuation still fires exactly once rather than
@@ -474,7 +473,7 @@ void QtWebSocketBackend::scheduleReconnect() {
     // Cast up to double first so the multiplication is openly floating-point.
     // Written as `count() * backoffMultiplier` the integral `rep` is narrowed to
     // double *inside* the expression, which the narrowing-conversions checks
-    // flag separately from the explicit cast back (morph#514). Same arithmetic,
+    // flag separately from the explicit cast back. Same arithmetic,
     // same result -- only the one deliberate narrowing is left, on the outside.
     auto next = std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(
         static_cast<double>(_currentReconnectDelay.count()) * _cfg.backoffMultiplier)};
@@ -576,7 +575,7 @@ bool QtWebSocketBackend::tryRouteControlReply(const ::morph::wire::Envelope& env
 }
 
 bool QtWebSocketBackend::tryRouteDeregisterReply(const ::morph::wire::Envelope& env) {
-    // A fire-and-forget deregister's reply (see issue #65): assigned a
+    // A fire-and-forget deregister's reply: assigned a
     // real callId purely so it lands here instead of falling through
     // to the callId==0 branch in onTextMessage and being handed to whichever
     // sendSync waiter happens to be parked. Nobody observes the

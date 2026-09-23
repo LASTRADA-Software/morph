@@ -179,7 +179,7 @@ void QtWebSocketServer::onNewConnection() {
         // Qt parent-child ownership: `this` owns the timer and deletes it, and every path that
         // drops the reference calls deleteLater() first (see the handshakeTimer handling below).
         // cppcoreguidelines-owning-memory has no model of that convention -- it flags any raw
-        // `new` bound to a non-gsl::owner pointer (morph#514). Suppressed here rather than for the
+        // `new` bound to a non-gsl::owner pointer. Suppressed here rather than for the
         // whole directory: this is the only such site in src/, and a directory-wide disable would
         // turn the check off for a future `new` that really is unowned.
         // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) — QObject parent owns this
@@ -260,7 +260,7 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         // an ordinary error the caller's `.onError(...)` already handles --
         // the same reply-without-full-decode pattern the maxMessageBytes
         // branch above uses. The connection stays open: rate limiting throttles
-        // a client, it does not evict one (morph#225).
+        // a client, it does not evict one.
         socket->sendTextMessage(
             QString::fromStdString(::morph::wire::encode(::morph::wire::makeErr("rate limited", peekedCallId()))));
         return;

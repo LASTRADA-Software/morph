@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Ids above 2^53 must survive the renderer's JSON round trip exactly
-// (morph#190, morph#191).
+// Ids above 2^53 must survive the renderer's JSON round trip exactly.
 //
 // JavaScript numbers are IEEE-754 doubles, so `JSON.parse` cannot hold an
 // integer above 2^53, and re-serialising the rounded value emits a *different*
@@ -125,11 +124,11 @@ TestCase {
         }
     }
 
-    // ── morph#191: CollectionView row ids ────────────────────────────────────
+    // ── CollectionView row ids ───────────────────────────────────────────────
 
-    // The two rows must remain addressable as distinct objects. Before the fix
-    // both objectNames ended in the same rounded id, so findChild could not
-    // name one row rather than the other.
+    // The two rows must remain addressable as distinct objects. Rounded through
+    // a double, both objectNames end in the same id and findChild cannot name
+    // one row rather than the other.
     function test_neighbouringRowIdsStayDistinct() {
         var view = createTemporaryObject(viewComponent, testCase)
         verify(view !== null)
@@ -172,11 +171,12 @@ TestCase {
         compare(cell.text, testCase.oddId)
     }
 
-    // ── morph#190: choice option ids ─────────────────────────────────────────
+    // ── choice option ids ────────────────────────────────────────────────────
 
     // Each option's valueJson is the literal the form submits for that choice,
-    // so two options must not share one. Before the fix both were the rounded
-    // even id, and the combo held two entries the UI could not tell apart.
+    // so two options must not share one. Rounded through a double both become
+    // the same even id, and the combo holds two entries the UI cannot tell
+    // apart.
     function test_choiceOptionValuesStayDistinct() {
         var form = createTemporaryObject(choiceFormComponent, testCase)
         verify(form !== null)

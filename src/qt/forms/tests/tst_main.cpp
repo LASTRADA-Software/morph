@@ -21,9 +21,9 @@ namespace {
 ///
 /// Each corpus is one file with two readers — a C++ suite and a QML one:
 ///
-/// - `tests/data/rule_corpus.json` (morph#176) — read by
+/// - `tests/data/rule_corpus.json` — read by
 ///   `tests/test_forms_rule_corpus.cpp` and `tst_DynamicFormRuleCorpus.qml`;
-/// - `tests/data/instance_bounds.json` (morph#164) — read by
+/// - `tests/data/instance_bounds.json` — read by
 ///   `tests/test_forms_instance_constraints.cpp` and
 ///   `tst_DynamicFormInstanceBounds.qml`.
 ///

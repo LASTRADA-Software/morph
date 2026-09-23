@@ -41,7 +41,7 @@ Frame {
     property var schema
     property var controller
 
-    // The schema as ordinary JSON data, however it was supplied (morph#388).
+    // The schema as ordinary JSON data, however it was supplied.
     // **Every read of the schema below goes through this, never through
     // `schema` itself.**
     //
@@ -59,11 +59,10 @@ Frame {
     //     strong id under `$defs`) was wrapped rather than unpacked, leaving
     //     `isInteger` false, so the id was submitted as a quoted JSON
     //     *string* and the server answered parse_number_failure;
-    //   - the `anyOf`-over-`$ref` collapse (morph#189) never ran, so a
-    //     nullable `$ref` member regressed to that same encoding -- #189's
-    //     own fix, going inert on this path;
-    //   - the closed-set recognition (morph#386) never ran, so an `enum`
-    //     drew a free-text box over what the schema states is a closed set.
+    //   - the `anyOf`-over-`$ref` collapse never runs, so a nullable `$ref`
+    //     member falls back to that same encoding;
+    //   - the closed-set recognition never runs, so an `enum` draws a
+    //     free-text box over what the schema states is a closed set.
     //
     // Normalising once, here, is what stops that being a standing trap for
     // the next `Array.isArray` anyone writes against schema data.
@@ -183,7 +182,7 @@ Frame {
         return typeof value === "number" && isFinite(value) ? value : undefined
     }
 
-    // Whether `value` breaks a declared `multipleOf` (morph#310). An absent or
+    // Whether `value` breaks a declared `multipleOf`. An absent or
     // non-positive step is no constraint at all, matching JSON Schema, which
     // requires `multipleOf` to be strictly positive.
     //
@@ -204,7 +203,7 @@ Frame {
 
     // Three-way compare of two integers held as decimal strings: -1, 0, 1.
     // Needed because a JS number cannot hold an int64 bound exactly, so the
-    // comparison has to happen on digits (morph#213). Inputs are already
+    // comparison has to happen on digits. Inputs are already
     // /^-?\d+$/-validated by the caller.
     function compareIntText(left, right) {
         const leftNeg = left.charAt(0) === "-"
@@ -243,7 +242,7 @@ Frame {
         // "type" key**. Resolving only the top-level $ref left every kind flag
         // below false, so the value fell through to the plain-text encoding and
         // went out as a quoted JSON *string* that the server then rejected with
-        // parse_number_failure (morph#189). Resolve through the non-null branch
+        // parse_number_failure. Resolve through the non-null branch
         // so the field is typed by T. `oneOf` is handled the same way — glaze
         // emits it for every `glz::enumerate`d `enum class`, and a
         // hand-written or evolved schema may use it for nullability too.
@@ -262,7 +261,7 @@ Frame {
                 // A closed set of alternatives is not the nullability shape
                 // this collapse exists for: its branches differ in *value*,
                 // so the first one's `const` is not the field's own and must
-                // not be left masquerading as it (morph#386). The set itself
+                // not be left masquerading as it. The set itself
                 // survives via enumChoices() below, which reads the branches
                 // rather than this collapsed node.
                 delete merged["const"]
@@ -292,7 +291,7 @@ Frame {
     //      a hand-written or evolved schema may: `{"enum": ["a", "b"]}`.
     //
     // This is distinguishable from the nullable-`$ref` shape resolveProp
-    // collapses (morph#189), whose branches carry no `const` at all: **one**
+    // collapses, whose branches carry no `const` at all: **one**
     // branch without a `const` and the property is not a closed set, so the
     // whole thing falls back rather than offering a partial list.
     //
@@ -384,7 +383,7 @@ Frame {
                 const types = Array.isArray(p.type) ? p.type : (p.type === undefined ? [] : [p.type])
                 const dp = opt(raw["x-decimalPlaces"], p["x-decimalPlaces"])
                 const optionsAction = opt(raw["x-optionsAction"], p["x-optionsAction"])
-                // A closed set stated by the schema itself (morph#386). Read
+                // A closed set stated by the schema itself. Read
                 // from `raw`, not the collapsed `p`: resolveProp keeps only
                 // one branch, and the set is the point. A field that also
                 // declares x-optionsAction is a server-fetched Choice and
@@ -470,7 +469,7 @@ Frame {
                     required: required.indexOf(name) !== -1,
                     // `resolveRef` merges the property node *over* the `$def`
                     // it points at, so these three read a per-field bound
-                    // declared through `FieldMeta` (morph#310) as readily as
+                    // declared through `FieldMeta` as readily as
                     // one glaze stamped on the shared type definition -- which
                     // is what makes a bound on one `Quantity` member leave a
                     // sibling of the same type alone.
@@ -487,16 +486,16 @@ Frame {
                     // `JSON.parse(controller.schemasJson)`), so an int64 bound
                     // is already rounded by the time it gets here -- INT64_MAX
                     // arrives as 9223372036854775808. These strings are not
-                    // (morph#213). Undefined for any bound a double holds
+                    // Undefined for any bound a double holds
                     // exactly, which is the overwhelmingly common case.
                     exactMinimum: p["x-exactMinimum"],
                     exactMaximum: p["x-exactMaximum"],
                     // Per-*instance* bounds a model wrote into the served
-                    // schema from data (morph::forms::InstanceConstraints;
-                    // morph#164). `{num,den,dp}` Rational nodes, never plain
+                    // schema from data (morph::forms::InstanceConstraints).
+                    // `{num,den,dp}` Rational nodes, never plain
                     // numbers, and never emitted by schemaJson<A>() itself.
-                    // Without these the renderer honoured only the compiled
-                    // `minimum`/`maximum` and an instance's own range was
+                    // Without these the renderer honours only the compiled
+                    // `minimum`/`maximum` and an instance's own range is
                     // decorative -- exactly the "two values for one concept,
                     // and the renderer believes the compiled one" outcome the
                     // decoration seam exists to remove.
@@ -624,7 +623,7 @@ Frame {
         // CheckBox writes those), but `equals` against a `bool` emits a JSON
         // *boolean* literal. Comparing the two as text made `"true" === true`
         // false, so a requiredWhen keyed on a boolean never fired on the
-        // client while the compiled evaluator fired it (morph#176).
+        // client while the compiled evaluator fires it.
         if (meta && meta.isBoolean)
             return text === "true"
         if (meta && (meta.isQuantity || meta.isInteger))
@@ -638,11 +637,11 @@ Frame {
     //
     // **Three-valued.** `true` / `false` / `undefined`, where `undefined` is
     // "this renderer cannot evaluate this node" -- an unrecognised `kind`.
-    // That is a distinct answer from `false`, and collapsing the two is what
-    // made the shipped renderer contradict every other client of the same
-    // spec sentence (morph#176): a `not` wrapping an unknown child came out
-    // *true*, so a requiredWhen keyed on it started demanding a field for a
-    // reason the renderer had just admitted it could not judge.
+    // That is a distinct answer from `false`, and collapsing the two makes
+    // this renderer contradict every other client of the same spec sentence:
+    // a `not` wrapping an unknown child comes out *true*, so a requiredWhen
+    // keyed on it demands a field for a reason the renderer has just admitted
+    // it cannot judge.
     //
     // `undefined` propagates. `and` is `false` if any child is false, and
     // `undefined` if none is false but some is unevaluable. `or` is `true` if
@@ -663,8 +662,7 @@ Frame {
             // An integral literal beyond 2^53 arrives here already rounded by
             // JSON.parse, so comparing it as a number collapses values the
             // schema kept distinct. `valueText` carries the exact digits when
-            // the emitter judged the number unsafe; compare on digits then
-            // (morph#176).
+            // the emitter judged the number unsafe; compare on digits then.
             if (cond.valueText !== undefined) {
                 const text = (opt(fieldValues[names[0]], "")).trim()
                 if (!/^-?\d+$/.test(text))
@@ -807,26 +805,25 @@ Frame {
     // The payload's exact digit routines below stay entirely locale-free —
     // this is the one control-edge conversion step, applied once per entry.
 
-    // Grouping is *validated*, not stripped (morph#574). A group separator is
+    // Grouping is *validated*, not stripped. A group separator is
     // only dropped where one can legally be -- preceded by one to three digits,
     // followed by exactly three more, never after the decimal separator.
-    // Stripping it unconditionally, which both this function and its C++ twin
-    // used to do, turns a de-DE user's US-style "1.5" into 15: a valid number,
-    // ten times too large, that nothing downstream can recognise as wrong.
-    // Verified against the C++ side on the same inputs before and after; the
-    // two edges agreed on every wrong answer and now agree on every rejection.
-    // The negative sign is matched as a whole string, not as one code unit
-    // (morph#583). 77 of the 711 locales Qt 6.11.2 knows spell it as something
+    // Stripping it unconditionally turns a de-DE user's US-style "1.5" into 15:
+    // a valid number, ten times too large, that nothing downstream can
+    // recognise as wrong. The C++ edge validates on the same rule, and the two
+    // are checked against each other on the same inputs.
+    // The negative sign is matched as a whole string, not as one code unit.
+    // 77 of the 711 locales Qt 6.11.2 knows spell it as something
     // other than a bare ASCII "-": 23 use U+2212, and 54 prefix it with a bidi
     // control mark (U+061C, U+200E, U+200F), making it two or three code units
     // -- ar_DZ does so even though its sign *is* the ordinary hyphen. `ch ===
-    // "-"` matched none of them, and formatCanonicalNumber emitted a sign this
+    // "-"` matches none of them, and formatCanonicalNumber would emit a sign this
     // function then rejected. A bare "-" stays accepted alongside the locale's
     // own spelling: U+2212 and the bidi marks are on no keyboard, so matching
     // only the locale spelling would leave those users no way to type a
     // negative number at all. An omitted or empty negativeSign reads as "-",
     // not as "no sign" -- there is no locale without one.
-    // A leading positive sign is accepted and *dropped* (morph#596): canonical
+    // A leading positive sign is accepted and *dropped*: canonical
     // text is -?[0-9]+(\.[0-9]+)?, which has no "+" in it, so "+5" yields "5".
     // 54 of the 711 locales spell the positive sign with a bidi control mark
     // before the "+" (U+061C, U+200E, U+200F), and unlike the negative side
@@ -836,7 +833,7 @@ Frame {
     // emits one: a positive displays unsigned in every locale, and emitting the
     // sign would turn every positive number in every form from "5" into "+5".
     // The pair is therefore deliberately not inverse across a positive sign.
-    // The digits are locale data too (morph#591), carried as a *base*: a
+    // The digits are locale data too, carried as a *base*: a
     // Unicode decimal digit set is ten contiguous code points by definition
     // (UAX #44), so one zeroDigit is enough and a ten-element table is not
     // needed. 76 of the 711 locales Qt 6.11.2 knows report a zeroDigit other
@@ -844,31 +841,26 @@ Frame {
     // (U+11136 Chakma, U+1E950 Adlam), which is why this scans code *points*
     // via codePointAt and steps two units for one digit when it has to. Entry
     // accepts a digit in [zeroDigit, zeroDigit+9] or in ["0","9"]; display
-    // emits only the locale's. That asymmetry is the morph#596 rule applied to
-    // digits: the locale's own digits are on the user's keyboard only if their
+    // emits only the locale's. That asymmetry is the positive-sign rule applied
+    // to digits: the locale's own digits are on the user's keyboard only if their
     // keyboard has them, and accepting an extra spelling cannot change a value
     // because the canonical output always spells digits in ASCII. Mixing the
     // two families in one entry is malformed -- see below.
-    // All five facts now travel as one object rather than as five positional
-    // arguments, mirroring the C++ NumericLocale aggregate: on that side the
-    // row of interchangeable string_views needed a clang-tidy suppression for
-    // bugprone-easily-swappable-parameters, and a sixth would have made the
-    // argument for it weaker rather than stronger. Here the gain is the same
-    // one a reader gets -- a call names each fact -- and it keeps the two
-    // mirrors structurally identical, which is the property morph#599 and
-    // morph#591 were both about.
-    // The two *separators* are matched as whole strings for the same reason
-    // (morph#599), and that this was not already true was the mixed idiom
-    // morph#583 and morph#596 left behind: they converted the signs to
-    // `text.startsWith(sign, i)` and left the separators on `ch === sep`, one
-    // UTF-16 code unit, a few lines apart with nothing saying why. Unlike the
-    // signs, no locale reaches this: measured over the 711 locales Qt 6.11.2
-    // reports, *every* decimalPoint and *every* groupSeparator is exactly one
-    // code unit (0 multi-unit, against 54 for each sign). So this changes what
-    // no user could reach, and fixes what every reader of these thirty lines
-    // could: docs/spec/forms/forms.md, "Both edges, or neither" -- the C++ edge
-    // has always matched separators whole (`rest.starts_with(...)`), and a
-    // divergence between the two is a divergence in what the product accepts.
+    // All five facts travel as one object rather than as five positional
+    // arguments, mirroring the C++ NumericLocale aggregate: on that side a row
+    // of interchangeable string_views would need a clang-tidy suppression for
+    // bugprone-easily-swappable-parameters. Here the gain is the one a reader
+    // gets -- a call names each fact -- and it keeps the two mirrors
+    // structurally identical.
+    // The two *separators* are matched as whole strings for the same reason the
+    // signs are, and uniformly with them: `text.startsWith(sep, i)`, not
+    // `ch === sep` over one UTF-16 code unit. No locale reaches the difference
+    // -- measured over the 711 locales Qt 6.11.2 reports, *every* decimalPoint
+    // and *every* groupSeparator is exactly one code unit, against 54
+    // multi-unit spellings for each sign -- so this is for the reader, and for
+    // docs/spec/forms/forms.md, "Both edges, or neither": the C++ edge matches
+    // separators whole (`rest.starts_with(...)`), and a divergence between the
+    // two is a divergence in what the product accepts.
     // The digit-set base of a NumericLocale-shaped object: the code point of
     // its zeroDigit, or ASCII "0" when it is absent or empty. Empty reads as
     // the default for the reason an empty negativeSign does -- there is no
@@ -938,7 +930,7 @@ Frame {
                 sawDecimal = true
                 canonical += "."
                 // The decimal point is output, so a sign straight after it is
-                // not leading (morph#497).
+                // not leading.
                 sawAnyOutput = true
                 i += decimalSeparator.length - 1 // the loop's ++i consumes the last unit
                 continue
@@ -1011,12 +1003,12 @@ Frame {
         return (cp >= 0x30 && cp <= 0x39) ? String.fromCodePoint(base + (cp - 0x30)) : ch
     }
 
-    // The locale's positiveSign is deliberately not read here (morph#596): a
-    // positive number displays unsigned in every locale, so the entry edge above
-    // accepts a leading "+" that this edge never produces. The digits, by
-    // contrast, *are* emitted in the locale's set (morph#591) -- this edge had
-    // to move with the entry edge or the pair would no longer be inverse, which
-    // is the round trip docs/spec/forms/forms.md requires.
+    // The locale's positiveSign is deliberately not read here: a positive
+    // number displays unsigned in every locale, so the entry edge above accepts
+    // a leading "+" that this edge never produces. The digits, by contrast,
+    // *are* emitted in the locale's set -- this edge has to match the entry
+    // edge or the pair is not inverse, which is the round trip
+    // docs/spec/forms/forms.md requires.
     function formatCanonicalNumber(text, locale) {
         const loc = locale ? locale : {}
         const decimalSeparator = loc.decimalSeparator !== undefined ? loc.decimalSeparator : "."
@@ -1177,8 +1169,8 @@ Frame {
             // Also already a JSON literal — but here the whole set is in the
             // schema, so membership is decidable *on the client*, and a value
             // outside it is invalid rather than merely "the server will say
-            // no". Without this the form reported ready for role="Emperor"
-            // and assembled a body for it (morph#386), which is the opposite
+            // no". Without this the form reports ready for role="Emperor"
+            // and assembles a body for it, which is the opposite
             // of what a submit gate is for. Same reason isBoolean refuses
             // anything but true/false. A server-fetched Choice below is
             // deliberately not checked this way: its option list is a
@@ -1220,7 +1212,7 @@ Frame {
                     return null
                 if (f.maximum !== undefined && value > f.maximum)
                     return null
-                // A decorated schema's per-instance range (morph#164). Narrows
+                // A decorated schema's per-instance range. Narrows
                 // the compiled bound; it never widens it, because both are
                 // checked. Quantity fields only, matching what
                 // InstanceConstraints::checkAction checks server-side -- a
@@ -1243,7 +1235,7 @@ Frame {
             // Prefer the exact string bound when the schema carries one: a
             // double-valued bound rounds at 2^53, and comparing INT64_MAX + 1
             // against a maximum rounded *up* to 9223372036854775808 judges it
-            // "not greater" and lets it through the gate (morph#213).
+            // "not greater" and lets it through the gate.
             const value = parseInt(text)
             if (f.exactMinimum !== undefined) {
                 if (compareIntText(normalised, f.exactMinimum) < 0)
@@ -1365,7 +1357,7 @@ Frame {
                 const name = form.fields[i].name
                 const entry = form.findControl(form, "field_" + name)
                 if (entry) {
-                    // An enum's combo box claims this objectName (morph#386)
+                    // An enum's combo box claims this objectName
                     // and carries no writable `text` -- "no selection" is
                     // currentIndex -1, the state it is created in.
                     if (form.fields[i].isEnum)
@@ -1468,8 +1460,8 @@ Frame {
     // `optionsReceived` is not. It exists only on a controller that serves a
     // morph::forms::Choice field, and a controller that serves none declares
     // no stub for it -- the sanctioned shape (bookmarks' and pastebin's forms
-    // controllers both document why). Unaccommodated, that shape made the form
-    // warn once per instance about the handler below (morph#387).
+    // controllers both document why). Unaccommodated, that shape makes the form
+    // warn once per instance about the handler below.
     //
     // The accommodation is the gated target, not `ignoreUnknownSignals`. A
     // controller without the signal is never connected to, so there is nothing
@@ -1489,7 +1481,7 @@ Frame {
             // Exact-int aware: an option id above 2^53 is rounded by a plain
             // JSON.parse, and re-stringifying the rounded number selects a
             // different row -- or, for a dense id range, makes two options
-            // indistinguishable from each other (morph#190).
+            // indistinguishable from each other.
             try { parsed = JsonExact.parse(payload) } catch (ignored) { return }
             for (let i = 0; i < form.fields.length; ++i) {
                 const f = form.fields[i]
@@ -1581,7 +1573,7 @@ Frame {
 
                 // One combo box for both closed sets: the server-fetched
                 // Choice (x-optionsAction) and the schema-stated enum
-                // (a `oneOf` of `const`s, or a bare `enum`; morph#386). They
+                // (a `oneOf` of `const`s, or a bare `enum`). They
                 // differ only in where the rows come from -- an enum's are
                 // already in the schema, so it never fetches -- and the rows
                 // have the same {label, valueJson} shape either way.
@@ -1761,10 +1753,10 @@ Frame {
                 }
 
                 // "boolean" — a CheckBox. The plain TextField's fall-through
-                // encoded the typed text as a JSON *string* ({"flag":"true"}),
-                // and applied no validation at all, so "banana" was accepted
-                // and sent; glaze rejected both with expected_true_or_false
-                // (morph#189). A CheckBox can only produce the two valid
+                // would encode the typed text as a JSON *string*
+                // ({"flag":"true"}), and apply no validation at all, so
+                // "banana" would be accepted and sent; glaze rejects both with
+                // expected_true_or_false. A CheckBox can only produce the two valid
                 // spellings. Reuses the plain TextField's field_ objectName —
                 // the two are mutually exclusive per field (isBoolean), so
                 // exactly one claims it.

@@ -146,7 +146,7 @@ TEST_CASE("morph::qt::forms::FormsControllerCore forwards fetchOptions' body, no
 
 TEST_CASE("morph::qt::forms::FormsControllerCore composes over a caller-supplied Bridge/executor",
           "[forms_controller_core]") {
-    // Issue #57: FormsControllerCore must be usable against a Bridge the
+    // FormsControllerCore must be usable against a Bridge the
     // caller already owns (e.g. one already switched to a Remote/Socket
     // backend, or shared across multiple presenters) instead of always
     // building and owning its own private, always-local Bridge.

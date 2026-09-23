@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // A controller that serves no `morph::forms::Choice` field must load a form
-// without the engine warning about it (morph#387).
+// without the engine warning about it.
 //
 // `optionsReceived` only exists on a controller that serves a Choice. A
 // controller that serves none does not declare it, and deliberately does not:

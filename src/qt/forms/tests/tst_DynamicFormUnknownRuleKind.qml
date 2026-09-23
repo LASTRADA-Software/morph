@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The forward-compatibility half of morph#176: what this renderer does with an
-// `x-rules` node whose `kind` it does not recognise.
+// The forward-compatibility half of the `x-rules` agreement: what this
+// renderer does with an `x-rules` node whose `kind` it does not recognise.
 //
 // forms.md ("Renderer fallback" -> "'Cannot evaluate' means defer, not block")
 // settles a sentence two shipped clients once read in opposite directions.
@@ -44,10 +44,10 @@ TestCase {
     }
 
     // Bound into the component rather than passed as an initial property.
-    // Both paths render the same form since morph#388 (`DynamicForm` re-reads
-    // the schema as JSON at the property, so the initial-properties path's
-    // QVariantMap conversion no longer changes what it sees); binding stays
-    // because it is what every shipped app does.
+    // Both paths render the same form (`DynamicForm` re-reads the schema as
+    // JSON at the property, so the initial-properties path's QVariantMap
+    // conversion cannot change what it sees); binding is used because it is
+    // what every shipped app does.
     property var pendingSchema: ({})
 
     Component {

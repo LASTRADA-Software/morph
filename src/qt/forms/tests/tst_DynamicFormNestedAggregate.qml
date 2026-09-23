@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // What DynamicForm does with a nested-aggregate member, cyclic or not
-// (morph#727; docs/spec/forms/forms.md, "What DynamicForm does with a nested
-// aggregate").
+// (docs/spec/forms/forms.md, "What DynamicForm does with a nested aggregate").
 //
-// morph#703 made `schemaJson<A>()` emit a finite, correctly annotated schema
-// for a self-referential domain type, by way of a `$ref` back into `$defs`.
-// It did not say what the shipped renderer should draw for one, and the spec
-// said only that morph "does not promise to render the form". This suite is
+// `schemaJson<A>()` emits a finite, correctly annotated schema for a
+// self-referential domain type, by way of a `$ref` back into `$defs`.
+// That says nothing about what the shipped renderer draws for one, and the
+// spec says only that morph "does not promise to render the form". This suite is
 // the measurement that replaced that non-promise with a stated contract, and
 // it pins every part of it:
 //
@@ -24,8 +23,8 @@
 //      member submits as a JSON *string*, an array-of-objects member as an
 //      array of strings, and `ready` is true for both.
 //
-// (4) is the part worth arguing about, and the argument is morph#759, not
-// this file. This suite states today's behaviour so that a change to it is
+// (4) is the part worth arguing about, and this file is not the place to
+// argue it. This suite states the current behaviour so that a change to it is
 // visible as a failing test rather than as a silent difference.
 
 import QtQuick
