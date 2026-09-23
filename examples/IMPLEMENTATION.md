@@ -186,7 +186,7 @@ code itself.**
   finding entry** — never the sqlite3 API, never a parallel helper layer.
   Known escapees, pre-enumerated so nobody relitigates them: conditional
   atomic updates with `RETURNING` (pastebin's burn-atomicity answer), FTS5
-  virtual tables (forge search fallback), and WAL-read-transaction snapshot
+  virtual tables (a full-text search fallback), and WAL-read-transaction snapshot
   pinning (ledger reports). Without this tier, rung 1's *recommended*
   design was illegal under this rule — rule erosion or silent workarounds
   would have followed, both defects by the prime directive's own standard.
