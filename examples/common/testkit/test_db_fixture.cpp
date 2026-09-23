@@ -2,6 +2,10 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlMigration.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <exception>
+#include <filesystem>
+#include <string>
 
 #include "testkit/db_fixture.hpp"
 
@@ -112,6 +116,91 @@ TEST_CASE("DbFixture::computeConnectionString uses ODBC_CONNECTION_STRING verbat
           "[ladder][testkit][db]") {
     REQUIRE(morph::ladder::testkit::DbFixture::computeConnectionString("DRIVER=PostgreSQL;Database=whatever") ==
             "DRIVER=PostgreSQL;Database=whatever");
+}
+
+// morph#766: when the shared database holds a foreign key whose target table
+// is gone, Lightweight's SqlSchema::ReadAllTables throws
+// std::out_of_range("map::at") out of DbFixture's constructor — before
+// anything has been dropped, so the bad state survives the run that reported
+// it and every test after it fails the same way, across invocations, until
+// somebody deletes a file nothing names.
+//
+// Two test cases below, because the issue has two halves and either can be
+// fixed without the other: the message has to name the fixture, the file and
+// the remedy, *and* the database has to be usable afterwards. A fix that only
+// improved the message would pass the first and fail the second.
+namespace {
+
+/// @brief Leaves the shared database holding a foreign key whose target table
+///        does not exist, constructs a `DbFixture` over it, and returns what
+///        that constructor threw.
+/// @return The exception's text, or an empty string if it did not throw —
+///         which is itself a failure, and each caller asserts on it.
+std::string reportFromPoisonedDatabase() {
+    {
+        const morph::ladder::testkit::DbFixture fixture;
+        Lightweight::SqlStatement stmt;
+        // SQLite accepts a foreign key naming a table that does not exist:
+        // the target is resolved at DML time, not at CREATE time. That is why
+        // this state is reachable at all, and why it survives on disk.
+        (void)stmt.ExecuteDirect(
+            "CREATE TABLE ladder_dangling_child "
+            "(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES ladder_absent_parent(id))");
+    }
+    try {
+        const morph::ladder::testkit::DbFixture poisoned;
+    } catch (const std::exception& error) {
+        return error.what();
+    }
+    return {};
+}
+
+}  // namespace
+
+TEST_CASE("DbFixture names itself, the database file and the remedy when the schema is unusable",
+          "[ladder][testkit][db]") {
+    const std::string reported = reportFromPoisonedDatabase();
+    // Names the fixture, so the report is not read as the test's own fault...
+    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("DbFixture"));
+    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("NOT a failure of the test case"));
+    // ...names the file, which is the thing a reader has to act on...
+    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("morph_ladder_test.db"));
+    // ...names what was wrong, and what it destroyed in saying so...
+    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("ladder_dangling_child -> ladder_absent_parent"));
+    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("CREATE TABLE ladder_dangling_child"));
+    // ...and names the remedy.
+    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("Remedy:"));
+}
+
+TEST_CASE("DbFixture leaves an unusable database usable, so the next test is not a casualty of it",
+          "[ladder][testkit][db]") {
+    REQUIRE_FALSE(reportFromPoisonedDatabase().empty());
+    // The half that costs the most when it is missing: the next fixture
+    // constructs, because the bad state is gone rather than still on disk.
+    REQUIRE_NOTHROW([] { const morph::ladder::testkit::DbFixture fixture; }());
+    const morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    LadderTestkitProbe row;
+    row.label = "usable again";
+    mapper.Create(row);
+    REQUIRE(mapper.Query<LadderTestkitProbe>().All().size() == 1);
+}
+
+TEST_CASE("DbFixture::databaseFileOf names the file an ODBC connection string points at", "[ladder][testkit][db]") {
+    const auto expected = std::filesystem::absolute("morph_ladder_test.db").string();
+    CHECK(morph::ladder::testkit::DbFixture::databaseFileOf(
+              "DRIVER=SQLite3;Database=morph_ladder_test.db;Timeout=5000") == expected);
+    // Last token, no trailing semicolon.
+    CHECK(morph::ladder::testkit::DbFixture::databaseFileOf("DRIVER=SQLite3;Database=morph_ladder_test.db") ==
+          expected);
+    // An absolute path is already absolute.
+    CHECK(morph::ladder::testkit::DbFixture::databaseFileOf("DRIVER=SQLite3;Database=/tmp/x.db;Timeout=1") ==
+          "/tmp/x.db");
+    // A server-hosted DSN names no file, and must not invent one: a report
+    // that told a reader to delete "" would be worse than one that said
+    // nothing.
+    CHECK(morph::ladder::testkit::DbFixture::databaseFileOf("DRIVER=PostgreSQL;Server=db.example;Port=5432").empty());
+    CHECK(morph::ladder::testkit::DbFixture::databaseFileOf("DRIVER=SQLite3;Database=;Timeout=1").empty());
 }
 
 TEST_CASE("DbFixture's table-drop sweep is unaffected by SQLite's own sqlite_sequence bookkeeping table",
