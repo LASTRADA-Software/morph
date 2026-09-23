@@ -202,7 +202,7 @@ inline bool registerActionExecutorOnce(std::string_view modelId, std::string_vie
     // scripts/check_nolint_directives.sh (which would have flagged a directive that
     // had stopped suppressing anything) and scripts/check_ci_clang_pin.sh (the
     // natural re-check trigger on a CLANG_VERSION bump). Re-read this when the pin
-    // moves; if the finding is gone, delete all three directives together.
+    // moves; if the finding is gone, delete all four directives together.
     // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
     assert(!::morph::model::registrationPhaseClosed() &&
            "registerActionExecutorOnce: registration after the registration phase closed. The "
