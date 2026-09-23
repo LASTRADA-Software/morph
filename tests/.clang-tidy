@@ -134,6 +134,26 @@
 # sets up a server, drives a protocol sequence and asserts along the way scores
 # high by construction; splitting it to satisfy the metric would scatter one
 # scenario across helpers. The check stays on for src/ and include/.
+#
+# This subtraction is wider than it now needs to be, and the number is known.
+# The nine examples/*/tests/.clang-tidy copies keep the check enabled and set
+# `readability-function-cognitive-complexity.IgnoreMacros: true` instead, which
+# stops it counting increments expanded from inside a macro body -- the whole
+# Catch2 assertion vocabulary -- while still scoring everything the test author
+# wrote (morph#778). Measured on 68a30bcc with clang-tidy 22.1.8 over the
+# clang-tidy-diff job's own 751-entry database, with the check forced on in
+# every directory: 246 TEST_CASE bodies score over 25 without the option and
+# 4 with it. Three of those four are under tests/ --
+#
+#     tests/test_strand_race.cpp:308   82 -> 46
+#     tests/test_strand_race.cpp:476   83 -> 43
+#     tests/bench/bench_dispatch_latency.cpp:455   74 -> 34
+#     tests/test_forms_rule_corpus.cpp:247         64 -> 30
+#
+# -- so narrowing this entry to the option is a real option rather than a
+# theory, but it is not free: it would newly fail those four bodies, two of
+# them in a file another branch is editing. Narrowing it is morph#787, filed
+# with those figures and the order of operations, rather than done here.
 
 # readability-convert-member-functions-to-static: fires on the `execute` methods
 # of fixture models. A stub action handler ignores its own state, which is
