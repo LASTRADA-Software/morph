@@ -3316,6 +3316,23 @@ jobs:
                   })
               kept.append(section)
 
+          if not sections:
+              # A diff with no file sections at all means clang-tidy-diff.py
+              # would be handed nothing, analyse nothing and exit 0 -- a green
+              # gate over an empty input, which is exactly morph#776's shape
+              # one level up (there it was `git diff -U0 HEAD` on a committed
+              # branch; here it would be a BASE_SHA that does not name this
+              # branch's fork point). Neither a pull_request nor a push event
+              # can legitimately produce an empty diff, so this is loud rather
+              # than silent.
+              print(
+                  "::error::the diff handed to this filter has no file sections. "
+                  "clang-tidy-diff.py would analyse zero files and exit 0, so this "
+                  "gate would report success having read nothing. Check the base "
+                  "revision the diff was computed against."
+              )
+              sys.exit(1)
+
           if sections and not kept:
               print(
                   f"::error::every one of the {len(sections)} changed file section(s) was "

@@ -98,6 +98,47 @@ serialising independent rungs behind one file.
   markdown follows `.markdownlint.yaml` (119-column limit; code blocks and
   tables exempt). `pre-commit run --all-files` runs the configured hooks.
 
+  **Running the `clang-tidy-diff` gate locally — use this diff base, and check
+  the file count.** The CI job analyses *changed lines only*, computed against
+  the pull request's base commit. The local equivalent is the three-dot form:
+
+  ```sh
+  cmake --preset clang-debug -DMORPH_BUILD_NET=ON -DMORPH_BUILD_QT=ON \
+        -DMORPH_BUILD_LADDER=ON -DMORPH_BUILD_BANK_EXAMPLE=ON   # see ci.yml for the full set
+  git fetch origin master
+  git diff -U0 origin/master...HEAD > /tmp/changed.diff
+
+  # A gate that analysed nothing must say so rather than exit 0.
+  files=$(grep -c '^+++ ' /tmp/changed.diff)
+  test "$files" -gt 0 || { echo "no changed files -- wrong diff base?"; exit 1; }
+  echo "clang-tidy-diff over $files changed file(s)"
+
+  python3 "$(find /usr/lib/llvm-*/share/clang /usr/share/clang \
+                  -name clang-tidy-diff.py | head -1)" \
+      -p1 -path build/clang-debug -j "$(nproc)" -quiet \
+      -extra-arg=-std=c++23 -extra-arg=-Wno-missing-include-dirs \
+      < /tmp/changed.diff
+  ```
+
+  `origin/master...HEAD` — **three** dots — diffs from the merge base, which is
+  what `github.event.pull_request.base.sha` names and therefore the same file
+  set CI analyses. `git diff -U0 HEAD`, the form that suggests itself, compares
+  the *working tree* to the current commit: after you commit it is **empty**,
+  `clang-tidy-diff.py` is handed no files, analyses nothing and exits 0. Five
+  lanes ran that command and read the exit code as a green gate (morph#776);
+  one of them had 345 changed lines against CI and zero locally.
+
+  That is also why the file count is printed and asserted rather than assumed.
+  Checking the gate by injecting a deliberate finding does **not** catch this:
+  an injected edit is uncommitted, so it appears in `git diff HEAD`, the gate
+  dutifully reports it and exits 1, and the non-vacuity check passes while the
+  real check covers nothing. **An injection test validates the plumbing, not
+  the input.** Count the files.
+
+  A green local run still is not CI's run, for a reason that has nothing to do
+  with the diff base: see `scripts/check_catch2_pin.sh`'s header for which
+  findings can differ and why.
+
   **Public macro definitions are exempt, by `// clang-format off`.** They are
   the framework's documented API and contributors read them as reference, so
   the continuation backslashes are hand-aligned and the body stays legible as
