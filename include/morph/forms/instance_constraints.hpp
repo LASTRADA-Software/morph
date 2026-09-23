@@ -266,7 +266,7 @@ public:
         // Reads go through findMember, which answers "is it there?" and "where
         // is it?" in one probe and cannot grow the document on a miss; the
         // `x-*` writes below intend `operator[]`'s insert and keep it, which
-        // is what the suppression above is still for (morph#706).
+        // is what the suppression above is for.
         auto* const properties = detail::findMember(dom, "properties");
         if (properties == nullptr) {
             return schema;

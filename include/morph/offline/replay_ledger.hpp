@@ -14,8 +14,8 @@ namespace morph::offline {
 ///
 /// Answers one question — "has this operation id already been applied?" —
 /// for a host that must dedup a retried write against one it already
-/// committed. Promoted from seven hand-written, near-identical copies of the
-/// same table across five example rungs (morph#226): `kanban`/`ledger` store a
+/// committed. One framework seam in place of the near-identical table five
+/// example rungs would each hand-write: `kanban`/`ledger` store a
 /// result and replay it verbatim on a hit ("response-replay"); `lims`/
 /// `bookmarks`/`ledger`'s import path store nothing and report only that the
 /// op was seen ("skip-only"). Both are the same mechanism with a different
@@ -93,8 +93,7 @@ struct IReplayLedger {
     /// construction), never by opening a connection of its own. Recording
     /// outside that transaction reintroduces exactly the defect this ledger
     /// exists to prevent: a crash between the write and the record redelivers
-    /// the operation and it is re-applied (morph#458 was this defect, shipped
-    /// in two rungs, before this interface existed).
+    /// the operation and it is re-applied.
     ///
     /// @par Idempotent: first-write-wins
     /// Recording an @p opId within @p scope that is already decided is a
@@ -159,12 +158,11 @@ class InMemoryReplayLedger : public IReplayLedger {
 protected:
     /// @brief Looks up @p opId within @p scope in the in-memory map.
     ///
-    /// @par The two `std::string` constructions below are deliberate (morph#728)
+    /// @par The two `std::string` constructions below are deliberate
     /// They materialise the key inside the lock purely to probe an ordered map
-    /// that could take a transparent comparator instead. That is morph#699's
-    /// family, and it was profiled rather than fixed for symmetry. Measured on
-    /// `d03c66f3`, clang 22 `-O2`, a counting `operator new`, 2e6 iterations
-    /// per row:
+    /// that could take a transparent comparator instead. That was profiled
+    /// rather than fixed. Measured with clang 22 `-O2`, a counting
+    /// `operator new`, 2e6 iterations per row:
     ///
     /// @verbatim
     /// -- allocations per lookup() --
@@ -181,9 +179,9 @@ protected:
     /// both past SSO   : 740.3 ns
     /// @endverbatim
     ///
-    /// So the mechanism is real and id-length-dependent exactly as morph#699
-    /// found, and the widened critical section costs ~55 ns of a ~740 ns
-    /// contended lookup. What parks it is the call census, not the size:
+    /// So the cost is real and id-length-dependent, and the widened critical
+    /// section costs ~55 ns of a ~740 ns contended lookup. What parks it is
+    /// the call census, not the size:
     /// `InMemoryReplayLedger` is constructed in **one** file in this tree,
     /// `tests/test_replay_ledger.cpp`, and in no shipping code at all. The
     /// only production `IReplayLedger::lookup()` call
@@ -192,10 +190,9 @@ protected:
     /// `doLookup` is an ODBC round-trip -- next to which 3 ns is not
     /// measurable.
     ///
-    /// This is morph#709's disposition, for morph#709's reason. It becomes
-    /// worth fixing the moment a per-request caller of *this* class appears;
-    /// the fix is then a transparent comparator on `_entries`, `std::map`'s
-    /// `is_transparent` flavour rather than `core/registry.hpp`'s
+    /// It becomes worth fixing the moment a per-request caller of *this* class
+    /// appears; the fix is then a transparent comparator on `_entries`,
+    /// `std::map`'s `is_transparent` flavour rather than `core/registry.hpp`'s
     /// hash-and-equality pair (which serves an `unordered_map` and does not
     /// apply here).
     ///

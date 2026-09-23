@@ -166,7 +166,7 @@ struct EquationRenderer {
     ///
     /// Iterative, over an explicit worklist, for the reason spelled out on
     /// `render` below: the derivation of a running total is a linear chain and
-    /// a recursive walk of it overflows the stack (morph#574). Each node is
+    /// a recursive walk of it overflows the stack. Each node is
     /// counted exactly once (the `seen` set), so the worklist order does not
     /// affect the counts.
     /// @param root The node to start from (may be null).
@@ -232,9 +232,9 @@ struct EquationRenderer {
             }
             // A node reachable by several displayed paths is settled by its
             // first visit; re-walking it would assign nothing new and, on a
-            // DAG, costs one walk per path rather than per node (morph#602:
-            // 31 nodes built by repeated `q = q + q` have 2^30 paths and took
-            // 10.3 s to render 33 short lines).
+            // DAG, costs one walk per path rather than per node. Measured: 31
+            // nodes built by repeated `q = q + q` have 2^30 paths and take
+            // 10.3 s to render 33 short lines without this test.
             if (!settled.insert(node).second) {
                 continue;
             }
@@ -268,9 +268,9 @@ struct EquationRenderer {
     /// Takes its left operand **by value** and appends to it rather than
     /// concatenating both sides into a fresh string. The left operand of a
     /// left-leaning chain — the shape `total = total + row` records — is the
-    /// whole expression rendered so far, so copying it once per level made
-    /// rendering quadratic in the depth (morph#582: 27.7 s and a
-    /// 350,001-character line at 70,000 steps). Appending makes that shape
+    /// whole expression rendered so far, so copying it once per level makes
+    /// rendering quadratic in the depth — measured at 27.7 s for a
+    /// 350,001-character line at 70,000 steps. Appending makes that shape
     /// linear, amortised. A **right**-leaning chain (`a + (b + (c + …))`) is
     /// still quadratic — the big operand is on the copied side — and so is a
     /// chain of unary negations, which has to prepend; `equation()`'s step
@@ -353,8 +353,8 @@ struct EquationRenderer {
     /// The walk is an explicit stack rather than recursion because the
     /// derivation of a running total (`total = total + x` in a loop) is a
     /// linear chain one node deep per iteration, and a recursive walk of it
-    /// runs the stack out. Measured on the recursive code (morph#574, 8 MiB
-    /// stack): `equation()` returned at 24,000 nodes and segfaulted inside
+    /// runs the stack out. Measured on a recursive walk with an 8 MiB stack:
+    /// `equation()` returned at 24,000 nodes and segfaulted inside
     /// `renderSymbolic` at 25,000 under clang `-O0`, returned at 50,000 and
     /// segfaulted at 60,000 under clang `-O2`, and segfaulted already at
     /// 40,000 under gcc `-O2`. Optimisation only moved the limit: unlike the

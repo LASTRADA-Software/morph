@@ -136,9 +136,9 @@ struct glz::meta<morph::forms::Multiline> {
 /// `$defs` entry describes — the bounds are emitted as property-level
 /// `x-min`/`x-max`/`x-step` and never reach the definition. With one shared
 /// `"Ranged"` name, a `double` slider and an `int` slider in the same action
-/// collapsed into a single entry whose type was wrong for one of them
-/// (morph#543); two `Ranged` fields of the *same* payload type still share one
-/// entry, because their entries are identical. See
+/// would collapse into a single entry whose type is wrong for one of them.
+/// Two `Ranged` fields of the *same* payload type do share one entry, because
+/// their entries are identical. See
 /// `forms/detail/schema_name.hpp`.
 /// @tparam Min  Inclusive lower bound.
 /// @tparam Max  Inclusive upper bound.

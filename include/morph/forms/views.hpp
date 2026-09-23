@@ -200,8 +200,9 @@ concept HasViewActions = requires {
     // deriveColumns, this function's only caller, has already returned "[]"
     // if it were absent. A findMember null check here would add a second
     // branch nothing can take -- untestable code and a future branch-coverage
-    // allowlist entry, which is the cost morph#706 warns against paying (see
-    // `docs/spec/forms/forms.md`, "Reading the DOM with `findMember`").
+    // allowlist entry, which is a cost not worth paying for a check that can
+    // never fire (see `docs/spec/forms/forms.md`, "Reading the DOM with
+    // `findMember`").
     auto const& propsObj = rowDom["properties"].get_object();
     auto iter = propsObj.find(field);
     if (iter == propsObj.end()) {
@@ -210,12 +211,11 @@ concept HasViewActions = requires {
     auto const& prop = iter->second;
     if (auto const* const decimals = ::morph::forms::detail::findMember(prop, "x-decimalPlaces")) {
         // A *write* into the entry being built: `operator[]`'s insert is the
-        // behaviour wanted, exactly as morph#706 left `forms.hpp`'s writes
-        // alone. Converting a write to a null check would change behaviour
-        // rather than make it safe. The directive is here, and on the two
-        // below, only because converting the read beside it moved this line
-        // into the diff, and `clang-tidy-diff` reports on changed lines --
-        // the piecemeal bill morph#677 describes.
+        // behaviour wanted, exactly as for `forms.hpp`'s writes. Converting a
+        // write to a null check would change behaviour rather than make it
+        // safe. The directive is here, and on the two below, because
+        // `clang-tidy-diff` reports on changed lines and these lines sit in
+        // the diff alongside the read beside them.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         entry["x-decimalPlaces"] = *decimals;
     }

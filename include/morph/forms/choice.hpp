@@ -159,8 +159,8 @@ inline constexpr bool isChoice = detail::IsChoice<std::remove_cvref_t<T>>::value
 ///
 /// `name` is composed per instantiation rather than being the literal
 /// `"Choice"`: glaze keys `$defs` by it and fills each entry only once, so one
-/// shared name made the second `Choice` in an action `$ref` the first one's
-/// definition and be described with the wrong payload type (morph#543). See
+/// shared name would make the second `Choice` in an action `$ref` the first
+/// one's definition and be described with the wrong payload type. See
 /// `forms/detail/schema_name.hpp` for how the key is built and why it is not
 /// derived from `glz::name_v`.
 template <typename T, morph::forms::FixedString OptionsAction, morph::forms::FixedString ValueField,

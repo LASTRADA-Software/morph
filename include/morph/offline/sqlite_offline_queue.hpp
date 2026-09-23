@@ -111,7 +111,7 @@ class SqliteOfflineQueue : public IOfflineQueue {
 public:
     using IOfflineQueue::enqueue;  // keep the two-arg overload visible
 
-    /// @brief `PRAGMA busy_timeout` set at construction (morph#532): how long
+    /// @brief `PRAGMA busy_timeout` set at construction: how long
     ///        a statement blocks on `SQLITE_BUSY` before giving up, in
     ///        milliseconds.
     static constexpr int kBusyTimeoutMillis = 5000;
@@ -238,7 +238,7 @@ public:
 
             execOrThrow("PRAGMA journal_mode=WAL;");
             // execOrThrow() discards sqlite3_exec's row callback, so a silent
-            // fallback would otherwise go unnoticed (morph#532). Read the
+            // fallback would otherwise go unnoticed. Read the
             // pragma back through a real prepared statement rather than
             // trusting the set.
             //
@@ -282,9 +282,9 @@ public:
             // sqlite3_open() above creates `_path` (and, once journal_mode=WAL
             // took, its "-wal"/"-shm" siblings) if it did not already exist --
             // a fresh directory entry that SQLite's own internal fsyncs of the
-            // *file's* contents never make durable, the identical
-            // directory-vs-file-fsync gap morph#532 closed for
-            // `FileActionLog`/`FileOfflineQueue` (see `FileIoOps::syncPath`'s
+            // *file's* contents never make durable -- the identical
+            // directory-vs-file-fsync gap
+            // `FileActionLog`/`FileOfflineQueue` close (see `FileIoOps::syncPath`'s
             // own docs). Unconditional: harmless when the file already
             // existed, since syncing an unchanged directory is a cheap no-op.
             //
@@ -495,11 +495,11 @@ protected:
         std::scoped_lock const lock{_mtx};
         // `WHERE NOT EXISTS (...)` rather than a bare UPDATE: the partial
         // unique index `ix_queue_idem` rejects stamping a non-empty key a
-        // pending row already holds, and a bare UPDATE turned that into a
+        // pending row already holds, and a bare UPDATE would turn that into a
         // thrown SqliteOfflineQueueError -- while this class's own
         // `enqueue(payload, key)` resolves the identical conflict silently, by
-        // keeping the existing row (morph#249). Same conflict, two answers,
-        // and only one of them matched the documented dedup contract.
+        // keeping the existing row. Same conflict, two answers, and only one of
+        // them matches the documented dedup contract.
         //
         // Throwing also bought nothing. This hook is called by the *base*
         // `IOfflineQueue::enqueue(payload, key)` default, which has already
@@ -548,7 +548,7 @@ private:
     void bindText(sqlite3_stmt* stmt, int index, const std::string& value) const {
         // An explicit length (not -1) is required so a NUL inside `value` --
         // legitimate, since payload/idempotencyKey are opaque strings the
-        // caller controls the serialisation of (morph#531) -- doesn't tell
+        // caller controls the serialisation of -- doesn't tell
         // SQLite to measure only up to that byte and silently truncate.
         if (value.size() > static_cast<std::size_t>(INT_MAX)) {
             throw SqliteOfflineQueueError{"SqliteOfflineQueue: value exceeds INT_MAX bytes"};
@@ -581,9 +581,8 @@ private:
         // sqlite3_column_bytes() gives the real stored length; constructing a
         // std::string from the raw `const char*` alone would stop at the
         // first NUL and silently truncate a NUL-bearing payload or
-        // idempotency key on the way back out (morph#531) -- the read-side
-        // half of the same truncation bindText() above fixes on the write
-        // side.
+        // idempotency key on the way back out -- the read-side half of the
+        // same truncation bindText() above prevents on the write side.
         const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, index));
         return text != nullptr ? std::string{text, static_cast<std::size_t>(sqlite3_column_bytes(stmt, index))}
                                : std::string{};
