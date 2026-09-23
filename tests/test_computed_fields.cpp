@@ -432,6 +432,7 @@ TEST_CASE("SimulatedRemoteBackend overwrites a tampered computed field before Mo
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }, std::chrono::milliseconds{4000}));
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); },
+                                      morph::testing::WaitBudget{std::chrono::milliseconds{4000}}));
     CHECK(observedTotal == Rational{20, dp2});
 }

@@ -156,7 +156,8 @@ std::size_t drain(morph::testing::StepExecutor& exec) {
     REQUIRE(morph::testing::waitUntil([&exec] { return exec.pending() > 0; }));
     std::size_t ran = exec.runAll();
     // A completion can post follow-up work; keep going while more arrives.
-    while (morph::testing::waitUntil([&exec] { return exec.pending() > 0; }, std::chrono::milliseconds{50})) {
+    while (morph::testing::waitUntil([&exec] { return exec.pending() > 0; },
+                                     morph::testing::WaitBudget{std::chrono::milliseconds{50}})) {
         ran += exec.runAll();
     }
     return ran;
@@ -407,7 +408,7 @@ TEST_CASE("SectionSet: destroying it with a dispatch in flight delivers nothing"
     // continuation resolves against an object that no longer exists, and must
     // find the callback scope stopped and do nothing.
     secSlowRelease().store(true);
-    CHECK(morph::testing::waitUntil([&errors] { return errors.load() != 0; }, std::chrono::milliseconds{500}) ==
-          false);
+    CHECK(morph::testing::waitUntil([&errors] { return errors.load() != 0; },
+                                    morph::testing::WaitBudget{std::chrono::milliseconds{500}}) == false);
     CHECK(errors.load() == 0);
 }

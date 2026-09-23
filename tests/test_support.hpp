@@ -283,6 +283,66 @@ inline constexpr std::chrono::milliseconds kDefaultWaitBudget{2000};
 /// @brief Default polling step for `waitUntil`.
 inline constexpr std::chrono::milliseconds kDefaultWaitStep{5};
 
+// ── Why these are two types and not two `milliseconds` (morph#721) ───────────
+//
+// `waitUntil` used to take `(Pred, milliseconds budget = 2000ms,
+// milliseconds step = 5ms)`: two adjacent, same-type, both-defaulted
+// parameters whose values differ by 400x. Transposing them at a call site
+// compiled silently and produced a 2000 ms poll inside a 5 ms budget -- one
+// predicate check, then failure -- across the 433 poll sites the audit above
+// counted. Nothing in the language or the lint stopped it; the transposed call
+// was simply a different, wrong program.
+//
+// `WaitBudget` and `WaitStep` make that transposition a **compile error**. Both
+// constructors are `explicit`, so neither a raw duration nor the other wrapper
+// converts: the static assertions below `waitUntil` pin every case, and they
+// fail the build of all 52 translation units that include this header if the
+// hazard is ever reintroduced.
+//
+// Two escapes were available and both were rejected. A `NOLINT` would have
+// removed the *warning* and left the hazard (morph#404). Reordering the
+// parameters so they are no longer adjacent would have removed the
+// heuristic's view of them and left the hazard too -- morph#715 measured that
+// exact outcome on `annotateExactBound`, where widening a parameter to
+// `std::string_view` silenced `bugprone-easily-swappable-parameters` while the
+// transposition still compiled.
+//
+// The raw `kDefaultWaitBudget` / `kDefaultWaitStep` constants stay
+// `std::chrono::milliseconds` because call sites use them for things that are
+// not `waitUntil` arguments -- a `condition_variable::wait_for` budget in
+// `tests/test_backend_registration_surface.cpp`, a manual pump quantum in
+// `tests/test_client_execute_deadline.cpp`. Wrapping those would have been
+// churn with no hazard behind it.
+
+/// @brief `waitUntil`'s overall polling budget: the longest it may wait before
+///        giving up and returning `false`.
+///
+/// A distinct type from WaitStep so that passing the two in the wrong order is
+/// a compile error rather than a 400x-wrong program. Construction is
+/// deliberately explicit; write `WaitBudget{5s}` at the call site.
+struct WaitBudget {
+    /// @brief The budget itself.
+    std::chrono::milliseconds value;
+
+    /// @brief Wraps a duration as a budget.
+    /// @param ms How long `waitUntil` may keep polling.
+    explicit constexpr WaitBudget(std::chrono::milliseconds ms) noexcept : value{ms} {}
+};
+
+/// @brief `waitUntil`'s polling step: how long it sleeps between predicate
+///        checks.
+///
+/// A distinct type from WaitBudget -- see that type, and the note above it, for
+/// why. Construction is deliberately explicit; write `WaitStep{1ms}`.
+struct WaitStep {
+    /// @brief The step itself.
+    std::chrono::milliseconds value;
+
+    /// @brief Wraps a duration as a polling step.
+    /// @param ms How long to sleep between predicate checks.
+    explicit constexpr WaitStep(std::chrono::milliseconds ms) noexcept : value{ms} {}
+};
+
 /// @brief Polls @p pred until it returns `true` or @p budget elapses.
 ///
 /// **Liveness only: never take an elapsed time across this call.** The step
@@ -293,18 +353,56 @@ inline constexpr std::chrono::milliseconds kDefaultWaitStep{5};
 /// budget expired first. Sleeps for @p step between polls so we don't burn the
 /// CPU. Sized for asynchronous test fixtures: most callers should just write
 /// `REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));`
+///
+/// @tparam Pred Nullary predicate returning something contextually convertible
+///              to `bool`.
+/// @param pred The predicate to poll.
+/// @param budget Longest time to keep polling before returning `false`.
+/// @param step How long to sleep between two polls.
+/// @return `true` if @p pred became `true` within @p budget.
 template <typename Pred>
-bool waitUntil(Pred pred, std::chrono::milliseconds budget = kDefaultWaitBudget,
-               std::chrono::milliseconds step = kDefaultWaitStep) {
-    const auto deadline = std::chrono::steady_clock::now() + budget;
+bool waitUntil(Pred pred, WaitBudget budget = WaitBudget{kDefaultWaitBudget},
+               WaitStep step = WaitStep{kDefaultWaitStep}) {
+    const auto deadline = std::chrono::steady_clock::now() + budget.value;
     while (!pred()) {
         if (std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
-        std::this_thread::sleep_for(step);
+        std::this_thread::sleep_for(step.value);
     }
     return true;
 }
+
+namespace detail {
+
+// Satisfied when `waitUntil` is callable with `Args` -- the predicate type
+// first, then whatever is passed after it. Plain comments rather than Doxygen
+// because clang's `-Wdocumentation` does not accept `@tparam` on a concept.
+template <typename... Args>
+concept WaitUntilCallableWith = requires(Args... args) { waitUntil(args...); };
+
+/// @brief A stand-in predicate type for the assertions below.
+using ExampleWaitPred = bool (*)();
+
+// The acceptance test for morph#721, and the reason this header is the right
+// place for it: these run in every translation unit that includes it, so the
+// hazard cannot be reintroduced by a later edit without reddening the build.
+//
+// What must keep working -- essentially all 433 sites rely on the defaults:
+static_assert(WaitUntilCallableWith<ExampleWaitPred>);
+static_assert(WaitUntilCallableWith<ExampleWaitPred, WaitBudget>);
+static_assert(WaitUntilCallableWith<ExampleWaitPred, WaitBudget, WaitStep>);
+
+// What must not compile. The first is the transposition itself; the rest are
+// the routes back to it, each of which would restore a silent 400x error.
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep, WaitBudget>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, std::chrono::milliseconds>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, std::chrono::milliseconds, std::chrono::milliseconds>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitBudget, WaitBudget>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep, WaitStep>);
+
+}  // namespace detail
 
 /// @brief Collects a single `RemoteServer` reply and decodes it.
 ///
@@ -344,7 +442,7 @@ struct WaitReply {
     /// @param budget Longest time to wait for the reply.
     /// @return `true` if a reply arrived within the budget.
     bool await(std::chrono::milliseconds budget = kDefaultWaitBudget) {
-        return waitUntil([this] { return ready.load(); }, budget);
+        return waitUntil([this] { return ready.load(); }, WaitBudget{budget});
     }
 };
 

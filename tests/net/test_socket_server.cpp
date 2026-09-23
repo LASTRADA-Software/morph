@@ -369,7 +369,8 @@ TEST_CASE("SocketServer: dropping a client reclaims the models it registered", "
         REQUIRE(server->health().liveModels == 1U);
     }  // client destructs: the socket closes and the server observes EOF
 
-    REQUIRE(morph::testing::waitUntil([&] { return server->health().liveModels == 0U; }, std::chrono::seconds{5}));
+    REQUIRE(morph::testing::waitUntil([&] { return server->health().liveModels == 0U; },
+                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
 
     // A late execute against the reclaimed id is answered, not serviced.
     RawWsClient probe{wsServer.port()};
@@ -405,7 +406,8 @@ TEST_CASE("SocketServer: each client's models are reclaimed independently", "[ne
     }
 
     // Only the departed client's instance goes; the survivor keeps working.
-    REQUIRE(morph::testing::waitUntil([&] { return server->health().liveModels == 1U; }, std::chrono::seconds{5}));
+    REQUIRE(morph::testing::waitUntil([&] { return server->health().liveModels == 1U; },
+                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
 
     morph::wire::Envelope execReq;
     execReq.kind = "execute";
@@ -457,7 +459,8 @@ TEST_CASE("SocketServer: destruction completes promptly with the accept loop par
         destroyed->store(true);
     }};
 
-    if (!morph::testing::waitUntil([destroyed] { return destroyed->load(); }, std::chrono::seconds{5})) {
+    if (!morph::testing::waitUntil([destroyed] { return destroyed->load(); },
+                                   morph::testing::WaitBudget{std::chrono::seconds{5}})) {
         destroyer.detach();  // still parked in close(); the thread keeps `owned` alive on purpose
         FAIL("SocketServer destruction did not complete within 5s: the accept loop was never unblocked (morph#437)");
     }
@@ -649,7 +652,8 @@ TEST_CASE("SocketServer: concurrent close() calls from two threads do not hang o
         done->store(true);
     });
 
-    if (!morph::testing::waitUntil([done] { return done->load(); }, std::chrono::seconds{15})) {
+    if (!morph::testing::waitUntil([done] { return done->load(); },
+                                   morph::testing::WaitBudget{std::chrono::seconds{15}})) {
         worker.detach();
         FAIL("Concurrent close() race did not complete within 15s -- possible hang from a double join");
     }
@@ -910,8 +914,8 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
         wsServer.close();
         closed->store(true);
     });
-    bool const finishedPromptly =
-        morph::testing::waitUntil([closed] { return closed->load(); }, std::chrono::seconds{5});
+    bool const finishedPromptly = morph::testing::waitUntil([closed] { return closed->load(); },
+                                                            morph::testing::WaitBudget{std::chrono::seconds{5}});
 
     ::setrlimit(RLIMIT_NOFILE, &original);  // restore before any further fd use, including cleanup below
     for (int const fd : clientFds) {

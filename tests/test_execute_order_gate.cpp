@@ -239,7 +239,8 @@ TEST_CASE(
 
     // t1 is not next in line (t0 hasn't released) -- the waiter must still be
     // parked after a short, generous wait.
-    REQUIRE_FALSE(morph::testing::waitUntil([&] { return t1Turn.load(); }, std::chrono::milliseconds{100}));
+    REQUIRE_FALSE(morph::testing::waitUntil([&] { return t1Turn.load(); },
+                                            morph::testing::WaitBudget{std::chrono::milliseconds{100}}));
 
     gate.release(mid, t0);  // Closes the gap: nextToRun 0 -> 1, matching t1.
     REQUIRE(morph::testing::waitUntil([&] { return t1Turn.load(); }));
@@ -360,7 +361,8 @@ TEST_CASE("ExecuteTicketGuard: awaitTurn forwards to the gate for the held ticke
     // t1 is not next in line (t0 hasn't released) -- if awaitTurn() forwarded
     // to nothing (or returned immediately regardless of ticket), this would
     // already be true.
-    REQUIRE_FALSE(morph::testing::waitUntil([&] { return t1Turn.load(); }, std::chrono::milliseconds{100}));
+    REQUIRE_FALSE(morph::testing::waitUntil([&] { return t1Turn.load(); },
+                                            morph::testing::WaitBudget{std::chrono::milliseconds{100}}));
 
     gate.release(mid, t0);  // Closes the gap: nextToRun 0 -> 1, matching t1.
     REQUIRE(morph::testing::waitUntil([&] { return t1Turn.load(); }));
@@ -479,8 +481,8 @@ TEST_CASE("ExecuteOrderGate: two threads nesting takeAndPost across models do no
     std::thread forward{[&worker, first, second] { worker(first, second); }};
     std::thread reverse{[&worker, first, second] { worker(second, first); }};
 
-    const bool completed =
-        morph::testing::waitUntil([&finished] { return finished.load() == 2; }, std::chrono::milliseconds{5000});
+    const bool completed = morph::testing::waitUntil([&finished] { return finished.load() == 2; },
+                                                     morph::testing::WaitBudget{std::chrono::milliseconds{5000}});
 
     if (!completed) {
         // Deadlocked: both threads are parked forever on a lock the other

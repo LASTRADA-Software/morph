@@ -160,8 +160,8 @@ TEST_CASE("soak: switchBackend churn between LocalBackend and SimulatedRemoteBac
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(poolLocal));
     currentServer.reset();
 
-    REQUIRE(
-        morph::testing::waitUntil([&] { return resolved.load() == issued.load(); }, std::chrono::milliseconds(20000)));
+    REQUIRE(morph::testing::waitUntil([&] { return resolved.load() == issued.load(); },
+                                      morph::testing::WaitBudget{std::chrono::milliseconds(20000)}));
     REQUIRE(resolved.load() == issued.load());
 
     // No more than a couple of model instances should ever be alive at once

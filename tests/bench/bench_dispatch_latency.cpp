@@ -65,12 +65,15 @@
 //   MORPH_BENCH_MIN_THROUGHPUT=<double>      (default: 500.0, executes/sec at concurrency=1)
 //   MORPH_BENCH_TRIALS=<int>                 (default: 5)
 //   MORPH_BENCH_WINDOW_MS=<int>              (default: 200, per throughput point per trial)
+//   MORPH_BENCH_LEDGER=<path|off>            (default: BENCH_ARTIFACT_DIR/bench_dispatch_latency.jsonl)
+//   MORPH_BENCH_INJECT_DELAY_US=<int>        (default: 0, see `injectedSpin` below)
 //
 // How the two thresholds were chosen is recorded at their definitions below.
 
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <cerrno>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -87,9 +90,14 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <unistd.h>
+#endif
 
 #include "test_support.hpp"
 
@@ -97,8 +105,20 @@ using namespace std::chrono_literals;
 
 namespace {
 
+// The one place in this file that reads the environment, which is what the
+// note on `envPositiveIntOr` has always claimed and what `ledgerPath` below
+// would otherwise have made false.
+//
+// `std::getenv` is `concurrency-mt-unsafe` because a concurrent `setenv` would
+// race it. Nothing in this binary calls `setenv`, and every caller here either
+// runs before the thread pool is constructed or reads a function-local static
+// that was forced on the main thread first -- see the `injectedSpin()` call at
+// the top of the case.
+// NOLINTNEXTLINE(concurrency-mt-unsafe)
+const char* envRaw(const char* name) { return std::getenv(name); }
+
 double envDoubleOr(const char* name, double def) {
-    const char* raw = std::getenv(name);
+    const char* raw = envRaw(name);
     if (!raw || *raw == '\0') {
         return def;
     }
@@ -138,6 +158,159 @@ double medianOf(std::vector<double> values) {
     }
     std::ranges::sort(values);
     return values[values.size() / 2];
+}
+
+// ── Every figure carries the load it was taken under (morph#707) ─────────────
+//
+// morph#710's own sweeps put the same binary 28x apart on throughput between
+// an idle box and a 16-way loaded one. A benchmark number without the load it
+// was measured at is therefore not comparable with another one, and most of
+// the confusion this instrument has caused came from comparing two such
+// numbers.
+//
+// Both of these are POSIX, and the include for them is guarded, so the calls
+// have to be as well: `MORPH_BUILD_LOAD_TESTS` is not a Linux-only option.
+// Elsewhere the load average reads -1.0 (best effort, and distinguishable from
+// a real reading) and the pid reads 0 -- a row is identified by its contents,
+// and the pid is only there to tell two rows of one sweep apart.
+long processId() {
+#if defined(__linux__) || defined(__APPLE__)
+    return static_cast<long>(::getpid());
+#else
+    return 0;
+#endif
+}
+
+double loadAverage1m() {
+#if defined(__linux__) || defined(__APPLE__)
+    std::array<double, 3> samples{0.0, 0.0, 0.0};
+    if (::getloadavg(samples.data(), static_cast<int>(samples.size())) >= 1) {
+        return samples[0];
+    }
+#endif
+    return -1.0;
+}
+
+// ── The injectable regression (morph#707, AGENTS.md's non-vacuity rule) ──────
+//
+// "A ceiling derived from a distribution but never fired is still unproven."
+// The same is true of a ceiling that was never derived: nobody has ever shown
+// these two constants firing on anything. `MORPH_BENCH_INJECT_DELAY_US` makes
+// the dispatch path deliberately slower by a stated amount, so the question
+// "what size of regression does this gate actually catch?" is a command rather
+// than an argument, and the answer is reproducible on whatever host is asking.
+//
+// A spin and not a sleep. A sleep yields the core, which flatters the
+// throughput phase and makes the injection measure the scheduler instead of
+// the dispatch path; a spin costs the CPU time a genuinely more expensive
+// dispatch would cost.
+//
+// Read once into a function-local static: `execute` is called on pool threads
+// hundreds of thousands of times per run, and `std::getenv` is neither cheap
+// nor thread-safe to interleave with anything that writes the environment.
+std::chrono::microseconds injectedSpin() {
+    static const std::chrono::microseconds kSpin{envPositiveIntOr("MORPH_BENCH_INJECT_DELAY_US", 0)};
+    return kSpin;
+}
+
+// ── The cross-process ledger (morph#687's remaining half) ────────────────────
+//
+// morph#710 gave this benchmark a distribution over trials *within* one
+// process. That substantially mitigates the spread -- 302x down to about 3x in
+// the common cases -- but it does not **record** it: a single process still
+// prints one triple and cannot say where that triple sits among others. That
+// is why morph#687's close condition ("reports a distribution over processes")
+// was never actually met, and it is the half that is met here.
+//
+// N runs of this binary accumulate into one JSON-lines file with no
+// orchestration at all:
+//
+//     for i in $(seq 20); do ./tests/bench/morph_bench "[bench]"; done
+//     # then read build/.../bench_dispatch_latency.jsonl
+//
+// and each run prints where it landed among the runs already recorded, so the
+// figure a reader cites arrives with its own error bar attached.
+//
+// The whole record is formatted into one string and written in a single
+// `write` to a file opened `std::ios::app` (O_APPEND). Short appends that way
+// interleave as whole lines on POSIX; that is not guaranteed everywhere, so
+// the reader skips a line it cannot parse rather than failing. A ledger is a
+// diagnostic, and a broken diagnostic must never redden a benchmark.
+struct LedgerRow {
+    double p99Ms{0.0};
+    double throughputC1{0.0};
+};
+
+// Pulls one `"key":<number>` out of a ledger line. Deliberately a string
+// search and not a JSON parser: this file has no JSON dependency, the schema
+// is written six lines above where it is read, and a parse failure here must
+// degrade to "skip the row".
+bool readKey(const std::string& line, const char* key, double& out) {
+    const std::string needle = std::string{"\""} + key + "\":";
+    const std::size_t at = line.find(needle);
+    if (at == std::string::npos) {
+        return false;
+    }
+    try {
+        out = std::stod(line.substr(at + needle.size()));
+    } catch (const std::exception&) {
+        return false;
+    }
+    return true;
+}
+
+std::string ledgerPath() {
+    const char* raw = envRaw("MORPH_BENCH_LEDGER");
+    if (raw == nullptr || *raw == '\0') {
+        return std::string{BENCH_ARTIFACT_DIR} + "/bench_dispatch_latency.jsonl";
+    }
+    return std::string{raw};
+}
+
+// Appends this process's headline figures, then reads every row back --
+// including rows this process did not write. Returns them all; an empty vector
+// means the ledger was disabled or unreadable, which is reported and not
+// asserted on.
+std::vector<LedgerRow> appendAndReadLedger(const std::string& record) {
+    const std::string path = ledgerPath();
+    if (path == "off") {
+        return {};
+    }
+    {
+        std::ofstream out{path, std::ios::app};
+        if (!out) {
+            std::cout << "morph_bench: cross-process ledger unavailable at " << path << " (errno " << errno << ")\n";
+            return {};
+        }
+        out << record << "\n";
+    }
+    std::vector<LedgerRow> rows;
+    std::ifstream in{path};
+    std::string line;
+    while (std::getline(in, line)) {
+        LedgerRow row;
+        if (readKey(line, "p99_ms", row.p99Ms) && readKey(line, "executes_per_sec_c1", row.throughputC1)) {
+            rows.push_back(row);
+        }
+    }
+    return rows;
+}
+
+// 1-based rank of `value` among `values`, best first -- counted as "how many
+// rows beat me, plus one" rather than by locating `value` in a sorted copy.
+// That is deliberate: this process's figure is compared against numbers that
+// have made a round trip through the ledger's text, so they are not
+// bit-identical to it and an equality search would rank every process last.
+// `smallestIsBest` picks the direction, since latency wants the smallest and
+// throughput the largest.
+std::size_t rankOf(const std::vector<double>& values, double value, bool smallestIsBest) {
+    std::size_t better = 0;
+    for (const double candidate : values) {
+        if (smallestIsBest ? candidate < value : candidate > value) {
+            ++better;
+        }
+    }
+    return better + 1;
 }
 
 /// @brief A `RemoteServer` reply sink that blocks on a condition variable.
@@ -262,7 +435,18 @@ struct BenchEchoAction {
     std::string s;
 };
 struct BenchEchoModel {
-    std::string execute(const BenchEchoAction& act) { return act.s; }
+    /// @brief Echoes its argument, plus whatever regression has been injected.
+    /// @param act The action to echo.
+    /// @return `act.s`, unchanged.
+    std::string execute(const BenchEchoAction& act) {
+        // See `injectedSpin` for why this is here and why it spins.
+        if (const auto spin = injectedSpin(); spin.count() > 0) {
+            const auto until = std::chrono::steady_clock::now() + spin;
+            while (std::chrono::steady_clock::now() < until) {
+            }
+        }
+        return act.s;
+    }
 };
 
 BRIDGE_REGISTER_MODEL(BenchEchoModel, "Bench_EchoModel")
@@ -311,10 +495,70 @@ TEST_CASE("bench: RemoteServer dispatch throughput and latency", "[bench]") {
     // for anything finer -- that is what the distribution is for, and it is
     // why this file now writes one.
     //
-    // Tightening them needs the CI runner characterised rather than guessed
-    // at, which is morph#707. Setting them from this 12-core box was tried
-    // and rejected on the measurement above: 20000/sec turned 3 of 20
-    // Debug-under-load processes red.
+    // ── morph#707: the cheaper alternative, weighed, and the answer ─────────
+    //
+    // morph#707 asks that an allocation gate be weighed before any wall-clock
+    // ceiling is tightened, on the grounds that allocations are deterministic
+    // and load-independent. **That gate already exists and already runs.**
+    // `tests/bench/CMakeLists.txt` registers `bench.alloc_budget`, which fails
+    // the build above 15.0 heap allocations per local round trip against a
+    // figure measured at exactly 14.06 on every one of 20 processes across
+    // three toolchains, idle and 16-way loaded alike (morph#700). Its margin
+    // is one allocation -- "the smallest regression worth a red build" -- and
+    // no wall-clock constant on any host is within three orders of magnitude
+    // of that resolution.
+    //
+    // So the property morph#707 worried was ungated ("dispatch does not get
+    // more expensive") **is** gated, tightly, by a different instrument. What
+    // the two constants below gate is the residue: a regression that costs
+    // time without costing allocations -- a spin, a syscall, a lock held
+    // longer, a sleep. That is a real class, and it is the only class these
+    // are for.
+    //
+    // They stay at 50 ms and 500/sec, and this is a decision rather than
+    // an omission. Tightening them needs the CI runner characterised rather
+    // than guessed at, and this lane could not characterise it: these figures
+    // come from a 12-core workstation, which is the configuration morph#707
+    // explicitly says is the misleading one. Setting them from this box was
+    // tried once already and rejected on measurement -- morph#710's 20000/sec
+    // turned 3 of 20 Debug-under-load processes red -- and guessing a second
+    // time from the same box would be the same mistake with a different
+    // number. **What is added instead is the evidence a future tightening
+    // needs**: the cross-process ledger below, so a candidate ceiling can be
+    // read off a recorded distribution rather than proposed, and
+    // `MORPH_BENCH_INJECT_DELAY_US`, so any candidate can be shown firing
+    // before it lands.
+    //
+    // **What the injection says about this pair, measured.** Release, clang
+    // 22.1.8, 12-core x86-64 Linux, `MORPH_BENCH_TRIALS=1`, load average
+    // 11.9-12.8 (a loaded box, and the figures below are coarse enough that it
+    // does not matter which):
+    //
+    //     injected   p99 ms    c=1 /sec   p99 gate   throughput gate
+    //     ---------+---------+----------+----------+------------------
+    //          0     0.0142     168862     pass       pass
+    //       1000 us  1.02685     989.2     pass       pass
+    //       2000 us  2.03428     495.5     pass       FAIL
+    //       3000 us  3.18618     331.2     pass       FAIL
+    //      60000 us 61.0339       16.7     FAIL       FAIL
+    //
+    // Both CHECKs therefore fire, which is the first time either has been
+    // shown to. And the size they fire at is the point: the baseline round
+    // trip is about 5.9 us, so the **throughput floor -- the tighter of the
+    // two -- first speaks at roughly a 340x regression**, and the p99 ceiling
+    // at roughly 8500x. That is the "~800x" morph#707 estimated, confirmed by
+    // measurement and if anything understated for the p99 half.
+    //
+    // So these are gross-failure detectors, they are now documented as such
+    // with the number attached, and a reader who wants resolution should watch
+    // `bench.alloc_budget` or diff the ledger. Reproduce the table with
+    // `MORPH_BENCH_INJECT_DELAY_US` on any host; the shape does not depend on
+    // this one, which is the point of measuring a ratio rather than a time.
+    // Forces `injectedSpin`'s function-local static to initialise here, on the
+    // main thread, before any pool thread can call `execute` and reach it. See
+    // `envRaw`.
+    (void)injectedSpin();
+
     const double p99MsMax = envDoubleOr("MORPH_BENCH_P99_MS_MAX", 50.0);
     const double minThroughput = envDoubleOr("MORPH_BENCH_MIN_THROUGHPUT", 500.0);
     const int trials = envPositiveIntOr("MORPH_BENCH_TRIALS", 5);
@@ -473,6 +717,49 @@ TEST_CASE("bench: RemoteServer dispatch throughput and latency", "[bench]") {
     }
     artifact << "]}";
 
+    // ── The cross-process ledger (morph#687, morph#707 step 2) ──────────────
+    //
+    // Appended after the per-process artifact is complete, so a row exists
+    // only for a run that produced a full set of figures. `load_1m` and
+    // `inject_delay_us` are on the row and not only on stdout, because a row
+    // taken under load, or under an injected regression, must never be
+    // mistaken for a clean one by whoever reads the file later.
+    const double throughputC1Best = *std::ranges::max_element(throughputColumns.at(0));
+    std::ostringstream record;
+    record << "{\"pid\":" << processId() << ",\"trials\":" << trials << ",\"p50_ms\":" << p50Best
+           << ",\"p95_ms\":" << p95Best << ",\"p99_ms\":" << p99Best << ",\"p99_ms_worst_trial\":" << p99Worst
+           << ",\"executes_per_sec_c1\":" << throughputC1Best << ",\"load_1m\":" << loadAverage1m()
+           << ",\"inject_delay_us\":" << injectedSpin().count() << "}";
+
+    const std::vector<LedgerRow> ledger = appendAndReadLedger(record.str());
+    if (ledger.empty()) {
+        std::cout << "morph_bench: no cross-process ledger for this run\n";
+    } else {
+        std::vector<double> ledgerP99;
+        std::vector<double> ledgerThroughput;
+        ledgerP99.reserve(ledger.size());
+        ledgerThroughput.reserve(ledger.size());
+        for (const LedgerRow& row : ledger) {
+            ledgerP99.push_back(row.p99Ms);
+            ledgerThroughput.push_back(row.throughputC1);
+        }
+        std::cout << "morph_bench cross-process ledger (" << ledgerPath() << "): " << ledger.size()
+                  << " process(es) recorded, this one at load " << loadAverage1m() << "\n"
+                  << "                    best      median       worst    this process\n"
+                  << "  p99 ms         " << *std::ranges::min_element(ledgerP99) << "    " << medianOf(ledgerP99)
+                  << "    " << *std::ranges::max_element(ledgerP99) << "    " << p99Best << " (rank "
+                  << rankOf(ledgerP99, p99Best, true) << " of " << ledger.size() << ")\n"
+                  << "  executes/sec   " << *std::ranges::max_element(ledgerThroughput) << "    "
+                  << medianOf(ledgerThroughput) << "    " << *std::ranges::min_element(ledgerThroughput) << "    "
+                  << throughputC1Best << " (rank " << rankOf(ledgerThroughput, throughputC1Best, false) << " of "
+                  << ledger.size() << ")\n";
+    }
+
+    if (injectedSpin().count() > 0) {
+        std::cout << "morph_bench: MORPH_BENCH_INJECT_DELAY_US=" << injectedSpin().count()
+                  << " -- this run carries a deliberately injected regression and its figures are not a baseline\n";
+    }
+
     CHECK(p99Best <= p99MsMax);
-    CHECK(*std::ranges::max_element(throughputColumns.at(0)) >= minThroughput);
+    CHECK(throughputC1Best >= minThroughput);
 }

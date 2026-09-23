@@ -38,7 +38,7 @@ using LogGuard = morph::log::ScopedLoggerOverride;
 
 template <typename Pred>
 bool waitFor(Pred pred, std::chrono::milliseconds budget = 2000ms) {
-    return morph::testing::waitUntil(std::move(pred), budget);
+    return morph::testing::waitUntil(std::move(pred), morph::testing::WaitBudget{budget});
 }
 
 }  // namespace

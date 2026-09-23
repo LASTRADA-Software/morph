@@ -324,5 +324,5 @@ TEST_CASE("LimitPolicy: executeTimeout surfaces as backend::TimeoutError through
         }
     });
 
-    REQUIRE(morph::testing::waitUntil([&] { return gotTimeoutError.load(); }, 2s));
+    REQUIRE(morph::testing::waitUntil([&] { return gotTimeoutError.load(); }, morph::testing::WaitBudget{2s}));
 }
