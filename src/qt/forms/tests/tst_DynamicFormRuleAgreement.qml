@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // `x-rules` is evaluated twice — once compiled (`morph::forms::allRulesSatisfied`)
-// and once in JavaScript here — and nothing pinned the two to each other
-// (morph#176). These cases drive the *verbatim* `schemaJson<A>()` output of a
+// and once in JavaScript here — so something has to pin the two to each other.
+// These cases drive the *verbatim* `schemaJson<A>()` output of a
 // real action through the renderer and assert the verdict the compiled
 // evaluator reaches for the same field state.
 //
@@ -57,8 +57,8 @@ TestCase {
         flag.checked = true
         flag.toggled()
         // Compiled: flag == true, so `reason` is required and unset -> not satisfied.
-        // Before morph#176 the client compared "true" === true and never fired,
-        // so it reported ready and submitted a body the server rejects.
+        // A client comparing "true" === true would never fire this rule, report
+        // ready, and submit a body the server rejects.
         compare(f.ready, false)
 
         findChild(f, "field_reason").text = "because"
@@ -80,9 +80,9 @@ TestCase {
         var f = createTemporaryObject(form, testCase)
         // 9007199254740992 is one below the literal 9007199254740993. The
         // compiled evaluator says the condition is false, so `reason` is not
-        // required. JSON.parse collapses both to the same double, so before
-        // morph#176 the client believed the condition held and blocked a
-        // submission the server would have accepted.
+        // required. JSON.parse collapses both to the same double, so a client
+        // that read the literal through it would believe the condition held and
+        // block a submission the server would have accepted.
         findChild(f, "field_id").text = "9007199254740992"
         compare(f.ready, true)
     }

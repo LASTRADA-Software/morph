@@ -10,8 +10,8 @@
 /// schema, and they are the part of morph that costs almost nothing to compile.
 /// Nothing here reaches glaze.
 ///
-/// Measured on `master` @ c6f6d953, clang 22.1.8, `-O2 -fsyntax-only`, one
-/// translation unit per header, best of three:
+/// Measured with clang 22.1.8, `-O2 -fsyntax-only`, one translation unit per
+/// header, best of three:
 ///
 /// | header | CPU s | preprocessed lines |
 /// |---|---|---|
@@ -23,7 +23,7 @@
 /// A consumer that wants the primitives and reaches for `bridge.hpp` — the
 /// obvious header, and the one every example includes — pays roughly three
 /// times over for a schema generator and a JSON codec it never calls. This
-/// header exists so the cheap path has a name (morph#573, step 4).
+/// header exists so the cheap path has a name.
 ///
 /// It is a facade and nothing else: it declares no symbol of its own, so
 /// including it is exactly equivalent to including the four headers below.

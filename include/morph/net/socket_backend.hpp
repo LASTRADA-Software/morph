@@ -41,7 +41,7 @@ struct SocketBackendConfig {
     /// Applied as `SO_SNDTIMEO`. Without it, a peer that stops reading fills the
     /// kernel send buffer and parks `sendFrame` inside `sendAll` **while holding
     /// `_socketMtx`** -- which parks `~SocketBackend` behind the same lock, with
-    /// nothing able to release it (morph#506). Generous on purpose: it bounds a
+    /// nothing able to release it. Generous on purpose: it bounds a
     /// send making *no* progress, not a slow one. Zero disables it.
     std::chrono::milliseconds sendTimeout{30000};
     /// @brief Bound on the handshake response read that follows a successful
@@ -56,7 +56,7 @@ struct SocketBackendConfig {
     /// parked in a blocking `recv` with nothing to unblock it, which in turn
     /// wedges `~SocketBackend` forever: the destructor's escape hatch only
     /// reaches a socket already published to `_socket`, and that publish
-    /// happens only *after* the handshake (morph#535). Zero disables it
+    /// happens only *after* the handshake. Zero disables it
     /// (the kernel default, block forever).
     ///
     /// @warning `SO_RCVTIMEO` restarts on every `recv`, so this bounds each
@@ -116,21 +116,20 @@ public:
     /// rather than the handshake as a whole, so a peer that dribbles one
     /// header byte per interval can stretch that phase to roughly
     /// `handshakeTimeout` times the 64 KiB header cap. Against a peer that
-    /// simply stops writing (the case morph#535 is about) the bound is one
+    /// simply stops writing, the bound is one
     /// `handshakeTimeout`. See `docs/spec/core/backend.md`'s `morph::net`
     /// section.
     ~SocketBackend() override {
         _shuttingDown.store(true);
-        // Under `_socketMtx`, and it has to be -- see morph#506, which proposed
-        // dropping it and was proved wrong by ThreadSanitizer. `shutdownBoth()`
-        // is indeed safe to call from any thread, but that is not what the lock
-        // is protecting here: `onDisconnected()` *reassigns* `_socket`
-        // (`_socket = TcpSocket{}`, a move-assign that closes the old fd), so an
-        // unlocked `_socket.valid()` here races the I/O thread replacing the
-        // object out from under it.
+        // Under `_socketMtx`, and it has to be -- dropping the lock here is
+        // what ThreadSanitizer flags. `shutdownBoth()` is indeed safe to call
+        // from any thread, but that is not what the lock is protecting:
+        // `onDisconnected()` *reassigns* `_socket` (`_socket = TcpSocket{}`, a
+        // move-assign that closes the old fd), so an unlocked `_socket.valid()`
+        // here races the I/O thread replacing the object out from under it.
         //
-        // The hazard #506 describes is closed from the other end: `sendAll` is
-        // no longer un-timed. `Config::sendTimeout` (SO_SNDTIMEO, 30s default)
+        // The risk of parking behind this lock is closed from the other end:
+        // `sendAll` is not un-timed. `Config::sendTimeout` (SO_SNDTIMEO, 30s default)
         // bounds any single send that makes no progress, so a peer that stops
         // reading can hold `_socketMtx` for at most that long instead of
         // forever, and this wait is bounded rather than open-ended. Fixing it
@@ -203,7 +202,7 @@ public:
     /// reaches it. `RemoteServer::attachLogIfConfigured` returns without
     /// consulting its `LogProvider` at all when the envelope's `contextKey` is
     /// empty, so dropping it here does not merely lose an entity key — it leaves
-    /// the instance unjournalled (morph#587). `SimulatedRemoteBackend` overrides
+    /// the instance unjournalled. `SimulatedRemoteBackend` overrides
     /// this for the same reason; the two must not disagree.
     ///
     /// Same synchronous-call constraint as `registerModel`. The factory argument
@@ -278,7 +277,7 @@ public:
         (void)sendControlForId(env, "assign");
     }
 
-    // ── The structural registration surface (morph#567 / morph#569) ──────
+    // ── The structural registration surface ──────────────────────────────
     //
     // Overridden natively rather than reached through
     // `backend::SynchronousBackendAdapter`. The reasoning is recorded in
@@ -293,10 +292,9 @@ public:
     // which this backend is otherwise documented as not having (it may be
     // driven from several threads at once).
     //
-    // Nothing about the legacy verbs changes: `registerModel`,
-    // `registerModelShared`, `attachModel` and `assignPrimary` still use
-    // `sendSync` and `callId == 0`, so every caller morph#570/#571 has yet to
-    // migrate behaves exactly as before.
+    // The synchronous verbs are unaffected: `registerModel`,
+    // `registerModelShared`, `attachModel` and `assignPrimary` use `sendSync`
+    // and `callId == 0`.
 
     /// @brief Acquires a model instance without blocking the calling thread.
     ///
@@ -392,11 +390,10 @@ public:
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
     /// Carries a real, non-zero `callId` drawn from the same shared counter
-    /// (`_pending.nextCallId()`) `execute()` uses, exactly as `QtWebSocketBackend` does (see
-    /// issue #65, and #454 for this transport's own reoccurrence of it):
+    /// (`_pending.nextCallId()`) `execute()` uses, exactly as `QtWebSocketBackend` does:
     /// `callId == 0` is `dispatchIncomingEnvelope`'s discriminator for "hand
     /// this payload to whichever `sendSync()` is parked", so a
-    /// fire-and-forget `deregister` sharing that sentinel had its own stray
+    /// fire-and-forget `deregister` sharing that sentinel would have its own stray
     /// `ok` reply delivered to an unrelated `register`/`attach` waiting on
     /// `_syncCv` whenever the two landed back to back on one connection.
     ///
@@ -482,8 +479,8 @@ public:
             sendFrame(::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env));
         } catch (const std::exception&) {
             // Either the write raced an already-in-progress disconnect, or
-            // (morph#536) `sendFrame` itself just tore the connection down
-            // after a failed/partial send. Either way a disconnect is now
+            // `sendFrame` itself just tore the connection down after a
+            // failed/partial send. Either way a disconnect is now
             // underway, and the io thread's handler drains _pending
             // (including this entry) via cancelPending.
         }
@@ -644,7 +641,7 @@ private:
             // `sendAll` can throw having already written part of the frame
             // (e.g. `SO_SNDTIMEO` firing mid-send) -- the peer's frame stream
             // is now desynchronised, and a subsequent send here would append
-            // a fresh frame into the middle of the truncated one (morph#536).
+            // a fresh frame into the middle of the truncated one.
             // Every caller of `sendFrame` reaches this one lock, so tearing
             // the connection down *here* -- rather than in each of them --
             // is enough to cover them all: `shutdownBoth()` unblocks the io
@@ -911,15 +908,15 @@ private:
                     // Before the handshake, so even that cannot park forever.
                     // Bounds any single send that makes no progress, which is
                     // what keeps ~SocketBackend from being parked behind
-                    // _socketMtx by a peer that stopped reading (morph#506).
+                    // _socketMtx by a peer that stopped reading.
                     (void)socket.setSendTimeout(_cfg.sendTimeout);
                 }
                 if (_cfg.handshakeTimeout.count() > 0) {
                     // Bounds the handshake response read, which otherwise has
                     // no timeout of its own and can park this thread forever
-                    // against a peer that accepts and then stays silent
-                    // (morph#535) -- and this fd is not yet published to
-                    // `_socket`, so the destructor cannot reach it either.
+                    // against a peer that accepts and then stays silent -- and
+                    // this fd is not yet published to `_socket`, so the
+                    // destructor cannot reach it either.
                     (void)socket.setRecvTimeout(_cfg.handshakeTimeout);
                 }
                 std::string leftover = ::morph::net::detail::performClientHandshake(socket, _url);

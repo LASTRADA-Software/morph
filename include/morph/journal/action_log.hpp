@@ -141,8 +141,8 @@ struct LogEntry {
 ///
 /// Declared here rather than beside the codec in `action_log_json.hpp`: a
 /// caller catching it needs only `<stdexcept>`, and making that catch drag in
-/// glaze would put the surcharge back on exactly the consumers this split
-/// exists to spare (morph#573, step 4).
+/// glaze would put the compile surcharge back on exactly the consumers the
+/// split exists to spare.
 struct SerializationError : std::runtime_error {
     using std::runtime_error::runtime_error;
 };

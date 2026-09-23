@@ -58,8 +58,8 @@ int retryOnEintr(Operation operation) {
 /// file-I/O call fails partway through an otherwise-successful operation
 /// (disk full, fd closed underneath, a permission change racing an exact
 /// window). None of those are reachable from a portable unit test without
-/// this seam — see `LASTRADA-Software/morph#97`, which requested exactly
-/// this for `FileActionLog`; `FileOfflineQueue` has the identical gap. A
+/// this seam, and `FileActionLog` and `FileOfflineQueue` have the identical
+/// gap. A
 /// test constructs a `FileIoOps` whose relevant member fails on demand (or
 /// on the Nth call, or forever) and passes it to the class under test;
 /// every other member stays at its real default, so the rest of the class's
@@ -128,7 +128,7 @@ struct FileIoOps {
     ///        it) to durable storage. `fsync` on a *file* makes only that
     ///        file's data durable -- not the directory entry that names it,
     ///        so a fresh file's creation or a rename can vanish on power loss
-    ///        even after the file's own contents were fsynced (morph#532).
+    ///        even after the file's own contents were fsynced.
     ///        POSIX: `open(dir, O_RDONLY|O_DIRECTORY)` + `fsync` + `close`. A
     ///        no-op on Windows, documented as such rather than faked --
     ///        `FlushFileBuffers`'s semantics for a directory handle differ
@@ -261,8 +261,8 @@ enum class RollBack : std::uint8_t {
 ///        it, `std::ftell` returns `-1` (`EOVERFLOW`) on every call, which
 ///        `rollBackShortWrite()` already treats as "no offset to roll back
 ///        to" and silently skips — quietly reviving the exact torn-tail
-///        merge morph#530 fixed, on every platform where this actually
-///        matters, for as long as the process keeps running (the next
+///        merge the rollback exists to prevent, on every platform where this
+///        actually matters, for as long as the process keeps running (the next
 ///        restart's `repairTornTail()` is still a backstop, but a long-lived
 ///        process that never restarts gets no benefit from it).
 /// @param file Open stdio handle to query.
@@ -308,7 +308,7 @@ inline void positionAtEnd(std::FILE* file) noexcept {
 }
 
 /// @brief Rolls @p file/@p path back to @p offsetBeforeWrite bytes after a
-///        short write, best-effort (morph#530).
+///        short write, best-effort.
 ///
 /// `resizeFile` truncates the file by path, not through @p file's own file
 /// descriptor, so @p file's buffered stdio position (what a later `ftell`
@@ -326,8 +326,8 @@ inline void positionAtEnd(std::FILE* file) noexcept {
 /// `std::filesystem::resize_file` **grows** it, padding with NUL bytes, and any
 /// later flush then appends the buffered record *after* that padding. The
 /// result is a NUL-bearing interior line that the caller's own reader rejects
-/// for the life of the file: precisely the bricking morph#530 exists to
-/// prevent, manufactured by the rollback meant to prevent it. (Measured:
+/// for the life of the file: precisely the bricking this rollback exists to
+/// prevent, manufactured by the rollback itself. (Measured:
 /// `ftell`=30 against an on-disk size of 10, `resize_file(30)` yielding a
 /// 30-byte file, and a final 50-byte file of data + 20 NULs + the flushed
 /// record.)
@@ -357,7 +357,7 @@ inline void positionAtEnd(std::FILE* file) noexcept {
 /// position where neither heal applies. Measured, against a queue: the merged
 /// line makes the next open throw a raw parse error instead of loading, so the
 /// whole backlog -- including records written long before the failure -- becomes
-/// unreachable. That is the bricking morph#530 exists to prevent, reached
+/// unreachable. That is the bricking the rollback exists to prevent, reached
 /// through the rollback rather than around it. A caller that gets `torn` must
 /// therefore refuse further appends on this handle rather than carry on.
 ///
@@ -404,8 +404,8 @@ inline void positionAtEnd(std::FILE* file) noexcept {
 
 /// @brief Truncates any bytes following the last newline in @p path.
 ///
-/// A crash between a caller's `fwrite` and its next `fsync` (or a short
-/// write, before morph#530's fix) can leave a partial record at the end.
+/// A crash between a caller's `fwrite` and its next `fsync` can leave a
+/// partial record at the end.
 /// Because every complete record is written newline-terminated in a single
 /// `fwrite`, whatever follows the final newline is by construction an
 /// incomplete record and never a whole one -- which makes discarding it

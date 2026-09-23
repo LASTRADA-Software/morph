@@ -3,15 +3,14 @@
 // JSON parsing that does not silently round an integer a double cannot hold.
 //
 // Every value the renderer receives from an app -- query results, choice option
-// rows -- arrives as JSON text and used to go through plain `JSON.parse`.
+// rows -- arrives as JSON text, and plain `JSON.parse` cannot carry it.
 // JavaScript numbers are IEEE-754 doubles, so an integer above 2^53 does not
 // survive: it is rounded on the way in, and re-serialising the rounded number
 // emits a *different* id than the app sent. Because doubles round to even in
 // that range, neighbouring ids collapse onto the same value, so two distinct
-// rows can become indistinguishable -- deleting one deletes the other
-// (morph#190, morph#191).
+// rows become indistinguishable -- deleting one deletes the other.
 //
-// The fix keeps the digits. parse() finds integer literals a double cannot
+// This module keeps the digits. parse() finds integer literals a double cannot
 // represent exactly and hands them back as exact-int wrappers carrying the
 // original text; literal() re-emits those digits verbatim. Values a double
 // *does* hold exactly -- the overwhelmingly common case -- stay ordinary

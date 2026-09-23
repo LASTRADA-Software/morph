@@ -4,21 +4,20 @@
 
 /// @file
 /// Model-agnostic core of the shipped Qt/QML forms renderer's controller:
-/// owns (or composes over) the Bridge/BridgeHandler/executor wiring
-/// `examples/forms/gui_qml`'s `FormsController` used to hardcode per-app, and
+/// owns (or composes over) the Bridge/BridgeHandler/executor wiring, and
 /// exposes the two operations `DynamicForm.qml` needs -- submit and
 /// options-fetch -- generically over `BridgeHandler<Model>::executeJson`, so
-/// an app depends on this directly instead of re-deriving the wiring. A
-/// concrete `QObject`/`QML_ELEMENT` wrapper per app (Qt cannot register a
+/// an app depends on this directly instead of re-deriving the wiring per app.
+/// A concrete `QObject`/`QML_ELEMENT` wrapper per app (Qt cannot register a
 /// class *template* for QML) forwards to this core and turns its callbacks
 /// into signals -- see `examples/forms/gui_qml/FormsController.hpp` for the
 /// reference wrapper.
 ///
 /// Two constructor overloads decide who owns the `Bridge`:
 /// - The single-argument (schema-only) constructor builds and owns a private
-///   `ThreadPoolExecutor` + `QtExecutor` + `Bridge` over a `LocalBackend`,
-///   exactly as before -- the convenient default for a demo or an app that
-///   has no `Bridge` of its own.
+///   `ThreadPoolExecutor` + `QtExecutor` + `Bridge` over a `LocalBackend` --
+///   the convenient default for a demo or an app that has no `Bridge` of its
+///   own.
 /// - The `(Bridge&, IExecutor*, schemasJson)` constructor composes over a
 ///   caller-supplied `Bridge`/executor instead -- the caller decides the
 ///   deployment mode (`LocalBackend`, `SimulatedRemoteBackend`,
@@ -101,11 +100,10 @@ public:
 
     /// @brief Executes @p optionsAction with @p bodyJson to fetch a `Choice`
     ///        field's combo-box options, via the same generic `executeJson`
-    ///        path `submitIfValid` uses -- @p optionsAction is never
-    ///        hardcoded, unlike the pre-factoring example controller, and
-    ///        @p bodyJson is a true pass-through (not always `"{}"`), so a
-    ///        dependent `Choice` (`x-optionsDependsOn`) can send
-    ///        `{parentField: value, ...}` instead of an empty body.
+    ///        path `submitIfValid` uses. @p optionsAction is a parameter rather
+    ///        than a hardcoded id, and @p bodyJson is a true pass-through (not
+    ///        always `"{}"`), so a dependent `Choice` (`x-optionsDependsOn`)
+    ///        can send `{parentField: value, ...}` instead of an empty body.
     /// @tparam OnReply Callable invoked with the options-action result JSON on success.
     /// @tparam OnError Callable invoked with the `std::exception_ptr` on failure.
     /// @param optionsAction Registered action type id that serves the options.
@@ -123,14 +121,11 @@ public:
 
 private:
     /// @brief The private pool/executor/backend bundle the schema-only
-    ///        constructor builds and owns, exactly as `FormsControllerCore`
-    ///        always did before the `(Bridge&, IExecutor*, ...)` overload
-    ///        existed. Absent (`_owned` unengaged) when the core instead
-    ///        composes over a caller-supplied `Bridge`/executor.
+    ///        constructor builds and owns. Absent (`_owned` unengaged) when the
+    ///        core instead composes over a caller-supplied `Bridge`/executor.
     ///
     /// Declaration order within the struct matters for destruction: `bridge`
-    /// must tear down before `pool`/`gui`, exactly as the pre-factoring
-    /// `FormsController` required.
+    /// must tear down before `pool`/`gui`, so it is declared last.
     struct OwnedBridge {
         morph::exec::ThreadPoolExecutor pool{2};
         ::morph::qt::QtExecutor gui;

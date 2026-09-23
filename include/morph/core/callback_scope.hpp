@@ -202,13 +202,12 @@ private:
 /// the others — call it from the thread that owns the scope. It replaces the
 /// `_state` handle itself, and reading a `shared_ptr` while another thread
 /// assigns it is a data race on the handle: the control block's refcount is
-/// atomic, the pointer object is not. This is a narrower promise than this
-/// paragraph used to make, and the reason is a portability constraint, not
-/// taste — see `_state`'s own comment. In the usage `reset()` exists for
+/// atomic, the pointer object is not. That narrowing is a portability
+/// constraint, not taste — see `_state`'s own comment. In the usage `reset()` exists for
 /// (`void onNewQuery() { _callbacks.reset(); }`, the supersede verb) the owning
-/// thread is the caller anyway. Within a single generation, the old guarantee
-/// holds unchanged: `reset()` stops the outgoing generation before releasing
-/// it, so a token holder that pinned it still observes refusal (morph#499).
+/// thread is the caller anyway. Within a single generation the guarantee is
+/// unconditional: `reset()` stops the outgoing generation before releasing it,
+/// so a token holder that pinned it still observes refusal.
 ///
 /// Identity, not a value: neither copyable nor movable. A moved-from scope would
 /// have to either strand or silently retarget tokens already captured in flight;
@@ -237,8 +236,7 @@ public:
     void requestStop() const noexcept {
         // `_state` is never null: the sole constructor make_shared's it, the
         // class is non-copyable and non-movable, and `reset()` always assigns a
-        // fresh value. The former `!= nullptr` guard was an unreachable branch
-        // and is gone (morph#499).
+        // fresh value. A `!= nullptr` guard here would be an unreachable branch.
         _state->stopped.store(true, std::memory_order_release);
     }
 
@@ -287,7 +285,7 @@ private:
     /// the primary template and hard-errors on `is_trivially_copyable`. The
     /// alternative, a mutex, would cost `token()`/`stopRequested()` their
     /// `noexcept`. So the concurrency contract is narrowed instead; see this
-    /// class's own Thread safety paragraph (morph#499).
+    /// class's own Thread safety paragraph.
     std::shared_ptr<detail::CallbackScopeState> _state;
 };
 

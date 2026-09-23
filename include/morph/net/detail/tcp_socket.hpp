@@ -48,12 +48,12 @@ public:
     /// `sendAll()` are written for blocking descriptors — neither treats
     /// `EAGAIN` as anything but a fatal error.
     ///
-    /// The blocking reset is not hypothetical bookkeeping (morph#478).
+    /// The blocking reset is not hypothetical bookkeeping.
     /// macOS/BSD propagate a listening socket's `O_NONBLOCK` onto the sockets
     /// `accept(2)` returns; POSIX permits that and Linux documents that it does
-    /// not do it. Since morph#437 `SocketServer::listen()` makes its listener
-    /// non-blocking, so without this every connection `tryAccept()` handed back
-    /// on macOS/BSD was non-blocking too, and `clientLoop()`'s first read —
+    /// not do it. `SocketServer::listen()` makes its listener non-blocking, so
+    /// without this every connection `tryAccept()` hands back on macOS/BSD
+    /// would be non-blocking too, and `clientLoop()`'s first read —
     /// `performServerHandshake()` — threw on `EAGAIN` before the client's
     /// Upgrade request had arrived. Every connection failed, and Linux-only CI
     /// could not see it. Clearing it here rather than in `tryAccept()` covers
@@ -111,13 +111,13 @@ public:
         if (rc != 0 || resolved == nullptr) {
             // `::gai_strerror`, and NOT `errnoMessage()`: `rc` is an `EAI_*`
             // code, not an `errno`, so `std::system_category().message(rc)`
-            // would render a confidently wrong string (morph#641).
+            // would render a confidently wrong string.
             //
-            // It also stays here rather than going the way `std::strerror`
-            // went in morph#625, because it does not have `std::strerror`'s
+            // It also stays, rather than being replaced the way `std::strerror`
+            // was, because it does not have `std::strerror`'s thread-safety
             // defect. This throw site runs on threads this subsystem spawns
-            // (see `errnoMessage` below), so the question was live; it was
-            // measured rather than assumed (morph#640).
+            // (see `errnoMessage` below), so the question is live; what follows
+            // is measured rather than assumed.
             //
             // glibc 2.44, `gcc -O0`: `gai_strerror` returns a pointer to a
             // string literal inside libc's own read-only data, distinct per
@@ -147,9 +147,9 @@ public:
         // One deadline for the whole call, not one timeout per candidate.
         // `ai_family = AF_UNSPEC` makes several candidates the norm ("localhost"
         // resolves to both ::1 and 127.0.0.1), and polling `timeout` inside the
-        // loop meant the worst case was N x timeout -- while two doc comments
-        // (here and SocketBackend's destructor note) state it as a single bound.
-        // morph#507.
+        // loop would make the worst case N x timeout -- while two doc comments
+        // (here and SocketBackend's destructor note) state it as a single
+        // bound. A deadline computed once keeps the stated bound true.
         auto const deadline = std::chrono::steady_clock::now() + timeout;
 
         for (addrinfo* rp = resolved; rp != nullptr; rp = rp->ai_next) {
@@ -259,7 +259,7 @@ public:
     /// **This call has no portable interruption mechanism.** `shutdown(2)` on a
     /// *listening* socket unblocks a parked `accept()` on Linux, but that is a
     /// Linux property rather than a POSIX one — on macOS/BSD the parked thread
-    /// stays parked (morph#437). Anything that has to be able to stop waiting
+    /// stays parked. Anything that has to be able to stop waiting
     /// must therefore not park here at all: use `setNonBlocking()` plus
     /// `::poll` on `nativeHandle()` alongside a self-pipe, and take the
     /// connection with `tryAccept()`. `SocketServer::acceptLoop()` is the
@@ -279,16 +279,12 @@ public:
             // SIGCHLD, SIGWINCH) tears down the accept loop and the server
             // silently stops taking connections.
             //
-            // Every other errno throws, and no other one is retried. This
-            // comment used to single out ECONNABORTED as "deliberately not
-            // retried, because shutdownBoth() is the documented way to break
-            // out of this call" -- which named the wrong errno for the
-            // mechanism it was guarding (morph#465): `shutdown(listenfd,
-            // SHUT_RDWR)` unblocks a parked `accept()` with EINVAL, not
-            // ECONNABORTED. Since morph#437 it is doubly stale, because
-            // shutting the listener down is no longer how anything breaks out
-            // of an accept loop -- `SocketServer` polls a self-pipe instead and
-            // never parks here at all.
+            // Every other errno throws, and no other one is retried.
+            // ECONNABORTED in particular is not special-cased: `shutdown(
+            // listenfd, SHUT_RDWR)` unblocks a parked `accept()` with EINVAL,
+            // not ECONNABORTED, and shutting the listener down is not how
+            // anything here breaks out of an accept loop -- `SocketServer`
+            // polls a self-pipe instead and never parks here at all.
             //
             // No ECONNABORTED retry is added in its place. A reset-race repro
             // over six shapes (blocking and non-blocking + poll, with and
@@ -335,8 +331,8 @@ public:
     /// The connection it yields is **blocking**, whatever mode this listener is
     /// in: the fd-adopting constructor clears `O_NONBLOCK`, which is what stops
     /// macOS/BSD's inheritance of the listener's flag reaching `recvSome()`
-    /// (morph#478). Any rewrite of this function has to keep going through that
-    /// constructor, or restore the reset itself.
+    /// Any rewrite of this function has to keep going through that
+    /// constructor, or do the reset itself.
     /// @return The accepted `TcpSocket`, or `std::nullopt` when no connection
     ///         was pending — a readiness report that went stale before the
     ///         `accept`, which the caller answers by waiting again.
@@ -406,8 +402,8 @@ public:
     ///
     /// Without this a `sendAll` against a peer that has stopped reading blocks
     /// forever once the kernel send buffer fills, and it does so while holding
-    /// whatever lock its caller took -- which is how `~SocketBackend` came to be
-    /// parkable behind `_socketMtx` (morph#506). With `SO_SNDTIMEO` set, the
+    /// whatever lock its caller took -- which is how `~SocketBackend` becomes
+    /// parkable behind `_socketMtx`. With `SO_SNDTIMEO` set, the
     /// blocked `send` returns `EAGAIN`/`EWOULDBLOCK` instead, `sendAll` throws
     /// as it already does for any other send error, and the lock is released.
     ///
@@ -436,7 +432,7 @@ public:
     /// the caller in `recvSome` forever -- for `SocketBackend`'s client
     /// handshake read specifically, that in turn wedges `~SocketBackend`,
     /// since the destructor's escape hatch only reaches a socket already
-    /// published to `_socket` (morph#535).
+    /// published to `_socket`.
     ///
     /// A timed-out `recv` makes `recvSome` throw (`EAGAIN`/`EWOULDBLOCK` is
     /// not one of the errors it treats as an orderly close), so callers meant
@@ -457,7 +453,7 @@ public:
     ///
     /// Documented for *connected* sockets only, which is where `shutdown(2)`
     /// waking a parked peer call is portable. It is not a way to interrupt
-    /// `accept()` on a listening socket — see `accept()` and morph#437.
+    /// `accept()` on a listening socket — see `accept()`.
     void shutdownBoth() noexcept {
         if (_fd >= 0) {
             ::shutdown(_fd, SHUT_RDWR);
@@ -492,8 +488,9 @@ private:
     /// values are `errno` values on POSIX, which is what every caller here
     /// passes. Preferred over `strerror_r` because that function's XSI and GNU
     /// variants differ in return type, so a portable call needs a build-time
-    /// discriminator and a caller-supplied buffer; this needs neither.
-    /// morph#625.
+    /// discriminator and a caller-supplied buffer; this needs neither. Also
+    /// preferred over `std::strerror`, which is not thread-safe and this
+    /// subsystem calls it from threads it spawns.
     static std::string errnoMessage(int err) { return std::system_category().message(err); }
 
     /// POSIX allows `EAGAIN` and `EWOULDBLOCK` to differ, and both name the

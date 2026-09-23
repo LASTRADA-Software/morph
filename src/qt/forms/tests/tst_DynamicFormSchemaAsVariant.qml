@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The same schema, reaching DynamicForm two ways, must render the same form
-// (morph#388).
+// The same schema, reaching DynamicForm two ways, must render the same form.
 //
 // Every shipped app *binds* `schema` declaratively, so the value arrives as a
 // genuine JS object and every `Array.isArray` in the renderer answers true. A
@@ -14,13 +13,12 @@
 // question:
 //
 //   - `{"type": ["integer","null"]}` (what schemaJson emits for a rule-3
-//     strong id under `$defs`) wrapped instead of unpacking, so `isInteger`
-//     came out false and the id went out as a quoted JSON *string* -- the
-//     parse_number_failure morph#189 already fixed once, through a new door;
-//   - the `anyOf`-over-`$ref` collapse of morph#189 itself went inert, so a
-//     nullable `$ref` member regressed to that same pre-#189 encoding;
-//   - the closed-set recognition of morph#386 (`oneOf` of `const`, and the
-//     bare `enum` keyword) stopped firing, so an enum drew a free-text box.
+//     strong id under `$defs`) wraps instead of unpacking, so `isInteger`
+//     comes out false and the id goes out as a quoted JSON *string*;
+//   - the `anyOf`-over-`$ref` collapse goes inert, so a nullable `$ref`
+//     member falls back to that same quoted-string encoding;
+//   - the closed-set recognition (`oneOf` of `const`, and the bare `enum`
+//     keyword) stops firing, so an enum draws a free-text box.
 //
 // Nothing warned: the form reported `ready` and produced a body the server
 // refuses. Each case below therefore asserts the two forms against **each
@@ -51,7 +49,7 @@ TestCase {
 
     // schemaJson<kanban::SetMemberRole>() (the same fixture
     // tst_DynamicFormEnumChoice.qml pins): `projectId` is the array-valued
-    // `type` of the report, `role` the morph#386 closed set.
+    // `type` of the report, `role` the closed set.
     //
     // The properties are declared `role, principal, projectId` -- deliberately
     // *not* their sorted order. schemaJson emits them sorted, so a verbatim
@@ -81,11 +79,11 @@ TestCase {
         "required": ["projectId", "principal", "role"]
     })
 
-    // The remaining array-shaped keys in one schema: the morph#189
+    // The remaining array-shaped keys in one schema: the
     // `anyOf`-over-`$ref` collapse (`optId`), the bare `enum` keyword
     // (`size`), `type: "array"` (`tags`), plus `required` and `x-layout`,
-    // which the triage of morph#388 measured as *not* degrading -- kept here
-    // so a fix that normalises the schema cannot quietly break them.
+    // measured as *not* degrading on the variant path -- pinned here so a
+    // change that normalises the schema cannot quietly break them.
     property var mixedSchema: ({
         "$defs": { "int64_t": { "type": "integer", "minimum": -9223372036854775808 } },
         "properties": {
@@ -220,9 +218,10 @@ TestCase {
     }
 
     function test_a_nullable_ref_member_keeps_morph189s_numeric_encoding() {
-        // morph#189's own fix reads `anyOf` through Array.isArray, so on this
-        // path it stopped running: the field lost its type entirely and fell
-        // back to the quoted-string encoding #189 was written to remove.
+        // The `anyOf` collapse reads its branches through Array.isArray, which
+        // answers false on this path unless the schema is re-read as JSON. If
+        // it does not run, the field loses its type and falls back to the
+        // quoted-string encoding.
         var form = viaVariant(variantMixedForm, testCase.mixedSchema)
         compare(form.fieldByName["optId"].isInteger, true)
         put(form, "size", 0)
@@ -233,7 +232,7 @@ TestCase {
     }
 
     function test_a_closed_set_is_still_drawn_as_a_picker() {
-        // morph#386's recognition reads `oneOf`/`enum` the same way.
+        // The closed-set recognition reads `oneOf`/`enum` the same way.
         var form = viaVariant(variantRoleForm, testCase.roleSchema)
         compare(form.fieldByName["role"].isEnum, true)
         compare(form.fieldByName["role"].enumOptions.length, 3)

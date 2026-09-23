@@ -39,7 +39,7 @@ enum class Hydration : std::uint8_t {
 /// cannot be moved between its states atomically: a reader landing between
 /// "first action is no longer pending" and "…and it failed" observes a
 /// not-poisoned instance whose first action has already failed, and is handed
-/// it — the exact case the spec forbids (morph#523).
+/// it — the exact case the spec forbids.
 ///
 /// Owned through a `shared_ptr` and captured that way — never via a raw pointer
 /// to the owning backend — into the strand task that settles it: that task may
@@ -74,8 +74,8 @@ using DirectoryKey = std::pair<std::string, std::string>;
 /// Structurally identical to `registry.hpp`'s `::morph::model::detail::PairKeyHash`,
 /// but defined here rather than reused so this header depends on nothing beyond
 /// `model.hpp`: `registry.hpp` pulls in glaze and the forms/schema stack, and the
-/// instance directory is part of the async core that must stay usable without it
-/// (morph#521).
+/// instance directory is part of the async core that must stay usable without
+/// it.
 struct DirectoryKeyHash {
     /// @brief Combines the hashes of the type id and the primary key.
     /// @param key The directory key to hash.
@@ -91,9 +91,9 @@ struct DirectoryKeyHash {
 /// @brief Everything a backend knows about one live model instance.
 ///
 /// One record per instance, rather than one entry per instance in each of
-/// several `ModelId`-keyed maps that had to be kept in lockstep by convention
-/// (morph#523). Every field is reached through a single hash lookup, and a
-/// half-updated instance is not representable.
+/// several `ModelId`-keyed maps kept in lockstep by convention. Every field is
+/// reached through a single hash lookup, and a half-updated instance is not
+/// representable.
 struct Instance {
     /// @brief The model itself. Never null for a record that is in the directory.
     std::shared_ptr<::morph::model::detail::IModelHolder> holder;
@@ -131,11 +131,11 @@ struct Instance {
 
 /// @brief The live model instances of one backend, plus the shared-instance directory.
 ///
-/// Replaces the six (`LocalBackend`) and eight (`RemoteServer`) parallel
-/// `ModelId`-keyed containers those classes used to carry, and the
-/// register-or-attach logic that was written out twice (morph#523). The
-/// invariants it maintains are stated in `docs/spec/core/shared_instances.md`;
-/// this class is where they are now enforced rather than asserted in comments.
+/// One type, shared by `LocalBackend` and `RemoteServer`, in place of the six
+/// and eight parallel `ModelId`-keyed containers each would otherwise carry and
+/// two separate copies of the register-or-attach logic. The invariants it
+/// maintains are stated in `docs/spec/core/shared_instances.md`; this class is
+/// where they are enforced rather than asserted in comments.
 ///
 /// @par Locking
 /// **Caller-locked, deliberately.** Every operation below assumes the owning

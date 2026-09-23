@@ -199,7 +199,7 @@ namespace morph::forms {
 /// declaration the schema advertises — the "the DTO *is* the form definition"
 /// rule (`examples/IMPLEMENTATION.md` rule 3) applied to a scalar bound, which
 /// the `formRules` vocabulary cannot express because every comparison node
-/// there takes two member pointers, never a literal (morph#310). They are
+/// there takes two member pointers, never a literal. They are
 /// keyed by field rather than by unit precisely so a floor declared for one
 /// `Quantity` member does not constrain a sibling of the same type —
 /// `UnitTraits::bounds` is per-unit and cannot make that distinction.
@@ -1244,10 +1244,9 @@ struct Equals {
             node["value"] = literal;
             // An integral literal beyond 2^53 does not survive the renderer's
             // JSON.parse: it arrives rounded, and an `equals` against it then
-            // compares two values the schema kept distinct (morph#176). Carry
-            // the exact digits alongside, as `x-exactMinimum`/`x-exactMaximum`
-            // already do for bounds (morph#213); a renderer that ignores
-            // `valueText` behaves exactly as before.
+            // compares two values the schema kept distinct. Carry the exact
+            // digits alongside, as `x-exactMinimum`/`x-exactMaximum` do for
+            // bounds; a renderer that ignores `valueText` is unaffected.
             if constexpr (std::is_integral_v<L> && !std::is_same_v<L, bool>) {
                 if (std::cmp_greater(literal, kExactDoubleLimit) || std::cmp_less(literal, -kExactDoubleLimitSigned)) {
                     // Glaze DOM builder — same shape as every sibling assignment here.
@@ -2218,7 +2217,7 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     // then fires two mutually exclusive kind flags on it (`isBoolean` and
     // `isArray` both true) and draws a checkbox whose payload is a JSON array
     // of the string "false", reporting the form `ready` for a value nobody
-    // chose (morph#392). `glz::glaze_enum_t` is the same trait glaze's own
+    // chose. `glz::glaze_enum_t` is the same trait glaze's own
     // enum schema specialisation gates on, so this fires exactly when that
     // specialisation would not have been reached -- a `static_assert` whose
     // condition depends on @p Member, so it only fires for the specific
@@ -2326,7 +2325,7 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
 /// found.")`, i.e. by throwing. Which of the two a call gets is decided by the
 /// constness of the DOM, not by the spelling, which is why the remedy
 /// `cppcoreguidelines-pro-bounds-avoid-unchecked-container-access` suggests
-/// cannot be adopted mechanically here (morph#706).
+/// cannot be adopted mechanically here.
 ///
 /// This returns a pointer instead: absence is a value the caller branches on,
 /// a read never grows the document, and nothing throws. It also replaces the
@@ -2436,21 +2435,21 @@ void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& propert
 /// is not instantiated again -- so a self-referential type
 /// (`struct Node { std::vector<Node> children; };`) or a mutual reference
 /// between two types costs one instantiation per type and stops, rather than
-/// recursing forever (morph#703, measured: see
-/// `docs/spec/forms/forms.md`, "Nested aggregates (recursive, cycle-safe)").
+/// recursing forever (measured: see `docs/spec/forms/forms.md`, "Nested
+/// aggregates (recursive, cycle-safe)").
 ///
-/// Two earlier designs are why this is worth stating. An ancestor *type list*
-/// made every distinct root-to-member route through the type graph its own
-/// instantiation, so a domain model that is a DAG rather than a tree -- an
-/// `Address` under both a `Customer` and a `Supplier`, a `Money` everywhere --
-/// cost one instantiation per route, and route count grows exponentially in
-/// the graph's size (morph#573, Part B: a fixture whose route count is
-/// Fibonacci(n) reached 86 s at 2,584 routes). A depth counter (morph#573
-/// step 3) cut that to one instantiation per (type, depth) pair, at the price
-/// of a 16-level cap and a `static_assert` that rejected every cyclic type.
-/// Carrying nothing is strictly better than both: one instantiation per
-/// *type*, no cap, and no rejection. The runtime recursion is stopped by
-/// @p visited, not by the type system.
+/// Carrying *nothing* through the instantiation is what buys that, and the two
+/// obvious alternatives both cost more. An ancestor *type list* makes every
+/// distinct root-to-member route through the type graph its own instantiation,
+/// so a domain model that is a DAG rather than a tree -- an `Address` under
+/// both a `Customer` and a `Supplier`, a `Money` everywhere -- costs one
+/// instantiation per route, and route count grows exponentially in the graph's
+/// size (measured: a fixture whose route count is Fibonacci(n) reaches 86 s at
+/// 2,584 routes). A depth counter cuts that to one instantiation per (type,
+/// depth) pair, at the price of a depth cap and a `static_assert` that rejects
+/// every cyclic type. Carrying nothing gives one instantiation per *type*, no
+/// cap, and no rejection. The runtime recursion is stopped by @p visited, not
+/// by the type system.
 ///
 /// morph therefore imposes no depth limit, but the *compiler* does, and MSVC's
 /// is low: 15 levels of nested aggregate initialisation inside an instantiated
@@ -2476,8 +2475,7 @@ void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& propert
             // property glaze emitted without an `items` node is left alone
             // rather than given an empty one. The `contains` + `operator[]`
             // pair this replaces probed the same map twice and needed a
-            // standing suppression to say why the subscript was safe
-            // (morph#706).
+            // standing suppression to say why the subscript was safe.
             annotateNestedAggregateRef<ItemType>(dom, *items, visited);
         }
     }
@@ -2576,7 +2574,7 @@ void annotateNestedAggregateRef(SchemaDomRef dom, glz::generic_u64& propertyOrIt
                 // $defs key that doesn't exist, so this only changes behavior
                 // for malformed input, which is left untouched instead.
                 // findMember is what states that in the type system rather
-                // than in a comment beside a subscript (morph#706).
+                // than in a comment beside a subscript.
                 auto* const defs = findMember(dom.value(), "$defs");
                 auto* const entry = (defs == nullptr) ? nullptr : findMember(*defs, key);
                 // `visited.insert(...).second` is the first-arrival test: it
@@ -2745,13 +2743,13 @@ template <typename T>
 /// top-level `x-rules` array is such a conjunction (`allRulesSatisfied` folds
 /// it with `&&`) and so are an `and` node's `conditions`, so
 /// `ruleList(andOf(exactlyOneOf(&A::a, &A::b), engaged(&A::c)))` is exactly as
-/// unsubmittable as the direct `ruleList(exactlyOneOf(&A::a, &A::b))` and is
-/// now rejected too. It previously shipped, because the loop skipped any node
-/// without a `fields` key and `and`/`or`/`not` emit `conditions`/`condition`
-/// instead (morph#544) — and the identical contradiction being a hard build
-/// failure in one spelling and a silently unsubmittable form in the other is
-/// worse than not checking at all, since the check's existence is what an
-/// author trusts.
+/// unsubmittable as the direct `ruleList(exactlyOneOf(&A::a, &A::b))`, so it is
+/// rejected too. Descending matters because `and`/`or`/`not` emit
+/// `conditions`/`condition` rather than `fields`: a loop that skipped any node
+/// without a `fields` key would let the wrapped spelling through. The identical
+/// contradiction being a hard build failure in one spelling and a silently
+/// unsubmittable form in the other is worse than not checking at all, since the
+/// check's existence is what an author trusts.
 ///
 /// `or` and `not` are **not** descended, and that is not an omission:
 ///
@@ -2804,9 +2802,8 @@ enum class ExactBoundKind : std::uint8_t {
 /// they are not rounded on the C++ side. They are rounded anyway the moment a
 /// renderer does `JSON.parse(controller.schemasJson)`, which every shipped app
 /// does -- `INT64_MAX` becomes `9223372036854775808`, and a client-side gate
-/// comparing against it then admits `INT64_MAX + 1` as "not greater"
-/// (morph#213). The exact digits travel as a string, which `JSON.parse` cannot
-/// round.
+/// comparing against it then admits `INT64_MAX + 1` as "not greater". The
+/// exact digits travel as a string, which `JSON.parse` cannot round.
 ///
 /// Emitted only above `kExactDoubleLimit`: an ordinary bound loses nothing to a
 /// double, so schemas that do not need this are byte-for-byte unchanged.
@@ -2819,7 +2816,7 @@ inline void annotateExactBound(glz::generic_u64& node, ExactBoundKind kind) {
     std::string_view const key = isMinimum ? "minimum" : "maximum";
     std::string_view const textKey = isMinimum ? "x-exactMinimum" : "x-exactMaximum";
     // A read, so it is checked: findMember yields nullptr for a node with no
-    // such bound instead of fabricating a null one (morph#706). The two
+    // such bound instead of fabricating a null one. The two
     // `node[textKey] =` writes further down are the opposite case -- the
     // companion key is *meant* to be created -- and keep `operator[]`, which
     // is what the suppression above is still for.
@@ -3085,8 +3082,8 @@ template <typename A>
 
     annotateSubmitMode<A>(dom);
 
-    // Exact companions for any bound a double cannot hold (morph#213). Last,
-    // so it also covers nodes added by the passes above.
+    // Exact companions for any bound a double cannot hold. Last, so it also
+    // covers nodes added by the passes above.
     annotateExactNumericBounds(dom);
 
     // value_or without a move: the copy is irrelevant (schemaJson memoises),

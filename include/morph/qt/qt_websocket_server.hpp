@@ -25,7 +25,7 @@ namespace morph::qt {
 /// is evaluated (same rationale as `morph::qt::QtWebSocketBackendConfig` and
 /// `morph::offline::NetworkMonitorConfig`).
 struct QtWebSocketServerConfig {
-    /// @brief Max simultaneous live client connections. `0` = unbounded (today's behavior).
+    /// @brief Max simultaneous live client connections. `0` = unbounded.
     ///
     /// A new connection beyond this count is closed immediately in `onNewConnection`,
     /// before any message exchange and before it is tracked internally.
@@ -33,10 +33,9 @@ struct QtWebSocketServerConfig {
 
     /// @brief Per-frame size cap enforced before a message reaches `RemoteServer::handle()`.
     ///
-    /// Defaults to `morph::wire::kMaxEnvelopeBytes` (the wire layer's own bound), so
-    /// an unconfigured server behaves exactly as today: the wire-layer cap is the
-    /// only one in effect. Set lower to reject oversized frames earlier, before the
-    /// cost of a pool round-trip and JSON decode.
+    /// Defaults to `morph::wire::kMaxEnvelopeBytes`, the wire layer's own bound, so an
+    /// unconfigured server is capped only there. Set lower to reject oversized frames
+    /// earlier, before the cost of a pool round-trip and JSON decode.
     std::size_t maxMessageBytes = ::morph::wire::kMaxEnvelopeBytes;
 
     /// @brief Per-connection token-bucket rate limit, in messages per second. `0` = unbounded.
@@ -52,7 +51,7 @@ struct QtWebSocketServerConfig {
     std::size_t messagesPerSecond = 0;
 
     /// @brief Time allowed for a newly-accepted connection to send its first text
-    ///        frame before it is closed. `0` = disabled (today's behavior).
+    ///        frame before it is closed. `0` = disabled.
     ///
     /// `QWebSocketServer::newConnection()` fires only after the WebSocket (and, in
     /// `SecureMode`, TLS) opening handshake has already completed, so in practice
@@ -61,14 +60,13 @@ struct QtWebSocketServerConfig {
     std::chrono::milliseconds handshakeTimeout{0};
 
     /// @brief Time a connection may go without sending any frame before it is
-    ///        closed. `0` = disabled (today's behavior).
+    ///        closed. `0` = disabled.
     ///
     /// Checked by a periodic housekeeping sweep (roughly once per second), so the
     /// actual close can lag the configured value by up to that sweep interval.
     std::chrono::milliseconds idleTimeout{0};
 
-    /// @brief Address `listen()` binds to. Default `QHostAddress::LocalHost`
-    /// (today's behavior, unchanged).
+    /// @brief Address `listen()` binds to. Default `QHostAddress::LocalHost`.
     QHostAddress bindAddress = QHostAddress::LocalHost;
 
     /// @brief Deliberate opt-out of the exposure guard: set `true` only to
@@ -94,8 +92,7 @@ struct QtWebSocketServerConfig {
 /// @par Resource limits
 /// Pass a `QtWebSocketServerConfig` to bound connection count, per-frame size,
 /// per-connection message rate, and handshake/idle time. All fields default to
-/// unbounded (except `maxMessageBytes`, which defaults to the wire-layer cap),
-/// reproducing today's behavior when omitted.
+/// unbounded, except `maxMessageBytes`, which defaults to the wire-layer cap.
 ///
 /// @par Bind address & plaintext-exposure guard
 /// `listen()` refuses — returns `false` and logs at `morph::log::LogLevel::error`
@@ -123,8 +120,7 @@ public:
     ///                declared at all on an SSL-less Qt build (`QT_NO_SSL`) — see the
     ///                class doc comment's "SSL-less Qt builds" section.
     /// @param cfg     Per-connection resource limits. Default: everything unbounded
-    ///                (today's behavior) except `maxMessageBytes`, which defaults to
-    ///                the wire-layer cap.
+    ///                except `maxMessageBytes`, which defaults to the wire-layer cap.
     /// @param parent  Optional Qt parent object.
     explicit QtWebSocketServer(::morph::backend::RemoteServer& server, quint16 port = 0,
 #ifndef QT_NO_SSL
@@ -172,14 +168,13 @@ public:
     /// `RemoteServer::drainedWithin()` to report every in-flight execute has
     /// replied, sending each still-connected client a real close frame
     /// (`CloseCodeGoingAway`, reason `"server shutting down"`) instead of an
-    /// abort, and finally running the existing `close()` hard stop for
-    /// whatever @p deadline did not leave time to finish gracefully.
+    /// abort, and finally running the `close()` hard stop for whatever
+    /// @p deadline did not leave time to finish gracefully.
     ///
     /// Pumps the Qt event loop internally while it waits, so it is safe to
     /// call from the Qt thread — which is also the thread that must run
     /// `sendTextMessage` for replies and close frames to actually reach
-    /// clients. Purely additive and opt-in: a server that never calls this
-    /// behaves exactly as it does today, and `close()` itself is unchanged.
+    /// clients.
     ///
     /// @param deadline Total time budget for the whole sequence, measured
     ///                 from the moment this call starts. Whatever the drain
@@ -208,7 +203,7 @@ private:
         /// @brief Current token-bucket balance for `messagesPerSecond`.
         double tokens = 0.0;
 
-        /// @brief Last time `tokens` was refilled (used to compute elapsed time on the next frame).
+        /// @brief Last time `tokens` was refilled; the next frame's refill is computed from it.
         std::chrono::steady_clock::time_point lastRefill;
 
         /// @brief Last time any frame was received on this connection (drives `idleTimeout`).

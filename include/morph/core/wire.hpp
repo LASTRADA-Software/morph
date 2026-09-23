@@ -354,9 +354,9 @@ struct EscapingWriteOpts : glz::opts {
 ///
 /// `Envelope` is a union-of-all-kinds struct: an `ok` reply uses three of its
 /// thirteen members and a `deregister` request uses two, but glaze writes every
-/// member of a struct it is handed, so a minimal reply carrying an 8-byte
-/// payload cost 255 bytes on the wire, 213 of them fields the kind does not use
-/// (morph#524).
+/// member of a struct it is handed, so without this a minimal reply carrying an
+/// 8-byte payload costs 255 bytes on the wire, 213 of them fields the kind does
+/// not use.
 ///
 /// Omitting a member that holds its default is **not** a protocol change. The
 /// decoder default-initialises the `Envelope` and reads with
@@ -388,9 +388,9 @@ struct EscapingWriteOpts : glz::opts {
 ///   `SocketBackend::dispatchIncomingEnvelope`). A peer therefore cannot treat
 ///   an absent `callId` as "no information"; it has to *reconstruct* the
 ///   sentinel before it can route the frame at all. morph's own `decode` does
-///   that for free by default-initialising, which is why omitting it
-///   round-tripped cleanly in C++ and still broke the scenario driver, a second
-///   decoder that read absence as `None` (morph#524). Emitting correlation
+///   that for free by default-initialising, so omitting it round-trips cleanly
+///   in C++ and still breaks the scenario driver, a second decoder that reads
+///   absence as `None`. Emitting correlation
 ///   fields unconditionally costs eleven bytes on the one message shape that
 ///   carries a zero id, and keeps "how do I route this frame" answerable from
 ///   the frame.
@@ -609,11 +609,11 @@ inline Envelope makeHello(std::uint32_t protocolVersion = kProtocolVersion) {
 /// flavours of invalid UTF-8, an embedded NUL, a raw control byte and an 8 MiB
 /// payload all encode successfully.
 ///
-/// That left a permanently uncovered branch guarding a real invariant. Rather
-/// than reshape `Envelope` to make a test possible, or wait on a
-/// fault-injection hook in glaze (LASTRADA-Software/morph#96 asked for one),
-/// this puts the seam on morph's side of the boundary — where the repository
-/// already puts it for the identical problem with file I/O.
+/// That leaves a branch guarding a real invariant with no way to reach it.
+/// Rather than reshape `Envelope` to make a test possible, or wait on a
+/// fault-injection hook glaze does not offer, this puts the seam on morph's
+/// side of the boundary — where the repository already puts it for the
+/// identical problem with file I/O.
 struct WireCodecOps {
     /// @brief Serialises @p env into @p out. Mirrors the `glz::write` call
     ///        `encode` would otherwise make directly.

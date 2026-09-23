@@ -119,8 +119,8 @@ template <typename W>
         step["title"] = std::string{StepT::title()};
         if constexpr (std::tuple_size_v<typename StepT::binds> != 0) {
             // The insert is the point: `prefill` is being created here, not
-            // read, so this is one of the sites morph#706 leaves alone. A read
-            // would go through `morph::forms::detail::findMember` instead.
+            // read, so `operator[]` is the behaviour wanted. A read would go
+            // through `morph::forms::detail::findMember` instead.
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             ::morph::forms::detail::emitBindsInto<typename StepT::binds>(step["prefill"]);
         }

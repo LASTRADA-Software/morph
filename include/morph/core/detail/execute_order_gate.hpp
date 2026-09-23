@@ -17,29 +17,20 @@
 /// @file
 /// @brief Per-model execute-ordering gate, extracted out of `RemoteServer`.
 ///
-/// `RemoteServer`'s per-model execute-ordering gate (`ExecuteGate` before this
-/// extraction, `takeExecuteTicket`/`awaitExecuteTurn`/`releaseExecuteTicket`,
-/// and `ExecuteTicketGuard` — all `private`) is a standalone concurrency
-/// primitive that was trapped inside the server. Its contract — hand out
-/// monotonic tickets per `ModelId`; block a ticket until its predecessor
-/// releases; tolerate releases arriving out of order; erase the gate when
-/// drained; tolerate a gate already erased — touches no wire format, no
-/// authorizer, no model, no executor, no strand, and is expressible without
-/// `RemoteServer` at all.
+/// The per-model execute-ordering gate `RemoteServer` dispatches through. Its
+/// contract — hand out monotonic tickets per `ModelId`; block a ticket until
+/// its predecessor releases; tolerate releases arriving out of order; erase the
+/// gate when drained; tolerate a gate already erased — touches no wire format,
+/// no authorizer, no model, no executor and no strand, so it lives here rather
+/// than inside the server.
 ///
-/// It began as a behavior-preserving port of the logic that used to live
-/// directly on `RemoteServer` -- `releasedOutOfOrder` and its out-of-order
-/// release handling (issue #449) came across unchanged, and that field's own
-/// doc comment carries the full history.
-///
-/// It is **no longer only that port**, and the locking in particular is not the
-/// same. morph#519 added the atomic `takeAndPost`, a nested `Ticket` bound to
-/// the exact `Gate` it was issued from (so a drain-and-recreate cannot redirect
-/// a later `awaitTurn`), and a gate-wide `std::recursive_mutex` held across the
-/// caller's `postFn`. Read `takeAndPost`'s doc before reasoning about lock
-/// order here: it is `_enqueueMtx` then `_mtx`, never the reverse, and an
-/// earlier revision that used one mutex *per model* deadlocked two threads
-/// against each other.
+/// `takeAndPost` takes a ticket and enqueues the work in one atomic step, the
+/// `Ticket` it returns is bound to the exact `Gate` it was issued from (so a
+/// drain-and-recreate cannot redirect a later `awaitTurn`), and a gate-wide
+/// `std::recursive_mutex` is held across the caller's `postFn`. Read
+/// `takeAndPost`'s doc before reasoning about lock order here: it is
+/// `_enqueueMtx` then `_mtx`, never the reverse. One mutex *per model* instead
+/// deadlocks two threads against each other.
 namespace morph::backend::detail {
 
 /// @brief Hands out monotonic per-`ModelId` tickets and lets callers block
@@ -68,10 +59,10 @@ public:
     /// ahead of the workers), can find a *newer* `Gate` already sitting where
     /// the old one used to be. Its `awaitTurn` then waits on that new gate's
     /// independent counter for a ticket number it will never produce --
-    /// permanently (morph#519's own fix introduced this: the old two-step
-    /// `take()`-then-post() throttled the producer just enough that a gate
-    /// essentially never drained mid-burst; the atomic `takeAndPost` removes
-    /// that throttle). `Ticket` closes this by carrying the exact `Gate`
+    /// permanently. The atomic `takeAndPost` is what makes this reachable: a
+    /// two-step `take()`-then-post() throttles the producer just enough that a
+    /// gate essentially never drains mid-burst, and `takeAndPost` removes that
+    /// throttle. `Ticket` closes the hole by carrying the exact `Gate`
     /// `shared_ptr` a ticket was issued from, so `awaitTurn(Ticket)` and
     /// `release(Ticket)` operate on that object directly -- never a fresh
     /// lookup, so a drain-and-recreate of the map entry cannot redirect them.
@@ -119,7 +110,7 @@ public:
         // inserting an already-passed ticket number into `releasedOutOfOrder`
         // a second time, which would sit there as the set's permanent
         // minimum and quietly break every future out-of-order release for
-        // this gate (issue #449's own mechanism, from the wrong end).
+        // this gate.
         std::shared_ptr<std::atomic<bool>> _released;
     };
 
@@ -181,9 +172,9 @@ public:
     /// diverge: caller A can take ticket 0 and then be pre-empted before
     /// enqueueing, while caller B takes ticket 1 and enqueues immediately — so
     /// a pool worker picks up ticket 1 first, blocks in `awaitTurn` waiting for
-    /// ticket 0, and A's own enqueued work never gets a worker to run on
-    /// (morph#519: exactly this, with `RemoteServer::handleImpl` and its worker
-    /// pool). Folding the enqueue into the same critical section as `take`
+    /// ticket 0, and A's own enqueued work never gets a worker to run on --
+    /// reachable with `RemoteServer::handleImpl` and its worker pool.
+    /// Folding the enqueue into the same critical section as `take`
     /// makes that divergence impossible: whichever caller's `takeAndPost` runs
     /// first for a given model gets both the lower ticket number and the
     /// earlier enqueue slot, for any thread scheduling, because a second
@@ -388,7 +379,7 @@ private:
         // ticket ahead of them has released too. Not an optimisation: it is
         // what makes `nextToRun` mean "the lowest ticket not yet released"
         // rather than "one past whichever ticket released last". See
-        // `releaseOnGateLocked` (issue #449). Ordered, because the release
+        // `releaseOnGateLocked`. Ordered, because the release
         // loop consumes it from the front; small by construction (it holds at
         // most the tickets in flight for one model, minus one).
         std::set<std::uint64_t> releasedOutOfOrder;
@@ -426,12 +417,10 @@ private:
         // immediately, without ever waiting for its turn, precisely so that
         // ticket cannot hold up the live work behind it (`RemoteServer`'s
         // rejection paths -- model not found, unauthorized, over limit, a
-        // shutdown gate -- all do exactly this). A later ticket releasing
-        // first therefore used to push `nextToRun` straight past an earlier
-        // ticket's number, whose waiter then had a predicate that could never
-        // become true again -- a caller parked forever (issue #449, the third
-        // occurrence of the stranded-ticket class #348 and #351 closed from
-        // the other end by making the release itself unmissable).
+        // shutdown gate -- all do exactly this). Applying a later ticket's
+        // release directly would push `nextToRun` straight past an earlier
+        // ticket's number, leaving that ticket's waiter with a predicate that
+        // can never become true again -- a caller parked forever.
         //
         // So an out-of-order release is recorded rather than applied, and
         // `nextToRun` walks forward only over a contiguous run of released
@@ -504,9 +493,9 @@ private:
 /// stalls every later ticket for the same model, because `awaitTurn` is a
 /// `cv.wait` with no deadline. In `RemoteServer` (the sole caller today) that
 /// rule used to be a per-call-site convention, and the convention was missed
-/// twice: by a shutdown gate that returns before the one place that released
-/// a ticket (issue #348), and by every exception that unwinds past a dispatch
-/// function's early returns (issue #351). This holder makes the rule
+/// two ways: by a shutdown gate that returns before the one place that
+/// releases a ticket, and by an exception that unwinds past a dispatch
+/// function's early returns. This holder makes the rule
 /// structural instead of remembered: the ticket is owned from the moment it
 /// is taken until the guard dies, so every exit path -- `return`, `throw`,
 /// and any branch a later change adds -- releases it. Two members opt out

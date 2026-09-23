@@ -9,7 +9,7 @@
 /// entry **once**: `auto& def = defs[name_v<val_t>]; if (!def.type) { … }`. A
 /// `glz::meta::name` that is the same string for two instantiations therefore
 /// makes the second one silently `$ref` the first one's definition, and a
-/// renderer that resolves the `$ref` reads the wrong payload type (morph#543).
+/// renderer that resolves the `$ref` reads the wrong payload type.
 ///
 /// This header is the single place the forms layer composes those keys, so the
 /// rule that keeps them apart is stated once rather than once per wrapper.
@@ -79,8 +79,7 @@ template <std::size_t N>
 /// the join injective: without that escape two different splits of the same
 /// characters alias (`ValueField = "id_x", LabelField = "name"` against
 /// `"id", "x_name"` — both plausible snake_case wire names — would produce one
-/// key, and the second `Choice` would then `$ref` the first one's definition,
-/// which is the very defect morph#543 is about).
+/// key, and the second `Choice` would then `$ref` the first one's definition).
 ///
 /// Doubling makes every `_` run *inside* an escaped part even-length, so a run
 /// that contains a join is odd — which is what tells the two apart, and it
@@ -227,8 +226,8 @@ struct ShapeTag {
 /// `{"type":"string"}` for it while `std::int8_t` (i.e. `signed char`) gets
 /// `{"type":"integer", …}`. Both are arithmetic and both are 8 bits wide, so a
 /// tag built from signedness and width alone would put them on one `$defs`
-/// entry describing only one of them — morph#543 again. The sibling character
-/// types are listed with it because they are schematised the same way.
+/// entry describing only one of them. The sibling character types are listed
+/// with it because they are schematised the same way.
 ///
 /// @tparam T Type to test.
 template <typename T>
@@ -293,7 +292,7 @@ inline constexpr auto rangedSchemaNameStorage = [] {
 /// themselves are emitted as property-level `x-min`/`x-max`/`x-step`, never
 /// into the `$def`. So `Ranged<0, 100>` and `Ranged<5, 50>` share one entry
 /// because their entries *are* the same entry, while `Ranged<0.0, 1.0, 0.1>`
-/// gets its own, which is the split morph#543 is about.
+/// gets its own.
 ///
 /// @tparam T The payload's arithmetic type (`decltype(Min)`).
 template <typename T>

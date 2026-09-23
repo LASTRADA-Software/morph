@@ -111,7 +111,7 @@ struct Principal {
 /// **An implementation that switches or matches on `actionType` must handle the
 /// empty case explicitly**, or it will hit its default arm on exactly those two
 /// disclosure verbs. Whether that fails open or closed is the implementation's
-/// choice, but it has to be a choice (morph#500).
+/// choice, but it has to be a choice.
 ///
 /// Default implementation supplied by the framework is `AllowAllAuthorizer`. Real
 /// deployments install a custom subclass that checks principal claims, action
@@ -268,7 +268,7 @@ public:
     /// @brief Installs @p ctx as the thread-local context until the scope exits.
     /// @param ctx Context whose address is stored; must outlive this object.
     explicit ScopedContext(const Context& ctx) : _prev{tlsCurrent()} { tlsCurrent() = &ctx; }
-    /// @brief Restores the previously active thread-local context.
+    /// @brief Restores the thread-local context that was active at construction.
     ~ScopedContext() { tlsCurrent() = _prev; }
     ScopedContext(const ScopedContext&) = delete;
     ScopedContext& operator=(const ScopedContext&) = delete;

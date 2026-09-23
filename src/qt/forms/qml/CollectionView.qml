@@ -120,7 +120,7 @@ Frame {
             // as exact digits (see JsonExact.js) and must be emitted verbatim.
             // Re-serialising it as a double rounds it, and because doubles round
             // to even in that range neighbouring ids collapse -- so Delete on one
-            // row built a body naming another (morph#191).
+            // row would build a body naming another.
             parts.push(JSON.stringify(actionField) + ":" + JsonExact.literal(row[bind[actionField]]))
         return "{" + parts.join(",") + "}"
     }

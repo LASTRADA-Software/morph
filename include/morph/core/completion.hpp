@@ -60,8 +60,8 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
     // `std::function<void(T)>` object -- because each is invocable with
     // `const T&`. A handler that wants its own value gets exactly one copy, at
     // its own parameter binding, where the reader of that call site can see it;
-    // a handler that only observes pays nothing. Erasing as `void(T)` charged
-    // every handler a copy whether or not it wanted one (morph#553).
+    // a handler that only observes pays nothing. Erasing as `void(T)` would
+    // charge every handler a copy whether or not it wanted one.
     std::vector<std::function<void(const T&)>> onOk;
     std::vector<std::function<void(std::exception_ptr)>> onErr;
     bool onErrAttached = false;
@@ -77,8 +77,8 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
             // Store first, drain `onOk` last. `value` is this state's own
             // store and is never moved out of: a `then()` attached *after*
             // this point (attachThen's `ready && value` branch) reads it
-            // again, and moving out of it left it engaged but moved-from so a
-            // later attacher silently observed a husk (morph#520). The value
+            // again, and moving out of it would leave it engaged but
+            // moved-from, so a later attacher would silently observe a husk. The value
             // is observed, never consumed -- structurally, now that no
             // dispatch path can take it.
             //
@@ -155,7 +155,7 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
             // `exception_ptr` straight through (`.onError([state](auto e) {
             // state->setException(e); })`) without inspecting it, so a guard
             // at one producer would leave every other one able to reintroduce
-            // the same wedge. See issue #347.
+            // the same wedge.
             error = exc ? exc
                         : std::make_exception_ptr(
                               std::runtime_error{"completion rejected with no exception (null exception_ptr)"});
@@ -192,11 +192,10 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
             std::scoped_lock const lock{mtx};
             if (ready && value) {
                 // Keep the state alive and read `value` in place rather than
-                // snapshotting it. The old shape copied `*value` into
-                // `savedVal` and then captured `savedVal` *by copy* before
-                // moving it into the handler -- two copies where the handler
-                // asked for at most one, and the reason a late attacher cost
-                // 2 copies rather than 1 (morph#553).
+                // snapshotting it. Copying `*value` into a local and then
+                // capturing that local *by copy* before moving it into the
+                // handler costs two copies where the handler asked for at most
+                // one, so a late attacher would pay 2 rather than 1.
                 fireNow = [self = this->shared_from_this(), handler = std::move(handler)]() { handler(*self->value); };
             } else if (!ready) {
                 onOk.push_back(std::move(handler));
@@ -255,10 +254,10 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
 /// completion state, instead of a second, erased completion whose only job is
 /// to be forwarded into the first.
 ///
-/// That forwarding cost six heap allocations per dispatch — the erased state,
+/// Such forwarding costs six heap allocations per dispatch — the erased state,
 /// the `.then` and `.onError` closures, their two handler vectors, and one of
-/// the two posted settle tasks — of the 14.06 a local round trip took. Through
-/// a sink it is one (morph#572, Part B).
+/// the two posted settle tasks — against the 14.06 a local round trip takes.
+/// Through a sink it is one.
 ///
 /// @par Contract for implementers
 /// - **Settle once.** `settleValue` and `settleException` are mutually
@@ -579,7 +578,7 @@ public:
 
     /// @brief Constructs a `Completion<T>`/`Promise<T>` pair sharing one settleable state.
     ///
-    /// The public "settleable promise" seam (issue #55): lets a caller — typically
+    /// The public "settleable promise" seam: lets a caller — typically
     /// test code — construct a `Completion<T>` it can resolve or reject on demand,
     /// without a full `Bridge`/`IBackend` round trip and without reaching into
     /// `morph::async::detail::CompletionState<T>`. Everything `Completion(state,

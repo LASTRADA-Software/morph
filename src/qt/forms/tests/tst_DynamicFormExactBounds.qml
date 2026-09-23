@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The client-side integer bounds gate at INT64 extremes (morph#213).
+// The client-side integer bounds gate at INT64 extremes.
 //
 // `minimum`/`maximum` reach this renderer through
 // `JSON.parse(controller.schemasJson)`, which every shipped app does, so an
@@ -53,17 +53,17 @@ TestCase {
         required: ["id"]
     })
 
-    // The same field with no exact companions: the pre-#213 shape, kept so the
-    // numeric fallback path stays covered.
+    // The same field with no exact companions, so the numeric fallback path
+    // stays covered.
     property var smallBoundSchema: ({
         properties: { n: { type: "integer", minimum: -10, maximum: 10, "x-order": 0 } },
         required: ["n"]
     })
 
-    // The anyOf shape: a bare std::optional<std::int64_t>. Before morph#189 this
-    // had no resolved type at all, so no bounds applied and the gate never ran.
-    // Now that resolveProp follows the non-null anyOf branch, the field inherits
-    // $defs/int64_t's bounds -- including the exact companions (morph#213).
+    // The anyOf shape: a bare std::optional<std::int64_t>. Without a resolved
+    // type no bounds apply and the gate never runs; because resolveProp follows
+    // the non-null anyOf branch, the field inherits $defs/int64_t's bounds --
+    // including the exact companions.
     property var anyOfI64Schema: ({
         "$defs": {
             "int64_t": {
@@ -174,9 +174,9 @@ TestCase {
 
     function test_anyOf_field_inherits_the_exact_bounds_and_rejects_past_them() {
         var form = createTemporaryObject(anyOfI64Form, testCase)
-        // Measured on morph#189's branch before this fix: an anyOf int64 field
-        // admitted INT64_MAX + 1, because the bound it compared against had been
-        // rounded up by JSON.parse to exactly that value.
+        // Without the exact companions, an anyOf int64 field admits
+        // INT64_MAX + 1, because the bound it compares against has been rounded
+        // up by JSON.parse to exactly that value.
         typeInto(form, "field_optId", "9223372036854775808")
         compare(form.ready, false)
     }
