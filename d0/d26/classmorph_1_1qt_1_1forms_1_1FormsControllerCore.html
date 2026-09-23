@@ -139,7 +139,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a9a8ab11ed270dd7cce1614f19a858ef7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">bodyJson</code> as <code class="param">actionType's</code> body via the generic <span class="tt">executeJson</span> path, invoking <code class="param">onReply</code> / <code class="param">onError</code> on the GUI thread once the reply arrives.  <br /></td></tr>
 <tr class="memitem:a1b6eed5ade78c6e44ffc6da9107e4a5c" id="r_a1b6eed5ade78c6e44ffc6da9107e4a5c"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
 <tr class="memitem:a1b6eed5ade78c6e44ffc6da9107e4a5c template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1b6eed5ade78c6e44ffc6da9107e4a5c">fetchOptions</a> (const std::string &amp;optionsAction, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td></tr>
-<tr class="memdesc:a1b6eed5ade78c6e44ffc6da9107e4a5c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses &ndash; <code class="param">optionsAction</code> is never hardcoded, unlike the pre-factoring example controller, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body.  <br /></td></tr>
+<tr class="memdesc:a1b6eed5ade78c6e44ffc6da9107e4a5c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses. <code class="param">optionsAction</code> is a parameter rather than a hardcoded id, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Model&gt;<br />
@@ -151,7 +151,7 @@ class morph::qt::forms::FormsControllerCore&lt; Model &gt;</div><p>Owns, or comp
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a7b6c4eacf300ebaa94a641847a7aaad5" name="a7b6c4eacf300ebaa94a641847a7aaad5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7b6c4eacf300ebaa94a641847a7aaad5">&#9670;&#160;</a></span>FormsControllerCore() <span class="overload">[1/2]</span></h2>
@@ -186,7 +186,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +235,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -268,7 +268,7 @@ template&lt;typename Model&gt; </div>
 <p>The <span class="tt">{actionType: schema}</span> JSON supplied at construction. </p>
 <dl class="section return"><dt>Returns</dt><dd>A reference to the cached schema-set JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -331,7 +331,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +376,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses &ndash; <code class="param">optionsAction</code> is never hardcoded, unlike the pre-factoring example controller, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body. </p>
+<p>Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses. <code class="param">optionsAction</code> is a parameter rather than a hardcoded id, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">OnReply</td><td>Callable invoked with the options-action result JSON on success. </td></tr>
@@ -394,7 +394,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>

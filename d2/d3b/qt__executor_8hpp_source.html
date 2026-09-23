@@ -149,13 +149,13 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d3b/qt__exe
 <div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">/// *delivered*. Without a guard, an event still on the Qt queue at teardown is</span></div>
 <div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">/// delivered against a freed executor and reads `_context` off freed memory.</span></div>
 <div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">///</span></div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">/// That is not hypothetical. `Bridge::executeVia` chains three `Completion`</span></div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">/// objects per dispatched action, each settled from inside the previous one&#39;s</span></div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// delivered callback, so a caller waiting only on its own top-level completion</span></div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// can observe &quot;done&quot; while an intermediate post is still queued. When that</span></div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">/// stale event is finally pumped, its body calls `post()` for the next link in</span></div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment">/// the chain — against an executor that no longer exists. It segfaults on an</span></div>
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment">/// ordinary uninstrumented build, not only under a sanitizer.</span></div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">/// `Bridge::executeVia` reaches that state on an ordinary run: it chains three</span></div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">/// `Completion` objects per dispatched action, each settled from inside the</span></div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// previous one&#39;s delivered callback, so a caller waiting only on its own</span></div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// top-level completion can observe &quot;done&quot; while an intermediate post is still</span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">/// queued. When that stale event is pumped, its body calls `post()` for the</span></div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment">/// next link in the chain — against a freed executor. It segfaults on an</span></div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment">/// uninstrumented build, not only under a sanitizer.</span></div>
 <div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">///</span></div>
 <div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment">/// Each queued task therefore carries a weak observer of this executor&#39;s</span></div>
 <div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span><span class="comment">/// lifetime and does nothing if the executor is already gone. Dropping is the</span></div>
@@ -166,8 +166,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d3b/qt__exe
 <div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="comment">/// **Boundary of the guarantee.** The check assumes this executor is destroyed</span></div>
 <div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="comment">/// on the same thread that runs its context&#39;s event loop, which holds for every</span></div>
 <div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span><span class="comment">/// owner in this repository. Destroying one from another thread while its loop</span></div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span><span class="comment">/// is mid-delivery still needs external synchronisation: this closes the &quot;torn</span></div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span><span class="comment">/// down with events still queued&quot; hole, not a genuine cross-thread race.</span></div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span><span class="comment">/// is mid-delivery still needs external synchronisation: the token covers</span></div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span><span class="comment">/// teardown with events still queued, not a genuine cross-thread race.</span></div>
 <div class="foldopen" id="foldopen00049" data-start="{" data-end="};">
 <div class="line"><a id="l00049" name="l00049"></a><span class="lineno"><a class="line" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html">   49</a></span><span class="keyword">class </span><a class="code hl_function" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a4f32eb604dfa5c0ea08bc945e4a2391b">QtExecutor</a> : <span class="keyword">public</span> <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> {</div>
 <div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span><span class="keyword">public</span>:<span class="comment"></span></div>
@@ -177,8 +177,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d3b/qt__exe
 <div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">    /// tasks; `QMetaObject::invokeMethod` dispatches to whichever thread</span></div>
 <div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">    /// `context-&gt;thread()` reports at the time each task is posted, so tasks</span></div>
 <div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">    /// posted after `context` is moved to a different thread run there.</span></div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">    /// Defaults to `QCoreApplication::instance()`, preserving the previous</span></div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">    /// GUI-thread-only behaviour. Passing `nullptr` (e.g. when constructed</span></div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">    /// Defaults to `QCoreApplication::instance()`, i.e. the GUI thread.</span></div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">    /// Passing `nullptr` (e.g. when constructed</span></div>
 <div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">    /// before `QCoreApplication` exists) makes `post()` a no-op, matching</span></div>
 <div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">    /// `QMetaObject::invokeMethod`&#39;s own handling of a null target. Borrowed,</span></div>
 <div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">    /// not owned: a non-null @p context must outlive this executor.</span></div>

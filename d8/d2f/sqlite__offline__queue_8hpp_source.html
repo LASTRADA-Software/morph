@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span><span class="keyword">public</span>:</div>
 <div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>    <span class="keyword">using </span><a class="code hl_function" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">IOfflineQueue::enqueue</a>;  <span class="comment">// keep the two-arg overload visible</span></div>
 <div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="comment"></span> </div>
-<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment">    /// @brief `PRAGMA busy_timeout` set at construction (morph#532): how long</span></div>
+<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment">    /// @brief `PRAGMA busy_timeout` set at construction: how long</span></div>
 <div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span><span class="comment">    ///        a statement blocks on `SQLITE_BUSY` before giving up, in</span></div>
 <div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="comment">    ///        milliseconds.</span></div>
 <div class="line"><a id="l00117" name="l00117"></a><span class="lineno"><a class="line" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6fb30c6097f183febd73b4809415c40c">  117</a></span>    <span class="keyword">static</span> <span class="keyword">constexpr</span> <span class="keywordtype">int</span> <a class="code hl_variable" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6fb30c6097f183febd73b4809415c40c">kBusyTimeoutMillis</a> = 5000;</div>
@@ -366,7 +366,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span> </div>
 <div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>            execOrThrow(<span class="stringliteral">&quot;PRAGMA journal_mode=WAL;&quot;</span>);</div>
 <div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>            <span class="comment">// execOrThrow() discards sqlite3_exec&#39;s row callback, so a silent</span></div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>            <span class="comment">// fallback would otherwise go unnoticed (morph#532). Read the</span></div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>            <span class="comment">// fallback would otherwise go unnoticed. Read the</span></div>
 <div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>            <span class="comment">// pragma back through a real prepared statement rather than</span></div>
 <div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            <span class="comment">// trusting the set.</span></div>
 <div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>            <span class="comment">//</span></div>
@@ -410,9 +410,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>            <span class="comment">// sqlite3_open() above creates `_path` (and, once journal_mode=WAL</span></div>
 <div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>            <span class="comment">// took, its &quot;-wal&quot;/&quot;-shm&quot; siblings) if it did not already exist --</span></div>
 <div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>            <span class="comment">// a fresh directory entry that SQLite&#39;s own internal fsyncs of the</span></div>
-<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>            <span class="comment">// *file&#39;s* contents never make durable, the identical</span></div>
-<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>            <span class="comment">// directory-vs-file-fsync gap morph#532 closed for</span></div>
-<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>            <span class="comment">// `FileActionLog`/`FileOfflineQueue` (see `FileIoOps::syncPath`&#39;s</span></div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>            <span class="comment">// *file&#39;s* contents never make durable -- the identical</span></div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>            <span class="comment">// directory-vs-file-fsync gap</span></div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>            <span class="comment">// `FileActionLog`/`FileOfflineQueue` close (see `FileIoOps::syncPath`&#39;s</span></div>
 <div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>            <span class="comment">// own docs). Unconditional: harmless when the file already</span></div>
 <div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>            <span class="comment">// existed, since syncing an unchanged directory is a cheap no-op.</span></div>
 <div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>            <span class="comment">//</span></div>
@@ -639,11 +639,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00495" name="l00495"></a><span class="lineno">  495</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
 <div class="line"><a id="l00496" name="l00496"></a><span class="lineno">  496</span>        <span class="comment">// `WHERE NOT EXISTS (...)` rather than a bare UPDATE: the partial</span></div>
 <div class="line"><a id="l00497" name="l00497"></a><span class="lineno">  497</span>        <span class="comment">// unique index `ix_queue_idem` rejects stamping a non-empty key a</span></div>
-<div class="line"><a id="l00498" name="l00498"></a><span class="lineno">  498</span>        <span class="comment">// pending row already holds, and a bare UPDATE turned that into a</span></div>
+<div class="line"><a id="l00498" name="l00498"></a><span class="lineno">  498</span>        <span class="comment">// pending row already holds, and a bare UPDATE would turn that into a</span></div>
 <div class="line"><a id="l00499" name="l00499"></a><span class="lineno">  499</span>        <span class="comment">// thrown SqliteOfflineQueueError -- while this class&#39;s own</span></div>
 <div class="line"><a id="l00500" name="l00500"></a><span class="lineno">  500</span>        <span class="comment">// `enqueue(payload, key)` resolves the identical conflict silently, by</span></div>
-<div class="line"><a id="l00501" name="l00501"></a><span class="lineno">  501</span>        <span class="comment">// keeping the existing row (morph#249). Same conflict, two answers,</span></div>
-<div class="line"><a id="l00502" name="l00502"></a><span class="lineno">  502</span>        <span class="comment">// and only one of them matched the documented dedup contract.</span></div>
+<div class="line"><a id="l00501" name="l00501"></a><span class="lineno">  501</span>        <span class="comment">// keeping the existing row. Same conflict, two answers, and only one of</span></div>
+<div class="line"><a id="l00502" name="l00502"></a><span class="lineno">  502</span>        <span class="comment">// them matches the documented dedup contract.</span></div>
 <div class="line"><a id="l00503" name="l00503"></a><span class="lineno">  503</span>        <span class="comment">//</span></div>
 <div class="line"><a id="l00504" name="l00504"></a><span class="lineno">  504</span>        <span class="comment">// Throwing also bought nothing. This hook is called by the *base*</span></div>
 <div class="line"><a id="l00505" name="l00505"></a><span class="lineno">  505</span>        <span class="comment">// `IOfflineQueue::enqueue(payload, key)` default, which has already</span></div>
@@ -693,7 +693,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00548" name="l00548"></a><span class="lineno">  548</span>    <span class="keywordtype">void</span> bindText(sqlite3_stmt* stmt, <span class="keywordtype">int</span> index, <span class="keyword">const</span> std::string&amp; value)<span class="keyword"> const </span>{</div>
 <div class="line"><a id="l00549" name="l00549"></a><span class="lineno">  549</span>        <span class="comment">// An explicit length (not -1) is required so a NUL inside `value` --</span></div>
 <div class="line"><a id="l00550" name="l00550"></a><span class="lineno">  550</span>        <span class="comment">// legitimate, since payload/idempotencyKey are opaque strings the</span></div>
-<div class="line"><a id="l00551" name="l00551"></a><span class="lineno">  551</span>        <span class="comment">// caller controls the serialisation of (morph#531) -- doesn&#39;t tell</span></div>
+<div class="line"><a id="l00551" name="l00551"></a><span class="lineno">  551</span>        <span class="comment">// caller controls the serialisation of -- doesn&#39;t tell</span></div>
 <div class="line"><a id="l00552" name="l00552"></a><span class="lineno">  552</span>        <span class="comment">// SQLite to measure only up to that byte and silently truncate.</span></div>
 <div class="line"><a id="l00553" name="l00553"></a><span class="lineno">  553</span>        <span class="keywordflow">if</span> (value.size() &gt; <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(INT_MAX)) {</div>
 <div class="line"><a id="l00554" name="l00554"></a><span class="lineno">  554</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html">SqliteOfflineQueueError</a>{<span class="stringliteral">&quot;SqliteOfflineQueue: value exceeds INT_MAX bytes&quot;</span>};</div>
@@ -726,58 +726,57 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00581" name="l00581"></a><span class="lineno">  581</span>        <span class="comment">// sqlite3_column_bytes() gives the real stored length; constructing a</span></div>
 <div class="line"><a id="l00582" name="l00582"></a><span class="lineno">  582</span>        <span class="comment">// std::string from the raw `const char*` alone would stop at the</span></div>
 <div class="line"><a id="l00583" name="l00583"></a><span class="lineno">  583</span>        <span class="comment">// first NUL and silently truncate a NUL-bearing payload or</span></div>
-<div class="line"><a id="l00584" name="l00584"></a><span class="lineno">  584</span>        <span class="comment">// idempotency key on the way back out (morph#531) -- the read-side</span></div>
-<div class="line"><a id="l00585" name="l00585"></a><span class="lineno">  585</span>        <span class="comment">// half of the same truncation bindText() above fixes on the write</span></div>
-<div class="line"><a id="l00586" name="l00586"></a><span class="lineno">  586</span>        <span class="comment">// side.</span></div>
-<div class="line"><a id="l00587" name="l00587"></a><span class="lineno">  587</span>        <span class="keyword">const</span> <span class="keyword">auto</span>* text = <span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span><span class="keywordtype">char</span>*<span class="keyword">&gt;</span>(sqlite3_column_text(stmt, index));</div>
-<div class="line"><a id="l00588" name="l00588"></a><span class="lineno">  588</span>        <span class="keywordflow">return</span> text != <span class="keyword">nullptr</span> ? std::string{text, <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(sqlite3_column_bytes(stmt, index))}</div>
-<div class="line"><a id="l00589" name="l00589"></a><span class="lineno">  589</span>                               : std::string{};</div>
-<div class="line"><a id="l00590" name="l00590"></a><span class="lineno">  590</span>    }</div>
-<div class="line"><a id="l00591" name="l00591"></a><span class="lineno">  591</span> </div>
-<div class="line"><a id="l00592" name="l00592"></a><span class="lineno">  592</span>    <span class="keyword">static</span> std::int64_t nowMillis() {</div>
-<div class="line"><a id="l00593" name="l00593"></a><span class="lineno">  593</span>        <span class="keywordflow">return</span> std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</div>
-<div class="line"><a id="l00594" name="l00594"></a><span class="lineno">  594</span>                   std::chrono::system_clock::now().time_since_epoch())</div>
-<div class="line"><a id="l00595" name="l00595"></a><span class="lineno">  595</span>            .count();</div>
-<div class="line"><a id="l00596" name="l00596"></a><span class="lineno">  596</span>    }</div>
-<div class="line"><a id="l00597" name="l00597"></a><span class="lineno">  597</span><span class="comment"></span> </div>
-<div class="line"><a id="l00598" name="l00598"></a><span class="lineno">  598</span><span class="comment">    /// @brief Returns the current row count. Caller must hold `_mtx`.</span></div>
-<div class="line"><a id="l00599" name="l00599"></a><span class="lineno">  599</span><span class="comment">    /// @return `COUNT(*)` against `morph_offline_queue`.</span></div>
-<div class="line"><a id="l00600" name="l00600"></a><span class="lineno">  600</span>    std::size_t countLocked()<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00601" name="l00601"></a><span class="lineno">  601</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;SELECT COUNT(*) FROM morph_offline_queue;&quot;</span>)};</div>
-<div class="line"><a id="l00602" name="l00602"></a><span class="lineno">  602</span>        sqlite3_step(guard.get());</div>
-<div class="line"><a id="l00603" name="l00603"></a><span class="lineno">  603</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 0));</div>
-<div class="line"><a id="l00604" name="l00604"></a><span class="lineno">  604</span>    }</div>
-<div class="line"><a id="l00605" name="l00605"></a><span class="lineno">  605</span><span class="comment"></span> </div>
-<div class="line"><a id="l00606" name="l00606"></a><span class="lineno">  606</span><span class="comment">    /// @brief Throws `OfflineQueueFullError` if the queue is already at</span></div>
-<div class="line"><a id="l00607" name="l00607"></a><span class="lineno">  607</span><span class="comment">    ///        `maxDepth()`. Caller must hold `_mtx`. No-op if unbounded.</span></div>
-<div class="line"><a id="l00608" name="l00608"></a><span class="lineno">  608</span>    <span class="keywordtype">void</span> checkCapacityLocked()<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00609" name="l00609"></a><span class="lineno">  609</span>        <span class="keywordflow">if</span> (!_maxDepth) {</div>
-<div class="line"><a id="l00610" name="l00610"></a><span class="lineno">  610</span>            <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00611" name="l00611"></a><span class="lineno">  611</span>        }</div>
-<div class="line"><a id="l00612" name="l00612"></a><span class="lineno">  612</span>        std::size_t <span class="keyword">const</span> current = countLocked();</div>
-<div class="line"><a id="l00613" name="l00613"></a><span class="lineno">  613</span>        <span class="keywordflow">if</span> (current &gt;= *_maxDepth) {</div>
-<div class="line"><a id="l00614" name="l00614"></a><span class="lineno">  614</span>            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,</div>
-<div class="line"><a id="l00615" name="l00615"></a><span class="lineno">  615</span>                                                 <span class="keyword">static_cast&lt;</span><span class="keywordtype">double</span><span class="keyword">&gt;</span>(current));</div>
-<div class="line"><a id="l00616" name="l00616"></a><span class="lineno">  616</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html">OfflineQueueFullError</a>{*_maxDepth, current};</div>
-<div class="line"><a id="l00617" name="l00617"></a><span class="lineno">  617</span>        }</div>
-<div class="line"><a id="l00618" name="l00618"></a><span class="lineno">  618</span>    }</div>
-<div class="line"><a id="l00619" name="l00619"></a><span class="lineno">  619</span> </div>
-<div class="line"><a id="l00620" name="l00620"></a><span class="lineno">  620</span>    std::filesystem::path _path;</div>
-<div class="line"><a id="l00621" name="l00621"></a><span class="lineno">  621</span>    <span class="keyword">mutable</span> sqlite3* _db = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00622" name="l00622"></a><span class="lineno">  622</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
-<div class="line"><a id="l00623" name="l00623"></a><span class="lineno">  623</span>    std::optional&lt;std::size_t&gt; _maxDepth;</div>
-<div class="line"><a id="l00624" name="l00624"></a><span class="lineno">  624</span>    ::morph::core::FileIoOps _io;</div>
-<div class="line"><a id="l00625" name="l00625"></a><span class="lineno">  625</span>    Synchronous _synchronous{Synchronous::normal};</div>
-<div class="line"><a id="l00626" name="l00626"></a><span class="lineno">  626</span>    std::chrono::milliseconds _busyTimeout{kBusyTimeoutMillis};</div>
-<div class="line"><a id="l00627" name="l00627"></a><span class="lineno">  627</span>    <span class="comment">// SQLite&#39;s numeric synchronous level, read back at construction.</span></div>
-<div class="line"><a id="l00628" name="l00628"></a><span class="lineno">  628</span>    <span class="keywordtype">int</span> _synchronousLevel{-1};</div>
-<div class="line"><a id="l00629" name="l00629"></a><span class="lineno">  629</span>    <span class="comment">// The mode the database actually ended up in, as read back at construction</span></div>
-<div class="line"><a id="l00630" name="l00630"></a><span class="lineno">  630</span>    <span class="comment">// -- &quot;wal&quot; normally, something else on a filesystem that cannot support it.</span></div>
-<div class="line"><a id="l00631" name="l00631"></a><span class="lineno">  631</span>    std::string _journalMode;</div>
-<div class="line"><a id="l00632" name="l00632"></a><span class="lineno">  632</span>};</div>
+<div class="line"><a id="l00584" name="l00584"></a><span class="lineno">  584</span>        <span class="comment">// idempotency key on the way back out -- the read-side half of the</span></div>
+<div class="line"><a id="l00585" name="l00585"></a><span class="lineno">  585</span>        <span class="comment">// same truncation bindText() above prevents on the write side.</span></div>
+<div class="line"><a id="l00586" name="l00586"></a><span class="lineno">  586</span>        <span class="keyword">const</span> <span class="keyword">auto</span>* text = <span class="keyword">reinterpret_cast&lt;</span><span class="keyword">const </span><span class="keywordtype">char</span>*<span class="keyword">&gt;</span>(sqlite3_column_text(stmt, index));</div>
+<div class="line"><a id="l00587" name="l00587"></a><span class="lineno">  587</span>        <span class="keywordflow">return</span> text != <span class="keyword">nullptr</span> ? std::string{text, <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(sqlite3_column_bytes(stmt, index))}</div>
+<div class="line"><a id="l00588" name="l00588"></a><span class="lineno">  588</span>                               : std::string{};</div>
+<div class="line"><a id="l00589" name="l00589"></a><span class="lineno">  589</span>    }</div>
+<div class="line"><a id="l00590" name="l00590"></a><span class="lineno">  590</span> </div>
+<div class="line"><a id="l00591" name="l00591"></a><span class="lineno">  591</span>    <span class="keyword">static</span> std::int64_t nowMillis() {</div>
+<div class="line"><a id="l00592" name="l00592"></a><span class="lineno">  592</span>        <span class="keywordflow">return</span> std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</div>
+<div class="line"><a id="l00593" name="l00593"></a><span class="lineno">  593</span>                   std::chrono::system_clock::now().time_since_epoch())</div>
+<div class="line"><a id="l00594" name="l00594"></a><span class="lineno">  594</span>            .count();</div>
+<div class="line"><a id="l00595" name="l00595"></a><span class="lineno">  595</span>    }</div>
+<div class="line"><a id="l00596" name="l00596"></a><span class="lineno">  596</span><span class="comment"></span> </div>
+<div class="line"><a id="l00597" name="l00597"></a><span class="lineno">  597</span><span class="comment">    /// @brief Returns the current row count. Caller must hold `_mtx`.</span></div>
+<div class="line"><a id="l00598" name="l00598"></a><span class="lineno">  598</span><span class="comment">    /// @return `COUNT(*)` against `morph_offline_queue`.</span></div>
+<div class="line"><a id="l00599" name="l00599"></a><span class="lineno">  599</span>    std::size_t countLocked()<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00600" name="l00600"></a><span class="lineno">  600</span>        detail::StatementGuard guard{prepare(<span class="stringliteral">&quot;SELECT COUNT(*) FROM morph_offline_queue;&quot;</span>)};</div>
+<div class="line"><a id="l00601" name="l00601"></a><span class="lineno">  601</span>        sqlite3_step(guard.get());</div>
+<div class="line"><a id="l00602" name="l00602"></a><span class="lineno">  602</span>        <span class="keywordflow">return</span> <span class="keyword">static_cast&lt;</span>std::size_t<span class="keyword">&gt;</span>(sqlite3_column_int64(guard.get(), 0));</div>
+<div class="line"><a id="l00603" name="l00603"></a><span class="lineno">  603</span>    }</div>
+<div class="line"><a id="l00604" name="l00604"></a><span class="lineno">  604</span><span class="comment"></span> </div>
+<div class="line"><a id="l00605" name="l00605"></a><span class="lineno">  605</span><span class="comment">    /// @brief Throws `OfflineQueueFullError` if the queue is already at</span></div>
+<div class="line"><a id="l00606" name="l00606"></a><span class="lineno">  606</span><span class="comment">    ///        `maxDepth()`. Caller must hold `_mtx`. No-op if unbounded.</span></div>
+<div class="line"><a id="l00607" name="l00607"></a><span class="lineno">  607</span>    <span class="keywordtype">void</span> checkCapacityLocked()<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00608" name="l00608"></a><span class="lineno">  608</span>        <span class="keywordflow">if</span> (!_maxDepth) {</div>
+<div class="line"><a id="l00609" name="l00609"></a><span class="lineno">  609</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00610" name="l00610"></a><span class="lineno">  610</span>        }</div>
+<div class="line"><a id="l00611" name="l00611"></a><span class="lineno">  611</span>        std::size_t <span class="keyword">const</span> current = countLocked();</div>
+<div class="line"><a id="l00612" name="l00612"></a><span class="lineno">  612</span>        <span class="keywordflow">if</span> (current &gt;= *_maxDepth) {</div>
+<div class="line"><a id="l00613" name="l00613"></a><span class="lineno">  613</span>            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,</div>
+<div class="line"><a id="l00614" name="l00614"></a><span class="lineno">  614</span>                                                 <span class="keyword">static_cast&lt;</span><span class="keywordtype">double</span><span class="keyword">&gt;</span>(current));</div>
+<div class="line"><a id="l00615" name="l00615"></a><span class="lineno">  615</span>            <span class="keywordflow">throw</span> <a class="code hl_struct" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html">OfflineQueueFullError</a>{*_maxDepth, current};</div>
+<div class="line"><a id="l00616" name="l00616"></a><span class="lineno">  616</span>        }</div>
+<div class="line"><a id="l00617" name="l00617"></a><span class="lineno">  617</span>    }</div>
+<div class="line"><a id="l00618" name="l00618"></a><span class="lineno">  618</span> </div>
+<div class="line"><a id="l00619" name="l00619"></a><span class="lineno">  619</span>    std::filesystem::path _path;</div>
+<div class="line"><a id="l00620" name="l00620"></a><span class="lineno">  620</span>    <span class="keyword">mutable</span> sqlite3* _db = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00621" name="l00621"></a><span class="lineno">  621</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
+<div class="line"><a id="l00622" name="l00622"></a><span class="lineno">  622</span>    std::optional&lt;std::size_t&gt; _maxDepth;</div>
+<div class="line"><a id="l00623" name="l00623"></a><span class="lineno">  623</span>    ::morph::core::FileIoOps _io;</div>
+<div class="line"><a id="l00624" name="l00624"></a><span class="lineno">  624</span>    Synchronous _synchronous{Synchronous::normal};</div>
+<div class="line"><a id="l00625" name="l00625"></a><span class="lineno">  625</span>    std::chrono::milliseconds _busyTimeout{kBusyTimeoutMillis};</div>
+<div class="line"><a id="l00626" name="l00626"></a><span class="lineno">  626</span>    <span class="comment">// SQLite&#39;s numeric synchronous level, read back at construction.</span></div>
+<div class="line"><a id="l00627" name="l00627"></a><span class="lineno">  627</span>    <span class="keywordtype">int</span> _synchronousLevel{-1};</div>
+<div class="line"><a id="l00628" name="l00628"></a><span class="lineno">  628</span>    <span class="comment">// The mode the database actually ended up in, as read back at construction</span></div>
+<div class="line"><a id="l00629" name="l00629"></a><span class="lineno">  629</span>    <span class="comment">// -- &quot;wal&quot; normally, something else on a filesystem that cannot support it.</span></div>
+<div class="line"><a id="l00630" name="l00630"></a><span class="lineno">  630</span>    std::string _journalMode;</div>
+<div class="line"><a id="l00631" name="l00631"></a><span class="lineno">  631</span>};</div>
 </div>
-<div class="line"><a id="l00633" name="l00633"></a><span class="lineno">  633</span> </div>
-<div class="line"><a id="l00634" name="l00634"></a><span class="lineno">  634</span>}  <span class="comment">// namespace morph::offline</span></div>
+<div class="line"><a id="l00632" name="l00632"></a><span class="lineno">  632</span> </div>
+<div class="line"><a id="l00633" name="l00633"></a><span class="lineno">  633</span>}  <span class="comment">// namespace morph::offline</span></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1Attempts_html"><div class="ttname"><a href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html">morph::offline::Attempts</a></div><div class="ttdoc">A replay attempt count, as a type distinct from a queue item id.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00035">offline_queue.hpp:35</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1Attempts_html_afada40b93deb9a3beeec9945e128af5a"><div class="ttname"><a href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html#afada40b93deb9a3beeec9945e128af5a">morph::offline::Attempts::value</a></div><div class="ttdeci">constexpr std::uint32_t value() const noexcept</div><div class="ttdoc">Returns the wrapped count.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00057">offline_queue.hpp:57</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html">morph::offline::SqliteOfflineQueue</a></div><div class="ttdoc">Reference SQLite-backed IOfflineQueue: persists payload, idempotencyKey, and attempts across process ...</div><div class="ttdef"><b>Definition</b> <a href="#l00110">sqlite_offline_queue.hpp:110</a></div></div>
@@ -785,7 +784,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a502fb36fc3b6d06d0b71562886764d70"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">morph::offline::SqliteOfflineQueue::maxDepth</a></div><div class="ttdeci">std::optional&lt; std::size_t &gt; maxDepth() const override</div><div class="ttdoc">Returns the configured maximum depth, or std::nullopt if unbounded.</div><div class="ttdef"><b>Definition</b> <a href="#l00484">sqlite_offline_queue.hpp:484</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a567cf64f346792ca897d326b55b21685"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a567cf64f346792ca897d326b55b21685">morph::offline::SqliteOfflineQueue::synchronousLevel</a></div><div class="ttdeci">int synchronousLevel() const noexcept</div><div class="ttdoc">SQLite&#39;s numeric PRAGMA synchronous level for this connection, as read back at construction.</div><div class="ttdef"><b>Definition</b> <a href="#l00143">sqlite_offline_queue.hpp:143</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a6ba81485a0911150f8aa9919869fa67c"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">morph::offline::SqliteOfflineQueue::size</a></div><div class="ttdeci">std::size_t size() const override</div><div class="ttdoc">Returns the number of pending rows. Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="#l00477">sqlite_offline_queue.hpp:477</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a6fb30c6097f183febd73b4809415c40c"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6fb30c6097f183febd73b4809415c40c">morph::offline::SqliteOfflineQueue::kBusyTimeoutMillis</a></div><div class="ttdeci">static constexpr int kBusyTimeoutMillis</div><div class="ttdoc">PRAGMA busy_timeout set at construction (morph#532): how long a statement blocks on SQLITE_BUSY befor...</div><div class="ttdef"><b>Definition</b> <a href="#l00117">sqlite_offline_queue.hpp:117</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a6fb30c6097f183febd73b4809415c40c"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6fb30c6097f183febd73b4809415c40c">morph::offline::SqliteOfflineQueue::kBusyTimeoutMillis</a></div><div class="ttdeci">static constexpr int kBusyTimeoutMillis</div><div class="ttdoc">PRAGMA busy_timeout set at construction: how long a statement blocks on SQLITE_BUSY before giving up,...</div><div class="ttdef"><b>Definition</b> <a href="#l00117">sqlite_offline_queue.hpp:117</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a75a81df376f6ce54a8acc5e076881912"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a75a81df376f6ce54a8acc5e076881912">morph::offline::SqliteOfflineQueue::setAttempts</a></div><div class="ttdeci">void setAttempts(uint64_t itemId, Attempts attempts) override</div><div class="ttdoc">Persists an updated attempt count for itemId. No-op if absent.</div><div class="ttdef"><b>Definition</b> <a href="#l00467">sqlite_offline_queue.hpp:467</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a7cacb4aae20ff8f48a80f6277d4d159e"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7cacb4aae20ff8f48a80f6277d4d159e">morph::offline::SqliteOfflineQueue::SqliteOfflineQueue</a></div><div class="ttdeci">SqliteOfflineQueue(std::filesystem::path path, std::optional&lt; std::size_t &gt; maxDepth=std::nullopt, ::morph::core::FileIoOps ioOps={}, Synchronous synchronous=Synchronous::normal, std::chrono::milliseconds busyTimeout=std::chrono::milliseconds{kBusyTimeoutMillis})</div><div class="ttdoc">Opens (or creates) the queue database at path, creating the schema if it does not already exist.</div><div class="ttdef"><b>Definition</b> <a href="#l00184">sqlite_offline_queue.hpp:184</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1SqliteOfflineQueue_html_a7d84c59b8a7487daff9ae3d10b8ae868"><div class="ttname"><a href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">morph::offline::SqliteOfflineQueue::drain</a></div><div class="ttdeci">std::vector&lt; QueueItem &gt; drain() const override</div><div class="ttdoc">Returns all pending rows in ascending-id (enqueue) order.</div><div class="ttdef"><b>Definition</b> <a href="#l00426">sqlite_offline_queue.hpp:426</a></div></div>

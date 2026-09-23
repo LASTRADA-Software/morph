@@ -218,9 +218,9 @@ Sharing&gt;</span> instantiation, so <span class="tt">kShared</span> resolves in
 </dl>
 <p>Out-of-line definition of <a class="el" href="#a117beb21e93ba420dbc7dd9692cbac20" title="Registers the executors for (Model, Action) under the given string ids.">ActionExecuteRegistry::registerAction</a>. Placed here after <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a> is fully defined so we can safely cast and call its methods.</p>
 <p>Builds one executor per <span class="tt">Sharing</span> policy the framework defines (<span class="tt"><a class="el" href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html" title="BridgeHandler sharing policy: private, one instance per handler.">NoSharing</a></span>, <span class="tt"><a class="el" href="../../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html" title="BridgeHandler sharing policy: joins the shared instance directory.">AllowShared</a></span>) from the same generic-lambda template, <span class="tt">static_cast</span>ing <span class="tt">handlerVoid</span> to the matching <span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a>&lt;Model,
-Sharing&gt;*</span> in each — see issue #68 / bridge.md's design-decision entry for why a single <span class="tt"><a class="el" href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html" title="BridgeHandler sharing policy: private, one instance per handler.">NoSharing</a></span>-only executor is unsound for a shared handler. </p>
+Sharing&gt;*</span> in each — see bridge.md's design-decision entry for why a single <span class="tt"><a class="el" href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html" title="BridgeHandler sharing policy: private, one instance per handler.">NoSharing</a></span>-only executor is unsound for a shared handler. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03323">3323</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03293">3293</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +317,7 @@ template&lt;typename Sharing&gt; </div>
 <p>Returns the process-level singleton registry. </p>
 <dl class="section return"><dt>Returns</dt><dd>Reference to the singleton <span class="tt"><a class="el" href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html" title="Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type is only known by its r...">ActionExecuteRegistry</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00181">181</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

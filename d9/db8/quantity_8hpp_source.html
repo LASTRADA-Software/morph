@@ -163,8 +163,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span><span class="comment">/// `named()` discards the name — so a build that never set it must not have</span></div>
 <div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="comment">/// that output emptied underneath it. The cost is real and measured, though:</span></div>
 <div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span><span class="comment">/// a 200,000-iteration running total took 54,056 KB and 0.034 s with</span></div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="comment">/// provenance against 12,236 KB and 0.006 s without (morph#574, clang 22,</span></div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="comment">/// `-O2`). **A bulk path that never calls `equation()` should set this to `0`.**</span></div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="comment">/// provenance against 12,236 KB and 0.006 s without (clang 22, `-O2`).</span></div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="comment">/// **A bulk path that never calls `equation()` should set this to `0`.**</span></div>
 <div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span><span class="comment">/// See `docs/spec/util/quantity_type.md`, *Limitations*.</span></div>
 <div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span><span class="preprocessor">#ifndef MORPH_QUANTITY_PROVENANCE</span></div>
 <div class="line"><a id="l00048" name="l00048"></a><span class="lineno"><a class="line" href="../../d9/db8/quantity_8hpp.html#a63ce497b2022a0d494169870ad16fda1">   48</a></span><span class="preprocessor">#define MORPH_QUANTITY_PROVENANCE 1</span></div>
@@ -231,7 +231,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>    <span class="comment">// operation, and INT64_MIN reaches here through the whole-integer</span></div>
 <div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>    <span class="comment">// `Rational{value, DecimalPlaces{n}}` constructor, which does not</span></div>
 <div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>    <span class="comment">// canonicalise (and `numerator` is public). `absU64` is the shared helper</span></div>
-<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>    <span class="comment">// that gets this right -- see morph#496.</span></div>
+<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>    <span class="comment">// that gets this right.</span></div>
 <div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>    <span class="keyword">auto</span> <span class="keyword">const</span> num = ::morph::math::detail::absU64(value.<a class="code hl_variable" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html#ad1bcb1d07772209d36c32e43b7baa9fd">numerator</a>);</div>
 <div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>    <span class="keyword">auto</span> <span class="keyword">const</span> den = <span class="keyword">static_cast&lt;</span>std::uint64_t<span class="keyword">&gt;</span>(value.<a class="code hl_variable" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html#ad6c59c25744a54b8f27699e4c3c43800">denominator</a>);</div>
 <div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>    <span class="keyword">auto</span> <span class="keyword">const</span> places = <span class="keyword">static_cast&lt;</span>std::uint32_t<span class="keyword">&gt;</span>(value.<a class="code hl_variable" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html#a75fabddd91c6c69a9707e0ba9ef067c2">decimalPlaces</a>.<a class="code hl_variable" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html#aa6d381d9d51f4aa69e33411b0f162edb">value</a>);</div>
@@ -611,8 +611,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l00475" name="l00475"></a><span class="lineno">  475</span><span class="comment">///</span></div>
 <div class="line"><a id="l00476" name="l00476"></a><span class="lineno">  476</span><span class="comment">/// A derivation has no bound — `total = total + row` over a data-driven loop</span></div>
 <div class="line"><a id="l00477" name="l00477"></a><span class="lineno">  477</span><span class="comment">/// records one step per iteration — so without a limit `equation()` renders</span></div>
-<div class="line"><a id="l00478" name="l00478"></a><span class="lineno">  478</span><span class="comment">/// every one of them into a single line (morph#582: 100,000 steps produced a</span></div>
-<div class="line"><a id="l00479" name="l00479"></a><span class="lineno">  479</span><span class="comment">/// 500,001-character line in 58.8 s). This is where a *rendered* formula stops</span></div>
+<div class="line"><a id="l00478" name="l00478"></a><span class="lineno">  478</span><span class="comment">/// every one of them into a single line — measured at 100,000 steps: a</span></div>
+<div class="line"><a id="l00479" name="l00479"></a><span class="lineno">  479</span><span class="comment">/// 500,001-character line in 58.8 s. This is where a *rendered* formula stops</span></div>
 <div class="line"><a id="l00480" name="l00480"></a><span class="lineno">  480</span><span class="comment">/// being something a person reads, not where the cost stops being tolerable:</span></div>
 <div class="line"><a id="l00481" name="l00481"></a><span class="lineno">  481</span><span class="comment">/// a caller that wants more passes its own limit, so erring low costs one</span></div>
 <div class="line"><a id="l00482" name="l00482"></a><span class="lineno">  482</span><span class="comment">/// argument while erring high costs an unreadable line nobody asked for.</span></div>
@@ -620,8 +620,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l00484" name="l00484"></a><span class="lineno">  484</span><span class="comment"></span> </div>
 <div class="line"><a id="l00485" name="l00485"></a><span class="lineno">  485</span><span class="comment">/// @brief Pass as `equation()`&#39;s limit to write the derivation out in full.</span></div>
 <div class="line"><a id="l00486" name="l00486"></a><span class="lineno">  486</span><span class="comment">///</span></div>
-<div class="line"><a id="l00487" name="l00487"></a><span class="lineno">  487</span><span class="comment">/// Restores the pre-morph#582 behaviour: no step is elided, and the cost is</span></div>
-<div class="line"><a id="l00488" name="l00488"></a><span class="lineno">  488</span><span class="comment">/// the caller&#39;s, taken deliberately. Used by the depth regression tests, which</span></div>
+<div class="line"><a id="l00487" name="l00487"></a><span class="lineno">  487</span><span class="comment">/// No step is elided, and the cost is the caller&#39;s, taken deliberately. Used</span></div>
+<div class="line"><a id="l00488" name="l00488"></a><span class="lineno">  488</span><span class="comment">/// by the depth regression tests, which</span></div>
 <div class="line"><a id="l00489" name="l00489"></a><span class="lineno">  489</span><span class="comment">/// exist precisely to walk a derivation deeper than any limit would render.</span></div>
 <div class="line"><a id="l00490" name="l00490"></a><span class="lineno"><a class="line" href="../../d9/db8/quantity_8hpp.html#a929e685516f4f67bd6a1755921d745bd">  490</a></span><span class="keyword">inline</span> <span class="keyword">constexpr</span> std::size_t <a class="code hl_variable" href="../../d9/db8/quantity_8hpp.html#a929e685516f4f67bd6a1755921d745bd">kEquationStepsUnlimited</a> = std::numeric_limits&lt;std::size_t&gt;::max();</div>
 <div class="line"><a id="l00491" name="l00491"></a><span class="lineno">  491</span> </div>
@@ -722,8 +722,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/db8/quantit
 <div class="line"><a id="l00584" name="l00584"></a><span class="lineno">  584</span><span class="comment">    /// derivation that is a linear chain down `left`, one node per iteration.</span></div>
 <div class="line"><a id="l00585" name="l00585"></a><span class="lineno">  585</span><span class="comment">    /// The compiler-generated destructor releases that chain recursively —</span></div>
 <div class="line"><a id="l00586" name="l00586"></a><span class="lineno">  586</span><span class="comment">    /// `~shared_ptr` -&gt; `~ASTNode` -&gt; `~shared_ptr` -&gt; ... — one stack frame</span></div>
-<div class="line"><a id="l00587" name="l00587"></a><span class="lineno">  587</span><span class="comment">    /// per node, and a long enough chain runs the stack out. Measured</span></div>
-<div class="line"><a id="l00588" name="l00588"></a><span class="lineno">  588</span><span class="comment">    /// (morph#574, clang 22, `-O0`, 8 MiB stack): a 21,000-node chain</span></div>
+<div class="line"><a id="l00587" name="l00587"></a><span class="lineno">  587</span><span class="comment">    /// per node, and a long enough chain runs the stack out. Measured with</span></div>
+<div class="line"><a id="l00588" name="l00588"></a><span class="lineno">  588</span><span class="comment">    /// clang 22, `-O0`, an 8 MiB stack: a 21,000-node chain</span></div>
 <div class="line"><a id="l00589" name="l00589"></a><span class="lineno">  589</span><span class="comment">    /// segfaults on destruction, while an optimised build survives 200,000</span></div>
 <div class="line"><a id="l00590" name="l00590"></a><span class="lineno">  590</span><span class="comment">    /// because clang turns the same chain into a loop. &quot;Crashes in Debug,</span></div>
 <div class="line"><a id="l00591" name="l00591"></a><span class="lineno">  591</span><span class="comment">    /// survives in Release&quot; is the worst signature a defect can have, so the</span></div>

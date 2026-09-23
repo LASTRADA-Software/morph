@@ -231,8 +231,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/da9/file__a
 <div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;FileActionLog: failed to open &quot;</span> + _path.string());</div>
 <div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>        }</div>
 <div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>        <span class="comment">// &quot;a&quot; mode creates the file if it did not already exist -- a fresh</span></div>
-<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>        <span class="comment">// directory entry that `_file`&#39;s own later fsyncs never make durable</span></div>
-<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>        <span class="comment">// (morph#532). Unconditional: harmless when the file already existed,</span></div>
+<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>        <span class="comment">// directory entry that `_file`&#39;s own later fsyncs never make durable.</span></div>
+<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>        <span class="comment">// Unconditional: harmless when the file already existed,</span></div>
 <div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>        <span class="comment">// since syncing an unchanged directory is a cheap no-op: a failure</span></div>
 <div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>        <span class="comment">// here is surfaced rather than swallowed, the same discipline</span></div>
 <div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>        <span class="comment">// `flush()`/`rotate()` already apply to the file-content fsync.</span></div>
@@ -311,7 +311,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/da9/file__a
 <div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>        line.push_back(<span class="charliteral">&#39;\n&#39;</span>);</div>
 <div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>        <span class="keywordtype">long</span> <span class="keywordtype">long</span> <span class="keyword">const</span> offsetBeforeWrite = ::morph::core::wideFtell(_file);</div>
 <div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>        <span class="keywordflow">if</span> (_io.fwrite(line.data(), line.size(), _file) != line.size()) {</div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>            <span class="comment">// See FileOfflineQueue::writeLine&#39;s identical comment (morph#530):</span></div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>            <span class="comment">// See FileOfflineQueue::writeLine&#39;s identical comment:</span></div>
 <div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>            <span class="comment">// &quot;a&quot;-mode means a short write&#39;s partial bytes sit exactly where the</span></div>
 <div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>            <span class="comment">// next append() would resume, merging into one line repairTornTail()</span></div>
 <div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>            <span class="comment">// can only heal at construction, before this can happen. Roll the</span></div>
@@ -508,7 +508,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/da9/file__a
 <div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span> </div>
 <div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span>        <span class="comment">// Two directory mutations just happened -- the seal rename and, on</span></div>
 <div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span>        <span class="comment">// success, a brand-new active file -- and neither is durable until</span></div>
-<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>        <span class="comment">// its directory entry is fsynced (morph#532). Run regardless of what</span></div>
+<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>        <span class="comment">// its directory entry is fsynced. Run regardless of what</span></div>
 <div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span>        <span class="comment">// failed above, so a rotation that is about to throw still leaves</span></div>
 <div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span>        <span class="comment">// whatever succeeded as durable as it can be made; the failure is</span></div>
 <div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span>        <span class="comment">// surfaced below rather than swallowed, same as the pre-rotation</span></div>
@@ -517,9 +517,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/da9/file__a
 <div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span>        <span class="comment">// constructor&#39;s own directory fsync -- but it is not silent either:</span></div>
 <div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span>        <span class="comment">// the contract is that it warns, so an operator knows the rotated</span></div>
 <div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span>        <span class="comment">// names are only as durable as the filesystem makes them. Collapsing</span></div>
-<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span>        <span class="comment">// the tri-state to a bool here used to drop that warning on the floor</span></div>
-<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>        <span class="comment">// for both directories, leaving `rotate()` quieter than the</span></div>
-<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>        <span class="comment">// construction path that documents the same classification.</span></div>
+<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span>        <span class="comment">// the tri-state to a bool here would drop that warning on the floor for</span></div>
+<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>        <span class="comment">// both directories, leaving `rotate()` quieter than the construction</span></div>
+<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>        <span class="comment">// path that documents the same classification.</span></div>
 <div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>        <span class="keyword">auto</span> <span class="keyword">const</span> classifyAndWarn = [<span class="keyword">this</span>](<span class="keyword">const</span> std::filesystem::path&amp; dir) {</div>
 <div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>            <span class="keyword">auto</span> <span class="keyword">const</span> outcome = ::morph::core::classifyDirectorySync(_io.syncPath(dir));</div>
 <div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>            <span class="keywordflow">if</span> (outcome == ::morph::core::DirectorySync::unsupported) {</div>

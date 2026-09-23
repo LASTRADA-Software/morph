@@ -178,7 +178,7 @@ Public Member Functions</h2></td></tr>
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-attribs" class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:a6fb30c6097f183febd73b4809415c40c" id="r_a6fb30c6097f183febd73b4809415c40c"><td class="memItemLeft">static constexpr int&#160;</td><td class="memItemRight"><a class="el" href="#a6fb30c6097f183febd73b4809415c40c">kBusyTimeoutMillis</a> = 5000</td></tr>
-<tr class="memdesc:a6fb30c6097f183febd73b4809415c40c"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">PRAGMA busy_timeout</span> set at construction (morph#532): how long a statement blocks on <span class="tt">SQLITE_BUSY</span> before giving up, in milliseconds.  <br /></td></tr>
+<tr class="memdesc:a6fb30c6097f183febd73b4809415c40c"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">PRAGMA busy_timeout</span> set at construction: how long a statement blocks on <span class="tt">SQLITE_BUSY</span> before giving up, in milliseconds.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
@@ -287,7 +287,7 @@ Protected Member Functions</h2></td></tr>
     <tr><td class="paramname">maxDepth</td><td>Maximum number of pending rows <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue()</a></span> will admit before throwing <span class="tt"><a class="el" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html" title="Thrown by enqueue() when the queue is at its configured maxDepth().">OfflineQueueFullError</a></span>; <span class="tt">std::nullopt</span> (the default) means unbounded. Not persisted in the database itself — a per-construction parameter, so a reopen must pass it again to keep the same cap enforced. </td></tr>
     <tr><td class="paramname">ioOps</td><td>Injectable directory-fsync primitive (<span class="tt">FileIoOps::syncPath</span> only &ndash; the rest of this class talks to SQLite directly, never through <span class="tt">FileIoOps</span>); defaults to the real syscall. Test-only seam, mirroring <span class="tt">FileActionLog</span>/<span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span>'s own <span class="tt">FileIoOps</span> parameter, for forcing the directory-fsync failure branch below without needing a real OS-level failure. </td></tr>
     <tr><td class="paramname">synchronous</td><td><span class="tt">PRAGMA synchronous</span> level; see <span class="tt"><a class="el" href="#ac68ad977c09782cdd23d3072b0389542" title="How hard each committed statement is pushed onto the platter.">Synchronous</a></span>. Defaults to <span class="tt">normal</span>. </td></tr>
-    <tr><td class="paramname">busyTimeout</td><td>How long a statement waits out a lock another connection holds before returning <span class="tt">SQLITE_BUSY</span>. Defaults to <span class="tt"><a class="el" href="#a6fb30c6097f183febd73b4809415c40c" title="PRAGMA busy_timeout set at construction (morph#532): how long a statement blocks on SQLITE_BUSY befor...">kBusyTimeoutMillis</a></span>. This class's own mutex makes <span class="tt">SQLITE_BUSY</span> unreachable for a single instance, so the timeout only matters when something else has the database open — but when it does, the wait happens under that mutex and blocks every other caller of this instance, a Qt GUI thread included. Pass <span class="tt">0</span> to restore fail-fast. </td></tr>
+    <tr><td class="paramname">busyTimeout</td><td>How long a statement waits out a lock another connection holds before returning <span class="tt">SQLITE_BUSY</span>. Defaults to <span class="tt"><a class="el" href="#a6fb30c6097f183febd73b4809415c40c" title="PRAGMA busy_timeout set at construction: how long a statement blocks on SQLITE_BUSY before giving up,...">kBusyTimeoutMillis</a></span>. This class's own mutex makes <span class="tt">SQLITE_BUSY</span> unreachable for a single instance, so the timeout only matters when something else has the database open — but when it does, the wait happens under that mutex and blocks every other caller of this instance, a Qt GUI thread included. Pass <span class="tt">0</span> to restore fail-fast. </td></tr>
   </table>
   </dd>
 </dl>
@@ -723,7 +723,7 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p><span class="tt">PRAGMA busy_timeout</span> set at construction (morph#532): how long a statement blocks on <span class="tt">SQLITE_BUSY</span> before giving up, in milliseconds. </p>
+<p><span class="tt">PRAGMA busy_timeout</span> set at construction: how long a statement blocks on <span class="tt">SQLITE_BUSY</span> before giving up, in milliseconds. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 

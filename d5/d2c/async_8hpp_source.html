@@ -132,8 +132,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d2c/async_8
 <div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment">/// schema, and they are the part of morph that costs almost nothing to compile.</span></div>
 <div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment">/// Nothing here reaches glaze.</span></div>
 <div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment">///</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment">/// Measured on `master` @ c6f6d953, clang 22.1.8, `-O2 -fsyntax-only`, one</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment">/// translation unit per header, best of three:</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment">/// Measured with clang 22.1.8, `-O2 -fsyntax-only`, one translation unit per</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment">/// header, best of three:</span></div>
 <div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment">///</span></div>
 <div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment">/// | header | CPU s | preprocessed lines |</span></div>
 <div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="comment">/// |---|---|---|</span></div>
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d2c/async_8
 <div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">/// A consumer that wants the primitives and reaches for `bridge.hpp` — the</span></div>
 <div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">/// obvious header, and the one every example includes — pays roughly three</span></div>
 <div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">/// times over for a schema generator and a JSON codec it never calls. This</span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">/// header exists so the cheap path has a name (morph#573, step 4).</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">/// header exists so the cheap path has a name.</span></div>
 <div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">///</span></div>
 <div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">/// It is a facade and nothing else: it declares no symbol of its own, so</span></div>
 <div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// including it is exactly equivalent to including the four headers below.</span></div>

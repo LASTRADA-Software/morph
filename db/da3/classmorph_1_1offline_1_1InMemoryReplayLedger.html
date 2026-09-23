@@ -154,7 +154,7 @@ Additional Inherited Members</h2></td></tr>
 <div class="textblock"><p>Thread-safe in-memory implementation of <span class="tt"><a class="el" href="../../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html" title="Interface for an op-id-keyed exactly-once replay ledger.">IReplayLedger</a></span>. </p>
 <p>Suitable for testing and for a host with no durability requirement. Mirrors <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">morph::offline::InMemoryOfflineQueue</a></span>'s shape. Not durable across a process restart, and — since it is not backed by any real transaction — not a stand-in for <span class="tt"><a class="el" href="../../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#ac50c49bf279d834aff50906a90b77742" title="Records that opId within scope has been decided, with payload attached.">record()</a></span>'s atomicity requirement: a real implementation must be backed by the same store and transaction as the write it guards. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html">replay_ledger.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html">replay_ledger.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a850370d1b1e52e71f796e0df44f5f7f5" name="a850370d1b1e52e71f796e0df44f5f7f5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a850370d1b1e52e71f796e0df44f5f7f5">&#9670;&#160;</a></span>doLookup()</h2>
@@ -184,7 +184,7 @@ Additional Inherited Members</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Looks up <code class="param">opId</code> within <code class="param">scope</code> in the in-memory map. </p>
-<dl class="section user"><dt>The two <span class="tt">std::string</span> constructions below are deliberate (morph#728)</dt><dd>They materialise the key inside the lock purely to probe an ordered map that could take a transparent comparator instead. That is morph#699's family, and it was profiled rather than fixed for symmetry. Measured on <span class="tt">d03c66f3</span>, clang 22 <span class="tt">-O2</span>, a counting <span class="tt">operator new</span>, 2e6 iterations per row:</dd></dl>
+<dl class="section user"><dt>The two <span class="tt">std::string</span> constructions below are deliberate</dt><dd>They materialise the key inside the lock purely to probe an ordered map that could take a transparent comparator instead. That was profiled rather than fixed. Measured with clang 22 <span class="tt">-O2</span>, a counting <span class="tt">operator new</span>, 2e6 iterations per row:</dd></dl>
 <pre class="fragment">/// -- allocations per lookup() --
 /// scope=bookmarks              ( 9) id=CreateSwimlane       (14) : 0.00
 /// scope=bookmarks              ( 9) id=CreateSwimlane-0001  (19) : 1.00
@@ -197,8 +197,8 @@ Additional Inherited Members</h2></td></tr>
 /// -- ns per lookup(), 8 threads on the one mutex --
 /// both inside SSO : 685.7 ns
 /// both past SSO   : 740.3 ns
-/// </pre><p>So the mechanism is real and id-length-dependent exactly as morph#699 found, and the widened critical section costs ~55 ns of a ~740 ns contended lookup. What parks it is the call census, not the size: <span class="tt"><a class="el" href="../../db/da3/classmorph_1_1offline_1_1InMemoryReplayLedger.html" title="Thread-safe in-memory implementation of IReplayLedger.">InMemoryReplayLedger</a></span> is constructed in <b>one</b> file in this tree, <span class="tt">tests/test_replay_ledger.cpp</span>, and in no shipping code at all. The only production <span class="tt"><a class="el" href="../../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#a91612627509fdc050129b853af9b8f3a" title="Reports whether opId within scope has already been decided.">IReplayLedger::lookup()</a></span> call (<span class="tt">examples/bookmarks/src/models/bookmark_model.cpp:737</span>, once per <span class="tt">ImportBookmarks</span>) runs against <span class="tt">BookmarksReplayLedger</span>, whose own <span class="tt"><a class="el" href="#a850370d1b1e52e71f796e0df44f5f7f5" title="Looks up opId within scope in the in-memory map.">doLookup</a></span> is an ODBC round-trip &ndash; next to which 3 ns is not measurable.</p>
-<p>This is morph#709's disposition, for morph#709's reason. It becomes worth fixing the moment a per-request caller of <em>this</em> class appears; the fix is then a transparent comparator on <span class="tt">_entries</span>, <span class="tt">std::map</span>'s <span class="tt">is_transparent</span> flavour rather than <span class="tt"><a class="el" href="../../d1/da2/registry_8hpp_source.html">core/registry.hpp</a></span>'s hash-and-equality pair (which serves an <span class="tt">unordered_map</span> and does not apply here).</p>
+/// </pre><p>So the cost is real and id-length-dependent, and the widened critical section costs ~55 ns of a ~740 ns contended lookup. What parks it is the call census, not the size: <span class="tt"><a class="el" href="../../db/da3/classmorph_1_1offline_1_1InMemoryReplayLedger.html" title="Thread-safe in-memory implementation of IReplayLedger.">InMemoryReplayLedger</a></span> is constructed in <b>one</b> file in this tree, <span class="tt">tests/test_replay_ledger.cpp</span>, and in no shipping code at all. The only production <span class="tt"><a class="el" href="../../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#a91612627509fdc050129b853af9b8f3a" title="Reports whether opId within scope has already been decided.">IReplayLedger::lookup()</a></span> call (<span class="tt">examples/bookmarks/src/models/bookmark_model.cpp:737</span>, once per <span class="tt">ImportBookmarks</span>) runs against <span class="tt">BookmarksReplayLedger</span>, whose own <span class="tt"><a class="el" href="#a850370d1b1e52e71f796e0df44f5f7f5" title="Looks up opId within scope in the in-memory map.">doLookup</a></span> is an ODBC round-trip &ndash; next to which 3 ns is not measurable.</p>
+<p>It becomes worth fixing the moment a per-request caller of <em>this</em> class appears; the fix is then a transparent comparator on <span class="tt">_entries</span>, <span class="tt">std::map</span>'s <span class="tt">is_transparent</span> flavour rather than <span class="tt"><a class="el" href="../../d1/da2/registry_8hpp_source.html">core/registry.hpp</a></span>'s hash-and-equality pair (which serves an <span class="tt">unordered_map</span> and does not apply here).</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">scope</td><td>Caller-chosen partition. </td></tr>
@@ -210,7 +210,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#a6de55c031a06aec82aa29285871f8974">morph::offline::IReplayLedger</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html">replay_ledger.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html">replay_ledger.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +258,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#a48eaf09a87452b81aabaf1672bfc18e1">morph::offline::IReplayLedger</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html#l00221">221</a> of file <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html">replay_ledger.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../d1/d15/replay__ledger_8hpp_source.html">replay_ledger.hpp</a>.</p>
 
 </div>
 </div>

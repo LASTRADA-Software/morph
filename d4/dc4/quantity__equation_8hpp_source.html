@@ -288,7 +288,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/dc4/quantit
 <div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">    ///</span></div>
 <div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    /// Iterative, over an explicit worklist, for the reason spelled out on</span></div>
 <div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    /// `render` below: the derivation of a running total is a linear chain and</span></div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// a recursive walk of it overflows the stack (morph#574). Each node is</span></div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// a recursive walk of it overflows the stack. Each node is</span></div>
 <div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    /// counted exactly once (the `seen` set), so the worklist order does not</span></div>
 <div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    /// affect the counts.</span></div>
 <div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    /// @param root The node to start from (may be null).</span></div>
@@ -354,9 +354,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/dc4/quantit
 <div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>            }</div>
 <div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>            <span class="comment">// A node reachable by several displayed paths is settled by its</span></div>
 <div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>            <span class="comment">// first visit; re-walking it would assign nothing new and, on a</span></div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>            <span class="comment">// DAG, costs one walk per path rather than per node (morph#602:</span></div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>            <span class="comment">// 31 nodes built by repeated `q = q + q` have 2^30 paths and took</span></div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>            <span class="comment">// 10.3 s to render 33 short lines).</span></div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>            <span class="comment">// DAG, costs one walk per path rather than per node. Measured: 31</span></div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>            <span class="comment">// nodes built by repeated `q = q + q` have 2^30 paths and take</span></div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>            <span class="comment">// 10.3 s to render 33 short lines without this test.</span></div>
 <div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>            <span class="keywordflow">if</span> (!settled.insert(node).second) {</div>
 <div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>                <span class="keywordflow">continue</span>;</div>
 <div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>            }</div>
@@ -390,9 +390,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/dc4/quantit
 <div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span><span class="comment">    /// Takes its left operand **by value** and appends to it rather than</span></div>
 <div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span><span class="comment">    /// concatenating both sides into a fresh string. The left operand of a</span></div>
 <div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">    /// left-leaning chain — the shape `total = total + row` records — is the</span></div>
-<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">    /// whole expression rendered so far, so copying it once per level made</span></div>
-<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">    /// rendering quadratic in the depth (morph#582: 27.7 s and a</span></div>
-<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">    /// 350,001-character line at 70,000 steps). Appending makes that shape</span></div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">    /// whole expression rendered so far, so copying it once per level makes</span></div>
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">    /// rendering quadratic in the depth — measured at 27.7 s for a</span></div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">    /// 350,001-character line at 70,000 steps. Appending makes that shape</span></div>
 <div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span><span class="comment">    /// linear, amortised. A **right**-leaning chain (`a + (b + (c + …))`) is</span></div>
 <div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span><span class="comment">    /// still quadratic — the big operand is on the copied side — and so is a</span></div>
 <div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span><span class="comment">    /// chain of unary negations, which has to prepend; `equation()`&#39;s step</span></div>
@@ -475,8 +475,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/dc4/quantit
 <div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span><span class="comment">    /// The walk is an explicit stack rather than recursion because the</span></div>
 <div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span><span class="comment">    /// derivation of a running total (`total = total + x` in a loop) is a</span></div>
 <div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span><span class="comment">    /// linear chain one node deep per iteration, and a recursive walk of it</span></div>
-<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span><span class="comment">    /// runs the stack out. Measured on the recursive code (morph#574, 8 MiB</span></div>
-<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span><span class="comment">    /// stack): `equation()` returned at 24,000 nodes and segfaulted inside</span></div>
+<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span><span class="comment">    /// runs the stack out. Measured on a recursive walk with an 8 MiB stack:</span></div>
+<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span><span class="comment">    /// `equation()` returned at 24,000 nodes and segfaulted inside</span></div>
 <div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span><span class="comment">    /// `renderSymbolic` at 25,000 under clang `-O0`, returned at 50,000 and</span></div>
 <div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span><span class="comment">    /// segfaulted at 60,000 under clang `-O2`, and segfaulted already at</span></div>
 <div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span><span class="comment">    /// 40,000 under gcc `-O2`. Optimisation only moved the limit: unlike the</span></div>

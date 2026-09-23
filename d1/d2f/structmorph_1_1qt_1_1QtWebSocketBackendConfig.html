@@ -230,11 +230,11 @@ Public Attributes</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Whether <span class="tt">bindModel</span>/<span class="tt">promoteModel</span> may return before the reply. </p>
-<p>Defaults to <span class="tt">false</span>: both settle their <span class="tt">Completion</span> from inside the call, having blocked the Qt thread in a nested <span class="tt">QEventLoop</span> for the round trip — <span class="tt">IBackend</span>'s own default behaviour, and what every existing embedder (a desktop Qt client, this backend's own test suite) already relies on, since it makes a handler usable on the line after <span class="tt">BridgeHandler</span>'s constructor returns.</p>
+<p>Defaults to <span class="tt">false</span>: both settle their <span class="tt">Completion</span> from inside the call, having blocked the Qt thread in a nested <span class="tt">QEventLoop</span> for the round trip — <span class="tt">IBackend</span>'s own default behaviour, and what a desktop Qt embedder relies on, since it makes a handler usable on the line after <span class="tt">BridgeHandler</span>'s constructor returns.</p>
 <p>Set <span class="tt">true</span> for a build where that blocking call cannot happen at all — a WASM main thread, where Qt refuses to spin a nested loop and the attempt aborts the page outright. <span class="tt">bindModel</span> then sends the request and returns an unsettled <span class="tt">Completion</span>, which the reply settles later. That is a deliberate trade, not a free improvement: the caller must wait for the continuation (e.g. gate the UI on <span class="tt">BridgeHandler::whenBound()</span>) before firing an action through that handler, since <span class="tt">executeVia</span> fails fast with "handler not bound" for an unbound binding rather than queuing or blocking.</p>
-<p>This flag chooses <em>whether the transport blocks</em>. It is no longer an opt-in to a second set of interface verbs: the continuation exists on both paths, because <span class="tt">bindModel</span> returns a <span class="tt">Completion</span> either way. </p>
+<p>This flag chooses <em>whether the transport blocks</em>, nothing more: the continuation exists on both paths, because <span class="tt">bindModel</span> returns a <span class="tt">Completion</span> either way. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

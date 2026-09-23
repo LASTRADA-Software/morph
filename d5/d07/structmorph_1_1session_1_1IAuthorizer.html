@@ -161,7 +161,7 @@ Public Member Functions</h2></td></tr>
 <td class="markdownTableBodyNone"><span class="tt">schemas</span>  </td><td class="markdownTableBodyNone"><span class="tt">env.typeId</span>  </td><td class="markdownTableBodyNone"><b>empty</b>  </td></tr>
 </table>
 <p>The two read channels are gated deliberately, so a deployer can refuse enumeration or schema disclosure without refusing use &ndash; <span class="tt">schemas</span> returns field names, bounds, rules and the payload fingerprint of every action, so it must not be reachable by a caller the server would not let execute.</p>
-<p><b>An implementation that switches or matches on <span class="tt">actionType</span> must handle the empty case explicitly</b>, or it will hit its default arm on exactly those two disclosure verbs. Whether that fails open or closed is the implementation's choice, but it has to be a choice (morph#500).</p>
+<p><b>An implementation that switches or matches on <span class="tt">actionType</span> must handle the empty case explicitly</b>, or it will hit its default arm on exactly those two disclosure verbs. Whether that fails open or closed is the implementation's choice, but it has to be a choice.</p>
 <p>Default implementation supplied by the framework is <span class="tt"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html" title="Default authorizer that permits everything.">AllowAllAuthorizer</a></span>. Real deployments install a custom subclass that checks principal claims, action permissions, rate limits, etc. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>

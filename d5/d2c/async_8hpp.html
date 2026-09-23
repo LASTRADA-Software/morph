@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d2c/async_8
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The asynchronous primitives, on their own — the cheap include. </p>
 <p><span class="tt">Completion</span>, <span class="tt">IExecutor</span> and its implementations, <span class="tt">StrandExecutor</span> and <span class="tt">CallbackScope</span> are useful without a model, a registry, a wire envelope or a schema, and they are the part of morph that costs almost nothing to compile. Nothing here reaches glaze.</p>
-<p>Measured on <span class="tt">master</span> @ c6f6d953, clang 22.1.8, <span class="tt">-O2 -fsyntax-only</span>, one translation unit per header, best of three:</p>
+<p>Measured with clang 22.1.8, <span class="tt">-O2 -fsyntax-only</span>, one translation unit per header, best of three:</p>
 <table class="markdownTable">
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">header  </th><th class="markdownTableHeadNone">CPU s  </th><th class="markdownTableHeadNone">preprocessed lines  </th></tr>
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d2c/async_8
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">core/bridge.hpp</a></span>  </td><td class="markdownTableBodyNone">3.76  </td><td class="markdownTableBodyNone">267,827  </td></tr>
 </table>
-<p>A consumer that wants the primitives and reaches for <span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></span> — the obvious header, and the one every example includes — pays roughly three times over for a schema generator and a JSON codec it never calls. This header exists so the cheap path has a name (morph#573, step 4).</p>
+<p>A consumer that wants the primitives and reaches for <span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></span> — the obvious header, and the one every example includes — pays roughly three times over for a schema generator and a JSON codec it never calls. This header exists so the cheap path has a name.</p>
 <p>It is a facade and nothing else: it declares no symbol of its own, so including it is exactly equivalent to including the four headers below. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../d5/d2c/async_8hpp_source.html">async.hpp</a>.</p>

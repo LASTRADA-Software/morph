@@ -482,9 +482,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de4/wire_8h
 <div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span><span class="comment">///</span></div>
 <div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span><span class="comment">/// `Envelope` is a union-of-all-kinds struct: an `ok` reply uses three of its</span></div>
 <div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span><span class="comment">/// thirteen members and a `deregister` request uses two, but glaze writes every</span></div>
-<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span><span class="comment">/// member of a struct it is handed, so a minimal reply carrying an 8-byte</span></div>
-<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span><span class="comment">/// payload cost 255 bytes on the wire, 213 of them fields the kind does not use</span></div>
-<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span><span class="comment">/// (morph#524).</span></div>
+<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span><span class="comment">/// member of a struct it is handed, so without this a minimal reply carrying an</span></div>
+<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span><span class="comment">/// 8-byte payload costs 255 bytes on the wire, 213 of them fields the kind does</span></div>
+<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span><span class="comment">/// not use.</span></div>
 <div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span><span class="comment">///</span></div>
 <div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span><span class="comment">/// Omitting a member that holds its default is **not** a protocol change. The</span></div>
 <div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span><span class="comment">/// decoder default-initialises the `Envelope` and reads with</span></div>
@@ -516,9 +516,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de4/wire_8h
 <div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span><span class="comment">///   `SocketBackend::dispatchIncomingEnvelope`). A peer therefore cannot treat</span></div>
 <div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span><span class="comment">///   an absent `callId` as &quot;no information&quot;; it has to *reconstruct* the</span></div>
 <div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span><span class="comment">///   sentinel before it can route the frame at all. morph&#39;s own `decode` does</span></div>
-<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span><span class="comment">///   that for free by default-initialising, which is why omitting it</span></div>
-<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span><span class="comment">///   round-tripped cleanly in C++ and still broke the scenario driver, a second</span></div>
-<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span><span class="comment">///   decoder that read absence as `None` (morph#524). Emitting correlation</span></div>
+<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span><span class="comment">///   that for free by default-initialising, so omitting it round-trips cleanly</span></div>
+<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span><span class="comment">///   in C++ and still breaks the scenario driver, a second decoder that reads</span></div>
+<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span><span class="comment">///   absence as `None`. Emitting correlation</span></div>
 <div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span><span class="comment">///   fields unconditionally costs eleven bytes on the one message shape that</span></div>
 <div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span><span class="comment">///   carries a zero id, and keeps &quot;how do I route this frame&quot; answerable from</span></div>
 <div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span><span class="comment">///   the frame.</span></div>
@@ -737,11 +737,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de4/wire_8h
 <div class="line"><a id="l00609" name="l00609"></a><span class="lineno">  609</span><span class="comment">/// flavours of invalid UTF-8, an embedded NUL, a raw control byte and an 8 MiB</span></div>
 <div class="line"><a id="l00610" name="l00610"></a><span class="lineno">  610</span><span class="comment">/// payload all encode successfully.</span></div>
 <div class="line"><a id="l00611" name="l00611"></a><span class="lineno">  611</span><span class="comment">///</span></div>
-<div class="line"><a id="l00612" name="l00612"></a><span class="lineno">  612</span><span class="comment">/// That left a permanently uncovered branch guarding a real invariant. Rather</span></div>
-<div class="line"><a id="l00613" name="l00613"></a><span class="lineno">  613</span><span class="comment">/// than reshape `Envelope` to make a test possible, or wait on a</span></div>
-<div class="line"><a id="l00614" name="l00614"></a><span class="lineno">  614</span><span class="comment">/// fault-injection hook in glaze (LASTRADA-Software/morph#96 asked for one),</span></div>
-<div class="line"><a id="l00615" name="l00615"></a><span class="lineno">  615</span><span class="comment">/// this puts the seam on morph&#39;s side of the boundary — where the repository</span></div>
-<div class="line"><a id="l00616" name="l00616"></a><span class="lineno">  616</span><span class="comment">/// already puts it for the identical problem with file I/O.</span></div>
+<div class="line"><a id="l00612" name="l00612"></a><span class="lineno">  612</span><span class="comment">/// That leaves a branch guarding a real invariant with no way to reach it.</span></div>
+<div class="line"><a id="l00613" name="l00613"></a><span class="lineno">  613</span><span class="comment">/// Rather than reshape `Envelope` to make a test possible, or wait on a</span></div>
+<div class="line"><a id="l00614" name="l00614"></a><span class="lineno">  614</span><span class="comment">/// fault-injection hook glaze does not offer, this puts the seam on morph&#39;s</span></div>
+<div class="line"><a id="l00615" name="l00615"></a><span class="lineno">  615</span><span class="comment">/// side of the boundary — where the repository already puts it for the</span></div>
+<div class="line"><a id="l00616" name="l00616"></a><span class="lineno">  616</span><span class="comment">/// identical problem with file I/O.</span></div>
 <div class="foldopen" id="foldopen00617" data-start="{" data-end="};">
 <div class="line"><a id="l00617" name="l00617"></a><span class="lineno"><a class="line" href="../../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html">  617</a></span><span class="keyword">struct </span><a class="code hl_struct" href="../../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html">WireCodecOps</a> {<span class="comment"></span></div>
 <div class="line"><a id="l00618" name="l00618"></a><span class="lineno">  618</span><span class="comment">    /// @brief Serialises @p env into @p out. Mirrors the `glz::write` call</span></div>

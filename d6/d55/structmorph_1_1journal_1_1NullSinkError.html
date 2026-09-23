@@ -133,9 +133,9 @@ Inheritance diagram for morph::journal::NullSinkError:</div>
  </div></div>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Thrown by <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a1248cb453951d71a0c28c7b3e5babf9c" title="Moves every row drainOutbox() currently reports to sink, then marks the whole batch relayed via markR...">OutboxRelay::relay()</a></span> when <span class="tt">sink</span> is null. </p>
-<p>A null <span class="tt">drainOutbox</span>/<span class="tt">markRelayed</span> already throws a catchable <span class="tt">std::bad_function_call</span> (invoking a null <span class="tt">std::function</span>); this makes a null <span class="tt">sink</span> consistent with that instead of a raw null-<span class="tt">shared_ptr</span> dereference (real undefined behavior, not portably catchable — see <span class="tt">LASTRADA-Software/morph#95</span>). </p>
+<p>A null <span class="tt">drainOutbox</span>/<span class="tt">markRelayed</span> already throws a catchable <span class="tt">std::bad_function_call</span> (invoking a null <span class="tt">std::function</span>); this makes a null <span class="tt">sink</span> consistent with that instead of a raw null-<span class="tt">shared_ptr</span> dereference, which is real undefined behavior and not portably catchable. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00023">23</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00022">22</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
 </div><hr/>The documentation for this struct was generated from the following file:<ul>
 <li>morph/journal/<a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a></li>
 </ul>

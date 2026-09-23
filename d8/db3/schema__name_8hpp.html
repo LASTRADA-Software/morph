@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/db3/schema_
 <p><a href="../../d8/db3/schema__name_8hpp_source.html">Go to the source code of this file.</a></p>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Compile-time <span class="tt">$defs</span> keys for the forms layer's field wrappers. </p>
-<p>glaze keys a schema's <span class="tt">$defs</span> block by <span class="tt">glz::name_v&lt;T&gt;</span> and populates each entry <b>once</b>: <span class="tt">auto&amp; def = defs[name_v&lt;val_t&gt;]; if (!def.type) { … }</span>. A <span class="tt">glz::meta::name</span> that is the same string for two instantiations therefore makes the second one silently <span class="tt">$ref</span> the first one's definition, and a renderer that resolves the <span class="tt">$ref</span> reads the wrong payload type (morph#543).</p>
+<p>glaze keys a schema's <span class="tt">$defs</span> block by <span class="tt">glz::name_v&lt;T&gt;</span> and populates each entry <b>once</b>: <span class="tt">auto&amp; def = defs[name_v&lt;val_t&gt;]; if (!def.type) { … }</span>. A <span class="tt">glz::meta::name</span> that is the same string for two instantiations therefore makes the second one silently <span class="tt">$ref</span> the first one's definition, and a renderer that resolves the <span class="tt">$ref</span> reads the wrong payload type.</p>
 <p>This header is the single place the forms layer composes those keys, so the rule that keeps them apart is stated once rather than once per wrapper.</p>
 <p>Two rules shape what goes into a key:</p>
 <ul>

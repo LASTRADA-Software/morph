@@ -134,7 +134,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Outcome of one <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a1248cb453951d71a0c28c7b3e5babf9c" title="Moves every row drainOutbox() currently reports to sink, then marks the whole batch relayed via markR...">OutboxRelay::relay()</a></span> call. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00027">27</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aad7cc68f6dfeb636b309b94c2888f90d" name="aad7cc68f6dfeb636b309b94c2888f90d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aad7cc68f6dfeb636b309b94c2888f90d">&#9670;&#160;</a></span>relayed</h2>
@@ -150,7 +150,7 @@ Public Attributes</h2></td></tr>
 
 <p>Outbox rows drained, appended to <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570" title="Durable audit sink rows are forwarded to.">OutboxRelay::sink</a></span>, and marked relayed in this call. Includes rows the sink silently deduped via <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span> — a row is still marked relayed exactly once even when the sink treats its append as a no-op. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
 
 </div>
 </div>
