@@ -206,4 +206,10 @@ jobs:
       # Informational: the build steps above are the gate. Listed rather than
       # asserted by path, since where Qt drops a wasm bundle is Qt's business.
       - name: Show the produced artifacts
-        run: find build-wasm-ladder -name '*.wasm' -o -name '*.html' | sort
+        run: |
+          # pipefail because `find` over a build tree the previous step was
+          # supposed to fill is a claim worth failing on: without it this step
+          # prints nothing and exits 0 whether the directory is empty or absent
+          # (morph#730).
+          set -o pipefail
+          find build-wasm-ladder -name '*.wasm' -o -name '*.html' | sort

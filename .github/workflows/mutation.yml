@@ -115,8 +115,27 @@ jobs:
         env:
           CXX: clang++-${{ env.CLANG_VERSION }}
         run: |
-          bash scripts/mutation.sh "${{ inputs.scope || 'core-forms' }}" \
-            | tee "mutation-${{ inputs.scope || 'core-forms' }}.log"
+          # `set -o pipefail`, and it is the whole point of this step
+          # (morph#730). A `run:` with no `shell:` key is `bash -e {0}` --
+          # `-e` but NOT `-o pipefail` -- so this pipeline used to exit with
+          # `tee`'s status, which is 0 unless the disk fills.
+          # scripts/mutation.sh takes deliberate care to exit 1 when
+          # mull-runner writes no report, and that 1 was discarded: the step
+          # went green and the failure surfaced one step later as
+          # check_mutation_regression.py failing to *open* a file. Two weeks
+          # of scheduled runs measured nothing and nothing said so. The same
+          # trap cost morph#479 the clang-tidy gate; scripts/check_workflow_pipefail.py
+          # now fails on an unguarded pipeline in any workflow.
+          #
+          # `tee` stays: the Upload step below publishes the log it writes.
+          set -o pipefail
+          scope="${{ inputs.scope || 'core-forms' }}"
+          bash scripts/mutation.sh "$scope" | tee "mutation-${scope}.log"
+          # An empty log means the campaign produced no output at all, which
+          # `set -o pipefail` cannot see -- a script that prints nothing and
+          # exits 0 is a successful pipeline. Same reason the install steps
+          # above `test -s` what curl wrote (morph#681).
+          test -s "mutation-${scope}.log"
 
       - name: Check for a regression against the recorded baseline
         id: regression
