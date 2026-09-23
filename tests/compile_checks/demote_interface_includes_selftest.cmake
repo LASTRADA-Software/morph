@@ -16,7 +16,7 @@
 # would pass identically with the function body deleted.
 #
 # That is the exact shape of gate this repository has shipped before and been
-# burned by (docs/spec/testing_charter.md, "Verify rather than assert"; the
+# burned by (AGENTS.md, "Verify rather than assert"; the
 # failure modes recorded in scripts/check_coverage_roots.sh's own header). So
 # the helper is checked against a hand-written option list instead, exercising
 # every case it claims to handle, with the expected results written out in

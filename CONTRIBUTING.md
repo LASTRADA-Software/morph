@@ -66,7 +66,7 @@ serialising independent rungs behind one file.
   why, and each instrument's known reach limits (`oom_injector` disabled under
   sanitizers, `fault_proxy` is ladder-only, no I/O-failure seam for
   `include/morph/net`) — see
-  [`docs/spec/testing_charter.md`](docs/spec/testing_charter.md) before
+  [`docs/spec/testing_strategy.md`](docs/spec/testing_strategy.md) before
   deciding what a change needs beyond an ordinary Catch2 case.
 - **Sanitizers:** the `clang-asan`/`clang-tsan`/`clang-ubsan` presets are what
   CI's sanitizer matrix runs. Running them locally has two traps that cost more

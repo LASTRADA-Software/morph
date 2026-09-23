@@ -16,6 +16,7 @@ behind its own CMake option, default `OFF`, so an ordinary `cmake --build`
 - [Load / latency benchmark](#load--latency-benchmark-testsbench)
 - [Adversarial cross-socket run](#adversarial-cross-socket-run-testsqttest_qt_websocket_adversarialcpp)
 - [Install / export consumability](#install--export-consumability-scriptscheck_install_exportsh)
+- [Declined techniques, and why](#declined-techniques-and-why)
 - [Cross-references](#cross-references)
 
 ## Fuzz harness (`tests/fuzz/`)
@@ -590,6 +591,34 @@ Self-tested by `scripts/test_check_install_export.sh`, which reintroduces each
 defect into a scratch copy of the tree one at a time and requires the checker
 to catch each one *for the stated reason* — the same "test the checker first"
 pattern as the deprecation-marker and test-type-name lints.
+
+## Declined techniques, and why
+
+Kept from `testing_charter.md`, which was removed on 2026-09-23 along with the
+meta-gates it inventoried. The inventory drifted every time a gate moved; these
+are scope decisions about what this library is, and they do not.
+
+- **Crash / power-loss simulation.** SQLite ships a storage engine of its own
+  and must survive an OS crash mid-write; morph does not own storage — its
+  offline queue (`include/morph/offline`) delegates durability to SQLite
+  itself (`sqlite_offline_queue.hpp`) or to plain file I/O
+  (`file_offline_queue.hpp`), and a crash-durability claim about *those*
+  belongs to SQLite's own test suite and the filesystem's fsync contract, not
+  to a simulation morph would have to build and maintain. Declined as
+  out-of-scope for what this library is, not as a gap.
+- **A proprietary, dedicated coverage harness (SQLite's TH3).** SQLite's
+  headline coverage figure is produced by TH3, which is not shipped with
+  SQLite and is not free to obtain. Citing that number as a model without
+  the harness that produces it would make this charter aspirational rather
+  than checkable — the constraint this whole document exists to avoid (see
+  "The guarantee" above). morph's coverage figures are produced entirely by
+  tools already in this repository (`scripts/coverage.sh`,
+  `llvm-cov`/`llvm-profdata`), so anyone can reproduce them.
+- **100% MC/DC as a stated target.** Named directly in "The guarantee" above:
+  this repository measures line and branch coverage, not MC/DC, and does not
+  claim to. Adopting the *number* without the instrument that verifies it
+  would be exactly the mistake the TH3 point above describes.
+
 
 ## Cross-references
 

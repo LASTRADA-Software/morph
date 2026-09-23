@@ -257,7 +257,7 @@ TEST_CASE("TcpSocket: adopting a non-blocking descriptor clears O_NONBLOCK", "[n
     // platform accept() never yields a non-blocking socket, and a test that
     // merely accepts a connection and inspects the result would pass with the
     // fix reverted -- a control measuring nothing, which
-    // docs/spec/testing_charter.md exists to keep out of this tree.
+    // AGENTS.md's "Verify rather than assert" exists to keep out of this tree.
     //
     // What is platform-independent is the rule the fix installs: the
     // fd-adopting constructor is the single place blocking mode is decided, and
