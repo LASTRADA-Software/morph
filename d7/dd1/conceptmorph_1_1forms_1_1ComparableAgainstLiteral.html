@@ -130,13 +130,13 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/dd1/concept
 <div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html">ComparableAgainstLiteral</a> = <span class="keyword">requires</span>(<span class="keyword">const</span> V&amp; fieldValue, <span class="keyword">const</span> L&amp; literal) {</div>
 <div class="line">    { detail::equalsOperand(fieldValue) == literal } -&gt; std::convertible_to&lt;bool&gt;;</div>
 <div class="line">}</div>
-<div class="ttc" id="aconceptmorph_1_1forms_1_1ComparableAgainstLiteral_html"><div class="ttname"><a href="../../d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html">morph::forms::ComparableAgainstLiteral</a></div><div class="ttdoc">Constraint: a field of type V can be compared against a literal of type L at all.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l01168">forms.hpp:1168</a></div></div>
+<div class="ttc" id="aconceptmorph_1_1forms_1_1ComparableAgainstLiteral_html"><div class="ttname"><a href="../../d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html">morph::forms::ComparableAgainstLiteral</a></div><div class="ttdoc">Constraint: a field of type V can be compared against a literal of type L at all.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l01169">forms.hpp:1169</a></div></div>
 </div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Constraint: a field of type <code class="param">V</code> can be compared against a literal of type <code class="param">L</code> at all. </p>
 <p>Checked at the <span class="tt">equals(...)</span> call site rather than left to fail inside <span class="tt">Equals::test</span>. <span class="tt">equals(&amp;A::someQuantity, "URGENT")</span> produced 83 lines whose first error was <span class="tt">no match for 'operator=='</span> deep inside this header, with no mention of <span class="tt">equals</span> and nothing pointing at the caller's own <span class="tt">formRules</span>.</p>
 <p>(<code class="param">V</code> is the field member type and <code class="param">L</code> the literal type. Neither is documented with a parameter-doc command: on a concept that is an error under -Weverything -Werror &ndash; see the note on <span class="tt">Condition</span> above.) </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01168">1168</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l01169">1169</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
