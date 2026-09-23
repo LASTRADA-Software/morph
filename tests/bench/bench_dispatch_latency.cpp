@@ -501,12 +501,12 @@ TEST_CASE("bench: RemoteServer dispatch throughput and latency", "[bench]") {
     // ceiling is tightened, on the grounds that allocations are deterministic
     // and load-independent. **That gate already exists and already runs.**
     // `tests/bench/CMakeLists.txt` registers `bench.alloc_budget`, which fails
-    // the build above 15.0 heap allocations per local round trip against a
-    // figure measured at exactly 14.06 on every one of 20 processes across
-    // three toolchains, idle and 16-way loaded alike (morph#700). Its margin
-    // is one allocation -- "the smallest regression worth a red build" -- and
-    // no wall-clock constant on any host is within three orders of magnitude
-    // of that resolution.
+    // the build above 9.0 heap allocations per local round trip against a
+    // figure measured at exactly 8.06 on every one of 84 processes across
+    // three toolchains, idle and oversubscribed alike (morph#700, morph#743,
+    // morph#572). Its margin is one allocation -- "the smallest regression
+    // worth a red build" -- and no wall-clock constant on any host is within
+    // three orders of magnitude of that resolution.
     //
     // So the property morph#707 worried was ungated ("dispatch does not get
     // more expensive") **is** gated, tightly, by a different instrument. What
