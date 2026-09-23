@@ -1648,7 +1648,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/dfc/remote_
 <div class="line"><a id="l01493" name="l01493"></a><span class="lineno"> 1493</span>            std::scoped_lock <span class="keyword">const</span> lock{_limitsMtx};</div>
 <div class="line"><a id="l01494" name="l01494"></a><span class="lineno"> 1494</span>            <span class="keywordflow">if</span> (_timeoutScheduler) {</div>
 <div class="line"><a id="l01495" name="l01495"></a><span class="lineno"> 1495</span>                <span class="comment">// The literal, not wire::kExecuteTimeoutMessage, on purpose:</span></div>
-<div class="line"><a id="l01496" name="l01496"></a><span class="lineno"> 1496</span>                <span class="comment">// scripts/scenario/scenario_coverage.py statically scans this</span></div>
+<div class="line"><a id="l01496" name="l01496"></a><span class="lineno"> 1496</span>                <span class="comment">// a scenario-coverage script (since removed) statically scanned this</span></div>
 <div class="line"><a id="l01497" name="l01497"></a><span class="lineno"> 1497</span>                <span class="comment">// file for a string literal passed directly to makeErr to</span></div>
 <div class="line"><a id="l01498" name="l01498"></a><span class="lineno"> 1498</span>                <span class="comment">// enumerate every refusal a scenario can assert against, and</span></div>
 <div class="line"><a id="l01499" name="l01499"></a><span class="lineno"> 1499</span>                <span class="comment">// does not follow named constants across headers (see that</span></div>
