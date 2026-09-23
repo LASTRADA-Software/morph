@@ -58,17 +58,19 @@ endif()
 # figure measured on the toolchains that actually run this target in CI, and
 # anything else can set its own. Setting it to 0 disables the gate.
 #
-# Measured on this tree with morph#572's Part A and Part C applied, 10 or more
-# processes per configuration, once idle and once with the machine 16-way
-# oversubscribed:
+# Re-measured on this tree with morph#572's Part A, Part B and Part C all
+# applied -- Part B landed in morph#743 and took the figure from 14.06 to 8.06,
+# which is why the ceiling below is 9.0 and no longer 15.0. 20 processes per
+# configuration, plus one run of 24 concurrent processes on twelve cores:
 #
-#   clang 22.1.8 / libstdc++ 16.2.1, Release : 14.06 per call, every process
-#   clang 22.1.8 / libstdc++ 16.2.1, Debug   : 14.06 per call, every process
-#   gcc 16.2.1   / libstdc++ 16.2.1, Debug   : 14.06 per call, every process
+#   clang 22.1.8 / libstdc++ 16.2.1, Release, idle       : 8.06, 20 of 20
+#   clang 22.1.8 / libstdc++ 16.2.1, Debug,   idle       : 8.06, 20 of 20
+#   clang 22.1.8 / libstdc++ 16.2.1, Debug,   24-way     : 8.06, 24 of 24
+#   gcc 16.2.1   / libstdc++ 16.2.1, Debug,   idle       : 8.06, 20 of 20
 #
 # The CI legs that build this target are Linux `clang-debug` and `gcc-debug`
-# (.github/workflows/ci.yml, the "every optional feature" matrix), so the last
-# two rows are the ones the default has to hold for.
+# (.github/workflows/ci.yml, the "every optional feature" matrix), so the Debug
+# rows are the ones the default has to hold for.
 #
 # **There is no spread to leave headroom for, and that is recent.** Before the
 # worker gate this file's benchmark now uses, the figure was bimodal -- ~17 on
@@ -78,9 +80,28 @@ endif()
 # under it would have been either flaky or blind: the pre-fix loaded mode
 # (13.06) sits *below* the post-fix idle mode (14.06), so no single number
 # could have separated a regression from a busy runner. With the race pinned
-# the figure is exact, so 15.0 is not a tolerance band -- it is "one more
+# the figure is exact, so 9.0 is not a tolerance band -- it is "one more
 # allocation per call than we spend now", which is the smallest regression
 # worth a red build.
+#
+# **Why this number was moved rather than left alone.** 15.0 was set against a
+# 14.06 figure; once Part B took the figure to 8.06 the same constant tolerated
+# a complete regression back to the pre-Part-B path without a word, which is a
+# gate holding a line nobody is standing on any more. Whoever next reduces the
+# figure should move this constant in the same commit, for the same reason.
+#
+# **Shown firing, not assumed to.** Adding a single `new char[8]` to
+# `Bridge::executeVia`'s steady-state path (clang-debug,
+# MORPH_BUILD_LOAD_TESTS=ON) takes the census to 9.06 and turns
+# `bench.alloc_budget` red -- ctest exit 8, and from the case's own output:
+#
+#   heap allocations total     : 1812 (9.06 per call)
+#   FAIL: 9.06 allocations per call exceeds --budget=9.00
+#
+# With the injection removed the same ctest case passes at 8.06. One extra
+# allocation per call is therefore the resolution of this gate, which is what
+# "one more allocation than we spend now" is meant to mean -- and note that the
+# same 9.06 passed silently under the 15.0 this replaces.
 #
 # MSVC's STL is excluded by default rather than guessed at: nothing in CI
 # measures it, and a ceiling nobody has measured is exactly the kind of control
@@ -88,7 +109,7 @@ endif()
 if(MSVC)
     set(_morph_alloc_budget_default 0)
 else()
-    set(_morph_alloc_budget_default 15.0)
+    set(_morph_alloc_budget_default 9.0)
 endif()
 set(MORPH_ALLOC_BUDGET_PER_CALL "${_morph_alloc_budget_default}" CACHE STRING
     "Ceiling, in heap allocations per local execute round trip, that morph_bench_alloc enforces as a ctest case. 0 disables the gate. See tests/bench/CMakeLists.txt for how the default was measured.")
