@@ -104,11 +104,11 @@ struct ListLeadsResult {
 /// concurrent conversions blocking on nested completions can starve the pool
 /// outright — no thread is ever free to run the nested `execute()` that
 /// would unblock them (see `test_convert_lead.cpp`'s pool-starvation test,
-/// which demonstrates the naive alternative deadlocking a small pool, and
-/// `docs/findings/` for why this is genuinely new ground: no sanctioned
+/// which demonstrates the naive alternative deadlocking a small pool). This
+/// is genuinely new ground: no sanctioned
 /// internal-client seam exists yet, and the only same-model cascade
 /// precedent, `kanban::BoardModel::evaluateRules`, does not extend
-/// mechanically to three different models' tables).
+/// mechanically to three different models' tables.
 ///
 /// This also resolves — not just relocates — the "three per-model journal
 /// entries carry no causal link" limit `LADDER.md`'s Journal honesty section

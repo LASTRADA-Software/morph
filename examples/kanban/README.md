@@ -316,9 +316,7 @@ reads by the caller's project role (not bearer-token validity alone).
 
 ## Findings
 
-Filed as GitHub issues per [`FINDINGS.md`](../FINDINGS.md) (this rung's
-findings were originally `r4-001`/`r4-002` under the retired
-`docs/findings/` directory):
+Filed as GitHub issues, per [`AGENTS.md`](../../AGENTS.md)'s filing bar:
 
 - [#343](https://github.com/LASTRADA-Software/morph/issues/343)
   — the replay-attempt budget cannot tell an undelivered replay from a

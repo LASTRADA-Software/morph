@@ -194,8 +194,9 @@ it, and a host must pick one:
 The two paragraphs above define the *contract* — dedup on a shared key. The
 mechanism is `morph::offline::IReplayLedger`
 (`include/morph/offline/replay_ledger.hpp`), and it lives in the framework
-because five rungs across seven call sites otherwise each hand-write the same
-op-id-keyed table answering "has this already been applied?":
+because five rungs — `bookmarks`, `crm`, `kanban`, `ledger`, `lims` — across
+seven call sites otherwise each hand-write the same op-id-keyed table
+answering "has this already been applied?":
 
 ```cpp
 struct IReplayLedger {
@@ -224,15 +225,15 @@ model's *already-open* mapper/transaction (see `BookmarksReplayLedger` in
 `examples/bookmarks/src/models/bookmark_model.cpp` for the reference shape —
 a file-local class, not its own header: it has exactly one consumer, and a
 header with no translation unit of its own has no `compile_commands.json`
-entry, which cost the first version of this exactly the tooling problem it
-now avoids) — and only the contract, plus
+entry, which is what clang-tidy needs to see it at all) — and only the
+contract, plus
 `tests/replay_ledger_conformance.hpp` to check an implementation against it,
 is promoted.
 
 **No base class for consumers.** A model holds or is handed an
-`IReplayLedger&`; it never derives from one — every occurrence found before
-promotion was a free function or a plain member, and a base-class design would
-have been un-adoptable by all of them.
+`IReplayLedger&`; it never derives from one — every occurrence in the rungs is
+a free function or a plain member, and a base-class design would be
+un-adoptable by all of them.
 
 **One mechanism, two response families.** The two shapes the seven occurrences
 split into — response-replay (kanban's/ledger's `StoreTransaction`, which

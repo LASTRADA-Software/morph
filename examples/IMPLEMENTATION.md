@@ -8,7 +8,7 @@ these applications exist to **stress-test morph**, not to be products.
 **The prime directive: every line of custom code that morph (or Lightweight)
 could have provided is a defect in the stress test.** If the framework can't
 provide it, that inability is a *finding* — record it per
-[`FINDINGS.md`](FINDINGS.md), don't quietly code around it.
+[`AGENTS.md`](../AGENTS.md)'s filing bar, don't quietly code around it.
 
 **Before you design around a Lightweight limitation, read
 [`docs/LIGHTWEIGHT-CONSTRAINTS.md`](../docs/LIGHTWEIGHT-CONSTRAINTS.md)** — one
@@ -27,12 +27,11 @@ tax, drawn from the fix budget) or **explicitly dispositioned in the spec
 as app-layer by design**. Without this rule the ladder ends with a shadow
 framework living in `examples/common` — which would be the program's
 biggest finding, permanently unfiled. The op-id ledger example is no longer
-hypothetical: it fired three rungs past its own trigger point and was
-promoted as `morph::offline::IReplayLedger`
-([morph#226](https://github.com/LASTRADA-Software/morph/issues/226); see
-[`FINDINGS.md`](FINDINGS.md), "Promoted findings", and
+hypothetical: five rungs hand-wrote the same op-id table across seven call
+sites before it was promoted as `morph::offline::IReplayLedger` — see
 [`docs/spec/offline/offline.md`](../docs/spec/offline/offline.md)'s
-`IReplayLedger` section for the disposition).
+`IReplayLedger` section for what it promotes and what it deliberately leaves
+app-side.
 
 ## 1. Models are the application
 

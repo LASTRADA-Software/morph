@@ -181,9 +181,8 @@ schemas/layouts). Build order (each step is a usable milestone):
      they did before this rung existed; the moment any role is assigned, the
      account switches to enforced mode and an *unlisted* principal is then
      implicitly `Viewer`. A real deployment would pair this with a
-     roles-backfill step at account-creation time (out of scope here — see
-     `docs/findings/` convention for where that would be filed as a
-     productionization gap, not a bug in this rung).
+     roles-backfill step at account-creation time (out of scope here, and a
+     productionization gap rather than a bug in this rung).
    - **Per-field enforcement has no framework hook and needed two new
      pieces**, matching the round-5 ground truth this section's "Expected
      strain points" already named: (1) `crm::gui::updateAccountSchemaJsonFor`

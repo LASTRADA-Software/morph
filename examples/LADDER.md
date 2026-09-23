@@ -13,8 +13,8 @@ replay, exactly-once, SQLite contention) and where reviews locate peak
 findings-per-week. **Rungs 5–7 are a design annex**: their READMEs are
 finished deliverables (requirements studies whose sharpest content the
 spikes convert into CI at a fraction of construction cost); building any of
-them is a separate decision taken *after* rung 4 with the
-[finding pipeline](FINDINGS.md) scoreboard in hand — **crm (rung 7) was
+them is a separate decision taken *after* rung 4, with what the built rungs
+have found in hand — **crm (rung 7) was
 green-lit for construction on 2026-08-28** by direct decision rather than
 waiting on that scoreboard review, once its own defining framework question
 was independently answered by the extension-bag spike (below). Both halves
@@ -23,8 +23,8 @@ was independently answered by the extension-bag spike (below). Both halves
 smaller ones. Ledger (rung 5) remains the strongest *unbuilt* candidate —
 the only annex rung left with a genuinely app-shaped core. The program's
 product is **findings fixed, not apps shipped** — see
-[`FINDINGS.md`](FINDINGS.md) for what counts, triage, the fix budget, exit
-criteria, and the demotion policy.
+[`AGENTS.md`](../AGENTS.md)'s filing bar for what a rung's defect is worth
+recording and what it is not.
 
 **The no-app spikes** (start immediately, in parallel with rungs 0–1; each
 files findings, none builds an app):
