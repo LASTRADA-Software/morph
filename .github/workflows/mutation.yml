@@ -207,4 +207,6 @@ jobs:
             mutation-*.log
             regression-*.log
             build/mutation-*/mutation-*.txt
+            build/mutation-*/baseline-*.log
+            build/mutation-*/mull.yml
           retention-days: 30

@@ -116,11 +116,58 @@
 # is max(baseline * 10, --minimum-timeout), which against a 22s baseline is 220s
 # -- so a mutant that makes the suite hang holds a worker for nearly four
 # minutes, and measured throughput was 6.7 mutants/minute on twelve workers
-# instead of the ~33 the arithmetic predicts. Capping it at 60s (2.7x baseline)
+# instead of the ~33 the arithmetic predicts. Capping it at 2.7x the baseline
 # recovers most of that. A mutant that outlives the cap is scored killed, which
 # is the standard reading and the right one here: nothing in morph_tests is
 # legitimately three times slower than the baseline, so an over-cap mutant has
 # changed the program's termination behaviour.
+#
+# ── Why the cap is measured here and not written down (morph#732) ────────────
+#
+# That 2.7x used to be a constant -- 60000 ms, arithmetic done once against the
+# 22s this workstation takes -- and a constant derived on one machine and
+# enforced on another is a threshold calibrated where the feature is cheap. The
+# same timeout bounds mull's **warm-up** run of the *unmutated* suite, so when
+# the baseline goes over the cap mull does not slow down, it aborts:
+#
+#     [info] Warm up run (threads: 1)
+#            [################################] 1/1. Finished in 1m0.0s
+#     [error] Original test failed (warmup run)
+#     status: Timedout
+#
+# -- run 35592789912, 2026-09-21, ubuntu-26.04. No mutation score was produced
+# for two weeks, and no one saw it because the workflow's own reporting was
+# broken twice over (morph#730, morph#731).
+#
+# The numbers, from the campaign's own logs rather than from an estimate:
+#
+#   | run          | date       | warm-up (1 thread) | mutant phase   |
+#   |--------------|------------|--------------------|----------------|
+#   | 34349442137  | 2026-09-09 | completed          | completed      |
+#   | 34836153375  | 2026-09-14 | **24.21s**         | 121m13.7s /784 |
+#   | 35592789912  | 2026-09-21 | **> 60s** (killed) | never started  |
+#
+# So the hosted runner is not systematically slower than this workstation --
+# 24.21s against 22s is ~10%. What it is, is *variable*: the same job's
+# instrumented build took 14 minutes on 09-14 and 29 minutes on 09-21, and the
+# baseline moved with it, from 2.5x under the cap to over it. A fixed cap with
+# no margin for a 2x machine is the defect; a second, larger constant would only
+# move the cliff.
+#
+# So the baseline is measured on whatever machine is actually running, once,
+# before mull is invoked, and the cap is 2.7x *that*. On this workstation that
+# reproduces the old 60000 ms almost exactly (22s * 2.7 = 59.4s), which is why
+# MULL_MIN_TIMEOUT_MS floors it at 60000: the ratio is what was measured, and
+# the floor keeps a fast machine from deriving a cap too tight for a mutant that
+# is merely slow.
+#
+# The measurement costs one extra run of the suite -- ~24s against a campaign of
+# two hours -- and pays for itself twice over: it is also the only place the
+# unmutated suite's own output is ever seen. Mull runs it too, and reports a
+# failure as `Original test failed (warmup run)` with `stdout: ''`, `stderr: ''`
+# -- a verdict with the evidence stripped out. Running it here first means a
+# suite that does not pass says so in its own words, before two hours of mutants
+# are scored against it.
 #
 # One caveat on the number, in the direction of *over*-counting kills.
 # tests/test_outbox.cpp names its scratch file after the address of a
@@ -238,10 +285,11 @@ mkdir -p "$build_dir"
     echo "excludePaths:"
     echo "  - .*_deps.*"
     echo "  - .*/tests/.*"
-    # Per-mutant timeout. morph_tests' own wall time is ~22s and several of its
-    # cases wait on real timeouts, so a mutant that merely makes the suite slow
-    # must not be scored as killed-by-timeout.
-    echo "timeout: 60000"
+    # No `timeout:` here. It is appended below, once the baseline it is derived
+    # from has been measured on this machine -- see "Why the cap is measured
+    # here and not written down". The frontend has read this file by then and
+    # does not consume `timeout` at all; only the runner does, and the runner
+    # has not started.
 } > "${build_dir}/mull.yml"
 
 # USE_COMPILER_CACHE=OFF: the objects carry mutation metadata keyed to this
@@ -268,6 +316,49 @@ if ! readelf -SW "${build_dir}/${binary}" | grep -q '\.mull_mutants'; then
     exit 1
 fi
 
+# ── The baseline, measured on the machine that is about to run the campaign ──
+#
+# One unmutated run of the suite, single-threaded, exactly as mull's warm-up
+# will run it. See "Why the cap is measured here and not written down" for what
+# this replaces and the three runs that made it necessary (morph#732).
+readonly baseline_log="${build_dir}/baseline-${scope}.log"
+echo "scripts/mutation.sh: measuring the unmutated suite (mull runs it once, single-threaded, before any mutant)..."
+baseline_start=${SECONDS}
+set +e
+"${build_dir}/${binary}" > "$baseline_log" 2>&1
+baseline_status=$?
+set -e
+readonly baseline_seconds=$(( SECONDS - baseline_start ))
+readonly baseline_status
+
+if [ "$baseline_status" -ne 0 ]; then
+    echo "scripts/mutation.sh: the unmutated suite exited ${baseline_status} after ${baseline_seconds}s." >&2
+    echo "  Every mutant is scored against this run, so a failing baseline makes the" >&2
+    echo "  whole campaign meaningless. Mull reports this as 'Original test failed" >&2
+    echo "  (warmup run)' with the suite's own output stripped out; here it is:" >&2
+    tail -n 30 "$baseline_log" >&2
+    exit 1
+fi
+
+# 2.7x, floored. The ratio is what was measured on a 12-core workstation (22s
+# baseline, 60s cap); the floor keeps a fast machine from deriving a cap too
+# tight for a mutant that is merely slow, and reproduces the old constant
+# exactly on the machine that constant came from.
+readonly timeout_floor_ms="${MULL_MIN_TIMEOUT_MS:-60000}"
+derived_timeout_ms=$(( baseline_seconds * 2700 ))
+if [ "$derived_timeout_ms" -lt "$timeout_floor_ms" ]; then
+    derived_timeout_ms="$timeout_floor_ms"
+fi
+readonly timeout_ms="${MULL_TIMEOUT_MS:-$derived_timeout_ms}"
+echo "scripts/mutation.sh: unmutated ${target} baseline: ${baseline_seconds}s on $(nproc) cores."
+echo "  per-mutant timeout: ${timeout_ms} ms (2.7x baseline, floored at ${timeout_floor_ms} ms${MULL_TIMEOUT_MS:+, overridden by MULL_TIMEOUT_MS})."
+
+# Appended now rather than written with the rest of the config: the frontend
+# read mull.yml at compile time and does not consume `timeout`, and the runner
+# -- which does -- has not started. Both halves therefore see one number, which
+# is the property the "step that is easy to get wrong" section is about.
+echo "timeout: ${timeout_ms}" >> "${build_dir}/mull.yml"
+
 # IDE only. Mull's SQLite reporter aborts on this project --
 # "Failed to write SQLite report: string or blob too big" -- and Mull treats a
 # reporter error as fatal, so it exits *after* the 46-minute run and *before*
@@ -283,7 +374,7 @@ fi
 set +e
 MULL_CONFIG="${PWD}/${build_dir}/mull.yml" "$runner" \
     --workers "${MULL_WORKERS:-$(nproc)}" \
-    --timeout "${MULL_TIMEOUT_MS:-60000}" \
+    --timeout "${timeout_ms}" \
     --reporters IDE \
     --report-dir "${build_dir}" \
     --report-name "mutation-${scope}" \
