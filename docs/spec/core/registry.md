@@ -36,6 +36,7 @@ without knowing their concrete types.
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Thread safety](#thread-safety)
+  - [The registration-phase latch](#the-registration-phase-latch)
 - [Failure modes](#failure-modes)
 - [Limitations](#limitations)
 - [Cross-references](#cross-references)
@@ -846,6 +847,32 @@ The process-level singletons are returned by `defaultDispatcher()` and
 `defaultRegistry()` (both are `inline` functions with function-local `static`
 variables).
 
+All three helpers `assert` in a debug build that the
+[registration-phase latch](#the-registration-phase-latch) is still open, which
+is what turns the thread-safety precondition below from advice into a
+diagnosable failure.
+
+#### Why all three are `noexcept` while allocating
+
+Each of the three builds `std::string` keys and grows a map, so each can throw
+`std::bad_alloc` through a `noexcept` boundary and call `std::terminate`. That
+is recorded in [Failure modes](#failure-modes) and is **deliberate, not an
+oversight** (morph#698).
+
+The only caller of any of them is the initialiser of a namespace-scope
+`const bool` that `BRIDGE_REGISTER_MODEL` / `BRIDGE_REGISTER_ACTION` emit. An
+exception that escapes the dynamic initialisation of a non-local variable
+already calls `std::terminate` — [basic.start.dynamic] and
+[except.terminate]. So dropping `noexcept` would not change what an
+out-of-memory during static init does to the process; it would move the
+`terminate` one frame outwards and add an unwind path to every registrar that
+can never be taken. The `noexcept` states what the call site already
+guarantees.
+
+The assertion is the other half of that argument: it is what enforces that the
+call site really is the only one. Before it, "the only caller is a static
+initialiser" was an assumption with nothing behind it.
+
 ## Registration macros
 
 Both macros below name their generated anonymous-namespace variable by pasting
@@ -1140,6 +1167,8 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `ActionDescription` | struct | `{schema, required}` for one action: `forms::schemaJson<A>()` plus `x-payloadFingerprint`/`x-payloadShape`, and the `required` names read back out of it. |
 | `actionDescription<A>()` | function template | The process-lifetime `ActionDescription` for `A`; `buildActionDescription<A>()` is the uncached builder behind it. |
 | `ModelRegistryFactory` | class | Maps `modelId` → factory; server-side model instantiation. |
+| `closeRegistrationPhase()` | function | Declares the registration phase over. From then on a debug build asserts on every `register*Once` call. See ["The registration-phase latch"](#the-registration-phase-latch). |
+| `registrationPhaseClosed()` | function | Whether the registration phase has closed. |
 | `ActionExecuteRegistry` | class | Maps `(modelId, actionId, typeid(Sharing))` → type-erased executor through `BridgeHandler`; client/schema-driven execute. Two entries per action, one per sharing policy — see ["The key is a triple"](#the-key-is-a-triple-not-a-pair--modelid-actionid-typeidsharing). |
 
 ### Macros
@@ -1164,6 +1193,9 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `registerModelOnce<M>(id)` | Static-init helper; returns `true`. |
 | `registerActionOnce<M, A>(modelId, actionId)` | Static-init helper; returns `true`. |
 | `registerActionExecutorOnce<M, A>(modelId, actionId)` | Static-init helper; only declared in `registry.hpp`, defined in `bridge.hpp`. |
+| `registrationPhaseFlag()` | The process-wide registration-phase `std::atomic<bool>`. See ["The registration-phase latch"](#the-registration-phase-latch). |
+| `noteRegistryRead(isProcessRegistry)` | Closes the latch on the first read of a process-level registry. Debug builds only; empty under `NDEBUG`. |
+| `reopenRegistrationPhaseForTesting()` | Re-opens the latch. Test-only. |
 
 ## Design decisions
 
@@ -1180,6 +1212,8 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `setOutboxManaged` opt-out | **Suppress `recordIfAttached`, not `hasActionLog()`** | A store-backed model that logs inside its own transaction (see `journal.md`'s transactional outbox) must stop the framework's auto-append without losing "a log is attached" as a fact holders can still query. |
 | `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `morph::flows::FlowSession::set`) opt in. |
 | `ActionDispatcher` keeps one record per pair, not four maps | **`ActionEntry` in a single `unordered_map`** | The four sub-maps were keyed identically and filled by one function, so the lockstep was real but unstated; and `RemoteServer::handle` reached three of them per request. One record makes the invariant structural and the three reads one table each (morph#572, Part C). |
+| Enforcing the "no registration after `main`" precondition | **A debug-build latch and an `assert`, not a mutex** | The constraint was documented and unenforceable; a violation's only symptom was intermittent map corruption. A latch closed by the first singleton read costs nothing in a release build and turns the `dlopen` scenario into an abort with a message. Synchronising the registries instead would put a lock on a per-request read path to legalise a startup-only operation — a trade nobody has measured (morph#698). |
+| `register*Once` stays `noexcept` | **Keep it, and record why** | The only caller is a namespace-scope initialiser, where an escaping exception already calls `std::terminate` ([basic.start.dynamic]). Removing `noexcept` changes nothing about an OOM at static init and adds a dead unwind path. See ["Why all three are `noexcept` while allocating"](#why-all-three-are-noexcept-while-allocating). |
 | Registry lookups are heterogeneous | **Transparent `PairKeyHash`/`PairKeyEqual`, `find(PairKeyView)`** | Every caller already holds `string_view`s; materialising the stored `pair<string, string>` to hash it allocated for any id past the SSO buffer, measured at 2 allocations per lookup. The transparent hash routes both overloads through one `string_view` body so lookup and stored hashes cannot drift apart — a drift that would report a registered action as unknown with no diagnostic. |
 
 ## Thread safety
@@ -1206,6 +1240,60 @@ dispatching — races the map's internals against concurrent `find` calls and is
 undefined behaviour. Load and register plugin modules from a single thread,
 quiesced with respect to dispatch, before exposing them.
 
+### The registration-phase latch
+
+The constraint above was, until morph#698, documented and unenforced: nothing
+in the tree detected a post-`main` registration, so a caller could violate it
+silently and discover it as intermittent map corruption with no diagnostic
+anywhere.
+
+`registry.hpp` now carries a one-way latch over the registration phase:
+
+| Symbol | Kind | Behaviour |
+|---|---|---|
+| `morph::model::closeRegistrationPhase()` | public function | Closes the latch. Idempotent, thread-safe, never re-opens. Call it once early in `main()`, before spawning a thread. |
+| `morph::model::registrationPhaseClosed()` | public function | Reports the latch state. |
+| `detail::registrationPhaseFlag()` | detail function | The `std::atomic<bool>` itself: a function-local `static` in an `inline` function, one per process, for the same reason the registries are. |
+| `detail::noteRegistryRead(bool isProcessRegistry)` | detail function | **Debug builds only** — closes the latch on the first read of a *process-level* registry. Empty under `NDEBUG`. |
+| `detail::reopenRegistrationPhaseForTesting()` | detail function | Re-opens it. Test-only; an application that calls it has re-created the hazard the latch exists to catch. |
+
+Three call sites feed the latch — `ActionDispatcher::dispatch`,
+`ModelRegistryFactory::create` and `ActionExecuteRegistry::execute` — each
+guarded on the instance being the process singleton. A locally constructed
+`ActionDispatcher` (which several tests own, and which `RemoteServer` accepts
+by reference) is outside the constraint and must not latch the whole program;
+it does not.
+
+Three asserts consume it: `registerModelOnce`, `registerActionOnce` and
+`registerActionExecutorOnce` — which is exactly what a `dlopen`ed module's
+`BRIDGE_REGISTER_*` initialisers call. A plugin loaded after dispatch has begun
+therefore aborts on a debug build with a message naming this section, instead
+of corrupting a map on a release build with no message at all.
+
+**Two asymmetries, both deliberate.**
+
+- *Debug builds only.* The assertion is an `assert`, which `NDEBUG` compiles
+  out, so the auto-close that feeds it is compiled out too:
+  `ActionDispatcher::dispatch` is a per-request path and must not pay for a
+  check nothing reads. A release build therefore answers
+  `registrationPhaseClosed()` with `false` until the application closes the
+  latch itself. `closeRegistrationPhase()` and `registrationPhaseClosed()`
+  exist and work on both builds; only the *automatic* closing is conditional.
+- *The latch is not synchronisation.* It detects the violation; it does not
+  make the violating call safe. Option (b) of morph#698 — an actual mutex or
+  concurrent map on the registries — remains explicitly out of scope, because
+  the read path is per-request on the server and no cost measurement has been
+  taken for locking it.
+
+The enforcement is proven rather than asserted, per `AGENTS.md`:
+`tests/test_registration_phase.cpp` `fork()`s a child that closes the latch and
+then calls each registrar, and requires the child to die on `SIGABRT`. Each of
+the three is paired with a control that runs the same registrar with the latch
+*open* and requires a normal exit — without it, a registrar that aborted for
+some unrelated reason would look identical. Both halves were watched failing
+against a mutated fix (the three asserts rewritten to `assert(true && ...)`,
+and separately `noteRegistryRead` emptied).
+
 ## Failure modes
 
 | Situation | Behaviour | Where |
@@ -1216,7 +1304,8 @@ quiesced with respect to dispatch, before exposing them.
 | `dispatch` when the decoded action fails `ActionValidator<Action>::ready(...)` | Throws `morph::model::ValidationError` (a `std::runtime_error` subclass) **before** `Model::execute` runs — the action is never executed. Actions with no validator (the common case) are unaffected: `ready()` defaults to `true`. | `ActionDispatcher::registerAction`'s runner |
 | `create` with an unknown model id | Throws `std::runtime_error("unknown model type: …")` at runtime. | `ModelRegistryFactory::create` |
 | `coalesce` for an unknown pair | Does **not** throw — defaults to `false` (every entry kept). | `ActionDispatcher::coalesce` |
-| Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. | `registry.hpp` |
+| Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. This is the intended outcome rather than an accepted defect: the same OOM without `noexcept` terminates anyway, because the caller is the dynamic initialiser of a non-local variable. See ["Why all three are `noexcept` while allocating"](#why-all-three-are-noexcept-while-allocating). | `registry.hpp` |
+| A `register*Once` call after the registration phase closes (e.g. a `dlopen`ed module registering once dispatch has begun) | **Debug build:** the `assert` fires and the process aborts with a message naming this hazard. **Release build:** unchanged — undefined behaviour, racing the map's internals against concurrent `find`s, with no diagnostic. The latch detects the violation; it does not make it safe. | `registry.hpp`, `bridge.hpp` — see ["The registration-phase latch"](#the-registration-phase-latch) |
 
 Note the asymmetry the design accepts intentionally: the **typed local path**
 (`BridgeHandler::execute<Action>()`, `Model::execute(action)`) is checked by the

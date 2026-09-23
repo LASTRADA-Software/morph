@@ -52,6 +52,7 @@ and react to backend changes.
 - [Failure modes](#failure-modes)
 - [Thread context](#thread-context)
 - [API reference](#api-reference)
+- [`executeInto` — settling the caller's own completion](#executeinto--settling-the-callers-own-completion)
 - [Design decisions](#design-decisions)
 - [Cross-references](#cross-references)
 - [Limitations](#limitations)
@@ -2475,6 +2476,45 @@ not a behavior change to the existing loopback-only default.
 | `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup pipe, and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup pipe cannot be created — an accept loop nothing can interrupt is worse than not listening (morph#437). |
 | `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
 | `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by writing one byte to the wakeup pipe it polls (morph#437) — **not** by `shutdownBoth()` on the listening socket, which only worked because Linux kicks a parked `accept(2)` on shutdown and left macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete (morph#451: the previous `_closing.exchange` guard let a second caller reach `_acceptThread.join()` while the first was inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++). The wakeup write runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
+
+## `executeInto` — settling the caller's own completion
+
+`IBackend` carries two dispatch entry points:
+
+| Verb | Shape | Who implements it |
+|---|---|---|
+| `execute(mid, call, cbExec)` | returns `Completion<std::shared_ptr<void>>` | Pure virtual. Every backend. |
+| `executeInto(mid, call, cbExec, sink)` | settles an `async::detail::ISettleSink` the caller owns | **Default-implemented**, forwarding to `execute`. Overridden by `LocalBackend` only. |
+
+`Bridge::executeVia` dispatches through `executeInto`, handing down a sink that
+**is** the typed `CompletionState<R>` its caller holds. That removes the
+`.then`/`.onError` block that used to forward the backend's erased completion
+into the typed one — six allocations per call of the 14.06 a local round trip
+took, measured down to 8.06 (morph#572, Part B; see
+[`bridge.md`](bridge.md#bridgesink--the-typed-state-the-backend-settles)).
+
+**Why a default rather than a pure virtual.** `execute` is implemented by five
+production backends and roughly ten test doubles. Making `executeInto` pure
+would be a fifteen-site change to gain an allocation on one path. The default
+is exactly the forwarding block it replaces, so a backend that does not
+override it costs precisely what it costs today — no gain, no regression.
+
+**The trap this creates, and how it is closed.** `LocalBackend` overrides
+`executeInto`, so a subclass of `LocalBackend` that overrode only `execute`
+would be bypassed for every bridge dispatch and would intercept nothing but the
+handful of direct `execute` callers — silently, with every test it still
+reaches passing. `LocalBackend::execute` is therefore **`final`**, which turns
+that into a compile error naming the fix: derive from `LocalBackend` and
+override `executeInto`, the primitive both entry points share. A backend
+deriving straight from `IBackend` is unaffected — it overrides `execute` and
+inherits the default `executeInto`, which forwards to it.
+
+**Pending tracking follows the sink.** `LocalBackend::_pending` holds
+`weak_ptr<ISettleSink>` rather than `weak_ptr<CompletionState<shared_ptr<void>>>`,
+and `cancelPending` calls `settleException` on each. A `cancelPending` racing a
+reply settles the same sink twice, which `ISettleSink`'s contract requires the
+implementation to absorb — see
+[`completion.md`](completion.md#detailisettlesink--where-a-backend-settles-one-dispatch).
 
 ## Design decisions
 

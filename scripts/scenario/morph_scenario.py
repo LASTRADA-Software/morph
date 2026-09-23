@@ -219,11 +219,32 @@ class WebSocket:
 
 PROTOCOL_VERSION = 1
 
-#: Every field `morph::wire::Envelope` reflects, with its default. `encode`
-#: writes all of them; `decode` ignores unknown keys and defaults absent ones,
-#: so sending the full set is both valid and closest to what morph itself puts
-#: on the wire. `primary`/`shared` are absent from wire.md's field table but
-#: present in `include/morph/core/wire.hpp` (see README, "Spec drift").
+#: Every field `morph::wire::Envelope` reflects, with its default.
+#:
+#: The driver sends the **full** set on every request. `decode` ignores unknown
+#: keys and defaults absent ones, so this is valid — but note that it is no
+#: longer what morph's own `encode` does: since morph#524 `encode` omits every
+#: member holding its default, writing only `kind`, `callId` and whatever the
+#: kind actually populates. Sending all thirteen is a deliberate divergence
+#: kept for two reasons:
+#:
+#:   * it exercises the decoder's tolerance of a maximal frame, which the short
+#:     form no longer does; and
+#:   * `scenarios/pastebin/malformed-envelope.scenario` asserts the server's
+#:     parse-error text by exact match, including a column offset and a
+#:     windowed snippet of the frame that failed. That frame is the one *this*
+#:     table produces, so its field order and completeness are load-bearing:
+#:     changing either re-derives that expectation.
+#:
+#: `callId` is the one field morph also always writes, and for a reason the
+#: driver depends on: `callId == 0` is a routing sentinel ("hand this to the
+#: parked synchronous call"), not an absence, so it is never elided. `rpc()`
+#: relies on that — it reads `decoded.get("callId")`, and would see `None`
+#: rather than `0` if it ever were. See "Omitted default fields" in
+#: docs/spec/core/wire.md.
+#:
+#: `primary`/`shared` are absent from wire.md's field table but present in
+#: `include/morph/core/wire.hpp` (see README, "Spec drift").
 ENVELOPE_DEFAULTS: dict[str, Any] = {
     "kind": "",
     "callId": 0,
@@ -314,6 +335,14 @@ class Client:
         `scenarios/pastebin/malformed-envelope.scenario` exists to pin. It is
         accepted only in that exact shape: an `err` whose message names a
         decode failure. A zero `callId` on anything else is still a violation.
+
+        That carve-out keys on the *value* `0`, not on the key being missing,
+        and that is deliberate: `callId` is a correlation field whose zero is a
+        routing sentinel, so `encode` never omits it even though it omits every
+        other defaulted member (morph#524). If that ever changes, `got` becomes
+        `None` here, the `got == 0` test stops matching, and every step of that
+        scenario fails as a transport error rather than an assertion — which is
+        exactly what it did while `callId` was briefly elided.
         """
         self.socket.send_text(json.dumps(envelope))
         want = envelope["callId"]

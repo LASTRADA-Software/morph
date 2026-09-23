@@ -15,6 +15,7 @@
 #include "../core/file_io_ops.hpp"
 #include "../core/logger.hpp"
 #include "action_log.hpp"
+#include "action_log_json.hpp"
 
 #ifdef _WIN32
 #include <io.h>

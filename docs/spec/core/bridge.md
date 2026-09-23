@@ -12,6 +12,7 @@ that only know action names at runtime.
 - [Architecture overview](#architecture-overview)
 - [`HandlerBinding`](#handlerbinding)
 - [`Bridge`](#bridge)
+  - [`BridgeSink` — the typed state the backend settles](#bridgesink--the-typed-state-the-backend-settles)
   - [The bridge's own executor](#the-bridges-own-executor)
 - [`BridgeHandler<Model>`](#bridgehandlermodel)
 - [Registration readiness — `isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound)
@@ -204,6 +205,46 @@ error propagation. Mirrors `ActionDispatcher::registerAction`'s runner
 "Outcome"](../journal/journal.md#logentry--one-recorded-action-execution) for
 the full field/replay semantics.
 
+### `BridgeSink` — the typed state the backend settles
+
+`executeVia` used to create **two** completions per dispatch: the typed one it
+hands the caller, and the erased `Completion<std::shared_ptr<void>>` the backend
+produced, with a `.then`/`.onError` pair forwarding one into the other. The
+forwarding cost six heap allocations — the erased `CompletionState`, the two
+closures, their two handler vectors, and one of the two posted settle tasks.
+
+`detail::BridgeSink<R>` is both halves at once: it derives from
+`async::detail::CompletionState<R>` (so it *is* the caller's typed state) and
+from `async::detail::ISettleSink` (so the backend settles it directly, through
+[`IBackend::executeInto`](backend.md#executeinto--settling-the-callers-own-completion)).
+One allocation replaces six. Measured on a `Ping{int}` → `Pong{int}` local
+round trip, clang 22.1.8 Release, twelve runs each, every run identical:
+**14.06 → 8.06 allocations per call, 1158.7 → 814.7 bytes**. The schema-driven
+`executeJson` path, which runs through the same function, falls **21.07 →
+15.06**.
+
+Everything the forwarding block did is a method on that class now. Each piece
+carries a comment naming the bug it came from, because moving them was the risk
+in this change:
+
+| Invariant | Where it lives now |
+|---|---|
+| The deadline is disarmed **first**, before any forwarding work, so a slow `onResult`/`publishResult` cannot give the timer a window to resolve the completion with `ClientTimeoutError` while the real result is in hand (morph#620) | `BridgeSink::settleOnce`, called at the top of both settle methods |
+| `pendingCalls()` is decremented on **exactly one** of two mutually-exclusive paths, whether or not the forwarding that follows then throws (morph#489) | `settleOnce`'s latch |
+| `lifetime->alive` is read **once**, and that one snapshot decides both `onResult` and `publishResult` (morph#486/#489) | `BridgeSink::settleValue` |
+| The value forwarding is `try`/`catch`-guarded, so a throwing move of `R` reaches the error sink rather than the callback executor (morph#502) | `BridgeSink::settleValue` |
+| A throw out of the backend undoes both the pending count and the deadline (morph#502) | `BridgeSink::abandon`, routed through the same latch |
+
+The latch is new, and it is load-bearing. Before `BridgeSink`, "exactly one
+decrement per dispatch" was carried by `.then` and `.onError` being mutually
+exclusive on one `CompletionState`. A sink has no such guarantee:
+`IBackend::cancelPending` settles it from one thread while a reply may be
+settling it from another. Without the latch the second settle decrements
+`_pendingCalls` again, and the counter is a `std::size_t` — a second decrement
+from zero reads as `18446744073709551615`, in a value `pendingCalls()`
+documents as a quiescence gate. `test_bridge_pending_calls.cpp` pins exactly
+that sequence, and was watched failing with the latch removed.
+
 The typed result is unwrapped from `std::shared_ptr<void>`
 into the final `Completion<R>` inside a `try`/`catch`: moving the result out of
 the opaque `shared_ptr<void>` can throw (a throwing move/copy on `R`, or a bad
@@ -217,9 +258,9 @@ fires instead. This mirrors the identical forwarding guard in
 path (`ActionExecuteRegistry::registerAction`) guards its own `resultToJson`
 forwarding the same way.
 
-Before any of that forwarding, the same `.then` closure checks the bridge's
-`CallbackToken` (captured as `alive = liveness()`) and gates every
-bridge-touching side effect on it being active — checked first, before
+Before any of that forwarding, `BridgeSink::settleValue` reads the bridge's
+lifetime gate once and gates every
+bridge-touching side effect on that one snapshot — checked first, before
 `onResult` or `hasSubscribers()` run. A backend completion can in principle
 resolve after the `Bridge` is gone: the backend may be co-owned and outlive
 this `Bridge`, or the callback may already be running when `~Bridge()` runs
@@ -1065,7 +1106,7 @@ make teardown order-independent.)
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Stages all re-registrations through `bindModel` on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Atomic exactly when the new backend answers `kCallerMayBlock`; a `kCallerMustNotBlock` backend's binds are deferred and the switch is not all-or-nothing (see above). Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its staging and commit, and resolves `whenBound()` waiters after releasing them. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the bridge's `CallbackToken`, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Dispatches through `IBackend::executeInto`, handing the backend a `detail::BridgeSink<R>` that is simultaneously the caller's typed completion state and the backend's settle sink — one allocation where the erased-completion forwarding block cost six (morph#572, Part B). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the bridge's `CallbackToken`, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 | `setExecuteDeadline` | `void setExecuteDeadline(std::chrono::milliseconds)` | Opt-in client-side execute deadline; `0` (the default) disables it. Lazily creates the backing `TimeoutScheduler` thread on first enable. |

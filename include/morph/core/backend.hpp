@@ -569,6 +569,50 @@ struct IBackend {
                                                                       ActionCall call,
                                                                       ::morph::exec::IExecutor* cbExec) = 0;
 
+    /// @brief Dispatches @p call and settles @p sink with its outcome.
+    ///
+    /// The same dispatch as `execute`, with the result delivered to a sink the
+    /// caller already owns instead of to a fresh `Completion` the caller then
+    /// has to forward into its own. `Bridge::executeVia` hands down a sink that
+    /// **is** the typed completion state the caller was given, which is what
+    /// removes the six-allocation forwarding block between the two (morph#572,
+    /// Part B): the erased `CompletionState`, the `.then` and `.onError`
+    /// closures, their two handler vectors, and one of the two posted settle
+    /// tasks.
+    ///
+    /// @par Why this has a default rather than being pure
+    /// `IBackend::execute` is implemented by five production backends and
+    /// roughly ten test doubles. A pure virtual here would be a fifteen-site
+    /// change to gain an allocation on one path. The default below is exactly
+    /// the forwarding block it replaces, so a backend that does not override it
+    /// costs precisely what it costs today — no gain, no regression — and a
+    /// backend that does gets the whole saving. `LocalBackend` overrides it;
+    /// nothing else does yet.
+    ///
+    /// @par Contract
+    /// Settles @p sink exactly once, through `settleValue` or `settleException`,
+    /// on the same thread and at the same point in the sequence the `execute`
+    /// overload would have resolved its completion. A backend that also has to
+    /// answer `cancelPending` must track the sink, not a state of its own.
+    /// Throwing out of this call is permitted and means the dispatch never
+    /// started — `Bridge::executeVia` undoes its pending count and its deadline
+    /// on that path, exactly as it does for `execute` (morph#502).
+    ///
+    /// @param mid    Target model id.
+    /// @param call   Bundled action; moved from.
+    /// @param cbExec Executor for delivering callbacks attached to the caller's
+    ///               own completion. A backend passes it along unchanged.
+    /// @param sink   Where to settle the outcome. Never null.
+    virtual void executeInto(::morph::exec::detail::ModelId mid, ActionCall call, ::morph::exec::IExecutor* cbExec,
+                             std::shared_ptr<::morph::async::detail::ISettleSink> sink) {
+        // Deliberately built from this class's own `execute`, not duplicated:
+        // one definition of what a dispatch is, whichever entry point a caller
+        // uses.
+        execute(mid, std::move(call), cbExec)
+            .then([sink](const std::shared_ptr<void>& value) { sink->settleValue(value); })
+            .onError([sink = std::move(sink)](const std::exception_ptr& exc) { sink->settleException(exc); });
+    }
+
     /// @brief Called by `Bridge::switchBackend()` after all handlers are re-registered.
     virtual void notifyBackendChanged() = 0;
 
@@ -1270,15 +1314,49 @@ public:
     /// The completion resolves with the opaque result on the strand thread and
     /// the callbacks are delivered via @p cbExec.
     ///
+    /// Expressed in terms of `executeInto` rather than beside it, so there is
+    /// one definition of what a local dispatch does whichever entry point a
+    /// caller uses. The extra `CompletionState` and its adapter sink are the
+    /// price of the `Completion`-returning shape — which is exactly the cost
+    /// `executeInto` exists to let `Bridge` stop paying (morph#572, Part B).
+    ///
+    /// @par Why this is `final`
+    /// `Bridge::executeVia` calls `executeInto`, not `execute`. A subclass that
+    /// overrode `execute` alone would therefore be bypassed for every bridge
+    /// dispatch and intercept only the handful of direct `execute` callers —
+    /// silently, with every test it has still passing on the paths it does
+    /// reach. `final` turns that into a compile error naming the fix: **derive
+    /// from `LocalBackend` and override `executeInto`**, which is the primitive
+    /// both entry points now share. (A backend deriving straight from
+    /// `IBackend` is unaffected: it overrides `execute` and inherits the
+    /// default `executeInto`, which forwards to it.)
+    ///
     /// @param mid    Target model id.
     /// @param call   Bundled action; `localOp` is the only field used here.
     /// @param cbExec Executor for delivering callbacks.
     /// @return Completion that will carry the result or an exception.
     ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
                                                               detail::ActionCall call,
-                                                              ::morph::exec::IExecutor* cbExec) override {
+                                                              ::morph::exec::IExecutor* cbExec) final {
         auto compState = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{compState, cbExec};
+        executeInto(mid, std::move(call), cbExec,
+                    std::make_shared<::morph::async::detail::CompletionSettleSink>(compState));
+        return comp;
+    }
+
+    /// @brief Schedules `call.localOp` on the model's strand and settles @p sink.
+    ///
+    /// @param mid    Target model id.
+    /// @param call   Bundled action; `localOp` is the only field used here.
+    /// @param cbExec Unused here: a sink carries its own delivery. Accepted so
+    ///               the signature matches `IBackend::executeInto`, whose remote
+    ///               implementations do need it.
+    /// @param sink   Settled on the strand thread with the result or the
+    ///               exception, exactly once.
+    void executeInto(::morph::exec::detail::ModelId mid, detail::ActionCall call, ::morph::exec::IExecutor* cbExec,
+                     std::shared_ptr<::morph::async::detail::ISettleSink> sink) override {
+        (void)cbExec;
 
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
         std::shared_ptr<detail::HydrationState> hydration;
@@ -1293,11 +1371,11 @@ public:
             }
         }
         if (!holder) {
-            compState->setException(
+            sink->settleException(
                 std::make_exception_ptr(std::runtime_error("model not found: id=" + std::to_string(mid.v))));
-            return comp;
+            return;
         }
-        trackPending(compState);
+        trackPending(sink);
         auto* const localOp = call.localOp;
         // The action handle travels with `localOp` into the strand task, not
         // just as far as this function: `ActionCall::localOp` borrows the
@@ -1317,82 +1395,86 @@ public:
         auto const inFlightAfterInc = inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
-        _strand.post(mid, [localOp, holder = std::move(holder), compState, session = std::move(session), modelTypeId,
-                           actionTypeId, inFlightCounter, hydration, action = std::move(action)]() mutable {
-            auto const start = std::chrono::steady_clock::now();
-            auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
-            bool ok = false;
-            // Resolve `compState` only after every metric and `endSpan` below are
-            // recorded — nothing synchronizes a `.then()`/`.onError()` callback
-            // (delivered via `cbExec`, which may run inline/synchronously) with
-            // anything after `setValue`/`setException` returns, so resolving first
-            // would let the caller observe completion before these metrics are
-            // emitted. This is a real race, not just a theoretical one.
-            std::shared_ptr<void> value;
-            std::exception_ptr error;
-            try {
-                ::morph::session::detail::ScopedContext const scoped{session};
-                // Explicit, because `localOp` is a function pointer now and
-                // a null one is undefined behaviour rather than the
-                // `std::bad_function_call` an empty `std::function` used to
-                // raise. Same outcome for the caller -- the completion
-                // resolves through its error sink -- with a diagnostic that
-                // names the field instead of the library.
-                if (localOp == nullptr) {
-                    throw std::runtime_error{"ActionCall::localOp is null: nothing to execute"};
+        _strand.post(
+            mid, [localOp, holder = std::move(holder), sink = std::move(sink), session = std::move(session),
+                  modelTypeId, actionTypeId, inFlightCounter, hydration, action = std::move(action)]() mutable {
+                auto const start = std::chrono::steady_clock::now();
+                auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
+                bool succeeded = false;
+                // Resolve the sink only after every metric and `endSpan` below are
+                // recorded — nothing synchronizes a `.then()`/`.onError()` callback
+                // (delivered via `cbExec`, which may run inline/synchronously) with
+                // anything after `setValue`/`setException` returns, so resolving first
+                // would let the caller observe completion before these metrics are
+                // emitted. This is a real race, not just a theoretical one.
+                std::shared_ptr<void> value;
+                std::exception_ptr error;
+                try {
+                    ::morph::session::detail::ScopedContext const scoped{session};
+                    // Explicit, because `localOp` is a function pointer now and
+                    // a null one is undefined behaviour rather than the
+                    // `std::bad_function_call` an empty `std::function` used to
+                    // raise. Same outcome for the caller -- the completion
+                    // resolves through its error sink -- with a diagnostic that
+                    // names the field instead of the library.
+                    if (localOp == nullptr) {
+                        throw std::runtime_error{"ActionCall::localOp is null: nothing to execute"};
+                    }
+                    value = localOp(*holder, action.get());
+                    succeeded = true;
+                } catch (...) {
+                    error = std::current_exception();
                 }
-                value = localOp(*holder, action.get());
-                ok = true;
-            } catch (...) {
-                error = std::current_exception();
-            }
-            // Settle hydration the moment the first action's outcome is known —
-            // before `endSpan`, before any metric, and before the `Completion`
-            // resolves. Each of those hands control to host code that is free
-            // to attach to this instance's key, and an attacher reaching the
-            // directory while the outcome is known but unrecorded is handed an
-            // instance whose first action has already failed — exactly what
-            // docs/spec/core/shared_instances.md's Failure modes section says
-            // must not happen. Only the *first* action settles it; `settle` is
-            // a single compare-exchange and ignores every later call.
-            if (hydration) {
-                hydration->settle(ok);
-            }
-            ::morph::observe::detail::endSpan(spanId, ok);
-            auto const elapsedMs =
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-            std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
-                {{"modelType", modelTypeId}, {"actionType", actionTypeId}}};
-            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
-            if (!ok) {
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
-            }
-            auto const inFlightAfterDec = inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
-            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
-                                                 static_cast<double>(inFlightAfterDec));
-            // Resolve last: the Completion is still settled exactly once, only
-            // its position relative to the now-recorded instrumentation moved.
-            if (ok) {
-                compState->setValue(std::move(value));
-            } else {
-                compState->setException(error);
-            }
-        });
-        return comp;
+                // Settle hydration the moment the first action's outcome is known —
+                // before `endSpan`, before any metric, and before the `Completion`
+                // resolves. Each of those hands control to host code that is free
+                // to attach to this instance's key, and an attacher reaching the
+                // directory while the outcome is known but unrecorded is handed an
+                // instance whose first action has already failed — exactly what
+                // docs/spec/core/shared_instances.md's Failure modes section says
+                // must not happen. Only the *first* action settles it; `settle` is
+                // a single compare-exchange and ignores every later call.
+                if (hydration) {
+                    hydration->settle(succeeded);
+                }
+                ::morph::observe::detail::endSpan(spanId, succeeded);
+                auto const elapsedMs =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
+                    {{"modelType", modelTypeId}, {"actionType", actionTypeId}}};
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+                if (!succeeded) {
+                    ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
+                }
+                auto const inFlightAfterDec = inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                                     static_cast<double>(inFlightAfterDec));
+                // Resolve last: the sink is still settled exactly once, only its
+                // position relative to the now-recorded instrumentation moved.
+                if (succeeded) {
+                    sink->settleValue(std::move(value));
+                } else {
+                    sink->settleException(error);
+                }
+            });
     }
 
     /// @brief Resolves every still-pending completion this backend produced with @p exc.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
-        std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
+        std::vector<std::weak_ptr<::morph::async::detail::ISettleSink>> snapshot;
         {
             std::scoped_lock const lock{_pendingMtx};
             snapshot.swap(_pending);
             _compactAt = kPendingCompactFloor;
         }
         for (auto& weak : snapshot) {
-            if (auto state = weak.lock()) {
-                state->setException(exc);
+            if (auto sink = weak.lock()) {
+                // May race a reply settling the same sink; `ISettleSink`'s
+                // contract makes the second call a no-op, which is what
+                // `CompletionState`'s first-result-wins gave this loop before
+                // the sink existed.
+                sink->settleException(exc);
             }
         }
     }
@@ -1468,14 +1550,14 @@ private:
     /// because a dead entry is one whose `CompletionState` is already gone and
     /// which `cancelPending`'s `weak.lock()` has always skipped. Carrying dead
     /// entries for longer changes nothing it observes.
-    /// @param state Completion state to track until it expires or is cancelled.
-    void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
+    /// @param sink Settle sink to track until it expires or is cancelled.
+    void trackPending(const std::shared_ptr<::morph::async::detail::ISettleSink>& sink) {
         std::scoped_lock const lock{_pendingMtx};
         if (_pending.size() >= _compactAt) {
             std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
             _compactAt = std::max(kPendingCompactFloor, _pending.size() * 2);
         }
-        _pending.emplace_back(state);
+        _pending.emplace_back(sink);
     }
 
     ::morph::exec::detail::StrandExecutor _strand;
@@ -1502,7 +1584,11 @@ private:
     // that only ever has a few calls in flight never sweeps at all.
     static constexpr std::size_t kPendingCompactFloor = 32;
     mutable std::mutex _pendingMtx;
-    std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
+    // Sinks, not completion states: a dispatch's settle point is whatever the
+    // caller handed down, which for `Bridge` is its own typed completion state
+    // (morph#572, Part B). A `weak_ptr` still, for the same reason as before --
+    // this list must not keep a finished dispatch alive.
+    std::vector<std::weak_ptr<::morph::async::detail::ISettleSink>> _pending;
     // Size at which `trackPending` next sweeps `_pending` for expired entries;
     // re-armed at twice the surviving count after each sweep. Guarded by
     // `_pendingMtx` along with `_pending` itself. See `trackPending` (morph#528).

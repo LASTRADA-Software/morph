@@ -25,6 +25,7 @@
 #include <morph/core/payload_schema.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/journal/action_log_json.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/quantity.hpp>

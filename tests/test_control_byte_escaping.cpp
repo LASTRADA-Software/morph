@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <morph/journal/action_log.hpp>
+#include <morph/journal/action_log_json.hpp>
 #include <morph/offline/file_offline_queue.hpp>
 #include <morph/session/session_auth.hpp>
 #include <string>
