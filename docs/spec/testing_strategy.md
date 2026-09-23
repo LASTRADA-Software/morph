@@ -276,9 +276,17 @@ box was tried and turned 3 of 20 Debug-under-load processes red.
 **The property those ceilings were feared to be leaving ungated is gated
 elsewhere, tightly.** morph#707 asks that an allocation gate be weighed before
 any wall-clock ceiling is tightened. It already exists: `bench.alloc_budget`
-(below) fails above 15.0 allocations per round trip against a figure measured
-at exactly 14.06 on every one of 20 processes across three toolchains, idle and
-loaded alike — a one-allocation margin, on a quantity machine load cannot move.
+(below) is set by rule at one allocation above the figure the benchmark
+measures — not a tolerance band — and that figure came out identical on every
+one of 20 processes across three toolchains, idle and loaded alike: a
+one-allocation margin, on a quantity machine load cannot move.
+**The two numbers are deliberately not restated here.** Both live in
+`tests/bench/CMakeLists.txt` — the ceiling as `MORPH_ALLOC_BUDGET_PER_CALL`,
+the measured figure in the comment that derives it — and they move together
+every time the dispatch path gets cheaper. When this paragraph carried copies
+of them they went stale twice in three days (morph#743, morph#758), while the
+argument they were quoted for survived both unchanged; so the argument is what
+this paragraph keeps, and the file above is where the current values are.
 So "dispatch does not get more expensive" is already gated to a resolution no
 wall-clock constant on any host can approach. What the two ceilings gate is the
 residue: a regression that costs time without costing allocations — a spin, a

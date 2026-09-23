@@ -924,6 +924,26 @@ public:
     void registerModel(std::string_view modelId, Factory factory) {
         _factories.insert_or_assign(std::string{modelId}, [factory = std::move(factory)]() mutable {
             std::unique_ptr<IModelHolder> holder{factory()};
+            // The fourth site of the morph#742 defect, and the one nothing was guarding.
+            // misc-static-assert fires here too -- `holder` is a runtime
+            // `std::unique_ptr` the factory just returned, so nothing in this condition
+            // is a constant expression, and the check's own fix does not compile:
+            // "static assertion expression is not an integral constant expression /
+            // function parameter 'holder' with unknown value cannot be used in a constant
+            // expression". Same defect, same suppression, same upstream report (morph#742).
+            //
+            // It stayed green only because `clang-tidy-diff` analyses changed lines and
+            // nothing had changed this one, so the next person to edit it inherited a red
+            // build that was not theirs (morph#762).
+            //
+            // Last re-checked at clang-tidy 22.1.8, the version CI pins: the diagnostic
+            // still fires and the suggested fix still does not compile. The stamp is here
+            // because nothing checks it for you -- morph#755 deleted both
+            // scripts/check_nolint_directives.sh (which would have flagged a directive that
+            // had stopped suppressing anything) and scripts/check_ci_clang_pin.sh (the
+            // natural re-check trigger on a CLANG_VERSION bump). Re-read this when the pin
+            // moves; if the finding is gone, delete all four directives together.
+            // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
             assert(!holder ||
                    (holder->type() == std::type_index(typeid(Model)) &&
                     "registerModel<Model>(modelId, factory): factory returned a holder for a different type"));
@@ -996,6 +1016,14 @@ inline bool registerModelOnce(std::string_view modelId) noexcept {
     // condition is "static assertion expression is not an integral constant
     // expression / non-constexpr function 'registrationPhaseClosed' cannot be used
     // in a constant expression". Reported upstream of this repository in morph#742.
+    //
+    // Last re-checked at clang-tidy 22.1.8, the version CI pins: the diagnostic
+    // still fires and the suggested fix still does not compile. The stamp is here
+    // because nothing checks it for you -- morph#755 deleted both
+    // scripts/check_nolint_directives.sh (which would have flagged a directive that
+    // had stopped suppressing anything) and scripts/check_ci_clang_pin.sh (the
+    // natural re-check trigger on a CLANG_VERSION bump). Re-read this when the pin
+    // moves; if the finding is gone, delete all four directives together.
     // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
     assert(!::morph::model::registrationPhaseClosed() &&
            "registerModelOnce: registration after the registration phase closed. The process-level "
@@ -1015,6 +1043,14 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     // condition is "static assertion expression is not an integral constant
     // expression / non-constexpr function 'registrationPhaseClosed' cannot be used
     // in a constant expression". Reported upstream of this repository in morph#742.
+    //
+    // Last re-checked at clang-tidy 22.1.8, the version CI pins: the diagnostic
+    // still fires and the suggested fix still does not compile. The stamp is here
+    // because nothing checks it for you -- morph#755 deleted both
+    // scripts/check_nolint_directives.sh (which would have flagged a directive that
+    // had stopped suppressing anything) and scripts/check_ci_clang_pin.sh (the
+    // natural re-check trigger on a CLANG_VERSION bump). Re-read this when the pin
+    // moves; if the finding is gone, delete all four directives together.
     // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
     assert(!::morph::model::registrationPhaseClosed() &&
            "registerActionOnce: registration after the registration phase closed. The process-level "

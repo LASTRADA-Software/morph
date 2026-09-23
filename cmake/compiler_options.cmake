@@ -755,8 +755,43 @@ function(apply_coverage target)
     # The flag is available on the pin: CI pins clang 22 and this was measured
     # on clang 22.1.8, and -fcoverage-mcdc landed in LLVM 18. So adopting it is
     # a question of the two reasons above, not of toolchain availability.
+    # `-fprofile-update=atomic` is not a tuning knob here -- without it the
+    # branch numbers this build produces over multithreaded code are wrong,
+    # and wrong in the direction that reports coverage nobody has (morph#754).
+    #
+    # llvm-cov does not count the second operand of a short-circuit `||`
+    # directly. It *derives* that arm by subtracting one counter from another,
+    # and clang's default profile counters are plain non-atomic increments. Two
+    # threads executing the same line therefore lose updates, the subtraction
+    # goes negative, and the u64 it lands in wraps: a disjunct nothing ever
+    # took prints as taken, with a nonsense count. That is not a hypothesis --
+    # a 12-thread probe over `if (flag.load() || !alwaysTrue())` reported
+    # `Branch True: 18.4E` for the never-taken arm in 8 runs out of 8, while
+    # the same binary single-threaded, and the same 12 threads built with this
+    # flag, reported `True: 0` in 3 runs out of 3 each.
+    #
+    # It cost morph a real disposition: `socket_server.hpp:224`'s allowlist
+    # entry was deleted on 2026-09-23 because one `clang-coverage` run saw its
+    # `!socket.valid()` disjunct "taken" (CI job 107031243709), while the four
+    # neighbouring runs of the same code -- and every local run since -- report
+    # it untaken.
+    #
+    # The cost is wall clock on the coverage leg only; no other preset is
+    # instrumented. It is real but it is not pinned down: `ctest --preset
+    # clang-coverage` over the same 2953 tests measured 270.21s without the
+    # flag, and 361.72s then 279.18s with it, on this machine. So the honest
+    # statement is "between a few percent and a third, and the run-to-run
+    # spread on an unquiet box is wider than one pair of runs can separate" --
+    # not the 34% the first comparison alone would have claimed. Three runs are
+    # not a distribution; if this number starts mattering, take it from
+    # `linux-coverage`'s own history rather than from here.
+    #
+    # What is not ambiguous is the effect: the first atomic run moved
+    # `socket_server.hpp` from 11 partial lines to 12. The non-atomic build was
+    # reporting an arm as covered that nothing takes, which is the direction
+    # that matters.
     target_compile_options(${target} PRIVATE
-        -fprofile-instr-generate -fcoverage-mapping -g -O0)
+        -fprofile-instr-generate -fcoverage-mapping -fprofile-update=atomic -g -O0)
     target_link_options(${target} PRIVATE
         -fprofile-instr-generate)
 

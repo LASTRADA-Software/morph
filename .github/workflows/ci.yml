@@ -3097,23 +3097,51 @@ jobs:
           #
           # So the diff is filtered first: a changed *source* with no entry in
           # compile_commands.json is dropped, and every drop is printed. A
-          # changed *header* is never dropped -- a header is never a
-          # translation unit, so -only-check-in-db's literal membership test
-          # would silently discard all of include/morph/**, which is
-          # morph#479's own defect one directory over (see above). The filter
-          # refuses to run at all unless the database is still the wide one
-          # the Configure step builds, because a filter consulting a narrowed
-          # database would quietly stop analysing everything the narrowing
-          # dropped.
+          # changed *header* cannot be dropped on that test -- a header is
+          # never a translation unit, so -only-check-in-db's literal
+          # membership test would silently discard all of include/morph/**,
+          # which is morph#479's own defect one directory over (see above).
+          # The filter refuses to run at all unless the database is still the
+          # wide one the Configure step builds, because a filter consulting a
+          # narrowed database would quietly stop analysing everything the
+          # narrowing dropped.
+          #
+          # A changed header used to be kept and handed to clang-tidy with no
+          # command at all, which is not the same as being analysed: clang
+          # falls back to InterpolatingCompilationDatabase, borrows the
+          # nearest entry's flags, and reports whatever the resulting broken
+          # parse produces as findings *in the contributor's file*. morph#753
+          # reproduced it on a new header in a directory with no .cpp:
+          # 'Lightweight/SqlConnection.hpp' file not found, plus a
+          # cppcoreguidelines-pro-type-member-init and a
+          # readability-identifier-naming that are both false -- the
+          # constructor does initialise those fields, and `_previous` is
+          # spelled like every other private member here. Three lanes hit the
+          # same fallback in one week from three directions.
+          #
+          # So a changed header is now *pinned*: the filter takes candidate
+          # commands from the database nearest-first, actually runs each one
+          # (`-fsyntax-only -x c++` on the header, with this job's own
+          # -extra-args), and writes the first that parses into an augmented
+          # database as a real entry for that header. clang-tidy then reads a
+          # command somebody checked instead of interpolating one. A header no
+          # candidate can parse is dropped with a warning that names the cause
+          # -- which is the honest answer, because there is no command to
+          # analyse it with -- and if that empties the diff the filter fails
+          # rather than reporting a green gate over nothing.
           cat > /tmp/filter-unbuilt-sources.py <<'PY'
           import json
           import pathlib
           import re
+          import shlex
+          import subprocess
           import sys
 
-          # Only *sources* are filtered out. A header is never a translation
-          # unit, so it is never in compile_commands.json.
+          # Only *sources* are filtered out on membership. A header is never a
+          # translation unit, so it is never in compile_commands.json -- it gets the
+          # command check below instead.
           SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".c++", ".cl", ".m", ".mm"}
+          HEADER_SUFFIXES = {".h", ".hh", ".hpp", ".hxx", ".h++", ".inc", ".ipp", ".tcc"}
 
           # Floors, not equalities. This filter is only trustworthy while the
           # database it consults is the wide one the Configure step builds: if
@@ -3121,24 +3149,22 @@ jobs:
           # default is the concrete way, morph#481 -- every examples/ source
           # would silently become "not built by this configure" and stop being
           # analysed, and this gate would go green having read 40% less code.
-          # The floor is what makes that loud. Counted over entries whose file
-          # resolves *inside the workspace*, so a resolution mismatch (a
-          # symlinked checkout, a path this script fails to normalise the same
-          # way) trips it too instead of silently skipping everything.
-          #
-          # Measured with this job's own configure flags and clang 22: 737
-          # entries naming 727 distinct in-workspace sources, 281 of them under
-          # examples/ (703/695/270 before morph#651 added
-          # -DMORPH_BUILD_BANK_GUI=ON to the Configure step above -- that flag
-          # moves both numbers away from their floor, never towards it).
-          # CI measured 690/276 at morph#481's revision. Both floors
-          # sit under both pairs with room for ordinary churn, and the
-          # regression they exist to catch takes examples/ to 16, not to 199.
           MIN_ENTRIES = 600
           MIN_EXAMPLES_ENTRIES = 200
 
+          # How many database entries a changed header is allowed to borrow flags from
+          # before this script gives up on it. Candidates are tried nearest-first (by
+          # shared path prefix), which is the same ordering clang's
+          # InterpolatingCompilationDatabase uses -- the difference is that each one is
+          # *checked* rather than assumed, and the first that parses the header is the
+          # one written into the database. 8 is enough to cross a directory boundary
+          # (the include/morph/** headers parse on candidate 1) without turning a
+          # pathological header into a linear scan of 700 compilations.
+          MAX_HEADER_CANDIDATES = 8
+
           root = pathlib.Path.cwd().resolve()
-          database = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          database_path = pathlib.Path(sys.argv[1])
+          database = json.loads(database_path.read_text())
           compiled = {pathlib.Path(entry["file"]).resolve() for entry in database}
           inside = {f for f in compiled if f.is_relative_to(root)}
           examples = {f for f in inside if f.is_relative_to(root / "examples")}
@@ -3154,6 +3180,87 @@ jobs:
               )
               sys.exit(1)
 
+
+          def entry_command(entry):
+              if "command" in entry:
+                  return shlex.split(entry["command"])
+              return list(entry["arguments"])
+
+
+          def probe_argv(entry, header):
+              """The entry's own compile command, aimed at `header` and told only to parse.
+
+              Everything that makes the command produce *output* is dropped -- `-c`, the
+              `-o`, the depfile switches and the source operand -- and nothing else is:
+              the include paths and macro definitions are the whole point, and they are
+              what the interpolated command gets wrong.
+              """
+              argv = entry_command(entry)
+              out = [argv[0]]
+              skip_next = False
+              for arg in argv[1:]:
+                  if skip_next:
+                      skip_next = False
+                      continue
+                  if arg in ("-c",):
+                      continue
+                  if arg in ("-o", "-MT", "-MF", "-MQ", "-x"):
+                      skip_next = True
+                      continue
+                  if arg in ("-MD", "-MMD", "-MP", "-M", "-MM"):
+                      continue
+                  # Every input operand goes, not just source-suffixed ones. A candidate
+                  # can itself be a pinned header entry built by an earlier iteration,
+                  # whose argv already ends in `-x c++ <that header>`; leaving it in
+                  # hands clang two main files and it refuses with "expected exactly one
+                  # compiler job". Caught by this branch's own clang-tidy-diff gate.
+                  if pathlib.Path(arg).suffix.lower() in SOURCE_SUFFIXES | HEADER_SUFFIXES:
+                      continue
+                  out.append(arg)
+              out += ["-fsyntax-only", "-x", "c++", str(header)]
+              return out
+
+
+          def shared_prefix_length(one, two):
+              count = 0
+              for a, b in zip(one.parts, two.parts):
+                  if a != b:
+                      break
+                  count += 1
+              return count
+
+
+          donors = list(database)
+
+
+          def command_for_header(header, extra_args):
+              """Find a compile command that actually parses `header`, or None.
+
+              Nearest-first by shared path prefix, and each candidate is *run* rather
+              than trusted. Returns (entry, argv) for the first that parses.
+              """
+              # `donors`, not `database`: the pinned entries this loop appends must never
+              # become candidates for the next header. They are derived commands, not
+              # ones the build system produced, and borrowing from one compounds a guess
+              # rather than checking it.
+              candidates = sorted(
+                  donors,
+                  key=lambda e: -shared_prefix_length(header, pathlib.Path(e["file"])),
+              )[:MAX_HEADER_CANDIDATES]
+              for entry in candidates:
+                  argv = probe_argv(entry, header) + list(extra_args)
+                  try:
+                      done = subprocess.run(
+                          argv, cwd=entry["directory"], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, timeout=300, check=False,
+                      )
+                  except (OSError, subprocess.TimeoutExpired):
+                      continue
+                  if done.returncode == 0:
+                      return entry, argv
+              return None, None
+
+
           sections = []
           current = None
           for line in pathlib.Path(sys.argv[2]).read_text(errors="replace").splitlines(keepends=True):
@@ -3164,8 +3271,15 @@ jobs:
                   continue
               current.append(line)
 
+          # Extra flags the clang-tidy-diff invocation passes through -extra-arg. The
+          # probe has to see the same ones or it answers a question nobody asked.
+          extra_args = sys.argv[5:]
+
           kept = []
           skipped = []
+          unparseable = []
+          pinned = []
+          headers_seen = 0
           for section in sections:
               name = None
               for line in section:
@@ -3184,12 +3298,43 @@ jobs:
                   kept.append(section)
                   continue
               path = root / name
-              if path.suffix.lower() in SOURCE_SUFFIXES and path.resolve() not in compiled:
+              suffix = path.suffix.lower()
+              if suffix in SOURCE_SUFFIXES and path.resolve() not in compiled:
                   skipped.append(name)
                   continue
+              if suffix in HEADER_SUFFIXES and path.is_file():
+                  headers_seen += 1
+                  entry, argv = command_for_header(path.resolve(), extra_args)
+                  if entry is None:
+                      unparseable.append(name)
+                      continue
+                  pinned.append((name, entry["file"]))
+                  database.append({
+                      "directory": entry["directory"],
+                      "file": str(path.resolve()),
+                      "arguments": argv,
+                  })
               kept.append(section)
 
+          if sections and not kept:
+              print(
+                  f"::error::every one of the {len(sections)} changed file section(s) was "
+                  f"dropped -- {len(skipped)} unbuilt source(s), {len(unparseable)} header(s) "
+                  f"no compile command in this configure can parse. clang-tidy would then "
+                  f"report success having analysed nothing, which is the failure this filter "
+                  f"exists to prevent. Build these files from some target."
+              )
+              sys.exit(1)
+
           pathlib.Path(sys.argv[3]).write_text("".join(line for section in kept for line in section))
+
+          # The augmented database: every original entry, plus one pinned entry per
+          # changed header. clang-tidy is pointed at this one, so it never reaches
+          # InterpolatingCompilationDatabase for a header and never analyses one with a
+          # command nobody checked (morph#753).
+          out_db = pathlib.Path(sys.argv[4])
+          out_db.mkdir(parents=True, exist_ok=True)
+          (out_db / "compile_commands.json").write_text(json.dumps(database))
 
           for name in skipped:
               print(
@@ -3198,20 +3343,42 @@ jobs:
                   f"would interpolate a neighbouring entry's compile command and "
                   f"report only clang-diagnostic-errors about that."
               )
+          for name in unparseable:
+              print(
+                  f"::warning file={name}::not analysed by clang-tidy-diff: none of the "
+                  f"{MAX_HEADER_CANDIDATES} nearest compile commands in this configure can "
+                  f"parse this header, so clang-tidy would report the failed parse as "
+                  f"findings in your code (morph#753). Build this header from some "
+                  f"translation unit to have it analysed."
+              )
+          for name, donor in pinned:
+              print(f"ok: {name} pinned to the compile command of {donor}")
           print(
               f"ok: compile database names {len(inside)} in-workspace source(s) "
               f"({len(examples)} under examples/); {len(kept)} of {len(sections)} "
               f"changed file section(s) analysed, {len(skipped)} source(s) "
-              f"skipped as unbuilt here"
+              f"skipped as unbuilt here, {len(pinned)} header(s) pinned to a checked "
+              f"compile command, {len(unparseable)} header(s) skipped as unparseable"
           )
           PY
 
           git diff -U0 "$BASE_SHA" > /tmp/changed.diff
+          # The fourth argument is where the *augmented* database is written:
+          # every entry the configure produced, plus one pinned entry per
+          # changed header. Everything after it is the -extra-arg set below,
+          # which the probe has to see or it answers a different question than
+          # the one clang-tidy will ask.
           python3 /tmp/filter-unbuilt-sources.py \
-            build/clang-debug/compile_commands.json /tmp/changed.diff /tmp/analysed.diff
+            build/clang-debug/compile_commands.json /tmp/changed.diff /tmp/analysed.diff \
+            /tmp/tidy-db -std=c++23 -Wno-missing-include-dirs
 
+          # -path /tmp/tidy-db, not build/clang-debug: that is the augmented
+          # database, and pointing clang-tidy at it is the whole fix for
+          # morph#753. The floors above are still evaluated against
+          # build/clang-debug's own database, so narrowing cannot hide behind
+          # the augmentation.
           if ! python3 "$CLANG_TIDY_DIFF" \
-              -path build/clang-debug \
+              -path /tmp/tidy-db \
               -clang-tidy-binary clang-tidy-${{ env.CLANG_VERSION }} \
               -p1 \
               -j "$(nproc)" \
