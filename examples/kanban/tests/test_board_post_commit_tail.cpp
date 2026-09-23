@@ -134,3 +134,226 @@ TEST_CASE("MoveTaskPosition reports success when only its post-commit tail fails
     model.attachActionLog(nullptr, std::to_string(*projectId));
     CHECK(columnOfTask(model, task) == columnB);
 }
+
+// ── morph#751: the other nine handlers ───────────────────────────────────────
+//
+// The case above covers `MoveTaskPosition`, the one handler morph#566 reached.
+// The audit morph#751 asked for classified all sixteen `BoardModel::execute`
+// overloads:
+//
+//   * six are read-only and open no transaction at all -- `OpenBoard`,
+//     `GetBoardState`, `GetAttachments`, `GetRules`, `GetEventsSince`,
+//     `GetActivity`. Nothing to shield; wrapping them would add a branch no
+//     input can take.
+//   * one was already shielded -- `MoveTaskPosition`, above.
+//   * **nine commit and then keep working**, and every one of those nine runs
+//     `logAction` after its `Commit()`. Four of them (`CreateColumn`,
+//     `CreateSwimlane`, `CreateTask`, `AddComment`) also re-read the board
+//     with `buildState` for their return value; those reads moved *inside* the
+//     transaction rather than being shielded, so a failed re-read rolls the
+//     write back instead of leaving a committed mutation with nothing truthful
+//     to report. What is left after the commit is `logAction` alone, and that
+//     is what `runPostCommitTail` now contains at all nine.
+//
+// `ApplyTagMutation` is the one whose commit is not visible in the handler --
+// `applyTagMutationImpl` owns the transaction -- but its `logAction` is
+// post-commit all the same, which is why it is in the list.
+//
+// Each case below asserts the same two things morph#566's does: the call does
+// not throw, and `appendAttempts` proves the tail genuinely ran and genuinely
+// failed. Without the second, every one of these would pass on a tree where
+// `runPostCommitTail` had been deleted and the log never consulted.
+
+namespace {
+
+/// @brief A board owned by "alice" with two columns, a swimlane and a task,
+///        all built *before* any throwing log is attached.
+///
+/// Member order is the construction order the setup needs: the database first,
+/// then a project (whose own principal scope opens and closes inside its
+/// initialiser), then the ambient principal the model's RBAC gates read.
+struct ShieldedBoard {
+    DbFixture db;
+    kanban::ProjectId projectId = createProjectOwnedBy("alice");
+    ScopedPrincipal alice{"alice"};
+    kanban::BoardModel model;
+    kanban::ColumnId columnA;
+    kanban::ColumnId columnB;
+    kanban::SwimlaneId swimlane;
+    kanban::TaskId task;
+
+    ShieldedBoard() {
+        model.execute(kanban::OpenBoard{.projectId = projectId});
+        columnA = model.execute(kanban::CreateColumn{.name = "Todo", .wipLimit = 0}).columns.back().id;
+        columnB = model.execute(kanban::CreateColumn{.name = "Doing", .wipLimit = 0}).columns.back().id;
+        swimlane = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.back().id;
+        task = model.execute(kanban::CreateTask{.columnId = columnA, .swimlaneId = swimlane, .title = "A"})
+                   .tasks.back()
+                   .id;
+    }
+
+    /// @brief Attaches a log whose `append()` throws, so the next call's
+    ///        post-commit tail fails at its first statement.
+    /// @return The log, for its `appendAttempts` counter.
+    [[nodiscard]] std::shared_ptr<ThrowingActionLog> armThrowingLog() {
+        auto log = std::make_shared<ThrowingActionLog>();
+        model.attachActionLog(log, std::to_string(*projectId));
+        return log;
+    }
+
+    /// @brief Detaches the throwing log, so the read-backs below can journal
+    ///        their own entries without hitting it.
+    void disarm() { model.attachActionLog(nullptr, std::to_string(*projectId)); }
+};
+
+}  // namespace
+
+TEST_CASE("CreateColumn reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    auto log = board.armThrowingLog();
+
+    const auto after = board.model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0});
+
+    CHECK(log->appendAttempts >= 1);
+    CHECK(std::ranges::any_of(after.columns, [](const auto& col) { return col.name == "Done"; }));
+
+    board.disarm();
+    const auto reread = board.model.execute(kanban::GetBoardState{});
+    CHECK(std::ranges::any_of(reread.columns, [](const auto& col) { return col.name == "Done"; }));
+}
+
+TEST_CASE("CreateSwimlane reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    auto log = board.armThrowingLog();
+
+    const auto after = board.model.execute(kanban::CreateSwimlane{.name = "Expedite"});
+
+    CHECK(log->appendAttempts >= 1);
+    CHECK(std::ranges::any_of(after.swimlanes, [](const auto& row) { return row.name == "Expedite"; }));
+
+    board.disarm();
+    const auto reread = board.model.execute(kanban::GetBoardState{});
+    CHECK(std::ranges::any_of(reread.swimlanes, [](const auto& row) { return row.name == "Expedite"; }));
+}
+
+TEST_CASE("CreateTask reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    auto log = board.armThrowingLog();
+
+    const auto after =
+        board.model.execute(kanban::CreateTask{.columnId = board.columnB, .swimlaneId = board.swimlane, .title = "B"});
+
+    CHECK(log->appendAttempts >= 1);
+    CHECK(std::ranges::any_of(after.tasks, [](const auto& row) { return row.title == "B"; }));
+
+    board.disarm();
+    const auto reread = board.model.execute(kanban::GetBoardState{});
+    CHECK(std::ranges::any_of(reread.tasks, [](const auto& row) { return row.title == "B"; }));
+}
+
+TEST_CASE("AddComment reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    auto log = board.armThrowingLog();
+
+    const auto after = board.model.execute(kanban::AddComment{.taskId = board.task, .body = "looking into it"});
+
+    CHECK(log->appendAttempts >= 1);
+    CHECK(std::ranges::any_of(after.comments, [](const auto& row) { return row.body == "looking into it"; }));
+
+    board.disarm();
+    const auto reread = board.model.execute(kanban::GetBoardState{});
+    CHECK(std::ranges::any_of(reread.comments, [](const auto& row) { return row.body == "looking into it"; }));
+}
+
+TEST_CASE("AddAttachment reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    auto log = board.armThrowingLog();
+
+    board.model.execute(kanban::AddAttachment{.taskId = board.task,
+                                              .filename = "report.pdf",
+                                              .contentType = "application/pdf",
+                                              .sizeBytes = 1024,
+                                              .storageKey = "abc123"});
+
+    CHECK(log->appendAttempts >= 1);
+
+    board.disarm();
+    const auto listed = board.model.execute(kanban::GetAttachments{.taskId = board.task});
+    REQUIRE(listed.attachments.size() == 1);
+    CHECK(listed.attachments.front().filename == "report.pdf");
+}
+
+TEST_CASE("RemoveAttachment reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    board.model.execute(kanban::AddAttachment{.taskId = board.task,
+                                              .filename = "report.pdf",
+                                              .contentType = "application/pdf",
+                                              .sizeBytes = 1024,
+                                              .storageKey = "abc123"});
+    const auto attachmentId = board.model.execute(kanban::GetAttachments{.taskId = board.task}).attachments.front().id;
+
+    auto log = board.armThrowingLog();
+
+    board.model.execute(kanban::RemoveAttachment{.attachmentId = attachmentId});
+
+    CHECK(log->appendAttempts >= 1);
+
+    board.disarm();
+    CHECK(board.model.execute(kanban::GetAttachments{.taskId = board.task}).attachments.empty());
+}
+
+TEST_CASE("CreateRule reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    auto log = board.armThrowingLog();
+
+    const auto created = board.model.execute(kanban::CreateRule{.projectId = board.projectId,
+                                                                .triggerColumnId = *board.columnB,
+                                                                .mutationType = kanban::RuleMutationType::AddTag,
+                                                                .mutationValue = "closed"});
+
+    CHECK(log->appendAttempts >= 1);
+    // The id the caller was handed has to be the row's, not a default -- the
+    // read that produces it now runs before the commit, so this also pins that
+    // reordering.
+    CHECK(created.ruleId.hasValue());
+
+    board.disarm();
+    const auto listed = board.model.execute(kanban::GetRules{.projectId = board.projectId});
+    REQUIRE(listed.rules.size() == 1);
+    CHECK(listed.rules.front().id == created.ruleId);
+}
+
+TEST_CASE("DeleteRule reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    const auto ruleId = board.model
+                            .execute(kanban::CreateRule{.projectId = board.projectId,
+                                                        .triggerColumnId = *board.columnB,
+                                                        .mutationType = kanban::RuleMutationType::AddTag,
+                                                        .mutationValue = "closed"})
+                            .ruleId;
+
+    auto log = board.armThrowingLog();
+
+    board.model.execute(kanban::DeleteRule{.ruleId = ruleId});
+
+    CHECK(log->appendAttempts >= 1);
+
+    board.disarm();
+    CHECK(board.model.execute(kanban::GetRules{.projectId = board.projectId}).rules.empty());
+}
+
+TEST_CASE("ApplyTagMutation reports success when only its post-commit tail fails", "[kanban][board][morph#751]") {
+    ShieldedBoard board;
+    auto log = board.armThrowingLog();
+
+    board.model.execute(kanban::ApplyTagMutation{
+        .taskId = board.task, .mutationType = kanban::RuleMutationType::AddTag, .tag = "urgent"});
+
+    CHECK(log->appendAttempts >= 1);
+
+    board.disarm();
+    const auto reread = board.model.execute(kanban::GetBoardState{});
+    const auto tagged = std::ranges::find_if(reread.tasks, [&](const auto& row) { return row.id == board.task; });
+    REQUIRE(tagged != reread.tasks.end());
+    CHECK(std::ranges::find(tagged->tags, "urgent") != tagged->tags.end());
+}

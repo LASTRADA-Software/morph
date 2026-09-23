@@ -73,9 +73,10 @@
 // is then a property of the code rather than of the machine's load, which is
 // what lets `tests/bench/CMakeLists.txt` compare it against a ceiling.
 //
-// With the gate in place the figure is *exact*: 14.06 per call in every one of
-// 30 processes across clang Release, clang Debug and gcc Debug, idle and
-// loaded alike. Take more than one run anyway -- a single process is a single
+// With the gate in place the figure is *exact*: 8.06 per call in every one of
+// 84 processes across clang Release, clang Debug and gcc Debug, idle and
+// oversubscribed alike (morph#572; it was 14.06 until Part B landed in
+// morph#743). Take more than one run anyway -- a single process is a single
 // sample -- but if two runs disagree here, something has changed.
 //
 // ── What the registry censuses measured (morph#699) ─────────────────────────

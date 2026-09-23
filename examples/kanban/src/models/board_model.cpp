@@ -201,6 +201,48 @@ template <typename Tail>
     return committed;
 }
 
+/// @brief The same containment for a tail that produces nothing the caller
+///        needs -- the shape every mutating handler other than
+///        `MoveTaskPosition` has (morph#751).
+///
+/// Those handlers' tails are `logAction` alone: the value they return was
+/// already computed, so there is no fallback to choose and no second value to
+/// reconcile. Giving them the three-argument overload above would mean passing
+/// a `committed` that the tail also returns unchanged -- a branch no input can
+/// distinguish, which is worse than no branch. This overload is that case
+/// written down.
+///
+/// **What each handler must do to be eligible**, and what the adoption in
+/// morph#751 did: anything the *caller's return value* depends on runs before
+/// `Commit()`, not after it. `CreateColumn` and its three siblings therefore
+/// build their `GetBoardResult` inside the transaction now, which is where
+/// `MoveTaskPosition` has always built its own (it needs one for the
+/// applied-ops ledger row). That is not a workaround for this overload's lack
+/// of a fallback -- it is the stronger ordering. A re-read that fails *before*
+/// the commit rolls the write back, so the caller's "this failed" is true;
+/// a re-read that fails *after* it leaves nothing truthful to return, because
+/// the board state is the answer and there is no partial board worth sending.
+/// The cost is that the write transaction now spans the read, so it holds
+/// SQLite's write lock for longer under contention; `MoveTaskPosition`, the
+/// heaviest handler in this file, has held it across exactly that read since
+/// this rung was written.
+///
+/// @tparam Tail Nullary callable returning `void`.
+/// @param tail The post-commit work to run.
+/// @param what A phrase naming the handler, for the log line.
+template <typename Tail>
+void runPostCommitTail(Tail&& tail, std::string_view what) {
+    try {
+        std::forward<Tail>(tail)();
+    } catch (const std::exception& error) {
+        ::morph::log::logError(std::string{"[kanban::BoardModel] "} + std::string{what} +
+                               " committed, but its post-commit tail failed: " + error.what());
+    } catch (...) {
+        ::morph::log::logError(std::string{"[kanban::BoardModel] "} + std::string{what} +
+                               " committed, but its post-commit tail threw a non-std::exception");
+    }
+}
+
 [[nodiscard]] GetBoardResult buildState(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project) {
     GetBoardResult result;
     result.projectId = ProjectId{static_cast<std::int64_t>(project.id.Value())};
@@ -502,10 +544,20 @@ GetBoardResult BoardModel::execute(const CreateColumn& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
+        // Built before the commit, not after it (morph#751). The board state
+        // is this call's whole return value, so a re-read that fails must roll
+        // the write back rather than leave a committed mutation with nothing
+        // truthful to report -- see `runPostCommitTail`'s void overload for the
+        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        auto result = buildState(mapper.Get(), project);
+
         transaction.Commit();
 
-        auto result = buildState(mapper.Get(), project);
-        logAction(action, result);
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        // The row is durable from the line above; `logAction` is not, and
+        // `_log->append`/`flush` can throw. A throw here must not tell the
+        // caller the CreateColumn failed.
+        runPostCommitTail([&] { logAction(action, result); }, "CreateColumn");
         return result;
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
@@ -544,10 +596,20 @@ GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
+        // Built before the commit, not after it (morph#751). The board state
+        // is this call's whole return value, so a re-read that fails must roll
+        // the write back rather than leave a committed mutation with nothing
+        // truthful to report -- see `runPostCommitTail`'s void overload for the
+        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        auto result = buildState(mapper.Get(), project);
+
         transaction.Commit();
 
-        auto result = buildState(mapper.Get(), project);
-        logAction(action, result);
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        // The row is durable from the line above; `logAction` is not, and
+        // `_log->append`/`flush` can throw. A throw here must not tell the
+        // caller the CreateSwimlane failed.
+        runPostCommitTail([&] { logAction(action, result); }, "CreateSwimlane");
         return result;
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
@@ -601,10 +663,20 @@ GetBoardResult BoardModel::execute(const CreateTask& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
+        // Built before the commit, not after it (morph#751). The board state
+        // is this call's whole return value, so a re-read that fails must roll
+        // the write back rather than leave a committed mutation with nothing
+        // truthful to report -- see `runPostCommitTail`'s void overload for the
+        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        auto result = buildState(mapper.Get(), project);
+
         transaction.Commit();
 
-        auto result = buildState(mapper.Get(), project);
-        logAction(action, result);
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        // The row is durable from the line above; `logAction` is not, and
+        // `_log->append`/`flush` can throw. A throw here must not tell the
+        // caller the CreateTask failed.
+        runPostCommitTail([&] { logAction(action, result); }, "CreateTask");
         return result;
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
@@ -646,10 +718,20 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
+        // Built before the commit, not after it (morph#751). The board state
+        // is this call's whole return value, so a re-read that fails must roll
+        // the write back rather than leave a committed mutation with nothing
+        // truthful to report -- see `runPostCommitTail`'s void overload for the
+        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        auto result = buildState(mapper.Get(), project);
+
         transaction.Commit();
 
-        auto result = buildState(mapper.Get(), project);
-        logAction(action, result);
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        // The row is durable from the line above; `logAction` is not, and
+        // `_log->append`/`flush` can throw. A throw here must not tell the
+        // caller the AddComment failed.
+        runPostCommitTail([&] { logAction(action, result); }, "AddComment");
         return result;
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
@@ -701,7 +783,12 @@ Ack BoardModel::execute(const AddAttachment& action) {
 
         transaction.Commit();
 
-        logAction(action, Ack{});
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        // Nothing here is read back for the caller -- the answer is `Ack{}`,
+        // which is already true the moment the commit above returns. All the
+        // tail does is journal, and a journal that refuses the entry does not
+        // make the attachment un-added.
+        runPostCommitTail([&] { logAction(action, Ack{}); }, "AddAttachment");
         return Ack{};
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
@@ -777,7 +864,8 @@ Ack BoardModel::execute(const RemoveAttachment& action) {
         mapper->Delete(rows.front());
         transaction.Commit();
 
-        logAction(action, Ack{});
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        runPostCommitTail([&] { logAction(action, Ack{}); }, "RemoveAttachment");
         return Ack{};
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
@@ -830,10 +918,15 @@ CreateRuleResult BoardModel::execute(const CreateRule& action) {
         rec.mutationType = std::string{ruleMutationTypeToString(action.mutationType)};
         rec.mutationValue = action.mutationValue;
         mapper->Create(rec);
+
+        // Read before the commit, for the same reason `CreateColumn` builds
+        // its state there (morph#751): `rec.id` is the caller's whole answer.
+        const CreateRuleResult result{.ruleId = RuleId{static_cast<std::int64_t>(rec.id.Value())}};
+
         transaction.Commit();
 
-        CreateRuleResult result{.ruleId = RuleId{static_cast<std::int64_t>(rec.id.Value())}};
-        logAction(action, result);
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        runPostCommitTail([&] { logAction(action, result); }, "CreateRule");
         return result;
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
@@ -908,7 +1001,8 @@ Ack BoardModel::execute(const DeleteRule& action) {
         mapper->Delete(rows.front());
         transaction.Commit();
 
-        logAction(action, Ack{});
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        runPostCommitTail([&] { logAction(action, Ack{}); }, "DeleteRule");
         return Ack{};
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
@@ -938,7 +1032,12 @@ ApplyTagMutationResult BoardModel::execute(const ApplyTagMutation& action) {
         // (once here unconditionally, once again with the causal link), which
         // `morph::journal::replay()` would then dispatch twice, breaking the
         // "exactly once" invariant design spec §9 requires of a cascade.
-        logAction(action, ApplyTagMutationResult{});
+        // ── post-commit tail (morph#751) ────────────────────────────────
+        // `applyTagMutationImpl` above owns the transaction and has already
+        // committed by the time it returns, so this `logAction` is post-commit
+        // exactly as the other handlers' are, even though the `Commit()` is not
+        // visible in this function.
+        runPostCommitTail([&] { logAction(action, ApplyTagMutationResult{}); }, "ApplyTagMutation");
         return ApplyTagMutationResult{};
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
