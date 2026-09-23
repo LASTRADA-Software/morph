@@ -247,6 +247,26 @@ exact contract for its own idempotency-key dedup (opaque key, non-empty keys
 only, a repeat is a silent no-op) — this is that decision made once, not
 re-litigated per rung.
 
+**`InMemoryReplayLedger` materialises its key inside its lock, on purpose.**
+Its `doLookup` builds two `std::string`s from its `string_view` parameters,
+under `_mtx`, only to probe a `std::map<std::pair<std::string, std::string>,
+std::string>`. A transparent comparator would remove both. It is left in place
+because the class has no shipping caller: `InMemoryReplayLedger` is
+constructed in exactly one file in this tree
+(`tests/test_replay_ledger.cpp`), and the one production
+`IReplayLedger::lookup()` call site
+(`examples/bookmarks/src/models/bookmark_model.cpp`, once per
+`ImportBookmarks`) runs against `BookmarksReplayLedger`, whose `doLookup` is a
+SQL round-trip. Measured on `d03c66f3` (clang 22 `-O2`, counting
+`operator new`, 2e6 iterations): 2.00 allocations per lookup with both key
+halves past libstdc++'s 15-character SSO buffer, 1.00 with one past it, 0.00
+with both inside — costing 3.4 ns of a 31.6 ns uncontended lookup, and 55 ns
+of a 740 ns lookup with eight threads on the mutex. This is
+[morph#728](https://github.com/LASTRADA-Software/morph/issues/728), parked on
+the same grounds and with the same kind of number as morph#709. It becomes
+worth doing the moment a per-request caller of this class exists; the header's
+own `doLookup` comment carries the full table and the shape of the fix.
+
 ### `IOfflineQueue`
 
 Minimal interface for durable storage of undelivered actions. Accepts items
