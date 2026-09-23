@@ -14,6 +14,30 @@
 using morph::net::detail::ParsedWsUrl;
 using morph::net::detail::TcpSocket;
 
+// ── The four blocking accept()s here carry no deadline, and why (morph#772) ──
+//
+// Every one of them runs on the server thread this file spawns, while the
+// connection that satisfies it is made by the *main* thread immediately after,
+// under `TcpSocket::connect()`'s own 2s deadline -- which throws rather than
+// returning on expiry. The main thread only ever reaches `serverThread.join()`
+// with that connection already established against this listener: loopback,
+// a 64-deep backlog, one consumer.
+//
+// That is the opposite shape from the site morph#773 had to bound
+// (`FakeWsServer::acceptAndHandshake()`, a *main-thread* `accept()` waiting on
+// the io thread of the component under test), and it is the reason a deadline
+// here would be a path nothing can take. An untakeable timeout path is worse
+// than none: it reads as a hazard that was found and handled.
+//
+// The long form of the argument, the mutation that shows the `connect()` is
+// the load-bearing step, and the ctest `TIMEOUT 120` backstop if it is ever
+// wrong, are in the note above the round-trip test in test_tcp_socket.cpp.
+// Verification status is the same as there: inferred from reading plus
+// `tcp_socket.hpp`'s `accept()` contract, not measured on these four sites.
+//
+// A `connect()` that throws aborts via `~std::thread` instead of hanging;
+// the error it discards on the way is morph#781.
+
 TEST_CASE("performClientHandshake/performServerHandshake complete over a real socket", "[net][handshake][socket]") {
     auto listener = TcpSocket::listen(0);
     std::uint16_t const port = listener.boundPort();

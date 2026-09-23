@@ -1,18 +1,27 @@
 # ThreadSanitizer suppressions for known false positives.
 #
-# Companion to cmake/valgrind.supp, and wired in the same way: the
-# `clang-tsan` leg of the sanitizers job in .github/workflows/ci.yml points
-# TSAN_OPTIONS=suppressions= at this file.
+# Companion to cmake/valgrind.supp. Three places point
+# `TSAN_OPTIONS=suppressions=` at this file, and they are the only places this
+# repository sets TSAN_OPTIONS at all:
 #
-# ── What this file is not, and what a lock-order report is missing ─────────
+#   * the `clang-tsan` **ctest preset** in CMakePresets.json, through
+#     `${sourceDir}` so it resolves from any working directory -- a relative
+#     path does not survive test discovery, which that preset's description
+#     explains at length (morph#688);
+#   * the `Test` step of ci.yml's `linux-sanitizers` job;
+#   * the `Test` step of ci.yml's `kanban-tsan` job.
 #
-# `suppressions=` is the **only** thing TSAN_OPTIONS carries in this
-# repository, so a report's *shape* is whatever TSan's defaults produce. That
-# matters for morph#578, an intermittent `lock-order-inversion` seen once in
-# six full `morph_tests` runs whose stack was lost, and it is worth writing
-# down here because this is the file the next person will open.
+# All three carry the same value, and that value is
+# `suppressions=<this file>:second_deadlock_stack=1` -- colon-joined, because a
+# second `TSAN_OPTIONS` key replaces the first and would silently drop this
+# file. Anything added here has to be added in all three, or a local
+# reproduction stops matching the CI run it is reproducing.
 #
-# Two things, one of which corrects a plausible-sounding guess:
+# ── What this file is not, and what second_deadlock_stack=1 buys ───────────
+#
+# Both points below are about morph#578, an intermittent `lock-order-inversion`
+# seen once in six full `morph_tests` runs whose stack was lost, and they are
+# written here because this is the file the next person will open.
 #
 #   1. Every `race:` entry below is a **suppression**, so none of them could
 #      have hidden that report: TSan matches `mutex:`/`deadlock:` entries
@@ -20,13 +29,16 @@
 #      this and the issue is right. Whether TSAN_OPTIONS was set at the time
 #      is irrelevant to whether the warning could appear.
 #
-#   2. `second_deadlock_stack=1` is **not** set, and the difference is
-#      measured rather than assumed. A 23-line standalone control (two static
-#      mutexes taken in both orders, clang 22.1.8, x86-64 Linux) reports the
-#      inversion either way and prints *both* acquisition stacks either way --
-#      so the option is not why morph#578's report was uninformative; a
-#      `grep -A 60 | head -70` over the run is, as that issue states. What the
-#      option adds, exactly, is 24 further lines carrying two more stacks:
+#   2. `second_deadlock_stack=1` **is** set (morph#736 set it, in all three
+#      places above), and what it buys is measured rather than assumed. A
+#      23-line standalone control -- two static mutexes taken in both orders,
+#      clang 22.1.8, x86-64 Linux -- reports the inversion either way and
+#      prints *both* `acquired here while holding` stacks either way, so the
+#      option is **not** why morph#578's report was uninformative; a
+#      `grep -A 60 | head -70` over the run is, as that issue states. What it
+#      adds, exactly, is 24 further lines carrying two more stacks (47 report
+#      lines -> 71 on that control; 36 -> 55 on the two-mutex inversion
+#      measured for the preset):
 #
 #          Mutex M0 previously acquired by the same thread here:
 #          Mutex M1 previously acquired by the same thread here:
@@ -34,10 +46,15 @@
 #      i.e. where the *already-held* mutex of each pair was taken. morph#578's
 #      cycle has three mutexes, two of them at stack addresses, and those two
 #      stacks are what would name the fixture or short-lived object holding
-#      them. TSan prints the hint itself in the report it would have improved.
+#      them. Without the option TSan prints only `Hint: use
+#      TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning
+#      message` -- advice nobody can take after the fact, because morph#578 and
+#      morph#717 are intermittent and the run that fires is the only evidence
+#      that will ever exist. It costs nothing measurable: 2M lock acquisitions
+#      under TSan took a median 0.275s without it and 0.273s with (morph#736).
 #
-# Setting it belongs to the sanitizer legs in .github/workflows/ci.yml, not to
-# a suppressions file, so it is filed rather than folded in here.
+# So: do not drop it while tidying a preset or a workflow env block. It is not
+# decoration, and the report that needs it cannot ask for it in advance.
 #
 # ── libstdc++'s refcounted exception teardown (morph#476) ──────────────────
 #
