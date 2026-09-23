@@ -598,7 +598,22 @@ jobs:
           #
           # Harmless on the clang-asan and clang-ubsan legs of this matrix:
           # neither runtime reads TSAN_OPTIONS.
-          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp
+          #
+          # `second_deadlock_stack=1` is colon-separated *into this value*, not
+          # a second `TSAN_OPTIONS:` key -- a second key silently replaces the
+          # first and drops the suppressions file, which is morph#688's failure
+          # one spelling over. It makes TSan print, for a lock-order inversion,
+          # the stacks where the *already-held* mutexes were taken. Measured on
+          # a two-mutex inversion under clang 22.1.8: 36 lines -> 55, the extra
+          # 19 being two `Mutex Mn previously acquired by the same thread here:`
+          # stacks that name the acquiring function and line. Without it TSan
+          # prints only `Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get
+          # more informative warning message` -- advice nobody can take after
+          # the fact, because morph#578 and morph#717 are intermittent and the
+          # run that fires is the only evidence that will ever exist. No
+          # measurable runtime cost: 2M lock acquisitions under TSan took a
+          # median 0.275s without and 0.273s with (morph#736).
+          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp:second_deadlock_stack=1
         run: |
           # morph::testkit::OomInjector (tests/oom_injector.cpp) overrides
           # the process-wide operator new/delete to force std::bad_alloc on
@@ -1027,7 +1042,13 @@ jobs:
           # Without it this leg is a coin toss on a false positive that the
           # other TSan leg already knows is one — and the failure mode of a
           # known false positive is that the next real one is waved past.
-          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp
+          #
+          # `second_deadlock_stack=1` for the reason the linux-sanitizers Test
+          # step above gives at length (morph#736), and appended to the same
+          # value rather than added as a second `TSAN_OPTIONS:` key, which
+          # would silently drop the suppressions file this leg was given in the
+          # first place.
+          TSAN_OPTIONS: suppressions=${{ github.workspace }}/cmake/tsan.supp:second_deadlock_stack=1
         run: ctest --preset clang-tsan -L ladder-kanban -R ThreadSanitizer --output-on-failure
 
       # Cumulative hit/miss for this leg. Without it the cache is
