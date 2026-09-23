@@ -1,12 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlMigration.hpp>
+#include <db/pool_transaction_audit.hpp>
 
 #include "ledger/db/database.hpp"
 
 namespace ledger::db {
 
 void configure(const std::string& connectionString) {
+    // morph#740: nothing in Lightweight stops a pooled DataMapper from being
+    // returned with a transaction still open on it -- `DataMapperPool::Return`
+    // does no transaction cleanup, and the cost lands on the next, unrelated
+    // borrower as a 60s stall and a `database is locked` it did not cause.
+    // Installing the audit here, at the one point every rung's process
+    // configures its database, turns that into an abort at the leak. See
+    // examples/common/db/pool_transaction_audit.hpp.
+    (void)::morph::ladder::db::installPoolTransactionAudit();
+
     Lightweight::SqlConnection::SetDefaultConnectionString(Lightweight::SqlConnectionString{connectionString});
 }
 

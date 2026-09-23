@@ -314,8 +314,39 @@ void checkZeroSumByCurrency(const std::vector<morph::math::Rational>& legAmounts
                                  morph::math::DecimalPlaces{decimalPlaces}};
 }
 
-/// @brief RAII guard around a raw SQLite read-transaction snapshot
-///        (`BEGIN DEFERRED` on construction, `COMMIT` on destruction).
+/// @brief RAII guard around a raw SQLite read transaction (`BEGIN
+///        DEFERRED` on construction, `COMMIT` on destruction).
+///
+/// @par Why this is not called a WAL snapshot guard
+///        It was, and the name was wrong. **Nothing in this rung, its
+///        server, or `scripts/scenario/` ever issues `PRAGMA
+///        journal_mode`**, and Lightweight's `SqlConnection::PostConnect()`
+///        declines to set WAL on purpose (`src/Lightweight/SqlConnection.cpp`
+///        at the pinned revision: *"We could also enable WAL mode here, but
+///        that changes the database file structure"* -- it sets only
+///        `busy_timeout = 60000`). So the ledger runs in SQLite's default
+///        **rollback-journal** mode, and the two modes give `BEGIN DEFERRED`
+///        opposite contention behaviour:
+///
+///        - under `journal_mode=WAL`, a deferred read transaction is a
+///          genuine snapshot -- readers see one consistent view while
+///          writers continue;
+///        - under a rollback journal, the same statement escalates to a
+///          `SHARED` lock on first read and **blocks every writer on the
+///          file for as long as it is held**.
+///
+///        This rung's report pass holds one across a whole aggregation
+///        (`computeReportJson`) on a background pool thread, so the old name
+///        described the opposite of the contention this guard actually
+///        causes -- a misdirection for anyone debugging `database is locked`
+///        here (morph#739). The consistent-view property the call site wants
+///        is still real: in rollback-journal mode it is delivered by the
+///        write barrier rather than by a snapshot. Turning WAL on to make
+///        the original name true is a separate, larger decision (WAL is
+///        per-database-file and persists in the file header, so it reaches
+///        every other connection and the scenario runner's
+///        fresh-database-per-run assumption) and is deliberately **not**
+///        taken here; morph#739 records the argument.
 ///
 ///        Load-bearing because `Lightweight::DataMapperPool::Return`
 ///        performs no transaction cleanup on a returned connection (it
@@ -336,19 +367,19 @@ void checkZeroSumByCurrency(const std::vector<morph::math::Rational>& legAmounts
 ///        report and must never mask whatever exception is already
 ///        propagating (or, on the non-exceptional path, silently eat a
 ///        real return value -- there is none here, this guard is void-only).
-class WalSnapshotGuard {
+class DeferredReadTransactionGuard {
 public:
     /// @brief Pins a read snapshot on @p connection's connection by issuing
     ///        `BEGIN DEFERRED` as the first statement.
     /// @param connection The connection to pin. Must not already have an
     ///        open transaction -- this class does not check.
-    explicit WalSnapshotGuard(Lightweight::SqlConnection& connection) : _connection{connection} {
+    explicit DeferredReadTransactionGuard(Lightweight::SqlConnection& connection) : _connection{connection} {
         (void)::Lightweight::SqlStatement{_connection}.ExecuteDirect("BEGIN DEFERRED");
     }
 
     /// @brief Releases the pinned snapshot via `COMMIT`, swallowing any
     ///        failure (see this class's own doc comment for why).
-    ~WalSnapshotGuard() {
+    ~DeferredReadTransactionGuard() {
         try {
             (void)::Lightweight::SqlStatement{_connection}.ExecuteDirect("COMMIT");
         } catch (...) {
@@ -356,10 +387,10 @@ public:
         }
     }
 
-    WalSnapshotGuard(const WalSnapshotGuard&) = delete;
-    WalSnapshotGuard& operator=(const WalSnapshotGuard&) = delete;
-    WalSnapshotGuard(WalSnapshotGuard&&) = delete;
-    WalSnapshotGuard& operator=(WalSnapshotGuard&&) = delete;
+    DeferredReadTransactionGuard(const DeferredReadTransactionGuard&) = delete;
+    DeferredReadTransactionGuard& operator=(const DeferredReadTransactionGuard&) = delete;
+    DeferredReadTransactionGuard(DeferredReadTransactionGuard&&) = delete;
+    DeferredReadTransactionGuard& operator=(DeferredReadTransactionGuard&&) = delete;
 
 private:
     Lightweight::SqlConnection& _connection;
@@ -1435,11 +1466,16 @@ RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
 
         std::string resultJson;
         {
-            // Read-transaction snapshot pinning (IMPLEMENTATION.md rule 4's
+            // Read-transaction pinning (IMPLEMENTATION.md rule 4's
             // pre-cleared raw-SQL escape tier): a raw BEGIN DEFERRED as the
             // FIRST statement on this connection for the aggregation, so
-            // every query it makes sees one consistent snapshot rather than a
-            // partial concurrent write mid-aggregation.
+            // every query it makes sees one consistent view rather than a
+            // partial concurrent write mid-aggregation. In this rung's
+            // journal mode -- rollback journal, because nothing here sets
+            // journal_mode=WAL; see the guard's own doc comment -- that
+            // consistency is bought with a write barrier over the whole
+            // aggregation, not with a WAL snapshot, so keep the scope as
+            // narrow as it is below.
             //
             // Still needed even though this now runs on the ledger's own
             // strand: the strand serialises this ledger's *own* actions, and
@@ -1453,11 +1489,11 @@ RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
             // the connection DataMapper::Connection() exposes, so the pin
             // covers every query below.
             //
-            // WalSnapshotGuard's destructor closes this transaction (via
+            // DeferredReadTransactionGuard's destructor closes this transaction (via
             // COMMIT, swallowing any failure -- see its own doc comment) no
             // matter how this scope is exited, including by
             // computeReportJson throwing.
-            WalSnapshotGuard snapshot{mapper.Connection()};
+            const DeferredReadTransactionGuard readTransaction{mapper.Connection()};
             resultJson = computeReportJson(mapper, action.ledgerId, reportPeriod);
         }
         // Written only after the read snapshot has been released, so this

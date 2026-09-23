@@ -8,6 +8,7 @@
 #include <charconv>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
@@ -161,6 +162,43 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
     if (!projectId.hasValue() || *projectId < 0 || static_cast<std::uint64_t>(*projectId) != attachedProjectDbId) {
         throw NotFound{"projectId does not match the attached board"};
     }
+}
+
+/// @brief Runs @p tail, a handler's *post-commit* work, and contains any
+///        exception it throws (morph#566).
+///
+/// A handler that has already called `SqlTransaction::Commit()` has made its
+/// mutation durable. Whatever it does afterwards -- journalling, a rule
+/// cascade, a re-read for the return value -- can still fail (a contended
+/// `SQLITE_BUSY` past the busy timeout is the failure observed in CI), and
+/// before this existed such a failure propagated out of `execute()`: the
+/// caller was told the action had failed, while the row it wrote was
+/// committed, and `execute()`'s own catch journalled an `Outcome::Failed`
+/// entry for it. A call must not report failure for a mutation that already
+/// happened.
+///
+/// So the tail's exceptions stop here and @p committed -- the state the
+/// handler did commit -- is returned instead. Only the post-commit tail goes
+/// through this: an exception from *before* the commit still means the
+/// mutation did not happen and must still reach the caller.
+///
+/// @tparam Tail Nullary callable returning `GetBoardResult`.
+/// @param tail The post-commit work to run.
+/// @param committed The state to return if @p tail throws.
+/// @param what A phrase naming the handler, for the log line.
+/// @return @p tail's result, or @p committed if it threw.
+template <typename Tail>
+[[nodiscard]] GetBoardResult runPostCommitTail(Tail&& tail, GetBoardResult committed, std::string_view what) {
+    try {
+        return std::forward<Tail>(tail)();
+    } catch (const std::exception& error) {
+        ::morph::log::logError(std::string{"[kanban::BoardModel] "} + std::string{what} +
+                               " committed, but its post-commit tail failed: " + error.what());
+    } catch (...) {
+        ::morph::log::logError(std::string{"[kanban::BoardModel] "} + std::string{what} +
+                               " committed, but its post-commit tail threw a non-std::exception");
+    }
+    return committed;
 }
 
 [[nodiscard]] GetBoardResult buildState(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project) {
@@ -1146,34 +1184,52 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
         }
 
         transaction.Commit();
-        logAction(action, result);
 
-        // Design spec §9: evaluateRules is called after the move's own commit,
-        // before returning, and mints this move's own stable causal identity from
-        // `event.id` -- the `BoardEventRecord` row `mapper->Create(event)` just
-        // assigned above. A DB-backed autoincrement id is a genuinely stable,
-        // cross-restart identity (unlike `LogEntry::seq`, which is sink-local and
-        // re-stamped on every forward -- see `docs/spec/journal/journal.md`'s
-        // Invariants section and this design spec's §9), and this move's event
-        // row already exists in this exact transaction regardless of whether any
-        // rule ends up matching it. `evaluateRules` itself checks
-        // `morph::journal::isReplaying()` and no-ops during replay, so a
-        // replayed MoveTaskPosition entry never re-derives or reuses this id for
-        // a second firing.
-        const std::string moveCausalId = "boardEvent:" + std::to_string(event.id.Value());
-        evaluateRules(action.taskId, action.columnId, moveCausalId);
+        // ── post-commit tail (morph#566) ────────────────────────────────
+        // The move is durable from the line above. Everything below --
+        // journalling, the rule cascade, and the post-cascade re-read -- is
+        // follow-on work, and none of it can un-apply what was just committed.
+        // It nonetheless runs against the same contended SQLite file:
+        // `evaluateRules` queries (and may write), and `buildState` re-reads,
+        // both of which can hit `SQLITE_BUSY` past the busy timeout under this
+        // rung's stress test. `runPostCommitTail` (this file, above) contains
+        // that and explains why; the pre-cascade `result` is what a caller gets
+        // if the tail fails.
+        return runPostCommitTail(
+            [&] {
+                logAction(action, result);
 
-        // Rebuilt after evaluateRules (rather than returning the pre-cascade
-        // `result` captured above) so a caller sees a rule's fired mutation --
-        // e.g. a freshly added tag -- in the very state this call returns,
-        // instead of only on the next GetBoardState poll. The ledger's own
-        // resultJson (written a few lines above, inside the same transaction)
-        // deliberately keeps the pre-cascade snapshot: a ledger replay is a
-        // "nothing new happened, return what happened before" path that never
-        // re-evaluates rules (see the opId-hit branch above), so a ledger hit
-        // returning the pre-cascade board state is correct, not stale -- it is
-        // reporting the same fact the original call's ledger row recorded.
-        return buildState(mapper.Get(), project);
+                // Design spec §9: evaluateRules is called after the move's own
+                // commit, before returning, and mints this move's own stable
+                // causal identity from `event.id` -- the `BoardEventRecord` row
+                // `mapper->Create(event)` just assigned above. A DB-backed
+                // autoincrement id is a genuinely stable, cross-restart identity
+                // (unlike `LogEntry::seq`, which is sink-local and re-stamped on
+                // every forward -- see `docs/spec/journal/journal.md`'s
+                // Invariants section and this design spec's §9), and this move's
+                // event row already exists in this exact transaction regardless
+                // of whether any rule ends up matching it. `evaluateRules` itself
+                // checks `morph::journal::isReplaying()` and no-ops during
+                // replay, so a replayed MoveTaskPosition entry never re-derives
+                // or reuses this id for a second firing.
+                const std::string moveCausalId = "boardEvent:" + std::to_string(event.id.Value());
+                evaluateRules(action.taskId, action.columnId, moveCausalId);
+
+                // Rebuilt after evaluateRules (rather than returning the
+                // pre-cascade `result` captured above) so a caller sees a rule's
+                // fired mutation -- e.g. a freshly added tag -- in the very state
+                // this call returns, instead of only on the next GetBoardState
+                // poll. The ledger's own resultJson (written a few lines above,
+                // inside the same transaction) deliberately keeps the pre-cascade
+                // snapshot: a ledger replay is a "nothing new happened, return
+                // what happened before" path that never re-evaluates rules (see
+                // the opId-hit branch above), so a ledger hit returning the
+                // pre-cascade board state is correct, not stale -- it is
+                // reporting the same fact the original call's ledger row
+                // recorded.
+                return buildState(mapper.Get(), project);
+            },
+            result, "MoveTaskPosition");
     } catch (const KanbanError& error) {
         logFailure(action, error.what());
         throw;

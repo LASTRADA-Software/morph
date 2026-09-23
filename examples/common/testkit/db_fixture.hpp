@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include <string>
 
+#include "db/pool_transaction_audit.hpp"
+
 /// @file
 /// Real on-disk SQLite database, shared per test binary — mirrors
 /// Lightweight's own `SqlTestFixture` (Lightweight/src/tests/Utils.hpp) and
@@ -76,6 +78,14 @@ private:
     ///        no branch of its own left to miss.
     static void ensureConnectionConfigured() {
         static const bool once = [] {
+            // morph#740: installed here as well as in every rung's own
+            // `db::setup()`/`db::configure()`, because no ladder test goes
+            // through those -- this fixture points Lightweight at the test
+            // database itself. Without it the audit would be live only in
+            // binaries the suite never runs, which is a control that measures
+            // nothing. With it, every ladder test case in the suite runs under
+            // the check.
+            (void)::morph::ladder::db::installPoolTransactionAudit();
             ::Lightweight::SqlConnection::SetDefaultConnectionString(
                 ::Lightweight::SqlConnectionString{computeConnectionString(std::getenv("ODBC_CONNECTION_STRING"))});
             ::Lightweight::SqlMigration::MigrationManager::GetInstance().CreateMigrationHistory();
