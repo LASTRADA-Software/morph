@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The renderer half of the per-field scalar bounds (morph#310).
+// The renderer half of the per-field scalar bounds.
 //
 // `FieldMeta::minimum`/`::maximum`/`::multipleOf` let an action declare a
 // bound the `formRules` vocabulary cannot express -- every comparison node

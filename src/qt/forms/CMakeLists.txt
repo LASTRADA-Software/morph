@@ -35,9 +35,9 @@ target_link_libraries(morph_forms_module PUBLIC morph::morph Qt6::Quick Qt6::Qml
 target_compile_features(morph_forms_module PUBLIC cxx_std_23)
 
 # The shipped renderer's own compiled code (I18nCatalog) and the two suites
-# below were never sanitizer-instrumented (morph#542): both suites are ctest
-# cases, so a sanitizer preset with -DMORPH_BUILD_FORMS_QML=ON ran them and
-# learned nothing. Same static-library caveat as morph_qt_impl in the root
+# below need sanitizer instrumentation of their own: both suites are ctest
+# cases, so without it a sanitizer preset with -DMORPH_BUILD_FORMS_QML=ON runs
+# them and learns nothing. Same static-library caveat as morph_qt_impl in the root
 # CMakeLists.txt -- every consumer here (the QML plugin, both test
 # executables) is instrumented on the same preset.
 if(DEFINED AF_SANITIZER)
@@ -64,7 +64,7 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
         apply_sanitizers(morph_forms_qml_tests ${AF_SANITIZER})
     endif()
 
-    # The shared x-rules corpus (morph#176) has two readers: this suite and
+    # The shared x-rules corpus has two readers: this suite and
     # tests/test_forms_rule_corpus.cpp. Both are pointed at the one file from
     # CMake so neither can quietly grow its own copy. tst_main.cpp reads it and
     # publishes it to the QML engine -- QML's own XMLHttpRequest refuses a

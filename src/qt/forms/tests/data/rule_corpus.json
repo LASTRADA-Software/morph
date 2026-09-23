@@ -1,6 +1,6 @@
 {
   "readme": [
-    "The shared x-rules corpus (morph#176). ONE file, TWO readers:",
+    "The shared x-rules corpus. ONE file, TWO readers:",
     "  tests/test_forms_rule_corpus.cpp          -- morph::forms::allRulesSatisfied",
     "  src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml -- a real DynamicForm",
     "Neither owns the cases, so the two evaluators cannot be pinned to",

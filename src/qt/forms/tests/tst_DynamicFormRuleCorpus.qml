@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The renderer half of the shared `x-rules` corpus (morph#176).
+// The renderer half of the shared `x-rules` corpus.
 //
 // `x-rules` is evaluated twice -- compiled by `morph::forms::allRulesSatisfied`
 // and again in JavaScript by DynamicForm.qml -- and nothing structural pinned
@@ -41,11 +41,10 @@ TestCase {
     // The schema the next createTemporaryObject() picks up. A `property var`
     // assigned a JS value, then *bound* into the component below rather than
     // handed to createTemporaryObject as an initial-properties entry. That
-    // distinction used to matter -- the initial-properties path converts the
-    // object through QVariantMap, and `DynamicForm` typed each field by asking
-    // `Array.isArray` about the result -- but morph#388 made the renderer
-    // re-read the schema as JSON at the property, so both paths now render the
-    // same form. Binding stays because it is what every shipped app does, and
+    // distinction does not matter to what is rendered: `DynamicForm` re-reads
+    // the schema as JSON at the property, so the initial-properties path's
+    // conversion through QVariantMap cannot change how a field is typed.
+    // Binding is used anyway because it is what every shipped app does, and
     // because re-assigning `pendingSchema` per corpus row re-renders on its own.
     property var pendingSchema: ({})
 

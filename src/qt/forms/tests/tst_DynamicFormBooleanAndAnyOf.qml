@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Covers the two field shapes DynamicForm used to encode with the wrong JSON
-// type, producing payloads the server rejected (morph#189):
+// Covers the two field shapes a renderer most easily encodes with the wrong
+// JSON type, producing payloads the server rejects:
 //
 //   1. {"type": "boolean"} fell through to the plain TextField, which applied
 //      no validation and emitted the typed text as a JSON *string* --

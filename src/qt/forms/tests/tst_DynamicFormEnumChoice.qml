@@ -2,11 +2,11 @@
 //
 // A C++ `enum class` member is fully described by the schema: glaze emits it
 // as a closed `oneOf` of `const` alternatives, each with its own `title`.
-// DynamicForm threw all of it away (morph#386) -- resolveProp collapsed the
-// `oneOf` to its first non-null branch (the nullable-$ref path morph#189
-// added, where the branches differ only in nullability), and no field flag
-// ever looked at `const`. The result was a plain TextField for a three-value
-// set, and a submit gate that reported `ready` for role = "Emperor".
+// A renderer that collapses the `oneOf` to its first non-null branch -- the
+// nullable-$ref path, where the branches differ only in nullability -- and
+// never looks at `const` throws all of that away: a plain TextField for a
+// three-value set, and a submit gate that reports `ready` for role =
+// "Emperor". These cases pin the recognition that prevents it.
 //
 // Every schema below is pasted **verbatim** from
 // `morph::forms::schemaJson<A>()` for a shipped action, so a change in what
@@ -100,8 +100,8 @@ TestCase {
     //   `partial`  -- a `oneOf` in which one branch pins no value. Not a
     //                 closed set; offering a two-of-three list would be worse
     //                 than the text field.
-    //   `optI64`   -- the nullable-$ref shape morph#189 added the collapse
-    //                 for. It carries no `const` and must keep collapsing.
+    //   `optI64`   -- the nullable-$ref shape the collapse exists for. It
+    //                 carries no `const` and must keep collapsing.
     property var handWrittenSchema: ({
         "$defs": { "int64_t": { "type": "integer" } },
         "properties": {
@@ -216,8 +216,8 @@ TestCase {
     }
 
     function test_the_nullable_ref_anyOf_still_collapses_to_its_typed_branch() {
-        // morph#189's shape. Its branches carry no `const`, so it is not a
-        // closed set and must still be typed by T rather than drawn as a
+        // The nullable-$ref shape. Its branches carry no `const`, so it is not
+        // a closed set and must still be typed by T rather than drawn as a
         // picker over nothing.
         var form = createTemporaryObject(handWrittenForm, testCase)
         var optI64 = meta(form, "optI64")
@@ -292,9 +292,9 @@ TestCase {
         var form = createTemporaryObject(roleForm, testCase)
         findChild(form, "field_projectId").text = "1"
         findChild(form, "field_principal").text = "bob"
-        // The exact case morph#386 measured: before the fix `ready` was true
-        // and a body was assembled for it, so the client gate said the
-        // opposite of what it exists to say.
+        // A value outside the closed set. Without the recognition above,
+        // `ready` is true and a body is assembled for it, so the client gate
+        // says the opposite of what it exists to say.
         form.setFieldValue("role", '"Emperor"')
         compare(form.ready, false)
         compare(form.previewLine, "")
