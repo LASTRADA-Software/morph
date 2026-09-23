@@ -128,12 +128,76 @@ struct InlineExecutor : morph::exec::IExecutor {
     void post(std::function<void()> fn) override { fn(); }
 };
 
+// -- Why the two durations below are two types (morph#735) -------------------
+//
+// This `waitUntil` used to take `(Pred, milliseconds budget = 20000ms,
+// milliseconds step = 5ms)`: two adjacent, same-type, both-defaulted
+// parameters whose values differ by 4000x. Transposing them at a call site
+// compiled silently and produced a 20000 ms poll inside a 5 ms budget -- one
+// predicate check, then failure. Measured on `d03c66f3` before this change,
+// with this file's own real compile command from
+// `build/linux-everything/compile_commands.json` (clang 22, `-std=c++23
+// -Weverything -Werror` plus the project's `-Wno-` list, `-fsyntax-only`):
+// the transposed call produced no diagnostic at all and exited 0.
+//
+// `WaitBudget` and `WaitStep` make the transposition a compile error instead.
+// Both constructors are `explicit`, so neither a raw `std::chrono::milliseconds`
+// nor the other wrapper converts, and the `static_assert` block below pins
+// every route back to the hazard.
+//
+// The same two types, with the same names and the same explicit constructors,
+// are what `tests/test_support.hpp`'s framework `waitUntil` grew in morph#721
+// -- deliberately the same shape rather than a third one. They are redeclared
+// here rather than included because `examples/` does not, and should not,
+// reach into the framework's own test support: this file's target links
+// `morph::ladder_testkit`, not `morph_test_main`'s private headers.
+//
+// A `NOLINT` was not an option: it would remove the *warning* and leave the
+// hazard (morph#404), and morph#715 measured the other near miss -- widening
+// one parameter's type to silence `bugprone-easily-swappable-parameters` while
+// the transposition still compiles.
+
+/// @brief `waitUntil`'s overall polling budget: the longest it may wait before
+///        giving up and returning `false`.
+///
+///        A distinct type from `WaitStep` so passing the two in the wrong
+///        order is a compile error rather than a 4000x-wrong program.
+///        Construction is deliberately explicit.
+struct WaitBudget {
+    /// @brief The budget itself.
+    std::chrono::milliseconds value;
+
+    /// @brief Wraps a duration as a budget.
+    /// @param millis How long `waitUntil` may keep polling.
+    explicit constexpr WaitBudget(std::chrono::milliseconds millis) noexcept : value{millis} {}
+};
+
+/// @brief `waitUntil`'s polling step: how long it sleeps between predicate
+///        checks.
+///
+///        A distinct type from `WaitBudget` -- see that type, and the note
+///        above it, for why. Construction is deliberately explicit.
+struct WaitStep {
+    /// @brief The step itself.
+    std::chrono::milliseconds value;
+
+    /// @brief Wraps a duration as a polling step.
+    /// @param millis How long to sleep between predicate checks.
+    explicit constexpr WaitStep(std::chrono::milliseconds millis) noexcept : value{millis} {}
+};
+
+/// @brief Default polling budget for `waitUntil`, before deadline scaling.
+inline constexpr std::chrono::milliseconds kDefaultWaitBudget{20000};
+
+/// @brief Default polling step for `waitUntil`.
+inline constexpr std::chrono::milliseconds kDefaultWaitStep{5};
+
 /// @brief Polls @p pred until it returns `true` or @p budget elapses,
 ///        sleeping @p step between polls. Same shape as `morph::testing::
-///        waitUntil` (`tests/test_support.hpp`) and this file's own former
-///        `pumpUntil` call, minus the Qt event-loop pump -- nothing here
-///        needs one, since no callback in this file is ever queued onto a
-///        Qt event loop in the first place.
+///        waitUntil` (`tests/test_support.hpp`), which grew these same two
+///        strong types in morph#721, minus the Qt event-loop pump -- nothing
+///        here needs one, since no callback in this file is ever queued onto
+///        a Qt event loop in the first place.
 ///
 /// @p budget is scaled by `MORPH_LADDER_DEADLINE_MS` exactly as every
 /// `pumpUntil` deadline is, via `testkit/deadline.hpp` -- the Qt-free half of
@@ -150,19 +214,50 @@ struct InlineExecutor : morph::exec::IExecutor {
 /// @param step   Sleep between polls.
 /// @return `true` if @p pred became true before the scaled budget elapsed.
 template <typename Pred>
-[[nodiscard]] bool waitUntil(Pred pred, std::chrono::milliseconds budget = std::chrono::milliseconds{20000},
-                             std::chrono::milliseconds step = std::chrono::milliseconds{5}) {
+[[nodiscard]] bool waitUntil(Pred pred, WaitBudget budget = WaitBudget{kDefaultWaitBudget},
+                             WaitStep step = WaitStep{kDefaultWaitStep}) {
     const auto scaledBudget =
-        std::chrono::milliseconds{morph::ladder::testkit::detail::scaledDeadlineMs(budget.count())};
+        std::chrono::milliseconds{morph::ladder::testkit::detail::scaledDeadlineMs(budget.value.count())};
     const auto deadline = std::chrono::steady_clock::now() + scaledBudget;
     while (!pred()) {
         if (std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
-        std::this_thread::sleep_for(step);
+        std::this_thread::sleep_for(step.value);
     }
     return true;
 }
+
+namespace detail {
+
+// Satisfied when `waitUntil` is callable with `Args` -- the predicate type
+// first, then whatever follows it. Plain comments rather than Doxygen because
+// clang's `-Wdocumentation` does not accept `@tparam` on a concept.
+template <typename... Args>
+concept WaitUntilCallableWith = requires(Args... args) { waitUntil(args...); };
+
+/// @brief A stand-in predicate type for the assertions below.
+using ExampleWaitPred = bool (*)();
+
+// The acceptance test for morph#735, kept in the translation unit that owns
+// the hazard so the build reddens if a later edit reintroduces it.
+//
+// What must keep working -- every call site in this file relies on the
+// defaults, and one passes an explicit budget:
+static_assert(WaitUntilCallableWith<ExampleWaitPred>);
+static_assert(WaitUntilCallableWith<ExampleWaitPred, WaitBudget>);
+static_assert(WaitUntilCallableWith<ExampleWaitPred, WaitBudget, WaitStep>);
+
+// What must not compile. The first is the transposition itself; the rest are
+// the routes back to it, each of which would restore a silent 4000x error.
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep, WaitBudget>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, std::chrono::milliseconds>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, std::chrono::milliseconds, std::chrono::milliseconds>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitBudget, WaitBudget>);
+static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep, WaitStep>);
+
+}  // namespace detail
 
 /// @brief Builds a signed session `Context` for @p principal, issued by
 ///        @p issuer. Same pattern as test_shared_instance_lifecycle.cpp's
@@ -411,7 +506,8 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
     // inside 90s but past the original, un-scaled 20s budget the Qt-based
     // version used without ever actually needing more (its own callback
     // delivery path happened to be fast enough not to hit this).
-    REQUIRE(waitUntil([&outstanding] { return outstanding.load() == 0; }, std::chrono::milliseconds{90000}));
+    REQUIRE(
+        waitUntil([&outstanding] { return outstanding.load() == 0; }, WaitBudget{std::chrono::milliseconds{90000}}));
     CAPTURE(failures.load());
 
     // Fetch one final GetBoardState and assert both design spec §8 invariants.

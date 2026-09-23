@@ -12,6 +12,8 @@
 #include "bank_test_support.hpp"
 
 using bank::testing::await;
+using bank::testing::WaitBudget;
+using bank::testing::WaitStep;
 using bank::testing::waitUntil;
 
 TEST_CASE("PayeeModel add/list/remove scoped to the owner", "[payee]") {
@@ -67,14 +69,14 @@ TEST_CASE("PayeeModel notifies subscribers of the state it produces", "[payee][s
     payees.execute(bank::dto::AddPayee{.name = "Streamed Payee", .iban = ""}).onError([&](const std::exception_ptr&) {
         rejected.store(true);
     });
-    REQUIRE(waitUntil([&] { return rejected.load(); }, std::chrono::milliseconds{2000}, std::chrono::milliseconds{5},
-                      app.guiLoop()));
+    REQUIRE(waitUntil([&] { return rejected.load(); }, WaitBudget{std::chrono::milliseconds{2000}},
+                      WaitStep{std::chrono::milliseconds{5}}, app.guiLoop()));
     REQUIRE_FALSE(fired.load());
 
     // A complete one succeeds and the subscription fires.
     await(payees.execute(bank::dto::AddPayee{.name = "Streamed Payee", .iban = "FR1420041010050500013M02606"}),
           app.guiLoop());
-    REQUIRE(waitUntil([&] { return fired.load(); }, std::chrono::milliseconds{2000}, std::chrono::milliseconds{5},
-                      app.guiLoop()));
+    REQUIRE(waitUntil([&] { return fired.load(); }, WaitBudget{std::chrono::milliseconds{2000}},
+                      WaitStep{std::chrono::milliseconds{5}}, app.guiLoop()));
     REQUIRE(newId > 0);
 }
