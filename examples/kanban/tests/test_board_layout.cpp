@@ -113,8 +113,9 @@ constexpr int kNarrowWindowWidth = 500;
 /// @return The new project's id, as its plain number.
 [[nodiscard]] qlonglong seedProject(BackendRig& rig) {
     morph::bridge::BridgeHandler<kanban::ProjectAdminModel> creator{rig.bridge(0), rig.executor()};
-    const auto id = morph::ladder::testkit::awaitQt(creator.execute(kanban::CreateProject{.name = "Sprint Board"})).id;
-    return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
+    const auto projectId =
+        morph::ladder::testkit::awaitQt(creator.execute(kanban::CreateProject{.name = "Sprint Board"})).id;
+    return projectId.hasValue() ? static_cast<qlonglong>(*projectId) : -1;
 }
 
 /// @brief Depth-first search of the *visual* item tree under @p root for an
@@ -127,6 +128,9 @@ constexpr int kNarrowWindowWidth = 500;
 /// @param root The item to search under (searched itself first).
 /// @param name The `objectName` to find.
 /// @return The item, or `nullptr`.
+// Recursion matches the shape of the thing being searched: a QQuickItem tree of
+// unbounded depth, where an iterative walk would hand-roll the same stack.
+// NOLINTNEXTLINE(misc-no-recursion)
 [[nodiscard]] QQuickItem* findItem(QQuickItem* root, const QString& name) {
     if (root == nullptr) {
         return nullptr;
@@ -274,7 +278,7 @@ TEST_CASE("BoardView keeps a usable board area and keeps every column reachable"
     // 2. The board area never collapses below one whole column plus the gaps
     //    around it. Below that the first column is cut in half and there is no
     //    width at which the board is usable.
-    CHECK(boardArea->width() >= kColumnWidth + 2 * kColumnSpacing);
+    CHECK(boardArea->width() >= kColumnWidth + (2 * kColumnSpacing));
 
     // 3. The strip really is wider than the area it is drawn in -- otherwise
     //    the reachability assertion below would pass on a board that never
