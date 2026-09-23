@@ -283,7 +283,7 @@ TEST_CASE("BoardView keeps a usable board area and keeps every column reachable"
     // 3. The strip really is wider than the area it is drawn in -- otherwise
     //    the reachability assertion below would pass on a board that never
     //    needed scrolling, and prove nothing.
-    const qreal stripExtent = kColumnCount * kColumnWidth + (kColumnCount - 1) * kColumnSpacing;
+    const qreal stripExtent = (kColumnCount * kColumnWidth) + ((kColumnCount - 1) * kColumnSpacing);
     CHECK(stripExtent > boardArea->width());
 
     QQuickItem* flick = findItem(boardArea, QStringLiteral("boardFlickable"));
@@ -326,7 +326,7 @@ TEST_CASE("BoardView keeps a usable board area and keeps every column reachable"
     REQUIRE(pumpUntil([&] { return boardArea->width() < boardAreaWhenWide; }));
     INFO("narrow window " << window->width() << ", board area " << boardArea->width() << ", activity "
                           << activityPanel->width());
-    CHECK(boardArea->width() >= kColumnWidth + 2 * kColumnSpacing);
+    CHECK(boardArea->width() >= kColumnWidth + (2 * kColumnSpacing));
 }
 
 #endif  // MORPH_LADDER_QML_URI
