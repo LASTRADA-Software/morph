@@ -350,18 +350,60 @@ private:
     /// @brief Records a rejected @p action as a `LogEntry` with
     ///        `Outcome::Failed` and @p error, if a log is attached; no-op
     ///        otherwise. The refused-attempt counterpart to `logAction`
-    ///        above: every mutating `execute()` overload catches its own
-    ///        `KanbanError` hierarchy around the whole body and calls this
-    ///        before rethrowing, so a `Forbidden`, `NotFound`,
-    ///        `ValidationError`, or `Conflict` refusal leaves the same
-    ///        audit trace a success does -- see
-    ///        `lims::SelfJournal::recordFailure` for the identical rationale
-    ///        this mirrors (`include/lims/core/self_journal.hpp`).
+    ///        above -- see `lims::SelfJournal::recordFailure` for the
+    ///        identical rationale this mirrors
+    ///        (`include/lims/core/self_journal.hpp`).
+    ///
+    ///        Not called from a handler directly: every mutating `execute()`
+    ///        overload goes through `logFailureForCurrentException` below,
+    ///        which is this call plus the containment it needs on a failure
+    ///        path. This one can throw -- `IActionLog::append`/`flush` are
+    ///        free to -- and on the failure path that would be fatal to the
+    ///        diagnosis, which is precisely what that wrapper exists for.
     /// @tparam Action Concrete action type.
     /// @param action The rejected action.
     /// @param error The rejecting exception's `what()`.
     template <typename Action>
     void logFailure(const Action& action, const std::string& error) const;
+
+    /// @brief Journals the exception **currently being handled** as an
+    ///        `Outcome::Failed` entry for @p action, whatever its type, and
+    ///        contains any failure of the journalling itself (morph#757).
+    ///
+    ///        Every mutating `execute()` overload ends `} catch (...) {
+    ///        logFailureForCurrentException(action); throw; }`. Before
+    ///        morph#757 they ended `catch (const KanbanError&)` instead, so
+    ///        `Outcome::Failed` was written for this rung's own four refusal
+    ///        types and for nothing else: an `std::invalid_argument` out of
+    ///        `std::stoull`, one of Lightweight's SQL exceptions from a
+    ///        pre-commit `Query`/`Create`/`Update`/`Delete` (a contended
+    ///        `SQLITE_BUSY` past the busy timeout being the one observed in
+    ///        CI, morph#566), or a `std::bad_alloc` all reached the caller
+    ///        having journalled nothing at all. Nothing in "a rejected
+    ///        attempt is itself audit-worthy" depends on the exception's
+    ///        type; only the `catch` clause did.
+    ///
+    ///        **Why the containment is not optional.** This runs while the
+    ///        original exception is still in flight and the caller's own
+    ///        `throw;` has not yet re-raised it. `logFailure` writes to the
+    ///        journal, so on a `std::bad_alloc` -- or a `SQLITE_BUSY` still
+    ///        active against a `FileActionLog` backed by the same device --
+    ///        the journalling attempt can throw from inside the handler for
+    ///        the original throw. Were that allowed to escape, it would
+    ///        *replace* the failure being reported with the failure to
+    ///        report it: a less diagnosable exception, and on a destructor
+    ///        path a `std::terminate`. So it is contained here, the same way
+    ///        `runPostCommitTail` contains the mirror case (morph#751), and
+    ///        the exception the caller sees is always the original one.
+    ///
+    ///        **Precondition:** an exception is being handled. This is a
+    ///        private helper and all ten call sites are `catch (...)`
+    ///        blocks; calling it outside one rethrows with no exception in
+    ///        flight, which is `std::terminate`.
+    /// @tparam Action Concrete action type.
+    /// @param action The action whose attempt failed.
+    template <typename Action>
+    void logFailureForCurrentException(const Action& action) const;
 
     /// @brief Throws `Forbidden` unless the calling principal's role on
     ///        this handler's attached project is at least `minimum`. Same
