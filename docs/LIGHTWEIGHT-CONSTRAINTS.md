@@ -274,6 +274,74 @@ fresh-database-per-run assumption), or a Lightweight revision whose
 
 ---
 
+## 6. `DataMapperPool::Return` performs no transaction cleanup — **live**
+
+**Constraint.** Returning a pooled `DataMapper` to
+`Lightweight::GlobalDataMapperPool()` does **not** end a transaction open on
+its connection. All three growth-strategy overloads of `Pool<Config>::Return`
+do the same three things — drop the async backend, announce the hand-off to
+the `SqlLogger`, park the mapper — and none of them issues `SQLEndTran` or
+restores `SQL_ATTR_AUTOCOMMIT`:
+
+```cpp
+void Return(std::unique_ptr<DataMapper> dm) noexcept
+{
+    DropAsyncBackend(*dm);                                     // = dm.Connection().DisableAsync();
+    SqlLogger::GetLogger().OnConnectionIdle(dm->Connection());
+    std::scoped_lock lock(_mutex);
+    _idleDataMappers.push_back(std::move(dm));
+}
+```
+
+A mapper parked with autocommit still `OFF` therefore carries an open
+transaction into the pool, and the next — unrelated — borrower inherits it.
+Combined with entry 5, the cost of that lands sixty seconds later, on a caller
+that opened no transaction, as `database is locked`.
+
+What keeps this tree safe is **declaration order, not the library**:
+`SqlTransaction::Commit()` and `::Rollback()` restore autocommit themselves and
+immediately, and a handler that relies on the destructor instead is safe only
+because its `SqlTransaction` local is declared *after* the pooled mapper and so
+destructs *before* it. Hoisting the transaction into a member, a
+`std::optional`, or any longer-lived scope silently undoes that.
+
+**Verified at** `bbb972a78e1962b968a2c6ad93f7dade736eaa01`, by reading
+`src/Lightweight/DataMapper/Pool.hpp:139-146` (the `UnboundedGrow` overload
+quoted above), `:150-162` (`BoundedWait`) and `:198-209` (`BoundedOverflow`,
+which is the one actually in force — `DefaultPoolConfig` at `:173-177` selects
+it), `:133-136` (`DropAsyncBackend`, the whole of what a returned connection is
+cleaned with), and `src/Lightweight/SqlTransaction.cpp:52-93`
+(`TryRollback()`/`TryCommit()` restoring autocommit there and then).
+
+**Workaround used in this tree.** morph#740's `PoolTransactionAudit`
+(`examples/common/db/pool_transaction_audit.hpp`) installs itself as the
+process-wide `SqlLogger` and reads `SQL_ATTR_AUTOCOMMIT` at every hand-off, so
+a leak aborts at the leak instead of stalling an innocent caller a minute
+later. All seven ladder rungs' `db::setup()`/`db::configure()` and
+`testkit/DbFixture` install it.
+
+**`examples/bank` deliberately does not, and that is not a coverage gap**
+(morph#752). Bank does not use the pool at all: `bank::db::WithMapper::mapper()`
+(`examples/bank/include/bank/db/db_model.hpp`) constructs a `DataMapper`
+directly, one per model, and `LightweightOfflineQueue` owns another.
+`OnConnectionIdle` and `OnConnectionReuse` — the only two hooks the audit reads
+— are emitted from `Pool.hpp` and from nowhere else at this pin, so an audit
+installed in bank would inspect zero hand-offs and could never fail. Measured
+rather than argued, by `examples/bank/tests/test_pool_scope.cpp`: the same
+counter records **2** hand-offs for one deliberate `Acquire()`/return and **0**
+across a bank `OpenAccount` + `Deposit` + `Transfer`, the two latter being the
+paths that open a `SqlTransaction`. Mutating `TransactionModel::execute(Deposit)`
+to acquire from the pool turns that 0 into a 2 and fails the case, so the zero
+is a measurement and not an unwired counter.
+
+**What retires this.** A Lightweight revision whose `Pool::Return` ends the
+transaction (or asserts that none is open), at which point the audit and this
+entry both go. Re-read all three `Return` overloads when the pin moves. Bank's
+half of the entry retires the moment any bank code names
+`GlobalDataMapperPool()` — `test_pool_scope.cpp` fails when it does.
+
+---
+
 ## Adding an entry
 
 File the upstream issue first, so the entry has a retirement condition somebody

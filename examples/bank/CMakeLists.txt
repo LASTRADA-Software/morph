@@ -209,6 +209,10 @@ if(MORPH_BUILD_TESTS)
             tests/test_lightweight_offline_queue.cpp
             tests/test_relations.cpp
             tests/test_stateful_account.cpp
+            # Not a behavioural test of bank: the record of why
+            # examples/common/db/pool_transaction_audit.hpp is deliberately not
+            # linked here (morph#752). See the file's own header.
+            tests/test_pool_scope.cpp
         )
         # ${PROJECT_SOURCE_DIR}/tests is morph's own test directory, and it is
         # on the include path for exactly one header:
