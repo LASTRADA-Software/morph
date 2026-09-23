@@ -203,6 +203,77 @@ or an equivalent in the plan renderer.
 
 ---
 
+## 5. SQLite connections are rollback-journal, with a 60 s busy timeout — **live**
+
+**Constraint.** Lightweight sets **one** SQLite pragma of its own, and it is
+not the one people assume. Every connection it opens to a SQLite data source
+gets `busy_timeout = 60000`; `journal_mode` it deliberately leaves alone, so
+the database stays in SQLite's default **rollback-journal** mode unless
+something in this tree sets it.
+
+Two consequences an example author gets wrong:
+
+- **`BEGIN DEFERRED` is not a snapshot here.** Under `journal_mode=WAL` a
+  deferred read transaction lets writers continue; under a rollback journal it
+  escalates to a `SHARED` lock on first read and blocks every writer on the
+  file until it is released. A long read transaction is therefore a *write
+  barrier*, not a free consistent view.
+- **The busy timeout is 60 s, not whatever the connection string says.**
+  `Timeout=5000` in an ODBC connection string is the ODBC login/query timeout;
+  it does not reach SQLite's `busy_timeout`, which `PostConnect()` has already
+  set to 60000 ms. A contended writer that is going to fail stalls for a
+  minute first.
+
+**Verified at** `bbb972a78e1962b968a2c6ad93f7dade736eaa01`, by reading
+`src/Lightweight/SqlConnection.cpp:388-398` — the whole of what `PostConnect()`
+does for SQLite:
+
+```cpp
+if (m_serverType == SqlServerType::SQLITE)
+{
+    // Set a busy timeout to prevent "database is locked" errors during concurrent access.
+    // 60 seconds should be sufficient for most operations.
+    SqlStatement stmt(*this);
+    [[maybe_unused]] auto cursor = stmt.ExecuteDirect("PRAGMA busy_timeout = 60000");
+
+    // We could also enable WAL mode here, but that changes the database file structure.
+    // However, for high-concurrency restoration, it is highly recommended.
+    // Let's stick to busy_timeout for now as it's purely a runtime behavior change.
+}
+```
+
+and by grepping this tree for the pragma nobody issues:
+
+```
+$ git grep -n "journal_mode" d03c66f3 -- examples/ledger examples/crm examples/bookmarks examples/polls scripts/scenario
+$ echo $?
+1
+```
+
+(pinned to `d03c66f3`, the revision before morph#739's own comments added
+the word to `ledger_model.cpp`; exit 1 is "no match").
+
+The only `journal_mode` under `examples/` is in kanban's *tests*
+(`examples/kanban/tests/test_kanban_offline.cpp:629`), which issue it
+optionally, for one fixture, and whose own comments record that it is
+per-database-file rather than per-connection. `morph::offline::SqliteOfflineQueue`
+does set WAL, but on its **own** sqlite3 handle and its own queue file — not on
+the ODBC database the rung models use.
+
+**Workaround used in this tree.** Name the thing after what it does in the mode
+that is actually in force: `examples/ledger/src/models/ledger_model.cpp`'s
+`DeferredReadTransactionGuard` was called `WalSnapshotGuard` until morph#739,
+and the old name described the opposite of its real contention behaviour. Keep
+raw read transactions as narrow as the aggregation that needs them.
+
+**What retires this.** A rung that sets `journal_mode=WAL` on the ODBC database
+deliberately (a decision with its own consequences — WAL lives in the database
+file header, so it reaches every other opener and the scenario runner's
+fresh-database-per-run assumption), or a Lightweight revision whose
+`PostConnect()` sets it. Re-read `PostConnect()` when the pin moves.
+
+---
+
 ## Adding an entry
 
 File the upstream issue first, so the entry has a retirement condition somebody
