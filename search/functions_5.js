@@ -22,5 +22,6 @@ var searchData=
   ['fromdouble_19',['fromDouble',['../d5/dda/structmorph_1_1units_1_1Quantity.html#af93658f52b9727462984d692b756bc0c',1,'morph::units::Quantity::fromDouble()'],['../d1/d58/structmorph_1_1units_1_1NamedQuantity.html#ac32995a8951ceaf342062543871fdb44',1,'morph::units::NamedQuantity::fromDouble()']]],
   ['fromfloat_20',['fromFloat',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ab31cff5187102ef9e5f07c750760111b',1,'morph::math::Rational::fromFloat(double value, DecimalPlaces wantedPrecision) noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#ace23b5b657e89e9ac35c308d1d5c2aa8',1,'morph::math::Rational::fromFloat(float value, DecimalPlaces wantedPrecision) noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#a32739f25a01b28c88b9bedd3036d5c38',1,'morph::math::Rational::fromFloat(long double value, DecimalPlaces wantedPrecision) noexcept']]],
   ['fromiso8601_21',['fromIso8601',['../d5/d44/structmorph_1_1time_1_1DateTime.html#aac467d857d5e3faaeaed2159a61f6890',1,'morph::time::DateTime']]],
-  ['fromoptional_22',['fromOptional',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a78819aecf83db1a10e7c8ee91f9fc67e',1,'morph::units::Quantity']]]
+  ['fromjson_22',['fromJson',['../da/d56/action__log__json_8hpp.html#a52476838a328cd4b14fcbab583fa09fb',1,'morph::journal']]],
+  ['fromoptional_23',['fromOptional',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a78819aecf83db1a10e7c8ee91f9fc67e',1,'morph::units::Quantity']]]
 ];

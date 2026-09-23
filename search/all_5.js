@@ -43,10 +43,11 @@ var searchData=
   ['fromdouble_40',['fromDouble',['../d5/dda/structmorph_1_1units_1_1Quantity.html#af93658f52b9727462984d692b756bc0c',1,'morph::units::Quantity::fromDouble()'],['../d1/d58/structmorph_1_1units_1_1NamedQuantity.html#ac32995a8951ceaf342062543871fdb44',1,'morph::units::NamedQuantity::fromDouble()']]],
   ['fromfloat_41',['fromFloat',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ab31cff5187102ef9e5f07c750760111b',1,'morph::math::Rational::fromFloat(double value, DecimalPlaces wantedPrecision) noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#ace23b5b657e89e9ac35c308d1d5c2aa8',1,'morph::math::Rational::fromFloat(float value, DecimalPlaces wantedPrecision) noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#a32739f25a01b28c88b9bedd3036d5c38',1,'morph::math::Rational::fromFloat(long double value, DecimalPlaces wantedPrecision) noexcept']]],
   ['fromiso8601_42',['fromIso8601',['../d5/d44/structmorph_1_1time_1_1DateTime.html#aac467d857d5e3faaeaed2159a61f6890',1,'morph::time::DateTime']]],
-  ['fromoptional_43',['fromOptional',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a78819aecf83db1a10e7c8ee91f9fc67e',1,'morph::units::Quantity']]],
-  ['fromresult_44',['fromResult',['../d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html#a9d5f166812a94406f281cedfcd0eec39',1,'morph::model::ActionKeyTraits']]],
-  ['fromto_45',['fromTo',['../da/d8f/structmorph_1_1units_1_1UnitRelation.html#ae92fac417b2e8892b03fe97d11fd7b91',1,'morph::units::UnitRelation']]],
-  ['fsync_46',['fsync',['../db/d00/structmorph_1_1core_1_1FileIoOps.html#a01347b2c0c868ddc4cc1b042d02d71b9',1,'morph::core::FileIoOps']]],
-  ['full_47',['full',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0',1,'morph::offline::SqliteOfflineQueue']]],
-  ['fwrite_48',['fwrite',['../db/d00/structmorph_1_1core_1_1FileIoOps.html#a71d292fdf71d8d58a6595e239475e122',1,'morph::core::FileIoOps']]]
+  ['fromjson_43',['fromJson',['../da/d56/action__log__json_8hpp.html#a52476838a328cd4b14fcbab583fa09fb',1,'morph::journal']]],
+  ['fromoptional_44',['fromOptional',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a78819aecf83db1a10e7c8ee91f9fc67e',1,'morph::units::Quantity']]],
+  ['fromresult_45',['fromResult',['../d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html#a9d5f166812a94406f281cedfcd0eec39',1,'morph::model::ActionKeyTraits']]],
+  ['fromto_46',['fromTo',['../da/d8f/structmorph_1_1units_1_1UnitRelation.html#ae92fac417b2e8892b03fe97d11fd7b91',1,'morph::units::UnitRelation']]],
+  ['fsync_47',['fsync',['../db/d00/structmorph_1_1core_1_1FileIoOps.html#a01347b2c0c868ddc4cc1b042d02d71b9',1,'morph::core::FileIoOps']]],
+  ['full_48',['full',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0',1,'morph::offline::SqliteOfflineQueue']]],
+  ['fwrite_49',['fwrite',['../db/d00/structmorph_1_1core_1_1FileIoOps.html#a71d292fdf71d8d58a6595e239475e122',1,'morph::core::FileIoOps']]]
 ];

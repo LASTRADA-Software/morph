@@ -160,12 +160,12 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Append-only, newline-delimited-JSON <span class="tt"><a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html" title="Interface for durable storage of executed-action entries.">IActionLog</a></span> backed by a local file. </p>
-<p>Each entry is written as one <span class="tt">journal::toJson</span>-encoded line. <span class="tt"><a class="el" href="#a9ae4ceee86a705a0dab6388abc8c87a3" title="Flushes stdio&#39;s buffer, then fsyncs the file descriptor. Thread-safe.">flush()</a></span> flushes the C stdio buffer and then issues a real fsync (POSIX <span class="tt">fsync</span> / Windows <span class="tt">_commit</span>), so a crash immediately after <span class="tt"><a class="el" href="#a9ae4ceee86a705a0dab6388abc8c87a3" title="Flushes stdio&#39;s buffer, then fsyncs the file descriptor. Thread-safe.">flush()</a></span> returns cannot lose data — this is the "local file" sink from the original request, and the natural target for <span class="tt"><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">SessionLog::checkpoint()</a></span> at a "Save" action. Dedups <span class="tt"><a class="el" href="#ae5f2328fc8fdc456e2592b610ec2feea" title="Appends entry as one JSON line. Buffered until flush(). Thread-safe.">append()</a></span> on a non-empty <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span>, rebuilding the seen-key set from disk at open time — see <span class="tt"><a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html" title="Interface for durable storage of executed-action entries.">IActionLog</a></span>'s class docs and the constructor's docs.</p>
+<p>Each entry is written as one <span class="tt"><a class="el" href="../../da/d56/action__log__json_8hpp.html#a69ee827282360aa84af92bc1a6898b99" title="Encodes entry as JSON.">journal::toJson</a></span>-encoded line. <span class="tt"><a class="el" href="#a9ae4ceee86a705a0dab6388abc8c87a3" title="Flushes stdio&#39;s buffer, then fsyncs the file descriptor. Thread-safe.">flush()</a></span> flushes the C stdio buffer and then issues a real fsync (POSIX <span class="tt">fsync</span> / Windows <span class="tt">_commit</span>), so a crash immediately after <span class="tt"><a class="el" href="#a9ae4ceee86a705a0dab6388abc8c87a3" title="Flushes stdio&#39;s buffer, then fsyncs the file descriptor. Thread-safe.">flush()</a></span> returns cannot lose data — this is the "local file" sink from the original request, and the natural target for <span class="tt"><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">SessionLog::checkpoint()</a></span> at a "Save" action. Dedups <span class="tt"><a class="el" href="#ae5f2328fc8fdc456e2592b610ec2feea" title="Appends entry as one JSON line. Buffered until flush(). Thread-safe.">append()</a></span> on a non-empty <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span>, rebuilding the seen-key set from disk at open time — see <span class="tt"><a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html" title="Interface for durable storage of executed-action entries.">IActionLog</a></span>'s class docs and the constructor's docs.</p>
 <dl class="section user"><dt>Process-local <span class="tt">seq</span></dt><dd>Like <span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="Thread-safe in-memory implementation of IActionLog.">InMemoryActionLog</a></span>, <span class="tt">seq</span> is assigned fresh per process instance — it does not resume from the highest <span class="tt">seq</span> already on disk if the file is reopened. Entries remain correctly ordered on disk regardless (append-only), but <span class="tt">seq</span> alone is not a cross-restart unique key; use <span class="tt"><a class="el" href="#aee38ac14807005f7ba0e194d884b6cc3" title="Re-reads the file from disk and decodes every line. Thread-safe.">entries()</a></span>' natural file order for that.</dd></dl>
 <dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe (guarded by an internal mutex). Safe to use from multiple threads within one process; not safe for multiple processes to append to the same path concurrently.</dd></dl>
 <dl class="section user"><dt>Rotation</dt><dd><span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path.">rotate()</a></span> seals the active file (rename to a host-chosen path) and reopens a fresh, empty one at the original path — the seam a host uses to implement its own retention policy. See <span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path.">rotate()</a></span>'s own docs. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a713f31e9794ab864d6ede7037ee78482" name="a713f31e9794ab864d6ede7037ee78482"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a713f31e9794ab864d6ede7037ee78482">&#9670;&#160;</a></span>FileActionLog()</h2>
@@ -210,7 +210,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -240,7 +240,7 @@ Public Member Functions</h2></td></tr>
 <p>Closes the underlying file. </p>
 <p><span class="tt">_file</span> is normally non-null: the constructor either finishes with a valid handle or throws before completing (in which case this destructor never runs), and copy/move are deleted. The one exception is a <span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path.">rotate()</a></span> whose reopen failed after the rename succeeded — it throws with the handle left null rather than dangling, so the null check here is reachable and load-bearing, not defensive noise. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -285,7 +285,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -324,7 +324,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -362,7 +362,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -405,7 +405,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00341">341</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>

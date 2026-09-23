@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::model::ModelTraits&lt; Model &gt; Struct Template Reference</title>
+<title>morph: morph/core/async.hpp File Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d14/structmorph_1_1model_1_1ModelTraits.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d2c/async_8hpp.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,27 +117,39 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d14/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::model::ModelTraits&lt; Model &gt; Struct Template Reference</div></div>
+  <div class="headertitle"><div class="title">async.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Traits specialisation that maps a model type to its string type-id.  
- <a href="#details">More...</a></p>
+<p>The asynchronous primitives, on their own — the cheap include.  
+<a href="#details">More...</a></p>
+<div class="textblock"><code>#include &quot;callback_scope.hpp&quot;</code><br />
+<code>#include &quot;completion.hpp&quot;</code><br />
+<code>#include &quot;executor.hpp&quot;</code><br />
+<code>#include &quot;strand.hpp&quot;</code><br />
+</div>
+<p><a href="../../d5/d2c/async_8hpp_source.html">Go to the source code of this file.</a></p>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><div class="compoundTemplParams">template&lt;typename Model&gt;<br />
-struct morph::model::ModelTraits&lt; Model &gt;</div><p>Traits specialisation that maps a model type to its string type-id. </p>
-<p>Users must specialise this (or use <span class="tt">BRIDGE_REGISTER_MODEL</span>) before the model can be registered with a backend. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
-  <table class="tparams">
-    <tr><td class="paramname">Model</td><td>Concrete model type. </td></tr>
-  </table>
-  </dd>
-</dl>
+<div class="textblock"><p>The asynchronous primitives, on their own — the cheap include. </p>
+<p><span class="tt">Completion</span>, <span class="tt">IExecutor</span> and its implementations, <span class="tt">StrandExecutor</span> and <span class="tt">CallbackScope</span> are useful without a model, a registry, a wire envelope or a schema, and they are the part of morph that costs almost nothing to compile. Nothing here reaches glaze.</p>
+<p>Measured on <span class="tt">master</span> @ c6f6d953, clang 22.1.8, <span class="tt">-O2 -fsyntax-only</span>, one translation unit per header, best of three:</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">header  </th><th class="markdownTableHeadNone">CPU s  </th><th class="markdownTableHeadNone">preprocessed lines  </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../d7/d76/executor_8hpp_source.html">core/executor.hpp</a></span>  </td><td class="markdownTableBodyNone">1.16  </td><td class="markdownTableBodyNone">124,855  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../d1/d76/completion_8hpp_source.html">core/completion.hpp</a></span>  </td><td class="markdownTableBodyNone">1.20  </td><td class="markdownTableBodyNone">127,450  </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../de/dc1/strand_8hpp_source.html">core/strand.hpp</a></span>  </td><td class="markdownTableBodyNone">1.20  </td><td class="markdownTableBodyNone">127,217  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">core/bridge.hpp</a></span>  </td><td class="markdownTableBodyNone">3.76  </td><td class="markdownTableBodyNone">267,827  </td></tr>
+</table>
+<p>A consumer that wants the primitives and reaches for <span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></span> — the obvious header, and the one every example includes — pays roughly three times over for a schema generator and a JSON codec it never calls. This header exists so the cheap path has a name (morph#573, step 4).</p>
+<p>It is a facade and nothing else: it declares no symbol of its own, so including it is exactly equivalent to including the four headers below. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
-</div><hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/core/<a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a></li>
-</ul>
-</div><!-- contents -->
+<p class="definition">Definition in file <a class="el" href="../../d5/d2c/async_8hpp_source.html">async.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">
 <div id="page-nav-resize-handle"></div>
@@ -150,7 +162,7 @@ struct morph::model::ModelTraits&lt; Model &gt;</div><p>Traits specialisation th
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>model</b></li><li class="navelem"><a href="../../d2/d14/structmorph_1_1model_1_1ModelTraits.html">ModelTraits</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>core</b></li><li class="navelem"><a href="../../d5/d2c/async_8hpp.html">async.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>
