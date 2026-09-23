@@ -168,9 +168,36 @@ private:
 
 }  // namespace
 
-TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under contention", "[strand][race]") {
+// `[slow]` (morph#760) is what gives this case its own ctest `TIMEOUT`; see
+// tests/CMakeLists.txt, where the tag is excluded from the blanket 120 s and
+// registered again with a budget sized from this case's measured loaded
+// runtime. It is a *scheduling* budget, not a performance one -- see the note
+// on `kIterations` below.
+TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under contention", "[strand][race][slow]") {
     constexpr int kThreads = 8;
     constexpr int kPostsPerThread = 400;
+    // Detection power, not a duration. Each iteration is one fresh
+    // pool/strand pair sampling the drain-and-re-arm interleaving once; twenty
+    // of them is how often this case gets to observe it. Cutting this number
+    // is the cheap way to fit a timeout and it makes the case worse at the one
+    // thing it exists for, so the budget was moved instead (morph#760).
+    //
+    // What the case actually costs is set by the *scheduler*, not by the work:
+    // the strand serialises `kThreads * kPostsPerThread` tasks, and each
+    // handoff is a wakeup that has to wait its turn on the run queue. Measured
+    // here, 12 cores, clang 22.1.8 Release, synthetic spin-loop load, whole
+    // case wall clock:
+    //
+    //     run queue  1 (idle)  ->    0.14 s
+    //     run queue 14         ->   23.8 s
+    //     run queue 27         ->  170.5 s
+    //     run queue 38         ->  396.4 s
+    //
+    // Steeply superlinear in the oversubscription ratio, and the serialisation
+    // invariant held in every one of those runs -- `inFlight 1, maxInFlight 1`
+    // throughout, 40 assertions passed. A host busy enough will still exceed
+    // any fixed ceiling; that is a property of the measurement, not a defect
+    // this case can assert its way out of.
     constexpr int kIterations = 20;
 
     morph::exec::detail::ModelId const key{42};
