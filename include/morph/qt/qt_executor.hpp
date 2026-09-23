@@ -27,13 +27,13 @@ namespace morph::qt {
 /// *delivered*. Without a guard, an event still on the Qt queue at teardown is
 /// delivered against a freed executor and reads `_context` off freed memory.
 ///
-/// That is not hypothetical. `Bridge::executeVia` chains three `Completion`
-/// objects per dispatched action, each settled from inside the previous one's
-/// delivered callback, so a caller waiting only on its own top-level completion
-/// can observe "done" while an intermediate post is still queued. When that
-/// stale event is finally pumped, its body calls `post()` for the next link in
-/// the chain — against an executor that no longer exists. It segfaults on an
-/// ordinary uninstrumented build, not only under a sanitizer.
+/// `Bridge::executeVia` reaches that state on an ordinary run: it chains three
+/// `Completion` objects per dispatched action, each settled from inside the
+/// previous one's delivered callback, so a caller waiting only on its own
+/// top-level completion can observe "done" while an intermediate post is still
+/// queued. When that stale event is pumped, its body calls `post()` for the
+/// next link in the chain — against a freed executor. It segfaults on an
+/// uninstrumented build, not only under a sanitizer.
 ///
 /// Each queued task therefore carries a weak observer of this executor's
 /// lifetime and does nothing if the executor is already gone. Dropping is the
@@ -44,8 +44,8 @@ namespace morph::qt {
 /// **Boundary of the guarantee.** The check assumes this executor is destroyed
 /// on the same thread that runs its context's event loop, which holds for every
 /// owner in this repository. Destroying one from another thread while its loop
-/// is mid-delivery still needs external synchronisation: this closes the "torn
-/// down with events still queued" hole, not a genuine cross-thread race.
+/// is mid-delivery still needs external synchronisation: the token covers
+/// teardown with events still queued, not a genuine cross-thread race.
 class QtExecutor : public ::morph::exec::IExecutor {
 public:
     /// @brief Constructs an executor that posts tasks to @p context's thread.
@@ -54,8 +54,8 @@ public:
     /// tasks; `QMetaObject::invokeMethod` dispatches to whichever thread
     /// `context->thread()` reports at the time each task is posted, so tasks
     /// posted after `context` is moved to a different thread run there.
-    /// Defaults to `QCoreApplication::instance()`, preserving the previous
-    /// GUI-thread-only behaviour. Passing `nullptr` (e.g. when constructed
+    /// Defaults to `QCoreApplication::instance()`, i.e. the GUI thread.
+    /// Passing `nullptr` (e.g. when constructed
     /// before `QCoreApplication` exists) makes `post()` a no-op, matching
     /// `QMetaObject::invokeMethod`'s own handling of a null target. Borrowed,
     /// not owned: a non-null @p context must outlive this executor.

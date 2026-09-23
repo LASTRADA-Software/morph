@@ -43,10 +43,9 @@ struct QtWebSocketBackendConfig {
     ///
     /// Defaults to `false`: both settle their `Completion` from inside the call,
     /// having blocked the Qt thread in a nested `QEventLoop` for the round trip
-    /// — `IBackend`'s own default behaviour, and what every existing embedder
-    /// (a desktop Qt client, this backend's own test suite) already relies on,
-    /// since it makes a handler usable on the line after `BridgeHandler`'s
-    /// constructor returns.
+    /// — `IBackend`'s own default behaviour, and what a desktop Qt embedder
+    /// relies on, since it makes a handler usable on the line after
+    /// `BridgeHandler`'s constructor returns.
     ///
     /// Set `true` for a build where that blocking call cannot happen at all —
     /// a WASM main thread, where Qt refuses to spin a nested loop and the
@@ -58,9 +57,9 @@ struct QtWebSocketBackendConfig {
     /// with "handler not bound" for an unbound binding rather than queuing or
     /// blocking.
     ///
-    /// This flag chooses *whether the transport blocks*. It is no longer an
-    /// opt-in to a second set of interface verbs: the continuation exists on
-    /// both paths, because `bindModel` returns a `Completion` either way.
+    /// This flag chooses *whether the transport blocks*, nothing more: the
+    /// continuation exists on both paths, because `bindModel` returns a
+    /// `Completion` either way.
     bool asyncRegistrationEnabled = false;
 };
 
@@ -224,19 +223,18 @@ public:
     /// so `contextKey` is the *only* channel by which the instance's identity
     /// reaches it. `RemoteServer::attachLogIfConfigured` returns without
     /// consulting its `LogProvider` at all when the envelope's `contextKey` is
-    /// empty, so dropping it here did not merely lose an entity key — it left
-    /// the instance **unjournalled** (morph#594). `SimulatedRemoteBackend` and
-    /// `morph::net::SocketBackend` (morph#587) override this for the same
-    /// reason; backends documented as interchangeable must not disagree about
-    /// whether a private registration is audited.
+    /// empty, so dropping the key here would not merely lose an entity key — it
+    /// would leave the instance **unjournalled**. `SimulatedRemoteBackend` and
+    /// `morph::net::SocketBackend` override this for the same reason; backends
+    /// documented as interchangeable must not disagree about whether a private
+    /// registration is audited.
     ///
     /// This is also the verb the *blocking* `bindModel` path reaches for an
     /// empty-`primary`, zero-`current` request, and the one
     /// `Bridge::switchBackend` calls directly when it re-registers a handler
-    /// after a reconnect — so before morph#594 the key was dropped whatever
-    /// `Config::asyncRegistrationEnabled` was set to on a backend swap, and
-    /// dropped on every private registration when it was unset. `bindModel`'s
-    /// own non-blocking path already carried it.
+    /// after a reconnect — so it carries the key on a backend swap and on every
+    /// private registration, whatever `Config::asyncRegistrationEnabled` is set
+    /// to.
     ///
     /// `registerModel` forwards here with an empty key, so there is one place
     /// that builds this envelope rather than two that can drift apart.
@@ -309,9 +307,8 @@ public:
     /// set, because that is exactly when a completion is settled by
     /// `onTextMessage` — a Qt slot, delivered by the event loop of the thread
     /// that called `bindModel`. A caller blocked in a wait is not running that
-    /// event loop, so the reply it is waiting for can never arrive: the
-    /// deadlock morph#568 exists to remove, which on a WASM main thread aborts
-    /// the page outright.
+    /// event loop, so the reply it is waiting for can never arrive — a deadlock,
+    /// which on a WASM main thread aborts the page outright.
     ///
     /// With the flag unset this backend's `bindModel` is `IBackend`'s default,
     /// which settles inside the call, so `kCallerMayBlock` is both true and
@@ -321,7 +318,7 @@ public:
     /// Note which way round this reads. It does not say "registration is
     /// asynchronous" — `SocketBackend`'s is too, and it answers
     /// `kCallerMayBlock` because a separate I/O thread settles its completions.
-    /// It says only that *this* thread must not stop and wait. See morph#593.
+    /// It says only that *this* thread must not stop and wait.
     ///
     /// @return `kCallerMustNotBlock` when `Config::asyncRegistrationEnabled` is
     ///         set, `kCallerMayBlock` otherwise.
@@ -373,9 +370,8 @@ public:
     /// Unlike `bindModel`, this does **not** consult
     /// `Config::asyncRegistrationEnabled`: promotion happens from inside the
     /// result `Completion`'s callback chain, where no caller is left blocked
-    /// waiting for it either way, so there is no synchronous guarantee to
-    /// preserve — which is why the optional non-blocking promote this
-    /// replaces (removed by morph#571) had no opt-in gate either.
+    /// waiting for it either way, so there is no synchronous guarantee an
+    /// opt-in gate would protect.
     ///
     /// The documented no-op cases (empty `primary`, zero `mid`) resolve with
     /// @p request's `mid` without sending anything, matching
@@ -403,7 +399,7 @@ public:
     /// model registered on the server indefinitely.
     ///
     /// Assigned a real, non-zero `callId` from the same counter/namespace
-    /// `execute()`/`bindModel()` use (see issue #65): `callId == 0`
+    /// `execute()`/`bindModel()` use: `callId == 0`
     /// is reserved for a parked synchronous control call's reply, and a
     /// fire-and-forget `deregister` sharing that sentinel could otherwise have
     /// its own stray "ok" reply handed to an unrelated `registerModel`'s
@@ -494,7 +490,7 @@ private:
     /// @return `true` if a pending control call was found and settled.
     bool tryRouteControlReply(const ::morph::wire::Envelope& env);
 
-    /// @brief Drops the reply to a fire-and-forget deregister (issue #65).
+    /// @brief Drops the reply to a fire-and-forget deregister.
     /// @param env Decoded reply envelope.
     /// @return `true` if the id belonged to a pending deregister.
     bool tryRouteDeregisterReply(const ::morph::wire::Envelope& env);
@@ -562,8 +558,8 @@ private:
     ///
     /// One map for both verbs, not two: `register`, `registerShared`, `attach`
     /// and `assign` replies are all matched identically — a bare `modelId`
-    /// echoed against the `callId` — so the split the four `*Async` verbs used
-    /// to justify has nothing left to represent.
+    /// echoed against the `callId` — so a per-verb split would have nothing to
+    /// represent.
     std::unordered_map<uint64_t, ::morph::async::Completion<::morph::exec::detail::ModelId>::Promise>
         _pendingRegistrations;
 
@@ -580,7 +576,7 @@ private:
     std::vector<QueuedRegistration> _queuedRegistrations;
 
     /// @brief Call-ids of `deregister` envelopes still awaiting their (unused)
-    ///        reply (see issue #65).
+    ///        reply.
     ///
     /// `deregisterModel` is fire-and-forget: nobody observes the reply, but it
     /// still needs a real, non-zero `callId` so `onTextMessage` can recognise

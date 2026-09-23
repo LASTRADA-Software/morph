@@ -25,10 +25,10 @@ namespace morph::journal {
 ///        (`LogEntry::schema`) disagrees with the fingerprint this build
 ///        computes for the same action, and no migration covers the pair.
 ///
-/// This is the signal the journal previously did not have. Before it, the same
-/// situation produced a successful reconstruction of a state that was never
-/// recorded — a renamed field decoding to its default, reported with as much
-/// confidence as a correct one. There is no "degraded" reconstruction to fall
+/// Without this signal the same situation reconstructs, successfully, a state
+/// that was never recorded — a renamed field decoding to its default, reported
+/// with as much confidence as a correct one. There is no "degraded"
+/// reconstruction to fall
 /// back to and no way to tell how much of the entry survived the decode, so
 /// this throws rather than warning: an audit trail that cannot be reconstructed
 /// faithfully must say so.
@@ -61,7 +61,7 @@ struct SchemaMismatchError : std::runtime_error {
 /// *unverifiable*: there is no record of the shape that produced its payload,
 /// so no check can be performed at all.
 enum class UnstampedPayloadPolicy : std::uint8_t {
-    /// @brief Replay it, exactly as every morph build before this check did.
+    /// @brief Replay it, without verifying a fingerprint it does not carry.
     ///
     /// The default, because it is the only choice that keeps journals written
     /// by earlier builds replayable at all — refusing them by default would
@@ -142,11 +142,11 @@ public:
 
 private:
     using Key = std::pair<std::string, std::string>;
-    // Both functors, not just the hash. This map named `PairKeyHash` alone for
-    // as long as it has existed, and `unordered_map` enables heterogeneous
-    // lookup only when the hash *and* the equality are transparent -- so every
-    // `find` built a `Key` to probe with, silently, while looking like it did
-    // not (morph#699). `add` still builds one, because it inserts.
+    // Both functors, not just the hash: `unordered_map` enables heterogeneous
+    // lookup only when the hash *and* the equality are transparent. Name the
+    // hash alone and every `find` silently builds a `Key` to probe with, while
+    // looking like it does not. `add` builds one regardless, because it
+    // inserts.
     std::unordered_map<Key, Migration, ::morph::model::detail::PairKeyHash, ::morph::model::detail::PairKeyEqual>
         _migrations;
 };
@@ -242,8 +242,8 @@ private:
 /// - **Different, with a migration registered** for `(actionType, entry.schema)`
 ///   in @p migrations — the migration rewrites the payload JSON in memory, and
 ///   the rewritten bytes are dispatched. The stored entry is untouched.
-/// - **Different, with no migration** — throw `SchemaMismatchError`. This is the
-///   case that used to reconstruct a state nobody ever recorded.
+/// - **Different, with no migration** — throw `SchemaMismatchError`. Decoding
+///   it anyway is what would reconstruct a state nobody ever recorded.
 /// - **Entry unstamped** (`schema` empty) — governed by @p unstamped; see
 ///   `UnstampedPayloadPolicy`.
 ///
@@ -286,8 +286,7 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
         // re-dispatching it would very likely throw the same exception again
         // (the same rejected precondition), aborting reconstruction outright.
         // Skipping it is exactly "replay only committed facts", which is what
-        // this function already promised before Failed entries could appear in
-        // the same log stream (issue #23).
+        // this function promises.
         if (entry.outcome == Outcome::Failed) {
             continue;
         }
