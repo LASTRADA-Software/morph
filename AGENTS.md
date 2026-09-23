@@ -4,14 +4,41 @@ Working agreements for any agent or contributor making changes in this
 repository. Applies to every tool — the filename is the cross-tool convention,
 not a Claude-specific one.
 
-## File what you find
+## File what you find — inside the bar
 
-**Anything you discover during analysis gets an issue, even when it is outside
-the task you are on.** A defect noticed in passing and left unrecorded is a
-defect nobody will find again on purpose — the conditions that surfaced it were
+**A finding that clears the bar below gets an issue, even when it is outside the
+task you are on.** A defect noticed in passing and left unrecorded is a defect
+nobody will find again on purpose — the conditions that surfaced it were
 incidental, and they will not recur to order.
 
-This applies to the awkward cases especially:
+### The bar
+
+This repository tracks **defects in shipped library behaviour** — `include/morph`
+and `src`. Everything else is fixed in place when it blocks you, and not tracked.
+
+| Finding | What to do |
+|---|---|
+| A defect in `include/morph` or `src` | **File it.** |
+| CI, build or lint *configuration* | Fix it in the change that needs it. **Do not file.** |
+| A defect in an `examples/` rung | Fix inline if you are already there. **Do not file.** |
+| The *same* example defect in a second place | **File it against `include/morph`** — it is a missing framework seam, not two bugs. |
+| A fix smaller than the issue describing it | Make the fix. **Do not file.** |
+
+`examples/` is a **detector, not a product**. It exists to prove the framework
+works and to surface framework gaps. Keep it building and its unit and GUI tests
+green; do not maintain it to production quality, and do not open tickets against
+it. When a rung needs the same hand-rolled guarantee twice, that is the signal
+the framework is missing something — promote it (morph#789 is the worked
+example) rather than repairing the rung again.
+
+**Why this bar exists.** It was measured on 2026-09-23: one day's landed changes
+ran roughly **6:1 scaffolding to library** — `examples/` +2658 lines, `scripts/`
++1923, `tests/` +1809, against `include/morph` +1171 — and 7 of the 9 open
+`area: ci` issues had been filed that same day. An unbounded filing rule makes
+the backlog self-replenishing: it closes and regenerates at the same rate, so
+merging pull requests stops reducing it.
+
+### Inside the bar, file the awkward cases especially:
 
 - **Findings that contradict the work you are doing.** If a fix reveals the
   issue it closes was mis-framed, say so in the issue rather than quietly
