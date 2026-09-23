@@ -27,6 +27,7 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 ## Contents
 
 - [LogEntry — one recorded action execution](#logentry--one-recorded-action-execution)
+  - [A refused recording is not an execution failure](#a-refused-recording-is-not-an-execution-failure)
 - [Serialization](#serialization)
   - [Why the codec is a separate header](#why-the-codec-is-a-separate-header)
 - [Line-format version (`v`)](#line-format-version-v)
@@ -83,6 +84,49 @@ runner (server/remote topologies) and `Bridge::executeVia`'s `localOp`
 the `catch` records a `Failed` entry (`error = exc.what()`, `result` empty)
 and rethrows unchanged, so the caller's error handling is unaffected — only
 the journal gains an entry it previously lacked.
+
+### A refused recording is not an execution failure
+
+`Outcome::Failed` means the model rejected the action, and nothing else. Only
+`Model::execute` can produce it, so it is the only call inside the `try` that
+records one.
+
+Two steps run after it and before the caller is answered: serialising the
+result (`ActionTraits<Action>::resultToJson`, which raises
+`model::detail::ParseError` on a write error) and appending the `LogEntry`. Both
+can throw, and by the time either does the model's mutation has already
+committed — an `IActionLog` that could not reach its backend is *required* to
+throw, since `append`/`flush` return `void` and that is the only channel the
+interface gives it (`FileActionLog` throws from eighteen sites; a full disk or a
+revoked permission reaches them in production).
+
+Inside the execution `try` they would give three wrong answers at once: a caller
+told a durable write was rejected and free to retry it, an `Outcome::Failed`
+entry in the audit trail for a mutation that committed, and that entry's `error`
+carrying the *sink's* message, permanently blaming the action for an
+infrastructure fault. An audit log that is wrong about which actions succeeded is
+worse than one missing entries, because nothing downstream can tell the two apart.
+
+So both steps sit outside that `try`, and a throw from either surfaces as
+`morph::model::ActionRecordingError` — a `std::runtime_error` subclass whose
+`what()` is `"action executed but was not recorded: <cause>"`, with `cause()`
+returning the underlying message and `result()` the committed action's result
+JSON. The caller still learns the recording failed; what changed is what it is
+told, which is now true: the write happened, the record of it did not. Existing
+`catch (const std::exception&)` handling is unaffected — `RemoteServer` still
+turns it into an `err` reply, `LocalBackend` still rejects the `Completion`
+through `onError` — and a caller that wants to distinguish a
+committed-but-unrecorded action from a rejected one catches the type.
+
+When the throw came from `resultToJson`, **no entry is written at all**. A
+`Succeeded` entry carries the result by definition (see `LogEntry::result`
+above), and there is none to carry; the caller is told, which is the only
+channel left. A committed mutation with no entry is a gap, but a smaller one
+than an entry asserting it failed.
+
+`OutboxRelay` is unaffected by any of this: it calls `sink->append()` and
+`sink->flush()` directly, and depends on their throwing — an outbox row is marked
+relayed only after the sink returned normally.
 
 ## Serialization
 
@@ -1307,6 +1351,13 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   success, so replaying `payload` re-derives an equivalent `result` for a
   deterministic model. A `Failed` entry has no `result` to derive — see
   `replay()`, next.
+- **A `Failed` entry means the model rejected the action.** It never means the
+  framework could not record a success. Serialising the result and appending the
+  entry run after the mutation has committed, outside the `try` that records
+  `Failed`; a throw from either is reported to the caller as
+  `morph::model::ActionRecordingError` and files no entry. See [A refused
+  recording is not an execution
+  failure](#a-refused-recording-is-not-an-execution-failure).
 - **`replay()`/`undoLast()` skip `Failed` entries.** A failed attempt never
   mutated model state, so there is nothing to reconstruct from it — and
   re-dispatching it would likely throw the same exception again, aborting

@@ -55,6 +55,12 @@ provides:
   runner (`ActionDispatcher::registerAction`), and the local `Bridge::executeVia`
   path — the last two throw `ValidationError` on a `false` result instead of
   running `Model::execute`.
+- **`ActionRecordingError`** — thrown when an action executed and its mutation
+  committed, but serialising the result or appending the journal entry failed.
+  Carries `cause()` (the underlying message) and `result()` (the committed
+  action's result JSON, or `""` when serialising it is what failed). Derives
+  from `std::runtime_error`, so existing `catch (const std::exception&)` paths
+  are unaffected.
 - **Logging policy** — `ActionLogPolicy<A>` and `Loggable` that control whether
   an action's executions are recorded and how duplicates are coalesced.
 - **Type-erased holders** — `IModelHolder` / `ModelHolder<M>` that own a model
@@ -600,12 +606,18 @@ class ActionDispatcher {
   enforcement and before the validator check, so the validator sees the
   authoritative computed value), enforces `ActionValidator<Action>::ready(action)` (throwing `ValidationError`
   on `false`, before `Model::execute` runs), then calls `Model::execute(action)`
-  inside a `try`/`catch (const std::exception&)`: on success it serialises the
-  result and records a `LogEntry` with `outcome = Outcome::Succeeded` (when
-  loggable and a log is attached); on a throw it records `outcome =
-  Outcome::Failed` (`error = exc.what()`, `result` empty) for the same actions
-  and rethrows unchanged, so callers see the same exception as before — the
-  journal entry is a side effect, not a change to error propagation. Mirrors
+  inside a `try`/`catch (const std::exception&)`: on a throw it records
+  `outcome = Outcome::Failed` (`error = exc.what()`, `result` empty) when the
+  action is loggable and a log is attached, and rethrows unchanged, so callers
+  see the same exception as before — the journal entry is a side effect, not a
+  change to error propagation. `Model::execute` is the **only** call inside that
+  `try`: serialising the result and recording `outcome = Outcome::Succeeded` run
+  after it, outside, because by then the mutation has committed and a throw from
+  either is not an execution failure. Both surface as
+  `morph::model::ActionRecordingError` instead — see [journal.md, "A refused
+  recording is not an execution
+  failure"](../journal/journal.md#a-refused-recording-is-not-an-execution-failure).
+  Mirrors
   `Bridge::executeVia`'s `localOp` (`bridge.md`) for `LocalBackend`. See
   [journal.md, "Outcome"](../journal/journal.md#logentry--one-recorded-action-execution)
   for the full field/replay semantics. Every recorded entry — success or

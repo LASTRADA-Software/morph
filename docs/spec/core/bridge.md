@@ -194,14 +194,20 @@ throw at runtime means `LocalBackend` was used in a build that promised never
 to — a configuration error, not a normal failure mode.
 
 Otherwise (the default, non-`MORPH_CLIENT_ONLY` build), `Model::execute(*action)`
-itself is wrapped in a `try`/`catch (const std::exception&)`: on success it
-records a journal `LogEntry` with `outcome = Outcome::Succeeded` for loggable
-actions; on a throw it records `outcome = Outcome::Failed` (`error =
-exc.what()`, `result` empty) for the same actions and rethrows unchanged, so
-the exception still resolves the `Completion` through `onError` exactly as
-before — the journal entry is a side effect of the attempt, not a change to
-error propagation. Mirrors `ActionDispatcher::registerAction`'s runner
-(`registry.md`) for remote topologies. See [journal.md,
+itself — and nothing else — is wrapped in a `try`/`catch (const std::exception&)`:
+on a throw it records `outcome = Outcome::Failed` (`error = exc.what()`,
+`result` empty) for loggable actions and rethrows unchanged, so the exception
+still resolves the `Completion` through `onError` exactly as before — the
+journal entry is a side effect of the attempt, not a change to error
+propagation. Serialising the result and recording `outcome = Outcome::Succeeded`
+run after that `try`, because by then the mutation has committed: a sink whose
+`append` throws, or a result that will not serialise, resolves the `Completion`
+through `onError` with `morph::model::ActionRecordingError` rather than being
+reported — and journaled — as the model refusing the action. Mirrors
+`ActionDispatcher::registerAction`'s runner (`registry.md`) for remote
+topologies. See [journal.md, "A refused recording is not an execution
+failure"](../journal/journal.md#a-refused-recording-is-not-an-execution-failure)
+and [journal.md,
 "Outcome"](../journal/journal.md#logentry--one-recorded-action-execution) for
 the full field/replay semantics.
 
@@ -1105,7 +1111,7 @@ make teardown order-independent.)
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Stages all re-registrations through `bindModel` on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Atomic exactly when the new backend answers `kCallerMayBlock`; a `kCallerMustNotBlock` backend's binds are deferred and the switch is not all-or-nothing (see above). Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its staging and commit, and resolves `whenBound()` waiters after releasing them. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Dispatches through `IBackend::executeInto`, handing the backend a `detail::BridgeSink<R>` that is simultaneously the caller's typed completion state and the backend's settle sink — one allocation where an erased-completion forwarding block costs six. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the bridge's `CallbackToken`, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged); a failure to serialise the result or to append the success entry happens after the mutation committed and rejects the completion with `morph::model::ActionRecordingError` instead of recording `Outcome::Failed`. Dispatches through `IBackend::executeInto`, handing the backend a `detail::BridgeSink<R>` that is simultaneously the caller's typed completion state and the backend's settle sink — one allocation where an erased-completion forwarding block costs six. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the bridge's `CallbackToken`, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 | `setExecuteDeadline` | `void setExecuteDeadline(std::chrono::milliseconds)` | Opt-in client-side execute deadline; `0` (the default) disables it. Lazily creates the backing `TimeoutScheduler` thread on first enable. |
