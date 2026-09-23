@@ -82,7 +82,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 1258,
+      "line": 1302,
       "source": "if (const auto* inst = _instances.find(modelId)) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_instances` invariant (core audit finding BK2). `_changeAware` is an index over the instance directory: an id enters it in `createHolder` (this file, when the holder answers `isBackendChangeAware()`) in the same `_regMtx`-held critical section that files the instance, and leaves it in `deregisterModel` only when `InstanceDirectory::release` reports the instance actually destroyed. `notifyBackendChanged()` (this function) holds the same `_regMtx` while walking `_changeAware` and looking each id up at this line, so every id it walks is still live -- the null arm cannot occur without a code change that breaks that subset invariant. Formerly keyed on `_models`, the map morph#523 replaced with the directory; the invariant and its reason are unchanged."
     },
@@ -100,16 +100,9 @@
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1781,
+      "line": 2033,
       "source": "if (_executeDeadline.count() > 0 && _timeoutScheduler) {",
       "reason": "Unreachable by construction (core audit finding B6). `setExecuteDeadline` (this file) is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and always creates `_timeoutScheduler` in the same call that sets `_executeDeadline` positive (`_executeDeadline = deadline; if (_executeDeadline.count() > 0 && !_timeoutScheduler) { _timeoutScheduler = std::make_shared<...>(); }`, both under `_executeDeadlineMtx`); nothing anywhere resets `_timeoutScheduler` back to null -- the class's own doc comment on `setExecuteDeadline` says so explicitly (\"setting the deadline back to 0 stops new calls from arming it but does not tear the thread down\"). So `_executeDeadline > 0 && !_timeoutScheduler` cannot happen at this line once any positive deadline has ever been set."
-    },
-    {
-      "file": "include/morph/core/bridge.hpp",
-      "line": 1920,
-      "source": "if (deadlineHandle && schedulerRef) {",
-      "context": "} catch (const std::exception& exc [[maybe_unused]]) {",
-      "reason": "Unreachable by construction, same joint-assignment shape as B6 above (core audit finding B11, reclassified (a)->(b) on review). `deadlineHandle` and `schedulerRef` are assigned together, a few lines above this one in `executeVia`, only inside `if (_executeDeadline.count() > 0 && _timeoutScheduler) { schedulerRef = _timeoutScheduler; ... }` (see the entry above) -- there is no path that sets `deadlineHandle` without also having set `schedulerRef` from the same non-null `_timeoutScheduler` in the same conditional. So `schedulerRef` null while `deadlineHandle` is non-null cannot occur; the only theoretically-open arm this compound condition has is structurally impossible. This entry is specifically the exception-path use of the guard (the `catch` block that undoes `_pendingCalls` and cancels the deadline before rethrowing). Two more textually-identical `if (deadlineHandle && schedulerRef)` guards exist further down, in the `.then()`/`.onError()` continuations -- present on master too -- which are a different guard on a different, reachable arm (schedulerRef going null between capture and a callback that can run after `~Bridge()`) and are not covered by this disposition. Re-resolved in morph#700 (morph#572 Parts A and C), which reported lines [1876, 1900, 1989] against the old hint 1856, and again in morph#699, which reported [1919, 1943, 2032] against the hint 1876 -- the three moved together by 43 lines, the length of the transparent KeyView/KeyHash/KeyEqual block added above them. Resolved from this entry's own text rather than by picking, both times: the wanted line is the `catch (...)` guard immediately after `_pendingCalls->fetch_sub(1, ...)` -- the exception path this disposition names -- which was 1876 and is now 1919, while the other two candidates (1900/1989, now 1943/2032) are the `.then()`/`.onError()` continuations this entry already excludes. Re-read at 1919 on this branch and the disposition is unchanged. The disposition is unchanged; only the line moved. Re-resolved again in morph#710: the citation shifted by one line when that branch's clang-tidy fixes inserted a line above it in bridge.hpp. Still the `catch (...)` arm immediately after `_pendingCalls->fetch_sub(1, ...)`, not the two `.then()`/`.onError()` continuations this entry excludes (which are now at 1944 and 2033)."
     },
     {
       "file": "include/morph/core/remote.hpp",
