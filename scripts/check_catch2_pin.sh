@@ -15,17 +15,38 @@
 #      workstation is not required to carry the runner's package, only to know
 #      that it does not.
 #
-# Why this gate exists (morph#666): a local `clang-tidy-diff` over the same
-# diff, with the same clang-tidy version and the same job flags, can exit 0 on
-# a diff the CI job fails -- silently, reporting nothing rather than reporting
-# less. The variable is the Catch2 on the include path:
-# `readability-function-cognitive-complexity` computes the *same* score under
-# both, and what differs is whether `ClangTidyDiagnosticConsumer` classifies
-# the finding as user code, which depends on which notes a given Catch2
-# release's `TEST_CASE` expansion produces and where it puts them. That is how
-# morph#656's branch shipped a NOLINT reason asserting a neighbouring TEST_CASE
-# "scores under the threshold" while it scored 87 against a threshold of 25:
-# the local gate agreed with it.
+# Why this gate exists, corrected by morph#777. The check the runner's Catch2
+# release decides is `bugprone-chained-comparison`, which every
+# examples/*/tests/.clang-tidy subtracts on the strength of that decision.
+# Measured on 68a30bcc, clang-tidy 22.1.8, one TEST_CASE of twelve `REQUIRE`s,
+# both releases reached identically (-isystem, i.e. as system headers, which is
+# how the runner and a workstation both reach theirs):
+#
+#     bugprone-chained-comparison                3.4.0: 12    3.16.0: 0
+#     readability-function-cognitive-complexity  3.4.0: 48    3.16.0: 48
+#
+# Catch2 put `/* NOLINT(bugprone-chained-comparison) */` on INTERNAL_CATCH_TEST
+# in 3.15.3. Under a runner package past that point the nine subtractions
+# become dead suppressions and nothing would say so -- that is what half B
+# under `--strict` prevents.
+#
+# What this gate is NOT about, though it used to say it was:
+# `readability-function-cognitive-complexity` scores the same 48 under both
+# releases and under `-I` and `-isystem` alike, so the version does not decide
+# it. Whether such a finding is *reported* turns on whether the diagnostic or
+# any of its increment notes lands outside a system header -- clang-tidy drops
+# a finding all of whose locations are in system headers or system macros. A
+# TEST_CASE whose increments come only from Catch2 macro bodies is dropped on
+# the runner and on a workstation alike; one with an increment spelled in the
+# test source (a hand-written `if`, or a lambda inside a `REQUIRE` argument --
+# macro arguments are spelled in the caller's file) is reported on both. So
+# there is no version-driven asymmetry on that check to pin, and morph#666's
+# "a local run exits 0 where CI exits 1" was morph#776: a `git diff -U0 HEAD`
+# on a committed branch, which hands clang-tidy-diff.py nothing at all.
+#
+# morph#656's branch shipping a NOLINT reason that asserted a neighbouring
+# TEST_CASE "scores under the threshold" while it scored 87 is still a real
+# event; what it was evidence of was the empty diff, not the package.
 #
 # What this gate does and does not do, stated plainly, because the distinction
 # is the whole point of the ticket:
@@ -34,12 +55,14 @@
 #     install -y catch2` is unpinned; if the runner image's package moves, the
 #     clang-tidy job's measurement changes with nothing anywhere saying so.
 #     Half B under `--strict` turns that silent move into a failed job.
-#   * It does not make a local clang-tidy-diff agree with CI's. Nothing short
-#     of the job not depending on the runner's Catch2 at all does that --
-#     morph#666's first closing condition, filed separately as a follow-up
-#     because it needs a CMake change in a file this change does not own.
-#     What half B does on a workstation is report, every time it is run, that
-#     the two measurements are not the same one.
+#   * It does not make a local clang-tidy-diff agree with CI's on
+#     `bugprone-chained-comparison`, and nothing short of the job not
+#     depending on the runner's Catch2 does. What half B does on a workstation
+#     is report, every time it is run, that for that one check the two
+#     measurements are not the same one. Every other check agrees across
+#     releases; a local run that disagrees with CI on one of those has a
+#     different cause, and the first one to rule out is the diff base
+#     (morph#776 -- see CONTRIBUTING.md's "Formatting/linting" gate).
 #
 # Requires git and grep; compiles nothing.
 set -euo pipefail
@@ -201,12 +224,14 @@ else
     printf 'WARNING: this machine'"'"'s Catch2 is %s (%s); CI pins catch2 %s.\n' \
         "$installed" "$installed_dir" "$pinned" >&2
     printf '         A local clang-tidy-diff run is therefore NOT the measurement the\n' >&2
-    printf '         clang-tidy-diff job makes. For checks whose evidence lives inside\n' >&2
-    printf '         Catch2 macro expansions -- readability-function-cognitive-complexity\n' >&2
-    printf '         on a TEST_CASE body is the known one -- it can exit 0 on a diff CI\n' >&2
-    printf '         fails, reporting nothing rather than reporting less (morph#666).\n' >&2
-    printf '         A green local run is not evidence for those checks. It is still\n' >&2
-    printf '         evidence for every check whose finding lands on a line you wrote.\n' >&2
+    printf '         clang-tidy-diff job makes, for one check: bugprone-chained-\n' >&2
+    printf '         comparison, which Catch2 NOLINTed out of its own REQUIRE macro in\n' >&2
+    printf '         3.15.3. Against a release at or past that point it reports nothing\n' >&2
+    printf '         on any TEST_CASE, and the nine examples/*/tests/.clang-tidy files\n' >&2
+    printf '         subtract it for findings you will never see here (morph#777).\n' >&2
+    printf '         A green local run is not evidence for that check. It IS evidence\n' >&2
+    printf '         for every other one, including readability-function-cognitive-\n' >&2
+    printf '         complexity, which scores identically under both releases.\n' >&2
     printf '\n' >&2
 fi
 

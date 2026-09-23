@@ -98,6 +98,47 @@ serialising independent rungs behind one file.
   markdown follows `.markdownlint.yaml` (119-column limit; code blocks and
   tables exempt). `pre-commit run --all-files` runs the configured hooks.
 
+  **Running the `clang-tidy-diff` gate locally — use this diff base, and check
+  the file count.** The CI job analyses *changed lines only*, computed against
+  the pull request's base commit. The local equivalent is the three-dot form:
+
+  ```sh
+  cmake --preset clang-debug -DMORPH_BUILD_NET=ON -DMORPH_BUILD_QT=ON \
+        -DMORPH_BUILD_LADDER=ON -DMORPH_BUILD_BANK_EXAMPLE=ON   # see ci.yml for the full set
+  git fetch origin master
+  git diff -U0 origin/master...HEAD > /tmp/changed.diff
+
+  # A gate that analysed nothing must say so rather than exit 0.
+  files=$(grep -c '^+++ ' /tmp/changed.diff)
+  test "$files" -gt 0 || { echo "no changed files -- wrong diff base?"; exit 1; }
+  echo "clang-tidy-diff over $files changed file(s)"
+
+  python3 "$(find /usr/lib/llvm-*/share/clang /usr/share/clang \
+                  -name clang-tidy-diff.py | head -1)" \
+      -p1 -path build/clang-debug -j "$(nproc)" -quiet \
+      -extra-arg=-std=c++23 -extra-arg=-Wno-missing-include-dirs \
+      < /tmp/changed.diff
+  ```
+
+  `origin/master...HEAD` — **three** dots — diffs from the merge base, which is
+  what `github.event.pull_request.base.sha` names and therefore the same file
+  set CI analyses. `git diff -U0 HEAD`, the form that suggests itself, compares
+  the *working tree* to the current commit: after you commit it is **empty**,
+  `clang-tidy-diff.py` is handed no files, analyses nothing and exits 0. Five
+  lanes ran that command and read the exit code as a green gate (morph#776);
+  one of them had 345 changed lines against CI and zero locally.
+
+  That is also why the file count is printed and asserted rather than assumed.
+  Checking the gate by injecting a deliberate finding does **not** catch this:
+  an injected edit is uncommitted, so it appears in `git diff HEAD`, the gate
+  dutifully reports it and exits 1, and the non-vacuity check passes while the
+  real check covers nothing. **An injection test validates the plumbing, not
+  the input.** Count the files.
+
+  A green local run still is not CI's run, for a reason that has nothing to do
+  with the diff base: see `scripts/check_catch2_pin.sh`'s header for which
+  findings can differ and why.
+
   **Public macro definitions are exempt, by `// clang-format off`.** They are
   the framework's documented API and contributors read them as reference, so
   the continuation backslashes are hand-aligned and the body stays legible as
@@ -107,6 +148,27 @@ serialising independent rungs behind one file.
   The sites carry a one-line pointer back here rather than repeating this
   paragraph — it used to be copy-pasted at all seventeen of them, and two of
   those copies had drifted into describing code that was not there.
+- **Do not trust an absolute path in a test failure when several worktrees
+  share one compiler cache.** `__FILE__` is expanded at compile time and baked
+  into the object; Catch2 records it per `TEST_CASE`. `fastcache-cc` serves
+  entries across checkouts — that cross-worktree hit rate is why
+  `cmake/CompileCache.cmake` prefers it to `ccache` — so a cache hit hands you
+  an object carrying **the path of whichever worktree compiled it**. The
+  failure report then names a directory that may hold a different revision of
+  that file, or that a landed lane has already pruned. Nothing in the output
+  says so; the path looks plausible.
+
+  Reproduced deliberately: two directories with byte-identical sources, the
+  second compile served from the cache, and the object it received baked in
+  the *first* directory's path. CI is unaffected — one checkout per runner.
+
+  `-ffile-prefix-map` is not the fix, and that is measured rather than
+  assumed: it does normalise the path, and it takes the cross-worktree hit
+  rate to zero doing it, because the flag carries the absolute source root
+  into the cache key. The numbers are in `cmake/compiler_options.cmake` beside
+  the same trade for coverage (morph#426, morph#775). So: read the line number,
+  not the directory, and re-run in your own worktree before believing where a
+  failure points.
 - **Keep mechanical facts honest:** `docs/spec/pinned_facts.toml` pins the
   mechanical facts that recur across specs — enum cardinalities, key
   constants (`kMaxEnvelopeBytes`, `kMaxDecimalPlaces`, `kClockSkewMs`),
@@ -149,12 +211,40 @@ Substitute `clang-asan`/`asan` or `clang-ubsan`/`ubsan` throughout for the
 other two. Two things that recipe hides, both of which used to have to be
 rediscovered:
 
-- **The suppressions file is wired into the test preset, absolutely.**
-  `cmake/tsan.supp` holds the known-false-positive entries for libstdc++'s
-  refcounted exception teardown (morph#476); the file itself carries the
-  evidence for each. The `clang-tsan` **test** preset sets
-  `TSAN_OPTIONS=suppressions=${sourceDir}/cmake/tsan.supp`, so `ctest --preset
-  clang-tsan` resolves it from any working directory. Spelling it relatively —
+- **`TSAN_OPTIONS` is wired into the test preset, absolutely, and it carries
+  two settings rather than one.** The authoritative value is the one in
+  `CMakePresets.json` on the `clang-tsan` **test** preset — read it there
+  rather than from a copy, because this paragraph quoting a *prefix* of it is
+  the mistake that produced morph#783. What the two settings are for:
+
+  - `suppressions=${sourceDir}/cmake/tsan.supp` — the known-false-positive
+    entries for libstdc++'s refcounted exception teardown (morph#476); the
+    file itself carries the evidence for each. `${sourceDir}` makes the path
+    absolute, so `ctest --preset clang-tsan` resolves it from any working
+    directory.
+  - `second_deadlock_stack=1` — without it a `lock-order-inversion` report
+    names only where each mutex was acquired *in the inverting thread*. With
+    it, TSan also prints a `Mutex Mn previously acquired by the same thread
+    here:` stack for each **already-held** mutex, which is what names the
+    fixture or short-lived object holding it. Measured on a two-mutex
+    inversion under clang 22.1.8: the report goes from 36 lines to 55, the
+    extra 19 being those two stacks (morph#736). Without the flag TSan prints
+    only `Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more
+    informative warning message` — advice nobody can act on after the fact,
+    because morph#578 and morph#717 are intermittent and the run that fires is
+    the only evidence there will ever be. CI's two TSan legs pass it, so a
+    local reproduction that did not would be less informative than the run it
+    is reproducing.
+
+  Both live in **one** `TSAN_OPTIONS` value, colon-separated, and that is
+  load-bearing: the variable is a single string, so a second `TSAN_OPTIONS`
+  assignment **replaces** the first rather than extending it. Exporting your
+  own `TSAN_OPTIONS=suppressions=/some/other.supp` therefore drops
+  `second_deadlock_stack=1` silently — you get a weaker TSan than CI runs with
+  nothing saying so. If you must add a setting, append it to the preset's
+  value; do not set the variable alongside it.
+
+  Spelling the suppressions path relatively —
   `TSAN_OPTIONS=suppressions=cmake/tsan.supp`, which is what copying CI's line
   by hand tends to produce — breaks test *discovery*, not the tests:
   `catch_discover_tests` runs each binary with its own build directory as the

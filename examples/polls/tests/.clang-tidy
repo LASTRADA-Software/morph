@@ -32,6 +32,40 @@
 # directory on the application ladder had no such file; it was removed with the
 # meta-gates, so a new rung now needs this file added by hand.
 
+# readability-function-cognitive-complexity: the check stays ON here. What is
+# turned off is its counting of increments that come from *inside* a macro
+# body, which for a Catch2 suite is the entire assertion vocabulary: an
+# assertion macro expands to `do { try { ... } catch (...) { ... } } while (...)`
+# and the check scores that at 4 whatever it is asserting. Seven assertions is
+# 28 against a threshold of 25, so a TEST_CASE goes over the line for having
+# assertions in it (morph#778).
+#
+# `IgnoreMacros: true` subtracts exactly that and nothing else. Measured on
+# 68a30bcc with clang-tidy 22.1.8 over the 751 translation units the
+# clang-tidy-diff job's configure produces, the check forced on everywhere and
+# the only variable this option:
+#
+#     TEST_CASE bodies scoring over 25 ... 246 before, 4 after
+#     named functions scoring over 25 ...   23 before, 20 after
+#     locations reported after but not before .... 0
+#
+# The 20 named functions keep their exact score -- `handleRequest` 34,
+# `execute` 45, `applyCapture` 26, `evaluateRule` 37 -- because their
+# complexity is written out rather than expanded. The three that move are
+# macro-using bodies that stay far over the line anyway (`run` in
+# examples/common/testkit_src/qml_surface.cpp, 132 -> 128). Controls: a
+# TEST_CASE of twelve plain assertions scores 48 and goes to 0; a TEST_CASE of
+# hand-written nested control flow scores 47 and goes to 43 -- still reported.
+# So this does not blind the check to a genuinely tangled test.
+#
+# Not the alternative fixes: splitting a few hundred passing TEST_CASE bodies
+# edits tests for a reason unconnected to what they assert, and disabling
+# `readability-*` would take identifier-naming and identifier-length with it.
+
 Checks: '-bugprone-chained-comparison'
+
+CheckOptions:
+  - key:   readability-function-cognitive-complexity.IgnoreMacros
+    value: "true"
 
 InheritParentConfig: true
