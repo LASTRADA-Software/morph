@@ -9,12 +9,12 @@
 namespace kanban::db {
 
 void setup(const std::string& connectionString) {
-    // Nothing in Lightweight stops a pooled DataMapper from being
-    // returned with a transaction still open on it -- `DataMapperPool::Return`
-    // does no transaction cleanup, and the cost lands on the next, unrelated
-    // borrower as a 60s stall and a `database is locked` it did not cause.
-    // Installing the audit here, at the one point every rung's process
-    // configures its database, turns that into an abort at the leak. See
+    // Nothing in Lightweight stops a pooled DataMapper from being returned with
+    // a transaction still open on it -- `DataMapperPool::Return` does no
+    // transaction cleanup, and the cost lands on the next, unrelated borrower
+    // as a 60s stall and a `database is locked` it did not cause. Installing
+    // the audit here, at the one point every rung's process configures its
+    // database, turns that into an abort at the leak. See
     // examples/common/db/pool_transaction_audit.hpp.
     (void)::morph::ladder::db::installPoolTransactionAudit();
 

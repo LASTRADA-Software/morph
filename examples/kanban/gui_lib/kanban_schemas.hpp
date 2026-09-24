@@ -38,9 +38,8 @@
 /// `CreateRule::triggerColumnId` is a `morph::forms::Choice<…,
 /// "GetBoardState">` rather than a raw `ColumnId` — the shape rule 3 prescribes
 /// for a user-chosen foreign key; `GetBoardState`'s reply returns `columns` as
-/// its first array member.
-/// `MoveTaskPosition` is absent for a different reason: it is a drag
-/// gesture, not a form (rule 2(a); see the README).
+/// its first array member. `MoveTaskPosition` is absent for a different reason:
+/// it is a drag gesture, not a form (rule 2(a); see the README).
 
 namespace kanban::gui {
 

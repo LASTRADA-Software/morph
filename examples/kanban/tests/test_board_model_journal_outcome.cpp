@@ -22,12 +22,11 @@
 // rung's own refusals and for nothing else -- an `std::invalid_argument` out of
 // `std::stoull`, one of Lightweight's SQL exceptions from a pre-commit query, or
 // a `std::bad_alloc` would all reach the caller having journalled nothing at
-// all. Nothing in
-// "a rejected attempt is itself audit-worthy" depends on the exception's
-// type; only the `catch` clause did. The last three cases in this file cover
-// the widened path, including the failure mode widening it introduces: the
-// journal write is itself fallible, and on a failure path a throw from it
-// must not replace the exception the caller came for.
+// all. Nothing in "a rejected attempt is itself audit-worthy" depends on the
+// exception's type; only the `catch` clause did. The last three cases in this
+// file cover the widened path, including the failure mode widening it
+// introduces: the journal write is itself fallible, and on a failure path a
+// throw from it must not replace the exception the caller came for.
 
 #include <Lightweight/Lightweight.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -215,10 +214,10 @@ struct FailedEntry {
 /// `do { try { ... } catch (...) { ... } } while (... && ...)`, which
 /// `readability-function-cognitive-complexity` scores at 4. Six of them
 /// written out in the `TEST_CASE` below put it at 32 against a threshold of
-/// 25, which fails `clang-tidy-diff`. The assertions are the same
-/// assertions and there are the same number of them -- they are reported
-/// against this function's lines instead of the caller's, which is the whole
-/// of the difference.
+/// 25, which fails `clang-tidy-diff`. The assertions are the same assertions
+/// and there are the same number of them -- they are reported against this
+/// function's lines instead of the caller's, which is the whole of the
+/// difference.
 ///
 /// `error` is deliberately not also checked for emptiness: @p errorPrefix is
 /// non-empty at every call site, and a string that starts with a non-empty
@@ -373,10 +372,10 @@ TEST_CASE("A journal that throws on the failure path does not replace a non-doma
     const DbBusyFixture busy{"board_columns"};
 
     // The compounded case: a non-domain failure -- the class a narrower catch
-    // would not journal at all -- while the journal it writes
-    // to is itself failing. `ValidationError` above proves containment by the
-    // exception's type; here there is no type to lean on, so the message is
-    // what distinguishes the original failure from the logging one.
+    // would not journal at all -- while the journal it writes to is itself
+    // failing. `ValidationError` above proves containment by the exception's
+    // type; here there is no type to lean on, so the message is what
+    // distinguishes the original failure from the logging one.
     const auto reached =
         messageFrom([&] { (void)model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}); });
     drained.clear();

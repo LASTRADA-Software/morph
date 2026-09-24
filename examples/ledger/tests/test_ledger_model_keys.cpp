@@ -55,8 +55,8 @@ constexpr std::int64_t kIds[] = {1, 7, 4294967297, 9007199254740993};
 TEST_CASE("LedgerModel keeps std::int64_t as its PrimaryKey because its keyed actions carry two id types",
           "[ledger][model][key]") {
     // A regression guard: the key type is `std::int64_t` and has to stay one.
-    // `BRIDGE_MODEL_KEY` would have deduced
-    // `LedgerId` from `&OpenAccount::ledgerId`, which is the better default
+    // `BRIDGE_MODEL_KEY` would have deduced `LedgerId` from
+    // `&OpenAccount::ledgerId`, which is the better default
     // -- but `GetReportStatus` keys this same model on a `ReportJobId`
     // (report_dto.hpp), so no single strong id is *the* key type here. The
     // model therefore declares the raw scalar in its own body, which

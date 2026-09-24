@@ -42,9 +42,9 @@
 namespace lims::gui {
 
 /// An id as the plain number QML rows and invokables carry, `-1` when
-/// unengaged. Re-exported rather than redefined so this rung's
-/// `-1` is the same named `kNoId` the other four rungs publish, and so the
-/// name stays `lims::gui::idNumber` for the callers and tests that use it.
+/// unengaged. Re-exported rather than redefined so this rung's `-1` is the same
+/// named `kNoId` the other four rungs publish, and so the name stays
+/// `lims::gui::idNumber` for the callers and tests that use it.
 using ::morph::ladder::gui::idNumber;
 
 /// @brief A `string_view` as a `QString`.

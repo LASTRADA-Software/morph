@@ -6,11 +6,11 @@
 //
 // Why this file exists at all: `gui/controllers/Format.hpp` is a header under
 // `examples/`, and the root `.clang-tidy`'s `HeaderFilterRegex` discarded
-// every finding in every such header, so no analyser had ever
-// reported on it. What it contained was an unbounded `double` → `std::int64_t`
-// conversion: `QString::toDouble` accepts `1e30`, `inf` and `nan`
-// from a QML field that carries no validator, and converting any of those is
-// undefined behaviour, not a large number.
+// every finding in every such header, so no analyser had ever reported on it.
+// What it contained was an unbounded `double` → `std::int64_t` conversion:
+// `QString::toDouble` accepts `1e30`, `inf` and `nan` from a QML field that
+// carries no validator, and converting any of those is undefined behaviour, not
+// a large number.
 //
 // The cases below are written against the returned `std::optional`, not
 // against the arithmetic, and that is deliberate: on a UBSan build the
@@ -55,10 +55,9 @@ TEST_CASE("parseMinor rejects text that is not a non-negative amount", "[bank][g
     CHECK_FALSE(parseMinor(QStringLiteral("-1.00")).has_value());
 }
 
-// The int64 bound. Without it each of these returns
-// `-9223372036854775808` — via undefined behaviour, and via an abort under
-// UBSan — and every call site then feeds that through `.value_or(0)` into a
-// balance.
+// The int64 bound. Without it each of these returns `-9223372036854775808` —
+// via undefined behaviour, and via an abort under UBSan — and every call site
+// then feeds that through `.value_or(0)` into a balance.
 TEST_CASE("parseMinor rejects amounts that do not fit in int64 minor units", "[bank][gui][format]") {
     // The easiest value to reach it with: 1e30 major units scale to 1e32.
     CHECK_FALSE(parseMinor(QStringLiteral("1e30")).has_value());

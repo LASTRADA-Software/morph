@@ -200,8 +200,8 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     // actually drives it: the client drains its own queue and re-dispatches
     // each item as an ordinary action through its authenticated `Bridge`.
     // That is what makes `QueuedCapture`'s `capturedBy` check mean anything —
-    // see this rung's README §7 decision for why the
-    // framework's own `onBackendChanged()` drain cannot carry a session.
+    // see this rung's README §7 decision for why the framework's own
+    // `onBackendChanged()` drain cannot carry a session.
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;

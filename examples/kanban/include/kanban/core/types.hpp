@@ -105,8 +105,8 @@ enum class Role : std::uint8_t { Viewer, Member, Manager };
 /// `value == 0` *is* the "not entered" state, **an event id of `0` is
 /// unrepresentable** -- construct one and it reports `hasValue() == false`,
 /// so a real event would read as "no event". The constraint holds because these
-/// ids are SQLite row ids, which start at 1. `fromRowId()` is
-/// the enforcement; use it for every conversion from a stored value.
+/// ids are SQLite row ids, which start at 1. `fromRowId()` is the enforcement;
+/// use it for every conversion from a stored value.
 struct BoardEventId {
     std::int64_t value{0};
     [[nodiscard]] constexpr bool hasValue() const { return value != 0; }

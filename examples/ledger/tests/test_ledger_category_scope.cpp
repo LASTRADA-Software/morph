@@ -20,9 +20,9 @@
 // The rule these cases pin: an account and a category are the same book's, or
 // the link is refused; a budget's category is its own book's, or the budget is
 // refused. The refusal is `NotFound{"<Action>: category does not belong to
-// this ledger"}` -- `accountInLedger`'s own idiom, deliberately
-// distinct from `"<Action>: no such account or category"`, because a client
-// that cannot tell them apart cannot tell a dead id from a mis-scoped one.
+// this ledger"}` -- `accountInLedger`'s own idiom, deliberately distinct from
+// `"<Action>: no such account or category"`, because a client that cannot tell
+// them apart cannot tell a dead id from a mis-scoped one.
 //
 // The last case is the negative control: a same-book link and a same-book
 // budget still succeed. Without it a guard that refused every link would pass

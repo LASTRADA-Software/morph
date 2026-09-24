@@ -133,8 +133,8 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     audit.allowUnbound(QStringLiteral("projectAdminBridge"), QStringLiteral("submitIfValid"), rendererCalled);
     audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("submitIfValid"), rendererCalled);
     // `fetchOptions`/`optionsReceived` are the same seam, one field kind over:
-    // `CreateRule::triggerColumnId` is this rung's first
-    // `morph::forms::Choice` field, and DynamicForm.qml's own
+    // `CreateRule::triggerColumnId` is this rung's first `morph::forms::Choice`
+    // field, and DynamicForm.qml's own
     // Component.onCompleted calls `controller.fetchOptions(...)` and its
     // `Connections { target: controller }` block declares `onOptionsReceived`
     // unconditionally for every attached controller (see

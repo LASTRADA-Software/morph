@@ -832,10 +832,9 @@ TEST_CASE("Replaying a move-to-Done journal entry does not re-fire its rule", "[
 // project B's rules would answer with A's and an `ok`: the argument would be
 // load-bearing in the type and inert in the code, and a client that passed the
 // id it meant would have no way to tell it had been ignored. Both refuse a
-// mismatch the way every other cross-project check in
-// board_model.cpp does. alice is a Manager on *both* projects here, so what
-// these pin is the projectId check itself, not the role gate standing in
-// for it.
+// mismatch the way every other cross-project check in board_model.cpp does.
+// alice is a Manager on *both* projects here, so what these pin is the
+// projectId check itself, not the role gate standing in for it.
 
 TEST_CASE("GetRules refuses another project's id rather than answering with the attached board's rules",
           "[kanban][rules][cross-tenant]") {
@@ -1042,12 +1041,12 @@ TEST_CASE("ActionKeyTraits<OpenBoard>::key() rejects a disengaged projectId inst
     CHECK_THROWS_AS(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(disengaged), std::runtime_error);
 
     // The refusal is now `morph::model::keyToString`'s own, not this rung's:
-    // BRIDGE_MODEL_KEY generates the specialisation, so the
-    // hand-written `throw kanban::ValidationError` is gone and the escaping
-    // type is morph's plain `std::runtime_error`. Pinned as a negative
-    // because it is the one caller-visible difference the migration makes.
-    // Nothing in the rung catches this by type -- `BoardBridge` routes it
-    // through `morph::ladder::gui::errorText()`, which reads `what()` off any
+    // BRIDGE_MODEL_KEY generates the specialisation, so the hand-written `throw
+    // kanban::ValidationError` is gone and the escaping type is morph's plain
+    // `std::runtime_error`. Pinned as a negative because it is the one
+    // caller-visible difference the migration makes. Nothing in the rung
+    // catches this by type -- `BoardBridge` routes it through
+    // `morph::ladder::gui::errorText()`, which reads `what()` off any
     // `std::exception` -- but a change that quietly reintroduced a rung-local
     // `key()` would show up right here.
     bool refusedByTheRung = false;
@@ -1061,11 +1060,10 @@ TEST_CASE("ActionKeyTraits<OpenBoard>::key() rejects a disengaged projectId inst
     CHECK_FALSE(refusedByTheRung);
 }
 
-// Equivalence pin: one
-// `BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)` stands in for
-// two hand-written specialisations, and the only way that is safe is if the
-// generated key is the same bytes a hand-written `key()` produces, for every id
-// it accepts.
+// Equivalence pin: one `BRIDGE_MODEL_KEY(BoardModel, OpenBoard,
+// &OpenBoard::projectId)` stands in for two hand-written specialisations, and
+// the only way that is safe is if the generated key is the same bytes a
+// hand-written `key()` produces, for every id it accepts.
 TEST_CASE("BoardModel's deduced key is the ProjectId itself and encodes exactly as the hand-written key() did",
           "[kanban][model][key]") {
     // The macro deduces `PrimaryKey` from the *member* it is handed, so the

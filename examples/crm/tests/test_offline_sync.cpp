@@ -16,9 +16,9 @@
 
 // ── GCC 16's -Warray-bounds false positive inside libstdc++'s shared_ptr ────
 //
-// The same block as `test_pipeline.cpp`'s -- which carries the
-// full measurement, the sizes, and the reason this wraps only the `#include`
-// block. Short form: at -O2/-O3, GCC 16 speculatively devirtualizes
+// The same block as `test_pipeline.cpp`'s -- which carries the full
+// measurement, the sizes, and the reason this wraps only the `#include` block.
+// Short form: at -O2/-O3, GCC 16 speculatively devirtualizes
 // `ModelFactory::create<crm::AccountModel>()`'s `IModelHolder::attachActionLog`
 // to `ModelHolder<crm::OpportunityModel>`'s override, then bounds an offset-112
 // store against the 112-byte `AccountModel` holder instead of the 136-byte

@@ -113,12 +113,12 @@ T await(morph::async::Completion<T> completion, morph::exec::MainThreadExecutor&
 // `static_assert` block below pins every route back to the hazard.
 //
 // The same two types, with the same names and the same explicit constructors,
-// are what `tests/test_support.hpp`'s framework `waitUntil` takes,
-// and what `examples/kanban/tests/test_kanban_stress.cpp` carries -- the same
-// shape in three places rather than three shapes. They are redeclared here
-// because bank deliberately links neither `morph_ladder_testkit` nor the
-// framework's private test headers (see `examples/bank/CMakeLists.txt`'s own
-// note on why bank is not a ladder rung).
+// are what `tests/test_support.hpp`'s framework `waitUntil` takes, and what
+// `examples/kanban/tests/test_kanban_stress.cpp` carries -- the same shape in
+// three places rather than three shapes. They are redeclared here because bank
+// deliberately links neither `morph_ladder_testkit` nor the framework's private
+// test headers (see `examples/bank/CMakeLists.txt`'s own note on why bank is
+// not a ladder rung).
 //
 // A `NOLINT` is not an option: it would remove the *warning* and leave the
 // hazard. Nor is widening one parameter's type to silence

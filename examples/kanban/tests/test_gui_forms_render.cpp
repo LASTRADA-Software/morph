@@ -327,9 +327,9 @@ TEST_CASE("MembersView renders SetMemberRole through the shipped renderer and su
     // currentIndex -1 -- "no selection" -- so the gate needs `role` engaged
     // too, not just `principal` (DynamicForm.qml's resetFields()/currentIndex
     // comments). Membership is decidable client-side once the schema states
-    // the closed set: an out-of-set value here would leave the
-    // field's own JSON literal null and the gate unsatisfied, which is a
-    // stronger property than the free-text field this form replaced ever had.
+    // the closed set: an out-of-set value here would leave the field's own JSON
+    // literal null and the gate unsatisfied, which is a stronger property than
+    // the free-text field this form replaced ever had.
     CHECK_FALSE(isReady(form));
     type(form, QStringLiteral("principal"), QStringLiteral("bob"));
     CHECK_FALSE(isReady(form));

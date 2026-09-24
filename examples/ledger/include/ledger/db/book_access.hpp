@@ -12,9 +12,8 @@
 #include "ledger/db/ledger_entity.hpp"
 
 /// @file
-/// The single home for this rung's "whose book is this?" rule, and
-/// for the "*which* book is this?" rule that sits beside it
-/// (`requireCategoryInBook`).
+/// The single home for this rung's "whose book is this?" rule, and for the
+/// "*which* book is this?" rule that sits beside it (`requireCategoryInBook`).
 ///
 /// **Where the rule lives, and why not at the authorizer.**
 /// `examples/IMPLEMENTATION.md` rule 4 puts ownership authorization *through
@@ -158,11 +157,11 @@ inline void requireOwnedParentBook(Lightweight::DataMapper& mapper, std::uint64_
 /// wrote down is half a scheme, not a rule.
 ///
 /// Neither `SetCategory` nor `LinkAccountToCategory` carries a `ledgerId`, so
-/// this cannot be a `Where` folded into the lookup the way
-/// `accountInLedger` scopes a leg's account against the ledger its action
-/// names. It is a comparison of the two loaded rows' own `ledger` values
-/// instead -- which is also why the refusal is raised after the not-found and
-/// ownership ones, leaving their wording and ordering untouched.
+/// this cannot be a `Where` folded into the lookup the way `accountInLedger`
+/// scopes a leg's account against the ledger its action names. It is a
+/// comparison of the two loaded rows' own `ledger` values instead -- which is
+/// also why the refusal is raised after the not-found and ownership ones,
+/// leaving their wording and ordering untouched.
 ///
 /// `NotFound`, and a message of its own: `accountInLedger`'s exact idiom for
 /// the identical question about an account, and for the same reason --

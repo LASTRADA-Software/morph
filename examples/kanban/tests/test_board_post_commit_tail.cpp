@@ -4,8 +4,8 @@
 // as failed -- the row it wrote is already committed.
 //
 // The symptom is a board whose `execute(MoveTaskPosition)` threw and whose move
-// was nonetheless observed applied (`test_kanban_offline.cpp:672`,
-// `movedCount == 1` under 32-way contention). That needs no race inside the
+// was nonetheless observed applied (`test_kanban_offline.cpp:672`, `movedCount
+// == 1` under 32-way contention). That needs no race inside the
 // commit path: `execute()` commits, then runs `logAction`, `evaluateRules` and a
 // final `buildState` -- every one of which can throw -- and without the shield
 // nothing between them and the caller distinguishes "the move did not happen"

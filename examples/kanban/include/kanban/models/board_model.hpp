@@ -570,8 +570,8 @@ BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::RemoveAttachment, "RemoveAtta
 // scalars.
 //
 // The disengaged-`projectId` rejection a hand-written `key()` would spell out is
-// `morph::model::keyToString`'s: it throws for a strong id with no
-// value instead of dereferencing an empty optional, which is what makes
+// `morph::model::keyToString`'s: it throws for a strong id with no value
+// instead of dereferencing an empty optional, which is what makes
 // `BoardBridge::openBoard("not-a-number")` (parsed into a default-constructed
 // `ProjectId{}` by board_qml_bridge.cpp's `parseId`) a rejected `Completion`
 // rather than undefined behaviour. `BridgeHandler::execute`'s

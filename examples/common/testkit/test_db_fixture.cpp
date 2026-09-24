@@ -116,11 +116,10 @@ TEST_CASE("DbFixture::computeConnectionString uses ODBC_CONNECTION_STRING verbat
 }
 
 // When the shared database holds a foreign key whose target table is gone,
-// Lightweight's SqlSchema::ReadAllTables throws
-// std::out_of_range("map::at") out of DbFixture's constructor — before
-// anything has been dropped, so the bad state survives the run that reported
-// it and every test after it fails the same way, across invocations, until
-// somebody deletes a file nothing names.
+// Lightweight's SqlSchema::ReadAllTables throws std::out_of_range("map::at")
+// out of DbFixture's constructor — before anything has been dropped, so the bad
+// state survives the run that reported it and every test after it fails the
+// same way, across invocations, until somebody deletes a file nothing names.
 //
 // Two test cases below, because the requirement has two halves and either can
 // hold without the other: the message has to name the fixture, the file and

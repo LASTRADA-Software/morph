@@ -406,11 +406,11 @@ TEST_CASE("ProjectAdminBridge::submitIfValid creates a project and still emits p
 
 TEST_CASE("ProjectAdminBridge::submitIfValid sets a member role and still emits memberRoleSet",
           "[kanban][gui][qml-bridge][issue344][issue393]") {
-    // MembersView.qml's "add member" row is a DynamicForm, so
-    // submitForm's SetMemberRole branch decodes a bare Ack and re-emits
-    // memberRoleSet exactly as the typed setMemberRole() call does, so
-    // whichever path submitted, ProjectListView.qml's existing
-    // onMemberRoleSet -> listRoles() handler still fires.
+    // MembersView.qml's "add member" row is a DynamicForm, so submitForm's
+    // SetMemberRole branch decodes a bare Ack and re-emits memberRoleSet
+    // exactly as the typed setMemberRole() call does, so whichever path
+    // submitted, ProjectListView.qml's existing onMemberRoleSet -> listRoles()
+    // handler still fires.
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     kanban::gui::ProjectAdminBridge bridge{rig->bridge(0), rig->executor()};

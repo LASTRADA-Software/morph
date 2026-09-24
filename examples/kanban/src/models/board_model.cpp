@@ -217,15 +217,14 @@ template <typename Tail>
 /// its three siblings therefore build their `GetBoardResult` inside the
 /// transaction, which is where `MoveTaskPosition` builds its own (it needs one
 /// for the applied-ops ledger row). That is not a workaround for this
-/// overload's lack
-/// of a fallback -- it is the stronger ordering. A re-read that fails *before*
-/// the commit rolls the write back, so the caller's "this failed" is true;
-/// a re-read that fails *after* it leaves nothing truthful to return, because
-/// the board state is the answer and there is no partial board worth sending.
-/// The cost is that the write transaction now spans the read, so it holds
-/// SQLite's write lock for longer under contention; `MoveTaskPosition`, the
-/// heaviest handler in this file, has held it across exactly that read since
-/// this rung was written.
+/// overload's lack of a fallback -- it is the stronger ordering. A re-read that
+/// fails *before* the commit rolls the write back, so the caller's "this
+/// failed" is true; a re-read that fails *after* it leaves nothing truthful to
+/// return, because the board state is the answer and there is no partial board
+/// worth sending. The cost is that the write transaction now spans the read, so
+/// it holds SQLite's write lock for longer under contention;
+/// `MoveTaskPosition`, the heaviest handler in this file, has held it across
+/// exactly that read since this rung was written.
 ///
 /// @tparam Tail Nullary callable returning `void`.
 /// @param tail The post-commit work to run.
@@ -584,11 +583,11 @@ GetBoardResult BoardModel::execute(const CreateColumn& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
-        // Built before the commit, not after it. The board state
-        // is this call's whole return value, so a re-read that fails must roll
-        // the write back rather than leave a committed mutation with nothing
-        // truthful to report -- see `runPostCommitTail`'s void overload for the
-        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        // Built before the commit, not after it. The board state is this call's
+        // whole return value, so a re-read that fails must roll the write back
+        // rather than leave a committed mutation with nothing truthful to
+        // report -- see `runPostCommitTail`'s void overload for the reasoning
+        // and its cost. `MoveTaskPosition` has always read here.
         auto result = buildState(mapper.Get(), project);
 
         transaction.Commit();
@@ -636,11 +635,11 @@ GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
-        // Built before the commit, not after it. The board state
-        // is this call's whole return value, so a re-read that fails must roll
-        // the write back rather than leave a committed mutation with nothing
-        // truthful to report -- see `runPostCommitTail`'s void overload for the
-        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        // Built before the commit, not after it. The board state is this call's
+        // whole return value, so a re-read that fails must roll the write back
+        // rather than leave a committed mutation with nothing truthful to
+        // report -- see `runPostCommitTail`'s void overload for the reasoning
+        // and its cost. `MoveTaskPosition` has always read here.
         auto result = buildState(mapper.Get(), project);
 
         transaction.Commit();
@@ -703,11 +702,11 @@ GetBoardResult BoardModel::execute(const CreateTask& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
-        // Built before the commit, not after it. The board state
-        // is this call's whole return value, so a re-read that fails must roll
-        // the write back rather than leave a committed mutation with nothing
-        // truthful to report -- see `runPostCommitTail`'s void overload for the
-        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        // Built before the commit, not after it. The board state is this call's
+        // whole return value, so a re-read that fails must roll the write back
+        // rather than leave a committed mutation with nothing truthful to
+        // report -- see `runPostCommitTail`'s void overload for the reasoning
+        // and its cost. `MoveTaskPosition` has always read here.
         auto result = buildState(mapper.Get(), project);
 
         transaction.Commit();
@@ -758,11 +757,11 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
-        // Built before the commit, not after it. The board state
-        // is this call's whole return value, so a re-read that fails must roll
-        // the write back rather than leave a committed mutation with nothing
-        // truthful to report -- see `runPostCommitTail`'s void overload for the
-        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        // Built before the commit, not after it. The board state is this call's
+        // whole return value, so a re-read that fails must roll the write back
+        // rather than leave a committed mutation with nothing truthful to
+        // report -- see `runPostCommitTail`'s void overload for the reasoning
+        // and its cost. `MoveTaskPosition` has always read here.
         auto result = buildState(mapper.Get(), project);
 
         transaction.Commit();

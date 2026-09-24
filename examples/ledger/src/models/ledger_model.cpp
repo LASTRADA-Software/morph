@@ -677,9 +677,9 @@ CreateLedgerResult LedgerModel::execute(const CreateLedger& action) {
         Lightweight::DataMapper mapper;
         db::LedgerRecord ledgerRow;
         ledgerRow.name = Light::SqlAnsiString<128>{action.name};
-        // The caller owns what it creates. This is the only place
-        // an owner is ever written: every other action reads it, and a book
-        // whose owner is NULL is one written before this column existed.
+        // The caller owns what it creates. This is the only place an owner is
+        // ever written: every other action reads it, and a book whose owner is
+        // NULL is one written before this column existed.
         ledgerRow.owner = Light::SqlAnsiString<64>{ctx->principal};
         mapper.Create(ledgerRow);
         auto result = CreateLedgerResult{.id = LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())}};
@@ -702,11 +702,11 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
         }
         Lightweight::DataMapper mapper;
         // The ledger row must already exist -- `execute(const CreateLedger&)`
-        // above is what creates one. Load it by primary key
-        // rather than fabricating a stub LedgerRecord, since
-        // BelongsTo assignment needs the real persisted parent (per
-        // polls::db::OptionRecord's own `opt.poll = poll;` usage, where `poll`
-        // is a row that has actually round-tripped through Create/Query).
+        // above is what creates one. Load it by primary key rather than
+        // fabricating a stub LedgerRecord, since BelongsTo assignment needs the
+        // real persisted parent (per polls::db::OptionRecord's own `opt.poll =
+        // poll;` usage, where `poll` is a row that has actually round-tripped
+        // through Create/Query).
         const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "OpenAccount");
         db::AccountRecord accountRow;
         accountRow.ledger = ledgerRow;
@@ -750,10 +750,10 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
     // A read is where the gap would be widest: without a principal check of
     // any kind, a second authenticated client could ask for -- and get --
     // every account and balance in a book it has nothing to do with.
-    // It carries no EmptyPrincipalError gate, because
-    // it does not need one: an empty principal never matches a recorded
-    // owner, so it is refused here and admitted only for an unowned book,
-    // which is exactly what it could always reach.
+    // It carries no EmptyPrincipalError gate, because it does not need one: an
+    // empty principal never matches a recorded owner, so it is refused here and
+    // admitted only for an unowned book, which is exactly what it could always
+    // reach.
     static_cast<void>(db::requireOwnedBook(mapper, action.ledgerId, db::currentPrincipal(), "GetLedger"));
     // Real balance per account: the sum of every leg posted against it,
     // computed in-model via Rational::operator+ (never a raw SQL SUM() --
@@ -770,8 +770,8 @@ ListTransactionsResult LedgerModel::execute(const ListTransactions& action) {
     Lightweight::DataMapper mapper;
     // Same gate, same reason, as execute(GetLedger) directly above: a listing
     // of a book's entries is a read of the book, so it goes through
-    // db::requireOwnedBook and needs no EmptyPrincipalError gate
-    // of its own -- an empty principal never matches a recorded owner.
+    // db::requireOwnedBook and needs no EmptyPrincipalError gate of its own --
+    // an empty principal never matches a recorded owner.
     static_cast<void>(db::requireOwnedBook(mapper, action.ledgerId, db::currentPrincipal(), "ListTransactions"));
 
     // The month bound, as a half-open UTC [start, end) over the stored epoch
@@ -1100,9 +1100,9 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
         }
         // The book gate runs after the journal is resolved, not before it, so
         // the two "no such journal" refusals this action already had keep
-        // their exact wording and order. The journal names its own
-        // ledger and that has just been verified against the action's, so
-        // gating on it is gating on the book the action really reaches.
+        // their exact wording and order. The journal names its own ledger and
+        // that has just been verified against the action's, so gating on it is
+        // gating on the book the action really reaches.
         db::requireOwnedParentBook(mapper, originalJournalRow.ledger.Value(), ctx->principal, "UndoTransaction");
 
         // A compensating entry names the entry it reverses, so "has this already
@@ -1549,11 +1549,11 @@ GetReportStatusResult LedgerModel::execute(const GetReportStatus& action) {
         throw NotFound{"GetReportStatus: no such job"};
     }
     const auto& row = jobRows.front();
-    // A job id carries no ledgerId of its own, so the book this
-    // read reaches is the one the job row names. Gated after the job lookup so
-    // "no such job" keeps its wording, and like `execute(GetLedger)` this pure
-    // read needs no separate empty-principal gate: an empty principal matches
-    // no recorded owner.
+    // A job id carries no ledgerId of its own, so the book this read reaches is
+    // the one the job row names. Gated after the job lookup so "no such job"
+    // keeps its wording, and like `execute(GetLedger)` this pure read needs no
+    // separate empty-principal gate: an empty principal matches no recorded
+    // owner.
     db::requireOwnedParentBook(mapper, row.ledger.Value(), db::currentPrincipal(), "GetReportStatus");
     return GetReportStatusResult{
         .status = static_cast<ReportStatus>(row.status.Value()),
@@ -1605,16 +1605,16 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
     const auto principal = db::currentPrincipal();
     db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), principal, "SetCategory");
     db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), principal, "SetCategory");
-    // Then *which* book: owning both is not the same as their
-    // being one book, and until this check existed a caller could file its own
-    // account in book two under its own category in book one.
+    // Then *which* book: owning both is not the same as their being one book,
+    // and until this check existed a caller could file its own account in book
+    // two under its own category in book one.
     //
     // Unreachable from the rule cascade, which is the other caller: that path
     // looks its category up with a `Where` on the triggering action's own
     // `ledgerId`, and its account is a leg account, which `accountInLedger`
-    // has already constrained to that same ledger. The two are
-    // therefore always one book there, and this refusal is a live gate only
-    // for the client-facing `execute(SetCategory)` above.
+    // has already constrained to that same ledger. The two are therefore always
+    // one book there, and this refusal is a live gate only for the
+    // client-facing `execute(SetCategory)` above.
     db::requireCategoryInBook(categoryRows.front().ledger.Value(), accountRows.front().ledger.Value(), "SetCategory");
     accountRows.front().category = categoryRows.front();
     mapper.Update(accountRows.front());

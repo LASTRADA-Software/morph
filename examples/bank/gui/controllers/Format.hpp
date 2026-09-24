@@ -116,10 +116,10 @@ inline std::optional<std::int64_t> parseMinor(const QString& text, int decimals 
     // because `nan < 0.0` is false -- is rejected rather than let through.
     //
     // The guard is still what makes the line below defined, and it still runs
-    // first. It bounds the *unrounded* value, which is the
-    // stronger of the two: every `double` strictly below 2^63 is at most
-    // 2^63-1024, so its rounding is inside `std::int64_t` with room to spare,
-    // and the bound stays the one form that is exact.
+    // first. It bounds the *unrounded* value, which is the stronger of the two:
+    // every `double` strictly below 2^63 is at most 2^63-1024, so its rounding
+    // is inside `std::int64_t` with room to spare, and the bound stays the one
+    // form that is exact.
     if (!(scaled < kMinorUnitsBound)) {
         return std::nullopt;
     }
@@ -127,8 +127,8 @@ inline std::optional<std::int64_t> parseMinor(const QString& text, int decimals 
     // on the double immediately below one half. 0.49999999999999994 + 0.5 is
     // exactly 1.0 in IEEE-754 -- the sum is not representable and rounds up --
     // so truncating it charged a whole minor unit for an amount below half of
-    // one. `llround` rounds to nearest with halves away from zero,
-    // which is what the `+ 0.5` was reaching for.
+    // one. `llround` rounds to nearest with halves away from zero, which is
+    // what the `+ 0.5` was reaching for.
     return static_cast<std::int64_t>(std::llround(scaled));
 }
 

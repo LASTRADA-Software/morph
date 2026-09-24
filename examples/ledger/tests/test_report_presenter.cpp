@@ -9,11 +9,11 @@
 // It is also the only test in this rung that runs a client and a
 // `ledger::app::App` together, which is what the shipped deployment actually
 // is. That became load-bearing rather than incidental when the report job
-// moved out of the model: `SubmitReport` now only writes a
-// Pending row, so without an App ticking somewhere in the process the
-// client's poller would poll a job that nothing will ever settle. Everything
-// below is unchanged from when the model computed the report inside its own
-// `execute()` -- the client cannot tell the difference, which is the point.
+// moved out of the model: `SubmitReport` now only writes a Pending row, so
+// without an App ticking somewhere in the process the client's poller would
+// poll a job that nothing will ever settle. Everything below is unchanged from
+// when the model computed the report inside its own `execute()` -- the client
+// cannot tell the difference, which is the point.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>

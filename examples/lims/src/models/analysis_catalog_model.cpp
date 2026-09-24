@@ -75,14 +75,13 @@ void applyBounds(db::AnalysisVersionRecord& row, const Action& action) {
 /// data" boundary the README predicts.
 ///
 /// What is no longer app-private is the part the framework has a vocabulary
-/// for. `morph::forms::InstanceConstraints` carries the
-/// version's precision and specification range into `x-decimalPlaces`,
-/// `x-minimum` and `x-maximum` — the framework's own keys — and the same
-/// declaration is what `SampleModel` checks a submitted reading against, so
-/// the advertised bound and the enforced one cannot drift apart. The
-/// superseded `x-versionDecimalPlaces` is gone with it: serving two precision
-/// keys and leaving a renderer to guess which one was true was worse than
-/// either alone.
+/// for. `morph::forms::InstanceConstraints` carries the version's precision and
+/// specification range into `x-decimalPlaces`, `x-minimum` and `x-maximum` —
+/// the framework's own keys — and the same declaration is what `SampleModel`
+/// checks a submitted reading against, so the advertised bound and the enforced
+/// one cannot drift apart. The superseded `x-versionDecimalPlaces` is gone with
+/// it: serving two precision keys and leaving a renderer to guess which one was
+/// true was worse than either alone.
 /// @param version The version to render.
 /// @return The schema text a client renders.
 [[nodiscard]] std::string renderSchemaFor(const AnalysisVersionView& version) {

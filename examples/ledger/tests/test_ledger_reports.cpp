@@ -269,9 +269,9 @@ TEST_CASE("A submitted report stays Pending for as long as nothing runs it", "[l
     // The property that says the executor really is outside the model, and one
     // a thread-pool-owning model could not express at all: with no runner
     // anywhere in the process, a submitted job is stable at Pending rather than
-    // merely "not done yet". This is also
-    // exactly what a job outliving the process that accepted it looks like --
-    // the row waits for whichever runner comes along next.
+    // merely "not done yet". This is also exactly what a job outliving the
+    // process that accepted it looks like -- the row waits for whichever runner
+    // comes along next.
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     ledger::db::LedgerRecord ledgerRow;

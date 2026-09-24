@@ -10,13 +10,13 @@
 // affordance, since RuleTriggerEvent has exactly one member (rule_dto.hpp).
 //
 // Both of this rung's remaining hand-built forms are schema-driven:
-// `CreateRule::mutationType` (a `RuleMutationType` enum class)
-// renders as the combo box DynamicForm draws for a closed
-// `oneOf`-of-`const`s set, and `CreateRule::triggerColumnId` is a
-// `ColumnId` to a `morph::forms::Choice<…, "GetBoardState">` (rule 3's shape
-// for a user-chosen foreign key) -- so the trigger-column combo box is now
-// server-fetched by DynamicForm itself, via BoardBridge.fetchOptions(), rather
-// than reading BoardBridge.board.columns by hand.
+// `CreateRule::mutationType` (a `RuleMutationType` enum class) renders as the
+// combo box DynamicForm draws for a closed `oneOf`-of-`const`s set, and
+// `CreateRule::triggerColumnId` is a `ColumnId` to a `morph::forms::Choice<…,
+// "GetBoardState">` (rule 3's shape for a user-chosen foreign key) -- so the
+// trigger-column combo box is now server-fetched by DynamicForm itself, via
+// BoardBridge.fetchOptions(), rather than reading BoardBridge.board.columns by
+// hand.
 //
 // `boardBridge` defaults to null so this same file also loads standalone
 // with nothing wired up, matching MembersView.qml's identical convention.

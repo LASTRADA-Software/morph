@@ -40,10 +40,10 @@ private:
 }  // namespace
 
 TEST_CASE("CreateLedger bootstraps a book the rest of the action surface can use", "[ledger][model]") {
-    // The whole point of `CreateLedger`: every step below goes
-    // through the action surface, so this is exactly what an out-of-process
-    // client can do against an empty database. No `mapper.Create` anywhere --
-    // if this test ever needs one again, the bootstrap gap is back.
+    // The whole point of `CreateLedger`: every step below goes through the
+    // action surface, so this is exactly what an out-of-process client can do
+    // against an empty database. No `mapper.Create` anywhere -- if this test
+    // ever needs one again, the bootstrap gap is back.
     morph::ladder::testkit::DbFixture fixture;
 
     ledger::LedgerModel model;
@@ -111,9 +111,9 @@ TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     // Seeds the `ledgers` row directly rather than dispatching `CreateLedger`
-    // (which has its own cases above): this case
-    // is about `OpenAccount`, and a direct row keeps it from failing for a
-    // reason that belongs to a different action.
+    // (which has its own cases above): this case is about `OpenAccount`, and a
+    // direct row keeps it from failing for a reason that belongs to a different
+    // action.
     ledger::db::LedgerRecord ledgerRow;
     ledgerRow.name = "Personal";
     mapper.Create(ledgerRow);

@@ -163,19 +163,17 @@ BudgetId BudgetModel::execute(const CreateBudget& action) {
             throw NotFound{"CreateBudget: no such ledger or category"};
         }
         // The named book, and the category's own book -- a budget joins the
-        // two, so owning one of them is not enough. The existence
-        // check above keeps its combined message; ownership is a separate
-        // refusal.
+        // two, so owning one of them is not enough. The existence check above
+        // keeps its combined message; ownership is a separate refusal.
         if (!db::bookIsReachableBy(ledgerRows.front(), ctx->principal)) {
             throw Forbidden{"CreateBudget: this book belongs to another principal"};
         }
         db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), ctx->principal, "CreateBudget");
         // ...and the category's book must *be* the named book, not merely be
-        // owned by the same principal. This is the site that
-        // decides which `categoryId` `execute(GetBudgetReport)` below fans its
-        // account lookup out over, so a budget filed under book one naming a
-        // book-two category is the one cross-book row with report
-        // consequences.
+        // owned by the same principal. This is the site that decides which
+        // `categoryId` `execute(GetBudgetReport)` below fans its account lookup
+        // out over, so a budget filed under book one naming a book-two category
+        // is the one cross-book row with report consequences.
         db::requireCategoryInBook(categoryRows.front().ledger.Value(), ledgerRows.front().id.Value(), "CreateBudget");
         db::BudgetRecord budgetRow;
         budgetRow.ledger = ledgerRows.front();
