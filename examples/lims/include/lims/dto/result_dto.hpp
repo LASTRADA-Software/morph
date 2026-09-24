@@ -221,7 +221,7 @@ struct CaptureConcentration {
     /// contradict the `x-rules` entry beside them: a renderer honouring
     /// `required` would demand both fields, and a payload satisfying it would
     /// then fail `exactlyOneOf` on the server. The opt-out below is what makes
-    /// the rule the only gate on the pair; since morph#165 `schemaJson` also
+    /// the rule the only gate on the pair; `schemaJson` also
     /// *rejects* the contradiction (`UnsatisfiableFormError`) instead of
     /// serving a form nobody can submit, so omitting it is now a loud error
     /// rather than a silent one.
@@ -284,7 +284,7 @@ struct ResultView {
     /// capture would destroy the observation. What it must never be is
     /// *silent* — before the framework could name a bound living in a version
     /// row, the range round-tripped to the client and back and was acted on
-    /// nowhere (upstream issue #164).
+    /// nowhere.
     ///
     /// Always `false` for a non-reading: a qualifier makes no numeric claim to
     /// be in or out of specification.

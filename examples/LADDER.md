@@ -110,12 +110,10 @@ audit). [`bank/README.md`](bank/README.md) sets out which conventions it
 shares and which it does not, and carries the two warnings that go with the
 server: it authenticates nobody — it trusts whatever principal a client
 asserts, because bank's `AuthModel` mints no token — and its corpus pins
-several known defects as `expect ok` rather than hiding them, chief among
-them
-[morph#471](https://github.com/LASTRADA-Software/morph/issues/471). Bank's
-relationship to the ladder is
-[morph#87](https://github.com/LASTRADA-Software/morph/issues/87); the rest of
-that issue — bringing bank's *conventions* into line — is open.
+several known defects as `expect ok` rather than hiding them, each named in
+that corpus. Bank's relationship to the ladder is settled — it sits outside the
+numbered sequence, see the table below — while bringing bank's *conventions*
+into line is open work.
 
 ## Cross-cutting stress map
 
@@ -255,10 +253,10 @@ check rather than take this section's word for it:
    one non-blocking acquire verb whose *request shape* selects private
    registration, register-or-attach or re-point — consumed by
    `Bridge::ensureBoundAsync`/`attachHandlerAsync` and implemented natively by
-   `QtWebSocketBackend`. It first shipped as a pair of optional non-blocking
-   twins beside the synchronous verbs; morph#567–morph#571 removed the twins
-   in favour of the single surface above, under which the synchronous verbs
-   survive only as what `IBackend`'s *default* `bindModel` dispatches to.
+   `QtWebSocketBackend`. Not a pair of optional non-blocking twins beside the
+   synchronous verbs: there is the single surface above, under which the
+   synchronous verbs survive only as what `IBackend`'s *default* `bindModel`
+   dispatches to.
 2. **Client-side execute deadline** (before rung 3's polling helper) — no
    timeout existed on a `Completion`, so a black-holed server hung the client
    forever. **Shipped:** `Bridge::setExecuteDeadline`

@@ -376,14 +376,13 @@ TEST_CASE("Presenter::trackBound() still emits bound() when the presenter is des
 
 TEST_CASE("Presenter::track() does not touch a presenter destroyed before its completion resolves",
           "[ladder][testkit][gui][presenter]") {
-    // The track() counterpart of the trackBound() case above, and regression
-    // coverage for morph#137. track() used to capture a bare `this`, while
-    // trackBound() -- the method immediately above it in presenter.hpp --
-    // already used a QPointer and documented why. A Completion resolves
-    // through the executor (posted, never delivered inline), so a presenter
-    // destroyed before that post runs had finishOne() write to freed memory:
-    // AddressSanitizer reported a stack-use-after-scope on the atomic
-    // fetch_sub, from a completion flushed by BackendRig's teardown pump.
+    // The track() counterpart of the trackBound() case above. Both capture a
+    // `QPointer` rather than a bare `this`, and this case is what holds them to
+    // it. A Completion resolves through the executor (posted, never delivered
+    // inline), so a presenter destroyed before that post runs would have
+    // finishOne() write to freed memory: with a bare `this`, AddressSanitizer
+    // reports a stack-use-after-scope on the atomic fetch_sub, from a
+    // completion flushed by BackendRig's teardown pump.
     //
     // Constructing the presenter in a nested scope and pumping after it dies
     // reproduces that exactly. There is nothing to assert but "this does not
@@ -549,7 +548,7 @@ TEST_CASE("Presenter::trackBound() emits bound() on the .onError path when regis
     // tests/qt/test_qt_websocket.cpp's issue26/issue54 cases use, chosen so
     // this is a real onError delivery rather than a timing race. With
     // asyncRegistrationEnabled set, constructing the handler queues its
-    // registration (issue #54's pre-connect queueing); QtWebSocketBackend's
+    // registration (the backend's pre-connect queueing); QtWebSocketBackend's
     // own disconnect/never-connected handling then drains that queue through
     // cancelPending(DisconnectedError), which is whenBound()'s only route to
     // .onError() -- see qt_websocket_backend.cpp's cancelPending().

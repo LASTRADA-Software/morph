@@ -160,7 +160,7 @@ Actions, in build order:
   formalizes the full event-queue design) — there is no existing
   polling/event-sequencing precedent anywhere in the framework to reuse; this
   rung builds it from a `ChangesCursor` query (a millisecond timestamp paired
-  with a same-instant id tie-break, not a bare `Timestamp` — issue #43's fix
+  with a same-instant id tie-break, not a bare `Timestamp` — the fix
   for the boundary case a timestamp-only cursor can silently drop),
   deliberately minimal otherwise. The action exists and is tested; the shipped
   client does not dispatch it (see the client-gaps list).

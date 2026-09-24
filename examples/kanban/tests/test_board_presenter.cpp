@@ -113,7 +113,7 @@ TEST_CASE(
     "BoardPresenter::openBoard, dispatched the instant the presenter is constructed over "
     "a stalled Socket-mode attach, still reports the board once the attach reply lands",
     "[kanban][gui][presenter]") {
-    // morph#305's premise: `openBoard()` fired immediately after construction
+    // The premise worth pinning: `openBoard()` fired immediately after construction
     // races the handler's registration and can fail fast with "handler not
     // bound". `OpenBoard` is payload-keyed (BRIDGE_MODEL_KEY, board_model.hpp)
     // so `BridgeHandler::execute()` routes it through `Bridge::attachHandlerAsync`

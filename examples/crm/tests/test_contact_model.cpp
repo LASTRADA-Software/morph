@@ -169,7 +169,7 @@ TEST_CASE("ListContactOptions serves {id, name} rows for the primary-contact Cho
 }
 
 // The sibling of `AccountModel`/`LeadModel`/`OpportunityModel`/`QuoteModel`'s
-// own "journals its edits against the attached identity" case (morph#412).
+// own "journals its edits against the attached identity" case.
 // `ContactModel::attachActionLog` was called by no test at all, so the claim
 // that this model journals what it writes was supported by no executed line --
 // the state lims was in before its own audit trail turned out to be recording

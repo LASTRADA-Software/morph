@@ -47,11 +47,10 @@
 //    refuses an over-budget call without hanging it -- the DoD's "run this
 //    rung's harness with messagesPerSecond configured ON" requirement, proven
 //    end to end (not merely at the framework-prereqs plan's own unit-test
-//    level) for the first time in this rung. This case used to prove that
-//    setExecuteDeadline *recovered* such a call, because the transport dropped
-//    the frame silently and only the deadline could settle it; since morph#225
-//    the transport answers it, so the call settles on its own and the deadline
-//    is no longer what saves it.
+//    level) for the first time in this rung. What it does *not* prove is that
+//    setExecuteDeadline recovers such a call: the transport answers the refused
+//    frame, so the call settles on its own. A transport that dropped it
+//    silently would leave the deadline as the only thing that could.
 // 3. The cross-model rename-race analogue (rung 2's TagModel-renames-while-
 //    BookmarkModel-writes race): this rung's README does not name an exact
 //    analogue -- there is only one model type here (PollModel), so that
@@ -293,12 +292,12 @@ TEST_CASE("The real rate limiter refuses an over-budget call without hanging it"
     // messagesPerSecond, one token per incoming frame of any kind, refilling
     // continuously; a frame that finds an empty bucket is refused -- it never
     // reaches RemoteServer, and the sender is answered with an
-    // `err "rate limited"` addressed to that frame's own callId (morph#225)
-    // (mirrors tests/qt/test_qt_websocket.cpp's own
-    // "messagesPerSecond throttles a burst on one connection" construction
-    // pattern -- ThreadPoolExecutor -> RemoteServer -> QtWebSocketServer with
-    // a low-messagesPerSecond cfg -- except BackendRig already threads that
-    // cfg straight through, so no hand-built server is needed here).
+    // `err "rate limited"` addressed to that frame's own callId (mirrors
+    // tests/qt/test_qt_websocket.cpp's own "messagesPerSecond throttles a burst
+    // on one connection" construction pattern -- ThreadPoolExecutor ->
+    // RemoteServer -> QtWebSocketServer with a low-messagesPerSecond cfg --
+    // except BackendRig already threads that cfg straight through, so no
+    // hand-built server is needed here).
     DbFixture fixture;
     ::morph::qt::QtWebSocketServerConfig cfg;
     cfg.messagesPerSecond = 5;  // bucket capacity 5, refills at 5/s -- same
@@ -372,9 +371,9 @@ TEST_CASE("The real rate limiter refuses an over-budget call without hanging it"
     CHECK(rateLimited >= 1);
 
     // The deadline is armed above and is deliberately *not* what settles these
-    // calls any more: before morph#225 a refused frame was dropped silently and
-    // only setExecuteDeadline could end the wait, so this case asserted
-    // clientTimeouts >= 1. Now the transport answers, so a timeout here would
-    // mean a call really did go unanswered -- the regression this guards.
+    // calls: the transport answers a refused frame, so a timeout here would mean
+    // a call really did go unanswered -- the regression this guards. Were
+    // refused frames dropped silently, only setExecuteDeadline could end the
+    // wait and this would have to assert clientTimeouts >= 1 instead.
     CHECK(clientTimeouts == 0);
 }

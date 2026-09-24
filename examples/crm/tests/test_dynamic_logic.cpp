@@ -2,11 +2,10 @@
 //
 // Dynamic logic (README build order §7): CreateOpportunity/UpdateOpportunity
 // declare requiredWhen(primaryContact, engaged(expectedCloseValue)) — the
-// shipped And/Or/Not-capable rule combinator vocabulary (morph#78), used
-// here as a plain requiredWhen (no compound and/or/not needed for this
-// particular rule, since the fields available don't support the
-// stage-comparison this rung originally considered — see
-// opportunity_dto.hpp's doc comment for why).
+// shipped And/Or/Not-capable rule combinator vocabulary, used here as a plain
+// requiredWhen (no compound and/or/not needed for this particular rule, since
+// the fields available don't support the stage-comparison this rung originally
+// considered — see opportunity_dto.hpp's doc comment for why).
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>

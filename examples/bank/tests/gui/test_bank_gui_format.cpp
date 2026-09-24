@@ -6,11 +6,11 @@
 //
 // Why this file exists at all: `gui/controllers/Format.hpp` is a header under
 // `examples/`, and the root `.clang-tidy`'s `HeaderFilterRegex` discarded
-// every finding in every such header (morph#664), so no analyser had ever
-// reported on it. What it contained was an unbounded `double` → `std::int64_t`
-// conversion (morph#663): `QString::toDouble` accepts `1e30`, `inf` and `nan`
-// from a QML field that carries no validator, and converting any of those is
-// undefined behaviour, not a large number.
+// every finding in every such header, so no analyser had ever reported on it.
+// What it contained was an unbounded `double` → `std::int64_t` conversion:
+// `QString::toDouble` accepts `1e30`, `inf` and `nan` from a QML field that
+// carries no validator, and converting any of those is undefined behaviour, not
+// a large number.
 //
 // The cases below are written against the returned `std::optional`, not
 // against the arithmetic, and that is deliberate: on a UBSan build the
@@ -55,12 +55,11 @@ TEST_CASE("parseMinor rejects text that is not a non-negative amount", "[bank][g
     CHECK_FALSE(parseMinor(QStringLiteral("-1.00")).has_value());
 }
 
-// The morph#663 regression. Each of these returned `-9223372036854775808`
-// before the bound existed — via undefined behaviour, and via an abort under
-// UBSan — and every call site then fed that through `.value_or(0)` into a
-// balance.
+// The int64 bound. Without it each of these returns `-9223372036854775808` —
+// via undefined behaviour, and via an abort under UBSan — and every call site
+// then feeds that through `.value_or(0)` into a balance.
 TEST_CASE("parseMinor rejects amounts that do not fit in int64 minor units", "[bank][gui][format]") {
-    // The value the issue reproduced with: 1e30 major units scale to 1e32.
+    // The easiest value to reach it with: 1e30 major units scale to 1e32.
     CHECK_FALSE(parseMinor(QStringLiteral("1e30")).has_value());
     CHECK_FALSE(parseMinor(QStringLiteral("1e300")).has_value());
 
@@ -94,8 +93,8 @@ TEST_CASE("parseMinor's ceiling is the int64 range, not an arbitrary cap", "[ban
     CHECK_FALSE(parseMinor(QStringLiteral("920000000000000000")).has_value());
 }
 
-// The morph#678 regression. `static_cast<std::int64_t>(x + 0.5)` is not
-// "round to nearest": for the double immediately below 0.5, adding 0.5 rounds
+// Why `std::llround` and not `x + 0.5`. `static_cast<std::int64_t>(x + 0.5)` is
+// not "round to nearest": for the double immediately below 0.5, adding 0.5 rounds
 // *up* to exactly 1.0 in IEEE-754, and the truncating cast then yields 1 for a
 // value that is below half a minor unit.
 //
@@ -110,15 +109,15 @@ TEST_CASE("parseMinor rounds a value just below half a minor unit down", "[bank]
     //     x                = 0.49999999999999994449
     //     x < 0.5          = true
     //     x + 0.5          = 1
-    //     (int64)(x + 0.5) = 1      <- what this function returned
-    //     std::llround(x)  = 0
+    //     (int64)(x + 0.5) = 1      <- the wrong answer
+    //     std::llround(x)  = 0      <- what this function returns
     //
     // Not a constructed bit pattern: a decimal string short enough to type
     // into the amount field, through `QString::toDouble`.
     CHECK(parseMinor(QStringLiteral("0.004999999999999999")) == 0);
     CHECK(parseMinor(QStringLiteral("0.0049999999999999994")) == 0);
 
-    // morph#663's bound still comes first. Rounding a value outside the int64
+    // The int64 bound still comes first. Rounding a value outside the int64
     // range is no better defined than casting one, so an amount that cannot
     // fit has to be rejected before it is rounded, not after.
     CHECK_FALSE(parseMinor(QStringLiteral("1e30")).has_value());

@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// An account, a budget and a category belong to one book (morph#373).
+// An account, a budget and a category belong to one book.
 //
 // Accounts, categories and budgets each carry their own `ledger`, and three
 // client-facing actions join two of them by id alone: `SetCategory`,
-// `LinkAccountToCategory` and `CreateBudget`. Until this file existed, none of
-// them compared the two rows' books, so book two's account could be filed
-// under book one's category and a book-one budget could report on a book-two
-// category. Both rows are real, both ids are well-formed, and every id in this
-// rung is a table-wide autoincrement -- so a lookup by id alone finds the
-// foreign row and accepts it.
+// `LinkAccountToCategory` and `CreateBudget`. Unless each compares the two
+// rows' books, book two's account can be filed under book one's category and a
+// book-one budget can report on a book-two category. Both rows are real, both
+// ids are well-formed, and every id in this rung is a table-wide autoincrement
+// -- so a lookup by id alone finds the foreign row and accepts it.
 //
-// morph#382's ownership gate reaches all three sites and refuses a link across
-// an *ownership* boundary. What it deliberately does not refuse -- and what
+// The ownership gate reaches all three sites and refuses a link across an
+// *ownership* boundary. What it deliberately does not refuse -- and what
 // every case below exercises -- is two books the **same** principal owns, and
 // two **unowned** books (the shape every `ledgers` row written before migration
 // `20260819000015` has, including every fixture book the scenario corpus
@@ -21,9 +20,9 @@
 // The rule these cases pin: an account and a category are the same book's, or
 // the link is refused; a budget's category is its own book's, or the budget is
 // refused. The refusal is `NotFound{"<Action>: category does not belong to
-// this ledger"}` -- `accountInLedger`'s idiom from morph#380, deliberately
-// distinct from `"<Action>: no such account or category"`, because a client
-// that cannot tell them apart cannot tell a dead id from a mis-scoped one.
+// this ledger"}` -- `accountInLedger`'s own idiom, deliberately distinct from
+// `"<Action>: no such account or category"`, because a client that cannot tell
+// them apart cannot tell a dead id from a mis-scoped one.
 //
 // The last case is the negative control: a same-book link and a same-book
 // budget still succeed. Without it a guard that refused every link would pass
@@ -62,9 +61,9 @@ private:
     morph::session::detail::ScopedContext _scope;
 };
 
-/// @brief A book with no recorded owner -- the shape every `ledgers` row had
-///        before morph#382's migration, and the shape the scenario corpus's
-///        fixture books still have.
+/// @brief A book with no recorded owner -- the shape the scenario corpus's
+///        fixture books have, and the only shape a `ledgers` row can still be
+///        written in now that `CreateLedger` stamps its caller.
 [[nodiscard]] ledger::LedgerId unownedBook(Lightweight::DataMapper& mapper, const std::string& name) {
     ledger::db::LedgerRecord row;
     row.name = Light::SqlAnsiString<128>{name};
@@ -167,8 +166,8 @@ TEST_CASE("SetCategory refuses a category from the caller's other book", "[ledge
         twoBooks(ledgerModel, budgetModel, ledgerModel.execute(ledger::CreateLedger{.name = "Alice book one"}).id,
                  ledgerModel.execute(ledger::CreateLedger{.name = "Alice book two"}).id);
 
-    // Both books are Alice's, so morph#382's ownership gate lets this through
-    // and only the book-scope check can refuse it.
+    // Both books are Alice's, so the ownership gate lets this through and only
+    // the book-scope check can refuse it.
     try {
         ledgerModel.execute(ledger::SetCategory{.accountId = books.secondSpend,
                                                 .categoryId = books.firstCategory,
@@ -239,7 +238,7 @@ TEST_CASE("CreateBudget refuses a category from another book", "[ledger][scope]"
 }
 
 TEST_CASE("Two unowned books may not be cross-linked either", "[ledger][scope]") {
-    // The case morph#382's ownership gate deliberately admits: a NULL owner
+    // The case the ownership gate deliberately admits: a NULL owner
     // means "created before ownership existed", so every principal passes the
     // ownership check on both books and the scope check is the only refusal
     // left. This is also the shape the scenario corpus seeds, so it is the

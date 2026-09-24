@@ -228,7 +228,7 @@ public:
     /// is skipped. That enforcement belongs here, not in the queue
     /// (`docs/spec/offline/offline.md`), and it is what makes replay correct
     /// against every shipped `IOfflineQueue` regardless of whether that
-    /// implementation happens to dedup at enqueue time (morph#175).
+    /// implementation happens to dedup at enqueue time.
     /// @param action The queued update, with the base version it assumed.
     /// @return What replay did, and the conflict id if it flagged one.
     /// @throws ValidationError if the envelope is not well-formed.
@@ -396,8 +396,8 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetAuditTrail, "GetAuditTrail", 
 // `std::int64_t` this rung declared by hand while `morph::model::ModelKey`
 // still admitted only `std::integral`/`std::string`. That restriction is what
 // forced the hand-written specialisations here, in `ledger::LedgerModel` and
-// in `kanban::BoardModel`; morph#163 widened the concept to admit a strong id
-// wrapping a raw key, and morph#183 deleted all three rungs' blocks.
+// in `kanban::BoardModel`. The concept admits a strong id wrapping a raw key,
+// so no rung carries such a block any more.
 //
 // Their bodies did `keyToString(*action.sampleId)` -- `operator*` on a
 // possibly-disengaged `std::optional`, undefined behaviour for an action

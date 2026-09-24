@@ -34,7 +34,7 @@
 /// `Context::principal` with the verified identity before the model runs,
 /// each mutating model action refusing an empty principal
 /// (`EmptyPrincipalError`, design spec §11) or, for `RunReportJob`, refusing
-/// any principal but `kReportRunnerPrincipal` -- and, since morph#382,
+/// any principal but `kReportRunnerPrincipal` -- and
 /// **per-book ownership**: `CreateLedger` records its caller on the `ledgers`
 /// row and every action reaching a book compares that owner against
 /// `Context::principal`, reads included. That last one is deliberately *not*

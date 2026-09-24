@@ -16,20 +16,19 @@
 
 /// @file
 /// `ledger::app::App` -- rung 5's server-side bootstrap: the model worker
-/// pool, the `RemoteServer` a standalone `ladder_ledger_server` (morph#242)
-/// stands a transport in front of, the process-global `TokenIssuer` and
+/// pool, the `RemoteServer` a standalone `ladder_ledger_server` stands a
+/// transport in front of, the process-global `TokenIssuer` and
 /// `LedgerAuthorizer` that give this rung a real auth story, and the one
 /// background job this rung has.
 ///
-/// The report runner exists because rung 5 had nowhere to put a background
-/// job and put it in a model instead: `LedgerModel` owned a
-/// `ThreadPoolExecutor` and `SubmitReport` posted the aggregation to it,
-/// making the one ladder model that included `<morph/core/executor.hpp>`
-/// (morph#160). The layering that resolves it is the same one
-/// `bookmarks::app::App` already demonstrates: the App owns the worker pool
-/// and decides *when* work runs; the model still owns *what* the work
-/// computes, and is re-entered as an ordinary client dispatch
-/// (`RunReportJob`), on its own strand, where mutation is safe.
+/// The report runner exists because a rung with nowhere else to put a
+/// background job puts it in a model instead: `LedgerModel` would own a
+/// `ThreadPoolExecutor`, `SubmitReport` would post the aggregation to it, and
+/// this would be the one ladder model including `<morph/core/executor.hpp>`.
+/// The layering that avoids that is the same one `bookmarks::app::App` already
+/// demonstrates: the App owns the worker pool and decides *when* work runs; the
+/// model still owns *what* the work computes, and is re-entered as an ordinary
+/// client dispatch (`RunReportJob`), on its own strand, where mutation is safe.
 ///
 /// Mirrors `bookmarks::app::App` closely and on purpose -- the same
 /// `RemoteServer` + process-global `TokenIssuer` + service-token-carrying

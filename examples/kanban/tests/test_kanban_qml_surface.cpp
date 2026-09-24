@@ -77,29 +77,27 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     audit.bind(QStringLiteral("projectAdminBridge"), projectAdminBridge);
 
     // ── What is exempt, and why each one is permanent ────────────────────
-    // The first run of this audit reported nine members BoardBridge publishes
-    // that no file under gui/qml/ binds, recorded as a backlog under
-    // morph#291. That backlog is now worked off, and nothing here is "tracked,
-    // decide later": every one of the nine was dispositioned by binding or
-    // deleting the member, and the two that remain are exempt for a structural
-    // reason that will not change.
+    // Nine members BoardBridge publishes are the ones an unbound audit
+    // naturally reports. Nothing here is "tracked, decide later": each of the
+    // nine is dispositioned by binding or deleting the member, and the two that
+    // remain are exempt for a structural reason that will not change.
     //
-    // What went, and where it went:
-    //   * `getRules`/`ruleCreated`/`ruleDeleted` -- these were not dead
-    //     surface, they were the automation-rules pane never being populated
-    //     at all (morph#304 §A2). BoardView.qml now fetches on `rulesPopup`'s
-    //     `onOpened` and re-fetches on each mutation, so the audit resolves
-    //     all three against real binding sites.
-    //   * `attachmentUploaded`/`attachmentDownloaded` -- a missing control.
-    //     TaskDetailPopup.qml now reports both outcomes; the download half in
-    //     particular had no user-visible effect whatsoever, since it writes
-    //     its bytes to a path outside the app.
-    //   * `bound` -- genuinely dead, and deleted rather than exempted. See
-    //     board_qml_bridge.hpp's own note where the signal used to be.
-    //   * `queueDepth` -- genuinely unbound, and bound rather than deleted
-    //     (morph#308). BoardView.qml now reads it for a pending-sync
-    //     indicator beside the dead-letter banner, so the audit resolves it
-    //     against a real binding site too.
+    // Where each of the nine went:
+    //   * `getRules`/`ruleCreated`/`ruleDeleted` -- not dead surface. Unbound,
+    //     they are the automation-rules pane not being populated at all.
+    //     BoardView.qml fetches on `rulesPopup`'s `onOpened` and re-fetches on
+    //     each mutation, so the audit resolves all three against real binding
+    //     sites.
+    //   * `attachmentUploaded`/`attachmentDownloaded` -- without a control they
+    //     are invisible, the download half especially, since it writes its
+    //     bytes to a path outside the app. TaskDetailPopup.qml reports both
+    //     outcomes.
+    //   * `bound` -- genuinely dead, so deleted rather than exempted. See
+    //     board_qml_bridge.hpp's own note in its place.
+    //   * `queueDepth` -- genuinely unbound, and bound rather than deleted.
+    //     BoardView.qml reads it for a pending-sync indicator beside the
+    //     dead-letter banner, so the audit resolves it against a real binding
+    //     site too.
     //
     // The list is checked in both directions: an exemption for a member that
     // has since been deleted, or one QML has since bound, fails this test
@@ -135,8 +133,8 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     audit.allowUnbound(QStringLiteral("projectAdminBridge"), QStringLiteral("submitIfValid"), rendererCalled);
     audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("submitIfValid"), rendererCalled);
     // `fetchOptions`/`optionsReceived` are the same seam, one field kind over:
-    // `CreateRule::triggerColumnId` (morph#393) is this rung's first
-    // `morph::forms::Choice` field, and DynamicForm.qml's own
+    // `CreateRule::triggerColumnId` is this rung's first `morph::forms::Choice`
+    // field, and DynamicForm.qml's own
     // Component.onCompleted calls `controller.fetchOptions(...)` and its
     // `Connections { target: controller }` block declares `onOptionsReceived`
     // unconditionally for every attached controller (see

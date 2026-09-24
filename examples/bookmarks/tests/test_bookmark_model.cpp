@@ -242,12 +242,11 @@ TEST_CASE("GetChangesSince returns only bookmarks touched after the given instan
 
 TEST_CASE("GetChangesSince does not miss a write landing in the same millisecond as the cursor",
           "[bookmarks][model]") {
-    // Regression test for issue #43: a cursor that compares only on
-    // updated_at_ms with strict `>` can silently drop a write whose
-    // timestamp equals the previous poll's asOf (same millisecond -- a
-    // plausible timing window on a fast machine or a loaded CI runner, not
-    // a contrived one). Frozen to a single instant, like the analogous
-    // same-millisecond BulkEdit regression test above, so the race is
+    // A cursor that compares only on updated_at_ms with strict `>` can silently
+    // drop a write whose timestamp equals the previous poll's asOf (same
+    // millisecond -- a plausible timing window on a fast machine or a loaded CI
+    // runner, not a contrived one). Frozen to a single instant, like the
+    // analogous same-millisecond BulkEdit regression test above, so the race is
     // deterministic rather than relying on incidental timing.
     DbFixture fixture;
     bookmarks::BookmarkModel model;

@@ -45,9 +45,8 @@ The user-code contract is: **you implement Models; morph exposes them.**
     *"the backend is unreachable — queue this action instead of sending it"*
     is app-layer by design and sits at the dispatch site, outside any model.
     This is not an exemption from the rule; it is the rule's last clause
-    having fired. The finding was raised
-    ([morph#197](https://github.com/LASTRADA-Software/morph/issues/197)) and
-    dispositioned as app-layer under the promotion rule above; the reasoning,
+    having fired. It was raised as a finding and dispositioned as app-layer
+    under the promotion rule above; the reasoning,
     the boundary, and the reference shapes are in
     [`docs/spec/offline/offline.md`](../docs/spec/offline/offline.md)
     ("Ownership: who enqueues" → "Disposition: app-layer by design"). The
@@ -119,7 +118,7 @@ content, URLs). Everything else is a strong type:
 | Points in time | `morph::time::Timestamp` / `DateTime` |
 | Foreign keys / lookups chosen by a user | `morph::forms::Choice<T, "ListAction">` |
 | Entity identity | A per-entity strong id type (e.g. `struct PasteId`) exposing `hasValue()` so it joins the forms palette as an empty-capable field |
-| Closed sets of states/options | `enum class` **with a `glz::meta`/`glz::enumerate` specialisation** (never a bare integer, never `bool` — a two-state flag is a two-enumerator `enum class`, per the readability rule that call sites must not read `f(true)`). The `glz::meta` is not optional decoration: `morph::forms::schemaJson<A>()` refuses to compile without one on any `enum class` member it reaches (morph#392) — glaze cannot describe the closed set otherwise, and a renderer would draw a checkbox for it instead of a combo box. |
+| Closed sets of states/options | `enum class` **with a `glz::meta`/`glz::enumerate` specialisation** (never a bare integer, never `bool` — a two-state flag is a two-enumerator `enum class`, per the readability rule that call sites must not read `f(true)`). The `glz::meta` is not optional decoration: `morph::forms::schemaJson<A>()` refuses to compile without one on any `enum class` member it reaches — glaze cannot describe the closed set otherwise, and a renderer would draw a checkbox for it instead of a combo box. |
 | Optional fields | empty-capable state (`hasValue()` / empty `Quantity`) or the action's `optionalFields` opt-out — not `std::optional<Quantity>`, which silently loses schema annotations (see the round-5 review finding in [`LADDER.md`](LADDER.md)) |
 | Line items / sub-objects | nested aggregates of the same palette |
 | Protocol scalars — pagination cursors, event ids / epoch tokens, op-ids / idempotency keys, base versions, job ids, capability & confirmation tokens | A named opaque newtype per role (e.g. `struct EventId`, `struct Cursor`), `hasValue()`-capable, serialising as its underlying scalar — **never** a bare `int64_t` and never a loose `std::string`. If morph offers no cheap `Tagged<T, "Name">` helper that joins glaze and the forms palette, that is a **day-one finding filed once**, not eight hand-rolled wrapper sets (round-7 T2). |

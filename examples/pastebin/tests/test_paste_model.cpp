@@ -495,12 +495,11 @@ TEST_CASE("CreatePaste's validate() rejects a fractional burnAfterReads", "[past
 
 TEST_CASE("The burn-budget rules reach the served CreatePaste schema", "[pastebin][model][forms]") {
     // `IMPLEMENTATION.md` rule 3: the DTO *is* the form definition, and there
-    // is no second source of truth. Until morph#310 there was one here — the
-    // three conditions above (>= 1, non-negative, whole) lived only in
-    // `validate()`, server-side, with nothing a client could gate on. The form
-    // therefore auto-fired into a guaranteed rejection, and the only remaining
-    // way to stop it was a hand-written QML conditional, which
-    // `examples/TESTING.md` presenter rule 6 forbids.
+    // is no second source of truth. With the three conditions above (>= 1,
+    // non-negative, whole) living only in `validate()`, server-side, there is
+    // nothing a client can gate on: the form auto-fires into a guaranteed
+    // rejection, and the only remaining way to stop it is a hand-written QML
+    // conditional, which `examples/TESTING.md` presenter rule 6 forbids.
     //
     // `FieldMeta::minimum`/`::multipleOf` are the vocabulary that closes it:
     // one declaration on the DTO, served as standard JSON-Schema keys and
@@ -1528,13 +1527,13 @@ TEST_CASE("CreatePaste retries past colliding animal-name ids instead of failing
     // if the retry logic itself is wrong.
     //
     // The previous version occupied a quarter of the keyspace and let the real
-    // generator roll (morph#365). That made an eight-attempt exhaustion a
-    // 1-in-1,640 event across its 40 creates — a red build on an unrelated PR
-    // that often, unreproducible when it fired, because `randomPasteId()`
-    // seeds from `std::random_device` and Catch2's `--rng-seed` cannot reach
-    // it. Its odds were the thing under test; here the retry *logic* is. The
-    // collisions are a real primary-key violation from the real store either
-    // way — the seam supplies the candidate id, not the verdict on it.
+    // generator roll. That made an eight-attempt exhaustion a 1-in-1,640 event
+    // across its 40 creates — a red build on an unrelated PR that often,
+    // unreproducible when it fired, because `randomPasteId()` seeds from
+    // `std::random_device` and Catch2's `--rng-seed` cannot reach it. Its odds
+    // were the thing under test; here the retry *logic* is. The collisions are
+    // a real primary-key violation from the real store either way — the seam
+    // supplies the candidate id, not the verdict on it.
     DbFixture fixture;
     pastebin::PasteModel model;
 
@@ -1878,8 +1877,7 @@ TEST_CASE("db::setup points the default connection at a database and applies the
 TEST_CASE("App teardown survives sweep dispatches still outstanding (the member-order guard)", "[pastebin][app]") {
     // The guard for `App`'s member declaration order, which is the entire
     // protection against a `post()` on a freed `QtExecutor`
-    // (`pastebin/app/app.hpp`'s comment above `_sweepExecutor`, and morph#127,
-    // which was a shipped bug of exactly that class). `_sweepExecutor` is
+    // (`pastebin/app/app.hpp`'s comment above `_sweepExecutor`). `_sweepExecutor` is
     // declared *first*, so it is destroyed *last* — after `~_pool` has joined
     // its worker threads. Move it to its natural reading position at the end
     // of the member list and this case segfaults deterministically:

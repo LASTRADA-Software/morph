@@ -154,7 +154,7 @@ void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::Pr
 ///        handler is only ever attached to one board (`OpenBoard` is this
 ///        model's keyed attach action), so an argument naming a *different*
 ///        project cannot be served here: it is refused rather than quietly
-///        answered from -- or written onto -- the attached board (morph#369).
+///        answered from -- or written onto -- the attached board.
 /// @param projectId The action's own `projectId` field.
 /// @param attachedProjectDbId The attached board's project id, parsed from
 ///        `_projectIdStr`.
@@ -165,7 +165,7 @@ void requireProjectMatchesAttachedBoard(ProjectId projectId, std::uint64_t attac
 }
 
 /// @brief Runs @p tail, a handler's *post-commit* work, and contains any
-///        exception it throws (morph#566).
+///        exception it throws.
 ///
 /// A handler that has already called `SqlTransaction::Commit()` has made its
 /// mutation durable. Whatever it does afterwards -- journalling, a rule
@@ -203,7 +203,7 @@ template <typename Tail>
 
 /// @brief The same containment for a tail that produces nothing the caller
 ///        needs -- the shape every mutating handler other than
-///        `MoveTaskPosition` has (morph#751).
+///        `MoveTaskPosition` has.
 ///
 /// Those handlers' tails are `logAction` alone: the value they return was
 /// already computed, so there is no fallback to choose and no second value to
@@ -212,20 +212,19 @@ template <typename Tail>
 /// distinguish, which is worse than no branch. This overload is that case
 /// written down.
 ///
-/// **What each handler must do to be eligible**, and what the adoption in
-/// morph#751 did: anything the *caller's return value* depends on runs before
-/// `Commit()`, not after it. `CreateColumn` and its three siblings therefore
-/// build their `GetBoardResult` inside the transaction now, which is where
-/// `MoveTaskPosition` has always built its own (it needs one for the
-/// applied-ops ledger row). That is not a workaround for this overload's lack
-/// of a fallback -- it is the stronger ordering. A re-read that fails *before*
-/// the commit rolls the write back, so the caller's "this failed" is true;
-/// a re-read that fails *after* it leaves nothing truthful to return, because
-/// the board state is the answer and there is no partial board worth sending.
-/// The cost is that the write transaction now spans the read, so it holds
-/// SQLite's write lock for longer under contention; `MoveTaskPosition`, the
-/// heaviest handler in this file, has held it across exactly that read since
-/// this rung was written.
+/// **What each handler must do to be eligible**: anything the *caller's return
+/// value* depends on runs before `Commit()`, not after it. `CreateColumn` and
+/// its three siblings therefore build their `GetBoardResult` inside the
+/// transaction, which is where `MoveTaskPosition` builds its own (it needs one
+/// for the applied-ops ledger row). That is not a workaround for this
+/// overload's lack of a fallback -- it is the stronger ordering. A re-read that
+/// fails *before* the commit rolls the write back, so the caller's "this
+/// failed" is true; a re-read that fails *after* it leaves nothing truthful to
+/// return, because the board state is the answer and there is no partial board
+/// worth sending. The cost is that the write transaction now spans the read, so
+/// it holds SQLite's write lock for longer under contention;
+/// `MoveTaskPosition`, the heaviest handler in this file, has held it across
+/// exactly that read since this rung was written.
 ///
 /// @tparam Tail Nullary callable returning `void`.
 /// @param tail The post-commit work to run.
@@ -386,11 +385,11 @@ void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> l
     // this condition is load-bearing, not defensive. `_projectIdStr` is the
     // answer to "which project is this handler attached to", which every
     // `execute()` overload asks as `has_value()` before dereferencing it into
-    // `std::stoull`; adopting the key unconditionally made that question
-    // answer "yes" for strings no `stoull` can parse, so the guards fell
-    // through and the rung replied with the bare text `stoull` -- an
-    // `std::invalid_argument` escaping as though it were a domain error
-    // (#368). See `attachActionLog`'s declaration for the contract this keeps.
+    // `std::stoull`. Adopting the key unconditionally makes that question
+    // answer "yes" for strings no `stoull` can parse, so the guards fall
+    // through and the rung replies with the bare text `stoull` -- an
+    // `std::invalid_argument` escaping as though it were a domain error.
+    // See `attachActionLog`'s declaration for the contract this keeps.
     if (namesAProject(entityKey)) {
         _projectIdStr = std::move(entityKey);
     }
@@ -474,8 +473,9 @@ void BoardModel::logFailureForCurrentException(const Action& action) const {
             throw;
         } catch (const KanbanError& error) {
             // A refusal this rung decided on. `what()` is the message the
-            // caller is being given, and it is what the journal recorded for
-            // these before morph#757 -- unchanged, deliberately.
+            // caller is being given, and it goes into the journal unprefixed --
+            // see the `std::exception` arm below for why only that one is
+            // prefixed.
             logFailure(action, error.what());
         } catch (const std::exception& error) {
             // Not a refusal -- something broke. Prefixed rather than recorded
@@ -534,8 +534,8 @@ GetBoardResult BoardModel::execute(const OpenBoard& action) {
     // string -- the value execute(GetActivity)'s own `_log->entries(
     // *_projectIdStr)` looks entries up by, so a session that opened its
     // board this way keeps finding the entries logAction/logFailure wrote
-    // during it once _entityKeyStr and _projectIdStr are no longer the same
-    // member (#422).
+    // during it, even though _entityKeyStr and _projectIdStr are separate
+    // members.
     _projectIdStr = std::to_string(project.id.Value());
     _entityKeyStr = *_projectIdStr;
     return buildState(mapper.Get(), project);
@@ -583,16 +583,16 @@ GetBoardResult BoardModel::execute(const CreateColumn& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
-        // Built before the commit, not after it (morph#751). The board state
-        // is this call's whole return value, so a re-read that fails must roll
-        // the write back rather than leave a committed mutation with nothing
-        // truthful to report -- see `runPostCommitTail`'s void overload for the
-        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        // Built before the commit, not after it. The board state is this call's
+        // whole return value, so a re-read that fails must roll the write back
+        // rather than leave a committed mutation with nothing truthful to
+        // report -- see `runPostCommitTail`'s void overload for the reasoning
+        // and its cost. `MoveTaskPosition` has always read here.
         auto result = buildState(mapper.Get(), project);
 
         transaction.Commit();
 
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         // The row is durable from the line above; `logAction` is not, and
         // `_log->append`/`flush` can throw. A throw here must not tell the
         // caller the CreateColumn failed.
@@ -635,16 +635,16 @@ GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
-        // Built before the commit, not after it (morph#751). The board state
-        // is this call's whole return value, so a re-read that fails must roll
-        // the write back rather than leave a committed mutation with nothing
-        // truthful to report -- see `runPostCommitTail`'s void overload for the
-        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        // Built before the commit, not after it. The board state is this call's
+        // whole return value, so a re-read that fails must roll the write back
+        // rather than leave a committed mutation with nothing truthful to
+        // report -- see `runPostCommitTail`'s void overload for the reasoning
+        // and its cost. `MoveTaskPosition` has always read here.
         auto result = buildState(mapper.Get(), project);
 
         transaction.Commit();
 
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         // The row is durable from the line above; `logAction` is not, and
         // `_log->append`/`flush` can throw. A throw here must not tell the
         // caller the CreateSwimlane failed.
@@ -702,16 +702,16 @@ GetBoardResult BoardModel::execute(const CreateTask& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
-        // Built before the commit, not after it (morph#751). The board state
-        // is this call's whole return value, so a re-read that fails must roll
-        // the write back rather than leave a committed mutation with nothing
-        // truthful to report -- see `runPostCommitTail`'s void overload for the
-        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        // Built before the commit, not after it. The board state is this call's
+        // whole return value, so a re-read that fails must roll the write back
+        // rather than leave a committed mutation with nothing truthful to
+        // report -- see `runPostCommitTail`'s void overload for the reasoning
+        // and its cost. `MoveTaskPosition` has always read here.
         auto result = buildState(mapper.Get(), project);
 
         transaction.Commit();
 
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         // The row is durable from the line above; `logAction` is not, and
         // `_log->append`/`flush` can throw. A throw here must not tell the
         // caller the CreateTask failed.
@@ -757,16 +757,16 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
         event.createdAtMs = nowMs();
         mapper->Create(event);
 
-        // Built before the commit, not after it (morph#751). The board state
-        // is this call's whole return value, so a re-read that fails must roll
-        // the write back rather than leave a committed mutation with nothing
-        // truthful to report -- see `runPostCommitTail`'s void overload for the
-        // reasoning and its cost. `MoveTaskPosition` has always read here.
+        // Built before the commit, not after it. The board state is this call's
+        // whole return value, so a re-read that fails must roll the write back
+        // rather than leave a committed mutation with nothing truthful to
+        // report -- see `runPostCommitTail`'s void overload for the reasoning
+        // and its cost. `MoveTaskPosition` has always read here.
         auto result = buildState(mapper.Get(), project);
 
         transaction.Commit();
 
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         // The row is durable from the line above; `logAction` is not, and
         // `_log->append`/`flush` can throw. A throw here must not tell the
         // caller the AddComment failed.
@@ -822,7 +822,7 @@ Ack BoardModel::execute(const AddAttachment& action) {
 
         transaction.Commit();
 
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         // Nothing here is read back for the caller -- the answer is `Ack{}`,
         // which is already true the moment the commit above returns. All the
         // tail does is journal, and a journal that refuses the entry does not
@@ -903,7 +903,7 @@ Ack BoardModel::execute(const RemoveAttachment& action) {
         mapper->Delete(rows.front());
         transaction.Commit();
 
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         runPostCommitTail([&] { logAction(action, Ack{}); }, "RemoveAttachment");
         return Ack{};
     } catch (...) {
@@ -929,7 +929,7 @@ CreateRuleResult BoardModel::execute(const CreateRule& action) {
         const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
         // The rule is created on the board this handler is attached to, so an
         // action naming a different project is refused rather than written
-        // onto the attached board under another project's name (morph#369).
+        // onto the attached board under another project's name.
         requireProjectMatchesAttachedBoard(action.projectId, projectDbId);
         auto project = loadProjectById(mapper.Get(), projectDbId);
 
@@ -959,12 +959,12 @@ CreateRuleResult BoardModel::execute(const CreateRule& action) {
         mapper->Create(rec);
 
         // Read before the commit, for the same reason `CreateColumn` builds
-        // its state there (morph#751): `rec.id` is the caller's whole answer.
+        // its state there: `rec.id` is the caller's whole answer.
         const CreateRuleResult result{.ruleId = RuleId{static_cast<std::int64_t>(rec.id.Value())}};
 
         transaction.Commit();
 
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         runPostCommitTail([&] { logAction(action, result); }, "CreateRule");
         return result;
     } catch (...) {
@@ -985,7 +985,7 @@ GetRulesResult BoardModel::execute(const GetRules& action) {
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     // The rules listed are the attached board's, so an action naming a
     // different project is refused rather than answered with this board's
-    // rules under the other project's name (morph#369).
+    // rules under the other project's name.
     requireProjectMatchesAttachedBoard(action.projectId, projectDbId);
     // loadProjectById's only purpose here is the same NotFound-if-attached-
     // project-was-deleted check every other read in this file makes; its
@@ -1040,7 +1040,7 @@ Ack BoardModel::execute(const DeleteRule& action) {
         mapper->Delete(rows.front());
         transaction.Commit();
 
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         runPostCommitTail([&] { logAction(action, Ack{}); }, "DeleteRule");
         return Ack{};
     } catch (...) {
@@ -1071,7 +1071,7 @@ ApplyTagMutationResult BoardModel::execute(const ApplyTagMutation& action) {
         // (once here unconditionally, once again with the causal link), which
         // `morph::journal::replay()` would then dispatch twice, breaking the
         // "exactly once" invariant design spec §9 requires of a cascade.
-        // ── post-commit tail (morph#751) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         // `applyTagMutationImpl` above owns the transaction and has already
         // committed by the time it returns, so this `logAction` is post-commit
         // exactly as the other handlers' are, even though the `Commit()` is not
@@ -1323,7 +1323,7 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
 
         transaction.Commit();
 
-        // ── post-commit tail (morph#566) ────────────────────────────────
+        // ── post-commit tail ────────────────────────────────────────────
         // The move is durable from the line above. Everything below --
         // journalling, the rule cascade, and the post-cascade re-read -- is
         // follow-on work, and none of it can un-apply what was just committed.

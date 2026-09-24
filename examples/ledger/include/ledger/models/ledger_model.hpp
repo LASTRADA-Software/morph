@@ -84,7 +84,7 @@ public:
     using PrimaryKey = std::int64_t;
 
     /// @brief Creates a book and returns its id -- the bootstrap every other
-    ///        action on this model depends on (morph#361).
+    ///        action on this model depends on.
     ///
     ///        The one action here that carries no `ledgerId`, because it is
     ///        the action that produces one. It is therefore dispatched
@@ -139,7 +139,7 @@ public:
 
     /// @brief Lists the journal entries `action.ledgerId` recorded during
     ///        `action.month`, oldest first, each carrying the `JournalId` a
-    ///        client needs to name it (morph#428).
+    ///        client needs to name it.
     ///
     ///        The read that makes `UndoTransaction` -- and the Undo control
     ///        `gui/qml/LedgerView.qml` ships -- drivable at all: before this,
@@ -148,7 +148,7 @@ public:
     ///        only ever pass an id it had guessed.
     ///
     ///        Gated by `db::requireOwnedBook` exactly as `GetLedger`,
-    ///        `GetBudgetReport` and `GetReportStatus` are (morph#382): a
+    ///        `GetBudgetReport` and `GetReportStatus` are: a
     ///        listing of a book's entries is precisely the kind of read that
     ///        gate exists for. Carries no `EmptyPrincipalError` gate, for the
     ///        same reason `execute(GetLedger)` does not -- an empty principal
@@ -250,7 +250,7 @@ public:
     ///        and this model owns no executor. Draining that row is
     ///        `ledger::app::App`'s report runner's job, which dispatches
     ///        `RunReportJob` back at this model as an ordinary client action
-    ///        (morph#160) -- the same shape bookmarks' metadata worker uses,
+    ///        -- the same shape bookmarks' metadata worker uses,
     ///        and the reason this header no longer includes
     ///        `<morph/core/executor.hpp>` at all.
     /// @param action The ledger id, report kind, and JSON-encoded params.
@@ -465,19 +465,18 @@ BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetLedger, "GetLedger", ::mo
 // Each of these lines records only that the action carries the key, and
 // routes the value through `morph::model::keyToString`.
 //
-// Until morph#183 these were seven hand-written `ActionKeyTraits`
-// specialisations plus a `ModelKeyTraits<LedgerModel>`, because
-// `morph::model::ModelKey` admitted only `std::integral`/`std::string` and
-// `ledger::LedgerId` (like every `LEDGER_DEFINE_STRONG_ID` type, types.hpp)
-// wraps a `std::optional<std::int64_t>`. morph#163 widened the concept to
-// admit a strong id, so the macros work on these fields now -- and each
-// hand-written body's `*action.ledgerId` is gone with them. That dereference
-// was `operator*` on a possibly-disengaged `std::optional`: undefined
-// behaviour for an action carrying an empty id, which handed back whatever
-// the union held and routed the caller to an arbitrary instance.
-// `keyToString` refuses an empty strong id instead, and
-// `BridgeHandler::execute`'s `catch (...)` around key extraction turns the
-// refusal into a rejected `Completion`.
+// The macros work on these fields -- rather than seven hand-written
+// `ActionKeyTraits` specialisations plus a `ModelKeyTraits<LedgerModel>` --
+// because `morph::model::ModelKey` admits a strong id and not only
+// `std::integral`/`std::string`, and `ledger::LedgerId` (like every
+// `LEDGER_DEFINE_STRONG_ID` type, types.hpp) wraps a
+// `std::optional<std::int64_t>`. A hand-written body has to write
+// `*action.ledgerId`: `operator*` on a possibly-disengaged `std::optional`,
+// undefined behaviour for an action carrying an empty id, handing back whatever
+// the union held and routing the caller to an arbitrary instance. `keyToString`
+// refuses an empty strong id instead, and `BridgeHandler::execute`'s
+// `catch (...)` around key extraction turns the refusal into a rejected
+// `Completion`.
 BRIDGE_KEY_FROM(ledger::OpenAccount, &ledger::OpenAccount::ledgerId);
 BRIDGE_KEY_FROM(ledger::GetLedger, &ledger::GetLedger::ledgerId);
 

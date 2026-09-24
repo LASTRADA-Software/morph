@@ -41,8 +41,9 @@ apply_bigobj(bank_gui_lib)
 # transitively and they are not -Werror clean.
 #
 # apply_sanitizers() is not the same question and does apply — see bank_lib's
-# own block in ../CMakeLists.txt (morph#679). This is the library holding
-# controllers/Format.hpp, where morph#663's undefined conversion was.
+# own block in ../CMakeLists.txt. This is the library holding
+# controllers/Format.hpp, whose double -> int64_t conversion is the kind of
+# undefined behaviour only a sanitizer leg reports.
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(bank_gui_lib ${AF_SANITIZER})
 endif()

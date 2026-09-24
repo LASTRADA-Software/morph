@@ -316,9 +316,9 @@ public:
         // numeric half comes from `toDecimalString` rather than from `{:.1f}`
         // on the dereferenced `Rational`: that spec delegates to
         // `std::formatter<double>` through `toDouble()` and so leaves the exact
-        // domain the type exists to stay inside. The decimals shown are now the
-        // value's own runtime `DecimalPlaces`, trimmed, instead of a hard-coded
-        // one. See morph#199.
+        // domain the type exists to stay inside. The decimals shown are the
+        // value's own runtime `DecimalPlaces`, trimmed, rather than a hard-coded
+        // count.
         auto summary = std::format("sample {} at {}: density {} {}", *action.sampleId, *action.measuredAt,
                                    morph::units::toDecimalString(action.density), Density::unitMeta().display);
         if (action.moisture.hasValue()) {

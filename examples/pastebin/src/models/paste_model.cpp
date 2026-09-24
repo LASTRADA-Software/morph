@@ -131,7 +131,7 @@ namespace {
 ///        *every* id this generator can spell and require `CreatePaste` to
 ///        give up. (The collision-retry test no longer depends on the size:
 ///        it scripts the collisions through `pastebin::PasteIdSource` rather
-///        than sampling them — see morph#365.)
+///        than sampling them.)
 constexpr std::array<std::string_view, 16> kAnimals = {
     "cat", "dog", "fox", "owl", "bee", "ant", "elk", "ram", "yak", "cod", "eel", "hen", "pig", "cow", "bat", "jay",
 };

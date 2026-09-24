@@ -18,9 +18,9 @@ here, in writing, before any task starts — the discipline rule this ladder
 runs on.
 
 1. **`session::Principal` is not a capability-token mechanism — correction.**
-   This README originally described participant identity as "the participant
-   token in `session::Context` ... `session::Principal` (added in #34)
-   carrying a capability token instead of a user identity." The real
+   Participant identity is *not* "the participant token in
+   `session::Context` ... `session::Principal` carrying a capability token
+   instead of a user identity", which is the easy misreading. The real
    `session::Principal` (`docs/spec/session/session.md`) is a client-side,
    `Bridge`-scoped UI cache populated *after* login from server-returned
    data — it has no wire representation and does not participate in
@@ -92,8 +92,8 @@ runs on.
 4. **`GetEventsSince` is genuinely new work, not a `GetChangesSince` port.**
    Rung 2's `GetChangesSince` is a timestamp-diffed-current-state view
    (`WHERE updatedAtMs > since OR (updatedAtMs = since AND id > lastId)` —
-   the `id` tie-break is issue #43's fix for the millisecond-boundary case a
-   bare `updatedAtMs > since` can silently drop; still a current-state view,
+   the `id` tie-break covers the millisecond-boundary case a bare
+   `updatedAtMs > since` silently drops; still a current-state view,
    returning full current rows, not a log) — not the Zulip append-only
    event-log pattern this rung's own "morph subsystems exercised" section
    correctly calls for. **Resolved shape**: a genuine `poll_events` table
@@ -122,11 +122,11 @@ runs on.
    is a real, shipped, separately-tested per-connection token bucket. A frame
    that finds an empty bucket is **refused, and answered**: it never reaches
    `RemoteServer`, and the sender receives an `err "rate limited"` addressed
-   to that frame's own `callId` (morph#225 —
-   `src/qt/qt_websocket_server.cpp`'s `makeErr("rate limited", …)` call, and
-   `include/morph/qt/qt_websocket_server.hpp`'s own doc comment). It used to
-   be dropped silently; that is what made a rate-limited call hang until the
-   client-side deadline fired, and it is no longer the case. This rung's own
+   to that frame's own `callId` (`src/qt/qt_websocket_server.cpp`'s
+   `makeErr("rate limited", …)` call, and
+   `include/morph/qt/qt_websocket_server.hpp`'s own doc comment). Dropping it
+   silently is what would make a rate-limited call hang until the client-side
+   deadline fired. This rung's own
    "run this rung's harness with `messagesPerSecond` configured ON" is a
    **test-harness configuration decision**, not new framework work — the
    client-side execute-deadline prerequisite below is what actually needs
@@ -147,10 +147,9 @@ runs on.
      `IBackend::promoteModel` (`include/morph/core/backend.hpp`),
      `QtWebSocketBackend::promoteModel`
      (`src/qt/qt_websocket_backend.cpp`), and `assignHandlerPrimary` itself,
-     which calls it unconditionally (`include/morph/core/bridge.hpp`). When
-     the claim was written that layer was an optional non-blocking twin a
-     backend could decline; morph#567–morph#571 replaced it with
-     `promoteModel`, which no backend can decline.
+     which calls it unconditionally (`include/morph/core/bridge.hpp`). It is
+     not an optional non-blocking twin a backend can decline: `promoteModel`
+     is the one verb, and no backend can decline it.
    - **The promote step never runs for this rung anyway.**
      `assignHandlerPrimary` is reached from exactly one branch of
      `BridgeHandler::execute`, guarded by `kShared &&
@@ -196,9 +195,8 @@ runs on.
    back from that raw value. `ModelKey` is the union of the two. `lims`
    keys `SampleModel` on `lims::SampleId` through exactly that path
    (`BRIDGE_MODEL_KEY(lims::SampleModel, lims::OpenSample,
-   &lims::OpenSample::sampleId)`), and the widening (morph#163) let
-   morph#183 delete three rungs' hand-written `ModelKeyTraits`
-   specialisations.
+   &lims::OpenSample::sampleId)`), and the widening is what lets three rungs
+   carry no hand-written `ModelKeyTraits` specialisations at all.
 
    **Current state, stated as such:** `polls::OpenPoll::pollId` is still a
    plain `std::string`, and this rung has not been migrated to a
@@ -229,18 +227,17 @@ each now lives:
   WASM main thread, so a WASM client must not reach it — and with
   `Config::asyncRegistrationEnabled` set it does not, so the very first
   `OpenPoll` a WASM tab makes is no longer blocked on the framework. Built as
-  this rung's first framework-level task, and built in the shape that existed
-  then: a pair of optional non-blocking twins a backend returned `true` or
-  `false` from, with the caller falling back to the synchronous verb on
-  `false`. morph#567–morph#571 removed the twins in favour of the one verb
-  above, so there is no opt-in left to decline and no fallback path; the
-  synchronous verbs survive only as what the *default* `bindModel` runs.
+  this rung's first framework-level task. Not a pair of optional non-blocking
+  twins a backend returns `true` or `false` from with the caller falling back to
+  the synchronous verb on `false`: there is one verb, so there is no opt-in to
+  decline and no fallback path, and the synchronous verbs survive only as what
+  the *default* `bindModel` runs.
 - **Client-side execute deadline.** *Shipped:*
   `Bridge::setExecuteDeadline` (`include/morph/core/bridge.hpp`), specified in
   `docs/spec/core/completion.md`. Without it a genuinely hung server blocked
   the calling `Completion` forever. (A frame refused by `messagesPerSecond`
-  used to belong here too; it no longer does, since the transport now answers
-  it with an `err "rate limited"` — morph#225.)
+  does *not* belong here: the transport answers it with an
+  `err "rate limited"`.)
   `Completion<T>::state()` already exposes the underlying
   `CompletionState`, and `CompletionState::setException` is
   idempotent-guarded (`if (ready) return;`), so the fix needs no
@@ -358,7 +355,7 @@ log table above.
   call against a hung server hangs its completion forever, which is what
   `Bridge::setExecuteDeadline` now exists to bound. A rate-limited server no
   longer drops frames silently — it answers them with `err "rate limited"`
-  (morph#225) — so the limiter is no longer the case that motivates the
+  — so the limiter is no longer the case that motivates the
   timeout; a genuinely unresponsive server is. **Done:** this rung's harness
   does run with `messagesPerSecond` configured ON (a polling app is the abuse
   case the limiter exists for), and
@@ -520,7 +517,7 @@ Known gaps:
   the real handler's `Sharing` argument, so `kShared` resolved `false` at that
   call site no matter what, and dispatching a payload-keyed action through
   `executeJson` on an `AllowShared` handler silently never attached.
-  **It was fixed framework-side (morph#68)**: `registerAction` now builds one
+  **It was fixed framework-side**: `registerAction` now builds one
   executor per `Sharing` policy from the same generic-lambda template, keyed
   by `(modelId, actionId, typeid(Sharing))`, and `executeJson` dispatches
   through the handler's own real policy — `ActionExecuteRegistry` and the

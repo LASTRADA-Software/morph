@@ -12,7 +12,7 @@
 #include "clock.hpp"
 #include "ledger/core/errors.hpp"
 #include "ledger/core/money.hpp"
-#include "ledger/core/time_util.hpp"  // monthRangeMs -- shared with LedgerModel's ListTransactions (morph#428)
+#include "ledger/core/time_util.hpp"  // monthRangeMs -- shared with LedgerModel's ListTransactions
 #include "ledger/db/book_access.hpp"
 #include "ledger/db/ledger_entity.hpp"
 
@@ -121,15 +121,15 @@ AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
         // Both sides, because this action names two rows and nothing else
         // constrains them to the same book. What this refuses is a link across
         // an *ownership* boundary -- someone else's account under your
-        // category, or yours under someone else's (morph#382).
+        // category, or yours under someone else's.
         db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), ctx->principal,
                                    "LinkAccountToCategory");
         db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), ctx->principal,
                                    "LinkAccountToCategory");
-        // And then *which* book, which ownership alone never answered: two
-        // books one principal owns, and two unowned ones, could be
-        // cross-linked until morph#373 closed it. Last of the three refusals,
-        // so the not-found and ownership ones keep their wording and ordering.
+        // And then *which* book, which ownership alone does not answer: two
+        // books one principal owns, and two unowned ones, would otherwise be
+        // cross-linkable. Last of the three refusals, so the not-found and
+        // ownership ones keep their wording and ordering.
         db::requireCategoryInBook(categoryRows.front().ledger.Value(), accountRows.front().ledger.Value(),
                                   "LinkAccountToCategory");
         accountRows.front().category = categoryRows.front();
@@ -163,19 +163,17 @@ BudgetId BudgetModel::execute(const CreateBudget& action) {
             throw NotFound{"CreateBudget: no such ledger or category"};
         }
         // The named book, and the category's own book -- a budget joins the
-        // two, so owning one of them is not enough (morph#382). The existence
-        // check above keeps its combined message; ownership is a separate
-        // refusal.
+        // two, so owning one of them is not enough. The existence check above
+        // keeps its combined message; ownership is a separate refusal.
         if (!db::bookIsReachableBy(ledgerRows.front(), ctx->principal)) {
             throw Forbidden{"CreateBudget: this book belongs to another principal"};
         }
         db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), ctx->principal, "CreateBudget");
         // ...and the category's book must *be* the named book, not merely be
-        // owned by the same principal (morph#373). This is the site that
-        // decides which `categoryId` `execute(GetBudgetReport)` below fans its
-        // account lookup out over, so a budget filed under book one naming a
-        // book-two category is the one cross-book row with report
-        // consequences.
+        // owned by the same principal. This is the site that decides which
+        // `categoryId` `execute(GetBudgetReport)` below fans its account lookup
+        // out over, so a budget filed under book one naming a book-two category
+        // is the one cross-book row with report consequences.
         db::requireCategoryInBook(categoryRows.front().ledger.Value(), ledgerRows.front().id.Value(), "CreateBudget");
         db::BudgetRecord budgetRow;
         budgetRow.ledger = ledgerRows.front();
@@ -247,7 +245,7 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     }
     // A pure read, gated the same way `LedgerModel::execute(GetLedger)` is:
     // spent-so-far against a budget is the book's activity, and it was
-    // readable by every authenticated principal (morph#382).
+    // readable by every authenticated principal.
     db::requireOwnedParentBook(mapper, budgetRows.front().ledger.Value(), db::currentPrincipal(), "GetBudgetReport");
     auto limitRows = mapper.Query<db::BudgetLimitRecord>()
                          .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::budget>, "=", *action.budgetId)
@@ -276,9 +274,9 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     const auto categoryId = budgetRows.front().category.Value();
     const auto ledgerId = budgetRows.front().ledger.Value();
     // Scoped to the budget's own ledger as well as its category, because
-    // morph#373's guard is write-side only: a row written before it existed
-    // may still hold a cross-book link, and this is what makes such a row
-    // provably inert rather than inert-by-argument. Without it, step 1
+    // `requireCategoryInBook` is a write-side guard only: a row written before
+    // it applied may still hold a cross-book link, and this is what makes such
+    // a row provably inert rather than inert-by-argument. Without it, step 1
     // collects the foreign account and the whole exclusion rests on step 2's
     // journal filter -- an invariant no future report kind is bound by.
     auto categoryAccountRows = mapper.Query<db::AccountRecord>()

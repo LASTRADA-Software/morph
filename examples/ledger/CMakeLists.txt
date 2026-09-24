@@ -12,7 +12,7 @@ morph_add_rung(NAME ledger)
 # morph_add_rung() only globs src/models/*.cpp, src/db/*.cpp and
 # src/app/*.cpp into ladder_ledger_lib (cmake/morph_add_rung.cmake) -- it
 # does not know about this rung's src/dto/ (Login's principal-charset
-# validation, morph#242) or src/auth/ (none needed: LedgerAuthorizer is
+# validation) or src/auth/ (none needed: LedgerAuthorizer is
 # header-only, unlike PollsAuthorizer's split .cpp -- see
 # ledger/auth/ledger_authorizer.hpp's own doc comment). Without an explicit
 # target_sources() call the rung fails to link with undefined

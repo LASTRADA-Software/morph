@@ -75,7 +75,7 @@ using ::morph::ladder::gui::idNumber;
 ///        happen here explicitly.
 ///
 ///        Kept as its own function rather than collapsed into
-///        `morph::ladder::gui::idFromText` (morph#169): the shared helper
+///        `morph::ladder::gui::idFromText`: the shared helper
 ///        maps text to id and stops there, deliberately treating `0` as an
 ///        engaged id, because a helper that folded a value into the empty
 ///        state would be the inbound half of the unset-vs-zero collapse that

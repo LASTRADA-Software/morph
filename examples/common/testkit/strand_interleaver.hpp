@@ -21,12 +21,10 @@
 /// `morph::exec::detail::ModelId`s and name both directly — the production
 /// components whose per-key ordering guarantee is the point of this harness.
 /// A stand-in would prove nothing here: unlike `morph::testing::StepExecutor`
-/// (issue #55's public seam, used elsewhere to interleave `RemoteServer`
-/// dispatch *without* naming `StrandExecutor`), these particular tests exist
-/// to test `StrandExecutor` itself. This is a deliberate, accepted
-/// testkit-layer reach-in into a `detail::` namespace, not a gap awaiting a
-/// public seam — see the historical discussion in
-/// https://github.com/LASTRADA-Software/morph/issues/55.
+/// (a public seam, used elsewhere to interleave `RemoteServer` dispatch
+/// *without* naming `StrandExecutor`), these particular tests exist to test
+/// `StrandExecutor` itself. This is a deliberate, accepted testkit-layer
+/// reach-in into a `detail::` namespace, not a gap awaiting a public seam.
 
 namespace morph::ladder::testkit {
 

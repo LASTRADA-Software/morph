@@ -15,14 +15,13 @@
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
 
-// morph#242: this rung had no authentication/authorization story, so every
-// mutating action failed in the shipped desktop client, in both deployment
-// modes -- Local (no login was ever installed) and Remote (RemoteServer
-// clears an unverified principal, and this rung shipped no authorizer that
-// could verify one, and no server binary). This file exercises the Remote-
-// mode half end to end, the same shape `test_bookmarks_authorizer.cpp` uses
-// for its own rung's identical fix: a tokenless client is refused, `Login`
-// mints a real signed token, and that token unlocks the rest.
+// Without an authentication/authorization story every mutating action fails in
+// the shipped desktop client, in both deployment modes -- Local (no login
+// installed) and Remote (RemoteServer clears an unverified principal, so an
+// absent authorizer means nothing can verify one). This file exercises the
+// Remote-mode half end to end, the same shape `test_bookmarks_authorizer.cpp`
+// uses for its own rung: a tokenless client is refused, `Login` mints a real
+// signed token, and that token unlocks the rest.
 
 using ledger::auth::isReservedPrincipal;
 using ledger::auth::isValidPrincipal;
@@ -198,8 +197,8 @@ TEST_CASE("setTokenIssuer/tokenIssuer share one process-global slot", "[ledger][
 }
 
 TEST_CASE("A tokenless client logs in over a real RemoteServer and its token unlocks the rest", "[ledger][auth]") {
-    // The end-to-end shape of morph#242's fix, at the wire level: this is the
-    // exact sequence a freshly launched Remote-mode desktop client performs.
+    // The whole login path at the wire level: this is the exact sequence a
+    // freshly launched Remote-mode desktop client performs.
     DbFixture fixture;
     const auto authorizer = std::make_shared<LedgerAuthorizer>(std::string{kSecret}, morph::session::hmacSha256);
     // RAII, not a trailing reset: a failing REQUIRE below throws, and a

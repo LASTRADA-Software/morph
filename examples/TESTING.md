@@ -145,8 +145,8 @@ deleted, an alias nobody bound, or a member QML does bind is a finding — so it
 can only shrink deliberately.
 
 Adopted by every rung that has QML — `bookmarks`, `pastebin`, `polls`,
-`ledger`, `lims` and `kanban` — and by `examples/bank`, which is not a rung
-(morph#240). The audit's own mutation suite is
+`ledger`, `lims` and `kanban` — and by `examples/bank`, which is not a rung.
+The audit's own mutation suite is
 `examples/common/testkit/test_qml_surface.cpp`: every case there drives it
 against a deliberately broken pair and asserts the specific finding.
 
@@ -172,7 +172,7 @@ configure.
 and the reason is worth stating because no rung needs it. The audit proves a
 name written in a `.qml` file resolves against the metaobject; it cannot prove
 the binding behaves. `MoveMoneyPage.qml`'s account picker was the case that
-forced the distinction (morph#296): the controller was self-consistent under
+forced the distinction: the controller was self-consistent under
 every C++ drive, and the defect was a `ComboBox` whose `currentIndex` nothing
 restored after its `model` was replaced. So `bank_gui_qml_tests` loads the
 shipped `.qml` from the source tree by URL — the `BankGui` QML module lives
@@ -256,9 +256,9 @@ DeferredDelete drain) copied from `tests/qt/test_qt_websocket.cpp`.
 
 The one sanctioned exception is a test that must not link Qt at all.
 `examples/kanban/tests/test_kanban_stress.cpp` is the case: it runs under
-ThreadSanitizer, and morph#128 established that routing its callbacks through
-a `QtExecutor` produced 165 TSan warnings that all bottomed out in Qt-internal
-frames a prebuilt Qt makes unreadable — evidence for nothing either way. It
+ThreadSanitizer, and routing its callbacks through a `QtExecutor` produces 165
+TSan warnings that all bottom out in Qt-internal frames a prebuilt Qt makes
+unreadable — evidence for nothing either way. It
 therefore owns a small `waitUntil` over `sleep_for` instead of `pumpUntil`.
 Such a loop still owes the scaling: `examples/common/testkit/deadline.hpp`
 holds `computeDeadlineScale`/`deadlineScale` with **no Qt dependency**,
@@ -290,7 +290,7 @@ and pays the retry loop knowingly.
 
 The better answer, where the design allows it, is to have no background
 worker under the test at all. `examples/ledger/tests/test_ledger_reports.cpp`
-takes that route: since morph#160 the report aggregation is an ordinary
+takes that route: the report aggregation is an ordinary
 `RunReportJob` action rather than a task posted to an executor the model
 owns, so the file needs neither a retry loop nor a `StepExecutor` — "the
 report has been computed" is what the dispatch returning means, and "nothing
@@ -544,7 +544,7 @@ Open framework facts every rung must respect (verified):
   **`asyncRegistrationEnabled = true`, which is opt-in and off by
   default**; with defaults, the first `registerModel` aborts the page.
 - **`waitForConnected()` hangs the page on WASM** — the WASM client must
-  use the `setConnectHandler` pattern (#39) instead; the Socket rig's
+  use the `setConnectHandler` pattern instead; the Socket rig's
   `waitForConnected()` recipe is for *native* tests only.
 - The **synchronous shared/keyed attach path
   (`registerModelShared`/`attachModel`) nests an event loop that aborts the
@@ -569,17 +569,15 @@ root `CMakeLists.txt` — don't repeat that eight times):
   `MORPH_LADDER_RUNGS` cache list (`"all"` or `"pastebin;kanban"`) — no
   per-rung booleans; the list maps 1:1 to CI path filters.
 - **The rung names themselves live in `examples/rungs.txt`, and nowhere
-  else.** That invariant above — "maps 1:1 to CI path filters" — was
-  documented long before anything enforced it, and it did not hold: the rung
-  list was hand-copied into five places, and every copy that was not
-  load-bearing eventually drifted. CI's `ladder-tests`/`ladder-sanitizers`
-  path filter stopped at `kanban` (rung 4), so a change confined to
-  `examples/ledger/` or `examples/lims/` matched nothing and skipped both
-  jobs — including the only job in the repository that sanitizer-instruments
-  a rung. Nothing reported it: a path filter that matches nothing succeeds
-  exactly as loudly as one that correctly found nothing to do (morph#179;
-  `scripts/coverage.sh` and `codecov.yml` had drifted the same way in
-  morph#141). The list is now structured so it cannot:
+  else.** The invariant above — "maps 1:1 to CI path filters" — cannot be
+  held by documentation alone. Hand-copied into five places, every copy that is
+  not load-bearing drifts: a `ladder-tests`/`ladder-sanitizers` path filter that
+  stops at `kanban` (rung 4) makes a change confined to `examples/ledger/` or
+  `examples/lims/` match nothing and skip both jobs — including the only job in
+  the repository that sanitizer-instruments a rung. Nothing reports it, because
+  a path filter that matches nothing succeeds exactly as loudly as one that
+  correctly found nothing to do; `scripts/coverage.sh` and `codecov.yml` drift
+  the same way. The list is therefore structured so it cannot:
 
   - `examples/rungs.txt` is the single authority: one bare rung name per
     line, ASCII, whole-line `#` comments. A line that is neither is a hard
@@ -650,9 +648,9 @@ root `CMakeLists.txt` — don't repeat that eight times):
   are not translated into ctest labels anywhere in this repo; select on
   them with `ctest -R` against the test name instead), a `TEST_PREFIX` of
   `<rung>.` on every discovered ctest name (a ctest name is global to the
-  build tree, so two rungs sharing a `TEST_CASE` name used to give
-  `ctest -L ladder-<rung>` another rung's cases as well as its own —
-  morph#464; `scripts/check_ctest_name_collisions.sh` is the gate that keeps
+  build tree, so without the prefix two rungs sharing a `TEST_CASE` name give
+  `ctest -L ladder-<rung>` another rung's cases as well as its own;
+  `scripts/check_ctest_name_collisions.sh` is the gate that keeps
   the names distinct, and note the prefix reaches the *ctest* entry only, so
   `ctest -R` still matches the bare test name), warnings and
   sanitizers **applied to all app code** (bank skips both repo-wide because
@@ -742,8 +740,8 @@ root `CMakeLists.txt` — don't repeat that eight times):
   drive Qt on every path, and against an uninstrumented system Qt that
   yields warnings bottoming out in Qt-internal frames that cannot be
   classified as real races or false positives from outside a
-  TSan-instrumented Qt build — morph#128 hit exactly that, 165 warnings
-  deep. Thread-sanitising a rung therefore means writing a test that
+  TSan-instrumented Qt build — measured at 165 warnings deep on
+  `examples/kanban`. Thread-sanitising a rung therefore means writing a test that
   constructs no `QtExecutor` at all — driving the model through a bare
   `morph::bridge::Bridge`/`morph::backend::LocalBackend` on a real
   `morph::exec::ThreadPoolExecutor` — and running just that test under
@@ -798,7 +796,7 @@ the deliberately pinned `kanban` in `kanban-tsan`.
 
 Per-rung scoping (`examples/<rung>/**` → that rung; `examples/common/**` or
 `include/morph/**` → all rungs) is a plausible next step, and was described
-here as though it already existed, but it has never been built (morph#255):
+here as though it already existed, but it has never been built:
 
 1. **CI (every push/PR)**: one `ladder-tests` job (clone of `linux-qt`:
    gcc-debug, offscreen, sccache), gated by the boolean changed-paths filter
@@ -847,7 +845,7 @@ here as though it already existed, but it has never been built (morph#255):
 
 `codecov.yml`'s `ladder` component scores `examples/common/**` against a 95%
 target. That number was reported as 90.39% on `master` and read as a five-point
-regression (morph#411). It is a real figure, it is reproducible, and the
+regression. It is a real figure, it is reproducible, and the
 regression is real — but two things about it have to be said before the figure
 means anything, because both of them were being read the other way.
 
@@ -877,14 +875,14 @@ A prior local measurement of this component disagreed with the uploaded one by
 five points for a *different* reason — a shared compiler cache served objects
 built in another worktree, whose absolute paths matched none of
 `scripts/coverage.sh`'s relative filters, so the records were dropped rather
-than mis-attributed (morph#426). That is fixed at configure time and gated by
+than mis-attributed. That is fixed at configure time and gated by
 `scripts/check_coverage_roots.sh`; run it before trusting any local figure.
 
 ### Where the drop came from: four files that did not exist at the measurement
 
-`codecov.yml` records `examples/common` at 95.85% when rungs 2-4 entered the
-report (morph#142, 2026-08-21). Splitting today's figure by whether a file
-existed then answers the question that ticket asked and could not answer:
+`codecov.yml` records `examples/common` at 95.85%, measured when rungs 2-4
+entered the report. Splitting today's figure by whether a file existed then is
+what makes the drop since attributable:
 
 |                                    | hits | miss | partial | lines | Codecov |
 |------------------------------------|-----:|-----:|--------:|------:|--------:|
@@ -968,7 +966,7 @@ taken on trust.
    helper no longer wraps its own timer. (A rate-limited frame no longer
    belongs on this list for a second reason: the transport answers it with an
    `err "rate limited"` addressed to the frame's own `callId`, so the caller's
-   `Completion` fails rather than hanging — morph#225.)
+   `Completion` fails rather than hanging.)
 2. **`Bridge::pendingCalls()`** → `include/morph/core/bridge.hpp`, so
    `settle()` can be exact rather than substituting presenter-level counters.
 3. **`MainThreadExecutor::runOnce()`/`drain()`** →

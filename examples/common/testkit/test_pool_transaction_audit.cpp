@@ -10,8 +10,8 @@
 #include "db/pool_transaction_audit.hpp"
 #include "testkit/db_fixture.hpp"
 
-// morph#740's acceptance. The claim under test is not "the suite passes" --
-// it is that a mapper deliberately returned to the pool mid-transaction is
+// The audit's own acceptance. The claim under test is not "the suite passes"
+// -- it is that a mapper deliberately returned to the pool mid-transaction is
 // named by the audit, and that the audit is silent when nothing leaks. Both
 // directions are asserted below, because a check that never fires and a check
 // that always fires are indistinguishable from one that measures nothing.
@@ -50,7 +50,7 @@ TEST_CASE("autocommitStateOf reports what SqlTransaction does to a connection", 
     }
     CHECK(autocommitStateOf(mapper->Connection()) == AutocommitState::On);
 
-    // And the correction morph#566's rescope turned on: Commit() restores
+    // And the part that is easy to get backwards: Commit() restores
     // autocommit itself, there and then -- it does not wait for the
     // destructor. Every statement after an explicit Commit() is therefore
     // already back in autocommit, however long the SqlTransaction local
@@ -104,7 +104,7 @@ TEST_CASE("PoolTransactionAudit names a pooled mapper returned mid-transaction",
 
         CHECK(audit.detections() >= 1);
         REQUIRE_FALSE(collector.messages.empty());
-        CHECK(collector.messages.front().contains("morph#740"));
+        CHECK(collector.messages.front().contains("PoolTransactionAudit"));
         CHECK(collector.messages.front().contains("SQL_ATTR_AUTOCOMMIT still OFF"));
 
         // Roll back before leaving, so the leaked connection is clean again

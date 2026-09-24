@@ -120,22 +120,21 @@ struct UndoTransaction {
 ///        that takes a `JournalId`.
 ///
 ///        This action exists because nothing else in the rung's wire surface
-///        ever hands a `journalId` back (morph#428). `StoreTransaction` and
+///        hands a `journalId` back. `StoreTransaction` and
 ///        `UndoTransaction` both answer with `GetLedgerResult` -- the
 ///        accounts and their balances -- `GetLedger` the same, and
-///        `ImportLedgerChunk` with counts. `JournalId` appeared in exactly
-///        one DTO field in the whole rung, and that field was
-///        `UndoTransaction`'s own *input*. The rung's own tests reached
-///        around that by querying the row through a `DataMapper`, which is
-///        precisely what a WebSocket client and the QML bridge do not have,
-///        so the shipped Undo control had no source for the one number it
-///        asks for.
+///        `ImportLedgerChunk` with counts. Without this action the only
+///        `JournalId` in any DTO field is `UndoTransaction`'s own *input*:
+///        a test can reach around that by querying the row through a
+///        `DataMapper`, but a WebSocket client and the QML bridge have no
+///        `DataMapper`, so the shipped Undo control would have no source for
+///        the one number it asks for.
 ///
 ///        Month-bounded, in the exact `"YYYY-MM"` shape
 ///        `GetBudgetReport::month` uses and validated by the same
 ///        `detail::isValidYearMonth`, so the result cannot grow without
 ///        bound as a book ages. That bound is the whole bounding mechanism --
-///        deliberately no cursor and no page size (morph#428's own scope):
+///        deliberately no cursor and no page size:
 ///        one month of one book is a quantity a client can hold, and a
 ///        pagination protocol is a wire contract worth designing on its own
 ///        evidence rather than inventing here.

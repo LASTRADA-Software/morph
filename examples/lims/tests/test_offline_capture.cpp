@@ -93,8 +93,8 @@ struct Lab {
 /// the model's own strand, where `session::current()` is null, and every item
 /// is then refused for want of a principal. That is pinned separately, in
 /// `test_backend_matrix.cpp`'s "onBackendChanged fires on switchBackend, and
-/// fails closed with no session", and filed as morph#201. What this
-/// helper exercises is the *classification* logic — base-version comparison,
+/// fails closed with no session". What this helper exercises is the
+/// *classification* logic — base-version comparison,
 /// conflict flagging, at-most-once — which is the same code the supported
 /// re-dispatch path runs, and which `test_backend_matrix.cpp` also drives
 /// through a real `Bridge` in all three deployment modes.
@@ -729,8 +729,9 @@ TEST_CASE("The durable queue dedups a re-enqueued operation where the in-memory 
     // retried a local write, say. `IOfflineQueue`'s documented contract is
     // that the queue "never interprets, requires, or enforces uniqueness" on
     // the key, but the two shipped implementations do not agree about that.
-    // See morph#175; this test pins the divergence so a future change
-    // to either one is noticed here rather than in a lab.
+    // The three shipped queues disagree about enqueue-time dedup; this test
+    // pins the divergence so a future change to either one is noticed here
+    // rather than in a lab.
     const auto path = freshQueuePath("dedup");
     morph::offline::SqliteOfflineQueue durable{path};
     morph::offline::InMemoryOfflineQueue volatileQueue;

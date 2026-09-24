@@ -95,7 +95,7 @@ public:
     ///        `transactionsListed` on success, `failed` on error.
     ///
     ///        The read that gives `undoTransaction` below a source for its
-    ///        `journalId` (morph#428): before it, the Undo control this
+    ///        `journalId`: before it, the Undo control this
     ///        rung's `LedgerView.qml` ships had to be typed a number no
     ///        screen ever displayed.
     /// @param ledgerId The ledger whose entries to list.

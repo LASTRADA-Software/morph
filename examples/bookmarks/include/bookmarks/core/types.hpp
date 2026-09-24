@@ -106,7 +106,7 @@ struct Cursor {
     [[nodiscard]] auto operator<=>(const Cursor&) const noexcept = default;
 };
 
-/// @brief `GetChangesSince`'s cursor (issue #43): a millisecond timestamp
+/// @brief `GetChangesSince`'s cursor: a millisecond timestamp
 ///        alone cannot be a correct "since" boundary, because a strict `>`
 ///        comparison on `updated_at_ms` silently drops a write that lands in
 ///        the *same millisecond* as the previous poll's cursor -- plausible

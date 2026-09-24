@@ -14,7 +14,7 @@
 /// back. `docs/analysis/qml-bridge-boilerplate.md` measured the rest of the
 /// bridge duplication as O(QML surface) and largely irreducible; this is the
 /// second of the two pieces it identified as genuinely model-independent and
-/// worth extracting (morph#169), after `errorText()` (morph#168).
+/// worth extracting; `errorText()` is the other.
 ///
 /// @par What an "id" is here
 /// Nothing in this header names a model type. It works on anything with
@@ -37,8 +37,8 @@
 /// only thing that is true of both: **whatever the id calls empty maps to the
 /// empty representation, and everything the id calls engaged — `0` included —
 /// maps to its own payload.** For an optional-backed id that is exactly the
-/// unset-vs-zero distinction morph#169 asks for; for a zero-sentinel id it is
-/// the strongest statement that is not a lie.
+/// unset-vs-zero distinction a QML row has to preserve; for a zero-sentinel id
+/// it is the strongest statement that is not a lie.
 
 namespace morph::ladder::gui {
 

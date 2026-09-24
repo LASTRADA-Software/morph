@@ -185,20 +185,18 @@ be written here. Two elements remain, both rule 2(a) — "the generated UI
 | `gui/qml/BoardView.qml`'s drag-and-drop board | `MoveTaskPosition` | **(a).** A drag is a gesture, not a form. See below. |
 | `gui/qml/MembersView.qml`'s per-row role `ComboBox` (`:78`) | `SetMemberRole` | **(a).** Edits one field of an existing row in place, on selection change, with no Submit gesture — not the create-a-new-thing shape `DynamicForm` renders. See below. |
 
-**The enum-rendering gap this table used to cite is closed.**
-`morph::forms::schemaJson` describes a C++ `enum class` completely — `Role`
-emits as `{"type":"string","oneOf":[{"title":"Viewer","const":"Viewer"},…]}` —
-and `DynamicForm` now draws that as a combo box, refusing a value outside the
-set ([#386](https://github.com/LASTRADA-Software/morph/issues/386)). Both
-`SetMemberRole` and `CreateRule` render as ordinary schema-driven forms as a
-result ([#393](https://github.com/LASTRADA-Software/morph/issues/393)):
-`gui/qml/MembersView.qml`'s "add member" row and `gui/qml/RulesView.qml`'s
+**There is no enum-rendering gap.** `morph::forms::schemaJson` describes a C++
+`enum class` completely — `Role` emits as
+`{"type":"string","oneOf":[{"title":"Viewer","const":"Viewer"},…]}` — and
+`DynamicForm` draws that as a combo box, refusing a value outside the set. Both
+`SetMemberRole` and `CreateRule` therefore render as ordinary schema-driven
+forms: `gui/qml/MembersView.qml`'s "add member" row and `gui/qml/RulesView.qml`'s
 "add rule" row are both `DynamicForm`s now, and
 `CreateRule::triggerColumnId` is a `morph::forms::Choice<…, "GetBoardState">`
 (rule 3's shape for a user-chosen foreign key), fetched by the renderer itself
 through `BoardBridge::fetchOptions`. Only `MembersView`'s **per-row** role
 picker — editing an existing member in place, not adding one — stays
-hand-built, on different grounds than the enum gap: it is an inline-edit
+hand-built, on grounds of its own: it is an inline-edit
 interaction, not a form, the same reasoning the drag-and-drop board below
 already gives for its own gesture.
 
@@ -217,11 +215,9 @@ schema — which is why nothing is filed against `morph::forms` for it.
 
 Two smaller findings fell out of rendering these forms for real, both filed
 rather than folded in: every `DynamicForm` warns about `onOptionsReceived`
-against any controller with no `Choice` field
-([#387](https://github.com/LASTRADA-Software/morph/issues/387)), and the
-renderer mistypes array-valued schema keys when `schema` is assigned as a
-`QVariant` instead of bound
-([#388](https://github.com/LASTRADA-Software/morph/issues/388)).
+against any controller with no `Choice` field, and the renderer mistypes
+array-valued schema keys when `schema` is assigned as a `QVariant` instead of
+bound. Both are in "Findings" below.
 
 ## Expected strain points
 
@@ -262,7 +258,7 @@ renderer mistypes array-valued schema keys when `schema` is assigned as a
   pool=4, 32 boards writing concurrently, WAL on and off; measure
   throughput collapse; assert no timeout-then-committed double-apply.
 - **The queue depth bound exists in the framework; this rung has not
-  adopted it.** The framework gap this rung filed as morph#112 is closed:
+  adopted it.** There is no framework gap left:
   `IOfflineQueue` enforces a reject-newest overflow policy — `maxDepth()`
   (`include/morph/offline/offline_queue.hpp:192`) reports the configured
   capacity, `enqueue()` throws `OfflineQueueFullError` (`:80`) rather than
@@ -316,34 +312,29 @@ reads by the caller's project role (not bearer-token validity alone).
 
 ## Findings
 
-Filed as GitHub issues, per [`AGENTS.md`](../../AGENTS.md)'s filing bar:
+Filed on the tracker, per [`AGENTS.md`](../../AGENTS.md)'s filing bar. What each
+one *is* is recorded here; the tracker holds their state:
 
-- [#343](https://github.com/LASTRADA-Software/morph/issues/343)
-  — the replay-attempt budget cannot tell an undelivered replay from a
-  rejected one, so reconnect flaps dead-letter work the server never saw.
-- [#344](https://github.com/LASTRADA-Software/morph/issues/344) —
-  the flagship GUI was hand-built with no `morph::forms` usage and no rule-2
-  justification. Seven forms now render through the shipped renderer and the
-  two remaining hand-built elements each carry their written rule-2(a)
-  justification (see "morph subsystems exercised").
-- [#386](https://github.com/LASTRADA-Software/morph/issues/386) —
-  `DynamicForm` rendered a C++ `enum class` as a free-text field, which is
-  what kept `MembersView`/`RulesView`'s add-member/add-rule forms hand-built
-  until it was fixed; both now render through the shipped renderer
-  ([#393](https://github.com/LASTRADA-Software/morph/issues/393)).
-- [#387](https://github.com/LASTRADA-Software/morph/issues/387) —
-  every `DynamicForm` warns about `onOptionsReceived` on a controller with no
+- The replay-attempt budget cannot tell an undelivered replay from a rejected
+  one, so reconnect flaps dead-letter work the server never saw.
+- Every `DynamicForm` warns about `onOptionsReceived` on a controller with no
   `Choice` field.
-- [#388](https://github.com/LASTRADA-Software/morph/issues/388) —
-  `DynamicForm` mistypes array-valued schema keys when `schema` is assigned as
+- `DynamicForm` mistypes array-valued schema keys when `schema` is assigned as
   a `QVariant` rather than bound.
 
-Not filed here, deliberately: the applied-ops ledger that "Exactly-once has
-no owner in the stack" (below) forces every rung to rebuild is already
-morph#226, which records the pattern as past
-[`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule-of-three threshold — this
-rung's `AppliedOpRecord` is one of its occurrences, not a separate gap. The
-ladder-wide sweep that prompted this README's truth pass is morph#304.
+Closed, and kept here because the current shape is the answer to them: the GUI
+being hand-built with no `morph::forms` usage and no rule-2 justification —
+seven forms render through the shipped renderer now, and the two remaining
+hand-built elements each carry their written rule-2(a) justification (see "morph
+subsystems exercised") — and `DynamicForm` rendering a C++ `enum class` as a
+free-text field, which is what would keep `MembersView`/`RulesView`'s
+add-member/add-rule forms hand-built.
+
+Not filed here, deliberately: the applied-ops ledger that "Exactly-once has no
+owner in the stack" (below) forces every rung to rebuild is already filed as one
+pattern past [`IMPLEMENTATION.md`](../IMPLEMENTATION.md)'s rule-of-three
+threshold — this rung's `AppliedOpRecord` is one of its occurrences, not a
+separate gap.
 
 ## Definition of done
 

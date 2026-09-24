@@ -32,8 +32,8 @@ add_subdirectory(common)
 # examples/rungs.txt, which CI's path-filter steps and scripts/coverage.sh also
 # read — those run on a bare checkout, before any configure, so a CMake
 # variable is unreachable to them. Hand-copying the list into each of them is
-# what produced morph#179: ci.yml's filter had stopped at kanban, so rungs 5
-# and 6 matched nothing and skipped the ladder jobs entirely.
+# what one stale copy costs: a ci.yml path filter that stops at an earlier rung
+# matches nothing for the later ones and skips the ladder jobs entirely.
 set(_morph_rung_file "${CMAKE_CURRENT_SOURCE_DIR}/rungs.txt")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_morph_rung_file}")
 if(NOT EXISTS "${_morph_rung_file}")

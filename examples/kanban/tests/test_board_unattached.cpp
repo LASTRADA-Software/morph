@@ -25,7 +25,7 @@
 // cases enter that state deliberately: `attachActionLog(log, {})` is character
 // for character the call `ModelFactory::create` makes.
 //
-// Filed as morph#368; the out-of-process counterpart is
+// The out-of-process counterpart is
 // `scripts/scenario/scenarios/kanban/a-board-must-be-opened-before-it-answers.scenario`.
 
 #include <catch2/catch_test_macros.hpp>
@@ -104,9 +104,9 @@ private:
 
 }  // namespace
 
-// The two guards issue #368 singles out: they are written, they are correct,
-// and over a server they never fired. Split into their own cases so a
-// regression in either is named by the failing test rather than by an
+// The two guards a server reaches first: they are written, they are correct,
+// and it is only over a server that they are ever asked. Split into their own
+// cases so a regression in either is named by the failing test rather than by an
 // assertion line.
 TEST_CASE("GetActivity on an unattached handler names the action and OpenBoard", "[kanban][model][unattached]") {
     DbFixture fixture;
@@ -114,8 +114,8 @@ TEST_CASE("GetActivity on an unattached handler names the action and OpenBoard",
     const ScopedPrincipal alice{"alice"};
 
     // Both halves matter and they are separate claims: the *type* is what a
-    // caller's `.onError(...)` branches on, and it was `std::invalid_argument`
-    // -- outside kanban's hierarchy altogether -- while the guard was dead.
+    // caller's `.onError(...)` branches on, and with the guard fallen through it
+    // is `std::invalid_argument` -- outside kanban's hierarchy altogether.
     CHECK_THROWS_AS(board.get().execute(kanban::GetActivity{}), kanban::NotFound);
     CHECK(errorTextOf([&] { return board.get().execute(kanban::GetActivity{}); }) ==
           "GetActivity: handler was never attached via OpenBoard");
@@ -134,9 +134,9 @@ TEST_CASE("GetRules on an unattached handler names the action and OpenBoard", "[
           "GetRules: handler was never attached via OpenBoard");
 }
 
-// All fifteen guards, in one case: the nine actions issue #368 lists -- every
-// one of which answered the bare string "stoull" over a server -- and the six
-// it does not.
+// All fifteen guards, in one case: the nine actions the scenario drives -- each
+// of which answers the bare string "stoull" over a server if its guard falls
+// through -- and the six it does not.
 TEST_CASE("Every action on an unattached handler is refused by name, never with \"stoull\"",
           "[kanban][model][unattached]") {
     DbFixture fixture;
@@ -176,10 +176,9 @@ TEST_CASE("Every action on an unattached handler is refused by name, never with 
     CHECK(errorTextOf([&] { return model.execute(kanban::GetRules{.projectId = projectId}); }) ==
           "GetRules: handler was never attached via OpenBoard");
 
-    // The rest of the fifteen. Not in issue #368's list and not driven by the
-    // scenario either -- which is exactly why they are here: a regression that
-    // re-opened the fall-through in one of these six would otherwise pass
-    // every file written to prevent it.
+    // The rest of the fifteen. Not driven by the scenario -- which is exactly
+    // why they are here: a regression that re-opened the fall-through in one of
+    // these six would otherwise pass every file written to prevent it.
     CHECK(errorTextOf([&] {
               return model.execute(kanban::AddAttachment{.taskId = kanban::TaskId{1},
                                                          .filename = "spec.pdf",
@@ -316,8 +315,8 @@ TEST_CASE("Attaching a log with an empty entityKey does not un-attach an open bo
     const auto state = model.execute(kanban::GetBoardState{});
     CHECK(state.projectId == projectId);
 
-    // #422's own version of this hazard: an empty entityKey must not pull
-    // _entityKeyStr away from the board _projectIdStr still names either --
+    // The second-attach version of this hazard: an empty entityKey must not pull
+    // _entityKeyStr away from the board _projectIdStr still names --
     // otherwise every entry logged after this second attach call would carry
     // entityKey="" while execute(GetActivity) keeps reading entries by
     // *_projectIdStr, making them invisible to it despite the handler still
@@ -329,14 +328,14 @@ TEST_CASE("Attaching a log with an empty entityKey does not un-attach an open bo
     CHECK(activity.events.front().actionType == "CreateColumn");
 }
 
-// #422's own residue: a `contextKey` the attach guard rejects used to produce
-// two different journal entity keys for the *same* attach call -- the raw
-// key from a holder-wrapped instance's `_contextKey` (`IModelHolder`,
-// `morph/core/model.hpp`, set unconditionally), and the empty string from
-// this `BoardModel`'s own `_projectIdStr`, which the guard had correctly
-// left disengaged. `_entityKeyStr` closes that gap by taking the same
-// unconditional assignment `_contextKey` does, so the two now agree even
-// though the attach guard still refuses "foo" as a board.
+// A `contextKey` the attach guard rejects must still produce one journal entity
+// key, not two, for the *same* attach call. Without a separate `_entityKeyStr`
+// there are two: the raw key from a holder-wrapped instance's `_contextKey`
+// (`IModelHolder`, `morph/core/model.hpp`, set unconditionally), and the empty
+// string from this `BoardModel`'s own `_projectIdStr`, which the guard correctly
+// leaves disengaged. `_entityKeyStr` takes the same unconditional assignment
+// `_contextKey` does, so the two agree even though the attach guard still
+// refuses "foo" as a board.
 TEST_CASE("A rejected contextKey still produces the raw key as the journal entityKey, matching IModelHolder",
           "[kanban][model][unattached]") {
     DbFixture fixture;
@@ -349,13 +348,14 @@ TEST_CASE("A rejected contextKey still produces the raw key as the journal entit
     // CreateColumn, not GetBoardState: GetBoardState is Loggable::No and its
     // execute() has no try/catch at all, so it never reaches logFailure.
     // CreateColumn's own attach guard throw is caught by its execute()'s
-    // catch-all handler, which does. The attach guard still refuses "foo"
-    // as a board either way -- this is the existing #368 behavior, unaffected
-    // by #422's split.
+    // catch-all handler, which does. The attach guard refuses "foo" as a board
+    // either way; that is the unattached-handler behaviour above, which the
+    // separate `_entityKeyStr` does not change.
     CHECK_THROWS_AS(model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}), kanban::NotFound);
 
-    // CreateColumn's own catch block already journalled the refusal before
-    // rethrowing -- exactly the path that used to stamp "" instead of "foo".
+    // CreateColumn's own catch block journals the refusal before rethrowing --
+    // the path that would stamp "" instead of "foo" if `_entityKeyStr` were
+    // `_projectIdStr`.
     const auto entries = log->entries();
     REQUIRE(entries.size() == 1);
     CHECK(entries.front().entityKey == "foo");

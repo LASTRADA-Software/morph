@@ -69,14 +69,13 @@ entry names the entry it reverses (`transaction_journals.causal_parent_id`),
 so this is a query against the audit trail, not mutable state on the
 original, which stays immutable.
 
-This one was worth running rather than asserting. Before the check existed,
-the second reversal applied: a reversed -50.00/+50.00 shop left Checking at
-**+50.00**, money the user never had. The ledger's headline per-currency
-zero-sum invariant does not catch it — a compensating entry is itself
-zero-sum, so the total stays 0.00 while the individual balances go wrong.
-Only the per-account balances show it. See
-`tests/test_sync_benchmark.cpp`'s "Scenario A, in the form this rung can
-express"; morph#144 carries the finding.
+This one was worth running rather than asserting. Without the check the second
+reversal applies: a reversed -50.00/+50.00 shop leaves Checking at **+50.00**,
+money the user never had. The ledger's headline per-currency zero-sum invariant
+does not catch it — a compensating entry is itself zero-sum, so the total stays
+0.00 while the individual balances go wrong. Only the per-account balances show
+it. See `tests/test_sync_benchmark.cpp`'s "Scenario A, in the form this rung can
+express".
 
 ## Scenario B — a stale base version is rejected, never merged
 
@@ -102,9 +101,10 @@ this document argues against.
 
 The mechanism is `UpdateRule::expectedVersion` -- optional, so an
 unconditional update stays unconditional, and engaged when a client wants its
-edit refused rather than applied blind. Before morph#144 the `version` column
-existed and incremented on every write but nothing ever compared it: this
-section described intended behaviour with no code behind it.
+edit refused rather than applied blind. The `version` column on its own is not
+the mechanism: it increments on every write whether or not anything compares
+it, so a section like this one describes intended behaviour until something
+does.
 
 ## Clock skew: client timestamps are claimed, never authoritative
 

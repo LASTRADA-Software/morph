@@ -17,12 +17,12 @@
 
 /// @file
 /// Why `examples/common/db/pool_transaction_audit.hpp` is **not** installed in
-/// bank (morph#752).
+/// bank.
 ///
-/// morph#740's `PoolTransactionAudit` detects a pooled `Lightweight::DataMapper`
-/// handed on with `SQL_ATTR_AUTOCOMMIT` still `OFF`. It is installed from all
-/// seven ladder rungs and from `testkit/DbFixture`; morph#752 proposed
-/// extending it to bank, on the premise that "bank's models acquire from
+/// `PoolTransactionAudit` detects a pooled `Lightweight::DataMapper` handed on
+/// with `SQL_ATTR_AUTOCOMMIT` still `OFF`. It is installed from all seven ladder
+/// rungs and from `testkit/DbFixture`, so extending it to bank looks like an
+/// oversight closed -- on the premise that "bank's models acquire from
 /// `Lightweight::GlobalDataMapperPool()` like every rung does".
 ///
 /// That premise is false, and this file is the measurement that says so.
@@ -43,8 +43,8 @@
 /// and requires it to move. Only then is the second half's zero evidence.
 ///
 /// It is also the tripwire the audit would have been: if bank ever moves its
-/// models onto `GlobalDataMapperPool()`, this case fails and morph#752 becomes
-/// live again.
+/// models onto `GlobalDataMapperPool()`, this case fails and installing the
+/// audit here becomes worth doing.
 
 namespace {
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// `ListTransactions` -- the read that makes a journal id nameable (morph#428).
+// `ListTransactions` -- the read that makes a journal id nameable.
 //
 // Before this action, `JournalId` appeared in exactly one DTO field in the
 // whole rung, and that field was `UndoTransaction`'s own *input*.
@@ -71,9 +71,9 @@ private:
     morph::session::detail::ScopedContext _scope;
 };
 
-/// @brief A book with no recorded owner -- the shape every `ledgers` row had
-///        before morph#382's migration, written the only way one can still be
-///        written now that `CreateLedger` always stamps its caller.
+/// @brief A book with no recorded owner -- written the only way one can be,
+///        now that `CreateLedger` always stamps its caller: by inserting the
+///        row directly, as the scenario corpus's fixtures do.
 /// @param mapper The mapper to write through.
 /// @param name   The book's name.
 /// @return The new book's id.
@@ -274,10 +274,10 @@ TEST_CASE("A listed id drives UndoTransaction and restores the exact balances", 
 
 TEST_CASE("ListTransactions refuses a principal that does not own the book",
           "[ledger][list-transactions][ownership]") {
-    // The gate every other book-reaching read carries (morph#382). A listing
-    // of a book's entries is precisely the read it exists for: without it, a
-    // second authenticated client learns every description and amount in a
-    // book it has nothing to do with.
+    // The gate every other book-reaching read carries. A listing of a book's
+    // entries is precisely the read it exists for: without it, a second
+    // authenticated client learns every description and amount in a book it has
+    // nothing to do with.
     morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model;
 

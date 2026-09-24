@@ -1,9 +1,9 @@
 // examples/ledger/tests/test_ledger_model_keys.cpp
 // SPDX-License-Identifier: Apache-2.0
 //
-// The three ledger models' primary keys, after morph#183 replaced their
-// hand-written `ModelKeyTraits`/`ActionKeyTraits` specialisations with
-// `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM`.
+// The three ledger models' primary keys, as
+// `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` declare them -- rather than the
+// hand-written `ModelKeyTraits`/`ActionKeyTraits` specialisations they replace.
 //
 // Nothing here needs a database: `ActionKeyTraits<A>::key()` is a pure
 // function over the action's own fields, and that is the whole point -- key
@@ -42,8 +42,8 @@
 namespace {
 
 /// @brief Ids the key encoding has to survive intact, including one past
-///        `2^53` -- the range morph#286 had to repair elsewhere in the
-///        ladder, and the one a key routed through a double would corrupt.
+///        `2^53` -- the range a key routed through a double corrupts, and the
+///        one the ladder's QML boundary has to be careful with elsewhere.
 constexpr std::int64_t kIds[] = {1, 7, 4294967297, 9007199254740993};
 
 }  // namespace
@@ -54,16 +54,16 @@ constexpr std::int64_t kIds[] = {1, 7, 4294967297, 9007199254740993};
 
 TEST_CASE("LedgerModel keeps std::int64_t as its PrimaryKey because its keyed actions carry two id types",
           "[ledger][model][key]") {
-    // A regression guard, not a migration check: this was `std::int64_t`
-    // before morph#183 and still is. `BRIDGE_MODEL_KEY` would have deduced
-    // `LedgerId` from `&OpenAccount::ledgerId`, which is the better default
+    // A regression guard: the key type is `std::int64_t` and has to stay one.
+    // `BRIDGE_MODEL_KEY` would have deduced `LedgerId` from
+    // `&OpenAccount::ledgerId`, which is the better default
     // -- but `GetReportStatus` keys this same model on a `ReportJobId`
     // (report_dto.hpp), so no single strong id is *the* key type here. The
     // model therefore declares the raw scalar in its own body, which
     // `PrimaryKeyOf` prefers over any deduced type (model_key.hpp's
     // `KeyTypeOf`), and every action uses `BRIDGE_KEY_FROM` purely for the
-    // unwrapping. `primary()`/`instances()` keep returning
-    // `std::int64_t`, so no call site had to move.
+    // unwrapping. `primary()`/`instances()` therefore return `std::int64_t`,
+    // which is what every call site here expects.
     CHECK((std::same_as<morph::model::PrimaryKeyOf<ledger::LedgerModel>, std::int64_t>));
 }
 
@@ -192,8 +192,7 @@ TEST_CASE("UpdateRule stays keyless: it carries a ruleId, not a ledgerId", "[led
 
 TEST_CASE("An action carrying an empty id fails key extraction instead of routing to a garbage instance",
           "[ledger][model][key]") {
-    // This is the failure the hand-written traits were exposed to and the one
-    // morph#183 calls out by name. Their bodies were
+    // This is the failure a hand-written trait is exposed to: its body is
     // `keyToString(*action.ledgerId)`, and `LedgerId::operator*` is
     // `return *value;` on a `std::optional` (core/types.hpp) -- undefined
     // behaviour for a disengaged id. On a plain libc++ that yields whatever

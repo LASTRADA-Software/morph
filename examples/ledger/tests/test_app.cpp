@@ -94,7 +94,7 @@ constexpr std::string_view kTestTokenSecret = "ledger-app-test-secret";
 }  // namespace
 
 TEST_CASE("App::runPendingReportsOnce settles a job the model only wrote a row for", "[ledger][app]") {
-    // The whole of morph#160 in one case: the model accepts the submission
+    // The submit/run split in one case: the model accepts the submission
     // and does nothing else -- no executor, no thread -- and the App layer is
     // what turns the Pending row into a computed report, by dispatching
     // RunReportJob back at the model on its own strand.
@@ -248,17 +248,16 @@ TEST_CASE("The App runs a job for every ledger, not only the first", "[ledger][a
 }
 
 TEST_CASE("A job whose ledger no longer exists settles Failed", "[ledger][app]") {
-    // morph#250, now closed. This test previously pinned the opposite: the
-    // aggregation found no accounts, produced `[]`, and the job settled Done,
-    // so a caller could not tell "no such ledger" from "a ledger with no
-    // activity" and the App's failure arm was unreachable this way.
-    // `RunReportJob` now checks its ledger row the way every sibling action
-    // does (OpenAccount, StoreTransaction, ImportLedgerChunk, SubmitReport,
-    // storeJournalImpl).
+    // Without a ledger check the aggregation finds no accounts, produces `[]`,
+    // and the job settles Done -- so a caller cannot tell "no such ledger" from
+    // "a ledger with no activity" and the App's failure arm is unreachable this
+    // way. `RunReportJob` therefore checks its ledger row the way every sibling
+    // action does (OpenAccount, StoreTransaction, ImportLedgerChunk,
+    // SubmitReport, storeJournalImpl).
     //
     // The check is raised inside the aggregation's own try block, so the job
-    // still settles *terminally*, which is the property the original test was
-    // written to guard. Throwing out of the action instead would leave the row
+    // still settles *terminally*, which is the property that has to hold
+    // alongside it. Throwing out of the action instead would leave the row
     // Pending, and `runPendingReportsOnce` re-sweeps every Pending row on
     // every pass -- the same doomed job would be re-dispatched forever.
     //

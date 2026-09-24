@@ -24,8 +24,7 @@
 /// the beginning" for `GetEventsSince` -- but it carries a constraint the
 /// type cannot enforce on its own: **an id of `0` is unrepresentable**.
 /// Construct one and it reports `hasValue() == false` and behaves as absent
-/// everywhere downstream, so a real record would read as "no record"
-/// (morph#215).
+/// everywhere downstream, so a real record would read as "no record".
 ///
 /// The constraint holds because both ids come from SQLite row ids, which
 /// start at 1. `fromRowId()` is the enforcement: every conversion from a
@@ -72,11 +71,11 @@ struct OptionId {
     ///        represent.
     ///
     /// `0` is this type's "not entered" sentinel, so an id of `0` would arrive
-    /// as *absent* and a real option would read as "no option selected"
-    /// (morph#215). SQLite row ids start at 1, so this never fires in
-    /// practice -- it exists so that a seeded row, a migrated dataset, an
-    /// externally supplied key, or a sequence reset fails loudly at the
-    /// boundary instead of collapsing silently one layer below the surface.
+    /// as *absent* and a real option would read as "no option selected".
+    /// SQLite row ids start at 1, so this never fires in practice -- it exists
+    /// so that a seeded row, a migrated dataset, an externally supplied key, or
+    /// a sequence reset fails loudly at the boundary instead of collapsing
+    /// silently one layer below the surface.
     /// @param rowId Stored row id; must be non-zero.
     /// @return An engaged `OptionId` wrapping @p rowId.
     /// @throws PollsError if @p rowId is `0`.
@@ -84,7 +83,7 @@ struct OptionId {
         if (rowId == 0) {
             throw PollsError{
                 "OptionId::fromRowId: an option row id of 0 is unrepresentable -- 0 is this "
-                "type's \"not entered\" sentinel (morph#215)"};
+                "type's \"not entered\" sentinel"};
         }
         return OptionId{.value = rowId};
     }
@@ -121,10 +120,10 @@ struct PollEventId {
     /// `0` is this type's "not entered" sentinel -- the spelling
     /// `GetEventsSince` uses for "no cursor yet, replay from the beginning" --
     /// so an event row id of `0` would arrive as *absent* and the reader would
-    /// silently rewind to the start of the log (morph#215). SQLite row ids
-    /// start at 1, so this never fires in practice; it exists so that a
-    /// seeded row, a migrated dataset, or a sequence reset fails loudly at the
-    /// boundary rather than collapsing silently.
+    /// silently rewind to the start of the log. SQLite row ids start at 1, so
+    /// this never fires in practice; it exists so that a seeded row, a migrated
+    /// dataset, or a sequence reset fails loudly at the boundary rather than
+    /// collapsing silently.
     /// @param rowId Stored row id; must be non-zero.
     /// @return An engaged `PollEventId` wrapping @p rowId.
     /// @throws PollsError if @p rowId is `0`.
@@ -132,7 +131,7 @@ struct PollEventId {
         if (rowId == 0) {
             throw PollsError{
                 "PollEventId::fromRowId: an event row id of 0 is unrepresentable -- 0 is this "
-                "type's \"not entered\" sentinel (morph#215)"};
+                "type's \"not entered\" sentinel"};
         }
         return PollEventId{.value = rowId};
     }

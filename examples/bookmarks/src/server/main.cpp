@@ -26,9 +26,9 @@
 /// public seam for this — exactly the class of reach-in
 /// `examples/common/testkit` migrated away from onto public seams
 /// (`Completion<T>::makeSettleable()`, `BridgeHandler::whenBound()`, the
-/// `QtWebSocketBackend(url, tls, cfg)` overload) once #55's public seams
-/// existed; adding a new one here from an *example* would be a step
-/// backward, not forward. The alternative — an internal client with a
+/// `QtWebSocketBackend(url, tls, cfg)` overload) as soon as public seams
+/// existed for them; adding a new reach-in here from an *example* would be a
+/// step backward, not forward. The alternative — an internal client with a
 /// minted service token, the shape `App`'s own metadata worker uses — is
 /// real infrastructure that `LADDER.md` already assigns to rung 4's
 /// `action_driver` generators. Demo data is therefore created through the

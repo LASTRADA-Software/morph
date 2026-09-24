@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The bank GUI's behaviour that lives *in* the QML, over a live engine and the
-// real controllers (morph#296).
+// real controllers.
 //
 // Why an engine rather than a controller-only test, stated up front because it
 // is the whole reason this binary exists: the controllers are entirely
 // self-consistent when driven from C++. Write `selectedAccount`, refresh,
 // deposit, and the money lands in the account that was written, every time.
-// The defect morph#296 named was not in the controller at all -- it was that
-// `MoveMoneyPage.qml` wrote `selectedAccount` and never read it back, so
-// nothing restored the `ComboBox`'s `currentIndex` after
-// `TransactionController::refresh()` republished `accounts`. A `ComboBox`
+// The defect this holds off is not in the controller at all: it is a
+// `MoveMoneyPage.qml` that writes `selectedAccount` and never reads it back, so
+// nothing restores the `ComboBox`'s `currentIndex` after
+// `TransactionController::refresh()` republishes `accounts`. A `ComboBox`
 // resets `currentIndex` to 0 whenever its `model` is replaced, and `refresh()`
 // is exactly what `deposit()`/`withdraw()`/`transfer()` call on success. The
-// picker therefore snapped back to the first account while the controller kept
-// the account the user chose, and the next deposit went somewhere the screen
-// did not say. Only a live engine over the shipped `.qml` can observe that, so
-// only a live engine can hold the regression.
+// picker then snaps back to the first account while the controller keeps the
+// account the user chose, and the next deposit goes somewhere the screen does
+// not say. Only a live engine over the shipped `.qml` can observe that, so only
+// a live engine can hold the property.
 //
 // The second case covers the other half of the same issue: `txns.posted` and
 // `payees.paid` were emitted and dropped. They are now the success half of
@@ -130,9 +130,9 @@ namespace {
 // two accounts, stand up a QQmlEngine, load MoveMoneyPage.qml and drive the
 // picker onto the savings account before it can assert anything of its own,
 // and that prologue is eight assertions -- 32 -- on its own. Hoisting it into a
-// helper moves the score into the helper instead of removing it. And morph#296's
-// defect *is* the sequence -- pick, deposit, still picked, deposit again, the
-// money followed the label -- which is the thing a split would scatter.
+// helper moves the score into the helper instead of removing it. And the defect
+// *is* the sequence -- pick, deposit, still picked, deposit again, the money
+// followed the label -- which is the thing a split would scatter.
 //
 // Two per-case directives rather than one entry in
 // examples/bank/tests/.clang-tidy, which would subtract the check from every
@@ -217,9 +217,9 @@ TEST_CASE("MoveMoneyPage's picker keeps naming the account the next deposit will
     REQUIRE(pumpUntil([&txns] { return txns.accounts().size() == 2; }));
     REQUIRE(balanceOf(savings) == 5000);
 
-    // The picker must still name the savings account. Before morph#296's fix
-    // it named the checking account here: replacing a ComboBox's `model` resets
-    // its `currentIndex` to 0, and nothing read `selectedAccount` back.
+    // The picker must still name the savings account. Without the read-back it
+    // names the checking account here: replacing a ComboBox's `model` resets
+    // its `currentIndex` to 0.
     CHECK(picker->property("currentValue").toLongLong() == txns.selectedAccount());
 
     // ── and it is not cosmetic: the money follows the label ───────────────

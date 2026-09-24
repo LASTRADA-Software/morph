@@ -16,7 +16,7 @@
 # a workstation with a current Catch2. That number is checked rather than
 # asserted: scripts/check_catch2_pin.sh reads the runner's installed version
 # back off the include path and fails this line and the clang-tidy-diff job
-# together if the package moves (morph#666).
+# together if the package moves.
 #
 # Directory-scoped, and no wider. clang-tidy resolves configuration by walking
 # up from the file it is analysing and offers no finer granularity than a
@@ -28,9 +28,8 @@
 # entry is subtracted, and only here.
 #
 # One copy per test directory rather than one shared file, because no directory
-# contains every example's tests and nothing else. A gate used to fail if a test
-# directory on the application ladder had no such file; it was removed with the
-# meta-gates, so a new rung now needs this file added by hand.
+# contains every example's tests and nothing else. Nothing gates the file's
+# presence, so a new rung needs this file added by hand.
 
 # readability-function-cognitive-complexity: the check stays ON here. What is
 # turned off is its counting of increments that come from *inside* a macro
@@ -38,10 +37,10 @@
 # assertion macro expands to `do { try { ... } catch (...) { ... } } while (...)`
 # and the check scores that at 4 whatever it is asserting. Seven assertions is
 # 28 against a threshold of 25, so a TEST_CASE goes over the line for having
-# assertions in it (morph#778).
+# assertions in it.
 #
-# `IgnoreMacros: true` subtracts exactly that and nothing else. Measured on
-# 68a30bcc with clang-tidy 22.1.8 over the 751 translation units the
+# `IgnoreMacros: true` subtracts exactly that and nothing else. Measured with
+# clang-tidy 22.1.8 over the 751 translation units the
 # clang-tidy-diff job's configure produces, the check forced on everywhere and
 # the only variable this option:
 #

@@ -8,12 +8,12 @@
 namespace ledger::db {
 
 void configure(const std::string& connectionString) {
-    // morph#740: nothing in Lightweight stops a pooled DataMapper from being
-    // returned with a transaction still open on it -- `DataMapperPool::Return`
-    // does no transaction cleanup, and the cost lands on the next, unrelated
-    // borrower as a 60s stall and a `database is locked` it did not cause.
-    // Installing the audit here, at the one point every rung's process
-    // configures its database, turns that into an abort at the leak. See
+    // Nothing in Lightweight stops a pooled DataMapper from being returned with
+    // a transaction still open on it -- `DataMapperPool::Return` does no
+    // transaction cleanup, and the cost lands on the next, unrelated borrower
+    // as a 60s stall and a `database is locked` it did not cause. Installing
+    // the audit here, at the one point every rung's process configures its
+    // database, turns that into an abort at the leak. See
     // examples/common/db/pool_transaction_audit.hpp.
     (void)::morph::ladder::db::installPoolTransactionAudit();
 
@@ -199,13 +199,13 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000013, "Create ledger_applied_ops table") {
 }
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000014, "Store SubmitReport params with the job row") {
-    // The job row has to be self-describing now that the aggregation no
-    // longer runs inside SubmitReport's own call frame (morph#160): the
-    // params used to be decoded on the caller's thread and captured into the
-    // posted lambda, so nothing needed to persist them. With the run moved
-    // to ledger::app::App's runner -- possibly in a different process, and
-    // certainly after a restart -- the row is the only record of what was
-    // asked for.
+    // The job row has to be self-describing, because the aggregation does not
+    // run inside SubmitReport's own call frame: it runs on
+    // ledger::app::App's runner, possibly in a different process and certainly
+    // after a restart, so the row is the only record of what was asked for.
+    // Decoding the params on the caller's thread and capturing them into a
+    // posted lambda would need no persistence -- and would tie the run to the
+    // process that accepted it.
     //
     // Nullable (AddNotRequiredColumn, not AddColumn) because SQLite cannot
     // add a NOT NULL column to a table that may already hold rows without a
@@ -216,12 +216,11 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000014, "Store SubmitReport params with the jo
 }
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000015, "Record which principal owns each book") {
-    // Per-book ownership (morph#382). Until this column existed the rung had
-    // no notion of whose book a `ledgers` row was: the signed-token check and
-    // the per-action empty-principal gate both held, and neither says *whose*
-    // book this is, so any authenticated principal could read, write and post
-    // into any book -- including one another principal had just created with
-    // `CreateLedger`.
+    // Per-book ownership. Without this column the rung has no notion of whose
+    // book a `ledgers` row is: the signed-token check and the per-action
+    // empty-principal gate both hold, and neither says *whose* book this is, so
+    // any authenticated principal could read, write and post into any book --
+    // including one another principal had just created with `CreateLedger`.
     //
     // Nullable (AddNotRequiredColumn, not AddColumn) for the same reason
     // 20260819000014's `params_json` is: SQLite cannot add a NOT NULL column

@@ -40,10 +40,10 @@ private:
 }  // namespace
 
 TEST_CASE("CreateLedger bootstraps a book the rest of the action surface can use", "[ledger][model]") {
-    // The whole point of `CreateLedger` (morph#361): every step below goes
-    // through the action surface, so this is exactly what an out-of-process
-    // client can do against an empty database. No `mapper.Create` anywhere --
-    // if this test ever needs one again, the bootstrap gap is back.
+    // The whole point of `CreateLedger`: every step below goes through the
+    // action surface, so this is exactly what an out-of-process client can do
+    // against an empty database. No `mapper.Create` anywhere -- if this test
+    // ever needs one again, the bootstrap gap is back.
     morph::ladder::testkit::DbFixture fixture;
 
     ledger::LedgerModel model;
@@ -111,9 +111,9 @@ TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     // Seeds the `ledgers` row directly rather than dispatching `CreateLedger`
-    // (which exists since morph#361, and has its own cases above): this case
-    // is about `OpenAccount`, and a direct row keeps it from failing for a
-    // reason that belongs to a different action.
+    // (which has its own cases above): this case is about `OpenAccount`, and a
+    // direct row keeps it from failing for a reason that belongs to a different
+    // action.
     ledger::db::LedgerRecord ledgerRow;
     ledgerRow.name = "Personal";
     mapper.Create(ledgerRow);
@@ -673,9 +673,9 @@ TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum an
 // ─────────────────────────────────────────────────────────────────────────
 // Per-currency scale: a leg's `decimalPlaces` is the scale its numerator is
 // expressed in, so two legs at different scales are not comparable until
-// both are restated at the account currency's own scale. These two cases
-// are the ones morph#304 §A1 predicted; both are checked through the real
-// `StoreTransaction` path, not against the partitioning helper directly.
+// both are restated at the account currency's own scale. Both cases below go
+// through the real `StoreTransaction` path, not against the partitioning helper
+// directly.
 // ─────────────────────────────────────────────────────────────────────────
 
 TEST_CASE("StoreTransaction rejects legs that balance only because their scales differ", "[ledger][model]") {
@@ -920,7 +920,7 @@ TEST_CASE("StoreTransaction refuses a leg on another book's account", "[ledger][
     // a well-formed number naming a real row and a lookup by id alone finds
     // it. Without the ledger filter the entry is accepted, the journal is
     // filed under book one, and book two's balance moves with no journal of
-    // its own to explain it (morph#367).
+    // its own to explain it.
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     ledger::db::LedgerRecord firstBookRow;

@@ -25,7 +25,7 @@
 /// rung's field client is deployed remotely: its models live server-side
 /// behind Lightweight/ODBC and are reached over a `Bridge`, so the one machine
 /// that must decide "queue this instead of sending it" is the one machine with
-/// no model on it. Filed as morph#197 and dispositioned there: rule 1 now
+/// no model on it. App-layer by design rather than by omission: rule 1
 /// carries a named carve-out for the offline write-path enqueue seam, and this
 /// class is the carve-out's reference shape for the domain-shaped half (see
 /// `docs/spec/offline/offline.md`, "Disposition: app-layer by design"). The

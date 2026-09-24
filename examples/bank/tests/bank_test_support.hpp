@@ -25,7 +25,7 @@ namespace bank::testing {
 /// @brief The ODBC connection string every test in this process shares.
 ///
 /// A path of this process's own, so two ctest cases running concurrently never
-/// name the same SQLite file (morph#682).
+/// name the same SQLite file.
 ///
 /// @return The connection string.
 [[nodiscard]] inline const std::string& connectionString() { return uniqueDatabaseConnection(); }
@@ -39,7 +39,7 @@ namespace bank::testing {
 ///
 /// The file is private to the process rather than a fixed path shared by every
 /// bank test binary -- see unique_test_database.hpp for why, and for what a
-/// fixed path cost under `ctest -j` (morph#682).
+/// fixed path cost under `ctest -j`.
 inline void ensureDatabase() {
     static const bool once = [] {
         bank::db::setup(connectionString());
@@ -94,7 +94,7 @@ T await(morph::async::Completion<T> completion, morph::exec::MainThreadExecutor&
     return std::move(*value);
 }
 
-// -- Why the two durations below are two types (morph#735) -------------------
+// -- Why the two durations below are two types -------------------
 //
 // This `waitUntil` used to take `(Pred, milliseconds budget, milliseconds step,
 // MainThreadExecutor&)`: two adjacent, same-type parameters that every caller
@@ -113,17 +113,17 @@ T await(morph::async::Completion<T> completion, morph::exec::MainThreadExecutor&
 // `static_assert` block below pins every route back to the hazard.
 //
 // The same two types, with the same names and the same explicit constructors,
-// are what `tests/test_support.hpp`'s framework `waitUntil` grew in morph#721,
-// and what `examples/kanban/tests/test_kanban_stress.cpp` carries -- the same
-// shape in three places rather than three shapes. They are redeclared here
-// because bank deliberately links neither `morph_ladder_testkit` nor the
-// framework's private test headers (see `examples/bank/CMakeLists.txt`'s own
-// note on why bank is not a ladder rung).
+// are what `tests/test_support.hpp`'s framework `waitUntil` takes, and what
+// `examples/kanban/tests/test_kanban_stress.cpp` carries -- the same shape in
+// three places rather than three shapes. They are redeclared here because bank
+// deliberately links neither `morph_ladder_testkit` nor the framework's private
+// test headers (see `examples/bank/CMakeLists.txt`'s own note on why bank is
+// not a ladder rung).
 //
-// A `NOLINT` was not an option: it would remove the *warning* and leave the
-// hazard (morph#404), and morph#715 measured the other near miss -- widening
-// one parameter's type to silence `bugprone-easily-swappable-parameters` while
-// the transposition still compiles.
+// A `NOLINT` is not an option: it would remove the *warning* and leave the
+// hazard. Nor is widening one parameter's type to silence
+// `bugprone-easily-swappable-parameters`, which leaves the transposition
+// compiling.
 
 /// @brief `waitUntil`'s overall polling budget: the longest it may wait before
 ///        giving up and returning `false`.
@@ -189,8 +189,8 @@ using ExampleWaitPred = bool (*)();
 /// @brief A stand-in executor reference type for the assertions below.
 using ExampleGui = morph::exec::MainThreadExecutor&;
 
-// The acceptance test for morph#735, in the header that owns the hazard, so it
-// runs in every bank test translation unit that includes it.
+// The acceptance test for that compile error, in the header that owns the
+// hazard, so it runs in every bank test translation unit that includes it.
 //
 // What must keep working -- both live call sites pass all four arguments:
 static_assert(WaitUntilCallableWith<ExampleWaitPred, WaitBudget, WaitStep, ExampleGui>);

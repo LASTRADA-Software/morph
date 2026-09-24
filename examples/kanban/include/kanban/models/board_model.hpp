@@ -314,9 +314,9 @@ public:
     ///        `_projectIdStr` is also set to it. A key that is not one leaves
     ///        `_projectIdStr` disengaged, so every `has_value()` attach guard
     ///        in this class still refuses to serve a handler no `OpenBoard`
-    ///        or canonical keyed attach ever named a board for (#368) --
+    ///        or canonical keyed attach ever named a board for --
     ///        independently of what @p entityKey was, since `_entityKeyStr`'s
-    ///        assignment above no longer has any bearing on that guard.
+    ///        assignment above has no bearing on that guard.
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
 private:
@@ -368,20 +368,20 @@ private:
 
     /// @brief Journals the exception **currently being handled** as an
     ///        `Outcome::Failed` entry for @p action, whatever its type, and
-    ///        contains any failure of the journalling itself (morph#757).
+    ///        contains any failure of the journalling itself.
     ///
     ///        Every mutating `execute()` overload ends `} catch (...) {
-    ///        logFailureForCurrentException(action); throw; }`. Before
-    ///        morph#757 they ended `catch (const KanbanError&)` instead, so
-    ///        `Outcome::Failed` was written for this rung's own four refusal
-    ///        types and for nothing else: an `std::invalid_argument` out of
-    ///        `std::stoull`, one of Lightweight's SQL exceptions from a
-    ///        pre-commit `Query`/`Create`/`Update`/`Delete` (a contended
-    ///        `SQLITE_BUSY` past the busy timeout being the one observed in
-    ///        CI, morph#566), or a `std::bad_alloc` all reached the caller
-    ///        having journalled nothing at all. Nothing in "a rejected
-    ///        attempt is itself audit-worthy" depends on the exception's
-    ///        type; only the `catch` clause did.
+    ///        logFailureForCurrentException(action); throw; }`. `catch (const
+    ///        KanbanError&)` would not do: it writes `Outcome::Failed` for this
+    ///        rung's own four refusal types and for nothing else, so an
+    ///        `std::invalid_argument` out of `std::stoull`, one of Lightweight's
+    ///        SQL exceptions from a pre-commit `Query`/`Create`/`Update`/
+    ///        `Delete` (a contended `SQLITE_BUSY` past the busy timeout is the
+    ///        one that actually turns up under CI's parallelism), or a
+    ///        `std::bad_alloc` would all reach the caller having journalled
+    ///        nothing at all. Nothing in "a rejected attempt is itself
+    ///        audit-worthy" depends on the exception's type, so neither does
+    ///        this `catch` clause.
     ///
     ///        **Why the containment is not optional.** This runs while the
     ///        original exception is still in flight and the caller's own
@@ -393,7 +393,7 @@ private:
     ///        *replace* the failure being reported with the failure to
     ///        report it: a less diagnosable exception, and on a destructor
     ///        path a `std::terminate`. So it is contained here, the same way
-    ///        `runPostCommitTail` contains the mirror case (morph#751), and
+    ///        `runPostCommitTail` contains the mirror case, and
     ///        the exception the caller sees is always the original one.
     ///
     ///        **Precondition:** an exception is being handled. This is a
@@ -493,16 +493,16 @@ private:
     ///        whether the caller may touch it is `requireRole`'s. It holds
     ///        only because both writers establish it: `OpenBoard` stores
     ///        `std::to_string` of a real row id, and `attachActionLog`
-    ///        declines any key that is not one. See #368 for what the
-    ///        fifteen guards did while it did not hold.
+    ///        declines any key that is not one. Break either writer and all
+    ///        fifteen guards start passing a key that does not parse.
     std::optional<std::string> _projectIdStr;
 
     /// @brief The key every subsequent `logAction`/`logFailure` call stamps
     ///        as its `LogEntry::entityKey` -- kept as its own member, separate
     ///        from `_projectIdStr` (the attach state), rather than one member
     ///        serving both -- the same *shape* `ledger::LedgerModel::
-    ///        _entityKeyStr` (`ledger_model.cpp`) and lims/crm already use
-    ///        (#422; #368's triage deferred exactly this split). Not the same
+    ///        _entityKeyStr` (`ledger_model.cpp`) and lims/crm already use.
+    ///        Not the same
     ///        *assignment*: `LedgerModel` has no attach-state member to guard
     ///        against at all (every one of its actions carries its own
     ///        `ledgerId`, so nothing there plays `_projectIdStr`'s role), so
@@ -565,13 +565,13 @@ BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::RemoveAttachment, "RemoveAtta
 // is the action that names it. `BRIDGE_MODEL_KEY` deduces the key *type* from
 // the member it is handed, so `PrimaryKeyOf<BoardModel>` is `kanban::ProjectId`
 // itself -- the strong id examples/IMPLEMENTATION.md rule 3 requires -- rather
-// than the unwrapped `std::int64_t` this rung declared while
-// `morph::model::ModelKey` still admitted only raw scalars (morph#163 widened
-// it; morph#183 migrated this rung off the hand-written specialisations).
+// than the unwrapped `std::int64_t` a hand-written specialisation would have to
+// declare, `morph::model::ModelKey` admitting a strong id rather than only raw
+// scalars.
 //
-// The disengaged-`projectId` rejection the hand-written `key()` spelled out is
-// now `morph::model::keyToString`'s own: it throws for a strong id with no
-// value instead of dereferencing an empty optional, which is what makes
+// The disengaged-`projectId` rejection a hand-written `key()` would spell out is
+// `morph::model::keyToString`'s: it throws for a strong id with no value
+// instead of dereferencing an empty optional, which is what makes
 // `BoardBridge::openBoard("not-a-number")` (parsed into a default-constructed
 // `ProjectId{}` by board_qml_bridge.cpp's `parseId`) a rejected `Completion`
 // rather than undefined behaviour. `BridgeHandler::execute`'s

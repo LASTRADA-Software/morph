@@ -282,8 +282,8 @@ public:
     ///        `mutationValue`." Manager-only. Emits `ruleCreated`, or `failed`.
     ///
     /// Not `Q_INVOKABLE` — see `createColumn`: `RulesView.qml` submits
-    /// `CreateRule` through the schema renderer now (morph#393), so nothing in
-    /// `gui/qml/` calls this either.
+    /// `CreateRule` through the schema renderer, so nothing in `gui/qml/` calls
+    /// this either.
     /// @param triggerColumnId The triggering column, as its plain number.
     /// @param mutationType    `"AddTag"` or `"RemoveTag"`.
     /// @param mutationValue   The tag name the mutation adds or removes.

@@ -15,15 +15,14 @@
 /// offers is a *Qt event-loop* wait: it includes `<QCoreApplication>` and
 /// calls `processEvents`. That include is the whole obstacle. kanban's
 /// concurrent-move stress test (`examples/kanban/tests/test_kanban_stress.cpp`)
-/// is deliberately Qt-free — morph#128 catalogued 165 ThreadSanitizer warnings
-/// that all bottomed out in Qt-internal frames reached through the
-/// `QtExecutor` its earlier, `pumpUntil`-driven version pulled in, and a
-/// prebuilt Qt cannot be seen through by TSan, making those warnings unusable
-/// evidence either way. That file therefore owns a small `waitUntil` of its
-/// own over `std::this_thread::sleep_for`, and until this header existed it
-/// was the last unscaled wait poll in `examples/`: its budgets were fixed
-/// wall-clock constants, so `MORPH_LADDER_DEADLINE_MS` moved every deadline
-/// in the ladder except the ones in the slowest test.
+/// is deliberately Qt-free: a `pumpUntil`-driven version of it pulls in
+/// `QtExecutor`, and a run under ThreadSanitizer then produces 165 warnings
+/// that all bottom out in Qt-internal frames — a prebuilt Qt cannot be seen
+/// through by TSan, so those warnings are unusable evidence either way. That
+/// file therefore owns a small `waitUntil` of its own over
+/// `std::this_thread::sleep_for`, and without this header its budgets would be
+/// fixed wall-clock constants: `MORPH_LADDER_DEADLINE_MS` would move every
+/// deadline in the ladder except the ones in the slowest test.
 ///
 /// Splitting the scale factor out is what lets both hold: `pump.hpp` includes
 /// this header and is otherwise unchanged, so every existing caller keeps the

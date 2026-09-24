@@ -13,7 +13,7 @@
 /// @file
 /// A process-wide check that no pooled `Lightweight::DataMapper` is ever
 /// returned to `Lightweight::GlobalDataMapperPool()` with a transaction still
-/// open on its connection (morph#740).
+/// open on its connection.
 ///
 /// @par The defect this exists to catch
 /// `Lightweight::Pool<Config>::Return` (`src/Lightweight/DataMapper/Pool.hpp`
@@ -163,7 +163,7 @@ private:
             return;
         }
         ++_detections;
-        std::string message = "morph#740: a pooled DataMapper was ";
+        std::string message = "PoolTransactionAudit: a pooled DataMapper was ";
         message += what;
         message +=
             " with SQL_ATTR_AUTOCOMMIT still OFF -- a transaction is open on it. "

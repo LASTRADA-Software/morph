@@ -24,8 +24,8 @@ struct LedgerRecord {
     static constexpr std::string_view TableName = "ledgers";
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;                              // 1
-    // The principal that created this book (morph#382). Every action reaching
-    // this book compares it against `session::current()->principal`; see
+    // The principal that created this book. Every action reaching this book
+    // compares it against `session::current()->principal`; see
     // `ledger/db/book_access.hpp`, which is the single home for that rule.
     //
     // Nullable, and the nullability is load-bearing rather than incidental:
@@ -197,9 +197,9 @@ struct ReportJobRecord {
     // `SubmitReport::params` verbatim, so the job row records what it was
     // asked to compute and not merely that it was asked. Load-bearing since
     // the aggregation moved out of SubmitReport's own call frame and into
-    // RunReportJob (morph#160): the runner that eventually settles this job
-    // may be in a different process from the one that accepted it, and has
-    // nothing but this row to reconstruct the request from.
+    // RunReportJob: the runner that eventually settles this job may be in a
+    // different process from the one that accepted it, and has nothing but this
+    // row to reconstruct the request from.
     //
     // Nullable, unlike the other required columns, purely because it was
     // added by ALTER TABLE to a table that may already hold rows (schema.cpp's

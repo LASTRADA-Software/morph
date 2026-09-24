@@ -22,7 +22,7 @@ struct BusyProbe {
     // `tableName` would compile, link, and silently map this record to a table
     // named after the C++ type — see test_db_fixture.cpp's identical comment on
     // `LadderTestkitProbe` for the full explanation, including why this is a
-    // per-declaration directive rather than a directory .clang-tidy (morph#702).
+    // per-declaration directive rather than a directory .clang-tidy.
     // NOLINTNEXTLINE(readability-identifier-naming)
     static constexpr std::string_view TableName = "busy_fixture_probe";
 

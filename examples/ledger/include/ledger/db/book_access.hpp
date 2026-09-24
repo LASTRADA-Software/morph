@@ -12,9 +12,8 @@
 #include "ledger/db/ledger_entity.hpp"
 
 /// @file
-/// The single home for this rung's "whose book is this?" rule (morph#382), and
-/// for the "*which* book is this?" rule that sits beside it
-/// (`requireCategoryInBook`, morph#373).
+/// The single home for this rung's "whose book is this?" rule, and for the
+/// "*which* book is this?" rule that sits beside it (`requireCategoryInBook`).
 ///
 /// **Where the rule lives, and why not at the authorizer.**
 /// `examples/IMPLEMENTATION.md` rule 4 puts ownership authorization *through
@@ -137,7 +136,7 @@ inline void requireOwnedParentBook(Lightweight::DataMapper& mapper, std::uint64_
 }
 
 /// @brief Refuses a category that belongs to a book other than @p bookLedgerId
-///        -- *which* book, where everything above answers *whose* (morph#373).
+///        -- *which* book, where everything above answers *whose*.
 ///
 /// Three actions join a category to something else by id alone:
 /// `SetCategory` and `LinkAccountToCategory` join it to an account,
@@ -151,21 +150,21 @@ inline void requireOwnedParentBook(Lightweight::DataMapper& mapper, std::uint64_
 /// `examples/IMPLEMENTATION.md` rule 1 is what makes that a defect rather than
 /// a documented liberty: a model re-checks its own preconditions, and "an
 /// account and a category are the same book's" is a precondition this rung
-/// documented and did not check. What made the mis-scoped row survivable was
-/// an invariant nothing states -- `GetBudgetReport` filters legs by the
-/// budget's own ledger's journals, so a foreign account's legs never reach the
-/// sum -- and a guarantee that rests on every future report keeping a filter
-/// nobody wrote down is the half-a-scheme shape morph#384 rejected.
+/// documents. Leaving it unchecked would be survivable only through an
+/// invariant nothing states -- `GetBudgetReport` filters legs by the budget's
+/// own ledger's journals, so a foreign account's legs never reach the sum --
+/// and a guarantee resting on every future report keeping a filter nobody
+/// wrote down is half a scheme, not a rule.
 ///
 /// Neither `SetCategory` nor `LinkAccountToCategory` carries a `ledgerId`, so
-/// this cannot be a `Where` folded into the lookup the way morph#380's
-/// `accountInLedger` scopes a leg's account against the ledger its action
-/// names. It is a comparison of the two loaded rows' own `ledger` values
-/// instead -- which is also why the refusal is raised after the not-found and
-/// ownership ones, leaving their wording and ordering untouched.
+/// this cannot be a `Where` folded into the lookup the way `accountInLedger`
+/// scopes a leg's account against the ledger its action names. It is a
+/// comparison of the two loaded rows' own `ledger` values instead -- which is
+/// also why the refusal is raised after the not-found and ownership ones,
+/// leaving their wording and ordering untouched.
 ///
 /// `NotFound`, and a message of its own: `accountInLedger`'s exact idiom for
-/// the identical question about an account, for the reason morph#380 gave --
+/// the identical question about an account, and for the same reason --
 /// a client that cannot tell "that id names nothing" from "that id is in your
 /// other book" cannot tell a dead id from a mis-scoped one. Not
 /// `ValidationError`: the request is well-formed, and every other "wrong book"

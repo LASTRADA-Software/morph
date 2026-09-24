@@ -158,8 +158,8 @@ TEST_CASE("Dropping MoveTaskPosition's reply frame and retrying is exactly-once,
     // be destroyed *before* the Bridge, and the handler would write into dead
     // stack slots: AddressSanitizer reports precisely that as a
     // stack-use-after-scope (caught by the ladder's ASan+UBSan leg). Same
-    // hazard, and same cause, as morph#137 -- a callback outliving the frame
-    // it captured by reference.
+    // hazard, and same cause, as any callback outliving the frame it captured
+    // by reference.
     bool firstResolved = false;
     bool firstFailed = false;
 

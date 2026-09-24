@@ -95,13 +95,13 @@ BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::GetBudgetReport, "GetBudgetR
 // (model_key.hpp's `KeyTypeOf`) -- and each line below records only that the
 // action carries the key.
 //
-// Until morph#183 these were hand-written specialisations, because
-// `morph::model::ModelKey` admitted only `std::integral`/`std::string` and no
-// `LEDGER_DEFINE_STRONG_ID` type qualified. morph#163 widened it, and with the
-// hand-written bodies went their `*action.ledgerId`/`*action.budgetId` --
-// `operator*` on a possibly-disengaged `std::optional`, undefined behaviour
-// for an action carrying an empty id. `morph::model::keyToString` refuses an
-// empty strong id instead of unwrapping it.
+// Macros rather than hand-written `ActionKeyTraits` specialisations, which is
+// possible because `morph::model::ModelKey` admits a `LEDGER_DEFINE_STRONG_ID`
+// type and not only `std::integral`/`std::string`. A hand-written body has to
+// unwrap the id itself -- `*action.ledgerId`/`*action.budgetId`, `operator*` on
+// a possibly-disengaged `std::optional`, undefined behaviour for an action
+// carrying an empty id -- where `morph::model::keyToString` refuses an empty
+// strong id instead.
 //
 // LinkAccountToCategory carries two ids (accountId, categoryId) and no
 // single natural "the" key. `ActionKeyTraits`'s primary template

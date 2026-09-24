@@ -61,9 +61,9 @@ TEST_CASE("AddComment requires an engaged taskId and non-empty body", "[kanban][
 
 TEST_CASE("kanban::BoardEventId: fromRowId rejects the one value it cannot represent", "[kanban][types]") {
     // 0 is BoardEventId's "not entered" sentinel, so an event id of 0 would
-    // arrive as *absent* and a real event would read as "no event"
-    // (morph#215). Row ids start at 1, so this never fires in practice -- it
-    // turns a silent collapse into a loud failure at the boundary.
+    // arrive as *absent* and a real event would read as "no event". Row ids
+    // start at 1, so this never fires in practice -- it turns a silent
+    // collapse into a loud failure at the boundary.
     CHECK_THROWS_AS(kanban::BoardEventId::fromRowId(0), kanban::KanbanError);
 }
 

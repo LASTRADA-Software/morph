@@ -91,8 +91,7 @@ Build order:
    exist and are enforced client- and server-side. **Correction (rung 6,
    verified against the shipped headers):** round 5's "there are no
    `and`/`or`/`not` combinators" is **out of date** — `andOf`/`orOf`/`notOf`
-   landed in commit 332f82c ("forms+qml: and/or/not rule conditions", #78),
-   are documented in `docs/spec/forms/forms.md` ("Compound conditions"), and
+   exist, are documented in `docs/spec/forms/forms.md` ("Compound conditions"), and
    are usable both nested in a `when` clause and directly as a top-level
    rule. What remains true: the vocabulary is still closed (no application
    lambdas), a hidden field's draft value still travels (decide
@@ -145,8 +144,8 @@ transitions; journal as regulatory audit.
   too — `replay()`'s gate is fingerprint equality, not compatibility — and
   is admitted by a pass-through migration. The *wire* half (an old
   `MORPH_CLIENT_ONLY` client against a new server) stays open: nothing
-  mechanically enforces the action-evolution policy on that path until
-  issue #207's per-action `hello` fingerprint exists to assert on.
+  mechanically enforces the action-evolution policy on that path: there is no
+  per-action `hello` fingerprint to assert on.
 - **Self-conflict in the offline chain**: one field client editing the same
   sample twice offline — the second queued update's base version must
   reference the first *queued* update, not the server state, or replay
@@ -155,9 +154,9 @@ transitions; journal as regulatory audit.
   redesign it** (round-5 correction): conversion carries the dp tag through
   unchanged, the renderer always submits in the canonical unit at the
   schema's `x-decimalPlaces`, and alternative-unit display rounds half-up.
-  What to test instead: (a) **retag-vs-round** — resolved upstream in
-  issue #159, which made `reconcileDeclaredPrecision` re-round rather than
-  retag; this rung keeps its own stricter rejection because the governing
+  What to test instead: (a) **retag-vs-round** — settled upstream:
+  `reconcileDeclaredPrecision` re-rounds rather than
+  retags; this rung keeps its own stricter rejection because the governing
   precision is the analysis version's runtime value, not the compile-time
   declared one (review D1, §7 below); (b) `x-unitAlternatives` lists
   **direct relation edges only**, so InvenTree-style "enter in any
@@ -274,10 +273,9 @@ fabricated claim rather than a parse failure.
 
 ### 7. Over-precise readings are rejected, not retagged (§3, review D1)
 
-Upstream issue #159 asked whether `x-decimalPlaces` "enforcement" should
-round the value, be redocumented as advisory, or reject an over-precise
-submission. The framework took the first option: `reconcileDeclaredPrecision`
-now re-rounds on its wire dispatch paths, so storage and display agree there.
+`x-decimalPlaces` "enforcement" could round the value, be advisory, or reject
+an over-precise submission. The framework rounds: `reconcileDeclaredPrecision`
+re-rounds on its wire dispatch paths, so storage and display agree there.
 
 A reading finer than the method supports is a claim about the instrument, so
 rounding it would record a measurement the analyst never made, and storing it
@@ -286,8 +284,8 @@ Either way storage and display disagree, which is disqualifying in a LIMS, so
 this rung rejects the payload.
 
 The precision it rejects against is the **analysis version's**, not the
-compiled `Quantity<mg_per_L, 3>`'s. That is now expressed as a
-`morph::forms::InstanceConstraints` (upstream issue #164) rather than a
+compiled `Quantity<mg_per_L, 3>`'s. That is expressed as a
+`morph::forms::InstanceConstraints` rather than a
 hand-written check: the same declaration that decorated the served form's
 `x-decimalPlaces` reports `precisionExceeded` here, so the number the
 operator's renderer honoured and the number the server enforces are one
@@ -324,14 +322,14 @@ row rather than from the compiled type. Revising an analysis leaves the old
 version's served form byte-identical, which is the ODK property the README
 asks for.
 
-**Corrected by upstream issue #164.** This rung originally served the
-per-version precision as a *second* key, `x-versionDecimalPlaces`, beside the
-framework's `x-decimalPlaces`, because overwriting the framework's key would
-have advertised a promise no code kept. Two keys for one concept, with no way
-for a renderer to know which to believe, was worse than either alone. The
-framework now has a seam for it: one declaration both decorates the schema and
-checks the submitted reading, so the advertised number and the enforced one
-cannot drift apart. `x-versionDecimalPlaces` is gone.
+**Not a second key.** Serving the per-version precision as
+`x-versionDecimalPlaces` beside the framework's `x-decimalPlaces` -- the shape
+this needs without a framework seam, since overwriting the framework's key would
+advertise a promise no code kept -- is two keys for one concept, with no way for
+a renderer to know which to believe, and worse than either alone. The framework's
+seam is what avoids it: one declaration both decorates the schema and checks the
+submitted reading, so the advertised number and the enforced one cannot drift
+apart.
 
 The form's *shape* is still compiled and therefore identical for every
 version: the `required` array and the `x-rules` list come from
@@ -360,16 +358,17 @@ own strand, where `session::current()` is null, so every queued item is
 refused for want of a principal. A lab reading replayed with no identified
 author is what this README calls disqualifying, so failing closed is right —
 but it does mean the framework's own replay seam cannot carry an
-authenticated replay. That is morph#201, and it was found only by
-driving replay through `switchBackend` instead of calling the hook directly;
-the §7 suite's own helper calls it from a thread that has a session
-installed, which the framework never does.
+authenticated replay. `docs/spec/offline/offline.md`'s "Conflict resolution on
+replay" says so. It is only visible when replay is driven through
+`switchBackend` rather than by calling the hook directly: the §7 suite's own
+helper calls it from a thread that has a session installed, which the framework
+never does.
 
 The write half could not use a framework seam either: there is no
 enqueue-on-failure hook, and the machine that must make the decision (a
 disconnected field client) has no model on it at all.
-`include/lims/offline/field_outbox.hpp` is the app-layer answer, and
-morph#197 is the finding — now dispositioned: `IMPLEMENTATION.md` rule 1
+`include/lims/offline/field_outbox.hpp` is the app-layer answer, and it is
+app-layer by design rather than by omission: `IMPLEMENTATION.md` rule 1
 carries a named carve-out for this seam, and `FieldOutbox` is the shape it
 points at (`docs/spec/offline/offline.md`, "Disposition: app-layer by design").
 
@@ -415,8 +414,8 @@ start flagging the client's own later updates as stale.
 This is where `docs/spec/offline/offline.md` puts the enforcement ("the queue
 … never interprets, requires, or enforces uniqueness on it — enforcement is
 the replay consumer's job"), and it is also the only way to be correct on all
-three shipped queues, which disagree about whether they dedup at enqueue time
-(morph#175).
+three shipped queues, which disagree about whether they dedup at enqueue
+time.
 
 The operation key is a minted random 128-bit id, per the spec's own
 recommendation. A counter was tried first and was wrong: `FieldOutbox` holds
@@ -477,8 +476,8 @@ so nobody discovers the omission.
 action id and a result that does not parse. It cannot catch a payload that
 parses into something *else* — a renamed field decodes to a default, silently,
 so a trail reconstructed across a rename is confidently wrong rather than
-visibly incomplete. That was morph#174's diagnosis, and the framework has
-since answered it — `journal::replay()` now stamps every entry with a
+visibly incomplete. The framework's answer to that is
+`journal::replay()`, which stamps every entry with a
 payload-shape fingerprint and refuses to replay across a mismatch instead of
 degrading to defaults (`docs/spec/journal/journal.md`). This rung's own
 reconstruction above does not go through `journal::replay()` — it decodes
@@ -525,7 +524,7 @@ claim the rule holds, but still submits, because a client that blocked on an
 unknown rule could not talk to a newer server at all.
 
 That evaluator is the third implementation of one closed vocabulary the
-framework owns, which is morph#176.
+framework owns; the shared corpus is what keeps the three honest.
 
 ### 19. `WorksheetModel` is not built, and the model list is corrected (§ model list)
 
@@ -661,16 +660,17 @@ that handler is attached when it returns.
 `RegisterClient`'s reply is decoded (the same glaze reflection the wire used)
 to emit `clientRegistered`, since the form path yields raw JSON rather than a
 typed result — `clientRegistered` is what sets the `clientId` property
-`SampleView.qml`'s "Latest client id" label binds (morph#309). With both
-effects on the `submitIfValid` path itself, the typed `registerClient`/
-`registerSample` invokables that morph#287 had exempted as "the only working
-path" became genuinely redundant and are gone — the surface audit in
-`test_lims_qml_surface.cpp` carries no exemption for either any more.
+`SampleView.qml`'s "Latest client id" label binds. With both
+effects on the `submitIfValid` path itself, typed `registerClient`/
+`registerSample` invokables would be genuinely redundant — which is why they do
+not exist, and why the surface audit in `test_lims_qml_surface.cpp` carries no
+exemption for either.
 
-### One dispatch path per action (morph#287, morph#309)
+### One dispatch path per action
 
-Both bridges used to publish a typed invokable *and* a schema-driven form for
-the same action: `rejectSample`/`returnForRework` beside
+Neither bridge publishes a typed invokable *and* a schema-driven form for the
+same action. The pairs that would otherwise exist are
+`rejectSample`/`returnForRework` beside
 `submitIfValid("RejectSample")` and its sibling, and `captureReading`/
 `captureQualifier`/`resolveConflict` beside
 `submitIfValid("CaptureConcentration")` and `submitIfValid("ResolveConflict")`.
@@ -734,21 +734,19 @@ files no uploaded report contained. Fixed here.
 
 ## Findings raised by this rung
 
-- **[morph#163](https://github.com/LASTRADA-Software/morph/issues/163)
-  — `ModelKey` rejects strong id types. Closed upstream.** `BRIDGE_MODEL_KEY`
-  routed the key through `keyToString`, whose concept admitted only
+- **`ModelKey` rejected strong id types. Closed upstream.** `BRIDGE_MODEL_KEY`
+  routes the key through `keyToString`, whose concept admitted only
   `std::integral` or `std::string`, while `IMPLEMENTATION.md` rule 3 mandates
   a strong id struct for entity identity. ledger and kanban carried the
   identical hand-written workaround; lims was the third, which is the
-  rule-of-three trigger. `ModelKey` now admits a strong id wrapping a raw key
-  (`WrappedModelKey`), and morph#183 deleted all three rungs' hand-written
-  blocks — `SampleModel` keys on `SampleId` itself, and an empty id is refused
+  rule-of-three trigger. `ModelKey` admits a strong id wrapping a raw key
+  (`WrappedModelKey`) now, so no rung carries a hand-written block —
+  `SampleModel` keys on `SampleId` itself, and an empty id is refused
   by `keyToString` instead of dereferenced.
 - **The round-5 "no `and`/`or`/`not` combinators" claim is stale** (build
-  order §5 above, corrected in place). They landed in commit 332f82c (#78)
-  and are specified in `docs/spec/forms/forms.md`.
-- **[morph#164](https://github.com/LASTRADA-Software/morph/issues/164)
-  — a forms schema is a pure function of the compiled action type.**
+  order §5 above, corrected in place). They exist and are specified in
+  `docs/spec/forms/forms.md`.
+- **a forms schema is a pure function of the compiled action type.**
   **Partly closed upstream.** Per-instance *values* now reach the framework's
   own keys through `morph::forms::InstanceConstraints`: the two analysis
   versions declaring 3 and 1 decimal places serve `"x-decimalPlaces":3` and
@@ -758,8 +756,7 @@ files no uploaded report contained. Fixed here.
   still a function of the compiled type, so a rung whose definitions are data
   needs one compiled action per unit family rather than per analysis. That is
   what rung 7's runtime custom fields run into head-on.
-- **[morph#174](https://github.com/LASTRADA-Software/morph/issues/174)
-  — a journal entry from an older build decodes leniently to defaults, with no
+- **a journal entry from an older build decodes leniently to defaults, with no
   signal.** **Closed at the framework level; this rung's own audit
   reconstruction has not adopted it.** `journal::replay()` now stamps every
   entry with `morph::model::payloadFingerprint<Action>()` and throws
@@ -772,9 +769,9 @@ files no uploaded report contained. Fixed here.
   field still decodes to its default with no signal — the finding entry below,
   §17 in "What that does not cover, stated plainly," is accordingly still
   live for this rung specifically, even though the framework question it
-  raised is answered.
+  raised is answered. (Filed; closed upstream.)
 - **A schema's `required` array can silently contradict its own `x-rules`.**
-  **Closed (morph#165).** `schemaJson`'s required-by-default rule put both
+  **Closed.** `schemaJson`'s required-by-default rule put both
   `value` and `qualifier` in `required` while the `exactlyOneOf` entry beside
   them said at most one may be engaged — an unsatisfiable form. `schemaJson<A>()`
   now rejects exactly this at generation, throwing
@@ -788,16 +785,14 @@ files no uploaded report contained. Fixed here.
   (`include/lims/dto/result_dto.hpp`) explains why it is still needed even
   though omitting it is now a loud error rather than a silent one. Guarded
   here by a test asserting `required` is exactly `["analysisVersionId"]`.
-- **[morph#175](https://github.com/LASTRADA-Software/morph/issues/175)
-  — the three shipped `IOfflineQueue`s disagree about repeated idempotency
+- **the three shipped `IOfflineQueue`s disagree about repeated idempotency
   keys.** **Closed.** `InMemoryOfflineQueue` admits the duplicate;
   `FileOfflineQueue` and `SqliteOfflineQueue` dedup — a deliberate
   strengthening the base contract permits but did not document. The
   interface header (`include/morph/offline/offline_queue.hpp`) now states the
   hit semantics explicitly: a dedup hit is first-write-wins with silent
   payload loss, matching what `docs/spec/offline/offline.md` already said.
-- **[morph#197](https://github.com/LASTRADA-Software/morph/issues/197)
-  — the offline write path has no model-side seam.** Rule 1 says all domain
+- **the offline write path has no model-side seam.** Rule 1 says all domain
   logic lives in models; the offline spec says enqueue-on-failure is the
   application's job at the dispatch site; and a disconnected field client has
   no model to put it in anyway. `FieldOutbox` is this rung's app-layer answer,
@@ -806,14 +801,12 @@ files no uploaded report contained. Fixed here.
   carve-out and `docs/spec/offline/offline.md` records the reasoning and the
   boundary; a framework primitive is reconsidered when a third rung grows its
   own enqueue path.
-- **[morph#172](https://github.com/LASTRADA-Software/morph/issues/172)
-  — `MORPH_BUILD_OFFLINE_SQLITE=ON` breaks the build on macOS with a non-Apple
+- **`MORPH_BUILD_OFFLINE_SQLITE=ON` breaks the build on macOS with a non-Apple
   clang.** `FindSQLite3` resolves the SDK's whole `/usr/include`, which is then
   injected as `-isystem` ahead of libc++'s own headers. The repo's own
   `morph_offline_sqlite_tests` target fails identically, which is why the
   durable queue had never been built here before.
-- **[morph#176](https://github.com/LASTRADA-Software/morph/issues/176)
-  — `x-rules` has one client-side evaluator and no shared corpus.** **Closed.**
+- **`x-rules` has one client-side evaluator and no shared corpus.** **Closed.**
   A shared corpus now pins the compiled evaluator
   (`morph::forms::allRulesSatisfied`) to the QML one: one checked-in file,
   `src/qt/forms/tests/data/rule_corpus.json`, is driven through both —
@@ -824,23 +817,20 @@ files no uploaded report contained. Fixed here.
   `tests/test_forms_rule_agreement.cpp`). A non-QML client still has to
   reimplement the vocabulary; the corpus is what keeps that reimplementation
   honest against the compiled evaluator's behavior.
-- **[morph#173](https://github.com/LASTRADA-Software/morph/issues/173)
-  — a ladder test whose name contains a semicolon never gets its
+- **a ladder test whose name contains a semicolon never gets its
   `ladder-<rung>` label.** `morph_add_rung`'s re-labelling step iterates
   `IN LISTS`, which splits the name, so `set_tests_properties` applies to
   nothing and nothing warns. Found here the hard way: `ctest -L ladder-lims`
   reported 85 cases while the binary reported 87. Two lims cases were renamed;
-  12 pre-existing ones repo-wide are still affected.
-- **[morph#199](https://github.com/LASTRADA-Software/morph/issues/199)
-  — a `Quantity`'s exact decimal can only be rendered with its unit appended.**
+  12 pre-existing ones repo-wide are still affected. (Filed.)
+- **a `Quantity`'s exact decimal can only be rendered with its unit appended.**
   **Closed.** `toDecimalString(quantity)` (`include/morph/util/quantity.hpp`)
   is now the public decimal-only renderer — the exact numeric half of
   `toString`, no unit suffix, `"N/A"` for an empty quantity — so a view that
   places the number and the unit separately (a table with the unit in its
   column header, a right-aligned suffix) asks for the two halves independently
   instead of concatenating them and chopping the suffix back off.
-- **[morph#201](https://github.com/LASTRADA-Software/morph/issues/201)
-  — `Model::onBackendChanged()` runs with no session.** **Closed as a
+- **`Model::onBackendChanged()` runs with no session.** **Closed as a
   documentation correction, not a code gap.** `LocalBackend` never consults an
   authorizer at all, so no version of this hook could ever carry a *verified*
   principal — a session-plumbing fix was the wrong ask. `switchBackend` still

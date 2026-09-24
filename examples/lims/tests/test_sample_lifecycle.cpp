@@ -342,7 +342,7 @@ TEST_CASE("Registering a sample or a client requires a principal and well-formed
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// SampleModel's primary key (morph#183)
+// SampleModel's primary key
 //
 // No DbFixture below this line: `ActionKeyTraits<A>::key()` is a pure
 // function over the action's own fields, and that is the point -- key
@@ -396,7 +396,7 @@ TEST_CASE("Every keyed SampleModel action encodes exactly the key its hand-writt
 }
 
 TEST_CASE("An empty sampleId fails key extraction instead of routing to a garbage instance", "[lims][sample][key]") {
-    // The failure morph#183 calls out by name. The hand-written bodies were
+    // The failure a hand-written trait is exposed to: its body is
     // `keyToString(*action.sampleId)`, and `SampleId::operator*` is
     // `return *value;` on a `std::optional` (lims/core/types.hpp) --
     // undefined behaviour for a disengaged id, which on a plain libc++ hands

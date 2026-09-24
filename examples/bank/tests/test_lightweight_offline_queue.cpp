@@ -2,7 +2,7 @@
 //
 // Runs morph's own IOfflineQueue conformance suite against a queue morph does
 // not ship: bank::offline::LightweightOfflineQueue, whose store is the
-// Lightweight ORM (morph#549).
+// Lightweight ORM.
 //
 // The suite is included from morph's tests/ directory **unedited**. That is the
 // point of the exercise, not an incidental detail: a suite adjusted until a new
@@ -32,7 +32,7 @@ using bank::offline::OfflineQueueRecord;
 ///
 /// The conformance suite's `make` factory must hand back an *empty* store on
 /// every call, and this process has exactly one database (its own private file
-/// -- see unique_test_database.hpp, morph#682). Truncating the one table is
+/// -- see unique_test_database.hpp). Truncating the one table is
 /// what "a fresh store" means here.
 void truncateQueueTable() {
     bank::testing::ensureDatabase();

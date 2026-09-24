@@ -78,7 +78,7 @@ using ::morph::ladder::gui::idNumber;
         // from toLongLong(), which is exactly the "not entered" state the
         // action's validate() is there to reject -- a clean ValidationError,
         // rather than the exception fromRowId raises for a corrupt *stored*
-        // id (morph#215).
+        // id.
         out.push_back(OneVote{.optionId = OptionId{.value = row.value(QStringLiteral("optionId")).toLongLong()},
                               .choice = parseChoice(row.value(QStringLiteral("choice")).toString())});
     }

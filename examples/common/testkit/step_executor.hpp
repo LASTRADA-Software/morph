@@ -22,8 +22,8 @@
 /// `DeterministicExecutor` is duplicated from that same header --
 /// `tests/test_support.hpp` is a private header for `morph_tests`' own
 /// translation units and has no reachable include path from `examples/`.
-/// That reachability gap, not the absence of the semantics, is what left
-/// every ladder async-job test spinning a real pool (morph#161).
+/// That reachability gap, not the absence of the semantics, is why a ladder
+/// async-job test has to reach for this copy instead of spinning a real pool.
 
 namespace morph::ladder::testkit {
 

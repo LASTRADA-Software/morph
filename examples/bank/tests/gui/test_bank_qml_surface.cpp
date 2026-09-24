@@ -62,7 +62,7 @@ TEST_CASE("Every bank controller exposes exactly the surface gui/qml binds, and 
     // metaobjects and text — but `BankClient`'s constructor runs the schema
     // migrations, so it needs a database like any other bank test does. A file
     // private to this process, so no other ctest case — in this binary or
-    // another — can be unlinking it while this one has it open (morph#682).
+    // another — can be unlinking it while this one has it open.
     bankgui::BankClient client{bank::testing::uniqueDatabaseConnection()};
 
     // const: `QmlSurfaceAudit::bind` takes `const QObject&`, and nothing here
@@ -107,15 +107,14 @@ TEST_CASE("Every bank controller exposes exactly the surface gui/qml binds, and 
     }
 
     // ── No backlog ────────────────────────────────────────────────────────
-    // The five `refresh` invokables above are the whole exemption list. The
-    // first run of this audit also reported four members no file under gui/qml/
-    // bound — `txns.selectedAccount` with its `selectedChanged`, `txns.posted`
-    // and `payees.paid` — recorded here as morph#296 and since resolved by
-    // binding all four rather than deleting any: MoveMoneyPage.qml now reads
-    // the picker's selection back out of the controller (which is what stops a
-    // deposit landing in an account the screen no longer names) and Main.qml
-    // handles both success signals as a toast, opposite the `onError` toast
-    // that was already there. Nothing else is exempt, in either direction.
+    // The five `refresh` invokables above are the whole exemption list, and
+    // nothing else is exempt in either direction. Four members that an audit
+    // like this one naturally reports -- `txns.selectedAccount` with its
+    // `selectedChanged`, `txns.posted` and `payees.paid` -- are bound rather
+    // than exempted: MoveMoneyPage.qml reads the picker's selection back out of
+    // the controller, which is what stops a deposit landing in an account the
+    // screen no longer names, and Main.qml handles both success signals as a
+    // toast, opposite the `onError` toast beside it.
 
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());

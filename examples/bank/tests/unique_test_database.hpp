@@ -18,7 +18,7 @@
 /// process deleted and re-migrated that file on the way in — which is correct
 /// under a serial `ctest` and nothing else. Under `ctest -j`, 21 processes
 /// unlinked and re-created one file concurrently and 21 of 21 cases failed with
-/// `HY000 (10) - [SQLite]disk I/O error (10)` (morph#682).
+/// `HY000 (10) - [SQLite]disk I/O error (10)`.
 ///
 /// The remedy the ladder took for the same hazard is `RESOURCE_LOCK` (see
 /// `cmake/morph_add_rung.cmake`), which serialises the cases instead. Bank does

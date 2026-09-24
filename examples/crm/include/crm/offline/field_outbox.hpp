@@ -15,10 +15,10 @@
 /// A field rep's **write path** for offline opportunity edits (README build
 /// order §8). Same shape, and same reasoning, as `lims::offline::FieldOutbox`
 /// (that rung's §7) — see that header's own doc comment for the full
-/// argument (`examples/IMPLEMENTATION.md` rule 1's carve-out, morph#197):
-/// the framework supplies no seam for "detect an offline `execute()` and
-/// queue instead", so the app decides that at the dispatch site, and this
-/// class is that decision's domain-shaped half for crm's own entity.
+/// argument (`examples/IMPLEMENTATION.md` rule 1's carve-out): the framework
+/// supplies no seam for "detect an offline `execute()` and queue instead", so
+/// the app decides that at the dispatch site, and this class is that decision's
+/// domain-shaped half for crm's own entity.
 ///
 /// @par What it actually does: chain a rep's own edits
 /// The same ODK Central trap lims's rung names: a rep who edits the same

@@ -75,12 +75,12 @@ BRIDGE_REGISTER_ACTION(ledger::RuleModel, ledger::UpdateRule, "UpdateRule")
 // `BRIDGE_MODEL_KEY`'s deduced type is the right one and nothing overrides it:
 // `PrimaryKeyOf<RuleModel>` is `ledger::LedgerId` itself, the strong id
 // examples/IMPLEMENTATION.md rule 3 asks for, rather than the unwrapped
-// `std::int64_t` this model declared by hand while `morph::model::ModelKey`
-// still admitted only raw scalars (morph#163 widened it, morph#183 migrated
-// this). The `*action.ledgerId` the hand-written body performed -- `operator*`
-// on a possibly-disengaged `std::optional`, undefined behaviour for an empty
-// id -- is gone with it: `morph::model::keyToString` refuses an empty strong
-// id, which `BridgeHandler::execute` turns into a rejected `Completion`.
+// `std::int64_t` a hand-written specialisation would have to declare.
+// `morph::model::ModelKey` admits a strong id, so no hand-written body has to
+// perform `*action.ledgerId` -- `operator*` on a possibly-disengaged
+// `std::optional`, undefined behaviour for an empty id. Instead
+// `morph::model::keyToString` refuses an empty strong id, which
+// `BridgeHandler::execute` turns into a rejected `Completion`.
 BRIDGE_MODEL_KEY(ledger::RuleModel, ledger::CreateRule, &ledger::CreateRule::ledgerId);
 
 // UpdateRule carries a ruleId, not a ledgerId, so it cannot share

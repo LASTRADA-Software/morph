@@ -43,8 +43,8 @@ class LedgerQmlBridge : public QObject {
 
     /// @brief The last listed month's journal entries, each a map of
     ///        `id`/`description`/`dateText` -- the `id` being the number
-    ///        `undoTransaction` asks for, which until morph#428 no screen in
-    ///        this rung ever displayed.
+    ///        `undoTransaction` asks for, and the only place in this rung
+    ///        that displays it.
     Q_PROPERTY(QVariantList entries READ entries NOTIFY entriesChanged)
 
     /// @brief `true` while any dispatch is in flight, for a busy indicator.

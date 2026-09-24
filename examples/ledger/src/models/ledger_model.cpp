@@ -44,7 +44,7 @@ static_assert(decltype(db::LedgerRecord::owner)::ValueType::value_type{}.capacit
               "ledger::db::LedgerRecord::owner must be exactly as wide as the longest principal Login will mint a "
               "token for (ledger::auth::kMaxPrincipalBytes) -- Light::SqlFixedString truncates rather than throwing, "
               "so a narrower column would store a shortened owner that the very principal who created the book can "
-              "never match, locking them out of it (morph#382).");
+              "never match, locking them out of it.");
 
 namespace {
 
@@ -318,7 +318,7 @@ void checkZeroSumByCurrency(const std::vector<morph::math::Rational>& legAmounts
 ///        DEFERRED` on construction, `COMMIT` on destruction).
 ///
 /// @par Why this is not called a WAL snapshot guard
-///        It was, and the name was wrong. **Nothing in this rung, its
+///        Because that name would be wrong. **Nothing in this rung, its
 ///        server, or `scripts/scenario/` ever issues `PRAGMA
 ///        journal_mode`**, and Lightweight's `SqlConnection::PostConnect()`
 ///        declines to set WAL on purpose (`src/Lightweight/SqlConnection.cpp`
@@ -336,17 +336,17 @@ void checkZeroSumByCurrency(const std::vector<morph::math::Rational>& legAmounts
 ///          file for as long as it is held**.
 ///
 ///        This rung's report pass holds one across a whole aggregation
-///        (`computeReportJson`) on a background pool thread, so the old name
-///        described the opposite of the contention this guard actually
-///        causes -- a misdirection for anyone debugging `database is locked`
-///        here (morph#739). The consistent-view property the call site wants
-///        is still real: in rollback-journal mode it is delivered by the
-///        write barrier rather than by a snapshot. Turning WAL on to make
-///        the original name true is a separate, larger decision (WAL is
+///        (`computeReportJson`) on a background pool thread, so a snapshot
+///        name would describe the opposite of the contention this guard
+///        actually causes -- a misdirection for anyone debugging
+///        `database is locked` here. The consistent-view property the call
+///        site wants is still real: in rollback-journal mode it is delivered
+///        by the write barrier rather than by a snapshot. Turning WAL on to
+///        make the snapshot name true is a separate, larger decision (WAL is
 ///        per-database-file and persists in the file header, so it reaches
 ///        every other connection and the scenario runner's
 ///        fresh-database-per-run assumption) and is deliberately **not**
-///        taken here; morph#739 records the argument.
+///        taken here.
 ///
 ///        Load-bearing because `Lightweight::DataMapperPool::Return`
 ///        performs no transaction cleanup on a returned connection (it
@@ -563,7 +563,7 @@ void finishReportJob(Lightweight::DataMapper& mapper, std::int64_t jobId, Report
 ///        action named, and since every read *is* scoped, the named book's
 ///        reply does not mention the account it moved and the other book shows
 ///        a balance change with no journal of its own to explain it. The two
-///        books disagree and neither report says so (morph#367).
+///        books disagree and neither report says so.
 ///
 ///        The ledger is compared after the lookup rather than folded into it
 ///        as a second `Where`, so "no such account" and "that account is in
@@ -677,9 +677,9 @@ CreateLedgerResult LedgerModel::execute(const CreateLedger& action) {
         Lightweight::DataMapper mapper;
         db::LedgerRecord ledgerRow;
         ledgerRow.name = Light::SqlAnsiString<128>{action.name};
-        // The caller owns what it creates (morph#382). This is the only place
-        // an owner is ever written: every other action reads it, and a book
-        // whose owner is NULL is one written before this column existed.
+        // The caller owns what it creates. This is the only place an owner is
+        // ever written: every other action reads it, and a book whose owner is
+        // NULL is one written before this column existed.
         ledgerRow.owner = Light::SqlAnsiString<64>{ctx->principal};
         mapper.Create(ledgerRow);
         auto result = CreateLedgerResult{.id = LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())}};
@@ -702,11 +702,11 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
         }
         Lightweight::DataMapper mapper;
         // The ledger row must already exist -- `execute(const CreateLedger&)`
-        // above is what creates one (morph#361). Load it by primary key
-        // rather than fabricating a stub LedgerRecord, since
-        // BelongsTo assignment needs the real persisted parent (per
-        // polls::db::OptionRecord's own `opt.poll = poll;` usage, where `poll`
-        // is a row that has actually round-tripped through Create/Query).
+        // above is what creates one. Load it by primary key rather than
+        // fabricating a stub LedgerRecord, since BelongsTo assignment needs the
+        // real persisted parent (per polls::db::OptionRecord's own `opt.poll =
+        // poll;` usage, where `poll` is a row that has actually round-tripped
+        // through Create/Query).
         const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "OpenAccount");
         db::AccountRecord accountRow;
         accountRow.ledger = ledgerRow;
@@ -747,13 +747,13 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
         throw ValidationError{"GetLedger: ledgerId is required"};
     }
     Lightweight::DataMapper mapper;
-    // A read is where the gap was widest: this action had no principal check
-    // of any kind, so a second authenticated client could ask for -- and get
-    // -- every account and balance in a book it had nothing to do with
-    // (morph#382). It carries no EmptyPrincipalError gate even now, because
-    // it does not need one: an empty principal never matches a recorded
-    // owner, so it is refused here and admitted only for an unowned book,
-    // which is exactly what it could always reach.
+    // A read is where the gap would be widest: without a principal check of
+    // any kind, a second authenticated client could ask for -- and get --
+    // every account and balance in a book it has nothing to do with.
+    // It carries no EmptyPrincipalError gate, because it does not need one: an
+    // empty principal never matches a recorded owner, so it is refused here and
+    // admitted only for an unowned book, which is exactly what it could always
+    // reach.
     static_cast<void>(db::requireOwnedBook(mapper, action.ledgerId, db::currentPrincipal(), "GetLedger"));
     // Real balance per account: the sum of every leg posted against it,
     // computed in-model via Rational::operator+ (never a raw SQL SUM() --
@@ -770,8 +770,8 @@ ListTransactionsResult LedgerModel::execute(const ListTransactions& action) {
     Lightweight::DataMapper mapper;
     // Same gate, same reason, as execute(GetLedger) directly above: a listing
     // of a book's entries is a read of the book, so it goes through
-    // db::requireOwnedBook (morph#382) and needs no EmptyPrincipalError gate
-    // of its own -- an empty principal never matches a recorded owner.
+    // db::requireOwnedBook and needs no EmptyPrincipalError gate of its own --
+    // an empty principal never matches a recorded owner.
     static_cast<void>(db::requireOwnedBook(mapper, action.ledgerId, db::currentPrincipal(), "ListTransactions"));
 
     // The month bound, as a half-open UTC [start, end) over the stored epoch
@@ -857,7 +857,7 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         // `GetLedgerResult` -- every account and balance in the book -- and the
         // account lookups are a "does account N belong to book B" oracle, so a
         // gate placed after either would hand a non-owner exactly what the
-        // `GetLedger` gate exists to withhold (morph#382).
+        // `GetLedger` gate exists to withhold.
         const auto ledgerRow = db::requireOwnedBook(mapper, action.ledgerId, ctx->principal, "StoreTransaction");
 
         // Task 11b, design spec §1 (kanban's execute(MoveTaskPosition) pattern,
@@ -1100,9 +1100,9 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
         }
         // The book gate runs after the journal is resolved, not before it, so
         // the two "no such journal" refusals this action already had keep
-        // their exact wording and order (morph#382). The journal names its own
-        // ledger and that has just been verified against the action's, so
-        // gating on it is gating on the book the action really reaches.
+        // their exact wording and order. The journal names its own ledger and
+        // that has just been verified against the action's, so gating on it is
+        // gating on the book the action really reaches.
         db::requireOwnedParentBook(mapper, originalJournalRow.ledger.Value(), ctx->principal, "UndoTransaction");
 
         // A compensating entry names the entry it reverses, so "has this already
@@ -1424,7 +1424,7 @@ RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
         // action checked only its own job row. Without it a job whose ledger
         // has since been deleted aggregates an empty account set, produces
         // `[]` and settles Done, so a caller cannot tell "no such ledger"
-        // from "a ledger with no activity" (morph#250).
+        // from "a ledger with no activity".
         //
         // Raised *inside* this try on purpose. Throwing out of the method
         // instead would leave the row Pending, and ledger::app::App re-sweeps
@@ -1443,8 +1443,8 @@ RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
         // own ledger on its row. Without this comparison
         // `RunReportJob{jobId: <book two's job>, ledgerId: <book one>}` settles
         // book two's job `Done` carrying book one's totals, terminally, and
-        // `GetReportStatus` then hands those back as book two's report
-        // (morph#371). Same shape as `accountInLedger`'s ledger comparison and
+        // `GetReportStatus` then hands those back as book two's report. Same
+        // shape as `accountInLedger`'s ledger comparison and
         // `execute(UndoTransaction)`'s journal check -- an id resolved without
         // the scope the action names.
         //
@@ -1549,11 +1549,11 @@ GetReportStatusResult LedgerModel::execute(const GetReportStatus& action) {
         throw NotFound{"GetReportStatus: no such job"};
     }
     const auto& row = jobRows.front();
-    // A job id carries no ledgerId of its own (morph#371), so the book this
-    // read reaches is the one the job row names. Gated after the job lookup so
-    // "no such job" keeps its wording, and like `execute(GetLedger)` this pure
-    // read needs no separate empty-principal gate: an empty principal matches
-    // no recorded owner.
+    // A job id carries no ledgerId of its own, so the book this read reaches is
+    // the one the job row names. Gated after the job lookup so "no such job"
+    // keeps its wording, and like `execute(GetLedger)` this pure read needs no
+    // separate empty-principal gate: an empty principal matches no recorded
+    // owner.
     db::requireOwnedParentBook(mapper, row.ledger.Value(), db::currentPrincipal(), "GetReportStatus");
     return GetReportStatusResult{
         .status = static_cast<ReportStatus>(row.status.Value()),
@@ -1594,7 +1594,7 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
     // Both call sites reach this: the public `execute(SetCategory)` overload,
     // where it is the only book gate the action gets, and the rule cascade
     // inside `execute(StoreTransaction)`, where the caller has already passed
-    // the same gate on the same book and this one passes too (morph#382).
+    // the same gate on the same book and this one passes too.
     //
     // Both *rows*, too, the way `BudgetModel::execute(LinkAccountToCategory)`
     // checks both of its: this action joins two rows nothing else constrains
@@ -1605,16 +1605,16 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
     const auto principal = db::currentPrincipal();
     db::requireOwnedParentBook(mapper, accountRows.front().ledger.Value(), principal, "SetCategory");
     db::requireOwnedParentBook(mapper, categoryRows.front().ledger.Value(), principal, "SetCategory");
-    // Then *which* book (morph#373): owning both is not the same as their
-    // being one book, and until this check existed a caller could file its own
-    // account in book two under its own category in book one.
+    // Then *which* book: owning both is not the same as their being one book,
+    // and until this check existed a caller could file its own account in book
+    // two under its own category in book one.
     //
     // Unreachable from the rule cascade, which is the other caller: that path
     // looks its category up with a `Where` on the triggering action's own
     // `ledgerId`, and its account is a leg account, which `accountInLedger`
-    // has already constrained to that same ledger (morph#380). The two are
-    // therefore always one book there, and this refusal is a live gate only
-    // for the client-facing `execute(SetCategory)` above.
+    // has already constrained to that same ledger. The two are therefore always
+    // one book there, and this refusal is a live gate only for the
+    // client-facing `execute(SetCategory)` above.
     db::requireCategoryInBook(categoryRows.front().ledger.Value(), accountRows.front().ledger.Value(), "SetCategory");
     accountRows.front().category = categoryRows.front();
     mapper.Update(accountRows.front());

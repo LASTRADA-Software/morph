@@ -11,8 +11,7 @@
 
 /// @file
 /// The metaobject-surface drift guard, generalised out of the hand-written
-/// one `examples/bookmarks/tests/test_bookmark_qml_bridges.cpp` established
-/// (morph#86's "what is actually justified", third bullet).
+/// one `examples/bookmarks/tests/test_bookmark_qml_bridges.cpp` established.
 ///
 /// @par What drifts, and why nothing else catches it
 /// A rung's QML binds its bridges *by string*: `page.tagController.refresh()`

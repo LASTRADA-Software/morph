@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// morph#566: a `MoveTaskPosition` whose *post-commit* work throws must not
-// report the move as failed -- the row it wrote is already committed.
+// A `MoveTaskPosition` whose *post-commit* work throws must not report the move
+// as failed -- the row it wrote is already committed.
 //
-// The CI observation this pins was a board whose `execute(MoveTaskPosition)`
-// threw and whose move was nonetheless observed applied
-// (`test_kanban_offline.cpp:672`, `movedCount == 1` under 32-way contention).
-// That needs no race inside the commit path: `execute()` commits, then runs
-// `logAction`, `evaluateRules` and a final `buildState` -- every one of which
-// can throw -- and before this fix nothing between them and the caller
-// distinguished "the move did not happen" from "the move happened and the
-// follow-on work did not".
+// The symptom is a board whose `execute(MoveTaskPosition)` threw and whose move
+// was nonetheless observed applied (`test_kanban_offline.cpp:672`, `movedCount
+// == 1` under 32-way contention). That needs no race inside the
+// commit path: `execute()` commits, then runs `logAction`, `evaluateRules` and a
+// final `buildState` -- every one of which can throw -- and without the shield
+// nothing between them and the caller distinguishes "the move did not happen"
+// from "the move happened and the follow-on work did not".
 //
-// The contended `SQLITE_BUSY` that produced it in CI is not reproducible on
-// demand. The *shape* is, deterministically: make the first step of the tail
-// (`logAction`) throw, and assert the caller is told the truth.
+// The contended `SQLITE_BUSY` that produces it under CI's parallelism is not
+// reproducible on demand. The *shape* is, deterministically: make the first step
+// of the tail (`logAction`) throw, and assert the caller is told the truth.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -135,31 +134,30 @@ TEST_CASE("MoveTaskPosition reports success when only its post-commit tail fails
     CHECK(columnOfTask(model, task) == columnB);
 }
 
-// ── morph#751: the other nine handlers ───────────────────────────────────────
+// ── The other nine handlers ──────────────────────────────────────────────────
 //
-// The case above covers `MoveTaskPosition`, the one handler morph#566 reached.
-// The audit morph#751 asked for classified all sixteen `BoardModel::execute`
-// overloads:
+// The case above covers `MoveTaskPosition`. All sixteen `BoardModel::execute`
+// overloads classify as:
 //
 //   * six are read-only and open no transaction at all -- `OpenBoard`,
 //     `GetBoardState`, `GetAttachments`, `GetRules`, `GetEventsSince`,
 //     `GetActivity`. Nothing to shield; wrapping them would add a branch no
 //     input can take.
-//   * one was already shielded -- `MoveTaskPosition`, above.
+//   * one is `MoveTaskPosition`, above.
 //   * **nine commit and then keep working**, and every one of those nine runs
 //     `logAction` after its `Commit()`. Four of them (`CreateColumn`,
 //     `CreateSwimlane`, `CreateTask`, `AddComment`) also re-read the board
-//     with `buildState` for their return value; those reads moved *inside* the
+//     with `buildState` for their return value; those reads sit *inside* the
 //     transaction rather than being shielded, so a failed re-read rolls the
 //     write back instead of leaving a committed mutation with nothing truthful
 //     to report. What is left after the commit is `logAction` alone, and that
-//     is what `runPostCommitTail` now contains at all nine.
+//     is what `runPostCommitTail` contains at all nine.
 //
 // `ApplyTagMutation` is the one whose commit is not visible in the handler --
 // `applyTagMutationImpl` owns the transaction -- but its `logAction` is
 // post-commit all the same, which is why it is in the list.
 //
-// Each case below asserts the same two things morph#566's does: the call does
+// Each case below asserts the same two things the case above does: the call does
 // not throw, and `appendAttempts` proves the tail genuinely ran and genuinely
 // failed. Without the second, every one of these would pass on a tree where
 // `runPostCommitTail` had been deleted and the log never consulted.
