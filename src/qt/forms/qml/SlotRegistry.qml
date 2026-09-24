@@ -7,6 +7,11 @@
 // schema or on the wire, and two renderers of the same schema may register
 // different slots. DynamicForm consults byField/byWidget/byUnit/byType in
 // that priority order and falls back to its own built-in control on a miss.
+//
+// byChrome registers the form's *chrome* instead -- the field label, help
+// text, section/accordion/tab containers, header, status line, submit button,
+// preview and result -- one Component per role, each replacing the built-in
+// one wholesale (docs/spec/forms/forms.md, "Chrome slots").
 
 import QtQuick
 
@@ -17,6 +22,7 @@ QtObject {
     property var _byWidget: ({})  // x-widget id -> Component
     property var _byUnit: ({})    // unitAscii -> Component
     property var _byType: ({})    // JSON type ("integer", "string", ...) -> Component
+    property var _byChrome: ({})  // chrome role ("fieldLabel", "section", ...) -> Component
 
     // Bumped on every by*() registration. `_byField`/`_byWidget`/`_byUnit`/
     // `_byType` are plain JS objects mutated in place (obj[key] = value);
@@ -56,6 +62,25 @@ QtObject {
     function byType(jsonType, component) {
         _byType[jsonType] = component
         revision++
+    }
+
+    /// Registers @p component as the form's chrome for @p role: one of
+    /// "fieldLabel", "fieldHelp", "section", "accordion", "tabset", "header",
+    /// "status", "submitButton", "preview", "result". An unknown role is
+    /// stored and never asked for.
+    function byChrome(role, component) {
+        _byChrome[role] = component
+        revision++
+    }
+
+    /// The Component registered for chrome @p role, or null (built-in). An
+    /// "accordion" with no registration of its own falls back to "section": a
+    /// host with one container card gets it for both kinds.
+    function resolveChrome(role) {
+        registry.revision
+        if (_byChrome[role] !== undefined) return _byChrome[role]
+        if (role === "accordion" && _byChrome["section"] !== undefined) return _byChrome["section"]
+        return null
     }
 
     /// Resolution order: field -> x-widget -> unit -> type -> null

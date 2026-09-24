@@ -88,6 +88,51 @@ Frame {
     // as it does today. See SlotRegistry.qml.
     property var slotRegistry: null
 
+    // The chrome Component registered for `role`, or null for the built-in
+    // (docs/spec/forms/forms.md, "Chrome slots").
+    function chrome(role) {
+        return slotRegistry ? slotRegistry.resolveChrome(role) : null
+    }
+
+    // Assigns each of `values` to the same-named property of a chrome item --
+    // only where the item declares it, so a chrome Component declares just the
+    // members it uses. A value may be a Qt.binding. `form` is always offered.
+    function bindChrome(item, values) {
+        if (!item)
+            return
+        if ("form" in item)
+            item.form = form
+        for (const key in values) {
+            if (key in item)
+                item[key] = values[key]
+        }
+    }
+
+    // Whether the text held for `name` is typed but does not encode -- the
+    // "this field is wrong" state a host's label chrome may show. Blank is not
+    // invalid: that is the required gate's business.
+    function fieldInvalid(name) {
+        const f = fieldByName[name]
+        if (!f)
+            return false
+        return opt(fieldValues[name], "").trim() !== "" && fieldJsonLiteral(f) === null
+    }
+
+    // The status line's text, shared by the built-in label and a status chrome.
+    readonly property string statusText: {
+        if (!ready) {
+            // Filling fields in is the usual remedy, but it is not the
+            // remedy for a member this renderer cannot represent, and
+            // telling the user to fill something that would not help
+            // is the worse half of the same lie a `ready` of true
+            // would be. Name the member instead.
+            if (unrepresentableReason !== "")
+                return "cannot be submitted -- " + unrepresentableReason
+            return "fill the required (*) fields"
+        }
+        return explicitSubmitMode ? "✓ ready -- press Submit" : "✓ executes automatically as you type"
+    }
+
     property var fieldValues: ({})
     property var fieldOptions: ({})
     property var fieldUnits: ({})
@@ -1677,7 +1722,11 @@ Frame {
             enabled: { form.rulesRevision; return !form.fieldReadonly(fieldColumn.modelData.name) }
             spacing: 2
 
+            property var labelChrome: form.chrome("fieldLabel")
+            property var helpChrome: form.chrome("fieldHelp")
+
             RowLayout {
+                visible: fieldColumn.labelChrome === null
                 Label {
                     text: fieldColumn.modelData.label
                     font.bold: true
@@ -1689,11 +1738,43 @@ Frame {
                 }
             }
 
+            // A host's label chrome replaces the row above: the caption, the
+            // live required marker and the invalid state are its to draw.
+            Loader {
+                active: fieldColumn.labelChrome !== null
+                visible: active
+                Layout.fillWidth: true
+                sourceComponent: fieldColumn.labelChrome
+                onLoaded: form.bindChrome(item, {
+                    field: fieldColumn.modelData,
+                    text: fieldColumn.modelData.label,
+                    required: Qt.binding(function () {
+                        form.rulesRevision
+                        return fieldColumn.modelData.required || form.isDynamicallyRequired(fieldColumn.modelData.name)
+                    }),
+                    invalid: Qt.binding(function () {
+                        form.rulesRevision
+                        return form.fieldInvalid(fieldColumn.modelData.name)
+                    })
+                })
+            }
+
             Label {
-                visible: fieldColumn.modelData.description !== ""
+                visible: fieldColumn.helpChrome === null && fieldColumn.modelData.description !== ""
                 text: fieldColumn.modelData.description
                 opacity: 0.6
                 font.pixelSize: 12
+            }
+
+            Loader {
+                active: fieldColumn.helpChrome !== null && fieldColumn.modelData.description !== ""
+                visible: active
+                Layout.fillWidth: true
+                sourceComponent: fieldColumn.helpChrome
+                onLoaded: form.bindChrome(item, {
+                    field: fieldColumn.modelData,
+                    text: fieldColumn.modelData.description
+                })
             }
 
             RowLayout {
@@ -2076,9 +2157,12 @@ Frame {
             property var runData
             Layout.fillWidth: true
             property bool collapsed: false
+            // The implicit "flat" bucket has no chrome to replace.
+            property var sectionChrome: (!box.runData || box.runData.section.kind === "flat")
+                                        ? null : form.chrome(box.runData.section.kind)
 
             RowLayout {
-                visible: box.runData.section.title !== ""
+                visible: box.sectionChrome === null && box.runData.section.title !== ""
                 Layout.fillWidth: true
 
                 Button {
@@ -2096,15 +2180,67 @@ Frame {
 
             GridLayout {
                 Layout.fillWidth: true
-                visible: !box.collapsed
+                visible: box.sectionChrome === null && !box.collapsed
                 columns: box.runData.section.kind === "flat" ? 1 : 2
 
+                // Empty under a chrome: the fields are created inside it
+                // instead, and one delegate per field is what keeps every
+                // objectName unique.
                 Repeater {
-                    model: box.runData.section.fields
+                    model: box.sectionChrome === null ? box.runData.section.fields : []
                     delegate: fieldDelegate
                 }
             }
+
+            // A host's section chrome (for "section", and for "accordion"
+            // unless one is registered for it): the card, the heading and any
+            // collapsing are its own; this form creates the field grid inside
+            // the chrome's `contentItem`.
+            Loader {
+                active: box.sectionChrome !== null
+                visible: active
+                Layout.fillWidth: true
+                sourceComponent: box.sectionChrome
+                onLoaded: {
+                    form.bindChrome(item, {
+                        title: box.runData.section.title,
+                        kind: box.runData.section.kind,
+                        section: box.runData.section
+                    })
+                    form.createFieldGrid(item, 2, function () { return box.runData.section.fields })
+                }
+            }
         }
+    }
+
+    // The field grid a section or tab-set chrome hosts, created inside the
+    // chrome's `contentItem` (expected to be a Layout, e.g. a ColumnLayout).
+    Component {
+        id: chromeFieldGrid
+
+        GridLayout {
+            id: chromeGrid
+            property var gridFields: []
+            Layout.fillWidth: true
+
+            Repeater {
+                model: chromeGrid.gridFields
+                delegate: fieldDelegate
+            }
+        }
+    }
+
+    // `fieldsOf` is a function so the grid follows a binding (a tab-set
+    // chrome's currentIndex) rather than a snapshot.
+    function createFieldGrid(chromeItem, columns, fieldsOf) {
+        if (!chromeItem || !chromeItem.contentItem) {
+            console.warn("DynamicForm: a section/tabset chrome must declare `contentItem`; its fields are not shown")
+            return null
+        }
+        return chromeFieldGrid.createObject(chromeItem.contentItem, {
+            columns: columns,
+            gridFields: Qt.binding(fieldsOf)
+        })
     }
 
     Component {
@@ -2118,10 +2254,13 @@ Frame {
             property var runData
             Layout.fillWidth: true
             property int currentTab: 0
+            // Null until the run is assigned, so the chrome never loads without it.
+            property var tabsetChrome: tabsBox.runData ? form.chrome("tabset") : null
 
             TabBar {
                 id: bar
                 objectName: "tabBar"
+                visible: tabsBox.tabsetChrome === null
                 Layout.fillWidth: true
                 currentIndex: tabsBox.currentTab
                 onCurrentIndexChanged: tabsBox.currentTab = currentIndex
@@ -2137,11 +2276,34 @@ Frame {
 
             GridLayout {
                 Layout.fillWidth: true
+                visible: tabsBox.tabsetChrome === null
                 columns: 2
 
                 Repeater {
-                    model: tabsBox.runData.sections[tabsBox.currentTab].fields
+                    model: tabsBox.tabsetChrome === null ? tabsBox.runData.sections[tabsBox.currentTab].fields : []
                     delegate: fieldDelegate
+                }
+            }
+
+            // A host's tab-set chrome: it draws the tabs from `tabs` and owns
+            // `currentIndex`; this form shows the selected tab's fields inside
+            // its `contentItem`, rebuilt on every switch exactly as the
+            // built-in tab bar's grid is.
+            Loader {
+                active: tabsBox.tabsetChrome !== null
+                visible: active
+                Layout.fillWidth: true
+                sourceComponent: tabsBox.tabsetChrome
+                onLoaded: {
+                    const chromeItem = item
+                    form.bindChrome(chromeItem, {
+                        tabs: tabsBox.runData.sections.map(function (section) { return { title: section.title } })
+                    })
+                    form.createFieldGrid(chromeItem, 2, function () {
+                        const index = ("currentIndex" in chromeItem) ? chromeItem.currentIndex : 0
+                        const section = tabsBox.runData.sections[index]
+                        return section ? section.fields : []
+                    })
                 }
             }
         }
@@ -2155,9 +2317,18 @@ Frame {
         spacing: 4
 
         Label {
+            visible: form.chrome("header") === null
             text: form.actionType
             font.bold: true
             font.pixelSize: 16
+        }
+
+        Loader {
+            active: form.chrome("header") !== null
+            visible: active
+            Layout.fillWidth: true
+            sourceComponent: form.chrome("header")
+            onLoaded: form.bindChrome(item, { text: Qt.binding(function () { return form.actionType }) })
         }
 
         Repeater {
@@ -2174,19 +2345,8 @@ Frame {
 
         Label {
             Layout.topMargin: 8
-            text: {
-                if (!form.ready) {
-                    // Filling fields in is the usual remedy, but it is not the
-                    // remedy for a member this renderer cannot represent, and
-                    // telling the user to fill something that would not help
-                    // is the worse half of the same lie a `ready` of true
-                    // would be. Name the member instead.
-                    if (form.unrepresentableReason !== "")
-                        return "cannot be submitted -- " + form.unrepresentableReason
-                    return "fill the required (*) fields"
-                }
-                return form.explicitSubmitMode ? "✓ ready -- press Submit" : "✓ executes automatically as you type"
-            }
+            visible: form.chrome("status") === null
+            text: form.statusText
             opacity: 0.6
             font.italic: true
             // A blocked submit is announced, not merely tinted (docs/spec/
@@ -2196,6 +2356,19 @@ Frame {
             Accessible.role: Accessible.StaticText
             Accessible.name: text
             Accessible.description: text
+        }
+
+        Loader {
+            active: form.chrome("status") !== null
+            visible: active
+            Layout.fillWidth: true
+            sourceComponent: form.chrome("status")
+            onLoaded: form.bindChrome(item, {
+                text: Qt.binding(function () { return form.statusText }),
+                ready: Qt.binding(function () { return form.ready }),
+                reason: Qt.binding(function () { return form.unrepresentableReason }),
+                explicitSubmit: Qt.binding(function () { return form.explicitSubmitMode })
+            })
         }
 
         // "x-submitMode": "explicit" (docs/spec/forms/forms.md, "Explicit
@@ -2209,7 +2382,21 @@ Frame {
         Loader {
             active: form.explicitSubmitMode
             Layout.topMargin: 4
-            sourceComponent: Button {
+            sourceComponent: form.chrome("submitButton") !== null ? form.chrome("submitButton") : builtinSubmitButton
+            // A host's submit chrome gets `ready` and `submit()`; the form's
+            // own guard in submit() still applies to it.
+            onLoaded: {
+                if (sourceComponent !== builtinSubmitButton)
+                    form.bindChrome(item, {
+                        ready: Qt.binding(function () { return form.ready }),
+                        submit: function () { form.submit() }
+                    })
+            }
+        }
+
+        Component {
+            id: builtinSubmitButton
+            Button {
                 id: submitButton
                 objectName: "submitButton"
                 enabled: form.ready
@@ -2219,7 +2406,7 @@ Frame {
         }
 
         Label {
-            visible: form.previewLine !== ""
+            visible: form.chrome("preview") === null && form.previewLine !== ""
             Layout.fillWidth: true
             text: form.previewLine
             wrapMode: Text.WrapAnywhere
@@ -2229,13 +2416,35 @@ Frame {
         }
 
         Label {
-            visible: form.resultText !== ""
+            visible: form.chrome("result") === null && form.resultText !== ""
             Layout.fillWidth: true
             text: (form.resultOk ? "ok:  " : "err: ") + form.resultText
             wrapMode: Text.WrapAnywhere
             font.family: "monospace"
             font.pixelSize: 12
             color: form.resultOk ? palette.text : "#d33"
+        }
+
+        // Preview and result chrome are loaded whatever their text: a host
+        // that wants neither registers an empty Item, and one that wants them
+        // decides for itself when to show an empty one.
+        Loader {
+            active: form.chrome("preview") !== null
+            visible: active
+            Layout.fillWidth: true
+            sourceComponent: form.chrome("preview")
+            onLoaded: form.bindChrome(item, { text: Qt.binding(function () { return form.previewLine }) })
+        }
+
+        Loader {
+            active: form.chrome("result") !== null
+            visible: active
+            Layout.fillWidth: true
+            sourceComponent: form.chrome("result")
+            onLoaded: form.bindChrome(item, {
+                text: Qt.binding(function () { return form.resultText }),
+                ok: Qt.binding(function () { return form.resultOk })
+            })
         }
     }
 
