@@ -52,11 +52,10 @@ prerequisites, the two most likely failure modes and their owning findings:
   true` — re-open the *async shared/keyed attach* finding even though this
   spike deliberately avoids the *shared* path; if the *plain* async path also
   aborts, that is a new, more severe finding (the plain path was supposed to
-  already be WASM-safe per `[issue26]`'s native tests) — file it as a GitHub
-  issue per [`examples/FINDINGS.md`](../../FINDINGS.md), titled for the gap
-  ("plain async registration aborts under WASM") with `severity: blocker`,
-  and this rung's exit criteria (per `examples/FINDINGS.md`) are **not met**
-  until it is at least triaged.
+  already be WASM-safe per `[issue26]`'s native tests) — it is a framework
+  defect, so file it per [`AGENTS.md`](../../../AGENTS.md)'s filing bar,
+  titled for the gap ("plain async registration aborts under WASM"), and this
+  rung is not done until it is at least triaged.
 - **"connected" logs but no "result=" ever appears.** The action dispatch
   itself is hanging — check whether `Completion` needs the
   *client-side execute deadline* finding's
@@ -65,9 +64,8 @@ prerequisites, the two most likely failure modes and their owning findings:
 
 If either failure mode reproduces, do **not** silently work around it in this
 spike — record it as a finding (per the two bullets above) and mark rung 0's
-Task 10 complete anyway with a "documents a real blocker" note; `FINDINGS.md`'s
-rung exit criteria explicitly allow a rung to exit with findings still
-`open`/`fix-scheduled`, just not un-triaged.
+Task 10 complete anyway with a "documents a real blocker" note. A rung may
+exit with findings still open; it may not exit with findings untriaged.
 
 If the Emscripten configure itself fails before either failure mode above
 becomes observable (for example, `find_package(Qt6 COMPONENTS WebSockets

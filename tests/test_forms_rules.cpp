@@ -412,7 +412,7 @@ TEST_CASE("Forms::Rules::Factories::ProduceGenuinelyExecutedInstantiations", "[f
 
 // ---------------------------------------------------------------------------
 // Unsatisfiable declarations: a capping rule over fields `required` also
-// demands (issue #165). Every fixture below uses CFRMoney -- an
+// demands. Every fixture below uses CFRMoney -- an
 // EmptyCapableField, hence *required by default* -- rather than
 // std::optional: `isStdOptional` keeps a std::optional member out of
 // `required` on sight, so a std::optional-typed fixture could not produce the
@@ -552,7 +552,7 @@ TEST_CASE("Forms::Rules::Unsatisfiable::StdOptionalMembersCanNeverConflict", "[f
     // CFRContactForm's exactlyOneOf ranges over two std::optional members,
     // which isStdOptional keeps out of `required` on sight -- so the
     // contradiction is unreachable for them, with or without the check. Pinned
-    // because a fixture like this one is the easy wrong way to test #165.
+    // because a fixture like this one is the easy wrong way to test it.
     std::string schema{};
     CHECK_NOTHROW(schema = morph::forms::schemaJson<CFRContactForm>());
     CHECK(schema.find(R"("required":[])") != std::string::npos);
@@ -583,7 +583,7 @@ TEST_CASE("Forms::Rules::Equals::PlainScalarField", "[forms][rules]") {
 }
 
 TEST_CASE("Forms::Rules::Equals::EmitNodeCarriesExactDigitsForLargeNegativeLiteral", "[forms][rules]") {
-    // morph#213's class of bug, the unexplored negative side: the existing
+    // The exact-digits class of bug, on its negative side: the existing
     // "an int64 literal beyond 2^53" coverage (test_forms_rule_agreement.cpp's
     // RuleAgreementAction, 9007199254740993) only ever exercises the
     // std::cmp_greater(...) arm of Equals::emitNode()'s
@@ -872,7 +872,7 @@ TEST_CASE("Forms::Rules::And::VariadicAcceptsMoreThanTwoConditions", "[forms][ru
 }
 
 // ---------------------------------------------------------------------------
-// The condition vocabulary is closed, and a wrapper does not open it (#544).
+// The condition vocabulary is closed, and a wrapper does not open it.
 //
 // `andOf`/`orOf`/`notOf` and the three `when`-bearing rules used to admit any
 // node exposing `test(const A&) const noexcept`, which every rule node does.
@@ -942,8 +942,8 @@ template <auto Field>
 concept CFREqualsStringLiteralComposable = requires { morph::forms::equals(Field, "URGENT"); };
 
 // The marker is enforced at every position a condition is accepted. Each of
-// these compiled before #544, and each emitted a node no renderer's condition
-// vocabulary has a case for.
+// these compiles without the marker, and each emits a node no renderer's
+// condition vocabulary has a case for.
 static_assert(!CFRAndComposable<CFRMarkerVisible, CFRMarkerEngaged>);
 static_assert(!CFROrComposable<CFRMarkerEngaged, CFRMarkerReadonly>);
 static_assert(!CFRNotComposable<CFRMarkerRequired>);
@@ -983,7 +983,7 @@ static_assert(!CFREqualsStringLiteralComposable<&CFRConditionMarkerForm::promo>)
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// Unsatisfiability detection reaches inside a compound node (#544 part a).
+// Unsatisfiability detection reaches inside a compound node.
 //
 // The top-level `x-rules` array is a conjunction -- `allRulesSatisfied` folds
 // it with `&&` -- and so is an `and` node's `conditions`, so a contradiction in
@@ -1042,8 +1042,8 @@ struct CFRCappingUnderOrIsSatisfiable {
 
 TEST_CASE("Forms::Rules::Unsatisfiable::CappingRuleWrappedInAndOfStillThrows", "[forms][rules][unsatisfiable]") {
     // The same contradiction as CFRUnsatisfiableExactlyOne, one `andOf` deep.
-    // It shipped silently before #544, because the check skipped any node with
-    // no `fields` key and `and` emits `conditions` instead.
+    // A check that skips any node with no `fields` key misses it, because
+    // `and` emits `conditions` instead.
     CHECK_THROWS_AS(morph::forms::schemaJson<CFRUnsatisfiableInsideAnd>(), morph::forms::UnsatisfiableFormError);
 }
 

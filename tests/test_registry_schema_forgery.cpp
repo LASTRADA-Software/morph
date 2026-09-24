@@ -92,7 +92,7 @@ struct RegSchemaForgeModel {
 // specialization of) the primary, glaze-driven template.
 //
 // Each specialization returns `const std::string&`, matching the primary
-// template (morph#573 step 1). A specialization therefore has to own its text
+// template. A specialization therefore has to own its text
 // for at least as long as the caller reads it, which is what the function-local
 // statics below are for -- returning a reference to a temporary would dangle.
 // That is the same contract the primary template meets with its own cache, and

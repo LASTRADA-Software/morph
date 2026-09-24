@@ -3,7 +3,7 @@
 #
 # Keeps tests/.clang-tidy's record of its own reach true.
 #
-# Why this gate exists (morph#632): clang-tidy resolves its configuration from
+# Why this gate exists: clang-tidy resolves its configuration from
 # the path of the translation unit it is analysing, not from the path of the
 # file a diagnostic lands in. tests/.clang-tidy's thirteen suppressions are
 # each argued as *test idiom* -- Catch2's REQUIRE expansion, a raw-syscall
@@ -26,8 +26,9 @@
 #      include/morph/ is compiled from a TU under tests/ and from a TU that is
 #      not, using this repository's *real* .clang-tidy files, and the finding
 #      must be absent from the first and present from the second. Behavioural
-#      rather than a grep for the mechanism, for the reason morph#298
-#      established -- and this direction matters twice over: if clang-tidy ever
+#      rather than a grep for the mechanism: a grep asserts that the words are
+#      there, not that the suppression reaches where the note says it does --
+#      and this direction matters twice over: if clang-tidy ever
 #      resolves configuration per diagnostic file, the note goes red rather
 #      than quietly stale.
 #
@@ -108,7 +109,7 @@ fi
 if [ "$disabled" != "$recorded" ]; then
     fail "tests/.clang-tidy's \`header-reach:\` list does not match what its
     \`Checks:\` key subtracts. Every suppression there is also off for every
-    include/morph/** header reached from a TU under tests/ (morph#632), and the
+    include/morph/** header reached from a TU under tests/, and the
     list is the only place a reader is told which ones. Differences:
 $(diff <(printf '%s\n' "$disabled") <(printf '%s\n' "$recorded") \
         | sed 's/^< /    only in Checks:      /; s/^> /    only in header-reach: /' \
@@ -181,7 +182,7 @@ $(printf '%s' "$from_src" | sed 's/^/    /')"
         fail "${check} IS now reported against include/morph/probe_scope.hpp from a
     TU under tests/, where tests/.clang-tidy subtracts it. clang-tidy appears to
     resolve configuration per diagnostic file rather than per translation unit,
-    which is the opposite of what morph#632 measured and of what the note in
+    which is the opposite of what was measured and of what the note in
     tests/.clang-tidy tells readers. Re-measure the reach, correct or delete
     that note, and revisit any header gate built on the old behaviour."
     else

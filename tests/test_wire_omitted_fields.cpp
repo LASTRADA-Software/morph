@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// `encode` leaves out the envelope fields that hold their default (morph#524).
+// `encode` leaves out the envelope fields that hold their default.
 //
 // `wire::Envelope` is a union-of-all-kinds struct: an `ok` reply uses three of
 // its thirteen members, but glaze writes every member of a struct it is handed,
@@ -100,8 +100,8 @@ TEST_CASE("morph::wire: every omittable field survives when it is not at its def
 
 TEST_CASE("morph::wire: the legacy all-keys form decodes to the same envelope as the short form",
           "[wire][omitted-fields]") {
-    // The exact bytes `encode` produced for this envelope before morph#524 —
-    // captured from the pre-change build, not regenerated, so this case still
+    // The exact bytes a defaults-writing `encode` produces for this envelope —
+    // captured from such a build, not regenerated, so this case still
     // means something if `encode` changes again.
     static constexpr std::string_view kLegacyOk =
         R"({"kind":"ok","callId":7,"typeId":"","contextKey":"","primary":"","shared":false,"modelId":0,)"

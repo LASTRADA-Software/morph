@@ -14,8 +14,8 @@
 #
 # ── Why this needs no clock and no sleep ────────────────────────────────────
 # The expiry instant is *sent by the scenario*, in the past. Nothing here
-# waits for time to pass, so this cannot become the kind of flaky timing test
-# morph#147 was. ExpirePaste's own DELETE carries an `expires_at_ms <= now`
+# waits for time to pass, so this cannot become a flaky timing test.
+# ExpirePaste's own DELETE carries an `expires_at_ms <= now`
 # guard, which is what makes it replay-safe and is also why it must be given a
 # genuinely expired paste to have any effect at all.
 #

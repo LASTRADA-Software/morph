@@ -35,7 +35,7 @@ def mutants(lines: list[str]) -> list[tuple[int, str, str]]:
             out.append((index, line.replace("expect err", "expect ok", 1), "kind err->ok"))
         # Both directions of every comparison `parse_expect` accepts. An
         # operator that is only ever a *destination* here is one no assertion
-        # written with it is ever mutated at (morph#383): its lone mutant is
+        # written with it is ever mutated at: its lone mutant is
         # the kind flip above, which the reply's own kind catches while the
         # comparison itself measures nothing. Each pair's source substring is
         # absent from every other pair's, so at most one fires per line and a

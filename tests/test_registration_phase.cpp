@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The registration-phase latch (morph#698).
+// The registration-phase latch.
 //
 // `docs/spec/core/registry.md` ("Thread safety") states as a hard constraint
 // that the three process-level registries are written only during static

@@ -2,7 +2,7 @@
 # Usage: bash scripts/test_check_coverage_profiles.sh
 #
 # Self-test for scripts/check_coverage_profiles.sh, the profile-discovery gate
-# extracted from scripts/coverage.sh for morph#430. A gate nobody tests reports
+# extracted from scripts/coverage.sh. A gate nobody tests reports
 # green whether or not it still detects anything, and this one guards exactly
 # the kind of defect that is a silence: an empty profile set with no failure
 # is a report computed over nothing, printed as if it were real.
@@ -22,7 +22,7 @@
 #
 # What this file does NOT assert, stated rather than left to be discovered:
 # that a *stale* file from a previous run is excluded. check_coverage_profiles.sh
-# does not filter on age; morph#430's actual fix is that scripts/coverage.sh
+# does not filter on age; the fix is that scripts/coverage.sh
 # deletes every path this gate returns once it has merged them, so nothing
 # stale is ever left for a later run's find to pick up. That deletion is
 # scripts/coverage.sh's own end-of-run `rm -f $PROFILES`, not a claim in this
@@ -97,7 +97,7 @@ fi
 # This is the shape scripts/coverage.sh's own comment documents: ctest's
 # working directory nests "$OUT" under itself, so real profile data lands at
 # $OUT/tests/build/clang-coverage/*.profraw, not directly under $OUT. The find
-# has to be recursive to find that at all; morph#430's fix bounds it by
+# has to be recursive to find that at all; the fix bounds it by
 # deleting what it merges, not by narrowing the search.
 dir="$(case_dir nested)"
 mkdir -p "${dir}/tests/build/clang-coverage"

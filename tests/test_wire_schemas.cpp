@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// The `"schemas"` envelope kind (morph#234) and the action-evolution policy
-// gate it feeds (morph#207).
+// The `"schemas"` envelope kind and the action-evolution policy gate it feeds.
 //
-// morph#234: a client that is not linked against a model's C++ had no way to
-// ask what an action's inputs are -- `morph::forms::schemaJson<A>()` is a
+// Without the kind, a client that is not linked against a model's C++ has no
+// way to ask what an action's inputs are -- `morph::forms::schemaJson<A>()` is a
 // compile-time function and no envelope kind served its output.
 //
-// morph#207: the action codec's lenient decode matches fields by *name* and
+// And the action codec's lenient decode matches fields by *name* and
 // default-constructs an absent one, so a client/server field rename
 // (`amountCents` -> `amount`) decodes to a zero-valued action that
 // `validate()` cannot distinguish from a legitimate zero. The two belong
@@ -47,7 +46,7 @@ using morph::wire::makeSchemas;
 // Model/action types need external linkage for glaze reflection (see
 // tests/test_policy_hardening.cpp).
 
-/// The action morph#207 was reported against, in miniature: one mandatory
+/// The shape that defect takes, in miniature: one mandatory
 /// field carrying the whole meaning of the request, and one field the author
 /// declared optional.
 struct WireSchemasDeposit {
@@ -370,7 +369,7 @@ TEST_CASE("RemoteServer defaults to PayloadCompleteness::Lenient", "[remote][com
 
 TEST_CASE("REGRESSION GUARD: leniently, a renamed field is accepted and applies nothing",
           "[remote][completeness][issue207]") {
-    // morph#207's measured defect, pinned as it stands today so the default
+    // The measured defect, pinned as it stands so the default
     // path cannot change without this failing. The client sends `amount`; the
     // server's action declares `amountCents`. The unknown key is dropped, the
     // absent one is default-constructed, and the deposit silently applies 0.
@@ -425,7 +424,7 @@ TEST_CASE("POLICY: RequireDeclaredFields still accepts a newer client's additive
     // "Additive-only within a major version" is the first bullet of the very
     // policy this gate enforces, so the gate must not be a strict decode:
     // `error_on_unknown_keys = true` turns this legal payload into a parse
-    // error, which is why morph#207 rules it out as a partial measure.
+    // error, which is why it is not the answer.
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<RemoteServer>(pool);
     server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);

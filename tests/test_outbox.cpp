@@ -393,8 +393,8 @@ TEST_CASE("OutboxRelay::relay(): a null sink reaching a non-empty drain throws N
           "[outbox][relay]") {
     // Unlike the empty-drainOutbox case above (which stays on relay()'s
     // early-return path and never reaches sink at all), this drains a real
-    // row with sink still null -- morph#95's actual gap: sink->append(row)
-    // on a null shared_ptr<IActionLog> used to be a null-pointer virtual
+    // row with sink still null -- the actual gap: sink->append(row)
+    // on a null shared_ptr<IActionLog> is a null-pointer virtual
     // dispatch (real UB, a process crash, not a catchable exception). relay()
     // now throws NullSinkError before ever dereferencing sink.
     std::vector<std::string> logged;

@@ -5,7 +5,7 @@
 # against `cmake --install`ed morph, via `find_package(morph CONFIG REQUIRED)`
 # and `target_link_libraries(... morph::morph)`.
 #
-# Why this gate exists (morph#232): `cmake --install` on a morph build used to
+# Why this gate exists: `cmake --install` on a morph build can
 # **exit 0** and install hundreds of Glaze headers plus a working
 # `glazeConfig.cmake` -- Glaze carries its own install/export rules and gets
 # them for free through `FetchContent` -- while installing zero morph headers
@@ -152,7 +152,7 @@ if [ "$skip_header_set_verification" -eq 0 ]; then
     fi
 fi
 
-# `cmake --install` exiting 0 is exactly what it did before morph#232, so its
+# `cmake --install` exiting 0 is exactly what it does when it installs nothing, so its
 # exit status is worth nothing on its own. It is checked anyway -- a *failing*
 # install is still a failure -- and then the prefix is inspected.
 run_step "cmake --install failed outright" \
@@ -166,7 +166,7 @@ for required in \
     "include/morph/util/rational.hpp" \
     "include/morph/core/bridge.hpp"; do
     if [ ! -f "${prefix}/${required}" ]; then
-        fail "cmake --install exited 0 but installed no ${required} -- this is the morph#232 shape"
+        fail "cmake --install exited 0 but installed no ${required} -- it reported success having installed nothing"
     fi
 done
 
@@ -196,7 +196,7 @@ note "the prefix contains morph's headers and package config"
 # ── 4. Build a consumer against the prefix ──────────────────────────────────
 #
 # The TU includes *every installed non-detail header*, generated from the prefix
-# rather than hand-listed. A hand-list is what let morph#540 ship: it named
+# rather than hand-listed. A hand-list ships stale: one named
 # `<morph/forms/forms.hpp>` and not `app.hpp`/`flows.hpp`/`sections.hpp`, all
 # three of which include `forms/detail/session_common.hpp` -- a header no
 # FILE_SET installed. `cmake --install` exited 0, this check stayed green, and

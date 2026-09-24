@@ -166,7 +166,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue + SyncWorker: poison item dead-let
     removeDbFiles(dbPath);
 }
 
-// ── Coverage: maxDepth / overflow policy (morph#112) ───────────────────────
+// ── Coverage: maxDepth / overflow policy ───────────────────────
 
 TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError",
           "[sqlite][overflow]") {
@@ -296,8 +296,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: the idempotency-key contract surv
     removeDbFiles(dbPath);
 }
 
-TEST_CASE("morph::offline::SqliteOfflineQueue: a NUL-bearing payload and key round-trip intact (morph#531)",
-          "[sqlite]") {
+TEST_CASE("morph::offline::SqliteOfflineQueue: a NUL-bearing payload and key round-trip intact", "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     auto const open = [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); };
@@ -305,7 +304,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a NUL-bearing payload and key rou
     removeDbFiles(dbPath);
 }
 
-// ── setIdempotencyKey on a conflicting key (morph#249) ───────────────────────
+// ── setIdempotencyKey on a conflicting key ───────────────────────
 //
 // The protected hook is reached only through the *base* default
 // `IOfflineQueue::enqueue(payload, key)`, which inserts first and stamps
@@ -522,7 +521,7 @@ TEST_CASE(
     removeDbFiles(dbPath);
 }
 
-// ── Durability PRAGMAs (morph#532) ───────────────────────────────────────
+// ── Durability PRAGMAs ───────────────────────────────────────
 //
 // journal_mode=WAL, synchronous=FULL, and busy_timeout are all set at
 // construction. journal_mode is a persistent property of the database file
@@ -532,7 +531,7 @@ TEST_CASE(
 // without shared-memory support silently falls back to `delete` mode
 // instead of erroring.
 
-TEST_CASE("morph::offline::SqliteOfflineQueue: journal_mode=WAL persists and is verified at construction (morph#532)",
+TEST_CASE("morph::offline::SqliteOfflineQueue: journal_mode=WAL persists and is verified at construction",
           "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
@@ -556,8 +555,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: journal_mode=WAL persists and is 
     removeDbFiles(dbPath);
 }
 
-TEST_CASE("morph::offline::SqliteOfflineQueue: a journal_mode that is not WAL warns and keeps working (morph#532)",
-          "[sqlite]") {
+TEST_CASE("morph::offline::SqliteOfflineQueue: a journal_mode that is not WAL warns and keeps working", "[sqlite]") {
     // An in-memory database always reports journal_mode "memory" regardless of
     // what is requested -- SQLite's own documented behavior (WAL needs shared
     // memory a `:memory:` database does not have), not a fault injected here.
@@ -592,8 +590,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a journal_mode that is not WAL wa
     CHECK(queue->drain().empty());
 }
 
-TEST_CASE("morph::offline::SqliteOfflineQueue: a WAL database reports journalMode() == \"wal\" (morph#532)",
-          "[sqlite]") {
+TEST_CASE("morph::offline::SqliteOfflineQueue: a WAL database reports journalMode() == \"wal\"", "[sqlite]") {
     // The other side of the case above: on an ordinary filesystem the read-back
     // must report `wal`, and must emit no warning. Without this, the warn path
     // above could pass while WAL silently never took anywhere.
@@ -615,7 +612,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a WAL database reports journalMod
 
 TEST_CASE(
     "morph::offline::SqliteOfflineQueue: PRAGMA busy_timeout lets a write wait out a transient lock instead of "
-    "failing immediately (morph#532)",
+    "failing immediately",
     "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
@@ -686,7 +683,7 @@ TEST_CASE(
     removeDbFiles(dbPath);
 }
 
-// ── Directory fsync (morph#532) ──────────────────────────────────────────
+// ── Directory fsync ──────────────────────────────────────────
 //
 // `sqlite3_open()` creates `dbPath` (and, once journal_mode=WAL took, its
 // "-wal"/"-shm" siblings) on first use -- a fresh directory entry that
@@ -697,10 +694,8 @@ TEST_CASE(
 // `FileActionLog`/`FileOfflineQueue` tests in test_action_log_phase2.cpp /
 // test_file_offline_queue.cpp.
 
-TEST_CASE(
-    "morph::offline::SqliteOfflineQueue: construction syncs the containing directory after creating the file "
-    "(morph#532)",
-    "[sqlite]") {
+TEST_CASE("morph::offline::SqliteOfflineQueue: construction syncs the containing directory after creating the file",
+          "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     std::vector<std::filesystem::path> syncedPaths;
@@ -724,8 +719,7 @@ TEST_CASE(
     removeDbFiles(dbPath);
 }
 
-TEST_CASE("morph::offline::SqliteOfflineQueue: an unsupported directory fsync warns instead of throwing (morph#532)",
-          "[sqlite]") {
+TEST_CASE("morph::offline::SqliteOfflineQueue: an unsupported directory fsync warns instead of throwing", "[sqlite]") {
     // Same split as the file-backed queues: a directory fsync this platform or
     // mount cannot perform is a durability *ceiling*, not a failure, and must
     // not stop the database opening. kanban's enableOfflineQueue() builds one
@@ -757,8 +751,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: an unsupported directory fsync wa
     removeDbFiles(dbPath);
 }
 
-TEST_CASE("morph::offline::SqliteOfflineQueue: Synchronous selects the level SQLite actually applies (morph#532)",
-          "[sqlite]") {
+TEST_CASE("morph::offline::SqliteOfflineQueue: Synchronous selects the level SQLite actually applies", "[sqlite]") {
     // `full` is opt-in because it costs ~18x per mutation, and every mutation
     // here is its own commit -- so the parameter only earns its place if it
     // actually reaches SQLite. Asserted against the level read back from the
@@ -791,7 +784,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: Synchronous selects the level SQL
 
 TEST_CASE(
     "morph::offline::SqliteOfflineQueue: a failing directory fsync during construction throws and leaks no "
-    "connection (morph#532)",
+    "connection",
     "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);

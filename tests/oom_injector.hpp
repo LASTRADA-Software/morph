@@ -33,8 +33,8 @@ namespace morph::testkit {
 /// excluded consistently on every leg where the override cannot work.
 ///
 /// @par Why this exists
-/// Several `catch (...)` blocks across the codebase (see
-/// `LASTRADA-Software/morph#108`) only ever fire on `std::bad_alloc` from a
+/// Several `catch (...)` blocks across the codebase only ever fire on
+/// `std::bad_alloc` from a
 /// real allocation failure -- there is no other way into them. That is not
 /// portably reachable from a unit test without a seam: this class overrides
 /// the process-wide `operator new`/`operator new[]` (defined once in

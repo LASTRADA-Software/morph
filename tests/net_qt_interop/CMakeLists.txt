@@ -13,13 +13,14 @@ target_link_libraries(morph_net_qt_interop_tests
 set_target_properties(morph_net_qt_interop_tests PROPERTIES AUTOMOC ON)
 apply_warnings(morph_net_qt_interop_tests)
 
-# Was missing entirely: this suite drives morph::net against Qt's transport and
-# was never instrumented (morph#403).
+# Easy to leave out: this suite drives morph::net against Qt's transport, and
+# an uninstrumented one contributes nothing to the coverage report while
+# looking like it does.
 if(AF_COVERAGE)
     apply_coverage(morph_net_qt_interop_tests)
 endif()
 
-# Likewise missing entirely (morph#542). This suite drives morph::net -- raw
+# Likewise easy to leave out. This suite drives morph::net -- raw
 # sockets, an I/O thread and a hand-rolled frame reader -- against Qt's
 # transport, which is the part of the tree a sanitizer has most to say about.
 if(DEFINED AF_SANITIZER)

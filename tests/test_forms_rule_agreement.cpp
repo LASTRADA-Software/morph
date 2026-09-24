@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The compiled half of the x-rules agreement check (morph#176).
+// The compiled half of the x-rules agreement check.
 //
 // `x-rules` is evaluated twice — here by `morph::forms::allRulesSatisfied`, and
 // again in JavaScript by `src/qt/forms/qml/DynamicForm.qml` — and nothing pinned

@@ -103,7 +103,7 @@ TEST_CASE("CompletionState: orphan destructor logs std::exception", "[completion
 }
 
 TEST_CASE("CompletionState: an orphan destructor survives a throwing log sink", "[completion][logger]") {
-    // The motivating case for morph#158. ~CompletionState is implicitly
+    // The motivating case for the noexcept guarantee. ~CompletionState is implicitly
     // noexcept and logs the abandoned exception, so before the logging layer
     // became noexcept a sink that threw here meant std::terminate -- which the
     // destructor worked around with a local try/catch(...) and a NOLINT. That

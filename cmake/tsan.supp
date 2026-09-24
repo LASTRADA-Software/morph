@@ -7,7 +7,7 @@
 #   * the `clang-tsan` **ctest preset** in CMakePresets.json, through
 #     `${sourceDir}` so it resolves from any working directory -- a relative
 #     path does not survive test discovery, which that preset's description
-#     explains at length (morph#688);
+#     explains at length;
 #   * the `Test` step of ci.yml's `linux-sanitizers` job;
 #   * the `Test` step of ci.yml's `kanban-tsan` job.
 #
@@ -19,23 +19,23 @@
 #
 # ── What this file is not, and what second_deadlock_stack=1 buys ───────────
 #
-# Both points below are about morph#578, an intermittent `lock-order-inversion`
-# seen once in six full `morph_tests` runs whose stack was lost, and they are
+# Both points below are about an intermittent `lock-order-inversion` -- seen
+# once in six full `morph_tests` runs, with its stack lost -- and they are
 # written here because this is the file the next person will open.
 #
 #   1. Every `race:` entry below is a **suppression**, so none of them could
 #      have hidden that report: TSan matches `mutex:`/`deadlock:` entries
-#      against lock-order findings, and there are none here. The issue says
-#      this and the issue is right. Whether TSAN_OPTIONS was set at the time
-#      is irrelevant to whether the warning could appear.
+#      against lock-order findings, and there are none here. Whether
+#      TSAN_OPTIONS was set at the time is irrelevant to whether the warning
+#      could appear.
 #
-#   2. `second_deadlock_stack=1` **is** set (morph#736 set it, in all three
-#      places above), and what it buys is measured rather than assumed. A
+#   2. `second_deadlock_stack=1` **is** set, in all three places above, and
+#      what it buys is measured rather than assumed. A
 #      23-line standalone control -- two static mutexes taken in both orders,
 #      clang 22.1.8, x86-64 Linux -- reports the inversion either way and
 #      prints *both* `acquired here while holding` stacks either way, so the
-#      option is **not** why morph#578's report was uninformative; a
-#      `grep -A 60 | head -70` over the run is, as that issue states. What it
+#      option is **not** why that report was uninformative; a
+#      `grep -A 60 | head -70` over the run is. What it
 #      adds, exactly, is 24 further lines carrying two more stacks (47 report
 #      lines -> 71 on that control; 36 -> 55 on the two-mutex inversion
 #      measured for the preset):
@@ -43,20 +43,20 @@
 #          Mutex M0 previously acquired by the same thread here:
 #          Mutex M1 previously acquired by the same thread here:
 #
-#      i.e. where the *already-held* mutex of each pair was taken. morph#578's
-#      cycle has three mutexes, two of them at stack addresses, and those two
+#      i.e. where the *already-held* mutex of each pair was taken. The cycle
+#      seen here has three mutexes, two of them at stack addresses, and those two
 #      stacks are what would name the fixture or short-lived object holding
 #      them. Without the option TSan prints only `Hint: use
 #      TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning
-#      message` -- advice nobody can take after the fact, because morph#578 and
-#      morph#717 are intermittent and the run that fires is the only evidence
+#      message` -- advice nobody can take after the fact, because these
+#      inversions are intermittent and the run that fires is the only evidence
 #      that will ever exist. It costs nothing measurable: 2M lock acquisitions
-#      under TSan took a median 0.275s without it and 0.273s with (morph#736).
+#      under TSan take a median 0.275s without it and 0.273s with.
 #
 # So: do not drop it while tidying a preset or a workflow env block. It is not
 # decoration, and the report that needs it cannot ask for it in advance.
 #
-# ── libstdc++'s refcounted exception teardown (morph#476) ──────────────────
+# ── libstdc++'s refcounted exception teardown ──────────────────────────────
 #
 # A `std::exception_ptr` is a refcounted handle to one heap-allocated
 # exception object, and the `std::runtime_error` inside it holds its message

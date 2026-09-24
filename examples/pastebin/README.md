@@ -379,27 +379,20 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   `offline/file_offline_queue.hpp` and `session/session_auth.hpp` was closed
   framework-side.
 
-  **On the finding numbers this section used to cite.** The ten findings above
-  were filed under a flat global sequence that no longer exists.
-  That sequence was first namespaced by rung (`<ns>-NNN-<kebab-slug>.md`)
-  because a flat sequence did not survive parallel branches — two disjoint
-  series were allocated independently and both merged, so the same number came
-  to mean different things on different branches. The `docs/findings/`
-  directory has since been retired altogether in favour of GitHub issues (see
-  [`../FINDINGS.md`](../FINDINGS.md)), so the bare numbers this rung's prose
-  used to carry (`017`, `018`, `021`, `023`, `026`) resolve to nothing. They
-  have been replaced throughout by a description of the gap and a pointer to
-  the code that closes it, which is what a reader actually needs and what
-  survives a renumbering. No finding has been invented to make an old citation
-  resolve.
+  **Why this section names gaps rather than numbering them.** A bare finding
+  number is precise and tells a reader nothing about whether it still says
+  what the citing text claims, and a flat sequence does not survive parallel
+  branches: two disjoint series allocated independently both merge, and the
+  same number then means different things on different branches. Each gap
+  below is therefore described, with a pointer to the code that closes it —
+  which is what a reader needs and what survives a renumbering.
 
 ### Known gaps, stated rather than smoothed over
 
-- **Findings triage complete.** [`../FINDINGS.md`](../FINDINGS.md)'s "Rung
-  exit criteria" makes a rung done when (1) its README's design questions are
-  resolved in writing, (2) every named strain test exists — passing or filed
-  as a finding, and (3) its findings are triaged (no `open` dispositions
-  left). All three are now met: of the ten findings this rung owned or
+- **Findings triage complete.** A rung is done when (1) its README's design
+  questions are resolved in writing, (2) every named strain test exists —
+  passing or filed as a finding, and (3) its findings are triaged. All three
+  are met: of the ten findings this rung owned or
   inherited, eight have since been fixed framework-side (the framework fixes
   are described inline throughout this README and this rung's own source
   comments, not re-listed here). `db_fault_fixture.hpp`'s store-error

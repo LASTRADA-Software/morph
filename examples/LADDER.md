@@ -10,23 +10,21 @@ the Lightweight ORM throughout; clients are Qt (desktop + WASM), as in
 **rung 0 through rung 4** plus the no-app spikes below — that is where the
 unproven seams live (first WASM-remote, first shared-over-socket, offline
 replay, exactly-once, SQLite contention) and where reviews locate peak
-findings-per-week. **Rungs 5–8 are a design annex**: their READMEs are
+findings-per-week. **Rungs 5–7 are a design annex**: their READMEs are
 finished deliverables (requirements studies whose sharpest content the
 spikes convert into CI at a fraction of construction cost); building any of
-them is a separate decision taken *after* rung 4 with the
-[finding pipeline](FINDINGS.md) scoreboard in hand — **crm (rung 7) was
+them is a separate decision taken *after* rung 4, with what the built rungs
+have found in hand — **crm (rung 7) was
 green-lit for construction on 2026-08-28** by direct decision rather than
 waiting on that scoreboard review, once its own defining framework question
 was independently answered by the extension-bag spike (below). Both halves
 (7a and 7b) are now **built server-side, with no client** — see
 [`crm/README.md`](crm/README.md)'s "What is not built" for that gap and two
 smaller ones. Ledger (rung 5) remains the strongest *unbuilt* candidate —
-the only other annex rung with a genuinely app-shaped core; forge's
-framework content still ships as its load script against synthetic models.
-The program's
+the only annex rung left with a genuinely app-shaped core. The program's
 product is **findings fixed, not apps shipped** — see
-[`FINDINGS.md`](FINDINGS.md) for what counts, triage, the fix budget, exit
-criteria, and the demotion policy.
+[`AGENTS.md`](../AGENTS.md)'s filing bar for what a rung's defect is worth
+recording and what it is not.
 
 **The no-app spikes** (start immediately, in parallel with rungs 0–1; each
 files findings, none builds an app):
@@ -83,11 +81,10 @@ later rungs consume earlier answers (5 reuses 4's cascade-journaling answer,
 | 5* | [`ledger`](ledger) | [Firefly III](https://github.com/firefly-iii/firefly-iii), [Actual Budget](https://github.com/actualbudget/actual) | Exact `Rational` arithmetic under invariants, multi-currency, sync-philosophy benchmark |
 | 6 | [`lims`](lims) | [SENAITE](https://github.com/senaite/senaite.core), [InvenTree](https://github.com/inventree/InvenTree), [ODK Central](https://github.com/getodk/central) | Unit algebra, versioned schema-driven forms, offline entities with conflict detection |
 | 7 | [`crm`](crm) | [EspoCRM](https://github.com/espocrm/espocrm), [Tryton](https://github.com/tryton/tryton), [Frappe](https://github.com/frappe/frappe) | Metadata-driven forms, dynamic logic, per-field authz; **7b** (gated): runtime custom fields |
-| 8* | [`forge`](forge) | [Gogs](https://github.com/gogs/gogs), [Gitea/Forgejo](https://github.com/go-gitea/gitea), GitLab architecture | Everything at once: orgs/permissions, notifications at scale, webhooks, out-of-protocol sidecars |
 
 \* = design annex: README is the deliverable; construction is a post-rung-4
-decision (ledger under construction; lims built; forge → load script; crm
-built server-side, no client — its own defining framework question was
+decision (ledger under construction; lims built; crm built server-side, no
+client — its own defining framework question was
 independently resolved by the extension-bag spike, which is why it carries
 no `*` here; 7b's go/no-go gate was passed on that answer).
 
@@ -221,8 +218,8 @@ committed scope is rungs 0–4 (+ spikes): ~8–10 bank-equivalents, a
 findings-per-week. Deferral decisions recorded in the rung READMEs: kanban
 defers automation rules and attachments to a "later" section (ledger needs
 only the cascade *decision*, writable from a spike); the annex rungs keep
-their internal gates (7a/7b, forge phase 3 per-item) for whenever they are
-green-lit. The **fault-injection wire proxy and the strand interleaver are
+their internal gates (7a/7b) for whenever they are green-lit. The
+**fault-injection wire proxy and the strand interleaver are
 pulled forward to rung 0–1** (round-7: they outperform whole rungs on
 finding yield; scheduling them at rung 4 delayed the program's
 highest-value instruments behind three rungs of CRUD).

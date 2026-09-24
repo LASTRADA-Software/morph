@@ -303,9 +303,8 @@ renderer mistypes array-valued schema keys when `schema` is assigned as a
 
 ## Steps 6 and 8: implemented
 
-Steps 6 (automation rules) and 8 (attachments) were originally deferred to a
-"later" bucket (each is independently large, and the attachments answer is
-duplicated at forge phase 2) — both are now implemented. Automation rules
+Steps 6 (automation rules) and 8 (attachments) are implemented, having been
+deferred to a "later" bucket first because each is independently large. Automation rules
 (tag add/remove, triggered on move-to-column) are scoped to the two mutation
 kinds this rung's schema actually supports; the README's own illustrative
 "assign to closer" example is not implemented, since no "closer" concept
@@ -317,9 +316,7 @@ reads by the caller's project role (not bearer-token validity alone).
 
 ## Findings
 
-Filed as GitHub issues per [`FINDINGS.md`](../FINDINGS.md) (this rung's
-findings were originally `r4-001`/`r4-002` under the retired
-`docs/findings/` directory):
+Filed as GitHub issues, per [`AGENTS.md`](../../AGENTS.md)'s filing bar:
 
 - [#343](https://github.com/LASTRADA-Software/morph/issues/343)
   — the replay-attempt budget cannot tell an undelivered replay from a

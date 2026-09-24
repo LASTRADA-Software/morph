@@ -15,7 +15,7 @@ branch's source location taken from the JSON export. The result mirrors exactly
 what `llvm-cov report` counts, so genuinely-uncovered branches stay uncovered
 and only the per-instantiation noise disappears.
 
-It also strips a second, unrelated kind of noise (see morph#93): `Q_OBJECT`
+It also strips a second, unrelated kind of noise: `Q_OBJECT`
 implicitly declares a static `tr()` overload for the enclosing class, whose
 coverage-map region llvm-cov attributes starting at the `Q_OBJECT` line and
 running to the start of whatever comes next in the file (the next class, or
@@ -151,7 +151,7 @@ def main():
             if lf == 0 and lh == 0:
                 # llvm-cov's own verdict is "nothing here to count" (matches
                 # `llvm-cov report`'s "Lines: 0, Cover: -"), but it still
-                # emitted stray FN/FNDA/DA records for this file (morph#93).
+                # emitted stray FN/FNDA/DA records for this file.
                 # Keep only SF:, drop everything the block carried, including
                 # the branch records just built above.
                 out.append(block[0])

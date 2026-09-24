@@ -151,7 +151,7 @@ TEST_CASE("render::locale_format round-trips through a multi-byte separator", "[
     CHECK(normalizeLocaleNumber(display, {.decimalSeparator = ",", .groupSeparator = kNarrowNbsp}) == "1050.25");
 }
 
-// ── morph#497: a sign after the decimal separator is not "leading" ──
+// ── A sign after the decimal separator is not "leading" ──
 //
 // `sawAnyOutput` was only set at the bottom of the loop, and the
 // decimal-separator branch `continue`d past it -- so after a separator the sign
@@ -188,7 +188,7 @@ TEST_CASE("normalizeLocaleNumber: the loose shapes stay accepted, in step with t
     REQUIRE(morph::render::normalizeLocaleNumber(".", {.decimalSeparator = ".", .groupSeparator = ","}) == ".");
 }
 
-// ── morph#574: a group separator is validated, not stripped ──────────────────
+// ── A group separator is validated, not stripped ─────────────────────────────
 //
 // Before this, every occurrence of the group separator was dropped
 // unconditionally, so a de-DE user typing the US form "1.5" into a price field
@@ -275,7 +275,7 @@ TEST_CASE("normalizeLocaleNumber: every well-formed locale entry still normalise
     CHECK(formatCanonicalNumber(*canonical, {.decimalSeparator = ",", .groupSeparator = "."}) == "1.000.000,25");
 }
 
-// ──── morph#583: the negative sign is locale data, and is not always one byte ────
+// ──── The negative sign is locale data, and is not always one byte ────
 //
 // Of the 711 locales Qt 6.11.2 reports through QLocale::matchingLocales, 77
 // spell the negative sign as something other than a bare ASCII '-':
@@ -377,7 +377,7 @@ TEST_CASE("normalizeLocaleNumber: the ASCII hyphen stays accepted in every local
 
 TEST_CASE("normalizeLocaleNumber: a locale sign is still rejected off the leading position",
           "[render][locale][morph583]") {
-    // The morph#497 rule is about the *output*, so it has to hold for a
+    // The leading-position rule is about the *output*, so it has to hold for a
     // multi-byte sign exactly as it does for '-'.
     CHECK(normalizeLocaleNumber("1" + entry(kSignEuEs, "2"),
                                 {.decimalSeparator = ".", .groupSeparator = "", .negativeSign = kSignEuEs}) ==
@@ -424,7 +424,7 @@ TEST_CASE("locale_format: an empty negative sign reads as '-', not as 'no sign'"
     // Unlike a group separator, there is no locale without a negative sign, so
     // empty cannot mean absence. On the display edge it would be a silently
     // wrong value: -5 formatted to "5" is a valid number of the wrong sign,
-    // which is the morph#574 failure mode, not a rejection.
+    // which is silent corruption, not a rejection.
     CHECK(formatCanonicalNumber("-5", {.decimalSeparator = ".", .groupSeparator = "", .negativeSign = ""}) == "-5");
     CHECK(normalizeLocaleNumber("-5", {.decimalSeparator = ".", .groupSeparator = "", .negativeSign = ""}) == "-5");
     // And an empty needle must not match at every index: a scan that treated it
@@ -432,7 +432,7 @@ TEST_CASE("locale_format: an empty negative sign reads as '-', not as 'no sign'"
     CHECK(normalizeLocaleNumber("123", {.decimalSeparator = ".", .groupSeparator = "", .negativeSign = ""}) == "123");
 }
 
-// ──── morph#596: a leading positive sign is accepted, and dropped ────────────
+// ──── A leading positive sign is accepted, and dropped ───────────────────────
 //
 // `normalizeLocaleNumber` had no notion of a positive sign at all: a leading
 // '+' fell through to the "any other character is malformed" arm, so an
@@ -516,7 +516,8 @@ TEST_CASE("normalizeLocaleNumber: a locale's multi-code-point positive sign is m
 }
 
 TEST_CASE("normalizeLocaleNumber: the ASCII '+' stays accepted in a bidi-sign locale", "[render][locale][morph596]") {
-    // The morph#583 precedent: the locale's own spelling is on no keyboard, so
+    // The same rule the negative sign follows: the locale's own spelling is on
+    // no keyboard, so
     // matching only it would reject the sign the user can actually type.
     CHECK(normalizeLocaleNumber(
               "+5", {.decimalSeparator = ".", .groupSeparator = "", .negativeSign = "-", .positiveSign = kPlusArEg}) ==
@@ -536,8 +537,8 @@ TEST_CASE("normalizeLocaleNumber: the ASCII '+' stays accepted in a bidi-sign lo
 
 TEST_CASE("normalizeLocaleNumber: a positive sign obeys the same leading-position rule",
           "[render][locale][morph596]") {
-    // morph#497's rule is about the *output*, so accepting a new sign spelling
-    // must not open a new way to inject one.
+    // The leading-position rule is about the *output*, so accepting a new sign
+    // spelling must not open a new way to inject one.
     CHECK(normalizeLocaleNumber("1+2", {.decimalSeparator = ".", .groupSeparator = ""}) == std::nullopt);
     CHECK(normalizeLocaleNumber("+-5", {.decimalSeparator = ".", .groupSeparator = ""}) == std::nullopt);
     CHECK(normalizeLocaleNumber("-+5", {.decimalSeparator = ".", .groupSeparator = ""}) == std::nullopt);
@@ -593,20 +594,20 @@ TEST_CASE("normalizeLocaleNumber: the new parameter costs no existing behaviour"
     CHECK(normalizeLocaleNumber("1.050,25", {.decimalSeparator = ",", .groupSeparator = "."}) == "1050.25");
     CHECK(normalizeLocaleNumber("-1.050,25", {.decimalSeparator = ",", .groupSeparator = "."}) == "-1050.25");
     CHECK(normalizeLocaleNumber("1.5", {.decimalSeparator = ",", .groupSeparator = "."}) ==
-          std::nullopt);  // morph#574 still holds
+          std::nullopt);  // grouping validation still holds
     CHECK(normalizeLocaleNumber("abc", {.decimalSeparator = ".", .groupSeparator = ""}) == std::nullopt);
     CHECK(normalizeLocaleNumber("", {.decimalSeparator = ".", .groupSeparator = ""}) == std::nullopt);
     CHECK(normalizeLocaleNumber(entry(kSignEuEs, "5"),
                                 {.decimalSeparator = ".", .groupSeparator = "", .negativeSign = kSignEuEs}) ==
-          "-5");  // morph#583 still holds
+          "-5");  // the whole-string sign match still holds
 }
 
-// ──── morph#599: the QML mirror's separators, cross-checked here ─────────────
+// ──── The QML mirror's separators, cross-checked here ────────────────────────
 //
 // This block adds no C++ behaviour. `normalizeLocaleNumber` has matched both
 // separators as whole strings since it was written -- "accepts a multi-byte
-// group separator" above already pins that -- and morph#599 is a defect in the
-// *QML mirror* (`src/qt/forms/qml/DynamicForm.qml`), which compared one UTF-16
+// group separator" above already pins that. The defect this guards against is
+// in the *QML mirror* (`src/qt/forms/qml/DynamicForm.qml`), which can compare one UTF-16
 // code unit (`ch === groupSeparator`) while this side used
 // `rest.starts_with`. docs/spec/forms/forms.md, "Both edges, or neither": a
 // divergence between the two is a divergence in what the product accepts, so
@@ -695,7 +696,7 @@ TEST_CASE("locale_format: the multi-unit separator corpus the QML mirror now sha
 
 TEST_CASE("locale_format: a multi-unit separator is validated exactly as a one-unit one is",
           "[render][locale][morph599]") {
-    // morph#574's grouping validation and morph#497's leading-position rule are
+    // The grouping validation and the leading-position rule are
     // stated over "the separator", so they have to hold when it is longer than
     // one unit -- on both edges. Same rows as the mirror's
     // `test_aMultiUnitSeparatorIsStillValidatedTheSameWay`.
@@ -723,7 +724,7 @@ TEST_CASE("locale_format: the pair round-trips through a multi-unit separator", 
     // Where "both edges, or neither" bites. `formatCanonicalNumber` has always
     // emitted the separators whole on both sides, so with a multi-unit
     // separator the mirror's display edge produced text its own entry edge then
-    // rejected -- the morph#583 shape, for a locale that does not exist yet.
+    // rejected -- the two-edge disagreement, for a locale that does not exist yet.
     // This side round-tripped throughout; that is what made the two disagree.
     auto const display = formatCanonicalNumber(
         "-1050.25", {.decimalSeparator = kDecimal2, .groupSeparator = kGroup2, .negativeSign = kSignEuEs});
@@ -733,7 +734,7 @@ TEST_CASE("locale_format: the pair round-trips through a multi-unit separator", 
           "-1050.25");
 }
 
-// ---- morph#591: the digits are locale data too ------------------------------
+// ---- The digits are locale data too ----------------------------------------
 //
 // Measured on this revision with QLocale::matchingLocales under Qt 6.11.2, over
 // all 711 locales: 76 report a zeroDigit other than ASCII '0', across eleven
@@ -769,7 +770,7 @@ struct DigitSet {
 
 // One representative per distinct set, spelled as explicit UTF-8 bytes with the
 // code point in the comment -- the house style for this file, and the reason
-// #610 converted the QML mirror to escapes: a digit that renders as itself is
+// the QML mirror spells them as escapes too: a digit that renders as itself is
 // still unreadable when a reviewer does not read that script.
 constexpr std::array<DigitSet, 11> kDigitSets = {{
     {.name = "ar_BH", .zero = "\xD9\xA0", .five = "\xD9\xA5"},                    // U+0660, U+0665
@@ -796,8 +797,8 @@ TEST_CASE("formatCanonicalNumber: the display edge emits the locale's digits", "
     // The exact bytes QLocale("ar_BH").toString(-1050.25) produces under
     // Qt 6.11.2, measured rather than derived:
     //   U+061C U+002D U+0661 U+066C U+0660 U+0665 U+0660 U+066B U+0662 U+0665
-    // Before morph#591 this edge emitted "\u061c-1\u066c050\u066b25" -- the
-    // locale's sign and separators around ASCII digits, which is what made the
+    // Without a digit base this edge emits "\u061c-1\u066c050\u066b25" -- the
+    // locale's sign and separators around ASCII digits, which is what makes the
     // pair self-consistent and the defect invisible from either side alone.
     CHECK(formatCanonicalNumber("-1050.25", {.decimalSeparator = kArDecimal,
                                              .groupSeparator = kArGroup,
@@ -842,7 +843,8 @@ TEST_CASE("locale_format: the pair round-trips through every measured digit set"
 }
 
 TEST_CASE("normalizeLocaleNumber: ASCII digits stay accepted in a native-digit locale", "[render][locale][morph591]") {
-    // The morph#596 precedent, applied to digits: the locale's own digits are
+    // The same rule the positive sign follows, applied to digits: the locale's
+    // own digits are
     // on the user's keyboard only if their keyboard has them. Entry therefore
     // accepts a spelling display never produces, exactly as it does for the
     // ASCII '+' and '-'.

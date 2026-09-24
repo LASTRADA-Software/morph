@@ -100,14 +100,13 @@ kinds qualify:
 
 The second exists because `examples/IMPLEMENTATION.md` rule 3 *requires* entity
 identity to be a per-entity strong id exposing `hasValue()`, so it joins the
-forms palette as an empty-capable field. While `ModelKey` admitted only raw
+forms palette as an empty-capable field. Were `ModelKey` to admit only raw
 scalars, those two rules could not both be obeyed: a rung following rule 3
-could not use `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` at all, and three rungs
-independently hand-wrote `ModelKeyTraits`/`ActionKeyTraits` instead — each
-re-stating the `*id` unwrapping the macro exists to hide (morph#163). Those
-three (kanban, ledger, lims) use the macros now; morph#183 deleted the
-hand-written blocks, and with them the `*id` dereference of a possibly-empty
-strong id that each one performed.
+could not use `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` at all, and would have to
+hand-write `ModelKeyTraits`/`ActionKeyTraits` instead — each copy re-stating
+the `*id` unwrapping the macro exists to hide, and each dereferencing a
+possibly-empty strong id in the process. The three rungs whose entities carry
+strong ids (kanban, ledger, lims) use the macros.
 
 A strong id encodes as **whatever it wraps**, so it shares a directory entry
 with the raw key of the same value; the directory stays one map keyed on
@@ -371,18 +370,15 @@ verb-agnostic: `register` (shared or not) and `attach` all reply `ok` with a
 the synchronous methods' own degrade-to-private behaviour rather than inventing
 new semantics.
 
-Until morph#571 this was expressed as two *optional* `IBackend` virtuals
-(`registerModelSharedAsync`/`attachModelAsync`) returning `bool`, beside two
-more for the private bind and the promote. They are gone; the reasoning that
-survived them is in [backend.md](backend.md), "What was wrong with the old
-shape".
+Why a single dispatch virtual rather than one optional virtual per verb: see
+[backend.md](backend.md), "Why one bind virtual and not four".
 
 **Why this exists.** `registerModelShared`/`attachModel` are synchronous, so on
 a wire backend they block in a nested `QEventLoop`, which a WASM main thread
-cannot spin at all. Before this, the *first* payload-keyed action a WASM client
-executed — the very shape a keyed screen is built on — aborted the page. See
-`examples/LADDER.md`, "Framework prerequisites" #1, for the rung-3 (`polls`)
-scenario that motivated closing this.
+cannot spin at all. Without the async path, the *first* payload-keyed action a
+WASM client executes — the very shape a keyed screen is built on — aborts the
+page. See `examples/LADDER.md`, "Framework prerequisites" #1, for the rung-3
+(`polls`) scenario this serves.
 
 **What callers see.** Nothing, by design. `BridgeHandler::execute()`'s
 signature and its documented contract are unchanged, including the promise that

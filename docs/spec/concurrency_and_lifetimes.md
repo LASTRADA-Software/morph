@@ -234,11 +234,11 @@ across threads by construction (see the next section): it reports an instant tha
 has already passed. That is fine for gating *delivery* of a callback — a
 suppressed callback simply does not run — and the bridge still uses `liveness()`
 for exactly that. It is not fine for gating a *member call on the `Bridge`*.
-`~BridgeHandler` used a bare `active()` check until issue #486, where a
-`shared_ptr<BridgeHandler>` kept alive by its own dispatched completions was
-released on a worker-pool thread while the owning thread ran `~App`: the check
-passed, the `Bridge` finished being destroyed, and `Bridge::deregisterHandler`
-then iterated the freed `_handlers`. The gate turns check-then-call into one
+A bare `active()` check in `~BridgeHandler` admits this: a
+`shared_ptr<BridgeHandler>` kept alive by its own dispatched completions is
+released on a worker-pool thread while the owning thread runs `~App`, the check
+passes, the `Bridge` finishes being destroyed, and `Bridge::deregisterHandler`
+then iterates the freed `_handlers`. The gate turns check-then-call into one
 indivisible step.
 
 **`~Bridge` therefore blocks**, like `~StrandExecutor` above and for the same
@@ -256,19 +256,18 @@ thread that is already inside `~Bridge`** — destroying a handler from within
 self-deadlock on the gate, exactly as re-entering any exclusively-held mutex is.
 No framework path does this; a caller that arranges it is outside the contract.
 
-### The same check-then-call shape, elsewhere in `Bridge` — issue #489
+### The same check-then-call shape, elsewhere in `Bridge`
 
-`~BridgeHandler` was one check-then-call site of this shape; issue #489 named
-four more inside `Bridge` itself, and a follow-up audit of that issue found three
-further ones on the `IBackend` `*Async` reply path — each gating a callback on
-`liveness()` (or an equivalent snapshot) and then touching `this`. Not all of
-them can take `BridgeLifetime`'s gate the way `~BridgeHandler` does — the gate
-makes `~Bridge` block for as long as the gated span takes, and a span that can
-call into consumer-supplied code or a backend's blocking registration path turns
-that bounded wait into an unbounded one. Four dispositions, by site:
+`~BridgeHandler` is one check-then-call site of this shape. Four more sit inside
+`Bridge` itself, and three on the bind/promote reply path — each gating a
+callback on `liveness()` (or an equivalent snapshot) and then touching `this`.
+Not all of them can take `BridgeLifetime`'s gate the way `~BridgeHandler` does:
+the gate makes `~Bridge` block for as long as the gated span takes, and a span
+that can call into consumer-supplied code or a backend's blocking registration
+path turns that bounded wait into an unbounded one. Four dispositions, by site:
 
 - **`executeVia()`'s `.then`/`.onError` continuations.** `_pendingCalls` and
-  `_subscriptions` are now heap-allocated (`shared_ptr`, like `BridgeLifetime`
+  `_subscriptions` are heap-allocated (`shared_ptr`, like `BridgeLifetime`
   itself) and captured by value into the continuations, rather than reached
   through `this`. Once pinned that way, touching them needs no liveness check
   at all: `_pendingCalls` is decremented unconditionally, and
@@ -286,17 +285,15 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   Safe to hold the gate here: nothing in that span calls into consumer code or
   a blocking backend path, only a mutex and a pointer comparison.
 
-  Since morph#593 that callback may also run **on the registering thread
-  itself**: unless the backend answers `IBackend::BindWait::kCallerMustNotBlock`,
+  That callback may also run **on the registering thread itself**: unless the
+  backend answers `IBackend::BindWait::kCallerMustNotBlock`,
   `registerHandlerImpl` waits for the bind completion and then delivers the
-  outcome from its own frame, so `registerHandler` returns a bound handler. That
-  reinstates, for one statement, exactly the blocking window every backend had
-  before morph#568, when the fallback was the synchronous
-  `registerModelWithContext`: a thread parked inside `registerHandler` is a
-  thread not running `~Bridge`, and a *different* thread destroying the `Bridge`
-  while `registerHandler` is still on this one was already a misuse then and is
-  no more possible now. What is new is only that the parking is visible in
-  `Bridge` rather than inside the backend verb. The two
+  outcome from its own frame, so `registerHandler` returns a bound handler. The
+  parked statement is a blocking window, and a deliberate one: a thread parked
+  inside `registerHandler` is a thread not running `~Bridge`, and a *different*
+  thread destroying the `Bridge` while `registerHandler` is still on this one is
+  a misuse either way. The window is visible in `Bridge` rather than hidden
+  inside a backend verb, which is the point of putting it here. The two
   `kCallerMustNotBlock` backends never park at all, which is the point: for
   `QtWebSocketBackend` under `asyncRegistrationEnabled` the reply arrives on the
   parked thread's own event loop, so parking would not be a slow teardown but a
@@ -311,17 +308,15 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   event that could run the destructor — that is a self-deadlock, not a slow
   teardown.
 
-  morph#615 removed the worst version of that span rather than the span
-  itself. The handler used to call `registerModelWithContext`/
-  `registerModelShared`, which for `QtWebSocketBackend` block on a nested
-  `QEventLoop`; it now calls `bindModel` and consults
-  `IBackend::bindWaitPolicy()`, so a backend that says `kCallerMustNotBlock`
-  is not waited for at all and the handler returns promptly. A
-  `kCallerMayBlock` backend is still waited out, on the transport thread,
-  under both bridge mutexes — a bounded round trip by that backend's own
-  contract, but still a span a `BridgeLifetime` gate must not cover. So the
-  site stays on `liveness()`, and the residual scope of issue #489 stays
-  open.
+  The span is kept as short as it can be: the handler calls `bindModel` and
+  consults `IBackend::bindWaitPolicy()`, so a backend that says
+  `kCallerMustNotBlock` is not waited for at all and the handler returns
+  promptly. Calling the synchronous `registerModelWithContext`/
+  `registerModelShared` instead would block on a nested `QEventLoop` for
+  `QtWebSocketBackend`. A `kCallerMayBlock` backend is still waited out, on the
+  transport thread, under both bridge mutexes — a bounded round trip by that
+  backend's own contract, but still a span a `BridgeLifetime` gate must not
+  cover. So the site stays on `liveness()`, and this window stays open.
 - **The bind/promote reply continuations** — `attachHandlerAsync`,
   `ensureBoundAsync` and `assignHandlerPrimary`. (The fourth registration site,
   `registerHandlerImpl`, is covered by the `BridgeLifetime` bullet above and is
@@ -330,17 +325,16 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   is present in the source. What closes the window is not a gate but the thread
   the continuation is delivered on.
 
-  Until morph#571 that thread was a **contract on the backend**, stated in the
-  `*Async` twins' doc comments: a backend overriding one had to deliver its
-  callbacks from a thread on which `~Bridge` could not run concurrently.
-  morph#568 moved every site onto `IBackend::bindModel`/`promoteModel` and
-  morph#571 deleted the twins, so there is no such contract left to state — but
-  the three sites name `exec::detail::inlineExecutor()` as the delivery
-  executor, which reproduces the old delivery thread exactly: the continuation
-  runs wherever the backend settled.
+  The alternative is to make that thread a **contract on the backend**: every
+  backend overriding an async registration verb would have to deliver its
+  callbacks from a thread on which `~Bridge` cannot run concurrently. Instead
+  every site goes through `IBackend::bindModel`/`promoteModel`, which takes the
+  delivery executor as an argument, and the three sites name
+  `exec::detail::inlineExecutor()`: the continuation runs wherever the backend
+  settled.
 
-  **Since morph#588 the window is closed for a `Bridge` that was given an
-  executor, and unchanged for one that was not.** The `bindModel`/
+  **The window is closed for a `Bridge` that was given an executor, and open
+  for one that was not.** The `bindModel`/
   `promoteModel` argument is still `inlineExecutor()` — deliberately, because a
   reply that settles inside the dispatch frame must reach `parkIfInFrame`
   there, or `registerHandler()` stops being synchronous and `awaitHandoff`
@@ -358,34 +352,31 @@ that bounded wait into an unbounded one. Four dispositions, by site:
   `attachModel` round trip — the same shape of objection that rules a gate out
   for the reconnect handler.
 
-  **What changed with the removal is who could get it wrong, not whether it can
-  be wrong.** A backend that settles a `bindModel` completion on its own
-  transport thread reopens morph#486's use-after-free here for a bridge with no
-  `bridgeExec`; the difference morph#571 made is that the delivery thread is a
-  value one call site produces rather than an obligation on fifteen backend
-  authors, so closing it was a change in one place. morph#588 made it: the
-  choice is a constructor argument, and the residual exposure is the embedder's
-  own — supplying an executor on a thread unrelated to teardown satisfies the
-  type and closes nothing, which is stated where the argument is documented
-  rather than left to be discovered.
+  **What the executor argument changes is who can get it wrong, not whether it
+  can be wrong.** A backend that settles a `bindModel` completion on its own
+  transport thread reproduces the `~BridgeHandler` use-after-free here for a
+  bridge with no `bridgeExec`. Because the delivery thread is a value one call
+  site produces rather than an obligation on fifteen backend authors, closing it
+  is a change in one place — a constructor argument. The residual exposure is
+  the embedder's own: supplying an executor on a thread unrelated to teardown
+  satisfies the type and closes nothing, which is stated where the argument is
+  documented rather than left to be discovered.
 
   The structural surface that replaces these four hooks —
   `IBackend::bindModel`/`promoteModel` — takes the executor the continuation is
   delivered on as an argument, so the delivery thread is chosen by the caller,
   which knows what its own teardown looks like, instead of by the backend, which
-  does not. `Bridge` now reaches it at all five sites (morph#568, morph#615).
-  **That does not close the window above, and morph#568 does not claim it
-  does**: `Bridge` owns no event loop, so the executor it names is
-  `exec::detail::inlineExecutor()` — "deliver wherever you settled", which is
-  what the prose contract already required. What changed is where the decision
-  lives: one value produced at five `Bridge` call sites, rather than a
-  documented obligation on every `IBackend` implementor. morph#588 then gave
-  `Bridge` an executor of its own and used it for the late replies — not in
-  place of the `inlineExecutor()` argument, which the in-frame settle needs, so
-  the two cases are now told apart by the handoff rather than by the executor.
-  See
-  [core/backend.md](core/backend.md#the-structural-registration-surface--bindmodel-and-promotemodel),
-  [core/bridge.md](core/bridge.md) and morph#522.
+  does not. `Bridge` reaches it at all five sites. **That alone does not close
+  the window above**: `Bridge` owns no event loop, so the executor it names is
+  `exec::detail::inlineExecutor()` — "deliver wherever you settled". What the
+  argument buys is where the decision lives: one value produced at five `Bridge`
+  call sites, rather than a documented obligation on every `IBackend`
+  implementor. The `Bridge`'s own executor is what closes it, and it is used for
+  the late replies only — not in place of the `inlineExecutor()` argument, which
+  the in-frame settle needs, so the two cases are told apart by the handoff
+  rather than by the executor. See
+  [core/backend.md](core/backend.md#the-structural-registration-surface--bindmodel-and-promotemodel)
+  and [core/bridge.md](core/bridge.md).
 
 `switchBackend()` and `whenBound()` were audited for the same shape and do not
 have it. Both are ordinary synchronous member functions called by the bridge's

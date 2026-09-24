@@ -5,7 +5,7 @@
 #
 # "Clang" here excludes "AppleClang" on purpose — unlike the warning gate in
 # cmake/compiler_options.cmake, which had to be widened to cover both (issue
-# #298). Xcode's toolchain accepts -fsanitize=fuzzer on the compile line but
+# above). Xcode's toolchain accepts -fsanitize=fuzzer on the compile line but
 # ships no libFuzzer runtime, so the link fails with
 # "library 'libclang_rt.fuzzer_osx.a' not found". Failing at configure time
 # with the message below is the better error.

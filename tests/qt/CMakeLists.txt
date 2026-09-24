@@ -13,7 +13,7 @@ apply_warnings(qt_test_client)
 # AF_SANITIZER, for the same reason these two carry apply_coverage(): the
 # include/morph/qt code exercised across the process boundary only runs *here*,
 # in the spawned child, so a sanitizer applied to the parent alone watches the
-# half of the conversation that is not being tested (morph#542). An instrumented
+# half of the conversation that is not being tested. An instrumented
 # child reports on its own stderr and exits non-zero, which the parent's
 # process-exit assertions already surface.
 if(DEFINED AF_SANITIZER)
@@ -27,7 +27,7 @@ endif()
 # instrumented child writes its own .profraw (LLVM_PROFILE_FILE's %p is per
 # process and the environment is inherited across the spawn), and llvm-cov can
 # only map it back through the binary that produced it -- see apply_coverage()
-# in cmake/compiler_options.cmake, and morph#403 for what "instrumented but not
+# in cmake/compiler_options.cmake, and check_coverage_objects.sh for what "instrumented but not
 # handed to llvm-cov" costs.
 if(AF_COVERAGE)
     apply_coverage(qt_test_server TEST)
@@ -58,7 +58,7 @@ apply_warnings(morph_qt_tests)
 # Was missing entirely, so this suite was never instrumented and contributed
 # nothing to the coverage number while the CI coverage leg configured
 # -DMORPH_BUILD_QT=ON and ran it -- include/morph/qt showed 13 lines in the
-# uploaded report (morph#403).
+# uploaded report.
 if(AF_COVERAGE)
     apply_coverage(morph_qt_tests)
 endif()
@@ -66,7 +66,7 @@ endif()
 # Was missing for the same reason and with the same consequence as the coverage
 # block above: morph is header-only, so this target compiled its own
 # uninstrumented copy of every include/morph/qt header while a job named for a
-# sanitizer ran the suite and learned nothing from it (morph#542).
+# sanitizer ran the suite and learned nothing from it.
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(morph_qt_tests ${AF_SANITIZER})
 endif()

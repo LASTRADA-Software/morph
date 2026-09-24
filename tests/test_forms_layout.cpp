@@ -263,7 +263,7 @@ TEST_CASE("Forms::SchemaJson::NoFieldSpansEmitsNoColspan", "[forms][layout]") {
 }
 
 // ---------------------------------------------------------------------------
-// x-submitMode — the emitter half of explicit submit mode (morph#208)
+// x-submitMode — the emitter half of explicit submit mode
 //
 // The renderer has consumed `x-submitMode` since it shipped, but nothing in
 // C++ emitted it, so no *generated* schema could carry it and ten call sites

@@ -11,9 +11,9 @@
 // regression gate via CHECK on p99 latency and minimum concurrency-1
 // throughput.
 //
-// ── What this file measures, and what it used to measure (morph#687) ────────
+// ── What this file measures, and what it must not ───────────────────────────
 //
-// **The serial phase used to report the test harness's polling step, not a
+// **The serial phase must not report the test harness's polling step, not a
 // round trip.** It waited on each reply with `morph::testing::WaitReply`,
 // whose `await()` calls `waitUntil`, which does
 // `std::this_thread::sleep_for(5ms)` between predicate checks. So an idle
@@ -25,8 +25,8 @@
 //     16-way loaded    p50 0.0167 ms   (min 0.0166, max 0.0216)
 //
 // A 302x swing in the headline figure, selected by machine load -- the same
-// shape of defect morph#687 recorded for `morph_bench_alloc`, and larger.
-// Neither mode was the dispatch latency: the same idle processes reported
+// shape of defect `morph_bench_alloc` is subject to, and larger.
+// Neither mode is the dispatch latency: the same idle processes reported
 // ~176k executes/sec at concurrency 1, i.e. a round trip of about 5.7 us,
 // three orders of magnitude below the 5074 us the latency phase printed.
 //
@@ -34,18 +34,18 @@
 // so what is timed is `handle()` to reply and one thread wakeup. The
 // replacement is local to this file on purpose: `waitUntil` has 464 call sites
 // and changing it is not this benchmark's business, so what the rest of them
-// inherit is morph#708 rather than a fix folded in here. The drain at
+// inherit is a separate change rather than a fix folded in here. The drain at
 // the end of each throughput window is blocking for the same reason: it is
 // inside the window's own elapsed time, so a 5 ms polling tail was being
 // charged to the throughput figure.
 //
 // ── Why it reports a distribution rather than a figure ──────────────────────
 //
-// morph#687's other half: a cited number taken from one process is one sample.
-// `morph_bench_alloc` answers that by pinning the race it was subject to, and
+// A cited number taken from one process is one sample.
+// `morph_bench_alloc` answers that by pinning the race it is subject to, and
 // an allocation count then comes out exact. A wall-clock figure has no such
 // regime to pin -- contention is not a mode, it is a tax -- so this benchmark
-// takes the other option morph#687 names and reports a distribution: it runs
+// takes the other option and reports a distribution: it runs
 // `MORPH_BENCH_TRIALS` trials and prints the best, median and worst of each
 // percentile and each throughput point, with every trial written to the JSON
 // artifact.
@@ -160,9 +160,9 @@ double medianOf(std::vector<double> values) {
     return values[values.size() / 2];
 }
 
-// ── Every figure carries the load it was taken under (morph#707) ─────────────
+// ── Every figure carries the load it was taken under ────────────────────────
 //
-// morph#710's own sweeps put the same binary 28x apart on throughput between
+// Load sweeps put the same binary 28x apart on throughput between
 // an idle box and a 16-way loaded one. A benchmark number without the load it
 // was measured at is therefore not comparable with another one, and most of
 // the confusion this instrument has caused came from comparing two such
@@ -191,7 +191,7 @@ double loadAverage1m() {
     return -1.0;
 }
 
-// ── The injectable regression (morph#707, AGENTS.md's non-vacuity rule) ──────
+// ── The injectable regression (AGENTS.md's non-vacuity rule) ────────────────
 //
 // "A ceiling derived from a distribution but never fired is still unproven."
 // The same is true of a ceiling that was never derived: nobody has ever shown
@@ -213,14 +213,13 @@ std::chrono::microseconds injectedSpin() {
     return kSpin;
 }
 
-// ── The cross-process ledger (morph#687's remaining half) ────────────────────
+// ── The cross-process ledger ────────────────────────────────────────────────
 //
-// morph#710 gave this benchmark a distribution over trials *within* one
+// The trial loop above gives a distribution over trials *within* one
 // process. That substantially mitigates the spread -- 302x down to about 3x in
 // the common cases -- but it does not **record** it: a single process still
-// prints one triple and cannot say where that triple sits among others. That
-// is why morph#687's close condition ("reports a distribution over processes")
-// was never actually met, and it is the half that is met here.
+// prints one triple and cannot say where that triple sits among others. A
+// distribution over *processes* is what this ledger adds.
 //
 // N runs of this binary accumulate into one JSON-lines file with no
 // orchestration at all:
@@ -495,21 +494,22 @@ TEST_CASE("bench: RemoteServer dispatch throughput and latency", "[bench]") {
     // for anything finer -- that is what the distribution is for, and it is
     // why this file now writes one.
     //
-    // ── morph#707: the cheaper alternative, weighed, and the answer ─────────
+    // ── The cheaper alternative, weighed, and the answer ───────────────────
     //
-    // morph#707 asks that an allocation gate be weighed before any wall-clock
-    // ceiling is tightened, on the grounds that allocations are deterministic
+    // An allocation gate is what to weigh before tightening any wall-clock
+    // ceiling, since allocations are deterministic
     // and load-independent. **That gate already exists and already runs.**
     // `tests/bench/CMakeLists.txt` registers `bench.alloc_budget`, which fails
     // the build above 9.0 heap allocations per local round trip against a
     // figure measured at exactly 8.06 on every one of 84 processes across
-    // three toolchains, idle and oversubscribed alike (morph#700, morph#743,
-    // morph#572). Its margin is one allocation -- "the smallest regression
+    // three toolchains, idle and oversubscribed alike. Its margin is one
+    // allocation -- "the smallest regression
     // worth a red build" -- and no wall-clock constant on any host is within
     // three orders of magnitude of that resolution.
     //
-    // So the property morph#707 worried was ungated ("dispatch does not get
-    // more expensive") **is** gated, tightly, by a different instrument. What
+    // So the property these loose ceilings look like they leave ungated
+    // ("dispatch does not get more expensive") **is** gated, tightly, by a
+    // different instrument. What
     // the two constants below gate is the residue: a regression that costs
     // time without costing allocations -- a spin, a syscall, a lock held
     // longer, a sleep. That is a real class, and it is the only class these
@@ -517,11 +517,11 @@ TEST_CASE("bench: RemoteServer dispatch throughput and latency", "[bench]") {
     //
     // They stay at 50 ms and 500/sec, and this is a decision rather than
     // an omission. Tightening them needs the CI runner characterised rather
-    // than guessed at, and this lane could not characterise it: these figures
-    // come from a 12-core workstation, which is the configuration morph#707
-    // explicitly says is the misleading one. Setting them from this box was
-    // tried once already and rejected on measurement -- morph#710's 20000/sec
-    // turned 3 of 20 Debug-under-load processes red -- and guessing a second
+    // than guessed at, and it has not been: these figures
+    // come from a 12-core workstation, which is the misleading configuration to
+    // set a CI ceiling from. Setting them from this box has been
+    // tried and rejected on measurement -- a 20000/sec floor
+    // turns 3 of 20 Debug-under-load processes red -- and guessing a second
     // time from the same box would be the same mistake with a different
     // number. **What is added instead is the evidence a future tightening
     // needs**: the cross-process ledger below, so a candidate ceiling can be
@@ -546,8 +546,8 @@ TEST_CASE("bench: RemoteServer dispatch throughput and latency", "[bench]") {
     // shown to. And the size they fire at is the point: the baseline round
     // trip is about 5.9 us, so the **throughput floor -- the tighter of the
     // two -- first speaks at roughly a 340x regression**, and the p99 ceiling
-    // at roughly 8500x. That is the "~800x" morph#707 estimated, confirmed by
-    // measurement and if anything understated for the p99 half.
+    // at roughly 8500x -- so the order of magnitude a loose ceiling costs is
+    // measured here rather than estimated.
     //
     // So these are gross-failure detectors, they are now documented as such
     // with the number attached, and a reader who wants resolution should watch
@@ -717,7 +717,7 @@ TEST_CASE("bench: RemoteServer dispatch throughput and latency", "[bench]") {
     }
     artifact << "]}";
 
-    // ── The cross-process ledger (morph#687, morph#707 step 2) ──────────────
+    // ── The cross-process ledger ────────────────────────────────────────────
     //
     // Appended after the per-process artifact is complete, so a row exists
     // only for a run that produced a full set of figures. `load_1m` and

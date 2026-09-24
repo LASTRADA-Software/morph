@@ -362,10 +362,10 @@ verbatim rather than re-serialising a rounded double.
 
 The failure this prevents is silent and destructive. JavaScript numbers are
 IEEE-754 doubles and round to even above 2^53, so neighbouring ids collapse onto
-one value: two rows became indistinguishable, and a confirmed `Delete` on one
-built a body naming the other (morph#191). Nothing downstream could notice — the
-server side is exact throughout, so the action decoded cleanly, validated, and
-deleted precisely the wrong row.
+one value: two rows become indistinguishable, and a confirmed `Delete` on one
+builds a body naming the other. Nothing downstream can notice — the server side
+is exact throughout, so such an action decodes cleanly, validates, and deletes
+precisely the wrong row.
 
 The same guarantee for `Choice` option ids is in
 [choice.md](choice.md#option-ids-larger-than-253).

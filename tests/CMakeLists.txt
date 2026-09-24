@@ -1,4 +1,4 @@
-# ── The SYSTEM-include demotion helper's own self-test (morph#438) ───────────
+# ── The SYSTEM-include demotion helper's own self-test ──────────────────────
 # cmake/morph_demote_interface_includes.cmake moves unixODBC's `-I` out of the
 # fetched Lightweight target's INTERFACE_COMPILE_OPTIONS. On Linux that flag is
 # empty, so nothing observable here would change if the helper's body were
@@ -165,7 +165,7 @@ target_compile_definitions(morph_tests PRIVATE
     MORPH_CMAKE_VERSION_PATCH=${PROJECT_VERSION_PATCH}
 )
 
-# The shared x-rules corpus (morph#176). One file, two readers: this suite and
+# The shared x-rules corpus. One file, two readers: this suite and
 # src/qt/forms/tests/tst_DynamicFormRuleCorpus.qml, both pointed at it from
 # CMake so neither can quietly grow its own copy. It lives beside the QML half
 # because that half cannot be handed a path at runtime; this half can.
@@ -219,20 +219,20 @@ include(Catch)
 # That number was never chosen with any particular test in mind, which is
 # fine while every test is sub-second and wrong for the one that is not: the
 # longest, most load-sensitive case in the binary was governed by the same
-# ceiling as the cheapest (morph#760). So the blanket stays and `[slow]` is
-# registered separately, exactly as it was for #589/#590 -- DISCOVERY_MODE
+# ceiling as the cheapest. So the blanket stays and `[slow]` is
+# registered separately -- DISCOVERY_MODE
 # PRE_TEST defers discovery to ctest invocation time, so a per-test TIMEOUT
 # cannot be set with set_tests_properties() here (nothing is named that test
 # yet at configure time); excluding a tag and giving it its own
 # catch_discover_tests() call is the mechanism that is actually available.
 #
-# (#589's own use of `[slow]` is gone: the 70,000-node `equation()` depth test
-# blew past 120s under TSan because of O(n^2) string building, #582 made that
-# rendering linear, and it is back under the blanket cap. The tag is reused
+# (The `equation()` depth test no longer needs the tag: at 70,000 nodes it blew
+# past 120s under TSan because of O(n^2) string building, and with that
+# rendering linear it is back under the blanket cap. The tag is reused
 # here for a different test and a different reason.)
 catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "~[slow]" PROPERTIES TIMEOUT 120)
 
-# `[slow]` (morph#760): `StrandExecutor never runs two tasks for one key
+# `[slow]`: `StrandExecutor never runs two tasks for one key
 # concurrently under contention`. Not slow because it computes anything --
 # 0.14 s on an idle box -- but because the strand serialises 3200 tasks per
 # iteration and every handoff is a thread wakeup that has to wait its turn on
@@ -246,7 +246,7 @@ catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "~[slow]" PRO
 #     run queue 38         ->  396.4 s   <- load average 31-38 at measurement
 #
 # Every one of those runs *passed*: 40 assertions, `inFlight 1, maxInFlight 1`
-# throughout. morph#760's report was this case being killed while passing, at
+# throughout. What this tag answers is the case being killed while passing, at
 # load average 29-48 -- above the 38 measured here, and the curve is
 # superlinear, so the fitted figure at a run queue of ~50 is roughly 730 s.
 #
@@ -266,9 +266,8 @@ catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "~[slow]" PRO
 # for one test out of 3044.
 catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "[slow]" PROPERTIES TIMEOUT 900)
 
-# ── Two-binary journal-path skew test (issue #246) ───────────────────────────
-# The executable form of the journal's data-at-rest contract, which
-# examples/lims/README.md asks for and #174 restated as "the other half": an
+# ── Two-binary journal-path skew test ───────────────────────────────────────
+# The executable form of the journal's data-at-rest contract: an
 # old build records a journal, a new build replays it, and a shape that changed
 # in between must not decode to a plausible default in silence.
 #
@@ -292,8 +291,8 @@ catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "[slow]" PROP
 # suppresses the model-owning registrars, so a client-only binary cannot
 # execute a model and therefore cannot journal anything. It is the right gate
 # for the *wire*-path skew test, which needs a per-action fingerprint exchanged
-# at `hello` before there is anything to assert against -- issue #207's
-# unimplemented proposal. This covers the journal path, which ships today.
+# at `hello` before there is anything to assert against, and no such exchange
+# exists. This covers the journal path, which ships today.
 set(MORPH_JOURNAL_SKEW_DIR "${CMAKE_CURRENT_BINARY_DIR}/journal_skew")
 file(MAKE_DIRECTORY "${MORPH_JOURNAL_SKEW_DIR}")
 
@@ -328,8 +327,8 @@ set_tests_properties(journal_skew_new_build_replays PROPERTIES
     FIXTURES_REQUIRED morph_journal_skew_fixture
     TIMEOUT 120)
 
-# ── forms: schema generation must not be route-count sensitive (morph#573) ───
-# The Part B regression guard. compile_checks/forms_dag_probe.cpp is compiled
+# ── forms: schema generation must not be route-count sensitive ──────────────
+# compile_checks/forms_dag_probe.cpp is compiled
 # twice — once as a type graph with one route to each node, once as a DAG with
 # 6,561 routes through the same number of types at the same depth — and
 # compile_checks/forms_dag_budget.cmake asserts the second costs no more than
@@ -561,7 +560,7 @@ if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE EQUAL 0)
         "${MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT}")
 endif()
 
-# Issue #61: BRIDGE_REGISTER_ACTION_FOR_CLIENT lets a MORPH_CLIENT_ONLY client
+# BRIDGE_REGISTER_ACTION_FOR_CLIENT lets a MORPH_CLIENT_ONLY client
 # register an action's ActionTraits (JSON codecs + an explicitly-named Result
 # type) without ever needing the real model's complete class body -- see
 # docs/spec/core/registry.md, "BRIDGE_REGISTER_ACTION_FOR_CLIENT".

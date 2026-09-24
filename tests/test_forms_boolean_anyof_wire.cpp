@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The C++ half of morph#189. DynamicForm used to emit a boolean field and an
-// `anyOf` integer field as JSON *strings*; this file pins the two facts that
+// The C++ half of the renderer's numeric-encoding contract. A renderer that
+// emits a boolean field or an `anyOf` integer field as a JSON *string* is
+// rejected by the decoder; this file pins the two facts that
 // make that a defect rather than a cosmetic difference:
 //
 //   1. `schemaJson<A>()` really does emit `{"type":"boolean"}` for a `bool`
@@ -91,7 +92,7 @@ TEST_CASE("morph::core: fromJson accepts the bare literals the fixed renderer em
 }
 
 TEST_CASE("morph::core: fromJson rejects the quoted literals the renderer used to emit", "[forms][boolean]") {
-    // These are the payloads morph#189 measured as rejected. If glaze ever
+    // These are the payloads measured as rejected. If glaze ever
     // started coercing them, the renderer defect would stop being observable
     // end-to-end and this test would tell us the severity had changed.
     SECTION("a stringified boolean") {

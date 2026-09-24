@@ -17,11 +17,11 @@ name: WASM ladder gate
 # rung list still has to be written out by hand. GitHub evaluates `on.*.paths`
 # to decide whether to start the workflow at all, which happens before any step
 # of it can run -- so nothing here can read examples/rungs.txt, the list every
-# other consumer derives from. That is exactly how they fell a rung behind:
-# both stopped at kanban, so ledger and lims matched nothing (morph#179).
+# other consumer derives from. That is exactly how such a list falls a rung
+# behind: it stops at whatever the last edit knew about, and every rung added
+# after that matches nothing here.
 #
-# They were checked against examples/rungs.txt from the outside by a
-# drift-guard job, removed with the meta-gates. Adding a rung still means
+# Nothing checks these two lists against examples/rungs.txt. Adding a rung means
 # adding two lines here -- but nothing catches forgetting any more, so the
 # two lists have to be kept in step by hand.
 on:
@@ -151,9 +151,10 @@ jobs:
       # missing, announcing why) fails this job instead of passing it
       # vacuously. The plain build that follows covers everything else.
       #
-      # The rungs are read from examples/rungs.txt rather than listed here --
-      # this loop used to name `pastebin bookmarks polls` literally, a third
-      # hand-copy of the rung list in this repository (morph#179).
+      # The rungs are read from examples/rungs.txt rather than listed here: a
+      # literal `pastebin bookmarks polls` would be a third hand-copy of the
+      # rung list in this repository, and the two above are already one too
+      # many.
       #
       # The gate is now the presence of `examples/<rung>/gui_wasm/`, not of
       # `examples/<rung>/`. Two cases it has to tell apart, and the directory
@@ -193,8 +194,8 @@ jobs:
             fi
           done <<< "$rungs"
           # A loop that named no target at all would pass this step while
-          # building nothing, which is the same shape of defect as the filter
-          # that started morph#179. At least one rung has a WASM client.
+          # building nothing -- the same shape of defect as a path filter that
+          # matches nothing. At least one rung has a WASM client.
           if [ "$built" -eq 0 ]; then
             echo "::error::no ladder_<rung>_gui_wasm target was built -- the named-target tripwire matched nothing"
             exit 1
@@ -209,7 +210,7 @@ jobs:
         run: |
           # pipefail because `find` over a build tree the previous step was
           # supposed to fill is a claim worth failing on: without it this step
-          # prints nothing and exits 0 whether the directory is empty or absent
-          # (morph#730).
+          # prints nothing and exits 0 whether the directory is empty or
+          # absent.
           set -o pipefail
           find build-wasm-ladder -name '*.wasm' -o -name '*.html' | sort

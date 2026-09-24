@@ -2,7 +2,7 @@
 # Usage: bash scripts/test_check_automoc_includes.sh
 #
 # Self-test for scripts/check_automoc_includes.sh, the CI gate for moc output
-# that includes its header by an ascending relative path (issue #372). A lint
+# that includes its header by an ascending relative path. A lint
 # gate that is never itself tested reports green whether or not it still
 # detects anything -- and this one is especially exposed to that, because the
 # defect it guards against is invisible in an ordinary checkout: the ascending

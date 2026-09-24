@@ -198,7 +198,7 @@ TEST_CASE("morph::offline::IOfflineQueue: default setAttempts is a no-op", "[que
     REQUIRE(queue.items[0].attempts == 0);
 }
 
-// ── Coverage: maxDepth / overflow policy (morph#112) ───────────────────────
+// ── Coverage: maxDepth / overflow policy ───────────────────────
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue below maxDepth succeeds", "[queue][overflow]") {
     morph::offline::InMemoryOfflineQueue queue{3};
@@ -289,8 +289,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: IOfflineQueue idempotency-key c
                                              [] { return std::make_unique<morph::offline::InMemoryOfflineQueue>(); });
 }
 
-TEST_CASE("morph::offline::InMemoryOfflineQueue: a NUL-bearing payload and key round-trip intact (morph#531)",
-          "[offline_queue]") {
+TEST_CASE("morph::offline::InMemoryOfflineQueue: a NUL-bearing payload and key round-trip intact", "[offline_queue]") {
     morph::test::checkNulPayloadRoundTrip("InMemoryOfflineQueue",
                                           [] { return std::make_unique<morph::offline::InMemoryOfflineQueue>(); });
 }

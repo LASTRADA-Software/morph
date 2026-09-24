@@ -266,8 +266,8 @@ TEST_CASE("encodeWsFrame round-trips close/ping/pong opcodes", "[net][frame]") {
 }
 
 // ── RFC 6455 conformance: illegal frames a peer must not accept ────────────
-// morph#533 -- none of the following were rejected before this file's reader
-// grew a role and these checks.
+// A reader with no role and no length/opcode checks accepts every one of the
+// following.
 
 TEST_CASE("WsFrameReader (server role) rejects an unmasked frame from a client", "[net][frame]") {
     WsFrameReader reader{/*expectMasked=*/true};

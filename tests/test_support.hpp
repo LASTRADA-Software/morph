@@ -37,7 +37,7 @@ struct InlineExecutor : ::morph::exec::IExecutor {
 /// @brief `IExecutor` that queues every posted task and runs them only when the
 ///        test explicitly asks, one at a time.
 ///
-/// The public interleaving-test harness for issue #55's use case 2: any server
+/// The public interleaving-test harness: any server
 /// component built on `morph::exec::IExecutor` — `RemoteServer` included — can
 /// be driven with fully deterministic, hand-stepped task ordering by
 /// constructing it against a `StepExecutor` instead of a `ThreadPoolExecutor`.
@@ -206,7 +206,7 @@ private:
     std::deque<std::function<void()>> _queue;
 };
 
-// ── The wait primitives are for liveness. Never time across one (morph#708) ──
+// ── The wait primitives are for liveness. Never time across one ─────────────
 //
 // `waitUntil` below, and `WaitReply::await` further down, answer *"did this
 // eventually happen?"*. They do not answer *"how long did this take?"*, and
@@ -220,11 +220,11 @@ private:
 // `WaitReply::await()` around each of 2000 serial round trips and published a
 // p50 of 5074 us, while the same processes reported ~176k executes/sec at
 // concurrency 1 — a round trip of about 5.7 us. Three orders of magnitude, on
-// a figure that had a CI gate on it. morph#710 fixes that file by replacing
-// the waiter with a condition variable (`BlockingReply` there); copy that
+// a figure that had a CI gate on it. The fix there is to replace
+// the waiter with a condition variable (`BlockingReply`); copy that
 // shape if you need to time something.
 //
-// ── Audit, master @ 6f95f49a (morph#708) ─────────────────────────────────────
+// ── Audit of the call sites ─────────────────────────────────────────────────
 //
 // 433 poll sites were classified: 211 direct `waitUntil(` invocations across 43
 // files, plus 222 `await()` invocations, which reach the same loop through
@@ -250,7 +250,7 @@ private:
 //
 // ── What the step costs a suite run, measured ────────────────────────────────
 //
-// morph#708 listed this as unmeasured. It is not free, and the bill reads the
+// It is not free, and the bill reads the
 // same two independent ways. Measured on an otherwise-quiet 12-core Linux box
 // (clang 22.1.8, Release, load average 0.9-2.1), one binary instrumented to
 // take the step from the environment so that the two arms differ in nothing
@@ -283,7 +283,7 @@ inline constexpr std::chrono::milliseconds kDefaultWaitBudget{2000};
 /// @brief Default polling step for `waitUntil`.
 inline constexpr std::chrono::milliseconds kDefaultWaitStep{5};
 
-// ── Why these are two types and not two `milliseconds` (morph#721) ───────────
+// ── Why these are two types and not two `milliseconds` ─────────────────────
 //
 // `waitUntil` used to take `(Pred, milliseconds budget = 2000ms,
 // milliseconds step = 5ms)`: two adjacent, same-type, both-defaulted
@@ -300,10 +300,10 @@ inline constexpr std::chrono::milliseconds kDefaultWaitStep{5};
 // hazard is ever reintroduced.
 //
 // Two escapes were available and both were rejected. A `NOLINT` would have
-// removed the *warning* and left the hazard (morph#404). Reordering the
+// removed the *warning* and left the hazard. Reordering the
 // parameters so they are no longer adjacent would have removed the
-// heuristic's view of them and left the hazard too -- morph#715 measured that
-// exact outcome on `annotateExactBound`, where widening a parameter to
+// heuristic's view of them and left the hazard too -- that exact outcome was
+// measured on `annotateExactBound`, where widening a parameter to
 // `std::string_view` silenced `bugprone-easily-swappable-parameters` while the
 // transposition still compiled.
 //
@@ -384,7 +384,7 @@ concept WaitUntilCallableWith = requires(Args... args) { waitUntil(args...); };
 /// @brief A stand-in predicate type for the assertions below.
 using ExampleWaitPred = bool (*)();
 
-// The acceptance test for morph#721, and the reason this header is the right
+// The acceptance test for that separation, and the reason this header is the right
 // place for it: these run in every translation unit that includes it, so the
 // hazard cannot be reintroduced by a later edit without reddening the build.
 //

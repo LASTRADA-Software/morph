@@ -6,7 +6,7 @@
 #
 # A gate nobody tests reports green whether or not it still detects anything,
 # and this one guards a defect whose entire character was reporting success:
-# `cmake --install` exited 0 while installing none of morph (morph#232). A
+# `cmake --install` exited 0 while installing none of morph. A
 # check for that which itself passed against a broken install would be worse
 # than no check at all -- it would turn "nobody looked" into "something looked
 # and said it was fine".
@@ -14,7 +14,7 @@
 # So the gate is checked in both directions: the unmodified tree must pass,
 # and each defect it claims to catch is reintroduced into a scratch copy of the
 # tree, one at a time, and must be caught *for the stated reason*. The
-# mutations below are not hypothetical: the first is morph#232 itself, three
+# mutations below are not hypothetical: the first is that defect itself, three
 # more were live bugs in these install rules that survived a reading of the
 # CMake and were found only by installing to a prefix and building something
 # against it, and the last is a vacuity guard on the check that caught one of
@@ -172,7 +172,7 @@ expect_caught "morph's install rules not running at all" \
 # reports the rest. So it moves whenever a public header gains a detail/ include
 # that sorts ahead of the previous first -- it read `morph/detail/fixed_string.hpp`
 # until `morph/core/backend.hpp` started including `detail/instance_directory.hpp`
-# (morph#523), which the consumer reaches earlier. A failure here saying "caught
+# which the consumer reaches earlier. A failure here saying "caught
 # for the WRONG reason" and naming some other detail/ header is that, and the fix
 # is to update this needle, not to touch the install rules. The needle stays
 # specific rather than becoming a loose `detail/` match so that this case still
@@ -193,7 +193,7 @@ expect_caught "the detail/ header set dropped from the install" \
 # relying on a real one being broken. It used to point at
 # morph/detail/quantity_equation.hpp, which was included partway down
 # quantity.hpp and used `formatOptionalDecimal` before that header declared it.
-# morph#574 made it self-contained -- a good change for clang-tidy and for any
+# it is self-contained -- a good property for clang-tidy and for any
 # tool that opens a header on its own -- and this case went red, correctly: no
 # detail/ header was left that VERIFY_INTERFACE_HEADER_SETS would reject, so
 # deleting the property no longer broke anything and the mutation could not be

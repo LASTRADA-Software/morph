@@ -85,7 +85,7 @@ public:
 
 // A model whose onBackendChanged RE-ENTERS the bridge by calling
 // registerHandler + deregisterHandler on the SAME bridge — the conflict-
-// resolution reentrancy the audit flagged (#14). Under the old design,
+// resolution reentrancy the audit flagged. Under a single-slot design,
 // notifyBackendChanged ran inline while Bridge::_mtx was held, so any of these
 // re-entrant calls (which also take _mtx) self-deadlocked. With strand dispatch
 // the callback runs on a pool thread with _mtx free, so the re-entrant calls

@@ -26,7 +26,7 @@ and react to backend changes.
 ## Contents
 
 - [The dispatch struct — `ActionCall`](#the-dispatch-struct--actioncall)
-  - [Why the callables are function pointers (morph#572)](#why-the-callables-are-function-pointers-morph572)
+  - [Why the callables are function pointers](#why-the-callables-are-function-pointers)
   - [Lifetime contract](#lifetime-contract)
 - [The abstract interface — `IBackend`](#the-abstract-interface--ibackend)
 - [Connect/disconnect notifications](#connectdisconnect-notifications)
@@ -79,17 +79,17 @@ There is one member function, `serializeBody()`, which pairs
 it rather than invoking the pointer itself, so the borrow is closed in one
 place instead of three.
 
-### Why the callables are function pointers (morph#572)
+### Why the callables are function pointers
 
 `Bridge::executeVia` builds an `ActionCall` on **every** call, including calls
 a `LocalBackend` serves and that therefore never touch `serializeAction` or
-`deserializeResult`. The earlier shape — three `std::function`s, each capturing
-a `shared_ptr<Action>` — made that apparatus cost heap allocations whichever
-path the call took: libstdc++'s small-object buffer is available only to a
+`deserializeResult`. The obvious alternative — three `std::function`s, each
+capturing a `shared_ptr<Action>` — makes that apparatus cost heap allocations
+whichever path the call takes: libstdc++'s small-object buffer is available only to a
 trivially copyable target, and a captured `shared_ptr` is not one, so each
-stateful callable allocated. The two type ids were `std::string` copies of
-compile-time constants and allocated whenever an id exceeded the 15-character
-SSO threshold.
+stateful callable allocated. Type ids carried as `std::string` copies of
+compile-time constants allocate in the same way whenever an id exceeds the
+15-character SSO threshold, so they are `string_view`s here.
 
 The behaviour of each callable is a constant of `(Model, Action)`, not of the
 call, so it is *addressed* rather than copied: a stateless function pointer,
@@ -97,13 +97,13 @@ parameterised on the action it operates on. The action object itself still
 needs a home — it is the one genuinely per-call thing — and that home is
 `action`, a single `make_shared<Action>`, which the type erasure needed anyway.
 
-**Measured** on `master` @ `a9cb5649` with `tests/bench/bench_dispatch_allocations.cpp`
+**Measured** with `tests/bench/bench_dispatch_allocations.cpp`
 (`morph_bench_alloc`, clang 22.1.8 / libstdc++ 16.2.1, Release, 15 processes
-per configuration): a local `Ping -> Pong` round trip fell from a median of
-**16.98** heap allocations per call (range 16.89–17.05) to **13.79**
-(range 13.71–14.03), and from 1245.7 to 1151.1 bytes per call. The three
-allocations removed are the `modelTypeId` string and the `serializeAction` and
-`localOp` closure targets.
+per configuration), the `std::function` shape against this one: a local
+`Ping -> Pong` round trip costs a median of **16.98** heap allocations per call
+(range 16.89–17.05) against **13.79** (range 13.71–14.03), and 1245.7 against
+1151.1 bytes per call. The three allocations are the `modelTypeId` string and
+the `serializeAction` and `localOp` closure targets.
 
 ### Lifetime contract
 
@@ -129,7 +129,7 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 | Method | Purpose |
 |---|---|
 | `registerModel(typeId, factory)` | Registers a new model instance, returns its opaque `ModelId`. |
-| `registerModelWithContext(typeId, factory, contextKey)` | Same as `registerModel`, additionally passes a stable identity (e.g. account id). Default implementation drops `contextKey` and forwards to `registerModel` — correct for `LocalBackend` where the factory closure already captures identity. Every backend whose instances live behind a wire protocol overrides it to carry `contextKey` across: `SimulatedRemoteBackend`, `SocketBackend` (morph#587) and `QtWebSocketBackend` (morph#594) all do. Not cosmetic — `RemoteServer::attachLogIfConfigured` skips the `LogProvider` lookup entirely on an empty `contextKey`, so a wire backend that drops the key leaves the instance with **no** action log rather than a log missing a field (morph#587). |
+| `registerModelWithContext(typeId, factory, contextKey)` | Same as `registerModel`, additionally passes a stable identity (e.g. account id). Default implementation drops `contextKey` and forwards to `registerModel` — correct for `LocalBackend` where the factory closure already captures identity. Every backend whose instances live behind a wire protocol overrides it to carry `contextKey` across: `SimulatedRemoteBackend`, `SocketBackend` and `QtWebSocketBackend` all do. Not cosmetic — `RemoteServer::attachLogIfConfigured` skips the `LogProvider` lookup entirely on an empty `contextKey`, so a wire backend that drops the key leaves the instance with **no** action log rather than a log missing a field. |
 | `bindModel(request, cbExec)` | Acquires a model instance and returns a `Completion<ModelId>` delivered on `cbExec`. One verb covering `registerModelWithContext`, `registerModelShared` and `attachModel`, selected by the request's shape. The preferred surface — see [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
 | `promoteModel(request, cbExec)` | Files an already-live instance under a key and returns a `Completion<ModelId>` delivered on `cbExec`. The structural counterpart of `assignPrimary`. |
 | `bindWaitPolicy()` | Whether a caller may block its own thread until a `bindModel`/`promoteModel` completion settles. `BindWait::kCallerMayBlock` by default. The framework callers are `Bridge::registerHandlerImpl`, `Bridge::switchBackend`'s phase 1 and `Bridge::installReconnectHandler`'s handler; see [Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy). |
@@ -222,15 +222,11 @@ WASM client makes, and again on the first payload-keyed `execute()` a keyed
 screen makes, which attaches. That is the whole reason a non-blocking
 registration path exists; everything below this heading is a consequence of it.
 
-The path is [`bindModel`/`promoteModel`](#the-structural-registration-surface--bindmodel-and-promotemodel).
-Between morph#26 and morph#571 it was instead four optional `*Async` twins
-beside the synchronous verbs, each returning a `bool` meaning "I accepted the
-request and will call exactly one callback later" or "I have no such path,
-call the synchronous verb instead". They are gone; what they were for, and
-what was wrong with the shape, is
-[What was wrong with the old shape](#what-was-wrong-with-the-old-shape) below.
-Two consequences of that history are still load-bearing and are recorded here
-rather than left to be rediscovered:
+The path is [`bindModel`/`promoteModel`](#the-structural-registration-surface--bindmodel-and-promotemodel);
+why it is one virtual rather than an optional non-blocking twin per verb is
+[Why one bind virtual and not four](#why-one-bind-virtual-and-not-four) below.
+Two consequences of it are load-bearing and are recorded here rather than left
+to be rediscovered:
 
 **The gate is `asyncRegistrationEnabled`, not the surface.** `bindModel` is
 non-blocking *as a signature* on every backend, but only a backend that
@@ -265,44 +261,38 @@ below for which backends answer which way.
 
 ## The structural registration surface — `bindModel` and `promoteModel`
 
-Everything above this heading describes the **older** of two registration
-surfaces. It still works, every backend in the tree still uses it, and nothing
-about it has changed — but it is being retired by
-[morph#522](https://github.com/LASTRADA-Software/morph/issues/522), whose
-five-step set replaces it. This section describes what replaces it and why.
+Everything above this heading describes the synchronous registration surface.
+It still works and every backend in the tree still implements it; this section
+describes the non-blocking surface that sits beside it, and why it has the
+shape it has.
 
-### What was wrong with the old shape
+### Why one bind virtual and not four
 
-The shape being replaced was four optional `*Async` twins on `IBackend` —
-`registerModelAsync`, `registerModelSharedAsync`, `attachModelAsync` and
-`assignPrimaryAsync` — each sitting beside a synchronous verb and each
-returning `bool`. morph#571 removed them; this section is kept because what
-was wrong with them is what the replacement is shaped by.
+The obvious alternative is four optional non-blocking twins on `IBackend` —
+one beside each of `registerModel`, `registerModelShared`, `attachModel` and
+`assignPrimary` — each returning a `bool` meaning "I accepted the request and
+will call exactly one callback later" or "I have no such path, call the
+synchronous verb instead". The objection is not the duplication. It is two
+properties of those *signatures*:
 
-What was wrong was not the duplication. It was two things that are properties
-of the *signatures*:
+1. **The continuation would be optional.** With `true` meaning "I accepted the
+   request" and `false` meaning "call the synchronous verb instead", every call
+   site carries two paths, no backend can be partially adopted without the
+   caller knowing about it, and each of `Bridge::attachHandlerAsync`,
+   `ensureBoundAsync` and `assignHandlerPrimary` has to carry that second path
+   plus handoff machinery for the case where the "async" verb answers inline.
 
-1. **The continuation was optional.** `true` meant "I accepted the request and
-   will call exactly one callback later", `false` meant "I have no async path,
-   call the synchronous verb instead". Every call site therefore carried two
-   paths, and no backend could be partially migrated without the caller knowing
-   about it. `Bridge::attachHandlerAsync`, `ensureBoundAsync` and
-   `assignHandlerPrimary` each carried that second path, plus the
-   `detail::AsyncDispatchHandoff` machinery needed because the "async" verb
-   might also answer inline.
-
-2. **The delivery thread was prose.** All four twins shared one requirement: a
-   backend must not deliver `onRegistered`/`onError` on a thread from which
-   `~Bridge` can run concurrently. That was a contract on the *backend*, stated
-   in a `@note`, and nothing could check it — a backend that replied on its own
-   transport thread compiled, passed, and reopened morph#486's use-after-free.
-   The reason it mattered is on `Bridge`'s side and is unchanged: three of the
-   four continuations (`ensureBoundAsync`, `attachHandlerAsync` and
-   `assignHandlerPrimary`) test `CallbackToken::active()` and then dereference
-   `this`, and a `~Bridge` completing between those two steps is issue #486 —
-   the same check-then-act shape
-   [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md) describes.
-   `registerHandlerImpl`'s callback was the exception: it holds
+2. **The delivery thread would be prose.** All four twins would share one
+   requirement: a backend must not deliver `onRegistered`/`onError` on a thread
+   from which `~Bridge` can run concurrently. That is a contract on the
+   *backend* that nothing can check — a backend that replies on its own
+   transport thread compiles, passes, and reopens the use-after-free described
+   in [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md). The
+   reason it matters is on `Bridge`'s side: three of the four continuations
+   (`ensureBoundAsync`, `attachHandlerAsync` and `assignHandlerPrimary`) test
+   `CallbackToken::active()` and then dereference `this`, and a `~Bridge`
+   completing between those two steps is exactly that check-then-act shape.
+   `registerHandlerImpl`'s callback is the exception: it holds
    `detail::BridgeLifetime` across its whole touch of `this`, which is safe
    there because nothing inside that span calls into consumer code or a
    blocking backend path. The other three cannot take that same gate — it makes
@@ -310,20 +300,20 @@ of the *signatures*:
    which the synchronous `Bridge::attachHandler` holds across a full
    `attachModel` round trip, unbounded on a wire backend.
 
-### What replaces it
+### What the surface is instead
 
 Two verbs, on `IBackend`, carrying every case the five acquire/promote verbs
 carry between them:
 
 | Verb | Signature | Replaces |
 |---|---|---|
-| `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | `registerModel`, `registerModelWithContext`, `registerModelShared`, `attachModel` — and the `*Async` twins beside them. |
-| `promoteModel` | `virtual Completion<ModelId> promoteModel(PromoteRequest, IExecutor& cbExec)` | `assignPrimary`, and the `*Async` twin beside it. |
+| `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | `registerModel`, `registerModelWithContext`, `registerModelShared`, `attachModel` |
+| `promoteModel` | `virtual Completion<ModelId> promoteModel(PromoteRequest, IExecutor& cbExec)` | `assignPrimary` |
 
 `BindRequest` carries the union of the three acquire verbs' parameters, and its
 *shape* — not the verb name — selects the behaviour:
 
-| `primary` | `current` | Meaning | Legacy verb |
+| `primary` | `current` | Meaning | Synchronous verb |
 |---|---|---|---|
 | empty | `ModelId{0}` | Private instance, never enters the shared directory. | `registerModelWithContext` |
 | non-empty | `ModelId{0}` | Register-or-attach on `(typeId, primary)`. | `registerModelShared` |
@@ -353,7 +343,7 @@ thread an argument:
   unobservable failure the surface exists to remove — so "deliver nowhere"
   cannot be spelled.
 
-What this does **not** do is make morph#486 impossible by itself. It does not
+What this does **not** do is make the use-after-free impossible by itself. It does not
 add a lock, and it does not know what the caller's teardown looks like. What it
 changes is *who decides*: the choice of delivery thread moves from fifteen
 `IBackend` implementors, none of which knows anything about the caller's
@@ -363,23 +353,23 @@ event-loop thread passes that thread's executor and the two-step
 check-then-dereference can no longer straddle a destructor, by construction
 rather than by the backend author having read a `@note`.
 
-**`Bridge` is that caller for half of it, since morph#588.** Its five dispatch
-sites still name `exec::detail::inlineExecutor()` on the `bindModel`/
-`promoteModel` call itself, and that is now a decision rather than an absence:
+**`Bridge` is that caller for half of it.** Its five dispatch
+sites name `exec::detail::inlineExecutor()` on the `bindModel`/
+`promoteModel` call itself, and that is a decision rather than an absence:
 an inline settle has to reach `Bridge::detail::parkIfInFrame` *inside* the
 dispatch frame, because that is what keeps `registerHandler()` synchronous for
 a backend that binds inline and what stops `detail::awaitHandoff` waiting on a
-task only the waiting thread could run. What morph#588 added is an executor for
-the other case — a reply that arrives after the dispatch frame has gone, which
-is the only one with a thread left to choose. `Bridge`'s constructor takes an
-optional `bridgeExec`, `detail::deliverLate` routes exactly those replies to
-it, and a null one (the default) runs them inline, where they ran before.
+task only the waiting thread could run. The other case — a reply that arrives
+after the dispatch frame has gone — is the only one with a thread left to
+choose. `Bridge`'s constructor takes an optional `bridgeExec`,
+`detail::deliverLate` routes exactly those replies to it, and a null one (the
+default) runs them inline.
 
-So the window morph#486 describes is **closed for an embedder that supplies an
-executor whose thread also runs `~Bridge`** — the continuation and the
+So the check-then-dereference window is **closed for an embedder that supplies
+an executor whose thread also runs `~Bridge`** — the continuation and the
 destructor are then two tasks on one thread and cannot interleave — and
-**unchanged for one that does not**, which is every caller that has not been
-updated. What is no longer true is that `Bridge` has nothing to name. For
+**open for one that does not**, which is every caller that names no executor.
+For
 `QtWebSocketBackend` the safety is the same by-construction safety it always
 had — it must itself be used from the Qt event loop thread and settles every
 reply from `onTextMessage` on that same thread, so the check and the use cannot
@@ -387,12 +377,12 @@ straddle a destructor. Its two non-reply paths do not weaken this either: a
 disconnected or no-op bind settles inline, inside the caller's own frame (which
 `Bridge::detail::parkIfInFrame` exists to handle), and `cancelPending` settles
 the remainder from `~Bridge` itself, which is not a *concurrent* destructor. A
-future backend that replied on its own transport thread reopens morph#486 for
+backend that replies on its own transport thread reopens the use-after-free for
 a `Bridge` constructed without a `bridgeExec`, and does not for one constructed
-with a suitable one. That split is the whole of what morph#588 claims: the
-guarantee this surface makes structural is a guarantee about *backends*, and
-for `Bridge`-mediated calls the delivery thread is now the embedder's choice
-rather than the backend's — a contract one embedder can satisfy, instead of one
+with a suitable one. That split is the whole of the claim: the guarantee this
+surface makes structural is a guarantee about *backends*, and for
+`Bridge`-mediated calls the delivery thread is the embedder's choice rather
+than the backend's — a contract one embedder can satisfy, instead of one
 every backend author must remember.
 
 `tests/test_backend_registration_surface.cpp` pins this: the backend settles
@@ -414,11 +404,10 @@ auto local = std::make_shared<morph::backend::LocalBackend>(pool);
 morph::backend::SynchronousBackendAdapter adapter{local, pool};
 ```
 
-It is what makes morph#522's steps 2–5 migrations rather than rewrites: every
-backend that stays blocking — `LocalBackend`, `SimulatedRemoteBackend`, and
-eleven test doubles — reaches the new surface without being edited. Two
-backends deliberately do not use it, for the same reason in two different
-shapes: `QtWebSocketBackend` (morph#568) and `SocketBackend` (morph#569) both
+It is what lets a backend that stays blocking — `LocalBackend`,
+`SimulatedRemoteBackend`, and eleven test doubles — reach this surface without
+being edited at all. Two backends deliberately do not use it, for the same
+reason in two different shapes: `QtWebSocketBackend` and `SocketBackend` both
 have a genuinely non-blocking path of their own, and wrapping either would
 reintroduce the blocking this exists to route around. `SocketBackend`'s case is
 set out under [The structural registration surface,
@@ -428,7 +417,7 @@ natively](#the-structural-registration-surface-natively).
   What changes is which thread pays: the blocking call runs on the adapter's
   executor, so the caller returns immediately with an unresolved `Completion`.
   A single-threaded WASM main thread has no such executor to offer, which is
-  why morph#568 puts `QtWebSocketBackend` on the surface natively instead.
+  why `QtWebSocketBackend` implements the surface natively instead.
 - **It answers `bindWaitPolicy()` itself rather than forwarding it**, with
   `kCallerMustNotBlock`. `bindModel`/`promoteModel` are the two verbs it
   reshapes, so the policy describing them describes the adapter and not what it
@@ -441,12 +430,12 @@ natively](#the-structural-registration-surface-natively).
   nothing would be a `bindModel` that blocks on some configurations and not
   others — contract by configuration, which is what is being removed.
 - **It cancels its own pending completions rather than only the wrapped
-  backend's** (morph#619). `bindModel`/`promoteModel` settle from a task on
-  `_control`, holding a promise the wrapped backend never sees, so the
-  one-line `_inner->cancelPending(exc)` this verb used to be reached none of
-  them: a bind cancelled by `~Bridge` or by `switchBackend` went on to resolve
-  **successfully** afterwards, against `IBackend::cancelPending`'s "after this
-  call, any later `setValue`/`setException` on those states is a no-op". The
+  backend's**. `bindModel`/`promoteModel` settle from a task on
+  `_control`, holding a promise the wrapped backend never sees, so a plain
+  `_inner->cancelPending(exc)` reaches none of them: a bind cancelled by
+  `~Bridge` or by `switchBackend` would go on to resolve **successfully**
+  afterwards, against `IBackend::cancelPending`'s "after this call, any later
+  `setValue`/`setException` on those states is a no-op". The
   adapter therefore keeps a `weak_ptr` to each dispatched promise and rejects
   the live ones first, on the same snapshot-then-deliver shape and the same
   amortised compaction as
@@ -459,11 +448,11 @@ natively](#the-structural-registration-surface-natively).
   `LocalBackend::cancelPending` has always had. And a task already *inside*
   `op()` cannot be recalled: the adapter has no way to interrupt a blocking
   verb it does not implement.
-- **It stops a control call the strand has not started yet** (morph#636).
+- **It stops a control call the strand has not started yet.**
   Settling the promise is only half of the cancellation, because it says
-  nothing about the *work* behind it: a task still queued on `_control` used to
-  reach the head of the strand after `cancelPending` returned and make its
-  blocking control call anyway — an actual `registerModelWithContext` /
+  nothing about the *work* behind it: a task still queued on `_control` would
+  otherwise reach the head of the strand after `cancelPending` returned and
+  make its blocking control call anyway — an actual `registerModelWithContext` /
   `registerModelShared` / `attachModel` on the wrapped backend, whose `resolve`
   then found the state already rejected and did nothing. The caller was told
   the bind was cancelled while the registration went through, leaving a live
@@ -492,12 +481,11 @@ natively](#the-structural-registration-surface-natively).
   `registerModelShared`/`registerModelWithContext`, which the adapter also
   forwards unchanged.
 
-  morph#615 changed the second half of that: the handler now calls
-  `bindModel`, so a wrapped backend's reconnect control calls *do* reach the
-  adapter's strand. What the proviso still rules out is the first half — the
-  handler itself is invoked by the wrapped backend, on whatever thread that
-  backend chooses, and the adapter does not move it. See morph#569's answer
-  under [`SocketBackend`](#socketbackend--socketserver--raw-socket-websocket-transport).
+  The handler calls `bindModel`, so a wrapped backend's reconnect control calls
+  *do* reach the adapter's strand. What the proviso rules out is the other
+  half — the handler itself is invoked by the wrapped backend, on whatever
+  thread that backend chooses, and the adapter does not move it. See
+  [`SocketBackend`](#socketbackend--socketserver--raw-socket-websocket-transport).
 
 ### Backends with a genuinely non-blocking path
 
@@ -508,8 +496,8 @@ inside the dispatch call and settling it a second later from a transport thread
 are the same code at the call site, because delivery goes through `cbExec`
 either way.
 
-Two backends in the tree take that route: `QtWebSocketBackend` (morph#568) and
-`SocketBackend` (morph#569). `SocketBackend`'s case — why it is native rather
+Two backends in the tree take that route: `QtWebSocketBackend` and
+`SocketBackend`. `SocketBackend`'s case — why it is native rather
 than wrapped, and what that does to its reconnect-handler hazard — is set out
 under [The structural registration surface,
 natively](#the-structural-registration-surface-natively).
@@ -531,11 +519,11 @@ non-empty `primary` with a zero `current` is a shared `register`; with a live
 one it is an `attach`. The two native implementations differ in transport and
 in gating, not in what a `BindRequest` shape means.
 
-**They do differ in gating, and after morph#568 that difference is
-observable.** `SocketBackend::bindModel` is unconditionally non-blocking;
+**They do differ in gating, and that difference is observable.**
+`SocketBackend::bindModel` is unconditionally non-blocking;
 `QtWebSocketBackend::bindModel` falls back to the blocking default unless
-`asyncRegistrationEnabled` is set. Since morph#568 puts `Bridge` on this
-surface, the gate now decides whether `Bridge::registerHandler` returns a
+`asyncRegistrationEnabled` is set. Because `Bridge` dispatches through this
+surface, the gate decides whether `Bridge::registerHandler` returns a
 *bound* handler: a blocking `bindModel` settles inside the dispatch frame, so
 the handler is bound on return, and a non-blocking one does not, so it is not.
 See [What a natively non-blocking backend does to
@@ -544,7 +532,7 @@ below — that is a property of the surface, not of either transport.
 
 Two things that were four-way duplicated collapsed with the verbs. There is one
 send path (`sendControl`), so the "encode before recording the pending entry"
-invariant and the `env.session` stamp of morph#495 each exist once rather than
+invariant and the `env.session` stamp each exist once rather than
 four times; and there is one pending map, because `register`, shared
 `register`, `attach` and `assign` replies were always matched identically.
 (`SocketBackend` reached the same conclusion independently and calls its own
@@ -569,12 +557,8 @@ thread, and a WASM main thread has no other thread to move it to.
 ### What a natively non-blocking backend does to `registerHandler`
 
 `Bridge::registerHandler` is synchronous and returns a `BridgeHandler`. What it
-cannot do is make the *backend* synchronous. Before morph#568 the fallback under
-the removed non-blocking twin was the blocking
-`registerModelWithContext`, so on every backend except a `QtWebSocketBackend`
-with `asyncRegistrationEnabled` set, the handler was bound by the time the
-constructor returned. Since morph#568 there is only `bindModel`, so the rule is
-stated once, structurally:
+cannot do is make the *backend* synchronous. There is one acquire verb, so the
+rule is stated once, structurally:
 
 > **`registerHandler` returns a bound handler unless the backend says the
 > caller must not wait.** A backend that has not overridden `bindModel` gets
@@ -584,22 +568,19 @@ stated once, structurally:
 > still bound — unless that backend answers
 > `BindWait::kCallerMustNotBlock`, in which case the handler is returned
 > **unbound** and the caller must gate on `Bridge::whenBound()` (or on the
-> `onDone` of the async entry points) before issuing a call, exactly as the
-> `*Async` path already required.
+> `onDone` of the async entry points) before issuing a call.
 
-The wait is morph#593's correction to the rule as morph#568 first wrote it. The
-rule then read "bound exactly when `bindModel` settles inside the call", which
-made *how the backend is implemented* decide what a synchronous, public entry
-point returns — and `SocketBackend` (morph#569) changed its implementation
-without any intent to change that. See
+The wait is what keeps the rule about the *policy* rather than about the
+implementation. Stated as "bound exactly when `bindModel` settles inside the
+call", it would make *how a backend is implemented* decide what a synchronous,
+public entry point returns, so a backend gaining a native non-blocking path
+would silently change `registerHandler`'s contract. See
 [Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy).
 
 `executeVia` fails fast with `"handler not bound"` for a call issued before the
-reply arrives; it does not queue. That is unchanged — it is the same failure the
-removed `*Async` path produced, now reachable through one surface instead of
-two.
+reply arrives; it does not queue.
 
-Consequences, as of morph#568 and morph#593:
+Consequences:
 
 | Backend | `bindModel` | `bindWaitPolicy()` | `registerHandler` returns |
 |---|---|---|---|
@@ -607,32 +588,30 @@ Consequences, as of morph#568 and morph#593:
 | A backend wrapped in `SynchronousBackendAdapter` | non-blocking, on the adapter's executor | `kCallerMustNotBlock` | **unbound** |
 | `QtWebSocketBackend`, `asyncRegistrationEnabled` unset | default (blocking verb) | `kCallerMayBlock` | bound |
 | `QtWebSocketBackend`, `asyncRegistrationEnabled` set | native, non-blocking | `kCallerMustNotBlock` | **unbound** (the WASM case, which is the whole point) |
-| `SocketBackend` (morph#569) | native, non-blocking | `kCallerMayBlock` (default) | bound, after waiting for the I/O thread's reply |
+| `SocketBackend` | native, non-blocking | `kCallerMayBlock` (default) | bound, after waiting for the I/O thread's reply |
 
 ### Waiting for a bind — `bindWaitPolicy`
 
 `Bridge::registerHandlerImpl` has exactly one call site for acquiring a model,
-and after morph#568 and morph#569 two shipped backends needed opposite
-behaviour from it:
+and two shipped backends need opposite behaviour from it:
 
 | Backend | What `bindModel` does | What the call site must do | Why |
 |---|---|---|---|
 | `SocketBackend` | returns an unsettled `Completion`; the I/O thread settles it | **wait** | its callers construct a `BridgeHandler` and use it on the next line; `executeVia` fails fast on `currentId == 0` |
 | `QtWebSocketBackend`, `asyncRegistrationEnabled` set | returns an unsettled `Completion` | **not wait** | the reply is delivered by the Qt event loop of the calling thread, so a wait is a deadlock — on WASM, a page abort |
 
-From the `Completion` alone the two are indistinguishable, and the surface
-morph#567 introduced had removed the only signal that told them apart (the
-`*Async` verbs' `bool` return). Measured, not argued: on morph#568's head, six
-`tests/net/` cases failed with `"handler not bound"`, and forcing the *other*
-answer at that call site instead hung five `tests/qt/` cases on the nested
-`QEventLoop`. Neither fixed setting of the call site is correct.
+From the `Completion` alone the two are indistinguishable, so the call site
+needs a signal. Measured, not argued: hard-coding "do not wait" fails six
+`tests/net/` cases with `"handler not bound"`, and hard-coding "wait" hangs
+five `tests/qt/` cases on the nested `QEventLoop`. Neither fixed setting of the
+call site is correct.
 
-Since morph#615 the same question is asked at all three sites that acquire an
-instance for a binding — `registerHandlerImpl`, `switchBackend`'s phase 1 and
-the reconnect handler — because all three used to block a thread that a
-`kCallerMustNotBlock` backend needs back before its reply can arrive. The
-first was the only synchronous *entry point*; the other two are worse, because
-the reconnect handler runs on the backend's own transport thread.
+The same question is asked at all three sites that acquire an instance for a
+binding — `registerHandlerImpl`, `switchBackend`'s phase 1 and the reconnect
+handler — because each of them would otherwise block a thread that a
+`kCallerMustNotBlock` backend needs back before its reply can arrive. The first
+is the only synchronous *entry point*; the other two are worse, because the
+reconnect handler runs on the backend's own transport thread.
 
 `IBackend::bindWaitPolicy()` restores exactly one bit:
 
@@ -646,9 +625,9 @@ the reconnect handler runs on the backend's own transport thread.
   which exists to move the blocking elsewhere, and would deadlock if the caller
   happened to be running on its executor).
 
-It is deliberately not the `bool` morph#567 removed. That `bool` chose *which
-verb to call*, so every call site carried two paths and a backend could be
-half-migrated; this one chooses nothing. There is still exactly one verb, called
+It is deliberately not a `bool` choosing *which verb to call*: that shape gives
+every call site two paths and lets a backend be half-adopted. This one chooses
+nothing. There is still exactly one verb, called
 unconditionally, and exactly one continuation — the only question is whether the
 thread that registered that continuation is allowed to stop and wait for it.
 Only a frame that would otherwise stop and wait asks: `registerHandlerImpl`
@@ -663,103 +642,67 @@ non-determinism the synchronous contract exists to exclude; a backend that
 breaks its own settle-exactly-once contract therefore hangs here rather than
 silently handing back an unbound handler.
 
-`SocketBackend`'s row above is the one morph#568 changed and morph#569 did not:
-morph#569 landed while `Bridge` still called the legacy verbs, so its native
-`bindModel` had no caller. morph#593 puts that row back to "bound" rather than
-asking every existing non-Qt embedder to start gating on `whenBound()` —
-`docs/spec/core/bridge.md`'s `whenBound()` section remains the right place for a
-caller that wants to gate anyway, and is required for the two
+`SocketBackend`'s row is the reason the policy exists rather than a rule keyed
+on "is this backend native": it is natively non-blocking *and* answers
+`kCallerMayBlock`, so it returns a bound handler like every synchronous backend
+does. `docs/spec/core/bridge.md`'s `whenBound()` section is the right place for
+a caller that wants to gate anyway, and is required for the two
 `kCallerMustNotBlock` rows.
 
-### Migration status
+### The default implementations, and what they cost a backend
 
-| Step | What it does | State |
-|---|---|---|
-| morph#567 | Adds `bindModel`/`promoteModel` and `SynchronousBackendAdapter`. Nothing else changes. | Landed |
-| morph#568 | `QtWebSocketBackend` implements the surface natively and drops all four `*Async` overrides; `Bridge`'s four dispatch sites fall back to it instead of to a synchronous verb. | Landed |
-| morph#569 | `SocketBackend` implements the surface natively, keeping every legacy verb on `sendSync`. | Landed |
-| morph#593 | Adds `IBackend::bindWaitPolicy()`, the one signal morph#567's surface left the call site without. Fixes the `"handler not bound"` regression morph#568 caused in `SocketBackend`. | Landed |
-| morph#570 | The example GUIs and the WASM spike. | Landed |
-| morph#615 | `Bridge::switchBackend`'s phase 1 and `Bridge::installReconnectHandler`'s handler onto `bindModel`, both consulting `bindWaitPolicy()`; `switchBackend`'s rollback keys on a rejected `Completion`. Also settles who owned the reconnect half: this table used to assign it to morph#570, whose own body scopes itself to `examples/` and never mentions `bridge.hpp`. | Landed |
-| morph#571 | Removes the four `*Async` verbs from `IBackend` and from `SynchronousBackendAdapter`, and drops `Bridge`'s four offer-the-twin-first branches. `LocalBackend`, `SimulatedRemoteBackend` and the test doubles in `tests/test_switch_backend.cpp`, `tests/test_bridge_lifetime.cpp` and `tests/test_client_execute_deadline.cpp` needed no migration: none overrode a twin, so all reach `bindModel`'s default unchanged. | Landed |
+A backend that overrides nothing gets `IBackend`'s `bindModel`/`promoteModel`,
+which route to exactly the synchronous verb each request shape names — so
+implementing this surface is optional for a backend that has no non-blocking
+path, and `LocalBackend`, `SimulatedRemoteBackend` and every test double in the
+tree take that route unchanged. A double that wants "dispatch and return
+without waiting" overrides `bindModel`/`promoteModel` and answers
+`BindWait::kCallerMustNotBlock`; `tests/test_async_registration.cpp` has
+several.
 
-Every existing implementor still compiles unchanged, and the default
-`bindModel`/`promoteModel` implementations route to exactly the synchronous verb
-each request shape names — so a backend that has overridden nothing behaves
-identically to how it did before the surface existed. What changed with
-morph#568 was the *caller*: every `Bridge` dispatch site took the shape
+One consequence of settling a `Completion` rather than invoking raw callbacks,
+named rather than left to be found: a backend that violates the one-callback
+contract by firing twice cannot be observed doing it from `Bridge`.
+`CompletionState` drops the second settle before any `Bridge` code sees it, so
+`tests/test_async_registration.cpp`'s `DoubleFiringBackend` pins the observable
+contract ("exactly one `onDone`") and `detail::parkIfInFrame`'s own
+double-claim guard is not reachable from a backend at all.
 
-```cpp
-bool const started = backend-><legacy>Async(..., onOk, onErr);   // removed by morph#571
-if (!started) {
-    auto completion = backend->bindModel(request, exec::detail::inlineExecutor());
-    completion.then(onOk).onError(onErr);
-}
-```
-
-so the path count did not grow: the structural call replaced the synchronous
-fallback that used to sit there. morph#571 deleted the first branch, leaving
-one. No backend in the tree had overridden a `*Async` verb since morph#568, so
-the second branch was already the one that always ran; the doubles in
-`tests/test_async_registration.cpp` that did override them now override
-`bindModel`/`promoteModel` instead and answer
-`BindWait::kCallerMustNotBlock`, which is what reproduces "dispatch and return
-without waiting" — the observable behaviour the `true` return used to produce.
-
-One thing the removal did lose, named rather than left to be found: a `bool`
-twin handed `Bridge` two raw `std::function`s, so a backend that violated the
-one-callback contract by firing twice reached `detail::parkIfInFrame`'s own
-double-claim guard. A `Completion` cannot be settled twice — `CompletionState`
-drops the second settle before any `Bridge` code sees it — so
-`tests/test_async_registration.cpp`'s `DoubleFiringBackend` now pins the
-observable contract ("exactly one `onDone`") while that guard inside
-`parkIfInFrame` is no longer reachable from a backend at all.
-
-morph#648 settled what to do about the now-unreachable arm, and corrected the
-reason recorded here: this section used to say the guard was kept "because
-`parkIfInFrame` is also called from the dispatching frame", which is false —
-the dispatching frame calls `claimHandoff`/`awaitHandoff`, and all eight
-`parkIfInFrame` call sites are completion callbacks. That the arm is
-unreachable is *measured*, not read: replacing its `return true` with an
+That guard is kept, and why is worth stating because the obvious reason is the
+wrong one: it is **not** that `parkIfInFrame` is also called from the
+dispatching frame — the dispatching frame calls `claimHandoff`/`awaitHandoff`,
+and all eight `parkIfInFrame` call sites are completion callbacks. That the arm
+is unreachable is *measured*, not read: replacing its `return true` with an
 `abort()` and running `morph_tests` (1556 cases) and `morph_net_tests` (191)
-fires it zero times. It is kept anyway, for a different reason than the one
-that was written down — the invariant that makes it dead is a property of every
-current *caller*, not of the function, so a ninth site that does not park a
-single `Completion`'s outcome would resurrect it — and it is now pinned by a
-test that calls `parkIfInFrame` directly, twice on one handoff, rather than
-left as an arm whose deletion nothing would detect. The neighbouring
-`try`/`catch (...)` around the dispatch was decided separately and left alone:
-it is reachable by any out-of-tree `IBackend` override that throws out of
+fires it zero times. It is kept because the invariant that makes it dead is a
+property of every current *caller*, not of the function, so a ninth site that
+does not park a single `Completion`'s outcome would resurrect it — and it is
+pinned by a test that calls `parkIfInFrame` directly, twice on one handoff,
+rather than left as an arm whose deletion nothing would detect. The
+neighbouring `try`/`catch (...)` around the dispatch is a separate case and is
+live: it is reachable by any out-of-tree `IBackend` override that throws out of
 `bindModel`, `IBackend` is a public extension point, and
-`ThrowingDispatchBackend` already exercises it — so it is covered defensive
-code, not dead code.
+`ThrowingDispatchBackend` exercises it — covered defensive code, not dead code.
 
-`Bridge::installReconnectHandler` and `Bridge::switchBackend`'s phase 1 were
-the two dispatch sites morph#568 did **not** move: both still called the
-blocking `registerModelShared`/`registerModelWithContext`, so a backend that
-had just been given a way to say `kCallerMustNotBlock` was blocked at both of
-them anyway. morph#615 moved them, and its shape is the one every other site
-already had — dispatch, park an inline reply in an `AsyncDispatchHandoff`,
-then `awaitHandoff` or `claimHandoff` according to the policy. What made it a
-change of its own rather than part of morph#568 is what the two sites do
-around the call: `switchBackend` stages for an all-or-nothing commit whose
-rollback used to key on a thrown exception, and the reconnect handler runs on
-the transport thread holding both bridge mutexes. Both are described in
-[bridge.md](bridge.md).
+All five `Bridge` dispatch sites have the same shape — dispatch, park an inline
+reply in an `AsyncDispatchHandoff`, then `awaitHandoff` or `claimHandoff`
+according to the policy. `installReconnectHandler` and `switchBackend`'s phase 1
+are the two that do most around the call: `switchBackend` stages for an
+all-or-nothing commit whose rollback keys on a rejected `Completion`, and the
+reconnect handler runs on the transport thread holding both bridge mutexes.
+Both are described in [bridge.md](bridge.md).
 
 `SocketBackend`'s reconnect-handler deadlock hazard is narrowed rather than
-closed by that: the control call it makes is no longer the blocking verb, but
-the handler is still *invoked* by the backend on whatever thread the backend
-chooses, which is the half morph#569 owns.
+closed by that: the control call it makes is not the blocking verb, but the
+handler is still *invoked* by the backend on whatever thread the backend
+chooses, which is `SocketBackend`'s own half of the problem.
 
-The executor those call sites name is **`exec::detail::inlineExecutor()`**, which
-runs the continuation on the thread that settled it. That is deliberately the
-*old* delivery thread, so neither morph#568 nor morph#571 changes observable
-*threading*: `Bridge` owns no event loop and has no thread of its own to name.
-morph#588 left that argument alone — an inline settle must still be delivered
-inline, or `registerHandler()` stops being synchronous — and gave `Bridge` an
-optional executor for the replies that arrive *after* the dispatch frame
-instead. See
+The executor those call sites name is **`exec::detail::inlineExecutor()`**,
+which runs the continuation on the thread that settled it — deliberately, since
+`Bridge` owns no event loop and has no thread of its own to name, and an inline
+settle must be delivered inline or `registerHandler()` stops being synchronous.
+The optional `bridgeExec` covers the replies that arrive *after* the dispatch
+frame instead. See
 [How the threading contract becomes structural](#how-the-threading-contract-becomes-structural)
 and [bridge.md](bridge.md), "The bridge's own executor".
 
@@ -840,9 +783,8 @@ else consults it, and nothing unlinks from it when a completion settles: an entr
 simply becomes a dead `weak_ptr` that `cancelPending`'s `weak.lock()` skips.
 
 Dead entries therefore have to be reclaimed by a sweep, and the question is only
-how often. Sweeping on **every** `execute`, as `trackPending` did before
-morph#528, makes admitting one call cost one atomic `weak_ptr::expired()` load
-per entry already in the list, under the mutex, before any work starts — so a
+how often. Sweeping on **every** `execute` makes admitting one call cost one
+atomic `weak_ptr::expired()` load per entry already in the list, under the mutex, before any work starts — so a
 burst of *n* costs O(n²). Measured against one parked model on an 8-core Linux
 box (clang 22.1.8, `-O2`), timing only the `execute()` calls themselves:
 
@@ -1100,9 +1042,9 @@ because `awaitTurn` waits with no deadline.
 `execute_order_gate.hpp`; `remote.hpp` keeps a `using` alias so call sites read
 unqualified) from the moment a ticket is issued: `dispatchMessage` adopts the
 ticket into one for the whole of its own frame, `dispatchExecute` included.
-`handleImpl` no longer holds a separate guard across the pool post — morph#519
-folded the take and the post into one `takeAndPost` call, so there is no window
-between them for a guard to cover. The guard releases on destruction, so *every* exit
+`handleImpl` holds no separate guard across the pool post: the take and the post
+are one `takeAndPost` call, so there is no window between them for a guard to
+cover. The guard releases on destruction, so *every* exit
 path is covered — each explicit `return`, every exception, and any branch a
 later change adds. Two members opt out deliberately:
 
@@ -1111,16 +1053,15 @@ later change adds. Two members opt out deliberately:
   paths free the gate *before* writing their reply instead of at end of scope;
   and
 - `disarm()`, which hands ownership on rather than releasing. It has **no
-  production caller** since morph#519 replaced `handleImpl`'s take-then-post
-  pair with `takeAndPost`; it is retained as part of the guard's API and
-  exercised only by tests. Calling it without taking ownership elsewhere
-  discards the only handle to an outstanding ticket, which can then never be
-  released — the #348/#351 failure mode.
+  production caller** — `handleImpl` uses `takeAndPost` — and is retained as
+  part of the guard's API, exercised only by tests. Calling it without taking
+  ownership elsewhere discards the only handle to an outstanding ticket, which
+  can then never be released.
 
-It was a per-call-site convention until it had been missed twice — by the
-shutdown gate (issue #348) and by every exception unwinding out of
-`dispatchExecute` (issue #351, below). Both are pinned by regression tests, and
-neither could recur through a hand-written release being forgotten again.
+A per-call-site convention is not enough here, because it is missable in two
+places that do not look like exits: the shutdown gate, and every exception
+unwinding out of `dispatchExecute` (below). Both are pinned by regression
+tests, and neither can recur through a hand-written release being forgotten.
 
 **Bookkeeping.** A gate is
 `{nextTicket, nextToRun, releasedOutOfOrder, condition_variable}`, held in a
@@ -1140,7 +1081,7 @@ from parking a worker forever.
 
 **One enqueue mutex, gate-wide.** `takeAndPost` holds an enqueue mutex from
 before it mints a ticket until after `postFn` returns, which is what makes the
-take and the enqueue atomic (morph#519). That mutex is **one per gate, not one
+take and the enqueue atomic. That mutex is **one per gate, not one
 per model**, and is acquired *before* the bookkeeping mutex, never the reverse.
 
 `postFn` is opaque: on a `ThreadPoolExecutor` it only enqueues, but on a
@@ -1174,9 +1115,8 @@ whenever a rejection got there first. That earlier ticket's waiter then held a
 predicate that could never become true again, with the same three costs listed
 for the shutdown gate below: a caller that never receives a reply, a pool
 worker blocked for the process's remaining lifetime, and `drainedWithin()`
-unable to succeed. It is why the bug class closed by issues #348 and #351
-returned a third time as issue #449, reproducing under `morph::net` in
-particular — dropping a connection reclaims that connection's models, so the
+unable to succeed. It is the third distinct way into this same failure, and it
+reproduces under `morph::net` in particular — dropping a connection reclaims that connection's models, so the
 executes still in flight for one model split into some that find it and some
 that reject with `"model not found"`, which manufactures precisely this
 interleaving. Making the *release* unmissable (below) was necessary and not
@@ -1231,7 +1171,7 @@ throwing, and `missingRequiredFields` parses the payload under
 ticket-taking site and the release. The cost was identical to the shutdown
 gate's, item for item — stranded caller, blocked pool worker, `drainedWithin()`
 unable to succeed — and it is why the release is now owned by
-`ExecuteTicketGuard` rather than written out at each exit (issue #351).
+`ExecuteTicketGuard` rather than written out at each exit.
 
 The release rule stated above therefore holds without exception, which is what
 makes the rest of this section true.
@@ -1254,7 +1194,7 @@ rather than raced; its throwing-hook case reuses that same wrapping executor
 and arms an authorizer only *after* the later request has parked in
 `awaitTurn`, so exactly one request — the held, earlier one — throws,
 from `authorize`, `authenticate` or `authorizeInstance` in turn. Its
-out-of-order-release case (issue #449) extends the same wrapping executor to
+out-of-order-release case extends the same wrapping executor to
 hold three posts at once, so all three tickets exist before any of them runs,
 and then releases the *middle* one first: a rejection skipping over ticket 0
 while ticket 2 is still outstanding, which is the interleaving the two-ticket
@@ -1567,7 +1507,7 @@ by `_pendingMtx`, because `cancelPending` can be called from `Bridge` /
 
 - `registerModelWithContext` — the same `register` round trip, carrying
   `contextKey` on the envelope (`wire::makeRegister(typeId, contextKey)`).
-  Overridden since morph#594; before that it was `IBackend`'s default, which
+  Overridden here rather than left at `IBackend`'s default, which
   drops the key. That is not a missing field:
   `RemoteServer::attachLogIfConfigured` returns **before** consulting its
   `LogProvider` when the envelope's `contextKey` is empty, so a privately
@@ -1645,7 +1585,7 @@ frame and routes it by `callId`:
   than hanging. `deregister` is deliberately **not** on that list — it is
   fire-and-forget, nobody parks for its reply, and sending it with `callId ==
   0` would let its stray `ok` resume an unrelated parked control call (issue
-  #65); it therefore takes a non-zero `callId` and its reply is recognised
+  above); it therefore takes a non-zero `callId` and its reply is recognised
   and discarded via `_pendingDeregisters`.
 
 Because `execute` replies are matched on `callId`, concurrent in-flight execute
@@ -1891,7 +1831,7 @@ nested `QEventLoop` that keeps pumping the socket.
 `SocketBackend` overrides `bindModel`/`promoteModel` itself rather than being
 wrapped in [`SynchronousBackendAdapter`](#synchronousbackendadapter--a-blocking-backend-on-the-new-surface).
 It had overridden none of the four `*Async` verbs, so the wrapper was the
-expected route; three findings decided against it (morph#569).
+expected route; three findings decide against it.
 
 1. **The transport already has the machinery.** The I/O thread demultiplexes
    replies by `callId` for `execute`, and `RemoteServer` echoes `callId` on
@@ -1909,11 +1849,11 @@ expected route; three findings decided against it (morph#569).
    strand, and this backend is explicitly documented as safe to drive from
    several threads at once. The native path takes no token at all.
 3. **The adapter's reconnect property does not apply here** — see the answer
-   below, which is the question morph#569 was opened to settle.
+   below.
 
 What does **not** change: `registerModel`, `registerModelShared`, `attachModel`
 and `assignPrimary` still use `sendSync` with `callId == 0`, so every caller
-morph#570/#571 has yet to migrate behaves exactly as before, and nothing on the
+has not been moved onto the new surface behaves exactly as before, and nothing on the
 wire changes for them. `cancelPending` now sweeps both tables, so a disconnect
 rejects an in-flight bind with `DisconnectedError` instead of stranding it —
 the asynchronous counterpart of `sendSync` waking on `!_connected`.
@@ -1939,11 +1879,11 @@ thread that would satisfy it. Stated precisely, in three parts:
   handler thread is still load-bearing.** The blocking verbs still park on
   `_syncCv`, and `Bridge`'s reconnect handler still calls them. A hazard-free
   route now exists; the hazardous one has not been removed or moved. Only when
-  morph#570 puts `Bridge::installReconnectHandler` on `bindModel` does the
+  `Bridge::installReconnectHandler` goes through `bindModel` does the
   hazard become unreachable from the reconnect path, and only then is dropping
   the handler thread a question worth asking.
 
-None of this touches morph#486. The surface adds no lock and knows nothing
+None of this touches the use-after-free window. The surface adds no lock and knows nothing
 about a caller's teardown; it moves the choice of delivery thread from the
 implementor to the caller, exactly as
 [How the threading contract becomes structural](#how-the-threading-contract-becomes-structural)
@@ -2051,14 +1991,14 @@ indefinitely, with no timeout. `shutdownBoth()` is documented safe to call from
 any thread for exactly this purpose, on a **connected** socket.
 
 **The accept loop owns its own wakeup, and does not borrow the kernel's**
-(morph#437). The accept thread never parks in `accept(2)`. `listen()` sets
+The accept thread never parks in `accept(2)`. `listen()` sets
 `O_NONBLOCK` on the listening socket and creates a self-pipe; the loop waits in
 a single `poll()` over the listening fd and the pipe's read end, and takes a
 ready connection with `TcpSocket::tryAccept()`, which answers `std::nullopt`
 rather than parking when a readiness report has gone stale. `close()` writes one
 byte to the pipe before `join()`, which is what ends the loop.
 
-**The listener's non-blocking mode stops at the listener** (morph#478).
+**The listener's non-blocking mode stops at the listener.**
 `TcpSocket`'s fd-adopting constructor clears `O_NONBLOCK` on every descriptor it
 takes ownership of, so a connection from `accept()` or `tryAccept()` is always
 blocking, whatever mode the listener it came from is in. That is a correctness
@@ -2152,7 +2092,7 @@ are:
   begins; there is no cancel. (The `_shuttingDown` disjunct that used to sit in
   `waitForConnected`'s predicate looked like an escape hatch for exactly this
   and was not one — the destructor never notifies `_connectCv`, so it could not
-  reliably release anybody — and was removed as part of morph#455.)
+  reliably release anybody.)
 
 ## Failure modes
 
@@ -2317,8 +2257,8 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `bindModel(request, cbExec)` | Posts `inner->bindModelBlocking(request)` onto the control strand; settles the returned `Completion` on `cbExec`. Never blocks the caller. |
 | `bindWaitPolicy()` | `BindWait::kCallerMustNotBlock`, always. Not forwarded: it describes the two verbs the adapter reshapes. |
 | `promoteModel(request, cbExec)` | Posts `inner->assignPrimary(...)` onto the control strand; resolves with `request.mid`. |
-| `cancelPending(exc)` | Sets each still-unsettled `bindModel`/`promoteModel` record's `cancelled` flag and rejects its promise with `exc`, **then** forwards to `inner`. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of (morph#619). The flag is what stops a task still *queued* on `_control` from making its blocking control call after the caller was told the bind was cancelled (morph#636); a task already inside that call is unaffected. |
-| every other `IBackend` verb | Forwarded to `inner` unchanged. Since morph#571 those are the synchronous verbs only: the one verb that could carry a non-blocking path is `bindModel`, which this adapter reshapes. |
+| `cancelPending(exc)` | Sets each still-unsettled `bindModel`/`promoteModel` record's `cancelled` flag and rejects its promise with `exc`, **then** forwards to `inner`. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of. The flag is what stops a task still *queued* on `_control` from making its blocking control call after the caller was told the bind was cancelled; a task already inside that call is unaffected. |
+| every other `IBackend` verb | Forwarded to `inner` unchanged — the synchronous verbs only: the one verb that could carry a non-blocking path is `bindModel`, which this adapter reshapes. |
 
 ### Error types
 
@@ -2389,7 +2329,7 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | Method | Notes |
 |---|---|
 | `QtWebSocketBackend(serverUrl, dispatcher = defaultDispatcher(), registry = defaultRegistry(), tls = nullopt, cfg = Config{})` | Opens the socket to `serverUrl` in the constructor. `dispatcher`/`registry` params are accepted but unused (models live on the server). `tls` non-null → `wss://`. `tls` is not declared at all when Qt is built with `QT_NO_SSL` (see above). |
-| `QtWebSocketBackend(serverUrl, tls, cfg = Config{})` | Overload that skips the unused `dispatcher`/`registry` pair (issue #55): a caller who only needs `tls`/`cfg` reaches them directly, without naming `morph::model::detail::defaultDispatcher()`/`defaultRegistry()` explicitly. Delegates to the main constructor with both defaulted. Not declared on a `QT_NO_SSL` build (no `tls` parameter to distinguish it from the `(serverUrl, cfg)` overload below). |
+| `QtWebSocketBackend(serverUrl, tls, cfg = Config{})` | Overload that skips the unused `dispatcher`/`registry` pair: a caller who only needs `tls`/`cfg` reaches them directly, without naming `morph::model::detail::defaultDispatcher()`/`defaultRegistry()` explicitly. Delegates to the main constructor with both defaulted. Not declared on a `QT_NO_SSL` build (no `tls` parameter to distinguish it from the `(serverUrl, cfg)` overload below). |
 | `QtWebSocketBackend(serverUrl, cfg)` | Overload that skips `dispatcher`/`registry` and `tls` together — the common case for a caller that only wants to set a `Config` field (e.g. `asyncRegistrationEnabled`) over a plaintext `ws://` connection. Delegates to the main constructor with `dispatcher`/`registry` defaulted and (on an SSL-enabled build) `tls = std::nullopt`. |
 | `bindModel(request, cbExec)` | Defers to `IBackend::bindModel` (blocking) unless `cfg.asyncRegistrationEnabled` is `true`. Otherwise builds the envelope `request`'s shape names — `register`, shared `register`, or `attach` — assigns a fresh `callId` (the same counter `execute` uses), records the promise in `_pendingRegistrations[callId]` and sends. The `Completion` settles later from `onTextMessage` (or from `cancelPending` on a disconnect). A private bind on an unconnected socket is queued in `_queuedRegistrations` instead; a keyed one rejects with `"disconnected"`. |
 | `bindWaitPolicy()` | `kCallerMustNotBlock` exactly when `cfg.asyncRegistrationEnabled` is set — that is when completions are settled by `onTextMessage`, a Qt slot delivered by the calling thread's own event loop, so a caller that blocked waiting for one would never see it arrive. `kCallerMayBlock` otherwise, where `bindModel` settles inside the call. |
@@ -2397,8 +2337,8 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `waitForConnected(timeoutMs = 5000)` | Pumps the Qt loop until connected or timeout; returns `_connected`. |
 | `negotiateProtocolVersion()` | Opt-in: sends `hello` synchronously (same nested-`QEventLoop` path as `registerModel`), classifies the reply via `wire::interpretHelloReply`. Throws on an explicit version rejection or a `sendSync` failure. |
 | `registerModel(typeId, factory)` | Forwards to `registerModelWithContext` with an empty key. |
-| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous via nested `QEventLoop`; `factory` ignored. Sends `register` carrying `contextKey`, so a privately registered instance is journalled (morph#594). Throws on `err` reply, and wraps a `sendSync` failure as `"register failed: <what>"`. |
-| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses, recorded in `_pendingDeregisters` so `onTextMessage` recognises the unwanted reply and drops it rather than handing it to a parked `sendSync` (issue #65). |
+| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous via nested `QEventLoop`; `factory` ignored. Sends `register` carrying `contextKey`, so a privately registered instance is journalled. Throws on `err` reply, and wraps a `sendSync` failure as `"register failed: <what>"`. |
+| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses, recorded in `_pendingDeregisters` so `onTextMessage` recognises the unwanted reply and drops it rather than handing it to a parked `sendSync`. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. |
 | `notifyBackendChanged()` | No-op. |
 | `cancelPending(exc)` | Drains `_pending`, `_pendingRegistrations` and `_queuedRegistrations` under `_pendingMtx`, then delivers `exc` to each — the exception itself, so a control call rejected by a dropped socket carries the same `DisconnectedError` an `execute` does. |
@@ -2453,10 +2393,10 @@ not a behavior change to the existing loopback-only default.
 | `explicit SocketBackend(serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and starts the I/O thread, which connects asynchronously. |
 | `waitForConnected(timeout = 5000ms)` | Blocks the calling thread on a condition variable until connected or the timeout elapses; returns the current connected state. The backend must outlive the call — destroying it while a thread is parked here is undefined, and there is no cancel (see Lifetime & ownership). |
 | `registerModel(typeId, factory)` | Forwards to `registerModelWithContext` with an empty `contextKey`; `factory` ignored. |
-| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous via a parked condition variable; sends `register` carrying `contextKey`, so the server's `LogProvider` is consulted for a private registration exactly as it is for a shared one (morph#587). `factory` ignored. Throws on `err` reply or disconnect. Thread-safe, but only one such call may be in flight at a time. `registerModelShared` and `attachModel` degrade here when `primary` is empty, so their private paths carry the key too. |
+| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous via a parked condition variable; sends `register` carrying `contextKey`, so the server's `LogProvider` is consulted for a private registration exactly as it is for a shared one. `factory` ignored. Throws on `err` reply or disconnect. Thread-safe, but only one such call may be in flight at a time. `registerModelShared` and `attachModel` degrade here when `primary` is empty, so their private paths carry the key too. |
 | `bindModel(request, cbExec)` | Native override of the structural surface. Sends the envelope `request`'s shape names with a non-zero `callId` and returns immediately; every shape carries `request.contextKey`, the private one included; the I/O thread settles the `Completion` when the reply arrives, delivered on `cbExec`. Never enters `sendSync`, so it takes no synchronous-call token and any number may be in flight. Rejects with `DisconnectedError` when the socket is down or drops first, or with `std::runtime_error{"<verb> failed: <server message>"}`. |
 | `promoteModel(request, cbExec)` | The `assign` counterpart of `bindModel`, on the same path; resolves with `request.mid` echoed back. An empty `primary` or a zero `mid` resolves without sending, matching `assignPrimary`'s guards. |
-| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses so its unawaited `ok` cannot be handed to a parked synchronous control call (issue #454; the `QtWebSocketBackend` precedent is issue #65). Needs no pending-id bookkeeping of its own: `dispatchIncomingEnvelope` already drops a non-zero `callId` that is absent from `_pending`. |
+| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses so its unawaited `ok` cannot be handed to a parked synchronous control call, as it is on `QtWebSocketBackend`. Needs no pending-id bookkeeping of its own: `dispatchIncomingEnvelope` already drops a non-zero `callId` that is absent from `_pending`. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. Thread-safe; supports concurrent in-flight calls from multiple threads. |
 | `notifyBackendChanged()` | No-op. |
 | `cancelPending(exc)` | Drains **both** pending maps — the `execute` calls and the `bindModel`/`promoteModel` control calls — and delivers `exc` to each state. |
@@ -2473,9 +2413,9 @@ not a behavior change to the existing loopback-only default.
 | Method | Notes |
 |---|---|
 | `SocketServer(server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server`. Does not start listening. |
-| `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup pipe, and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup pipe cannot be created — an accept loop nothing can interrupt is worse than not listening (morph#437). |
+| `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup pipe, and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup pipe cannot be created — an accept loop nothing can interrupt is worse than not listening. |
 | `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
-| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by writing one byte to the wakeup pipe it polls (morph#437) — **not** by `shutdownBoth()` on the listening socket, which only worked because Linux kicks a parked `accept(2)` on shutdown and left macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete (morph#451: the previous `_closing.exchange` guard let a second caller reach `_acceptThread.join()` while the first was inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++). The wakeup write runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
+| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by writing one byte to the wakeup pipe it polls — **not** by `shutdownBoth()` on the listening socket, which works only because Linux kicks a parked `accept(2)` on shutdown and leaves macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete. A `_closing.exchange` guard is not enough: it lets a second caller reach `_acceptThread.join()` while the first is inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++. The wakeup write runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## `executeInto` — settling the caller's own completion
 
@@ -2490,7 +2430,7 @@ not a behavior change to the existing loopback-only default.
 **is** the typed `CompletionState<R>` its caller holds. That removes the
 `.then`/`.onError` block that used to forward the backend's erased completion
 into the typed one — six allocations per call of the 14.06 a local round trip
-took, measured down to 8.06 (morph#572, Part B; see
+took, measured down to 8.06 (see
 [`bridge.md`](bridge.md#bridgesink--the-typed-state-the-backend-settles)).
 
 **Why a default rather than a pure virtual.** `execute` is implemented by five
@@ -2521,14 +2461,14 @@ implementation to absorb — see
 | Decision | Choice | Why |
 |---|---|---|
 | Dual-path `ActionCall` | Three callables: `localOp`, `serializeAction`, `deserializeResult` | The same `ActionCall` struct works for both local and remote execution without an `if (isRemote)` branch at the call site — each backend uses the field(s) it needs. |
-| Callables are function pointers, not `std::function`s | `std::string (*)(const void*)` etc., with the action in `ActionCall::action` | Every call builds all three, whichever path it takes, so a stateful callable charges an allocation to calls that never invoke it. The behaviour is a constant of `(Model, Action)`; only the action is per-call. Measured at 3 allocations per local round trip (morph#572, Part A). The cost is an explicit borrow: see [Lifetime contract](#lifetime-contract). |
+| Callables are function pointers, not `std::function`s | `std::string (*)(const void*)` etc., with the action in `ActionCall::action` | Every call builds all three, whichever path it takes, so a stateful callable charges an allocation to calls that never invoke it. The behaviour is a constant of `(Model, Action)`; only the action is per-call. Measured at 3 allocations per local round trip. The cost is an explicit borrow: see [Lifetime contract](#lifetime-contract). |
 | Type ids are `string_view`s, not `std::string`s | `modelTypeId`, `actionTypeId` | They are always views of `constexpr` string literals from the registration macros, so copying them into a `std::string` bought nothing and allocated whenever an id exceeded the SSO threshold (`"CreateSwimlane"` is 14 characters; the margin is one character wide). |
-| `registerModelWithContext` | Virtual with a default that drops `contextKey` | `LocalBackend`'s factory closure already captures identity, so there is nothing to forward — which is why the default drops the key rather than being pure virtual. A backend whose instances are constructed on the far side of a wire protocol has no such closure, so the envelope is the only channel the identity has: `SimulatedRemoteBackend` and `SocketBackend` both override it so the server's `LogProvider` can attach an action log. The default being *permissive* is what let `SocketBackend` ship without an override and silently stop journalling private registrations (morph#587); the price of that permissiveness is that "is this a wire backend?" has to be answered by hand for each new transport. |
+| `registerModelWithContext` | Virtual with a default that drops `contextKey` | `LocalBackend`'s factory closure already captures identity, so there is nothing to forward — which is why the default drops the key rather than being pure virtual. A backend whose instances are constructed on the far side of a wire protocol has no such closure, so the envelope is the only channel the identity has: `SimulatedRemoteBackend` and `SocketBackend` both override it so the server's `LogProvider` can attach an action log. The default being *permissive* is what lets a wire backend ship without an override and silently stop journalling private registrations; the price of that permissiveness is that "is this a wire backend?" has to be answered by hand for each new transport. |
 | `RemoteServer` heap requirement | `std::enable_shared_from_this` | `handle()` posts to the worker pool capturing `shared_from_this()` — the server must outlive any in-flight message. |
 | `handleInline` | Synchronous; caller-restricted to control messages | Safe to call from a worker-pool thread (e.g. from a `BridgeHandler` constructor). It is meant for `register`/`deregister` only; an `execute` envelope is rejected with an `err` reply, because `dispatchExecute` posts to the strand and would reply after `handleInline` returns (writing into an already-destroyed reply buffer). The rejection is now enforced by the code, matching the documented intent. |
 | `SimulatedRemoteBackend` factory ignored | Model construction delegated to `RemoteServer`'s `ModelRegistryFactory` | The factory closure lives on the client side; the server owns the actual instances. |
 | `cancelPending` snapshots | Weak-ptr snapshot under lock, then resolves outside | Avoids holding the lock while delivering exceptions to each state, preventing deadlock if a callback re-enters the backend. |
-| `_pending` compacted amortised, not intrusively | Sweep when `size() >= _compactAt`, re-arm at twice the survivors | The alternative considered in morph#528 was intrusive: give `CompletionState` a slot index and unlink on settle, making both registration and removal O(1) with no sweep at all. Rejected. It pushes a back-reference to the backend's table into a type shared by every backend, and puts a `_pendingMtx` acquisition on the settle path of every completion — turning a cost paid once per burst into contention paid by every strand thread on every result, on the exact path morph#579's value-handling contract just fixed. The amortised sweep buys the same O(1) admission for one `size_t` of state confined to `LocalBackend`, at the cost of a list bounded at 2× the live count instead of exactly it. |
+| `_pending` compacted amortised, not intrusively | Sweep when `size() >= _compactAt`, re-arm at twice the survivors | The intrusive alternative is to give `CompletionState` a slot index and unlink on settle, making both registration and removal O(1) with no sweep at all. Rejected. It pushes a back-reference to the backend's table into a type shared by every backend, and puts a `_pendingMtx` acquisition on the settle path of every completion — turning a cost paid once per burst into contention paid by every strand thread on every result, on the exact path `Completion`'s value-handling contract exists to keep cheap. The amortised sweep buys the same O(1) admission for one `size_t` of state confined to `LocalBackend`, at the cost of a list bounded at 2× the live count instead of exactly it. |
 | `setReconnectHandler` | Default no-op | Only backends with a transport layer (e.g. `QtWebSocketBackend`) need to react to reconnects. `LocalBackend` and `SimulatedRemoteBackend` never invoke it. |
 | `setConnectHandler`/`setDisconnectHandler` on `IBackend`, not only `QtWebSocketBackend` | Same no-op-default pattern as `setReconnectHandler` | Connection state is a property of any transport-backed backend; a UI observing it shouldn't have to downcast to a concrete backend type. A purely local backend has no meaningful connection state, so the base-class hook is simply inert for it — no behavior change, matching the existing `setReconnectHandler` precedent exactly. |
 | `setDisconnectHandler` fires before reconnect scheduling | Ordering choice, not incidental | An instant successful reconnect must not look, from an observer's perspective, like nothing happened — the disconnected state must be visible even when the very next thing that happens is a fresh `connected`. |
@@ -2537,7 +2477,7 @@ implementation to absorb — see
 | Opaque model ids | Monotonic counter run through a keyed 4-round Feistel permutation (`detail::OpaqueIdGenerator`), key drawn from `std::random_device` at construction | Guarantees uniqueness (Feistel networks are bijections for any round function) while making ids unguessable without the key; self-contained, no external crypto dependency — same posture as the reference HMAC-SHA256 in `session_auth.hpp`. |
 | WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. A lost/undelivered deregister no longer leaks indefinitely: `QtWebSocketServer`'s connection scope reclaims the model at the next disconnect (see Limitations). |
 | Connection-scoped cleanup bypasses `IAuthorizer` | `closeConnection` never calls `authorize`/`authorizeInstance`/`authenticate` | It is server housekeeping triggered by the transport's own connection-close event, not a caller action; synthesising a `deregister` envelope would need a token to pass ownership checks and would require the transport to learn ids by parsing replies — recording the owning connection at register time is simpler and cannot desync. |
-| `callId`-multiplexed replies | `execute` replies carry a non-zero `callId`; *awaited* control replies carry `0`. The one exception is the fire-and-forget `deregister`, which carries a non-zero `callId` from the same counter on both WebSocket transports | Lets `QtWebSocketBackend` run many concurrent async executes over one socket and match each reply to its `Completion`, while still supporting the parked-nested-loop synchronous `register` path (which uses `callId == 0`). The `deregister` exception exists because `0` means "give this payload to whoever is parked in `sendSync`", and `deregister` is the one control message nobody parks for: with `callId == 0` its own unwanted `ok` was handed to an unrelated `register`/`attach` that happened to be parked, which returned that reply's `modelId` of `0` (issue #65 for `QtWebSocketBackend`, issue #454 for `SocketBackend`). Every message whose reply *is* awaited synchronously still uses `0`. |
+| `callId`-multiplexed replies | `execute` replies carry a non-zero `callId`; *awaited* control replies carry `0`. The one exception is the fire-and-forget `deregister`, which carries a non-zero `callId` from the same counter on both WebSocket transports | Lets `QtWebSocketBackend` run many concurrent async executes over one socket and match each reply to its `Completion`, while still supporting the parked-nested-loop synchronous `register` path (which uses `callId == 0`). The `deregister` exception exists because `0` means "give this payload to whoever is parked in `sendSync`", and `deregister` is the one control message nobody parks for: with `callId == 0` its own unwanted `ok` is handed to an unrelated `register`/`attach` that happens to be parked, which then returns that reply's `modelId` of `0`. Every message whose reply *is* awaited synchronously still uses `0`. |
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
 | No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
@@ -2548,12 +2488,12 @@ implementation to absorb — see
 | `morph::net`'s I/O model | A dedicated I/O thread + `std::condition_variable`, instead of the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and — as a side effect — lets `SocketBackend` be driven safely from multiple threads (`QtWebSocketBackend` cannot be, since it is pinned to one event-loop thread). |
 | `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + base64 + HTTP Upgrade + frame codec), not a third-party library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency to keep morph's default build dependency-free, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
 | `WsFrameReader` reassembles fragments | Accumulates continuation frames and returns only the completed message | Fragmentation is not an exotic case: a peer fragments whenever a message exceeds its outgoing frame size, and Qt's `QWebSocket` defaults that to 512 KiB. Rejecting fragments broke interop with the transport this project ships, for every payload past that size. Control frames interleaved between fragments pass through untouched, and the reassembled total is bounded by `wire::kMaxEnvelopeBytes` so a stream of tiny continuations cannot grow the buffer without limit. |
-| `WsFrameReader` rejects RFC 6455-illegal frames instead of tolerating them | Masking direction, RSV bits, opcode range, control-frame framing, Close status code, minimal length encoding and text-payload UTF-8 are all checked; a violation throws out of `tryExtractFrame()` and the call site drops the connection | The interop requirement above makes what the reader *refuses* part of the transport's contract rather than an implementation detail: ten classes of illegal frame used to be accepted, and a peer that sends one now gets disconnected (morph#533). The reader is given its role at construction (`expectMasked`) because §5.1 is directional — a server MUST reject an unmasked client frame and a client MUST reject a masked server frame, and that rule is the anti-cache-poisoning defence, not a formality. Text UTF-8 is validated incrementally, since a multi-byte sequence may straddle a fragment boundary. On the sending side the mask key is drawn per frame from a thread-local `std::random_device` rather than a thread-local `std::mt19937`, whose state a peer can reconstruct from 624 observed keys (§5.3); `random_device` has no reproducible state to recover, and holding it thread-local keeps the entropy source open instead of reacquiring it on every outbound message. |
-| Registration continuation delivered via a caller-supplied `IExecutor&`, not on the backend's thread | `bindModel`/`promoteModel` return a `Completion<ModelId>` built with the caller's executor | The four `*Async` twins' threading contract could only be stated in prose, and its violation is a use-after-free (morph#486/#489). Making the executor an argument moves the choice of delivery thread from fifteen implementors that know nothing about the caller's teardown to the one caller that does, and turns it from a `@note` into a value a call site must produce. Rejected: matching `execute`'s `IExecutor*` — a null pointer makes `Completion` drop every handler silently, which is the same unobservable failure the surface removes. |
+| `WsFrameReader` rejects RFC 6455-illegal frames instead of tolerating them | Masking direction, RSV bits, opcode range, control-frame framing, Close status code, minimal length encoding and text-payload UTF-8 are all checked; a violation throws out of `tryExtractFrame()` and the call site drops the connection | The interop requirement above makes what the reader *refuses* part of the transport's contract rather than an implementation detail: a tolerant reader accepts ten classes of illegal frame, and a peer that sends one here gets disconnected instead. The reader is given its role at construction (`expectMasked`) because §5.1 is directional — a server MUST reject an unmasked client frame and a client MUST reject a masked server frame, and that rule is the anti-cache-poisoning defence, not a formality. Text UTF-8 is validated incrementally, since a multi-byte sequence may straddle a fragment boundary. On the sending side the mask key is drawn per frame from a thread-local `std::random_device` rather than a thread-local `std::mt19937`, whose state a peer can reconstruct from 624 observed keys (§5.3); `random_device` has no reproducible state to recover, and holding it thread-local keeps the entropy source open instead of reacquiring it on every outbound message. |
+| Registration continuation delivered via a caller-supplied `IExecutor&`, not on the backend's thread | `bindModel`/`promoteModel` return a `Completion<ModelId>` built with the caller's executor | A per-verb non-blocking twin can only state its threading contract in prose, and a violation of it is a use-after-free. Making the executor an argument moves the choice of delivery thread from fifteen implementors that know nothing about the caller's teardown to the one caller that does, and turns it from a `@note` into a value a call site must produce. Rejected: matching `execute`'s `IExecutor*` — a null pointer makes `Completion` drop every handler silently, which is the same unobservable failure the surface removes. |
 | One `bindModel` instead of three acquire verbs | Behaviour selected by `BindRequest`'s shape (`primary` empty?, `current` zero?) | The three verbs already degrade into each other exactly along those two fields, so naming them separately stated the same distinction three times — and tripled it again for the `*Async` twins. The default implementation still routes each shape to the legacy verb it names, so a backend that overrides only some of the three is unaffected. |
-| `SynchronousBackendAdapter` is a decorator, not a base class or a CRTP mixin | Wraps `shared_ptr<IBackend>` and forwards every verb | It must work on `LocalBackend` and eleven test doubles *without modifying them*, which rules out anything they would have to derive from. Cost is one forwarding method per unchanged verb; benefit is that morph#522's remaining four steps are migrations rather than rewrites. |
+| `SynchronousBackendAdapter` is a decorator, not a base class or a CRTP mixin | Wraps `shared_ptr<IBackend>` and forwards every verb | It must work on `LocalBackend` and eleven test doubles *without modifying them*, which rules out anything they would have to derive from. Cost is one forwarding method per unchanged verb; benefit is that an unmodified blocking backend reaches the new surface at all. |
 | The adapter's blocking executor is required, not defaulted | Constructor parameter with no default; null `inner` throws | "Where does the blocking happen" is the only question the class exists to answer. An adapter that silently ran the call inline when handed nothing would block on some configurations and not others — contract by configuration, which is the thing being removed. |
-| `SocketBackend` runs reconnect handlers on a dedicated thread | Not inline from the I/O thread's connect path | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the I/O thread's read loop can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. Still load-bearing after morph#569: `bindModel` cannot deadlock this way, but the blocking verbs still can and `Bridge`'s reconnect handler still calls them. |
+| `SocketBackend` runs reconnect handlers on a dedicated thread | Not inline from the I/O thread's connect path | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the I/O thread's read loop can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. Still load-bearing even though `bindModel` cannot deadlock this way: the blocking verbs can, and a caller may still reach them. |
 | `SocketBackend` implements `bindModel`/`promoteModel` natively | Not wrapped in `SynchronousBackendAdapter`, although it overrides none of the four `*Async` verbs | The I/O thread already demultiplexes replies by `callId` for `execute` and `RemoteServer` echoes `callId` on every control reply, so the non-blocking path costs a second `PendingCallTable` and no protocol change. Wrapping instead would park a thread per bind for a round trip this transport need not park for, and would keep every bind inside `sendSync`'s one-synchronous-call token — which `listInstances` and the legacy `registerModel` share, and which is the one global restriction on a backend otherwise documented as drivable from several threads at once. The adapter's reconnect-handler property, the other reason to consider it, does not apply: it forwards `setReconnectHandler` and the blocking verbs straight through, so a wrapped `SocketBackend` would run reconnect control calls exactly where it does today. |
 
 ## Lifetime annotations
@@ -2637,7 +2577,7 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   documented future work, not implemented today. Nothing in `SocketServer`'s
   teardown depends on which of those kernels it runs on any more: the accept
   loop is interrupted by a wakeup file descriptor the server owns, not by any
-  kernel's treatment of `shutdown(2)` on a listening socket (morph#437). One
+  kernel's treatment of `shutdown(2)` on a listening socket. One
   half of that is still unverified first-hand — **the macOS symptom has never
   been reproduced on a Darwin machine by this project's own measurement**; the
   original report's `sample(1)` backtrace and documented BSD semantics are the
@@ -2675,7 +2615,7 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   learns only that the connection went away, and neither side logs which check
   failed. Sending the RFC status code needs the reader's error model to change
   from throwing to `std::expected<..., WsProtocolError>` at both call sites;
-  that is separable work, deliberately not done in morph#533. A Close frame
+  that is separable work and is not done here. A Close frame
   *from* the peer is a different path and is not a violation: it is echoed back
   carrying the peer's own status code (§5.5.1), where it used to be echoed
   empty.
@@ -2690,7 +2630,7 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   `Config::handshakeTimeout`.** If destruction races an in-flight (re)connect
   attempt, the TCP connect phase is bounded by the former and the handshake
   response read that follows a successful TCP connect is bounded by the
-  latter (`SO_RCVTIMEO` on the not-yet-published socket; morph#535 — a peer
+  latter (`SO_RCVTIMEO` on the not-yet-published socket — a peer
   that completes the TCP handshake but never speaks, or never finishes, the
   WebSocket Upgrade used to leave the I/O thread, and therefore the
   destructor's join, waiting forever). Neither bound is a hard real-time

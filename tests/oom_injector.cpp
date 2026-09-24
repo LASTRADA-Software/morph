@@ -12,8 +12,8 @@
 // overloads are *compiled out* under either sanitizer, by the guard a few
 // lines below, rather than linked beside that runtime's.
 //
-// Which means -- and an earlier version of this comment said the opposite, in
-// a form confident enough to act on (morph#718) -- there is no link failure
+// Which means -- against the obvious guess, which is confident enough to act
+// on -- there is no link failure
 // and no "multiple definition of `operator new(unsigned long)'". Measured with
 // clang 22.1.8: `clang++ -std=c++23 -fsanitize=address
 // tests/oom_injector.cpp` links, and `nm -C --defined-only` finds eight
@@ -28,9 +28,10 @@
 //
 // ctest-level test exclusion is therefore exactly the remedy for it, and is
 // the one in use: .github/workflows/ci.yml excludes `OomInjector|morph#108` by
-// name on the clang-asan and clang-tsan legs. With that filter bypassed,
-// morph#719's lane measured six tests failing on each of the two legs. Deleting
-// the exclusion on the strength of the old comment turns both legs red.
+// name on the clang-asan and clang-tsan legs (one test's own name carries that
+// token, which is why the filter names it). With that filter bypassed, six
+// tests fail on each of the two legs, measured. Deleting the exclusion turns
+// both legs red.
 //
 // The link failure the old comment described was presumably real before the
 // guard below existed -- it is why the guard exists -- and the comment was not

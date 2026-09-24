@@ -35,11 +35,11 @@ runs, and the natural spelling is silently wrong:
 completion.then([this](GetBoardResult r) { /* `this` may be long gone */ });
 ```
 
-Correctness used to depend on every author independently remembering a
+Without it, correctness depends on every author independently remembering a
 three-part incantation: declare a token member (last!), capture its weak form,
 re-check it before touching `this`. Forgetting compiles fine — which is the
-hazard. Issue #137 was a real `stack-use-after-scope` write produced exactly
-this way, invisible in every unsanitised build.
+hazard, and the `stack-use-after-scope` write it produces is invisible in every
+unsanitised build.
 
 Liveness is only half of it. Two different situations must both suppress
 delivery:
@@ -216,8 +216,9 @@ cannot. It is normative.
   This is what makes a token the wrong tool for gating a **call into an object
   whose destruction it observes**, as opposed to gating *delivery of a callback*.
   A refused callback costs nothing when the check is stale; a member call made a
-  few instructions after a stale `Active` runs on destroyed memory. Issue #486
-  was exactly that, in `~BridgeHandler`. Where a call has to be gated, the caller
+  few instructions after a stale `Active` runs on destroyed memory —
+  `~BridgeHandler` is the call site where that applies. Where a call has to be
+  gated, the caller
   needs something that *holds* the answer for the duration of the call — see
   `bridge::detail::BridgeLifetime` in [bridge.md](bridge.md), which pairs a
   `shared_mutex` with the flag so check-then-call is one step and the destructor
@@ -268,8 +269,8 @@ statement. `morph::flows::FlowSession` does exactly this.
 
 | Decision | Rationale |
 |---|---|
-| **Composition, not inheritance** | A base class (`HasLifetime`, tried in #150 and closed) is a requirement on every consumer's hierarchy — impossible or costly for `QObject`s, aggregates, and types that already have a base. A member composes with all of them, and non-adopting code is untouched. |
-| **A distinct type, not `std::stop_token` alone** | `std::stop_token` covers requirement (2) but not (1): destroying a `stop_source` does not request stop, so a bare stop token says nothing about liveness. The verb names deliberately mirror `stop_source`/`stop_token` so a C++20 reader recognises the shape, and so #116's work-side cancellation can share this vocabulary rather than growing a second one. |
+| **Composition, not inheritance** | A base class (a `HasLifetime`) is a requirement on every consumer's hierarchy — impossible or costly for `QObject`s, aggregates, and types that already have a base. A member composes with all of them, and non-adopting code is untouched. |
+| **A distinct type, not `std::stop_token` alone** | `std::stop_token` covers requirement (2) but not (1): destroying a `stop_source` does not request stop, so a bare stop token says nothing about liveness. The verb names deliberately mirror `stop_source`/`stop_token` so a C++20 reader recognises the shape, and so a work-side cancellation facility could share this vocabulary rather than growing a second one. |
 | **Not named `CallbackContext`** | `morph::session::Context` already exists and means something entirely different (authenticated principal, token, request id). Two unrelated "Context" types in one framework is a readability tax. `Scope`/`Token` also matches the `std::stop_source`/`stop_token` pairing. |
 | **Fail-closed default token** | An unbound token suppressing is a visible functional bug (a callback that did not fire); an unbound token admitting is a use-after-free. The type exists to make that trade. |
 | **Three-way `status()` rather than a single `bool`** | Liveness and stop are genuinely different facts. Collapsing them is what made the hand-rolled `weak_ptr` idiom unable to express "alive but cancelled" in the first place. |
@@ -282,9 +283,9 @@ statement. `morph::flows::FlowSession` does exactly this.
 ## Out of scope
 
 - **Cancelling the work.** This gates *delivery* of a result nobody wants; it
-  does nothing to the work still in flight producing it. That is issue #116's
-  half of the story, and the two are meant to end up one vocabulary — if #116
-  lands, `requestStop()` is its natural upstream trigger.
+  does nothing to the work still in flight producing it. Nothing in the
+  framework offers work-side cancellation; if it ever does, `requestStop()` is
+  its natural upstream trigger and the two should share one vocabulary.
 - **Interop with `std::stop_token`.** Constructing a `CallbackToken` from an
   externally supplied `std::stop_token` (so callbacks tie into an existing
   cancellation tree) is a deliberate future extension, not present today.
@@ -306,8 +307,8 @@ statement. `morph::flows::FlowSession` does exactly this.
   belongs to, and the self-join deadlock family the no-block-until-drained
   decision avoids.
 - [`executor.md`](executor.md) — `IExecutor`; `morph::qt::QtExecutor`'s own
-  `_alive` token (issue #151) is the adjacent-but-distinct case: *the executor*
-  going away, rather than the receiver.
+  `_alive` token is the adjacent-but-distinct case: *the executor* going away,
+  rather than the receiver.
 - [`workflows_navigation.md`](../forms/workflows_navigation.md) —
   `morph::flows::FlowSession`, the second in-framework adopter and the worked
   example of the "teardown that pumps" escape hatch.

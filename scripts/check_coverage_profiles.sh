@@ -7,9 +7,9 @@
 # COVERAGE_OBJECTS manifest read already uses) rather than word-splitting a
 # single string, so a path containing a space is merged and deleted as one
 # unit instead of being silently split into fragments that `rm -f` no-ops on
-# -- code review on the #430 fix found the space-joined form left exactly
+# -- review of the discovery fix found the space-joined form left exactly
 # that gap, even though nothing in this repository's own paths triggers it
-# today. This is the profile-discovery half of morph#430: naming it here, in
+# today. This is the profile-discovery half of that fix: naming it here, in
 # one place, is what lets scripts/coverage.sh delete exactly this list once
 # it has merged them, so a later run's find can never inherit a stale file
 # this run already accounted for.

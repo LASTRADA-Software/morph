@@ -192,8 +192,7 @@ inline void checkIdempotencyKeyContractAcrossReopen(const std::string& name, Key
 }
 
 /// @brief Asserts an implementation round-trips a NUL-bearing payload and
-///        idempotency key intact, rather than truncating at the first `\0`
-///        (morph#531).
+///        idempotency key intact, rather than truncating at the first `\0`.
 ///
 /// `QueueItem::payload` is documented as an opaque string whose serialisation
 /// format is the caller's choice (JSON, binary-hex, plain text, ...), so a
@@ -210,8 +209,8 @@ inline void checkIdempotencyKeyContractAcrossReopen(const std::string& name, Key
 ///        the record *and* keeps the item in an in-memory map, and `drain()`
 ///        serves that map, so without a reopen this check compares the values
 ///        it just handed to `enqueue` against themselves and never executes the
-///        on-disk encoder or decoder at all. That encoder is exactly what
-///        morph#531 is about for the file backend: with no reopen, deleting
+///        on-disk encoder or decoder at all. That encoder is where a NUL is
+///        lost for the file backend: with no reopen, deleting
 ///        `escape_control_characters` from `FileOfflineQueue`'s write options
 ///        leaves this check green.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) — `make` and `reopen` are the same type by nature; for the durable backends they are deliberately the *same* factory, so a swap is a no-op rather than a hazard

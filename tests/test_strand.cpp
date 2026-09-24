@@ -19,7 +19,7 @@ TEST_CASE("morph::exec::detail::StrandExecutor serialises tasks for the same key
     // Scoped so ~StrandExecutor's own _inFlight == 0 wait (strand.hpp) is the
     // drain, not a fixed-iteration poll: every queued task has run by the time
     // this block exits, with no dependence on how fast the host runs them
-    // (morph#396 -- the shape morph#374 fixed here first).
+    // rather than on a sleep long enough to have probably finished.
     {
         morph::exec::detail::StrandExecutor strand{pool};
         for (int i = 0; i < numTasks; ++i) {

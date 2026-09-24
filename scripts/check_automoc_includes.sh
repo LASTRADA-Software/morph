@@ -2,7 +2,7 @@
 # Usage: bash scripts/check_automoc_includes.sh [DIR...]
 #
 # Fails if any moc-generated source includes its class's header by a path that
-# climbs out of its own directory -- see issue #372.
+# climbs out of its own directory.
 #
 # moc writes the include for the header it was run on. Left to itself it writes
 # a path relative to the generated file, and since the generated file lives
@@ -105,8 +105,7 @@ ${offenders}
 AUTOMOC include lint failed: the moc output above includes its header by a path
 that climbs out of its own directory. That path is also resolved against every
 -I entry, so it can pick up a same-named header from a different checkout -- and
-Clang's -Wshadow-header makes it a hard error under this project's -Werror
-(issue #372).
+Clang's -Wshadow-header makes it a hard error under this project's -Werror.
 
 Two things produce this, and the second is the likelier one:
 

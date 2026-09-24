@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Two-binary journal-path skew probe (issue #246).
+// Two-binary journal-path skew probe.
 //
 // `examples/lims/README.md` asks for the executable form of the journal's
 // data-at-rest contract: an *old* build records a journal, a *new* build reads
@@ -18,7 +18,7 @@
 // the model-owning registrars, so a client-only binary cannot execute a model
 // and therefore cannot journal anything — it is the right gate for the
 // *wire*-path skew test, which needs a per-action fingerprint exchanged at
-// `hello` before there is anything to assert against, and which issue #207
+// `hello` before there is anything to assert against, and which nothing
 // tracks. This probe covers the journal path, which ships today.
 //
 // Three actions, chosen for the three distinct answers:

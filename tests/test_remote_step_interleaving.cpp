@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Covers the public deterministic-interleaving-harness seam for `RemoteServer`
-// (issue #55, use case 2): hand-stepping `RemoteServer`'s real per-model
+// hand-stepping `RemoteServer`'s real per-model
 // ordering via `morph::testing::StepExecutor`, without naming
 // `morph::exec::detail::StrandExecutor` or `morph::exec::detail::ModelId`.
 

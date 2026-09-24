@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// `morph::forms::InstanceConstraints` — the per-instance seam (issue #164).
+// `morph::forms::InstanceConstraints` — the per-instance seam.
 //
 // The case under test is the issue's own: two *instances* of one compiled
 // action type declare three and one decimal places, and a value outside the
@@ -278,7 +278,7 @@ TEST_CASE("One value can break more than one declared key at once", "[forms][ins
 // comfortably inside (8) or outside (-5, 40, 80) it; none lands on 0 or 10
 // themselves, which is where `<=>`'s `less`/`greater` arms actually change
 // answer -- the same "name claims a boundary, body tests the middle" shape
-// morph#484 named in test_forms_exact_bounds.cpp and
+// called out in test_forms_exact_bounds.cpp and
 // tests/test_wire_hardening.cpp. minimum/maximum are documented inclusive
 // (checkValue's own doc comment), so a value equal to either bound must pass,
 // and the smallest possible step past it must not.
@@ -426,7 +426,7 @@ TEST_CASE("checkValue with no declared decimalPlaces never reports PrecisionExce
 }
 
 // ---------------------------------------------------------------------------
-// The renderer half of the seam (morph#164).
+// The renderer half of the seam.
 //
 // Serving an instance's keys and checking against them from one declaration is
 // only worth anything if the shipped renderer honours what was served. It

@@ -46,8 +46,8 @@ namespace {
 // highest fd open, and how many fds in that range are open at all. Same
 // technique as tests/net/test_socket_server.cpp's own `highestOpenFd()`,
 // with the count added -- `highest + 1 - open` is the size of the gap that
-// `FdLimitClamp` exists to fill, and morph#559 asks for it to be *reported*
-// rather than assumed away.
+// `FdLimitClamp` exists to fill, and it is *reported* rather than assumed
+// away.
 struct FdScan {
     int highest = -1;
     int open = 0;
@@ -85,8 +85,8 @@ FdScan scanOpenFds(int limit) {
 // filling any such gap for real rather than assuming there isn't one. Only
 // once real exhaustion has been *observed* does the syscall under test run.
 //
-// morph#559 reported this test failing under concurrent machine load and asked
-// for the clamp to *say* what it measured rather than leave the next reader
+// This test fails under concurrent machine load if the clamp does not hold, so
+// the clamp *says* what it measured rather than leaving the next reader
 // guessing. `exhausted()` and `summary()` are that: every call site asserts
 // `exhausted()` before the syscall under test -- so a clamp that did not bite
 // fails on its own terms instead of being mistaken for a bug in `accept()` --
@@ -169,11 +169,11 @@ TEST_CASE("TcpSocket: listen on port 0 gets an OS-assigned port", "[net][tcp]") 
     REQUIRE(listener.boundPort() != 0U);
 }
 
-// ── Why the blocking accept()s below carry no deadline of their own (morph#772) ─────
+// ── Why the blocking accept()s below carry no deadline of their own ─────────
 //
-// morph#559 recorded a run parked indefinitely in `__accept` with nothing in
-// the process able to satisfy it, and morph#773 bounded the one site that has
-// that shape: `FakeWsServer::acceptAndHandshake()` in test_socket_backend.cpp,
+// A run can park indefinitely in `__accept` with nothing in
+// the process able to satisfy it. The one site in these tests with
+// that shape is bounded: `FakeWsServer::acceptAndHandshake()` in test_socket_backend.cpp,
 // where the *main test thread* blocks in `accept()` while the only thing that
 // could satisfy it is the io thread of the `SocketBackend` under test -- i.e.
 // the very component whose failure to connect those tests exist to provoke.
@@ -196,7 +196,8 @@ TEST_CASE("TcpSocket: listen on port 0 gets an OS-assigned port", "[net][tcp]") 
 //
 // If (1) throws instead, the helper thread stays parked and `~std::thread`
 // calls `std::terminate` -- an abort in 0.09s that names the test, not a hang.
-// The error it discards while doing so is morph#781, filed separately.
+// The error it discards while doing so is not reported anywhere, which is a
+// known cost of this shape.
 //
 // **Verification status.** The reasoning is inferred from reading plus
 // `tcp_socket.hpp`'s own `accept()` contract; it is not a measurement that
@@ -212,8 +213,8 @@ TEST_CASE("TcpSocket: listen on port 0 gets an OS-assigned port", "[net][tcp]") 
 //
 // That is also the backstop if this reasoning is ever wrong: `TIMEOUT 120` in
 // tests/net/CMakeLists.txt turns a park into a named ctest failure. It is a
-// worse name than morph#773's (`accept()` timed out, versus "this test was
-// slow") and six times the wall clock, which is why a site that genuinely can
+// worse name than a bounded accept gives (`accept()` timed out, versus "this
+// test was slow") and six times the wall clock, which is why a site that genuinely can
 // starve gets its own bound -- and why a site that cannot does not.
 //
 // Also bounded, and the two exceptions to the pattern above, both `accept()`ing
@@ -221,7 +222,7 @@ TEST_CASE("TcpSocket: listen on port 0 gets an OS-assigned port", "[net][tcp]") 
 // `accept()` on a 2s `poll()` over a *non-blocking* listener, where `accept()`
 // fails with EAGAIN rather than parking; and the EMFILE test gates its own on a
 // 5s `poll()` that both establishes the precondition it used to assume and
-// bounds the wait (morph#773).
+// bounds the wait.
 
 TEST_CASE("TcpSocket: connect/accept/send/recv round-trip", "[net][tcp]") {
     auto listener = TcpSocket::listen(0);
@@ -258,7 +259,7 @@ TEST_CASE("TcpSocket: shutdownBoth unblocks a concurrent recvSome", "[net][tcp]"
     std::uint16_t const port = listener.boundPort();
 
     TcpSocket serverSide;
-    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
+    // Bounded by shape rather than by a deadline: see the note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
     acceptThread.join();
@@ -282,7 +283,7 @@ TEST_CASE("TcpSocket: recvSome returns 0 when the peer closes cleanly", "[net][t
     std::uint16_t const port = listener.boundPort();
 
     TcpSocket serverSide;
-    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
+    // Bounded by shape rather than by a deadline: see the note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     {
         auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
@@ -294,7 +295,7 @@ TEST_CASE("TcpSocket: recvSome returns 0 when the peer closes cleanly", "[net][t
     REQUIRE(got == 0U);
 }
 
-// ── Non-blocking listener (morph#437) ───────────────────────────────────────
+// ── Non-blocking listener ───────────────────────────────────────────────────
 
 TEST_CASE("TcpSocket: setNonBlocking makes an idle listener answer tryAccept with nullopt", "[net][tcp]") {
     // The property SocketServer's accept loop depends on: once poll() has
@@ -349,11 +350,11 @@ TEST_CASE("TcpSocket: setNonBlocking reports failure on an empty socket", "[net]
     REQUIRE_FALSE(empty.setNonBlocking());
 }
 
-// ── Adopted sockets are blocking (morph#478) ────────────────────────────────
+// ── Adopted sockets are blocking ────────────────────────────────────────────
 
 TEST_CASE("TcpSocket: adopting a non-blocking descriptor clears O_NONBLOCK", "[net][tcp]") {
-    // The regression control for morph#478, and the only test in this file that
-    // can fail on Linux because of it.
+    // The regression control for the adopted-descriptor rule, and the only test
+    // in this file that can fail on Linux because of it.
     //
     // macOS/BSD propagate a listener's O_NONBLOCK onto the sockets accept(2)
     // returns; Linux does not (measured with a standalone accept() probe here:
@@ -385,7 +386,7 @@ TEST_CASE("TcpSocket: tryAccept hands back a blocking connection", "[net][tcp]")
     // EAGAIN as fatal, and the first thing clientLoop() does with an accepted
     // socket is performServerHandshake(), which reads before the client's
     // Upgrade bytes have necessarily arrived. A non-blocking accepted socket
-    // therefore fails every connection (morph#478).
+    // therefore fails every connection.
     //
     // Stated limit: on Linux this assertion also holds with the fix reverted,
     // because accept() here never produces a non-blocking socket to begin with.
@@ -512,14 +513,14 @@ TEST_CASE("TcpSocket::listen: fails with EADDRINUSE when the port is already bou
 // `tcp_socket.hpp` formats its message on whichever thread hit the error, and
 // this subsystem spawns those threads itself, so the renderer has to be one
 // that two threads may call at once -- `std::error_category::message`, not
-// `std::strerror` (morph#625).
+// `std::strerror`.
 //
-// What this case does not establish: that the previous `std::strerror`
-// spelling was actually racing. glibc renders both spellings to the same
-// bytes, so this assertion would have held before the change too. The evidence
-// for the change is clang-tidy `concurrency-mt-unsafe` going from six findings
-// in this header to none; this case is a standing guard on the message, not
-// that measurement.
+// What this case does not establish: that `std::strerror` would actually race
+// here. glibc renders both spellings to the same bytes, so this assertion
+// holds either way. The evidence for the choice is clang-tidy
+// `concurrency-mt-unsafe`, which reports six findings in this header for the
+// unsafe spelling and none for this one; this case is a standing guard on the
+// message, not that measurement.
 TEST_CASE("TcpSocket::listen renders a bind() failure through std::system_category", "[net][tcp]") {
     auto first = TcpSocket::listen(0);
     std::uint16_t const port = first.boundPort();
@@ -545,8 +546,8 @@ TEST_CASE("TcpSocket::accept: throws when accept() itself runs out of file descr
     // SYN-ACK arrives, which is a different instant from the one at which the
     // listener's accept queue gains the child socket (the final ACK). On a
     // machine under load those two can separate, and the blocking `accept()`
-    // below would then park -- morph#559 saw a net test park in `accept()`
-    // indefinitely and take a whole run with it. Waiting for the listener to
+    // below would then park -- a net test parked in `accept()`
+    // indefinitely takes a whole run with it. Waiting for the listener to
     // actually report readable turns that into a bounded, named failure here,
     // and leaves `accept()` with a connection genuinely queued so the EMFILE
     // it hits is the one under test.
@@ -567,7 +568,7 @@ TEST_CASE("TcpSocket::recvSome: throws for a real socket error distinct from ECO
     auto listener = TcpSocket::listen(0);
     std::uint16_t const port = listener.boundPort();
     TcpSocket serverSide;
-    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
+    // Bounded by shape rather than by a deadline: see the note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
     acceptThread.join();
@@ -597,7 +598,7 @@ TEST_CASE("TcpSocket::sendAll: throws when the peer resets the connection", "[ne
     std::uint16_t const port = listener.boundPort();
 
     TcpSocket serverSide;
-    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
+    // Bounded by shape rather than by a deadline: see the note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     {
         auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
@@ -630,7 +631,7 @@ TEST_CASE("TcpSocket::shutdownBoth: a safe no-op on an empty socket", "[net][tcp
     REQUIRE_FALSE(empty.valid());
 }
 
-// ── morph#506: a peer that stops reading must not park the sender forever ──
+// ── A peer that stops reading must not park the sender forever ─────────────
 //
 // Once the kernel send buffer fills against a peer that never reads, a blocking
 // `::send` never returns -- and `sendAll` loops on it. `SocketBackend::sendFrame`
@@ -647,7 +648,7 @@ TEST_CASE("TcpSocket: setSendTimeout bounds a send against a peer that never rea
     // Accepts and then does nothing at all -- never reads a byte. Held open for
     // the duration of the test so the connection stays established.
     TcpSocket serverSide;
-    // Bounded by shape rather than by a deadline: see the morph#772 note above the round-trip test.
+    // Bounded by shape rather than by a deadline: see the note above the round-trip test.
     std::thread acceptThread{[&] { serverSide = listener.accept(); }};
     auto clientSide = TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000});
     acceptThread.join();

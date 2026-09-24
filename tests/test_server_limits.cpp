@@ -190,7 +190,7 @@ TEST_CASE("benchmark: in-process execute round-trip", "[!benchmark][remote]") {
         std::atomic<uint64_t> next{0};
         constexpr int n = 32;
         // Heap-allocated and co-owned by every reply callback, not a stack
-        // local captured by reference (morph#565). The wait below is bounded,
+        // local captured by reference. The wait below is bounded,
         // so the body can and does return with replies still in flight; a
         // stack-local counter is destroyed at that point and the straggler's
         // `fetch_add` writes into a dead frame. Catch2 then re-enters this body

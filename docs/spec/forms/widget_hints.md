@@ -147,14 +147,14 @@ two differently-*bounded* `int` sliders share one entry — their entries are
 identical, and that is what `$defs` is for — while an `int` slider and a
 `double` slider get one each.
 
-They have to. glaze populates a `$defs` entry only once, so while every
-instantiation shared the single name `"Ranged"`, the second one was skipped and
-`$ref`ed the first one's definition: a `Ranged<0.0, 1.0, 0.1>` next to a
-`Ranged<0, 100>` was served as `{"type":["integer","null"], "minimum":
+They have to. glaze populates a `$defs` entry only once, so if every
+instantiation shared the single name `"Ranged"`, the second one would be skipped
+and `$ref` the first one's definition: a `Ranged<0.0, 1.0, 0.1>` next to a
+`Ranged<0, 100>` would be served as `{"type":["integer","null"], "minimum":
 -2147483648, …}` while its property correctly carried `"x-step": 0.1` — every
-legal value of the double slider failing the type it was handed under. That was
-morph#543, the same defect [choice.md](choice.md#schema-representation)
-describes for `Choice`.
+legal value of the double slider failing the type it was handed under. This is
+the same defect [choice.md](choice.md#schema-representation) describes for
+`Choice`.
 
 Because these keys are part of the emitted document, changing this composition
 is a wire-shape change for any client that resolves `$ref` targets by name.

@@ -43,7 +43,7 @@ expect ok field principal == "alice"
 # ── Open the ledger, carrying the minted session ────────────────────────────
 # NOTE: `client`'s own principal=/token= options are NOT capture-expanded --
 # they take literal text. The credentials a Login just minted have to be
-# installed with a `session` step, which is. See morph#360.
+# installed with a `session` step, which is.
 client books model=LedgerModel
 session principal=$who token=$token
 
@@ -127,8 +127,8 @@ expect err message == "RunReportJob: only the report runner may run a report job
 # that names no journal is refused rather than silently doing nothing, and the
 # refusal says nothing about the entries that do exist.
 #
-# A *real* journal id is nameable now -- `ListTransactions` hands them out
-# (morph#428) -- and the reversal it makes possible is driven end to end by
+# A *real* journal id is nameable -- `ListTransactions` hands them out --
+# and the reversal that makes possible is driven end to end by
 # `store-list-and-undo-an-entry.scenario`. This file keeps the guessed id on
 # purpose, because the refusal is a different path from the reversal.
 do UndoTransaction ledgerId=1 journalId=999999

@@ -68,8 +68,8 @@ struct ALGetBalance {};
 struct ALSetNickname {
     std::string name;
 };
-// Throws when overdrawn -- the case issue #23 is about: a rejected action must
-// still leave a journal entry, not silence.
+// Throws when overdrawn -- a rejected action must still leave a journal entry,
+// not silence.
 struct ALWithdraw {
     int amount = 0;
 };

@@ -616,7 +616,7 @@ TEST_CASE("FileActionLog::rotate: promotes unflushed idempotencyKeys into durabl
     REQUIRE(sealedEntries[0].idempotencyKey == "row-1");
 }
 
-// ── FileIoOps fault injection (LASTRADA-Software/morph#97) ─────────────────
+// ── FileIoOps fault injection ─────────────────────────────────────────────
 //
 // Every branch below only runs when a real OS-level file-I/O call fails
 // partway through an otherwise-successful operation -- previously
@@ -646,10 +646,10 @@ TEST_CASE("FileActionLog::append: a short fwrite() throws and does not record th
     REQUIRE(log2.entries().size() == 1);
 }
 
-TEST_CASE("FileActionLog::append: a short write does not merge with the next successful append (morph#530)",
+TEST_CASE("FileActionLog::append: a short write does not merge with the next successful append",
           "[action_log][phase2][file][fault-injection]") {
-    // Regression for morph#530. The single-write case above (fwrite always
-    // short) never exercises the actual defect: append() used to throw on a
+    // The single-write case above (fwrite always
+    // short) never exercises the actual defect: append() must not throw on a
     // short write without rolling the file back, and the handle is
     // append-mode, so a *subsequent* successful append concatenated directly
     // onto the truncated JSON with no separating newline -- merging two
@@ -782,7 +782,7 @@ TEST_CASE("FileActionLog::rotate: a failing pre-rotation fsync() throws before a
     REQUIRE(log.entries().size() == 1);
 }
 
-// ── Directory fsync (morph#532) ──────────────────────────────────────────
+// ── Directory fsync ──────────────────────────────────────────
 //
 // `fsync` on a file makes its *data* durable but not a new directory entry
 // or a rename -- the constructor's first `fopen("a")` can create the file,
@@ -791,7 +791,7 @@ TEST_CASE("FileActionLog::rotate: a failing pre-rotation fsync() throws before a
 // confirm it is actually called at each site, with the right directory, and
 // that a failure there is surfaced rather than swallowed.
 
-TEST_CASE("FileActionLog: construction syncs the containing directory after creating the file (morph#532)",
+TEST_CASE("FileActionLog: construction syncs the containing directory after creating the file",
           "[action_log][phase2][file][fault-injection]") {
     TempFile const tmp{"file_fault_construct_syncpath"};
     std::vector<std::filesystem::path> syncedPaths;
@@ -807,7 +807,7 @@ TEST_CASE("FileActionLog: construction syncs the containing directory after crea
     CHECK(syncedPaths[0] == tmp.path.parent_path());
 }
 
-TEST_CASE("FileActionLog: an unsupported directory fsync warns instead of throwing (morph#532)",
+TEST_CASE("FileActionLog: an unsupported directory fsync warns instead of throwing",
           "[action_log][phase2][file][fault-injection]") {
     // A directory fsync needs a *read* handle on the directory, strictly
     // stronger than writing a file inside it: on a mode-0300 spool directory --
@@ -858,7 +858,7 @@ TEST_CASE("FileActionLog: a failing directory fsync during construction throws a
     REQUIRE(reopened.entries().size() == 1);
 }
 
-TEST_CASE("FileActionLog::rotate: syncs both the seal rename's and the reopen's directory (morph#532)",
+TEST_CASE("FileActionLog::rotate: syncs both the seal rename's and the reopen's directory",
           "[action_log][phase2][file][fault-injection]") {
     TempFile const active{"file_fault_rotate_syncpath_active"};
     TempFile const sealed{"file_fault_rotate_syncpath_sealed"};
@@ -907,7 +907,7 @@ TEST_CASE(
     "FileActionLog::rotate: a failing reopen after a successful rename leaves the log closed, "
     "requireOpen()'s throwing arm reachable, and the destructor's null check load-bearing",
     "[action_log][phase2][file][fault-injection]") {
-    // The one scenario morph#97 called out as needing the *most* real-world
+    // The scenario needing the *most* real-world
     // contortion to reach without this seam: fopen() failing on the reopen
     // right after the rename to sealedPath already succeeded. With FileIoOps,
     // this is just "let the constructor's own fopen() through for real, then
@@ -1019,7 +1019,7 @@ TEST_CASE("FileActionLog: a torn trailing record whose resize_file() fails is lo
     REQUIRE(std::filesystem::file_size(tmp.path) == sizeBefore);
 }
 
-// ── An unreadable journal must never be mistaken for a torn one (morph#493) ──
+// ── An unreadable journal must never be mistaken for a torn one ──
 //
 // repairTornTail() scans with an ifstream whose open it did not check, so a
 // scan that never happened left `intactEnd` at 0 and truncated the whole file

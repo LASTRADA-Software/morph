@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Direct coverage of the free functions morph#530/#532 added to
+// Direct coverage of the free functions in
 // `morph/core/file_io_ops.hpp`. They are reached indirectly through
 // `FileActionLog`/`FileOfflineQueue`/`SqliteOfflineQueue` elsewhere, but only
 // along the paths those classes happen to take -- which left the error
@@ -173,7 +173,7 @@ TEST_CASE("morph::core::rollBackShortWrite: a failing flush truncates nothing", 
     // the write short. The on-disk contents are then unknowable and the
     // buffered bytes cannot portably be discarded, so truncating to a stream
     // offset that may exceed the real size would pad the file with NULs rather
-    // than trim it -- the bricking morph#530 exists to prevent.
+    // than trim it -- the bricking the rollback exists to prevent.
     auto const path = tempIoPath("failing_flush");
     {
         std::ofstream out{path, std::ios::binary};

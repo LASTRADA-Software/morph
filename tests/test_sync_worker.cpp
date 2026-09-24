@@ -386,7 +386,7 @@ TEST_CASE("morph::offline::SyncWorker: run() over a queue at maxDepth still drai
     REQUIRE_NOTHROW(queue.enqueue("e"));
 }
 
-// ── Issue #343: an undelivered replay must not spend the retry budget ───────
+// ── An undelivered replay must not spend the retry budget ──────────────────
 //
 // `ReplayFunction` returns `bool`, whose only two outcomes are "remove it" and
 // "charge one attempt". That gives the caller no way to say *"this never

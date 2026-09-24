@@ -26,8 +26,8 @@
 #   * "owner does not match the session principal" — the action carries an
 #     `owner` field and the caller *filled it in*. `resolveOwner` compares it
 #     with the session principal and refuses, and an empty principal matches
-#     nothing. This is the shape morph#471 added; before it, naming an owner
-#     was how an anonymous caller got served that owner's data.
+#     nothing. Without that comparison, naming an owner is how an anonymous
+#     caller gets served that owner's data.
 #   * "... belongs to a different owner" — the action is addressed by row id,
 #     so there is no `owner` field to check, and the empty principal simply
 #     failed to match the row's real owner further down.
@@ -154,11 +154,11 @@ do SpendingByKind accountId=$acct sinceMs=0
 expect err message == "account belongs to a different owner"
 
 # ── Refused by the owner comparison instead ────────────────────────────────
-# The shape morph#471 added. Everything above left `owner` empty, which is the
-# only case the old `resolveOwner` consulted the session for; filling it in was
-# how an anonymous caller reached a real customer's data, because the field was
-# taken verbatim and compared with nothing. It is now compared with the session
-# principal, and an empty principal matches no name at all — so the anonymous
+# Everything above leaves `owner` empty, which a `resolveOwner` that consults
+# the session only for the empty case would still refuse. Filling the field in
+# is the case that separates the two: taken verbatim and compared with nothing,
+# it is how an anonymous caller reaches a real customer's data. It is compared
+# with the session principal, and an empty principal matches no name at all — so the anonymous
 # client is refused before any `users` row is looked up.
 use anon-vault
 do ListAccounts owner=$who

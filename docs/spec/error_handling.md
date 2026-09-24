@@ -92,12 +92,11 @@ before any concurrency, and read unlocked thereafter (as
 **Single-shot result, composing callbacks.** The *result* (value or error) is
 single-shot — `setValue`/`setException` are no-ops once `ready`. But `then()`
 and `onError()` each **compose**: every handler attached while the state is not
-yet ready is kept and fires, in attachment order, when the result lands. This
-was fixed under issue #59 — `onOk`/`onErr` used to be single fields, so a
-second `onError()` on the same still-pending `Completion` silently discarded
-the first handler (and, because `onErrAttached` was still set from that second
-call, suppressed the orphan logger too — losing the error entirely, not just
-misdelivering it).
+yet ready is kept and fires, in attachment order, when the result lands. Composition
+is what makes this safe: were `onOk`/`onErr` single fields, a second
+`onError()` on the same still-pending `Completion` would silently discard the
+first handler and, because `onErrAttached` is set by that second call, suppress
+the orphan logger too — losing the error entirely, not just misdelivering it.
 
 | Situation | Behavior |
 |---|---|

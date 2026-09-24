@@ -50,7 +50,7 @@ jobs:
       - name: Install Doxygen 1.17.0
         run: |
           # `--fail` and `-S`, for the reason ci.yml's Install sccache step
-          # gives at length (morph#672): without them, an HTTP 503 from the
+          # gives at length: without them, an HTTP 503 from the
           # download host is a *successful* transfer of an error page, curl
           # exits 0 having written it to the file, and the only diagnostic
           # anyone sees is `gzip: stdin: not in gzip format` from tar -- which

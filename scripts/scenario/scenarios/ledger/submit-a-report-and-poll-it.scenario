@@ -15,7 +15,7 @@
 #
 # So a scenario can submit, and can observe Pending. It cannot observe Done:
 # that needs the server's own runner to tick, and waiting for a tick means a
-# sleep, which this runner forbids by design (morph#147). What it *can* do is
+# sleep, which this runner forbids by design. What it *can* do is
 # assert the authorization boundary that makes the wait unavoidable, which is
 # the file's closing section and the evidence for RunReportJob's entry in
 # coverage_allowlist.json.
@@ -28,7 +28,7 @@
 #
 # Asserting `status == "Pending"` therefore makes a scenario depend on
 # wall-clock timing through the back door, which is exactly what this runner
-# exists not to do (morph#147) -- and it was caught the way such things should
+# exists not to do -- and it was caught the way such things should
 # be, by a mutation run whose repeated passes gave the runner time to tick: the
 # mutant `status != "Pending"` survived, because by then the job had genuinely
 # completed.

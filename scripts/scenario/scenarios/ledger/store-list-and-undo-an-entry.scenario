@@ -13,10 +13,10 @@
 # only input is that id, and a client could only ever pass a number it had
 # guessed — so the only assertable path was the not-found refusal.
 #
-# `ListTransactions` closed that (morph#428), the same way `CreateLedger`
-# closed the equivalent hole one level up (morph#361/#384): by adding the
-# action, not by documenting the gap. So this file now drives the reversal
-# itself, and the step that proves the gap is closed is the capture below —
+# `ListTransactions` closes that, the same way `CreateLedger` closes the
+# equivalent hole one level up: by adding the action, not by documenting the
+# gap. So this file drives the reversal itself, and the step that proves the
+# gap is closed is the capture below —
 # `capture journal=$.entries[0].id` could not resolve against any reply the
 # tree produced before this change.
 #
@@ -46,13 +46,11 @@
 #     `GetBudgetReport` uses — and bounds the answer to a half-open UTC
 #     `[start, end)` range over the entry's stored date;
 #   * enums travel as their *enumerator names*, not as integers:
-#     `kind="Asset"`, `currency="EUR"`. That is what morph#444 made of them
-#     when it gave every ledger enum a `glz::meta`/`glz::enumerate`
-#     (ledger/core/types.hpp), and it is what a real server accepts today.
-#     Every other file in this directory sends the same enumerator names --
-#     they spelled the pre-#444 integers until morph#460 rewrote them, which
-#     is why nothing in this directory carries a bare integer for an enum any
-#     more.
+#     `kind="Asset"`, `currency="EUR"`. That follows from every ledger enum
+#     carrying a `glz::meta`/`glz::enumerate` (ledger/core/types.hpp), and it
+#     is what a real server accepts. Every other file in this directory sends
+#     the same enumerator names, which is why nothing here carries a bare
+#     integer for an enum.
 
 # ── Sign in ────────────────────────────────────────────────────────────────
 client auth model=AuthModel
@@ -150,7 +148,7 @@ expect ok field entries !~ "\"id\""
 # its own event, not a copy of the original's date), so it lands in whatever
 # month this file is run in. A month after August would therefore be empty or
 # not depending on the wall clock, which is the dependence this runner forbids
-# by design (morph#147); a month before it never can be.
+# by design; a month before it never can be.
 do ListTransactions ledgerId=$book month="2026-07"
 expect ok field entries !~ "first entry"
 expect ok field entries !~ "\"id\""

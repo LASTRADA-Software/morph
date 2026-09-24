@@ -190,7 +190,7 @@ TEST_CASE("checkedMul handles a zero operand without dividing by a zero gcd", "[
 }
 
 TEST_CASE("checkedDiv reports the overflow dividedBy reports as success", "[rational][checked]") {
-    // morph#206. Dividing INT64_MAX by 1/1000000 has an exact quotient of
+    // Dividing INT64_MAX by 1/1000000 has an exact quotient of
     // 9223372036854775807000000, which does not fit. dividedBy multiplies by
     // the reciprocal through the saturating path, clamps to INT64_MAX/1, and
     // hands back a *successful* expected -- so the caller who checks it is
@@ -258,8 +258,8 @@ TEST_CASE("checkedDiv checks the cross-cancelled factors, not the raw operands",
 }
 
 TEST_CASE("A saturating division names its own site and its own remedy", "[rational][checked][saturate]") {
-    // morph#206: dividedBy saturates through operator*='s arithmetic, and the
-    // log used to say so -- naming a function the division caller never
+    // dividedBy saturates through operator*='s arithmetic, and a log that says
+    // so names a function the division caller never
     // called, and offering checkedAdd/checkedSub/checkedMul, none of which is
     // a division. Each site now names itself and the one helper that helps.
     std::vector<std::string> logged;
@@ -424,7 +424,7 @@ TEST_CASE("checked* still report rather than saturate, for callers that must not
 }
 
 TEST_CASE("Saturating arithmetic is noexcept even when the log sink throws", "[rational][checked][saturate]") {
-    // morph::log offers no noexcept guarantee (morph#158): a user-installed
+    // morph::log offers no noexcept guarantee: a user-installed
     // sink may throw, and detail::log's own scoped_lock may throw
     // std::system_error. An arithmetic operator must not start failing because
     // logging failed, so the reporters swallow. Without that, these operators

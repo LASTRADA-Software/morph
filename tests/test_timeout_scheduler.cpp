@@ -101,7 +101,7 @@ TEST_CASE("TimeoutScheduler: cancel() before the deadline prevents the callback 
 
 // ── What `cancel()` does about a callback that has already started ───────────
 //
-// The header now states the distinction these two cases make (issue #620):
+// The header states the distinction these two cases make:
 // `cancel()` stops a callback that has not started, and returns *without
 // waiting* for one that has. Only `~TimeoutScheduler` means "no callback is in
 // flight", because only it joins. Both halves are asserted below so the prose

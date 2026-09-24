@@ -1,4 +1,4 @@
-# ── A shared source cache for FetchContent dependencies (morph#552) ──────────
+# ── A shared source cache for FetchContent dependencies ──────────────────────
 #
 # Every configure in CI clones `glaze`, `Catch2`, `Lightweight` and
 # `doxygen-awesome-css` again from github.com. One run configures more than a
@@ -42,7 +42,7 @@ endif()
 # include() is idempotent; every call site already does this too.
 include(FetchContent)
 
-# ── Declaring and caching, split (morph#712) ─────────────────────────────────
+# ── Declaring and caching, split ─────────────────────────────────────────────
 #
 # `morph_declare_dep` is what call sites use; `morph_cache_dep` below is the
 # caching half and is called only by it (and directly by
@@ -60,10 +60,10 @@ include(FetchContent)
 # Why this wrapper exists at all: before it, every dependency wrote its revision
 # twice -- once as `morph_cache_dep`'s `tag`, once as the `GIT_TAG` of the
 # `FetchContent_Declare` beside it -- and the two could disagree. The divergence
-# was asymmetric in the worst way: a warm cache served the first, an uncached
-# configure fetched the second, both successfully and with no diagnostic
-# anywhere. morph#693 added a gate that compared the two copies; this removes
-# the second copy, so there is nothing left to disagree.
+# would be asymmetric in the worst way: a warm cache serves the first, an
+# uncached configure fetches the second, both successfully and with no
+# diagnostic anywhere. Comparing the two copies in a gate is possible; having
+# only one copy leaves nothing to disagree.
 #
 # `GIT_REPOSITORY` and `GIT_TAG` are therefore refused in ARGN rather than
 # forwarded: passing either would re-create the second copy inside the one call
@@ -83,7 +83,7 @@ function(morph_declare_dep name repository tag)
                 "morph_declare_dep(${name} ...) was passed ${_argument} as an extra "
                 "argument. The repository and the tag are this call's own second and "
                 "third arguments, and stating either of them twice is the divergence "
-                "this function exists to make unwritable (morph#712): the cache keys "
+                "this function exists to make unwritable: the cache keys "
                 "on what it is handed, FetchContent fetches what it is handed, and a "
                 "warm cache would then build a different revision than a cold one, "
                 "both successfully.")
@@ -173,7 +173,7 @@ function(morph_cache_dep name repository tag)
 
     if(EXISTS "${_stamp}")
         set(FETCHCONTENT_SOURCE_DIR_${_upper} "${_dir}" CACHE PATH
-            "Cached ${name} source tree (morph#552)" FORCE)
+            "Cached ${name} source tree" FORCE)
         message(STATUS "morph: dep cache: ${name} from ${_dir}")
     endif()
 endfunction()

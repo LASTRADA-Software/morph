@@ -899,19 +899,19 @@ TEST_CASE("Rational::Wire::NullableComposition", "[rational]") {
 }
 
 // ---------------------------------------------------------------------------
-// roundToDecimalPlaces — the exact scale-rounding primitive (morph#159).
+// roundToDecimalPlaces — the exact scale-rounding primitive.
 //
 // `ceil`/`floor`/`trunc` all leave the Rational domain (they return int64_t),
 // so before this existed there was no way to *reduce a value* to N decimal
 // places at all — only to relabel it, which is exactly the display-vs-storage
-// split morph#159 reports.
+// split this primitive closes.
 // ---------------------------------------------------------------------------
 
 using morph::math::RoundingMode;
 using morph::math::roundToDecimalPlaces;
 
 // The primitive is usable in constant expressions, like the rest of Rational's
-// arithmetic. These are morph#159's own reproduction value: 1.23456 at dp=5,
+// arithmetic. The worked value: 1.23456 at dp=5,
 // reduced to the dp=1 its field declares.
 static_assert(roundToDecimalPlaces(Rational{Numerator{123456}, Denominator{100000}, DecimalPlaces{5}}, dp1) ==
               Rational{Numerator{6}, Denominator{5}, dp1});
@@ -919,7 +919,7 @@ static_assert(roundToDecimalPlaces(Rational{Numerator{123456}, Denominator{10000
                   .getDecimalPlaces() == dp1);
 
 TEST_CASE("Rational::RoundToDecimalPlaces::ReducesTheValueNotJustTheTag", "[rational]") {
-    // morph#159's payload: 1.23456 canonicalises to 3858/3125.
+    // 1.23456 canonicalises to 3858/3125.
     Rational const submitted{Numerator{123456}, Denominator{100000}, DecimalPlaces{5}};
     REQUIRE(submitted.numerator == 3858);
     REQUIRE(submitted.denominator == 3125);

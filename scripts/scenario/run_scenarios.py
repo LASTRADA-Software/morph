@@ -114,11 +114,11 @@ class RungSpec:
     def seed(self, db_path: pathlib.Path) -> None:
         """Inserts the fixture rows a rung's scenarios name by a fixed id.
 
-        Ledger is the only rung that gets any, and what they are for changed
-        with morph#361. They used to be unavoidable: `ledgers` rows were
-        created by no registered action, so `OpenAccount ledgerId=1` against a
-        fresh database was refused with "no such ledger" and every ledger
-        journey was unreachable over the wire. `CreateLedger` closed that, and
+        Ledger is the only rung that gets any, and they are a convenience
+        rather than a necessity: with no action that creates a `ledgers` row,
+        `OpenAccount ledgerId=1` against a fresh database is refused with "no
+        such ledger" and every ledger journey is unreachable over the wire.
+        `CreateLedger` is what removes that dependence, and
         `scenarios/ledger/bootstrap-a-book-over-the-wire.scenario` is the file
         that proves it -- it names no seeded id at all and would pass against
         a database this method never touched.
@@ -196,8 +196,8 @@ RUNGS: dict[str, RungSpec] = {
         db_var="LEDGER_DB",
         token_secret_var="LEDGER_TOKEN_SECRET",
         # Fixture books for the fourteen ledger files written against the
-        # fixed ids 1 and 2 -- see `seed`'s doc comment for why they stay now
-        # that `CreateLedger` exists (morph#361).
+        # fixed ids 1 and 2 -- see `seed`'s doc comment for why they stay even
+        # though `CreateLedger` exists.
         seed_sql=(
             "INSERT OR IGNORE INTO ledgers (id, name) VALUES (1, 'Scenario book')",
             "INSERT OR IGNORE INTO ledgers (id, name) VALUES (2, 'Second book')",

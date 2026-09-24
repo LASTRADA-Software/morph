@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for issue #24: morph::session::Principal and Bridge::setPrincipal/
+// morph::session::Principal and Bridge::setPrincipal/
 // currentPrincipal -- readable authorization state outside a dispatch, so UI
 // code can gate itself (e.g. disable a button) instead of attempting an
 // action and catching the refusal.
@@ -66,7 +66,7 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal: readable without an active dispa
           "[bridge][principal]") {
     // No BridgeHandler, no execute() call anywhere in this test -- proves the
     // Principal is readable purely from the Bridge, independent of any
-    // in-flight or prior dispatch. This is exactly the gap issue #24 reports:
+    // in-flight or prior dispatch. That is the whole point of the type:
     // session::current() (Context) only exists during a dispatch; Principal
     // does not have that restriction.
     morph::exec::ThreadPoolExecutor pool{2};

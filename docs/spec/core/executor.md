@@ -148,8 +148,8 @@ three `Completion` objects per dispatched action, each settled from *inside*
 the previous one's delivered callback, so a caller waiting only on its own
 top-level completion can observe "done" while an intermediate post is still
 queued; when that stale event is finally pumped, its body calls `post()` for
-the next link. Before the guard this segfaulted ordinary uninstrumented
-builds, not merely sanitizer runs (morph#127).
+the next link. Without the guard this segfaults ordinary uninstrumented
+builds, not merely sanitizer runs.
 
 Dropping is the correct outcome rather than the lesser evil: a chain being
 torn down has nobody left to observe its result, and
@@ -278,7 +278,7 @@ bookkeeping: the next queued task for that key still runs.
 The destructor waits for all in-flight tasks to complete (`_inFlight == 0`)
 before destroying the strand map.
 
-**Testing per-model ordering without naming `StrandExecutor`/`ModelId` (issue #55).**
+**Testing per-model ordering without naming `StrandExecutor`/`ModelId`.**
 `RemoteServer` (see `backend.md`) owns a `StrandExecutor` internally, but every
 task it ever dispatches — the top-level `handle()` post and the internal
 per-model strand dispatch alike — funnels through the single `IExecutor` the
@@ -345,50 +345,49 @@ combined `{_mapMtx, strand->mtx}` lock. Live memory therefore tracks the set of
 *currently active* models rather than every model ever seen — there is no
 per-model registration to leak.
 
-**The cost was allocation churn.** A model posted to serially — one action at
-a time, each waited out — never has a task queued at the instant the previous
-one finishes, so it never keeps a strand: every dispatch missed in the map and
-rebuilt the map node and the `Strand`. Measured on `7a343e6f` with
+**The cost it would otherwise carry is allocation churn.** A model posted to
+serially — one action at a time, each waited out — never has a task queued at
+the instant the previous one finishes, so it never keeps a strand: every
+dispatch misses in the map, and a naive implementation rebuilds the map node
+and the `Strand` each time. Measured with
 `tests/bench/bench_dispatch_allocations.cpp` (see
 [testing_strategy.md](../testing_strategy.md)), x86-64 Linux, GCC 16.2.1 /
-libstdc++, `-O2`, that came to **4 allocations and 760 of the 1990 bytes** a
-local `execute` round trip cost — 38% of the bytes, for a strand that is
-rebuilt and thrown away. 576 of those bytes were not the strand at all but
+libstdc++, `-O2`, that comes to **4 allocations and 760 of the 1990 bytes** a
+local `execute` round trip costs — 38% of the bytes, for a strand that is
+rebuilt and thrown away. 576 of those bytes are not the strand at all but
 `std::queue`'s `std::deque` eagerly allocating a node map and a 512-byte first
-buffer in its default constructor. Replacing that container with
-`PendingQueue`, which holds the head task inline, cut the strand's share to **2
-allocations and 152 bytes** and the whole round trip to 18.9 allocations /
-1396 bytes (morph#660).
+buffer in its default constructor, which is why the pending queue is
+`PendingQueue`, holding the head task inline: that alone cuts the strand's
+share to **2 allocations and 152 bytes** and the whole round trip to 18.9
+allocations / 1396 bytes.
 
 **The remaining two allocations — the map node and the `Strand` itself — are
-recycled rather than removed (morph#670).** They looked inherent to the erase:
-removing them appeared to mean keeping the slot alive across the drain, which
-would trade the churn for a per-model entry nothing reclaims, since
-`StrandExecutor` has no deregistration hook. That framing turned out to be
-avoidable. The entry still leaves the map at exactly the same moment, under
-exactly the same locks; the drain simply calls `extract` instead of `erase` and
-parks the detached node in a single-slot `_spare` member, and the next
-`post()` that misses re-keys that node and inserts it back. The map is still
-bounded by the removal — `_spare` holds **at most one** node, is guarded by
-`_mapMtx` like the map itself, and is freed with the executor.
+recycled rather than removed.** Removing them means keeping the slot alive
+across the drain, which trades the churn for a per-model entry nothing
+reclaims, since `StrandExecutor` has no deregistration hook. Recycling avoids
+that trade: the entry leaves the map at exactly the same moment, under exactly
+the same locks; the drain calls `extract` instead of `erase` and parks the
+detached node in a single-slot `_spare` member, and the next `post()` that
+misses re-keys that node and inserts it back. The map stays bounded by the
+removal — `_spare` holds **at most one** node, is guarded by `_mapMtx` like the
+map itself, and is freed with the executor.
 
 Reusing the parked node's `Strand` object is guarded additionally by
 `use_count() == 1`: the recycled node is then the only owner, so no strand task
 can still reach the object and reusing it is indistinguishable from
 constructing a new one. When that guard fails — a finishing strand lambda still
 holds its `shared_ptr` when the next `post()` looks — a fresh `Strand` is
-constructed exactly as before and only the node is recycled. To make the guard
+constructed and only the node is recycled. To make the guard
 usually hold, the strand lambda drops its `shared_ptr` immediately after the
 drain block rather than at its own destruction; nothing after that point
 touches the strand. That timing affects *whether* the object is recycled, never
 whether the recycling is safe.
 
-Re-measured on `7d4ca453` (this change's base) with the same instrument,
-x86-64 Linux, **clang 22.1.8 / libstdc++ 16.2.1, Release**: the round trip went
-from **18.90 allocations / 1394.8 bytes** to **16.95 / 1244.6** — the full 2
-allocations and ~150 bytes the strand had left. Six alternating runs of each
-binary; spread within 0.1 allocations and 2 bytes per call. The magnitude is
-libstdc++-specific, as it was for morph#660.
+Measured with the same instrument, x86-64 Linux, **clang 22.1.8 / libstdc++
+16.2.1, Release**: recycling takes the round trip from **18.90 allocations /
+1394.8 bytes** to **16.95 / 1244.6** — the full 2 allocations and ~150 bytes
+the strand had left. Six alternating runs of each binary; spread within 0.1
+allocations and 2 bytes per call. The magnitude is libstdc++-specific.
 
 ## Thread safety
 

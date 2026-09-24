@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for issue #25: form generation recurses into a nested-aggregate
+// Form generation recurses into a nested-aggregate
 // member's object schema -- a directly-nested struct member or a
 // `std::vector<Sub>` repeated aggregate -- applying the same
 // title/x-order/required/widget rules the top level already applies, instead
@@ -11,7 +11,7 @@
 // shared `$defs` entry (referenced by `$ref`) when it is used two or more
 // times. Both are exercised below. Recursion continues into the type graph to
 // whatever depth it has: there is no depth limit, and a self- or mutually-
-// referential type is described rather than rejected (morph#703 -- see
+// referential type is described rather than rejected (see
 // docs/spec/forms/forms.md, "Nested aggregates (recursive, cycle-safe)"). Both
 // of those cases are exercised at the bottom of this file. What *is* bounded
 // is what a given compiler will instantiate: see `kDeepChainLevels` below for
@@ -96,8 +96,8 @@ struct DeepSpecimen {
     Provenance provenance;
 };
 
-// A self-referential nested-aggregate type (a tree node). Until morph#703 this
-// could not be passed to morph::forms::schemaJson<A>() at all -- either use,
+// A self-referential nested-aggregate type (a tree node). A recursion carrying
+// a depth NTTP cannot pass this to morph::forms::schemaJson<A>() at all -- either use,
 // as the action type or nested inside one, tripped forms.hpp's kMaxNestDepth
 // static_assert. It now can be, and is: see "Cyclic nested-aggregate types"
 // at the bottom of this file.
@@ -122,8 +122,8 @@ struct Bee {
     std::vector<Ay> ays;
 };
 
-// An acyclic chain four levels past the old 16-level cap, which is the other
-// thing morph#703 removed. Written out rather than macro-generated so the
+// An acyclic chain four levels past the 16-level cap a depth counter would
+// impose. Written out rather than macro-generated so the
 // fixture reads as what it is. How much of it each toolchain can actually
 // compile is decided at `DeepChain` below -- and it is not the same number on
 // all three.
@@ -192,7 +192,7 @@ struct Deep20 {
 };
 
 // How deep the chain the deep-nesting case actually uses is. Not a morph
-// limit -- morph has had none since morph#703 -- but a *compiler* one, and it
+// limit -- morph imposes none -- but a *compiler* one, and it
 // is MSVC's. `mergeSchemaExtras<A>` default-constructs `A probe{}`, and for a
 // chain-rooted action that one initialiser is as deeply nested as the chain
 // is; past a point cl gives up at that line with
@@ -200,7 +200,7 @@ struct Deep20 {
 //   fatal error C1054: compiler limit: initializers nested too deeply
 //
 // which names neither the action type nor the nesting, and so is strictly
-// worse than the static_assert morph#703 removed. Measured rather than
+// worse than a static_assert naming the limit. Measured rather than
 // guessed, on cl 19.44 / 19.50 / 19.51 (CI runs 19.51.36256.0), by bisecting a
 // reduced `template <typename A> void f() { A probe{}; }` over a chain of
 // plain aggregates -- see docs/spec/forms/forms.md, "Nesting depth in
@@ -215,9 +215,9 @@ struct Deep20 {
 // The action type is itself one of cl's 15 levels, so cl tops out at a
 // 14-link chain below it. 12 is what this fixture keeps there: one link of
 // margin, because forms.hpp default-constructs a probe at four sites and a
-// future one could add a wrapper level. That is *below* the 16-level cap
-// morph#703 removed, so on MSVC this case no longer demonstrates what it was
-// written to demonstrate -- it still proves the walk descends and annotates
+// future one could add a wrapper level. That is *below* the 16-level cap a
+// depth counter would impose, so on MSVC this case does not demonstrate the
+// absence of that cap -- it still proves the walk descends and annotates
 // every level, which is the part that can regress. The 20-level case is real
 // coverage on the other three CI legs (Linux gcc, Linux clang, Windows
 // clang-cl), and reducing it to 12 everywhere would have deleted that
@@ -662,14 +662,14 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: optionalFields marks a non-std::o
     CHECK(std::find(requiredNames.begin(), requiredNames.end(), "label") == requiredNames.end());
 }
 
-// ── annotateNestedAggregateRef's defensive fallbacks (issue #25) ───────────
+// ── annotateNestedAggregateRef's defensive fallbacks ──────────────────────
 //
 // These call the detail function directly with hand-built DOM fragments,
 // rather than through schemaJson<A>(), because glaze itself never actually
 // produces the malformed shapes these branches guard against -- see the
 // function's own doc comment ("left untouched rather than guessed at").
 //
-// The recursion carries no depth NTTP since morph#703 -- only the `visited`
+// The recursion carries no depth NTTP -- only the `visited`
 // set, the shared-$defs bookkeeping it threads through. A fresh, empty set per
 // call is what mergeSchemaExtras hands the recursion at the start of each
 // schema.
@@ -789,10 +789,10 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: a self-referential nested-aggrega
     CHECK(decoded.children[0].name == "child");
 }
 
-// ── Cyclic nested-aggregate types (morph#703) ──────────────────────────────
+// ── Cyclic nested-aggregate types ─────────────────────────────────────────
 //
-// Every case below was a hard `static_assert` before morph#703 removed the
-// `Depth` NTTP, `kMaxNestDepth` and the 16-level cap: the *compilation* of
+// Every case below is a hard `static_assert` for a recursion carrying a
+// `Depth` NTTP, `kMaxNestDepth` and a 16-level cap: the *compilation* of
 // this section is therefore itself the regression test, and reinstating the
 // NTTP turns these into build failures rather than assertion failures. The
 // assertions on top of that pin the shape of what is emitted, so a change that
@@ -901,7 +901,7 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: a mutually referential pair yield
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: a deep acyclic chain compiles and is annotated at every level",
           "[forms][nested][issue703]") {
-    // 20 levels -- four past the cap morph#703 removed -- everywhere except
+    // 20 levels -- four past the cap a depth counter would impose -- everywhere except
     // MSVC, where cl's own 15-level initialiser-nesting limit caps it at 12:
     // see `kDeepChainLevels`. The name no longer says "past the old 16-level
     // cap" because on one of the four CI legs that is not what runs.

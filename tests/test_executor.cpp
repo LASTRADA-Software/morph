@@ -130,7 +130,7 @@ TEST_CASE("morph::exec::MainThreadExecutor drain runs a bounded chain of tasks t
     REQUIRE(count.load() == chainLength);
 }
 
-// ── morph#501: a non-std::exception must not escape the main-thread pump ──
+// ── A non-std::exception must not escape the main-thread pump ──
 //
 // runTask() caught only `const std::exception&`, while ThreadPoolExecutor::loop
 // has caught `...` as well all along. Three doc claims on this class depended on

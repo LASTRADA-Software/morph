@@ -15,7 +15,7 @@
 # at kanban (rung 4), so a change confined to examples/ledger/ or
 # examples/lims/ matched nothing and skipped both ladder jobs — silently, since
 # a filter that matches nothing reports success just as loudly as one that
-# matches everything (morph#179). Deriving the regex here means it cannot fall
+# matches everything. Deriving the regex here means it cannot fall
 # behind the list again.
 #
 # Consumers that genuinely cannot call this (GitHub evaluates a workflow's
@@ -46,12 +46,12 @@ readonly rung_file="${repo_root}/examples/rungs.txt"
 #                          the ladder's normative rules
 #   scripts/scenario/      the scenario corpus and its driver, which
 #                          `ladder-tests` now *runs* against the servers it has
-#                          just built (morph#462). Without this entry a pull
+#                          just built. Without this entry a pull
 #                          request that touched only the corpus would match
 #                          nothing and skip the job -- so the one gate that can
 #                          catch a broken scenario would be absent from exactly
 #                          the changes most able to break one. That is
-#                          morph#179's defect in a second location, and
+#                          the drifted-hand-copy defect in a second location, and
 #                          drift-guard.yml's scenario-coverage job carries no
 #                          path filter at all for the same reason.
 # Not `readonly`: this script has to stay runnable under the bash 3.2 that

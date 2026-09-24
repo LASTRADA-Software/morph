@@ -3,12 +3,12 @@
 #
 # Self-test for scripts/check_sanitizer_instrumentation.sh, the gate that fails
 # when a sanitizer leg runs a binary carrying none of that sanitizer's runtime
-# symbols (morph#542). A lint gate nobody tests reports green whether or not it
+# symbols. A lint gate nobody tests reports green whether or not it
 # still detects anything, and this one guards a silence: an uninstrumented
 # sanitizer leg builds, runs the whole suite, passes, and costs its full
 # runtime -- indistinguishable from a leg that found nothing wrong.
 #
-# morph#675 added a second mode (`--binary <file> <mode>`) for the question the
+# A second mode (`--binary <file> <mode>`) answers the question the
 # sweep refused: "is this one binary instrumented?", asked by a developer who
 # built a single target under a sanitizer preset. The important property of
 # that mode is not what it reports but where it cannot be used -- if it could
@@ -141,7 +141,7 @@ else
 fi
 
 # ── 2. sweep: one uninstrumented binary -> fail, naming it ──────────────────
-# morph#542 itself, in miniature. A nonzero exit alone is not enough: the gate
+# The defect itself, in miniature. A nonzero exit alone is not enough: the gate
 # has several failure paths and one of them firing for an unrelated reason
 # would look like a pass of this case, so the message must name the binary.
 dir="$(case_dir sweep_dirty)"
@@ -161,7 +161,7 @@ fi
 
 # ── 2b. the symbol is keyed on the mode ─────────────────────────────────────
 # The same tree that passes as `ubsan` must fail as `tsan`. Without this, an
-# `__asan_`-only assertion -- the exact defect morph#542 records -- would
+# `__asan_`-only assertion -- the exact defect this gate exists for -- would
 # satisfy every other case here.
 dir="$(case_dir sweep_wrong_mode)"
 a="$(make_binary "$dir" morph_tests __ubsan_)"
@@ -186,13 +186,13 @@ elif ! mentions 'listed no tests' "$output"; then
     fail "the empty test list was rejected, but not for being empty:"
     printf '%s\n' "$output" >&2
 elif ! mentions 'genuinely registers no tests' "$output"; then
-    fail "the empty test list was rejected, but the message does not say ctest succeeded -- it reads the same as a listing that failed, which is morph#690:"
+    fail "the empty test list was rejected, but the message does not say ctest succeeded -- it reads the same as a listing that failed:"
     printf '%s\n' "$output" >&2
 else
     note "ok: an empty ctest test list is rejected rather than passing vacuously, and named as empty rather than broken"
 fi
 
-# ── 3b. sweep: ctest *fails* to list -> the reason is printed (morph#690) ───
+# ── 3b. sweep: ctest *fails* to list -> the reason is printed ───────────────
 # The distinction case 3 cannot make on its own, and the one that cost three CI
 # runs: "ctest enumerated a tree with no tests" and "ctest died before printing
 # any JSON" both arrive here as an empty list. On the bank-ubsan leg it was the
@@ -213,7 +213,7 @@ if output="$(run_checker "$dir" ubsan 2>&1)"; then
     fail "a ctest listing that failed outright was reported as clean:"
     printf '%s\n' "$output" >&2
 elif ! mentions 'morph690_fixture_marker' "$output"; then
-    fail "the failed listing was rejected, but ctest's own reason was discarded -- the caller is left with 'listed no tests' and no cause, which is morph#690:"
+    fail "the failed listing was rejected, but ctest's own reason was discarded -- the caller is left with 'listed no tests' and no cause:"
     printf '%s\n' "$output" >&2
 else
     note "ok: a ctest listing that failed prints the reason it failed"
@@ -253,7 +253,7 @@ else
 fi
 
 # ── 6. narrow: refused under GITHUB_ACTIONS ────────────────────────────────
-# The whole safety of morph#675's addition. If this passes, the narrow mode is
+# The whole safety of the narrow mode. If this passes, it is
 # reachable from a workflow step, and a leg could report "instrumented" having
 # examined one file -- which is the sweep's floor removed by another route.
 # Asserted on a fixture that would otherwise *pass* (case 4's), so a refusal
@@ -280,7 +280,7 @@ else
 fi
 
 # ── 7. sweep: a single-binary tree still fails on the floor ────────────────
-# morph#675 is about making the narrow case answerable, not about lowering the
+# The narrow mode is about making one binary answerable, not about lowering the
 # floor. This is the regression guard for the difference: the sweep over a
 # one-binary tree must still refuse, with the floor's own message, even though
 # that binary is instrumented.

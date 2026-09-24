@@ -222,8 +222,8 @@ PROTOCOL_VERSION = 1
 #: Every field `morph::wire::Envelope` reflects, with its default.
 #:
 #: The driver sends the **full** set on every request. `decode` ignores unknown
-#: keys and defaults absent ones, so this is valid — but note that it is no
-#: longer what morph's own `encode` does: since morph#524 `encode` omits every
+#: keys and defaults absent ones, so this is valid — but note that it is not
+#: what morph's own `encode` does: `encode` omits every
 #: member holding its default, writing only `kind`, `callId` and whatever the
 #: kind actually populates. Sending all thirteen is a deliberate divergence
 #: kept for two reasons:
@@ -339,10 +339,9 @@ class Client:
         That carve-out keys on the *value* `0`, not on the key being missing,
         and that is deliberate: `callId` is a correlation field whose zero is a
         routing sentinel, so `encode` never omits it even though it omits every
-        other defaulted member (morph#524). If that ever changes, `got` becomes
+        other defaulted member. If that ever changes, `got` becomes
         `None` here, the `got == 0` test stops matching, and every step of that
-        scenario fails as a transport error rather than an assertion — which is
-        exactly what it did while `callId` was briefly elided.
+        scenario fails as a transport error rather than an assertion.
         """
         self.socket.send_text(json.dumps(envelope))
         want = envelope["callId"]
@@ -481,7 +480,7 @@ CAPTURED_CLIENT_OPTIONS = ("principal", "token", "contextKey")
 
 # The rest name the connection itself, and are static in every shipped
 # scenario. They are not expanded — a capture in one is refused by name rather
-# than sent literally (morph#360).
+# than sent literally.
 STATIC_CLIENT_OPTIONS = ("url", "model", "protocol")
 
 
@@ -489,10 +488,10 @@ def resolve_client_options(options: dict[str, str], captures: dict[str, Any]) ->
     """Expands `$capture` references in a `client` step's options.
 
     `session` runs its values through `parse_value`, so `session token=$token`
-    installs the captured token; `client` read its own options raw, so
-    `client books token=$token` sent the six literal characters and the run
-    failed several steps later with a bare `unauthorized` (morph#360). This is
-    the one place both spellings now agree.
+    installs the captured token. Were `client` to read its own options raw,
+    `client books token=$token` would send the six literal characters and the
+    run would fail several steps later with a bare `unauthorized`. This is
+    the one place both spellings agree.
 
     Only the credential options are expanded. A capture in `url`, `model` or
     `protocol` is refused here, naming the option — those are static in every

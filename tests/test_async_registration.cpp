@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for issue #26: Bridge::registerHandler() and the keyed
+// Bridge::registerHandler() and the keyed
 // attach/promote entry points reach the backend through the structural
 // registration surface (IBackend::bindModel / promoteModel), and a backend
 // whose reply arrives later must not block the caller.
@@ -13,8 +13,7 @@
 // registerModel does -- the pattern this issue is about, since Qt refuses to
 // spin a nested loop on a WASM main thread at all).
 //
-// Until morph#571 that shape was expressed by overriding four optional
-// `*Async` twins that returned `bool`; the doubles here now express it by
+// The doubles here express that shape by
 // overriding bindModel/promoteModel and answering
 // BindWait::kCallerMustNotBlock, which is what makes registerHandlerImpl
 // return without waiting -- the same observable behaviour the `true` return
@@ -171,7 +170,7 @@ struct morph::model::ActionKeyTraits<ARThrowingKeyTouch> {
 BRIDGE_MODEL_KEY(ARKeyedModel, ARTouch, &ARTouch::id);
 BRIDGE_KEY_FROM_RESULT(ARKeyedCreate, &ARKeyedCreated::id);
 
-// ── Issue #67: assignHandlerPrimary goes through IBackend::promoteModel ────
+// ── assignHandlerPrimary goes through IBackend::promoteModel ──────────────
 //
 // A model whose result-keyed action (BRIDGE_KEY_FROM_RESULT) drives
 // Bridge::assignHandlerPrimary. Needs **external** linkage (not an anonymous
@@ -388,14 +387,14 @@ public:
 // Tries to settle the same bind twice, inline, from inside bindModel itself.
 // Bridge::attachHandlerAsync must still report exactly once.
 //
-// Note what moved with morph#571: the twins handed the Bridge two raw
-// std::functions, so a second call reached detail::parkIfInFrame's own guard.
-// A Completion cannot be settled twice -- CompletionState drops the second
-// settle before any Bridge code sees it -- so this double now pins the
-// *observable* contract ("exactly one onDone") while the guard inside
-// parkIfInFrame is no longer reachable from a backend. See the PR for morph#571.
-// The guard itself is pinned by a direct call to parkIfInFrame instead
-// (morph#648), next to the test case this double drives.
+// Note what settling a `Completion` changes here: raw callbacks would hand
+// the Bridge two std::functions, so a second call would reach
+// detail::parkIfInFrame's own guard. A Completion cannot be settled twice --
+// CompletionState drops the second settle before any Bridge code sees it --
+// so this double pins the *observable* contract ("exactly one onDone") while
+// the guard inside parkIfInFrame is not reachable from a backend at all.
+// The guard itself is pinned by a direct call to parkIfInFrame instead,
+// next to the test case this double drives.
 class DoubleFiringBackend : public AsyncRegisterBackend {
 public:
     ModelCompletion bindModel(morph::backend::detail::BindRequest request, morph::exec::IExecutor& cbExec) override {
@@ -1060,7 +1059,7 @@ TEST_CASE("Bridge::registerHandler: binds inline for a backend with no non-block
     CHECK(binding->currentId.load() != 0U);
 }
 
-// ── Issue #60: registration-settled seam (whenBound/isBound) ────────────────
+// ── The registration-settled seam (whenBound/isBound) ──────────────────────
 //
 // executeVia() fails fast with "handler not bound" for a binding whose async
 // registration hasn't round-tripped yet. Bridge::whenBound() gives a caller a
@@ -1128,8 +1127,8 @@ TEST_CASE("BridgeHandler::whenBound: fires once the deferred async registration 
     CHECK_FALSE(errored);
     CHECK(handler.isBound());
 
-    // Once bound, dispatching immediately (the exact scenario issue #60
-    // describes -- a dispatch issued right after connect) must succeed rather
+    // Once bound, dispatching immediately -- a dispatch issued right after
+    // connect -- must succeed rather
     // than fail fast with "handler not bound".
     std::atomic<int> result{-1};
     handler.execute(ARCount{.x = 3}).then([&](int v) { result.store(v); }).onError([](const std::exception_ptr&) {});
@@ -1175,7 +1174,7 @@ TEST_CASE("Bridge::whenBound: multiple waiters on the same in-flight registratio
     CHECK(resolvedCount == 3);
 }
 
-// ── Issue #67: assignHandlerPrimary goes through IBackend::promoteModel ────
+// ── assignHandlerPrimary goes through IBackend::promoteModel ──────────────
 //
 // A result-keyed action's execute() calls ensureBound() then, once the reply
 // names the key, assignHandlerPrimary(). When the backend settles its
@@ -2163,8 +2162,8 @@ TEST_CASE("attachHandlerAsync reports exactly once even when the backend fires i
     // publish the binding) exactly once for a single dispatch.
     //
     // What makes that hold is CompletionState, not detail::parkIfInFrame's
-    // `handoff.fired` guard -- this comment used to name the guard, and was
-    // wrong from morph#571 onwards (morph#648). The second promise.resolve()
+    // `handoff.fired` guard, which is the obvious guess and the wrong one.
+    // The second promise.resolve()
     // below is dropped by the already-settled state before any Bridge code
     // sees it, so parkIfInFrame is entered once and its double-claim arm is
     // never taken. That arm is pinned separately, by the direct-call case
@@ -2189,8 +2188,8 @@ TEST_CASE("attachHandlerAsync reports exactly once even when the backend fires i
 
 TEST_CASE("parkIfInFrame swallows a second claim on the same handoff and keeps the first outcome",
           "[bridge][registration][shared-instances][issue26]") {
-    // The arm the case above used to claim to exercise, driven where it can
-    // actually be reached: directly (morph#648).
+    // The arm the case above looks like it exercises, driven where it can
+    // actually be reached: directly.
     //
     // No backend reaches it any more -- every dispatch site parks one
     // Completion's outcome, and a CompletionState settles once -- so without
@@ -2277,7 +2276,7 @@ TEST_CASE("ensureBoundAsync's out-of-frame success callback is a genuine no-op o
 }
 
 // ---------------------------------------------------------------------------
-// Coverage for LASTRADA-Software/morph#108: attachHandlerAsync's two
+// attachHandlerAsync's two
 // success-path `catch (...)` blocks (the out-of-frame callback below, and its
 // in-frame claimHandoff counterpart) only ever fire on std::bad_alloc from a
 // real allocation failure inside the strongBinding->contextKey/primary copy-
@@ -2382,7 +2381,7 @@ TEST_CASE(
 // portably would need either a structural change that gives the target copy
 // a distinguishable allocation shape, or a seam finer-grained than a global
 // allocator override can offer -- disproportionate machinery for one
-// branch. Tracked by the same morph#108, not a second, separate ask.
+// branch, so that one is left uncovered.
 
 TEST_CASE(
     "Bridge::attachHandler (sync): attaching a fresh, never-attached binding to an empty key still performs a "
@@ -2411,13 +2410,14 @@ TEST_CASE(
     CHECK(binding->primary.empty());
 }
 
-// ── morph#588: the bridge's own executor for late registration replies ──────
+// ── The bridge's own executor for late registration replies ────────────────
 //
 // Every Bridge dispatch site names `inlineExecutor()` on the `bindModel`/
-// `promoteModel` call, so a reply that arrives after the dispatching frame has
-// gone used to be published on whichever thread the backend settled it on --
-// the morph#486 thread. `Bridge`'s optional `bridgeExec` constructor argument
-// is where that decision lives now. The three cases below pin the three halves
+// `promoteModel` call, so without an executor of its own a reply that arrives
+// after the dispatching frame has gone is published on whichever thread the
+// backend settled it on -- which can be the thread running `~Bridge`.
+// `Bridge`'s optional `bridgeExec` constructor argument
+// is where that decision lives. The three cases below pin the three halves
 // of the contract: a late reply goes through the executor, an in-frame reply
 // does not, and no executor means exactly the old behaviour.
 
@@ -2475,9 +2475,9 @@ TEST_CASE("Bridge(bridgeExec): a registration reply that misses its dispatch fra
     REQUIRE(binding->currentId.load() == 0U);
     REQUIRE(bridgeExec.queued() == 0);
 
-    // The reply lands. Before morph#588 this published the id right here, on
-    // completeNext()'s own thread; now it is a task on the bridge's executor
-    // and nothing is published until that executor runs it. Restoring inline
+    // The reply lands. With no bridge executor this publishes the id right
+    // here, on completeNext()'s own thread; with one it is a task on that
+    // executor and nothing is published until the executor runs it. Restoring inline
     // delivery makes the next two lines fail rather than merely not-prove.
     rawBackend->completeNext();
     CHECK(binding->currentId.load() == 0U);
@@ -2514,10 +2514,10 @@ TEST_CASE("Bridge(bridgeExec): a bind that settles inside the dispatch frame is 
     CHECK(neverDrained.queued() == 0);
 }
 
-TEST_CASE("Bridge(): with no executor, a late registration reply is delivered inline, as before morph#588",
+TEST_CASE("Bridge(): with no executor, a late registration reply is delivered inline",
           "[bridge][registration][issue588]") {
     // The default. `Bridge`'s new argument must compose (framework invariant
-    // 2), so omitting it has to leave the pre-morph#588 behaviour byte for
+    // 2), so omitting it has to leave inline delivery byte for
     // byte: the reply publishes on completeNext()'s own thread, with no
     // executor anywhere in the path.
     auto backend = std::make_unique<AsyncRegisterBackend>();

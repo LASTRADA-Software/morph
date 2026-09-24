@@ -17,12 +17,12 @@ apply_warnings(morph_offline_sqlite_tests)
 
 # Was missing entirely, so sqlite_offline_queue.hpp's dedicated suite was never
 # instrumented and the file's 57.04% -- the worst in the library -- was measured
-# with its own tests absent from the report (morph#403).
+# with its own tests absent from the report.
 if(AF_COVERAGE)
     apply_coverage(morph_offline_sqlite_tests)
 endif()
 
-# Was missing for the same reason, with a sharper consequence (morph#542): the
+# Easy to leave out for the same reason, with a sharper consequence: the
 # `clang-asan` leg turns MORPH_BUILD_OFFLINE_SQLITE on precisely because the
 # SQLite queue "is where the memory/threading/UB risk actually lives -- a C
 # API", then built this suite with zero sanitizer flags and ran it. The job was

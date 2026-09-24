@@ -350,7 +350,7 @@ learns only that the string was not a valid canonical UTC timestamp.
 string), so the journal's payload fingerprint has no reflected members to
 decompose and would otherwise render it as the same opaque placeholder as every
 other custom-codec type. That would make a retype between two of them invisible
-to `replay()`'s fingerprint check (morph#245).
+to `replay()`'s fingerprint check.
 
 See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
 
