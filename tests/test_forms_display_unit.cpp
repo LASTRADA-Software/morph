@@ -112,10 +112,11 @@ glz::generic_u64 schemaDom(std::string const& schema) {
 // schema of that array property -- with a `$ref` into `$defs` resolved. A
 // copy, so nothing returned refers into a caller's temporary.
 glz::generic_u64 resolvedProperty(const glz::generic_u64& dom, std::string const& name, bool items) {
-    glz::generic_u64 node = dom["properties"][name];
-    if (items) {
-        node = glz::generic_u64{node["items"]};
-    }
+    // Copy-initialised, never brace-initialised: `generic_u64{x}` is
+    // list-initialisation, which under GCC/Clang builds a one-element array
+    // holding `x` rather than a copy of it.
+    const glz::generic_u64& property = dom["properties"][name];
+    glz::generic_u64 node = items ? property["items"] : property;
     if (node.contains("$ref")) {
         constexpr std::string_view kPrefix = "#/$defs/";
         std::string const ref = node["$ref"].get<std::string>();
