@@ -151,6 +151,20 @@ API surface).
   `invalid` states (`DynamicForm.fieldInvalid(name)`); the status line's text is
   now `DynamicForm.statusText`. With nothing registered, every form renders as
   before. See `docs/spec/forms/forms.md`, "Chrome slots".
+- **A host slot can draw a `std::vector<Row>` member, and the form encodes it.**
+  A collection of objects had no built-in control and was reported
+  unrepresentable, so a form carrying one could not be submitted whatever the
+  host drew. When a `SlotRegistry` slot claims such a (top-level) member,
+  `DynamicForm` now describes the row type as `field.itemFields` (the grid's
+  columns: label, unit, decimals, read-only, required, kind flags), accepts the
+  rows as `{member: cellText}` objects, and encodes every cell with the encoder
+  the same member gets at the top level (`encodeFieldText`) — a `Quantity` cell
+  is exact, an over-precise one is refused, a blank required cell keeps the form
+  unready. Slots gain four optional members, assigned only when declared:
+  `fieldText` (the retained value, kept current through prefill, reset and tab
+  rebuilds), `rows`, `setRows(rows)` and `form`. Without a slot nothing changes.
+  See `docs/spec/forms/forms.md`, "Collections of objects — a host slot draws
+  them".
 
 - **`FieldMeta::unit` / `FieldMeta::decimals` — a display unit and precision
   for a plain `double`/`float`/integral member.** A DTO holding lab readings as

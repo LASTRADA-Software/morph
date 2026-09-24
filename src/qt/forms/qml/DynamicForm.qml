@@ -26,7 +26,10 @@
 // collection whose items are objects -- is *unrepresentable*: no typed text
 // encodes to the shape the schema asks for. Such a member is named in its
 // field descriptor's `unrepresentable` and keeps the form short of `ready`
-// (docs/spec/forms/forms.md, "What `ready` claims").
+// (docs/spec/forms/forms.md, "What `ready` claims"). The one exception is a
+// collection of objects a host slot claims (SlotRegistry): the slot edits the
+// rows as cell texts and this form encodes each cell with the same encoders
+// its own controls use -- see "Collections of objects" in forms.md.
 //
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
@@ -509,6 +512,8 @@ Frame {
             if (hit !== undefined && hit !== null)
                 return hit
         }
+        if (derivedKey === undefined)
+            return literal
         const hit2 = catalog.lookup(displayLocale, derivedKey)
         if (hit2 !== undefined && hit2 !== null)
             return hit2
@@ -516,9 +521,33 @@ Frame {
     }
 
     // Flat field descriptors, in declaration (x-order) order.
+    //
+    // Reading the registry's revision makes a slot registered after the first
+    // evaluation re-describe the member it claims: whether a collection of
+    // objects is representable depends on it (see describeObject).
     property var fields: {
-        const props = schemaData.properties || {}
-        const required = schemaData.required || []
+        if (slotRegistry)
+            slotRegistry.revision
+        return describeObject(schemaData, 0)
+    }
+
+    // Whether a host slot claims the member `name` -- the same resolution the
+    // field delegate performs, so the two cannot disagree.
+    function slotClaims(name, xWidget, unitAscii, jsonType) {
+        return slotRegistry !== null && slotRegistry !== undefined
+               && slotRegistry.resolve(actionType, name, xWidget, unitAscii, jsonType) !== null
+    }
+
+    // Field descriptors for one object schema's properties, in x-order order.
+    // `depth` is 0 for the action itself and 1 for the element of a top-level
+    // collection of objects (`itemFields` below); element members are
+    // described once and never recursed into further, so a self-referential
+    // row type cannot loop. At depth 1 a label resolves through an explicit
+    // x-i18nKey or the literal only: the derived "<action>.<field>" key names
+    // top-level members.
+    function describeObject(objectSchema, depth) {
+        const props = (objectSchema && objectSchema.properties) || {}
+        const required = (objectSchema && objectSchema.required) || []
         return Object.keys(props)
             .sort(function (a, b) { return opt(props[a]["x-order"], 0) - opt(props[b]["x-order"], 0) })
             .map(function (name) {
@@ -579,15 +608,28 @@ Frame {
                 const typedControl = dp !== undefined || optionsAction !== undefined
                         || enumOptionRows.length > 0 || p.format === "date-time"
                         || types.indexOf("integer") !== -1 || types.indexOf("boolean") !== -1
+                // A collection whose element is an object schema with members
+                // of its own (glaze's std::vector<Sub>): the shape a host
+                // grid slot edits row by row.
+                const itemSchema = types.indexOf("array") !== -1 ? resolveProp(p.items) : {}
+                const isObjectArray = jsonTypes(itemSchema).indexOf("object") !== -1
+                        && itemSchema.properties !== undefined
+                const jsonType = types.length > 0 ? types[0] : ""
+                // Only a top-level collection is handed to a slot: its rows
+                // are stored in the collection's own fieldValues entry, which
+                // a member one level down does not have.
+                const claimedBySlot = depth === 0 && isObjectArray
+                        && slotClaims(name, opt(widget, ""), opt(extUnits.unitAscii, ""), jsonType)
+                const derivedKey = function (slot) { return depth === 0 ? i18nFieldKey(name, slot) : undefined }
                 return {
                     name: name,
                     title: literalTitle,
                     label: resolveText(i18nExplicitFieldKey(i18nOverride, "label"),
-                                       i18nFieldKey(name, "label"), literalTitle),
+                                       derivedKey("label"), literalTitle),
                     description: resolveText(i18nExplicitFieldKey(i18nOverride, "help"),
-                                              i18nFieldKey(name, "help"), literalHelp),
+                                              derivedKey("help"), literalHelp),
                     placeholder: resolveText(i18nExplicitFieldKey(i18nOverride, "placeholder"),
-                                              i18nFieldKey(name, "placeholder"), literalPlaceholder),
+                                              derivedKey("placeholder"), literalPlaceholder),
                     readOnly: opt(raw["x-readonly"], opt(p["x-readonly"], false)),
                     hidden: opt(raw["x-hidden"], opt(p["x-hidden"], false)),
                     unit: unitText,
@@ -644,12 +686,26 @@ Frame {
                     // but each entry is encoded as a JSON string, same as an
                     // array of strings, rather than silently misencoding.
                     isArray: types.indexOf("array") !== -1,
+                    // A collection of objects, and -- for a top-level one --
+                    // its element's member descriptors, in x-order order: the
+                    // columns a grid slot draws (label, unit, decimals,
+                    // readOnly, required, and the kind flags that say how a
+                    // cell's text is encoded). Empty for any other member.
+                    isObjectArray: isObjectArray,
+                    itemFields: (isObjectArray && depth === 0) ? describeObject(itemSchema, depth + 1) : [],
+                    // True when a registered slot draws this collection, which
+                    // is what makes it representable (see `unrepresentable`).
+                    claimedBySlot: claimedBySlot,
                     // Why no control here can collect what the schema asks
                     // for, or "" for every member this renderer represents --
                     // which is every member of a flat action. A non-empty
                     // reason makes the member unencodable, so the form reports
                     // ready only for a payload that legitimately omits it.
-                    unrepresentable: unrepresentableMemberReason(p, types, typedControl),
+                    //
+                    // A top-level collection of objects a slot claims is the
+                    // exception: the slot collects each row's cell texts and
+                    // encodeObjectArray encodes them, so an encoding exists.
+                    unrepresentable: claimedBySlot ? "" : unrepresentableMemberReason(p, types, typedControl),
                     required: required.indexOf(name) !== -1,
                     // `resolveRef` merges the property node *over* the `$def`
                     // it points at, so these three read a per-field bound
@@ -703,7 +759,7 @@ Frame {
                     // SlotRegistry.byKind (see fieldKind).
                     kind: fieldKind(p, types, dp, optionsAction, enumOptionRows.length > 0),
                     unitAscii: opt(extUnits.unitAscii, ""),
-                    jsonType: types.length > 0 ? types[0] : ""
+                    jsonType: jsonType
                 }
             })
     }
@@ -1332,6 +1388,62 @@ Frame {
     // returns "[]" -- a genuinely empty array is still a valid array
     // literal, distinct from the field itself being unengaged (handled by
     // fieldJsonLiteral's blank-text check before this is ever called).
+    // A collection-of-objects field's rows, as the JS array a slot wrote with
+    // setRows (JSON text in fieldValues), or [] when there are none yet or the
+    // text is not an array.
+    function objectArrayRows(text) {
+        if (text === undefined || text === null || String(text).trim() === "")
+            return []
+        try {
+            const parsed = JSON.parse(text)
+            return Array.isArray(parsed) ? parsed : []
+        } catch (ignored) {
+            return []
+        }
+    }
+
+    // Encodes a collection of objects from its rows' cell texts: `text` is a
+    // JSON array of `{member: cellText}` objects, one per row, where each cell
+    // text is what the built-in control for that member would hold (a digit
+    // string for a number or Quantity, "true"/"false" for a boolean, the
+    // option's `valueJson` for a closed set). Each cell goes through
+    // encodeFieldText with the element's own member descriptor, so the same
+    // syntax, locale, precision and bound rules apply as at the top level; a
+    // blank optional cell is omitted from its row object. Returns null -- no
+    // literal, so the form is not ready -- when the text is not an array of
+    // objects, a cell does not encode, or a required member is blank.
+    function encodeObjectArray(f, text) {
+        let rows
+        try {
+            rows = JSON.parse(text)
+        } catch (ignored) {
+            return null
+        }
+        if (!Array.isArray(rows))
+            return null
+        const encodedRows = []
+        for (let r = 0; r < rows.length; ++r) {
+            const row = rows[r]
+            if (row === null || typeof row !== "object" || Array.isArray(row))
+                return null
+            const parts = []
+            for (let m = 0; m < f.itemFields.length; ++m) {
+                const member = f.itemFields[m]
+                const cell = row[member.name]
+                const cellText = (cell === undefined || cell === null) ? "" : String(cell)
+                const literal = encodeFieldText(member, cellText, 0)
+                if (literal === null) {
+                    if (cellText.trim() !== "" || member.required)
+                        return null
+                    continue
+                }
+                parts.push(JSON.stringify(member.name) + ":" + literal)
+            }
+            encodedRows.push("{" + parts.join(",") + "}")
+        }
+        return "[" + encodedRows.join(",") + "]"
+    }
+
     function arrayJsonLiteral(text) {
         const items = text.split(",")
             .map(function (item) { return item.trim() })
@@ -1346,7 +1458,16 @@ Frame {
     // revalidate() (the submit body) and optionsRequestBody() (a dependent
     // Choice's parent values).
     function fieldJsonLiteral(f) {
-        const text = (opt(fieldValues[f.name], "")).trim()
+        return encodeFieldText(f, opt(fieldValues[f.name], ""), opt(fieldUnits[f.name], 0))
+    }
+
+    // The encoder behind fieldJsonLiteral, over an explicit text and unit
+    // selection instead of the form's own draft -- so a collection's cells,
+    // which have no entry in fieldValues, go through exactly the rules a
+    // top-level control's text does. `unitIndex` selects from f.unitOptions
+    // (0 is the canonical unit).
+    function encodeFieldText(f, rawText, unitIndex) {
+        const text = String(rawText === undefined || rawText === null ? "" : rawText).trim()
         if (text === "")
             return null
         // A member no control can collect has no literal, whatever was typed:
@@ -1355,6 +1476,9 @@ Frame {
         // makes the form report ready.
         if (f.unrepresentable !== "")
             return null
+        if (f.isObjectArray) {
+            return encodeObjectArray(f, text)
+        }
         if (f.isArray) {
             return arrayJsonLiteral(text)
         }
@@ -1392,7 +1516,7 @@ Frame {
                                                         })
             if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText))
                 return null
-            const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
+            const unit = f.unitOptions[unitIndex]
             // Reject more decimals than the current unit's precision instead
             // of silently rounding them away.
             const fracLen = (canonicalText.split(".")[1] || "").length
@@ -1400,7 +1524,7 @@ Frame {
                 return null
             const value = parseFloat(canonicalText)
             // Bounds are declared against the canonical unit.
-            if (opt(fieldUnits[f.name], 0) === 0) {
+            if (unitIndex === 0) {
                 if (f.minimum !== undefined && value < f.minimum)
                     return null
                 if (f.maximum !== undefined && value > f.maximum)
@@ -1859,9 +1983,33 @@ Frame {
                     // same set-value path the built-in controls use, so an
                     // override participates in the required-gate and
                     // auto-fire without special-casing.
+                    //
+                    // Optional, each assigned only when the slot declares it:
+                    // `fieldText` (the retained text, kept current -- a prefill,
+                    // a reset or a rebuilt tab reaches the slot through it),
+                    // `rows` / `setRows(rows)` (a collection of objects as a JS
+                    // array of {member: cellText}), and `form` (this form, for
+                    // encodeFieldText and the rest of its public surface).
                     onLoaded: {
+                        const name = fieldColumn.modelData.name
                         item.field = fieldColumn.modelData
-                        item.setValue = function (text) { form.setFieldValue(fieldColumn.modelData.name, text) }
+                        item.setValue = function (text) { form.setFieldValue(name, text) }
+                        // revalidate() bumps rulesRevision after every write to
+                        // fieldValues, a plain object that notifies nothing.
+                        if ("fieldText" in item)
+                            item.fieldText = Qt.binding(function () {
+                                form.rulesRevision
+                                return form.opt(form.fieldValues[name], "")
+                            })
+                        if ("rows" in item)
+                            item.rows = Qt.binding(function () {
+                                form.rulesRevision
+                                return form.objectArrayRows(form.fieldValues[name])
+                            })
+                        if ("setRows" in item)
+                            item.setRows = function (rows) { form.setFieldValue(name, JSON.stringify(rows)) }
+                        if ("form" in item)
+                            item.form = form
                     }
                 }
 
