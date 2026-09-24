@@ -17,8 +17,20 @@
 //                       an explicit Submit button (enabled only while ready)
 //                       instead -- see "Explicit submit mode" below
 //
+// A member this vocabulary has no control for -- an object-typed member, or a
+// collection whose items are objects -- is *unrepresentable*: no typed text
+// encodes to the shape the schema asks for. Such a member is named in its
+// field descriptor's `unrepresentable` and keeps the form short of `ready`
+// (docs/spec/forms/forms.md, "What `ready` claims").
+//
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
+//
+// `ready` is a claim about the *payload*: true only when the assembled body
+// satisfies the schema the form was generated from, not merely when every
+// control the renderer happened to draw is filled. `unrepresentableReason`
+// carries the live reason when a member no input can satisfy is what blocks
+// submission.
 //
 // By default, the form calls controller.submitIfValid(...) automatically
 // the instant every field/rule is satisfied (safe for a read-only query
@@ -79,6 +91,18 @@ Frame {
     property var fieldUnits: ({})
     property int optionsRevision: 0
     property bool ready: false
+
+    // Why no input can make this form ready, or "" when none applies: the
+    // first member the renderer cannot represent that submission currently
+    // waits on (`"<wire name>: <reason>"`). Written by revalidate() from the
+    // same pass that writes `ready`, so the two cannot disagree.
+    //
+    // Empty while the form is ready, and also empty while it is merely
+    // unfilled -- a blank required field or an unsatisfied rule is the
+    // ordinary submit gate, which the user can act on, and the status label
+    // below says so. This property exists for the case the user cannot act
+    // on, which is otherwise indistinguishable from it.
+    property string unrepresentableReason: ""
 
     // Non-zero while values are being written programmatically rather than
     // edited by a user -- restoring a control the layout just recreated, or
@@ -273,6 +297,45 @@ Frame {
         return p
     }
 
+    // A resolved property's declared JSON types, as an array however the
+    // schema spells it: one string, a list (`["integer","null"]`), or no
+    // `type` key at all, which is no declaration rather than a type.
+    function jsonTypes(p) {
+        return Array.isArray(p.type) ? p.type : (p.type === undefined ? [] : [p.type])
+    }
+
+    // Why this renderer cannot represent `p`, or "" when it can.
+    //
+    // The form draws flat fields. A member whose value is an *object* reaches
+    // one scalar control, and a collection whose items are objects reaches the
+    // comma-separated array control, so whatever a user types encodes as a
+    // JSON string (or an array of strings) where the schema asks for an object
+    // or an array of them. No input closes that gap: the member is
+    // unrepresentable, not merely unfilled.
+    //
+    // Naming it is what keeps `ready` a claim about the payload rather than
+    // about which controls happen to be filled. A form that reported ready
+    // here would assemble a body the action must reject, and the rejection
+    // would surface at the action boundary instead of in the form, where the
+    // user could see it. Which of drawing a sub-form, declining the schema or
+    // going on flattening it is right is a separate question; the readiness
+    // answer is the same under all three.
+    //
+    // `typed` says one of the kind flags already claims the property for a
+    // control that encodes a shape of its own. That is what keeps a Quantity
+    // and a Choice -- both `"type": "object"` in the schema, both with an
+    // encoder that produces the right shape -- out of this.
+    function unrepresentableMemberReason(p, types, typed) {
+        if (!typed && types.indexOf("object") !== -1)
+            return "a nested object member, which this renderer does not draw"
+        if (types.indexOf("array") !== -1) {
+            const itemTypes = jsonTypes(resolveProp(p.items))
+            if (itemTypes.indexOf("object") !== -1 || itemTypes.indexOf("array") !== -1)
+                return "a collection of nested objects, which this renderer does not draw"
+        }
+        return ""
+    }
+
     // Value/label pairs for a property that states a **closed set of values**
     // outright, or [] for one that does not. Two spellings, both handled:
     //
@@ -380,7 +443,7 @@ Frame {
             .map(function (name) {
                 const raw = props[name]
                 const p = resolveProp(raw)
-                const types = Array.isArray(p.type) ? p.type : (p.type === undefined ? [] : [p.type])
+                const types = jsonTypes(p)
                 const dp = opt(raw["x-decimalPlaces"], p["x-decimalPlaces"])
                 const optionsAction = opt(raw["x-optionsAction"], p["x-optionsAction"])
                 // A closed set stated by the schema itself. Read
@@ -417,6 +480,16 @@ Frame {
                 const literalTitle = opt(raw["title"], opt(p.title, name))
                 const literalHelp = opt(p.description, "")
                 const literalPlaceholder = opt(raw["x-placeholder"], opt(p["x-placeholder"], ""))
+                // The kind flags below that hand the property to a control
+                // with an encoder of its own, restated here because
+                // unrepresentableMemberReason has to know whether anything
+                // claimed the property before it judges its declared type.
+                // `isArray` is deliberately absent: the array control claims
+                // the property but encodes its items as strings, so an array
+                // of objects is unrepresentable even though a control drew it.
+                const typedControl = dp !== undefined || optionsAction !== undefined
+                        || enumOptionRows.length > 0 || p.format === "date-time"
+                        || types.indexOf("integer") !== -1 || types.indexOf("boolean") !== -1
                 return {
                     name: name,
                     title: literalTitle,
@@ -466,6 +539,12 @@ Frame {
                     // but each entry is encoded as a JSON string, same as an
                     // array of strings, rather than silently misencoding.
                     isArray: types.indexOf("array") !== -1,
+                    // Why no control here can collect what the schema asks
+                    // for, or "" for every member this renderer represents --
+                    // which is every member of a flat action. A non-empty
+                    // reason makes the member unencodable, so the form reports
+                    // ready only for a payload that legitimately omits it.
+                    unrepresentable: unrepresentableMemberReason(p, types, typedControl),
                     required: required.indexOf(name) !== -1,
                     // `resolveRef` merges the property node *over* the `$def`
                     // it points at, so these three read a per-field bound
@@ -1162,6 +1241,12 @@ Frame {
         const text = (opt(fieldValues[f.name], "")).trim()
         if (text === "")
             return null
+        // A member no control can collect has no literal, whatever was typed:
+        // every encoding below would produce a value of the wrong JSON type,
+        // and a wrong literal is worse than none, because it is the one that
+        // makes the form report ready.
+        if (f.unrepresentable !== "")
+            return null
         if (f.isArray) {
             return arrayJsonLiteral(text)
         }
@@ -1271,13 +1356,24 @@ Frame {
         // int64-sized integers stay exact.
         const parts = []
         let ok = true
+        let blocker = ""
         for (let i = 0; i < fields.length; ++i) {
             const f = fields[i]
             const text = (opt(fieldValues[f.name], "")).trim()
             const literal = fieldJsonLiteral(f)
             if (literal === null) {
-                if (text !== "" || f.required || isDynamicallyRequired(f.name))
+                if (text !== "" || f.required || isDynamicallyRequired(f.name)) {
                     ok = false
+                    // An unrepresentable member blocks submission only when
+                    // the payload would have to carry it -- the schema
+                    // requires it, or the user typed into it anyway. One left
+                    // blank and optional is legitimately omitted, and a
+                    // payload the schema accepts is not something to report.
+                    // First one wins: the caller wants a reason, and the whole
+                    // set is on the field descriptors.
+                    if (blocker === "" && f.unrepresentable !== "")
+                        blocker = f.name + ": " + f.unrepresentable
+                }
                 continue
             }
             parts.push(JSON.stringify(f.name) + ":" + literal)
@@ -1295,6 +1391,7 @@ Frame {
             }
         }
         ready = ok
+        unrepresentableReason = ok ? "" : blocker
         previewLine = ok ? "{" + parts.join(",") + "}" : ""
         rulesRevision++
         // In explicit-submit mode the renderer never fires on its own --
@@ -2018,8 +2115,16 @@ Frame {
         Label {
             Layout.topMargin: 8
             text: {
-                if (!form.ready)
+                if (!form.ready) {
+                    // Filling fields in is the usual remedy, but it is not the
+                    // remedy for a member this renderer cannot represent, and
+                    // telling the user to fill something that would not help
+                    // is the worse half of the same lie a `ready` of true
+                    // would be. Name the member instead.
+                    if (form.unrepresentableReason !== "")
+                        return "cannot be submitted -- " + form.unrepresentableReason
                     return "fill the required (*) fields"
+                }
                 return form.explicitSubmitMode ? "✓ ready -- press Submit" : "✓ executes automatically as you type"
             }
             opacity: 0.6
