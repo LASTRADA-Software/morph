@@ -402,6 +402,8 @@ struct FieldMeta {
     std::optional<math::Rational> minimum{};     // disengaged = no floor
     std::optional<math::Rational> maximum{};     // disengaged = no ceiling
     std::optional<math::Rational> multipleOf{};  // disengaged = any value
+    std::string_view unit{};                     // "" = no display unit (plain members only)
+    std::optional<math::DecimalPlaces> decimals{};  // disengaged = no display precision
 };
 
 struct RecordMeasurement {
@@ -567,6 +569,47 @@ A per-*instance* `x-minimum`/`x-maximum` written by
 composes with a compiled bound rather than replacing it: the renderer checks
 both, so an instance range narrows the declared one and never widens it.
 
+### Display unit and decimals for a plain member — `unit` / `decimals`
+
+A `Quantity` carries its unit and its precision in its type. A DTO whose
+numeric members are plain `double`s has neither, so `FieldMeta` declares them:
+
+```cpp
+struct RecordDensity {
+    double density = 0.0;
+    double temperature = 0.0;
+
+    static constexpr std::array fieldMetadata{
+        FieldMeta{.field = "density", .unit = "kg/m³", .decimals = math::DecimalPlaces{3}},
+        FieldMeta{.field = "temperature"}.withUnit("°C"),
+    };
+};
+```
+
+- **`unit` is emitted as `ExtUnits`**, the key a `Quantity`'s unit already
+  travels in, with the one string in both `unitAscii` and `unitUnicode`. Every
+  reader of a unit therefore finds a plain member's where it finds a
+  `Quantity`'s: the shipped renderer's unit suffix, `SlotRegistry.byUnit`, and
+  a view's `v-columns` entry (`views.hpp` copies `ExtUnits` off the property
+  node). It is presentation only: nothing converts through it, and it never
+  reaches the payload.
+- **`decimals` is emitted as `x-displayDecimals`, deliberately not
+  `x-decimalPlaces`.** `x-decimalPlaces` hands a property the exact
+  `{num,den,dp}` encoding (see [Plain number fields](#plain-number-fields--type-number):
+  a declared precision wins over the `"number"` type), and a `double` member
+  cannot decode that object. `x-displayDecimals` keeps the JSON-number encoding
+  and only tells the renderer how many fraction digits to show and accept. It
+  is read only for a `"number"` property with no `x-decimalPlaces`.
+- **Both are ignored on a `Quantity` member**, whose unit and declared
+  precision are part of its type and already emitted; a second declaration
+  could only disagree with the first. A `decimals` above `kMaxDecimalPlaces`
+  is ignored too, as a non-positive `multipleOf` is.
+- **Both apply at any depth**, like the rest of `FieldMeta`: a `std::vector<Row>`
+  element's own `fieldMetadata` stamps the row type's properties.
+
+Neither is checked server-side. Like `placeholder`, they are presentation;
+the one gate that follows from `decimals` is the renderer's entry limit below.
+
 ### Field metadata is not a security control
 
 `x-readonly` and `x-hidden` are presentation only. The field still travels in
@@ -589,8 +632,10 @@ member of the action at all.
 | `minimum` | property node (sibling of `$ref`) | number | Inclusive lower bound on the field's value, from `FieldMeta::minimum`. Omitted when not declared. Standard JSON-Schema vocabulary, not an `x-*` key — see [Per-field scalar bounds](#per-field-scalar-bounds--minimum--maximum--multipleof). |
 | `maximum` | property node (sibling of `$ref`) | number | Inclusive upper bound, from `FieldMeta::maximum`. Omitted when not declared. |
 | `multipleOf` | property node (sibling of `$ref`) | number | The field's value must be an exact integer multiple of this, from `FieldMeta::multipleOf`. `1` is how "whole number" is spelled. Omitted when not declared, or when the declared value is not strictly positive. |
+| `ExtUnits` | property node (sibling of `$ref`) | object | A plain member's display unit, from `FieldMeta::unit`, as `{"unitAscii": unit, "unitUnicode": unit}` — the shape a `Quantity` carries. Omitted when empty, and never emitted for a `Quantity` member. See [Display unit and decimals](#display-unit-and-decimals-for-a-plain-member--unit--decimals). |
+| `x-displayDecimals` | property node (sibling of `$ref`) | non-negative integer | A plain number's display and entry precision, from `FieldMeta::decimals`. Omitted when disengaged, above `kMaxDecimalPlaces`, or on a `Quantity` member. |
 
-All ten keys are additive and non-breaking, extending the renderer-contract
+All twelve keys are additive and non-breaking, extending the renderer-contract
 table below without renaming or retyping any existing key, per this program's
 versioning stance (see "Design principle" above). A
 renderer that ignores them falls back to today's behavior exactly: it shows
@@ -788,7 +833,8 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-maximum` | property node (sibling of `$ref`) | object `{num,den,dp}` | Inclusive upper bound, same source and shape as `x-minimum`. |
 | `x-instanceConstraints` | top-level (object) | array of strings | Wire field names whose keys were written from *instance* data rather than derived from the compiled action type. Present only on a decorated schema. A renderer needing to know whether an `x-decimalPlaces`/`x-minimum`/`x-maximum` is instance-sourced checks membership here rather than guessing. |
 | `format` | `Timestamp` property (or its `$def`) | string, value `"date-time"` | Standard JSON-Schema vocabulary (stamped by glaze, not by morph). The renderer shows a date-time input; the wire value is the ISO-8601 string `Timestamp` serialises to. No `x-*` extension is used for timestamps. |
-| `ExtUnits` | `$def` of the `Quantity`'s unit type (reached via the property's `$ref`) | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer resolves the property's `$ref` into `$defs` to read `ExtUnits.unitAscii`/`unitUnicode` (it is **not** on the property node next to the `x-*` keys) to label the field and anchor the unit selector. |
+| `x-displayDecimals` | property node (sibling of `$ref`) | non-negative integer | A plain `"number"` member's display and entry precision, from `FieldMeta::decimals`. Read only when the property has no `x-decimalPlaces`; the value keeps its JSON-number encoding, and an entry with more fraction digits is refused. See [Display unit and decimals](#display-unit-and-decimals-for-a-plain-member--unit--decimals). |
+| `ExtUnits` | `$def` of the `Quantity`'s unit type (reached via the property's `$ref`) — or, for a plain member declaring `FieldMeta::unit`, the property node | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer resolves the property's `$ref` into `$defs` to read `ExtUnits.unitAscii`/`unitUnicode` (it is **not** on the property node next to the `x-*` keys) to label the field and anchor the unit selector. On a plain member it is the `FieldMeta::unit` display text in both subfields, and there is no unit selector. |
 | `x-layout` | top-level (object) | object | The form's group structure: `{ "groups": [ { "title": string, "kind": "section"\|"tab"\|"accordion", "fields": [wire-key,…] }, … ] }`, in `A::formLayout` declaration order. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
 | `x-group` | property node (sibling of `$ref`) | string | The title of the group this field belongs to. Omitted for a field in the implicit default group, or when `x-layout` is absent. |
 | `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups`. Omitted under the same conditions as `x-group`. |
@@ -972,6 +1018,15 @@ number:
 | `Quantity<U, Dec>` | `"type": ["object","null"]`, `x-decimalPlaces`, `ExtUnits` | exact `{num,den,dp}`, assembled from the typed digits |
 | an integral member | `"type": "integer"` (+ `x-exactMinimum`/`x-exactMaximum` past 2^53) | bare integer, gated on the [exact string bounds](#exact-numeric-bounds--x-exactminimum--x-exactmaximum) |
 | `double` / `float` | `"type": "number"` | bare JSON number, as above |
+
+**`x-displayDecimals` is an entry limit.** When a plain number declares one
+(`FieldMeta::decimals`, see [Display unit and decimals](#display-unit-and-decimals-for-a-plain-member--unit--decimals)),
+an entry with more fraction digits than that has no literal, exactly as an
+over-precise `Quantity` entry has none: it is refused, never rounded, because a
+rounded value is one the user did not type. The encoding stays a bare JSON
+number. The field descriptor carries the count as `decimals` (with
+`decimalsDeclared` telling a slot whether `0` was declared or merely
+defaulted), and the placeholder spells it (`"0.000"`).
 
 A generated `Quantity` property is therefore not `"number"` at all. The order
 still matters, because a *decorated* schema can put `x-decimalPlaces` on a
