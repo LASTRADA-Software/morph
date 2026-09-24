@@ -77,7 +77,7 @@ using UnitTraits = morph::units::UnitTraits<E>;
 ///        (`account_dto.hpp`'s `Currency currency;`, `budget_dto.hpp`'s
 ///        `Currency currency;`) -- so, like every other closed-set field this
 ///        rung declares, it needs a `glz::meta`/`glz::enumerate` for
-///        `morph::forms::schemaJson<A>()` to describe it (morph#392). Spelled
+///        `morph::forms::schemaJson<A>()` to describe it. Spelled
 ///        the same as `currencyToCode`'s own 3-letter codes, so the wire
 ///        encoding and the DB column encoding agree.
 template <>

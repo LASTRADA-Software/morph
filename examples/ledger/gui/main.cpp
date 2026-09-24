@@ -2,7 +2,7 @@
 //
 /// @file
 /// ledger's desktop client shell: one `AppContext` (deployment mode chosen
-/// from argv), a login step (morph#242) before any domain bridge is usable,
+/// from argv), a login step before any domain bridge is usable,
 /// the four QML bridges Tasks 18-21 define built inside `ctx.onReady()`, and
 /// a `QQmlApplicationEngine` loading this rung's own QML module.
 ///

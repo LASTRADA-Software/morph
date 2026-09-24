@@ -52,10 +52,10 @@ here that carries no `ledgerId` — it is what mints one — so it is dispatched
 keyless, the same shape `polls::PollModel` gives `CreatePoll`. Any
 authenticated principal may call it; a caller with no token is refused
 `unauthorized` by `LedgerAuthorizer` before the model is entered, and an empty
-principal by the model itself. Added by morph#361: until then a `ledgers` row
-was created by no registered action at all, and a freshly started
-`ladder_ledger_server` against a new database served a book nobody could open
-(`OpenAccount` refused with `OpenAccount: no such ledger`).
+principal by the model itself. Without it no registered action would create a
+`ledgers` row at all, and a freshly started `ladder_ledger_server` against a new
+database would serve a book nobody could open (`OpenAccount` refusing with
+`OpenAccount: no such ledger`).
 
 **Whose book it is.** `CreateLedger` records its caller as the book's owner,
 and every action that reaches a book compares that owner against the
@@ -85,7 +85,7 @@ rows, and there is no principal to attribute those rows to; `NULL` therefore
 means "created before ownership existed", the same reading `params_json`
 already has on a report job. Nothing writes a new one — `CreateLedger` always
 stamps its caller — but the scenario corpus's fixture books are seeded by raw
-`INSERT` and are unowned for this reason. Added by morph#382.
+`INSERT` and are unowned for this reason.
 
 **Which book it is.** Owning both books is not the same as their being one
 book. An account and a category are joined only when they belong to the *same*
@@ -100,15 +100,14 @@ rather than filtering on a scope argument; the guard is
 `ledger::db::requireCategoryInBook` and it lives beside the ownership one in
 `ledger/db/book_access.hpp`.
 
-Until morph#373 this was accepted, and what made it survivable was an
-invariant stated nowhere: `GetBudgetReport` filters legs by the budget's own
-ledger's journals, so a foreign account's legs never reached the sum. A
-guarantee resting on every future report kind keeping a filter nobody wrote
-down is the shape morph#384 rejected, so the link is refused at the write
-instead.
+Accepting the cross-book pair would be survivable only through an invariant
+stated nowhere: `GetBudgetReport` filters legs by the budget's own ledger's
+journals, so a foreign account's legs never reach the sum. A guarantee resting
+on every future report kind keeping a filter nobody wrote down is half a scheme,
+so the link is refused at the write instead.
 
-**The guard is write-side only.** A row written before morph#373 may still
-hold a cross-book link, and nothing rewrites or refuses it: no migration
+**The guard is write-side only.** A row written before the guard applied may
+still hold a cross-book link, and nothing rewrites or refuses it: no migration
 touches the `accounts` or `budgets` rows, and every read still answers. Two
 reasons. A cleanup would have to *choose* which side to break — null the
 account's `category_id`, or move the row into the other book — and both
@@ -125,15 +124,16 @@ membership table: there is no way to share a book with a second principal, and
 no `kanban`-style `project_roles` to promote anyone through. A book is its
 creator's, and everyone else is refused.
 
-**One action a client cannot drive to a result (morph#362).** Every action
+**One action a client cannot drive to a result.** Every action
 below is registered on the wire, and one of them answers only with a refusal
 no matter what a client sends. It is recorded in
 `scripts/scenario/coverage_allowlist.json` so the workflow-coverage gate does
 not chase it.
 
-This used to be two. `UndoTransaction` was the other, and morph#428 closed it
-by adding the missing read rather than by writing the gap down — see
-"`ListTransactions` is how an entry gets named" below.
+`UndoTransaction` is *not* one of them, and the reason is worth knowing before
+adding a second entry to that allowlist: the read that makes it drivable was
+added rather than the gap written down — see "`ListTransactions` is how an entry
+gets named" below.
 
 - **`RunReportJob` is the report runner's, not a client's.**
   `LedgerModel::execute(const RunReportJob&)` refuses every principal but
@@ -146,19 +146,19 @@ by adding the missing read rather than by writing the gap down — see
   runner's own tick land or does not. It cannot advance its own job, and
   asking to is a refusal, not a slow success.
 
-**`ListTransactions` is how an entry gets named (morph#428).**
-`UndoTransaction { ledgerId, journalId }` reverses one journal entry, and until
-morph#428 `JournalId` appeared in exactly one wire DTO in this rung — that
-action's own input. Nothing returned one: `StoreTransaction` and
-`UndoTransaction` answer `GetLedgerResult` (accounts and balances), `GetLedger`
-the same, `ImportLedgerChunk` answers counts, and there was no `GetJournal` and
-no listing. So the only outcome a client could reach was the not-found refusal
-`UndoTransaction: no such journal`, against an id it guessed, while the
-in-process tests got the id from the database — and the desktop client shipped
-an Undo button whose only input was a number no screen ever displayed.
+**`ListTransactions` is how an entry gets named.**
+`UndoTransaction { ledgerId, journalId }` reverses one journal entry, and
+`ListTransactions` is the only thing in the rung that hands a `JournalId` back.
+Nothing else returns one: `StoreTransaction` and `UndoTransaction` answer
+`GetLedgerResult` (accounts and balances), `GetLedger` the same,
+`ImportLedgerChunk` answers counts, and there is no `GetJournal`. Without the
+listing the only outcome a client could reach would be the not-found refusal
+`UndoTransaction: no such journal` against a guessed id — in-process tests can
+read the id out of the database, but a desktop client's Undo button would have
+no screen to read it from.
 
-That question is settled, the same way morph#361/#384 settled the equivalent
-one for `CreateLedger`: by adding the action. `ListTransactions { ledgerId,
+The answer is the same one `CreateLedger` gets for the equivalent question:
+add the action. `ListTransactions { ledgerId,
 month }` answers `{ entries: [{ id, description, date, legs }] }` for one
 `"YYYY-MM"` month of one book, oldest first, gated by `db::requireOwnedBook`
 like every other book-reaching read. `LedgerView.qml`'s Undo control now takes
@@ -188,8 +188,7 @@ Build order (status as of rung 5's implementation, see
   instead -- two clients both reversing the same transaction offline -- found
   a real bug (both `UndoTransaction`s applied, doubling the reversal), fixed
   by `causal_parent_id` naming what a compensating entry reverses and a second
-  reversal being rejected with `AlreadyReversed`. morph#144 tracked both
-  halves and is closed.
+  reversal being rejected with `AlreadyReversed`.
 
 
 1. Accounts + `StoreTransaction { description, date, legs[] }` — one
@@ -232,7 +231,7 @@ Build order (status as of rung 5's implementation, see
    SQLite WAL read transaction; the byte-identical DoD is only meaningful
    against that snapshot.
 
-   **Who runs the job (morph#160).** `SubmitReport` writes a `Pending` row
+   **Who runs the job.** `SubmitReport` writes a `Pending` row
    and returns; it schedules nothing and starts no thread. `ledger::app::App`
    — this rung's App layer — sweeps for `Pending` rows on a timer and
    dispatches `RunReportJob` back at `LedgerModel`, where the aggregation
@@ -253,7 +252,7 @@ Build order (status as of rung 5's implementation, see
    design's queued lambda died with its process.
 
    **The App owns a `RemoteServer`, fronted by `ladder_ledger_server`
-   (morph#242).** `RemoteServer` clears the session principal for any
+  .** `RemoteServer` clears the session principal for any
    authorizer that does not authenticate (`docs/spec/security.md`), so a real
    login story needed a real, verifying authorizer: `LedgerAuthorizer`
    (`ledger/auth/ledger_authorizer.hpp`) plus `AuthModel`/`Login`
@@ -388,12 +387,12 @@ data; the submit→poll job idiom.
   unit at `dp=0` and the type system carries it natively. Named test: a
   JPY leg stores and displays as a true integer, with no `x-rules` gate
   required.
-- **Locale entry** — *fixed, morph#574*: in de-DE the group separator is "."
-  and the shipped normalizer stripped it anywhere, so typing `1.5` submitted
-  **15**, a silent 10× money error. `normalizeLocaleNumber` and its QML mirror
-  now validate group placement (one to three digits before, exactly three
-  after, never past the decimal separator) and report a malformed entry
-  instead; `"1.050,25"` still normalises. Remaining from this item:
+- **Locale entry** — *fixed*: in de-DE the group separator is "." and a
+  normalizer that strips it anywhere turns a typed `1.5` into **15**, a silent
+  10× money error. `normalizeLocaleNumber` and its QML mirror validate group
+  placement (one to three digits before, exactly three after, never past the
+  decimal separator) and report a malformed entry instead; `"1.050,25"` still
+  normalises. Remaining from this item:
   result *display* in the shipped forms renderer goes through
   `double` division — balances beyond 2^53 drift on readback while the
   payload is exact. This rung's own views do not: every money label binds

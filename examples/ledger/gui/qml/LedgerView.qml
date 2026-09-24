@@ -94,11 +94,11 @@ ColumnLayout {
     }
 
     // ── Entries, and the Undo control they feed ──────────────────────────
-    // The journal id is shown rather than typed. Until morph#428 this was a
-    // bare "Journal id to undo" TextField, and no screen in this rung -- and
-    // no reply on the wire -- ever displayed a journal id, so the only way to
-    // fill it in was to guess. `listTransactions` is where the ids come from
-    // now; `undoTransaction` is handed one of them straight back.
+    // The journal id is shown rather than typed. A bare "Journal id to undo"
+    // TextField would be unfillable except by guessing: nothing else in this
+    // rung, and no reply on the wire, displays a journal id.
+    // `listTransactions` is where the ids come from; `undoTransaction` is
+    // handed one of them straight back.
     RowLayout {
         Layout.fillWidth: true
         Label { text: qsTr("Entries") ; font.bold: true }

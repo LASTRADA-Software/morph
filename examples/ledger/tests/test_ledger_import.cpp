@@ -351,10 +351,10 @@ TEST_CASE("ImportLedgerChunk rejects a chunk that does not sum to zero within a 
 
 TEST_CASE("ImportLedgerChunk refuses an account from another book", "[ledger][import][security]") {
     // Both of this action's account lookups -- the chunk-wide
-    // `counterAccountId` and the per-row `account_id` column -- resolved by
-    // id alone, so a chunk imported into book one could post onto book two's
-    // accounts (morph#367). Every other test in this file uses a single book,
-    // which is why a second one is seeded here.
+    // `counterAccountId` and the per-row `account_id` column -- would resolve
+    // by id alone without the scope check, so a chunk imported into book one
+    // could post onto book two's accounts. Every other test in this file uses a
+    // single book, which is why a second one is seeded here.
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     ledger::db::LedgerRecord firstBookRow;

@@ -93,7 +93,7 @@ using ::morph::ladder::gui::idNumber;
 ///
 ///        `id` is the whole point of the listing: it is the number
 ///        `undoTransaction` asks for, published so a view can hand it back
-///        rather than asking a user to guess it (morph#428).
+///        rather than asking a user to guess it.
 ///
 ///        No amounts. A `TransactionLeg` carries no currency of its own --
 ///        the currency belongs to the account the leg names (design spec §2)

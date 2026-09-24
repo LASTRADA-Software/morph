@@ -24,7 +24,7 @@ namespace ledger {
 inline constexpr std::size_t kMaxLedgerNameBytes = 128;
 
 /// @brief Creates a book -- the root entity every other ledger action keys
-///        off (morph#361).
+///        off.
 ///
 /// Lives here, beside `OpenAccount`/`GetLedger`, because those are the other
 /// two actions whose subject is the book itself rather than what is posted
@@ -44,7 +44,6 @@ inline constexpr std::size_t kMaxLedgerNameBytes = 128;
 /// promise than `kanban::CreateProject`'s, which makes its caller the first
 /// `Manager` of a real role table: this rung has no roles and no way to share
 /// a book, so the owner is simply the one principal that may use it.
-/// morph#382.
 struct CreateLedger {
     std::string name;
 

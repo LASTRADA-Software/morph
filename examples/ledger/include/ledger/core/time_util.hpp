@@ -22,7 +22,7 @@
 /// because they now have more than one. `isValidYearMonth` was in
 /// `ledger/dto/budget_dto.hpp` and `monthRangeMs` in an anonymous namespace in
 /// `src/models/budget_model.cpp`; `ListTransactions` takes the same
-/// `"YYYY-MM"` bound as `GetBudgetReport` (morph#428) and must parse it the
+/// `"YYYY-MM"` bound as `GetBudgetReport` and must parse it the
 /// same way, and a second copy of a date parser is a second thing to get
 /// wrong.
 

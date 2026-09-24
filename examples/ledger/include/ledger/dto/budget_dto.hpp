@@ -6,7 +6,7 @@
 #include <string>
 
 // `detail::isValidYearMonth` moved to ledger/core/time_util.hpp when
-// `ListTransactions` gained the same "YYYY-MM" bound (morph#428); it is still
+// `ListTransactions` gained the same "YYYY-MM" bound; it is still
 // `ledger::detail::isValidYearMonth`, still called from the two validate()s
 // below, and now has one definition rather than two.
 #include "ledger/core/time_util.hpp"

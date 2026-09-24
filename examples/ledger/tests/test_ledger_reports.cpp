@@ -36,16 +36,15 @@ private:
 ///        `ledger::app::App`'s runner does -- under the runner principal,
 ///        as an ordinary `RunReportJob` dispatch.
 ///
-/// This file used to poll `GetReportStatus` in a bounded retry loop with
-/// `std::this_thread::sleep_for` between iterations, because
-/// `execute(SubmitReport)` posted the aggregation to a real
-/// `ThreadPoolExecutor` the model itself owned and there was no way to
-/// observe -- let alone control -- when the worker ran. There is no loop, no
-/// sleep and no cap any more, and not because a test double was introduced:
-/// the aggregation is now an ordinary synchronous action
-/// (morph#160), so "the report has been computed" is simply what this call
-/// returning means. `examples/TESTING.md`'s ban on `sleep_for` outside
-/// `pump.hpp` is satisfied by construction here rather than by budget.
+/// No retry loop, no `std::this_thread::sleep_for` and no cap -- and not
+/// because a test double was introduced. The aggregation is an ordinary
+/// synchronous action, so "the report has been computed" is simply what this
+/// call returning means. Were `execute(SubmitReport)` to post the aggregation
+/// to a `ThreadPoolExecutor` the model itself owned, there would be no way to
+/// observe -- let alone control -- when the worker ran, and a caller would be
+/// back to polling `GetReportStatus` on a budget. `examples/TESTING.md`'s ban
+/// on `sleep_for` outside `pump.hpp` is satisfied by construction here rather
+/// than by budget.
 ///
 /// The principal scope is installed and dropped inside this helper, so a
 /// caller's own `ScopedPrincipal` (a *user*, which `RunReportJob` refuses)
@@ -267,10 +266,10 @@ TEST_CASE("GetReportStatus rejects a disengaged jobId and an unknown job", "[led
 }
 
 TEST_CASE("A submitted report stays Pending for as long as nothing runs it", "[ledger][reports]") {
-    // The property that says the executor really did leave the model
-    // (morph#160), and the one the old thread-pool version could not assert
-    // at all: with no runner anywhere in the process, a submitted job is
-    // stable at Pending rather than merely "not done yet". This is also
+    // The property that says the executor really is outside the model, and one
+    // a thread-pool-owning model could not express at all: with no runner
+    // anywhere in the process, a submitted job is stable at Pending rather than
+    // merely "not done yet". This is also
     // exactly what a job outliving the process that accepted it looks like --
     // the row waits for whichever runner comes along next.
     morph::ladder::testkit::DbFixture fixture;
@@ -301,11 +300,11 @@ TEST_CASE("A submitted report stays Pending for as long as nothing runs it", "[l
 TEST_CASE("Running one report job settles that job and no other", "[ledger][reports]") {
     // Two jobs outstanding at once, settled one at a time -- a completion
     // that wrote the wrong row, or every row, would show up here and nowhere
-    // else. The property predates morph#160 as a goal but could not be
-    // asserted while the aggregation was a lambda on a real pool: both jobs
-    // finished before either could be observed, and "job B is Done" looked
-    // the same whether B ran or A settled it. `RunReportJob` names the job it
-    // settles, so the second one staying Pending is now an ordinary CHECK.
+    // else. It is only assertable because the aggregation is synchronous: were
+    // it a lambda on a real pool, both jobs would finish before either could be
+    // observed, and "job B is Done" would look the same whether B ran or A
+    // settled it. `RunReportJob` names the job it settles, so the second one
+    // staying Pending is an ordinary CHECK.
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     ledger::db::LedgerRecord ledgerRow;
@@ -487,16 +486,16 @@ TEST_CASE("RunReportJob rejects unengaged ids and an unknown job", "[ledger][rep
 }
 
 TEST_CASE("RunReportJob refuses a job that belongs to another ledger", "[ledger][reports]") {
-    // morph#371. The action carries both a `jobId` and a `ledgerId`, and used
-    // to resolve the job by id alone -- the ledger guard below it checked only
-    // that `action.ledgerId` named an *existing* book, never that it was
-    // *this job's* book. The aggregation then ran against the action's ledger
-    // (`computeReportJson(mapper, action.ledgerId, ...)`) and settled the
+    // The action carries both a `jobId` and a `ledgerId`. Resolving the job by
+    // id alone is not enough: the ledger guard checks only that
+    // `action.ledgerId` names an *existing* book, never that it is *this job's*
+    // book. The aggregation runs against the action's ledger
+    // (`computeReportJson(mapper, action.ledgerId, ...)`) and settles the
     // action's job (`finishReportJob(mapper, *action.jobId, Done, ...)`), so
-    // book two's job settled `Done` carrying book one's totals, and a
-    // subsequent `GetReportStatus` handed those back as book two's report.
-    // `Done` is terminal, so the correct body could never afterwards be
-    // computed for that job.
+    // without the comparison below book two's job settles `Done` carrying book
+    // one's totals and a subsequent `GetReportStatus` hands those back as book
+    // two's report. `Done` is terminal, so the correct body could never
+    // afterwards be computed for that job.
     //
     // The two books are given different currencies so a cross-filed body is
     // visible in the body itself rather than only in the status: every

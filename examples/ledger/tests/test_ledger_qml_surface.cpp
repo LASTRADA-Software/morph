@@ -64,41 +64,41 @@ TEST_CASE("Every ledger bridge exposes exactly the surface gui/qml binds, and no
     audit.bind(QStringLiteral("reportBridge"), reportBridge);
     audit.bindIn(QStringLiteral("ReportView.qml"), QStringLiteral("bridge"), reportBridge);
 
-    // ── The former backlog, worked off member by member (#239) ───────────
-    // The first run of this audit reported 15 members these four bridges
-    // publish that no file under gui/qml/ bound: `busy`/`busyChanged` on all
-    // three of `LedgerQmlBridge`/`BudgetQmlBridge`/`RuleQmlBridge`,
-    // `ledgerBridge`'s `refresh`/`undoTransaction`, `budgetBridge`'s
+    // ── No exemption list, and why ────────────────────────────────────────
+    // Fifteen members these four bridges publish are the ones an unbound audit
+    // naturally reports: `busy`/`busyChanged` on all three of
+    // `LedgerQmlBridge`/`BudgetQmlBridge`/`RuleQmlBridge`, `ledgerBridge`'s
+    // `refresh`/`undoTransaction`, `budgetBridge`'s
     // `categoryCreated`/`budgetCreated`/`limitSet`/`lastBudgetId`/
     // `linkAccount`, and `ruleBridge`'s `ruleCreated`/`ruleUpdated`. Every one
-    // was live, meaningful surface backed by real presenter state (`busy()`
+    // is live, meaningful surface backed by real presenter state (`busy()`
     // forwards to `_presenter.busy()` on all three; the others are real
     // create/link/undo gestures with a model and a presenter behind them) —
-    // none was dead scaffolding, so all 15 were bound rather than deleted:
+    // none is dead scaffolding, so all fifteen are bound rather than exempted:
     //
-    //   * `busy` now gates a `BusyIndicator` in `LedgerView.qml`,
+    //   * `busy` gates a `BusyIndicator` in `LedgerView.qml`,
     //     `BudgetView.qml` and `RulesView.qml`. Its `busyChanged` NOTIFY needs
     //     no exemption of its own: the audit treats a property's NOTIFY as
     //     covered by reading the property (testkit_src/qml_surface.cpp's signal
-    //     sweep), and that is exactly what these three views now do.
+    //     sweep), and that is exactly what these three views do.
     //   * `ledgerBridge.refresh` is a "Refresh" button; `undoTransaction` is a
     //     journal-id field plus an "Undo" button, both in `LedgerView.qml`.
     //   * `budgetBridge.linkAccount` is an account-id/category-id pair plus a
     //     button in `BudgetView.qml`; `lastBudgetId` fills the same
     //     chain-without-a-round-trip label next to "Create budget" that
-    //     `lastCategoryId` already had next to "Create category".
+    //     `lastCategoryId` fills next to "Create category".
     //   * `categoryCreated`/`budgetCreated`/`limitSet` and `ruleCreated`/
     //     `ruleUpdated` carry no payload of their own — the state they
     //     describe is already bound (`lastCategoryId`/`lastBudgetId`/
     //     `lastRule`) — so each gets a `Connections` handler that writes a
     //     status line, the same shape bank's `Main.qml` uses for
-    //     `txns.posted`/`payees.paid` (#303): a transient confirmation is the
+    //     `txns.posted`/`payees.paid` for: a transient confirmation is the
     //     only way a fire-and-forget signal becomes visible at all.
     //
-    // The list is checked in both directions: an exemption for a member that
-    // has since been deleted, or one QML has since bound, fails this test
-    // (testkit/qml_surface.hpp). It can only shrink deliberately, and with
-    // every one of the 15 now bound, there is nothing left to exempt.
+    // An exemption list would be checked in both directions -- an exemption for
+    // a member that has been deleted, or one QML has since bound, fails this
+    // test (testkit/qml_surface.hpp) -- but with all fifteen bound there is
+    // nothing to exempt.
 
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());

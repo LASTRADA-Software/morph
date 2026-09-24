@@ -20,7 +20,7 @@ namespace ledger {
 ///        carrying `kind` and `params` verbatim. Nothing is scheduled and no
 ///        thread is started -- the row *is* the queue, and
 ///        `ledger::app::App`'s report runner is what drains it, by
-///        dispatching `RunReportJob` back at this model (morph#160). A job
+///        dispatching `RunReportJob` back at this model. A job
 ///        submitted while no runner is up therefore stays `Pending` and is
 ///        picked up by the first pass of the next one, which is what makes a
 ///        report survive a server restart instead of dying with the process
@@ -67,7 +67,7 @@ struct MonthlyStatementParams {
 ///        not as a lambda posted to an executor the model owns, because the
 ///        aggregation is business logic and business logic lives in a model
 ///        (`examples/IMPLEMENTATION.md` rule 1) -- while deciding *when* it
-///        runs is orchestration, which does not (morph#160). Re-entering the
+///        runs is orchestration, which does not. Re-entering the
 ///        model as an ordinary dispatch is the same shape
 ///        `bookmarks::RecordMetadata` has for that rung's metadata worker.
 ///

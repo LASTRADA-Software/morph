@@ -8,7 +8,7 @@
 namespace ledger::db {
 
 void configure(const std::string& connectionString) {
-    // morph#740: nothing in Lightweight stops a pooled DataMapper from being
+    // Nothing in Lightweight stops a pooled DataMapper from being
     // returned with a transaction still open on it -- `DataMapperPool::Return`
     // does no transaction cleanup, and the cost lands on the next, unrelated
     // borrower as a 60s stall and a `database is locked` it did not cause.
@@ -200,7 +200,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000013, "Create ledger_applied_ops table") {
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000014, "Store SubmitReport params with the job row") {
     // The job row has to be self-describing now that the aggregation no
-    // longer runs inside SubmitReport's own call frame (morph#160): the
+    // longer runs inside SubmitReport's own call frame: the
     // params used to be decoded on the caller's thread and captured into the
     // posted lambda, so nothing needed to persist them. With the run moved
     // to ledger::app::App's runner -- possibly in a different process, and
@@ -216,7 +216,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000014, "Store SubmitReport params with the jo
 }
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000015, "Record which principal owns each book") {
-    // Per-book ownership (morph#382). Until this column existed the rung had
+    // Per-book ownership. Until this column existed the rung had
     // no notion of whose book a `ledgers` row was: the signed-token check and
     // the per-action empty-principal gate both held, and neither says *whose*
     // book this is, so any authenticated principal could read, write and post

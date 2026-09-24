@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Per-book authorization (morph#382).
+// Per-book authorization.
 //
 // Until this file existed, `ledger` had no per-book ownership of any kind:
 // any principal holding a valid token could read, write and post into any
@@ -56,9 +56,9 @@ private:
     morph::session::detail::ScopedContext _scope;
 };
 
-/// @brief A book with no recorded owner -- the shape every `ledgers` row had
-///        before morph#382's migration, written the only way one can still be
-///        written now that `CreateLedger` always stamps its caller.
+/// @brief A book with no recorded owner -- written the only way one can be,
+///        now that `CreateLedger` always stamps its caller: by inserting the
+///        row directly, as the scenario corpus's fixtures do.
 [[nodiscard]] ledger::LedgerId unownedBook(Lightweight::DataMapper& mapper, const std::string& name) {
     ledger::db::LedgerRecord row;
     row.name = Light::SqlAnsiString<128>{name};
@@ -114,11 +114,11 @@ TEST_CASE("A second principal can neither read nor write a book it does not own"
 
     const ScopedPrincipal bob{"bob"};
 
-    // The read half. `GetLedger` had no principal check at all, so this is
-    // where a second client learned the whole book.
+    // The read half. Without a principal check on `GetLedger` this is where a
+    // second client learns the whole book.
     CHECK_THROWS_AS(model.execute(ledger::GetLedger{.ledgerId = book}), ledger::Forbidden);
 
-    // The write half, in the two shapes the reproduction on morph#382 used.
+    // The write half, in the two shapes that reach a book by id alone.
     CHECK_THROWS_AS(model.execute(ledger::OpenAccount{.ledgerId = book,
                                                       .name = "Bob's account in Alice's book",
                                                       .kind = ledger::AccountKind::Liability,
@@ -332,8 +332,8 @@ TEST_CASE("A book written before the owner column stays open to everyone", "[led
     // populate rows that already exist and there is no principal to attribute
     // them to, so a NULL owner means "created before ownership existed" -- the
     // same reading `params_json` already has on the report-job row -- and such
-    // a book behaves exactly as every book did before morph#382. The scenario
-    // corpus's fixture books are written this way.
+    // a book is open to every authenticated principal. The scenario corpus's
+    // fixture books are written this way.
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     const auto book = unownedBook(mapper, "Scenario book");
