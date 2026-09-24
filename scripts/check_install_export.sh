@@ -152,6 +152,12 @@ if [ "$skip_header_set_verification" -eq 0 ]; then
     fi
 fi
 
+# morph is header-only, but morph::morph links core-cpp's static modules, and
+# morph's install installs them with core-cpp's package. They have to be built
+# first: installing an unbuilt tree fails with "file INSTALL cannot find".
+run_step "the library did not build" \
+    cmake --build "$build_dir" || true
+
 # `cmake --install` exiting 0 is exactly what it does when it installs nothing, so its
 # exit status is worth nothing on its own. It is checked anyway -- a *failing*
 # install is still a failure -- and then the prefix is inspected.

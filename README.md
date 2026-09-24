@@ -437,6 +437,7 @@ Relevant CMake options: `MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
 
 ```sh
 cmake -S . -B build-min -DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF
+cmake --build build-min
 cmake --install build-min --prefix /your/prefix
 ```
 
@@ -450,7 +451,10 @@ compile definitions, so nothing else has to be restated. Point
 `CMAKE_PREFIX_PATH` at the prefix you installed into. Glaze is installed
 alongside morph when the build fetched it, and `morphConfig.cmake` resolves it
 for you via `find_dependency` — an installed morph whose Glaze cannot be found
-fails at `find_package` time rather than at compile time.
+fails at `find_package` time rather than at compile time. core-cpp, whose
+static modules morph links, is built and installed alongside morph the same
+way, and found through `find_dependency(core-cpp 0.3)`: that is why the
+install needs the build step before it.
 
 Optional components install only when their build option was on, and are
 requested by name:

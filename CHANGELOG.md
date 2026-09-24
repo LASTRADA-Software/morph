@@ -11,6 +11,16 @@ API surface).
 
 ### Changed
 
+- **morph depends on core-cpp v0.3.0.** It is fetched through CPM, and
+  `morph::morph` links its `core::base`, `core::async`, `core::net` and, natively,
+  `core::platform`. morph stays header-only, but those are static libraries, so
+  a project that links morph now builds them. `TimeoutScheduler` runs on
+  core-cpp's event-loop timers: natively on a thread of its own, and under
+  single-threaded WebAssembly on a loop the browser's timer pumps, where
+  `cancel()` now also retires the timer. An install of morph installs
+  core-cpp's package next to it, and `find_package(morph)` finds it through
+  `find_dependency(core-cpp 0.3)`.
+
 - **Dependencies are fetched through CPM, and cached by CPM.** glaze, Catch2,
   doxygen-awesome-css and Lightweight come through `CPMAddPackage` when no
   installed copy is found, and CPM keeps their sources in `CPM_SOURCE_CACHE`,

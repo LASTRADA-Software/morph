@@ -111,7 +111,7 @@ include(cmake/compiler_options.cmake)
 
 # Compiler-cache launcher selection: fastcache-cc (when a fastcached daemon
 # answers) -> sccache -> ccache -> none. Included before any target or fetched
-# dependency (glaze, through CPM, below) so those get cached too. See
+# dependency (glaze and core-cpp, through CPM, below) so those get cached too. See
 # cmake/CompileCache.cmake for the full selection logic; it declares its own
 # USE_COMPILER_CACHE/FASTCACHE_ADDR options.
 include(cmake/CompileCache.cmake)
@@ -172,6 +172,59 @@ if(NOT glaze_FOUND)
         OPTIONS "glaze_ENABLE_TESTS OFF")
 endif()
 
+# ── core-cpp ────────────────────────────────────────────────────────────────
+# The shared C++23 foundation of the Contour Terminal projects: morph takes
+# its event loop and timers, base64 and the wakeup primitive from it. Only the
+# modules morph links are built (EXCLUDE_FROM_ALL, unless morph installs; see
+# below), none of core-cpp's own tests, examples, TUI or TLS, and nothing is
+# fetched on its behalf: with those off it needs no dependency but the thread
+# library. Under Emscripten it
+# builds its single-threaded WebAssembly subset, which is what morph uses
+# there. SYSTEM, so morph's warning set does not apply to core-cpp's headers.
+#
+# morph stays a header-only INTERFACE target, but core::base, core::net and
+# core::platform are static libraries, so every consumer of morph now builds
+# them.
+#
+# morph's install exports morph::morph, which links core-cpp's modules, so an
+# install of morph has to install core-cpp too: CMake refuses an export that
+# names a target in no export set. CORE_CPP_INSTALL follows MORPH_INSTALL for
+# that, and morphConfig.cmake finds the installed core-cpp package in turn.
+# MORPH_INSTALL is described with the install rules below. EXCLUDE_FROM_ALL
+# is off while morph installs: CMake leaves an excluded subdirectory's install
+# rules out of the parent's install, so `cmake --install` would install
+# morph's package without the core-cpp package it depends on.
+option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
+if(MORPH_INSTALL)
+    set(_morph_core_cpp_exclude_from_all NO)
+else()
+    set(_morph_core_cpp_exclude_from_all YES)
+endif()
+CPMAddPackage(
+    NAME core-cpp
+    GITHUB_REPOSITORY contour-terminal/core-cpp
+    GIT_TAG v0.3.0
+    VERSION 0.3.0
+    SYSTEM YES
+    EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
+    OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF" "CORE_CPP_WITH_TUI OFF"
+            "CORE_CPP_WITH_TLS OFF" "CORE_CPP_FETCH_DEPS OFF" "CORE_CPP_INSTALL ${MORPH_INSTALL}")
+unset(_morph_core_cpp_exclude_from_all)
+
+# A sanitizer leg instruments core-cpp's compiled modules with morph's own
+# targets: TimeoutScheduler's loop thread runs inside core::net, and a
+# ThreadSanitizer that cannot see one side of a hand-off reports races that
+# are not there and misses ones that are. core-cpp lists those targets in the
+# CORE_CPP_TARGETS global property for exactly this.
+if(DEFINED AF_SANITIZER)
+    get_property(_morph_core_cpp_targets GLOBAL PROPERTY CORE_CPP_TARGETS)
+    foreach(_morph_core_cpp_target IN LISTS _morph_core_cpp_targets)
+        apply_sanitizers(${_morph_core_cpp_target} ${AF_SANITIZER})
+    endforeach()
+    unset(_morph_core_cpp_targets)
+    unset(_morph_core_cpp_target)
+endif()
+
 # Emscripten's single-threaded build has no pthreads; requiring Threads there
 # would force -pthread (SharedArrayBuffer), which we deliberately avoid so the
 # WASM bundle can be served from plain GitHub Pages with no COOP/COEP headers.
@@ -187,7 +240,10 @@ target_include_directories(morph INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(morph INTERFACE glaze::glaze)
+target_link_libraries(morph INTERFACE glaze::glaze core::base core::async core::net)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(morph INTERFACE core::platform)
+endif()
 if(NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(morph INTERFACE Threads::Threads)
 endif()
@@ -816,7 +872,9 @@ morph_verify_warning_flags()
 # add_subdirectory's morph installs its own artefacts, and inheriting ours
 # would put morph's headers and package config into that project's prefix
 # uninvited -- which is the mirror image of the bug above.
-option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
+#
+# MORPH_INSTALL itself is declared above, before core-cpp is added, because
+# core-cpp's own install rules follow it.
 
 if(MORPH_INSTALL)
     include(GNUInstallDirs)

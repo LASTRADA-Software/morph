@@ -575,15 +575,13 @@ Known gaps:
   ships, and it has never been compiled (no Emscripten toolchain here — the
   `ladder-wasm` CI job is a compile gate). Writing `gui/main.cpp` and running
   the organizer-plus-participants demo is named follow-up work.
-- **`Bridge::setExecuteDeadline` used to be unusable from a browser tab, and
-  the fix is CI-compile-verified only.** `EventPoller`'s constructor calls it
-  unconditionally, and it lazily builds a `TimeoutScheduler`, which spawned a
-  `std::thread` — impossible in the `wasm_singlethread` Qt build these
-  clients target. `include/morph/core/timeout_scheduler.hpp` now selects a
-  browser-timer (`emscripten_async_call`) build of itself under
-  `__EMSCRIPTEN__ && !__EMSCRIPTEN_PTHREADS__`, so deadlines still fire, on
-  the main thread. Neither the original hazard nor the fix has been observed
-  on a real Emscripten build; see that header's `@file` comment and
+- **`Bridge::setExecuteDeadline` in a browser tab is CI-compile-verified
+  only.** `EventPoller`'s constructor calls it unconditionally, and it lazily
+  builds a `TimeoutScheduler`. Under `__EMSCRIPTEN__ &&
+  !__EMSCRIPTEN_PTHREADS__` that scheduler starts no thread: its event loop is
+  pumped by the browser's own timer, so deadlines fire on the main thread.
+  The WebAssembly CI jobs compile and link it; nothing here runs it. See
+  `include/morph/core/timeout_scheduler.hpp`'s `@file` comment and
   `docs/spec/core/completion.md`.
 - **No admin-token persistence.** `PollBridge::setAdminToken` installs the
   token as the shared `Bridge`'s default session for the remainder of the

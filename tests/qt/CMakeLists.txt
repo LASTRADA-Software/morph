@@ -104,7 +104,7 @@ catch_discover_tests(morph_qt_tests
 # "QSslConfiguration is an incomplete type" failure an actual SSL-less Qt hits
 # -- confirmed by compiling the pre-fix source this way, which fails with
 # exactly that error. Both source files are compiled into the same
-# try_compile executable because they both live in the morph_qt_impl target
+# try_compile target because they both live in the morph_qt_impl target
 # (see CMakeLists.txt) and must independently satisfy the guard for that
 # target to build under QT_NO_SSL.
 # See qt_websocket_backend.hpp's / qt_websocket_server.hpp's class doc
@@ -120,6 +120,8 @@ catch_discover_tests(morph_qt_tests
 get_target_property(MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS morph INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(MORPH_QT_NO_SSL_GUARD_GLAZE_INCLUDE_DIRS glaze::glaze INTERFACE_INCLUDE_DIRECTORIES)
 list(APPEND MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS ${MORPH_QT_NO_SSL_GUARD_GLAZE_INCLUDE_DIRS})
+# core-cpp's headers, for the reason tests/CMakeLists.txt's guards spell them out.
+list(APPEND MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS "${core-cpp_SOURCE_DIR}/src" "${core-cpp_BINARY_DIR}/include")
 string(REPLACE ";" "\\;" MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS "${MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS}")
 
 # QtWebSocketServer is a Q_OBJECT type, so the try_compile executable below
@@ -140,7 +142,13 @@ if(NOT MORPH_QT_NO_SSL_GUARD_MOC_RESULT EQUAL 0)
         "${MORPH_QT_NO_SSL_GUARD_MOC_ERROR}")
 endif()
 
+# Compiled into a static library, not linked into an executable: the guard is
+# about compiling under QT_NO_SSL, and the code now references core-cpp's
+# compiled modules (through TimeoutScheduler), which a try_compile() scratch
+# project cannot link -- they are built by this project, after configure.
 unset(MORPH_QT_NO_SSL_GUARD_COMPILES CACHE)
+set(_morph_saved_try_compile_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 try_compile(MORPH_QT_NO_SSL_GUARD_COMPILES
     SOURCES
         "${CMAKE_SOURCE_DIR}/src/qt/qt_websocket_backend.cpp"
@@ -152,6 +160,8 @@ try_compile(MORPH_QT_NO_SSL_GUARD_COMPILES
     CXX_STANDARD 23
     COMPILE_DEFINITIONS "-DQT_NO_SSL"
 )
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_morph_saved_try_compile_target_type}")
+unset(_morph_saved_try_compile_target_type)
 if(NOT MORPH_QT_NO_SSL_GUARD_COMPILES)
     message(FATAL_ERROR
         "QT_NO_SSL guard check failed: src/qt/qt_websocket_backend.cpp and/or "

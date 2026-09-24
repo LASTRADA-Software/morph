@@ -107,14 +107,12 @@
 /// constructs a `morph::async::detail::TimeoutScheduler`, which used to
 /// unconditionally spawn a `std::thread` — impossible in the
 /// `wasm_singlethread` Qt build this ladder's WASM clients are compiled
-/// against. `timeout_scheduler.hpp` now selects a browser-timer
-/// (`emscripten_async_call`) build of itself under
-/// `__EMSCRIPTEN__ && !__EMSCRIPTEN_PTHREADS__`, so this constructor is
-/// safe from a browser tab and deadlines still fire — see that file's
-/// `@file` comment and `docs/spec/core/completion.md`. Neither the fix nor
-/// the original hazard has been observed on a real Emscripten build; no
-/// toolchain for one exists in this repository (the `ladder-wasm` CI job is
-/// a compile gate).
+/// against. Under `__EMSCRIPTEN__ && !__EMSCRIPTEN_PTHREADS__` the
+/// scheduler starts no thread: its event loop is host-driven, pumped by the
+/// browser's own timer, so this constructor is safe from a browser tab and
+/// deadlines still fire — see `timeout_scheduler.hpp`'s `@file` comment and
+/// `docs/spec/core/completion.md`. The `wasm-ladder` CI job compiles and
+/// links that build; nothing in this repository runs it.
 ///
 /// @par Default poll interval and its trade-off
 /// `kDefaultInterval` is 3 seconds. This is this class's answer to the
