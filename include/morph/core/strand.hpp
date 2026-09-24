@@ -370,6 +370,14 @@ private:
             {
                 std::scoped_lock const lock{_mapMtx};
                 if (--_inFlight == 0) {
+                    // Inside the `== 0` branch, so a handoff does not signal at
+                    // all: the re-arm above has already incremented for the
+                    // next dispatch, so the count does not reach zero until the
+                    // strand is quiescent. `~StrandExecutor` is the only waiter
+                    // on this variable, so `notify_all` wakes at most one
+                    // thread and is equivalent to `notify_one` here -- there is
+                    // no herd to wake, and no predicate but `_inFlight == 0`
+                    // for a wakeup to land on and be lost.
                     _cv.notify_all();
                 }
             }

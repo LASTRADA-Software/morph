@@ -918,6 +918,71 @@ unseeded and is omitted from the request body until the user touches it, which
 is what distinguishes "not answered" from an explicit `false` for a
 `std::optional<bool>` member.
 
+### Plain number fields — `type: "number"`
+
+glaze emits `{"type": "number"}` for a bare `double` or `float` member, under
+`$defs/double` / `$defs/float` with the type's own range on the definition node:
+
+```json
+"$defs": {"float": {"type": "number",
+                    "minimum": -3.4028234663852886e+38,
+                    "maximum": 3.4028234663852886e+38}},
+"properties": {"score": {"$ref": "#/$defs/float", "x-order": 1}}
+```
+
+Such a member carries no `x-decimalPlaces` and is not a `Quantity`, so none of
+the exact-decimal machinery applies to it. The shipped `DynamicForm.qml`
+renderer draws the plain `TextField` and encodes its text as a JSON **number**,
+which it needs a branch of its own to do: the plain-text fall-through
+(`JSON.stringify(text)`) would submit `{"ratio":"3.5"}` where the schema asks
+for `{"ratio":3.5}`, and a `TextField` applies no validation of its own, so
+`{"ratio":"banana"}` would be submitted just as readily and the form would
+report `ready` for it.
+
+The encoding is:
+
+- **Locale-normalised first**, exactly as a `Quantity`'s entry is: the decimal
+  separator and the digit grouping are the display locale's, and neither
+  belongs in the JSON number (`"1,000.5"` → `1000.5` in a locale that groups on
+  comma).
+- **Grammar `-?\d+(\.\d+)?`** on the normalised text. No exponent, no trailing
+  separator, no bare fraction: a spelling outside it has no literal, so the
+  field is not engaged and the form is not ready — it is never encoded as a
+  string instead.
+- **Digits carried through as typed**, not round-tripped through a JS number,
+  which would re-spell a long entry in exponent form and round it at the
+  seventeenth digit. Only the leading-zero run is removed, because JSON forbids
+  it: `"007.50"` → `7.50`. Trailing fraction zeros are kept — re-spelling the
+  fraction is not the encoder's business.
+- **Gated on the declared range** and on `multipleOf`, like an integer field.
+  For a plain member the range is the one glaze stamps on the type, so a value
+  a `float` cannot hold is refused by the same check that enforces a
+  [`FieldMeta` bound](#per-field-scalar-bounds--minimum--maximum--multipleof).
+  `allFieldBoundsSatisfied` does not check a `double` member — it reads
+  `Quantity`, bare `math::Rational` and integral members only — but `ready` is
+  a claim about the payload satisfying **the schema**, and the schema states
+  the bound.
+
+Three neighbouring shapes are numeric too and encode differently, which is why
+the renderer asks in this order — `Quantity`, then `integer`, then plain
+number:
+
+| Member | Schema | Encoding |
+|---|---|---|
+| `Quantity<U, Dec>` | `"type": ["object","null"]`, `x-decimalPlaces`, `ExtUnits` | exact `{num,den,dp}`, assembled from the typed digits |
+| an integral member | `"type": "integer"` (+ `x-exactMinimum`/`x-exactMaximum` past 2^53) | bare integer, gated on the [exact string bounds](#exact-numeric-bounds--x-exactminimum--x-exactmaximum) |
+| `double` / `float` | `"type": "number"` | bare JSON number, as above |
+
+A generated `Quantity` property is therefore not `"number"` at all. The order
+still matters, because a *decorated* schema can put `x-decimalPlaces` on a
+property whose type is `"number"` — a precise field spelled the plain way. The
+declared precision wins there, and the field keeps the exact encoding.
+
+A bare `math::Rational` member is **not** in this family: its schema is an
+inline object of `num`/`den`/`dp` with no `x-decimalPlaces`, so it is
+[unrepresentable](#what-ready-claims) — the one object-typed member whose C++
+declaration looks scalar.
+
 ### Nullable fields whose type is a `$ref` — `anyOf`
 
 A nullable member whose underlying type is emitted as a definition rather than
@@ -1200,7 +1265,12 @@ two shapes:
 
 - an **object-typed** member that no typed control claims — a
   [nested aggregate](#nested-aggregates-recursive-cycle-safe), whose one scalar
-  control collects text where the schema asks for an object;
+  control collects text where the schema asks for an object. A bare
+  `math::Rational` member is this shape too, and is the instance least likely
+  to be expected: its C++ declaration is a scalar and its schema is an object
+  of `num`/`den`/`dp`. Wrapping it in a `Quantity` — or giving the field an
+  `x-decimalPlaces` — is what hands it the exact-decimal control that encodes
+  that shape;
 - an **array whose `items` are objects** (or arrays), which takes the
   [`type: "array"` control](#array-fields--type-array) and encodes each entry as
   a JSON string. A control *was* drawn and the member is unrepresentable anyway,

@@ -128,6 +128,18 @@ turns it into a set of per-key serial queues:
 - `_inFlight` counts strand lambdas currently dispatched to the base executor.
   The destructor waits on `_cv` until `_inFlight == 0` before destroying the
   map, so no pool thread can touch `_strands` after the executor is gone.
+- **The drain's own work is one handoff per task and one notification per
+  quiescence, whatever the host is doing.** `_cv` is signalled only where
+  `--_inFlight` reaches zero, and `~StrandExecutor` is its only waiter, so the
+  `notify_all` wakes at most one thread — a handoff between two tasks for one
+  key signals nothing. What a loaded host adds is therefore *latency between*
+  those operations, not more of them: a drain of N tasks costs N dispatches
+  whose wall clock is the base executor's wakeup latency under the run queue of
+  the moment. Measured on a 12-thread host, the same drain's per-task cost
+  spans three orders of magnitude with machine load while every count above
+  stays fixed. A task body that calls `std::this_thread::yield()` pays far more
+  again, because a yielding thread goes to the back of the run queue with no
+  sleeper credit; that is a property of the posted task, not of the strand.
 - **`~StrandExecutor` is a complete-drain barrier, not only a use-after-free
   guard.** The re-arm in `scheduleNext` increments `_inFlight` for the next
   dispatch *before* the current dispatch decrements its own, so the count never
