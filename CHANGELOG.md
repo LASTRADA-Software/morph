@@ -119,6 +119,16 @@ API surface).
 
 ### Added
 
+- **`SlotRegistry.byKind(kind, component)` — one host control per kind of
+  control.** The JSON type `byType` keys on does not identify a control: a
+  `Quantity` and a nested object are both `"object"`, a `Choice` is
+  `"integer"`, an enum and a `Timestamp` are `"string"`. Field descriptors now
+  carry `kind` (`quantity`, `choice`, `enum`, `datetime`, `date`, `boolean`,
+  `integer`, `number`, `string`, `array`, `objectArray`, `object`), and
+  `resolve()` takes it as an optional sixth argument, consulted after unit and
+  before type. See `docs/spec/forms/forms.md`, "Theming / component-override
+  registry" (fixes #812).
+
 - **A locale numeric entry accepts an explicit `+`.**
   `morph::render::normalizeLocaleNumber` had no notion of a positive sign: a
   leading `+` fell through to the "any other character is malformed" arm, so
