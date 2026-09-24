@@ -87,7 +87,7 @@ namespace pastebin::gui {
 /// The rung's two neighbours are already covered and neither mechanism reaches
 /// here: `PastePresenter` inherits `Presenter::track()`, which re-checks a
 /// `QPointer` before touching the presenter (`examples/common/gui/presenter.hpp`
-/// — added for a real AddressSanitizer `stack-use-after-scope`, morph#137), and
+/// — without it AddressSanitizer reports a `stack-use-after-scope`), and
 /// `PasteBridge` relays through Qt signal/slot connections, which Qt severs
 /// when either end is destroyed. `FormsBridge` goes through neither, so it
 /// takes the framework's general answer:

@@ -195,7 +195,7 @@ struct GetChangesSinceResult {
     /// @brief The boundary this poll ran to, captured *before* the query
     ///        itself (`BookmarkModel::execute`'s own doc comment, Task 7,
     ///        has the full argument for why) — the next poll's `since`.
-    ///        `ChangesCursor` (issue #43), not a bare `Timestamp`: a
+    ///        `ChangesCursor`, not a bare `Timestamp`: a
     ///        millisecond-resolution timestamp alone cannot distinguish a
     ///        write that lands in the exact same millisecond as this
     ///        instant from one that happened strictly before it.

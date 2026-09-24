@@ -17,9 +17,9 @@
 /// an ambient dependency like time is, so a test that wants to exercise the
 /// retry path has only two options without a seam: occupy a share of the
 /// keyspace and *sample* the resulting collision distribution, or nothing.
-/// Sampling is what morph#365 was filed about — the case's outcome then
-/// depends on `std::random_device`, which no Catch2 `--rng-seed` reaches, so
-/// it can neither be reproduced nor pinned.
+/// Sampling is the hazard this replaces — a sampled case's outcome depends on
+/// `std::random_device`, which no Catch2 `--rng-seed` reaches, so it can
+/// neither be reproduced nor pinned.
 ///
 /// A **process-global** provider with a scoped override, rather than a
 /// constructor parameter, for exactly the reason `clock.hpp` records for

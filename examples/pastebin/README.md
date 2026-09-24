@@ -190,9 +190,7 @@ must both work unchanged.
   the returned column count, but the first `FetchRow()` throws SQLSTATE
   24000 "Invalid cursor state"; it never opens a cursor over the returned
   rows — filed upstream as
-  [`LASTRADA-Software/Lightweight#545`](https://github.com/LASTRADA-Software/Lightweight/issues/545),
-  tracked morph-side as
-  [`LASTRADA-Software/morph#58`](https://github.com/LASTRADA-Software/morph/issues/58).
+  [`LASTRADA-Software/Lightweight#545`](https://github.com/LASTRADA-Software/Lightweight/issues/545).
   `PasteModel::execute(const GetPaste&)` therefore runs a
   `SqlTransaction` around (1) the identical conditional `UPDATE` minus its
   `RETURNING` clause, dispatched on `NumRowsAffected()`, and (2) an ordinary
@@ -402,9 +400,8 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   standalone finding. The sqliteodbc `RETURNING`/`SQLFetch` gap (see
   "Burn-atomicity" above) is filed upstream against
   [`Lightweight`](https://github.com/LASTRADA-Software/Lightweight/issues/545)
-  and tracked morph-side as
-  [`morph#58`](https://github.com/LASTRADA-Software/morph/issues/58) — a
-  genuine third-party ODBC driver limitation, not fixable in morph source.
+  and tracked morph-side — a genuine third-party ODBC driver limitation, not
+  fixable in morph source.
 - The WASM client's verification status, above.
 - **`ladder-tests` still builds no GUI.** That job's distro Qt is 6.4.2, below
   the 6.5 floor `MORPH_BUILD_FORMS_QML` requires, so it configures without the

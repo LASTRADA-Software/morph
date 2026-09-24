@@ -454,8 +454,7 @@ TEST_CASE("App::stopBackgroundJobs is idempotent, and ~App still stops the timer
 TEST_CASE("App teardown survives fetch dispatches still outstanding (the member-order guard)", "[bookmarks][app]") {
     // The guard for `App`'s member declaration order, which is the entire
     // protection against a `post()` on a freed `QtExecutor`
-    // (`bookmarks/app/app.hpp`'s comment above `_fetchExecutor`, and morph#127,
-    // which was a shipped bug of exactly that class). `_fetchExecutor` is
+    // (`bookmarks/app/app.hpp`'s comment above `_fetchExecutor`). `_fetchExecutor` is
     // declared *first*, so it is destroyed *last* — after `~_pool` has joined
     // its worker threads. Move it to its natural reading position at the end of
     // the member list and this case segfaults deterministically:

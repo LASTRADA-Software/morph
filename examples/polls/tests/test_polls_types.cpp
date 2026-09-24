@@ -29,7 +29,7 @@ TEST_CASE("PollsError hierarchy: each derived type carries its own message", "[p
 
 TEST_CASE("polls id types: fromRowId rejects the one value they cannot represent", "[polls][types]") {
     // 0 is these types' "not entered" sentinel, so an id of 0 would arrive as
-    // *absent* and a real record would read as "no record" (morph#215). Row
+    // *absent* and a real record would read as "no record". Row
     // ids start at 1, so this never fires in practice -- the point is that a
     // seeded, migrated, or externally supplied 0 fails loudly at the boundary
     // instead of collapsing silently one layer below the QML surface.

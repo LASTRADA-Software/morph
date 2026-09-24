@@ -61,7 +61,7 @@ namespace {
 }
 
 /// @brief `morph::offline::IReplayLedger` over `db::ImportedOpRecord`
-///        (morph#226) -- the first rung migrated onto the promoted interface.
+///        -- the first rung migrated onto the promoted interface.
 ///
 /// A file-local class rather than its own header: it has exactly one
 /// consumer (`ImportBookmarks::execute`, below), and every one of its
@@ -544,12 +544,11 @@ GetChangesSinceResult BookmarkModel::execute(const GetChangesSince& action) {
         action.since.timestampMs.hasValue() ? (*action.since.timestampMs).value.time_since_epoch().count() : 0;
     const std::uint64_t sinceLastId = static_cast<std::uint64_t>(action.since.lastId.value_or(0));
 
-    // See ChangesCursor's doc comment (issue #43): a strict `updatedAtMs >
-    // sinceMs` alone drops a write landing in the exact same millisecond as
-    // `sinceMs`. The id tie-break recovers it without over-including: any
-    // row strictly after sinceMs qualifies outright; a row *at* sinceMs
-    // qualifies only if its id is past the last one already delivered at
-    // that same instant.
+    // See ChangesCursor's doc comment: a strict `updatedAtMs > sinceMs` alone
+    // drops a write landing in the exact same millisecond as `sinceMs`. The id
+    // tie-break recovers it without over-including: any row strictly after
+    // sinceMs qualifies outright; a row *at* sinceMs qualifies only if its id
+    // is past the last one already delivered at that same instant.
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     auto rows =
         mapper->Query<db::BookmarkRecord>()

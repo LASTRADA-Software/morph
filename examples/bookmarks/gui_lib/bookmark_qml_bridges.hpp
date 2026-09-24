@@ -105,10 +105,10 @@ namespace bookmarks::gui {
 /// reaches here: `BookmarkPresenter`/`TagPresenter`/`SharedFeedPresenter`
 /// inherit `Presenter::track()`, which re-checks a `QPointer` before touching
 /// the presenter (`examples/common/gui/presenter.hpp` — added for a real
-/// AddressSanitizer `stack-use-after-scope`, morph#137), and the three
-/// `*Bridge` classes over them relay through Qt signal/slot connections, which
-/// Qt severs when either end is destroyed. `FormsBridge` dispatches directly
-/// and goes through neither, so it takes the framework's general answer:
+/// AddressSanitizer `stack-use-after-scope`), and the three `*Bridge` classes
+/// over them relay through Qt signal/slot connections, which Qt severs when
+/// either end is destroyed. `FormsBridge` dispatches directly and goes through
+/// neither, so it takes the framework's general answer:
 /// `morph::async::CallbackScope` (`docs/spec/core/callback_scope.md`) as a
 /// **last-declared member**, with every `this`-capturing callback wrapped in
 /// `_callbacks.guard(...)`. Members are destroyed in reverse declaration

@@ -49,8 +49,8 @@ namespace pastebin {
 /// `validate()` evaluates that declaration through
 /// `morph::forms::allFieldBoundsSatisfied`, and `schemaJson<CreatePaste>()`
 /// serves the identical two numbers to the client as standard JSON-Schema
-/// keys, so the constraint is stated once (morph#310). Every other `Reads` in
-/// the rung is *produced* by
+/// keys, so the constraint is stated once. Every other `Reads` in the rung is
+/// *produced* by
 /// the model from a whole `std::int64_t` (`paste_model.cpp`'s `readsOf`), so
 /// `PasteView`'s two `Reads` members are whole by construction rather than by
 /// validation, and `EditPaste` carries no read count at all.

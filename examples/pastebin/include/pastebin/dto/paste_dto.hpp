@@ -94,7 +94,7 @@ struct CreatePaste {
                                                                     "editability"};
 
     /// @brief The burn budget's own rules, declared where the schema can serve
-    ///        them (`morph::forms::FieldMeta`, morph#310).
+    ///        them (`morph::forms::FieldMeta`).
     ///
     /// `minimum = 1` and `multipleOf = 1` are the whole of the burn-budget
     /// rule: at least one read, and a whole number of them. Both are checked
