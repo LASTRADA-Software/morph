@@ -514,12 +514,17 @@ if(MORPH_BUILD_FORMS_QML)
     # stops being self-contained must fail here, not silently pass (morph#230).
     set_target_properties(morph_qt_forms PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
     target_link_libraries(morph_qt_forms INTERFACE morph Qt6::Core)
+    # qt_executor.hpp is listed here too, not only under morph::qt: the
+    # controller core includes it, and morph::qt (MORPH_BUILD_QT, which needs
+    # Qt WebSockets) is not part of every install that ships this header. It
+    # needs nothing beyond QtCore.
     target_sources(morph_qt_forms
         INTERFACE
         FILE_SET HEADERS
         BASE_DIRS include
         FILES
             include/morph/qt/forms/forms_controller_core.hpp
+            include/morph/qt/qt_executor.hpp
     )
 endif()
 
@@ -834,6 +839,55 @@ if(MORPH_INSTALL)
         )
     endif()
 
+    # The MorphForms QML module (MORPH_BUILD_FORMS_QML): its backing library,
+    # its plugin, and the object libraries a static QML module carries --
+    # without the latter an installed module links but registers no QML types
+    # and embeds no .qml files. The qmldir/qmltypes/sources go to a QML import
+    # directory for tooling (qmllint, qmlls, a consumer's qmlcachegen); at run
+    # time the module resolves from its embedded resources.
+    set(MORPH_INSTALL_QMLDIR "${CMAKE_INSTALL_LIBDIR}/qml" CACHE STRING
+        "Import directory (relative to the prefix) the MorphForms QML module is installed under")
+    if(TARGET morph_forms_module)
+        set_target_properties(morph_forms_module PROPERTIES EXPORT_NAME forms_qml)
+        set_target_properties(morph_forms_moduleplugin PROPERTIES EXPORT_NAME forms_qmlplugin)
+        # A generated target's name starts with morph_forms_module(plugin)_;
+        # exporting it under that name would read morph::morph_... downstream.
+        foreach(_morph_forms_target IN LISTS MORPH_FORMS_QML_OUTPUT_TARGETS)
+            string(REGEX REPLACE "^morph_" "" _morph_forms_export_name "${_morph_forms_target}")
+            set_target_properties(${_morph_forms_target} PROPERTIES EXPORT_NAME ${_morph_forms_export_name})
+        endforeach()
+        install(TARGETS morph_forms_module morph_forms_moduleplugin ${MORPH_FORMS_QML_OUTPUT_TARGETS}
+            EXPORT morphTargets
+            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+            LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+            RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+            OBJECTS DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        )
+        list(APPEND MORPH_INSTALLED_COMPONENTS forms_qml)
+
+        get_target_property(_morph_forms_dir morph_forms_module QT_QML_MODULE_OUTPUT_DIRECTORY)
+        set(_morph_forms_qml_dest "${MORPH_INSTALL_QMLDIR}/MorphForms")
+        install(FILES "${_morph_forms_dir}/morph_forms_module.qmltypes"
+            DESTINATION "${_morph_forms_qml_dest}")
+        install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/qt/forms/qml/"
+            DESTINATION "${_morph_forms_qml_dest}/qml"
+            FILES_MATCHING PATTERN "*.qml" PATTERN "*.js")
+        # qmldir names the plugin by its build-tree target; a consumer sees the
+        # exported name, which is what a static-Qt build's QML plugin import
+        # looks the plugin up by.
+        install(CODE "
+            file(READ \"${_morph_forms_dir}/qmldir\" _morph_qmldir)
+            string(REPLACE \"linktarget morph_forms_moduleplugin\" \"linktarget morph::forms_qmlplugin\"
+                   _morph_qmldir \"\${_morph_qmldir}\")
+            file(WRITE \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_morph_forms_qml_dest}/qmldir\" \"\${_morph_qmldir}\")
+            message(STATUS \"Installing: \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_morph_forms_qml_dest}/qmldir\")
+        ")
+        unset(_morph_forms_dir)
+        unset(_morph_forms_qml_dest)
+        unset(_morph_forms_target)
+        unset(_morph_forms_export_name)
+    endif()
+
     install(EXPORT morphTargets
         FILE morphTargets.cmake
         NAMESPACE morph::
@@ -844,6 +898,7 @@ if(MORPH_INSTALL)
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/morphConfig.cmake.in"
         "${CMAKE_CURRENT_BINARY_DIR}/morphConfig.cmake"
         INSTALL_DESTINATION "${MORPH_CMAKE_INSTALL_DIR}"
+        PATH_VARS MORPH_INSTALL_QMLDIR
     )
 
     # SameMajorVersion follows docs/spec/VERSIONING.md, which is what decides

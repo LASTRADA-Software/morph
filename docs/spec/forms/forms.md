@@ -1247,8 +1247,22 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
   structurally, not by name). It builds whenever `-DMORPH_BUILD_FORMS_QML=ON`,
   independent of `MORPH_BUILD_EXAMPLES` — an app depends on it directly
   (`target_link_libraries(... morph_forms_moduleplugin)` plus `import
-  MorphForms` in its own QML) instead of copying or forking it.
-- **`include/morph/qt/forms/forms_controller_core.hpp`** ships
+  MorphForms` in its own QML) instead of copying or forking it. **Installed**,
+  it is the `forms_qml` component: `find_package(morph CONFIG REQUIRED
+  COMPONENTS forms_qml qt_forms)` and `morph::forms_qmlplugin`. The install
+  carries the backing library, the plugin and the object libraries a static
+  QML module needs (its compiled resources and the plugin's static
+  initialiser — without them an application links and then finds no
+  `MorphForms` at run time), plus `qmldir`/`.qmltypes`/sources under
+  `MORPH_INSTALL_QMLDIR` for tooling, exported as `morph_QML_IMPORT_PATH`. The
+  installed `qmldir`'s `linktarget` names `morph::forms_qmlplugin`, the name a
+  static-Qt build's QML plugin import resolves.
+  `scripts/check_forms_qml_install.sh` (CI job `install-export-forms-qml`)
+  builds and runs an application against an install, and proves the plugin is
+  what it measured by running the same application without it.
+- **`include/morph/qt/forms/forms_controller_core.hpp`** (component
+  `qt_forms`, which also ships the `qt_executor.hpp` it includes, so an install
+  without `MORPH_BUILD_QT` still compiles it) ships
   `morph::qt::forms::FormsControllerCore<Model>`, a header-only, model-agnostic
   template (no `Q_OBJECT` — Qt cannot register a class *template* for QML) that
   owns or composes over the `Bridge`/`BridgeHandler<Model>`/`QtExecutor`
