@@ -679,6 +679,33 @@ if(MORPH_BUILD_TESTS)
     target_include_directories(morph_test_log_level INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
     target_link_libraries(morph_test_log_level INTERFACE morph::morph Catch2::Catch2)
 
+    # On Windows a failed assert(), an abort() or a crash in a test opens a
+    # modal dialog (CRT assert, abort, Windows Error Reporting) and waits for a
+    # click: under ctest nobody clicks, so the test holds the run until its
+    # timeout, and on a desktop it lands on the user's screen. core-cpp's
+    # core::testing_dialogs is one object whose static initialiser calls
+    # core::testing::suppressWindowsDialogs() before main() runs: CRT reports
+    # and abort()'s message go to stderr, abort() asks for no fault report,
+    # Windows Error Reporting shows no UI, and the process exits, so the test
+    # fails loudly instead. It is linked into test executables only, never into
+    # morph or the example applications.
+    #
+    # Every Catch2 suite reaches it through morph_test_log_level, which each of
+    # them links (through morph_test_main or directly, for the ones that own a
+    # QCoreApplication main). An OBJECT library's objects reach only the target
+    # that links it directly, so they are named as an interface link item too,
+    # as core-cpp's own core::testing_main does. Test executables without
+    # Catch2 call morph_suppress_test_dialogs() themselves.
+    function(morph_suppress_test_dialogs target)
+        if(WIN32 AND TARGET core-cpp-testing_dialogs)
+            target_link_libraries(${target} PRIVATE core::testing_dialogs)
+        endif()
+    endfunction()
+    if(WIN32 AND TARGET core-cpp-testing_dialogs)
+        target_link_libraries(morph_test_log_level INTERFACE
+            core::testing_dialogs "$<TARGET_OBJECTS:core-cpp-testing_dialogs>")
+    endif()
+
     # STATIC, not OBJECT: the only symbol it carries is `main`, which is always
     # an undefined symbol in the linking executable, so the archive member is
     # always extracted. (An OBJECT library would work too; a listener-based

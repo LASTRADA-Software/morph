@@ -4,10 +4,12 @@
 
 add_executable(qt_test_server qt_test_server_main.cpp qt_test_models.hpp)
 target_link_libraries(qt_test_server PRIVATE morph_qt_impl)
+morph_suppress_test_dialogs(qt_test_server)
 apply_warnings(qt_test_server)
 
 add_executable(qt_test_client qt_test_client_main.cpp qt_test_models.hpp)
 target_link_libraries(qt_test_client PRIVATE morph_qt_impl)
+morph_suppress_test_dialogs(qt_test_client)
 apply_warnings(qt_test_client)
 
 # AF_SANITIZER, for the same reason these two carry apply_coverage(): the

@@ -307,6 +307,7 @@ foreach(_skew_role old new)
     target_compile_definitions(morph_journal_skew_${_skew_role}
         PRIVATE MORPH_SKEW_ROLE_${_skew_role_upper})
     target_link_libraries(morph_journal_skew_${_skew_role} PRIVATE morph::morph)
+    morph_suppress_test_dialogs(morph_journal_skew_${_skew_role})
     apply_warnings(morph_journal_skew_${_skew_role})
     if(DEFINED AF_SANITIZER)
         apply_sanitizers(morph_journal_skew_${_skew_role} ${AF_SANITIZER})
@@ -502,6 +503,7 @@ target_link_libraries(morph_guard_probe_deps INTERFACE
 add_executable(morph_client_only_guard_links compile_checks/client_only_no_model_link.cpp)
 target_compile_definitions(morph_client_only_guard_links PRIVATE MORPH_CLIENT_ONLY)
 target_link_libraries(morph_client_only_guard_links PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_client_only_guard_links)
 add_test(NAME morph_client_only_guard_links COMMAND morph_client_only_guard_links)
 set_tests_properties(morph_client_only_guard_links PROPERTIES TIMEOUT 60)
 
@@ -552,6 +554,7 @@ unset(_morph_client_only_unresolved)
 add_executable(morph_client_only_runtime_throw compile_checks/client_only_runtime_throw.cpp)
 target_compile_definitions(morph_client_only_runtime_throw PRIVATE MORPH_CLIENT_ONLY)
 target_link_libraries(morph_client_only_runtime_throw PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_client_only_runtime_throw)
 add_test(NAME morph_client_only_runtime_throw COMMAND morph_client_only_runtime_throw)
 set_tests_properties(morph_client_only_runtime_throw PROPERTIES TIMEOUT 60)
 
@@ -565,6 +568,7 @@ set_tests_properties(morph_client_only_runtime_throw PROPERTIES TIMEOUT 60)
 add_executable(morph_client_only_facade compile_checks/client_only_facade_no_model_header.cpp)
 target_compile_definitions(morph_client_only_facade PRIVATE MORPH_CLIENT_ONLY)
 target_link_libraries(morph_client_only_facade PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_client_only_facade)
 add_test(NAME morph_client_only_facade COMMAND morph_client_only_facade)
 set_tests_properties(morph_client_only_facade PROPERTIES TIMEOUT 60)
 
@@ -577,4 +581,48 @@ if(DEFINED AF_SANITIZER)
         apply_sanitizers(${_morph_guard_probe} ${AF_SANITIZER})
     endforeach()
     unset(_morph_guard_probe)
+endif()
+
+# ── Windows dialog canary ────────────────────────────────────────────────────
+# Proves that a morph test executable dies on a failed assert() or an abort()
+# instead of waiting on a dialog nobody will click, and that an invalid CRT
+# parameter is handled rather than raising one. Its main() asks for nothing:
+# linking core::testing_dialogs, as every test executable here does, is what
+# installs the suppression. Modelled on core-cpp's WindowsDialogCanary, and
+# judged the same way: by the marker each mode prints before it fails
+# (PASS_REGULAR_EXPRESSION, which also makes ctest ignore the exit status), not
+# by WILL_FAIL, which would score a run that never reached its assertion as a
+# pass. The TIMEOUT is what catches a dialog: a run still waiting when it
+# expires is waiting for a click.
+if(WIN32 AND TARGET core-cpp-testing_dialogs)
+    add_executable(morph_windows_dialog_canary windows_dialog_canary.cpp)
+    morph_suppress_test_dialogs(morph_windows_dialog_canary)
+    foreach(_mode IN ITEMS assert abort invalid-parameter)
+        add_test(NAME morph_windows_dialog_canary.${_mode} COMMAND morph_windows_dialog_canary ${_mode})
+        # `assert` and `abort` must kill the process; `invalid-parameter` must
+        # survive, because the suppression installs a no-op handler, so the one
+        # marker is the failure for two modes and the pass for the third.
+        set(_pass "failing by ${_mode}")
+        set(_fail "CONTINUED AFTER FAILURE")
+        if(_mode STREQUAL "invalid-parameter")
+            set(_pass "CONTINUED AFTER FAILURE")
+            set(_fail "")
+        endif()
+        # A Debug CRT writes abort()'s message to stderr, and the suppression
+        # keeps it there rather than dropping it: the abort run must show it. A
+        # Release UCRT writes none, and a multi-config generator does not say
+        # which it builds, so those keep the "failing by" marker.
+        if(_mode STREQUAL "abort" AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(_pass "abort\\(\\) has been called")
+        endif()
+        set_tests_properties(morph_windows_dialog_canary.${_mode} PROPERTIES
+            PASS_REGULAR_EXPRESSION "${_pass}"
+            FAIL_REGULAR_EXPRESSION "${_fail}"
+            TIMEOUT 60
+            SKIP_RETURN_CODE 77
+            LABELS "canary")
+    endforeach()
+    unset(_mode)
+    unset(_pass)
+    unset(_fail)
 endif()
