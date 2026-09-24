@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Schema versioning (README build order §4, review D4 — mandatory, no socket
-// needed). The claim under test is a *split* one, and upstream issue #164
-// moved where the split falls:
+// needed). The claim under test is a *split* one:
 //
 //   values are version-bound; structure is not.
 //

@@ -425,7 +425,7 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
         // does so through `Rational`, never a `double`.
         const auto reading = *capture.value * dilutionMultiplier;
 
-        // One declaration, both jobs (upstream issue #164). This is the same
+        // One declaration, both jobs. This is the same
         // `versionConstraints(...)` the catalogue built to decorate the served
         // form's `x-decimalPlaces` / `x-minimum` / `x-maximum`, so the numbers
         // the operator's renderer honoured are literally the numbers checked
@@ -594,7 +594,7 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
 
         // At-most-once, enforced here because the queue is documented not to
         // enforce it -- and because the shipped queues disagree about whether
-        // they do anyway (morph#175).
+        // they do anyway.
         if (alreadyDecided(*action.operationKey)) {
             return ReplayCaptureResult{.outcome = ReplayOutcome::Skipped, .sampleId = action.sampleId};
         }

@@ -41,14 +41,13 @@ namespace lims::gui {
 /// a schema-driven form body -- `submitIfValid("CaptureConcentration", ...)`
 /// -- so the number travels as the exact rational the shipped renderer built
 /// from the served `x-decimalPlaces`, and the model checks that precision
-/// against the analysis version's own declaration. An earlier
-/// `captureReading(versionId, double, ...)` entry point converted the value
-/// with `Concentration::fromDouble` at the field's declared precision, which
-/// was exact but *rounding*: it made the model's over-precision refusal (the
-/// rung README's §3 decision 7) unreachable from the GUI, and it put the only
+/// against the analysis version's own declaration. There is deliberately no
+/// `captureReading(versionId, double, ...)` overload: converting the value with
+/// `Concentration::fromDouble` at the field's declared precision is exact but
+/// *rounding*, which makes the model's over-precision refusal (the rung
+/// README's §3 decision 7) unreachable from the GUI, and it would put the only
 /// `double` on this rung's QML surface, against the convention
-/// `lims_qml_conversions.hpp` states. It was deleted rather than documented
-/// (morph#287).
+/// `lims_qml_conversions.hpp` states.
 class ResultPresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
 public:

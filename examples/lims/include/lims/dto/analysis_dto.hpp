@@ -46,11 +46,12 @@ struct AnalysisBound {
 ///        analysis version — the single declaration that both decorates the
 ///        served schema and checks the submitted reading.
 ///
-/// This is the rung's use of `morph::forms::InstanceConstraints` (upstream
-/// issue #164). Before it existed the version's precision had to be served as
-/// a second, app-private key beside the framework's `x-decimalPlaces` and the
-/// check re-implemented by hand in `SampleModel`, and the specification range
-/// could only be served as a key no code anywhere read.
+/// This is the rung's use of `morph::forms::InstanceConstraints`, the
+/// framework's own instance-constraint seam. Without it the version's precision
+/// would have to be served as a second, app-private key beside the framework's
+/// `x-decimalPlaces` with the check re-implemented by hand in `SampleModel`,
+/// and the specification range could only be served as a key no code anywhere
+/// read.
 /// @param field The wire (JSON) field name the reading is submitted under.
 /// @param decimalPlaces The version's declared decimal places.
 /// @param specLow The version's inclusive lower specification bound, if any.

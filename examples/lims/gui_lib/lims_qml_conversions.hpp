@@ -42,7 +42,7 @@
 namespace lims::gui {
 
 /// An id as the plain number QML rows and invokables carry, `-1` when
-/// unengaged. Re-exported rather than redefined (morph#169) so this rung's
+/// unengaged. Re-exported rather than redefined so this rung's
 /// `-1` is the same named `kNoId` the other four rungs publish, and so the
 /// name stays `lims::gui::idNumber` for the callers and tests that use it.
 using ::morph::ladder::gui::idNumber;
@@ -82,7 +82,7 @@ template <typename Q>
 /// type's: `toDecimalString` reports an absent value as `"N/A"` — so that
 /// `toString == toDecimalString + display` holds for every value — and a QML
 /// view showing an unfilled measurement wants an empty cell, not the letters
-/// `N/A` baked into its text. See morph#199.
+/// `N/A` baked into its text.
 /// @tparam Q The `Quantity` specialisation.
 /// @param quantity The value to render.
 /// @return Its shortest exact decimal at its own precision, or `""`.

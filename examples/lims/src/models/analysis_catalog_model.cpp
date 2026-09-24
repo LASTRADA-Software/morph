@@ -75,7 +75,7 @@ void applyBounds(db::AnalysisVersionRecord& row, const Action& action) {
 /// data" boundary the README predicts.
 ///
 /// What is no longer app-private is the part the framework has a vocabulary
-/// for. `morph::forms::InstanceConstraints` (upstream issue #164) carries the
+/// for. `morph::forms::InstanceConstraints` carries the
 /// version's precision and specification range into `x-decimalPlaces`,
 /// `x-minimum` and `x-maximum` — the framework's own keys — and the same
 /// declaration is what `SampleModel` checks a submitted reading against, so

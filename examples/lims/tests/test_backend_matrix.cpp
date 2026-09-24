@@ -200,7 +200,7 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     // actually drives it: the client drains its own queue and re-dispatches
     // each item as an ordinary action through its authenticated `Bridge`.
     // That is what makes `QueuedCapture`'s `capturedBy` check mean anything —
-    // see this rung's README §7 decision and morph#201 for why the
+    // see this rung's README §7 decision for why the
     // framework's own `onBackendChanged()` drain cannot carry a session.
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
@@ -301,8 +301,7 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
     // for this rung: a lab reading replayed with no identified author is
     // exactly what the README calls disqualifying. But it does mean the
     // framework's own replay seam cannot carry an authenticated replay, which
-    // is why §7's supported path is the re-dispatch above. See
-    // morph#201.
+    // is why §7's supported path is the re-dispatch above.
     DbFixture fixture;
 
     auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();

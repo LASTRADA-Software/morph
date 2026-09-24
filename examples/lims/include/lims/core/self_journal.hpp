@@ -170,7 +170,7 @@ private:
         // this rung records is *unstamped*, and a later replay against a
         // renamed field would decode it to a default and report the wrong
         // state confidently -- the failure this rung's README names as the
-        // ladder's open question (issue #174). Empty for an action whose
+        // ladder's open question. Empty for an action whose
         // ActionTraits is hand-written; see docs/spec/journal/journal.md,
         // "Payload schema fingerprint".
         entry.schema = ::morph::model::detail::actionPayloadSchema<Action>();

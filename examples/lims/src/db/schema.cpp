@@ -8,7 +8,7 @@
 namespace lims::db {
 
 void configure(const std::string& connectionString) {
-    // morph#740: nothing in Lightweight stops a pooled DataMapper from being
+    // Nothing in Lightweight stops a pooled DataMapper from being
     // returned with a transaction still open on it -- `DataMapperPool::Return`
     // does no transaction cleanup, and the cost lands on the next, unrelated
     // borrower as a 60s stall and a `database is locked` it did not cause.

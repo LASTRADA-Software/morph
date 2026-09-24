@@ -76,7 +76,7 @@ TEST_CASE("Every lims bridge exposes exactly the surface gui/qml binds, and noth
     // the shared handler, so it leaves that handler attached to the new sample
     // the same way the typed call did (`BridgeHandler::execute`'s `ResultKeyed`
     // branch). Neither typed invokable added anything beyond that any more, so
-    // both are gone (morph#309, closing morph#287's last two exemptions).
+    // both are gone, so neither needs an exemption here.
 
     // `submitIfValid` on both bridges is called from the shipped `MorphForms`
     // renderer's QML (`src/qt/forms/qml/DynamicForm.qml`'s `submit()` and its

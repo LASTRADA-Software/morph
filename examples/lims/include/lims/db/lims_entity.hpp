@@ -172,8 +172,7 @@ struct OperatorRecord {
 /// and never interprets, requires, or enforces uniqueness on it"). This table
 /// is that enforcement, made durable: a second delivery of the same logical
 /// field update is skipped rather than acted on again — which matters because
-/// the shipped queues disagree about whether they dedup at enqueue time (see
-/// morph#175).
+/// the shipped queues disagree about whether they dedup at enqueue time.
 ///
 /// A row is written once the operation reaches a *terminal* decision, which is
 /// applied **or** flagged as a conflict — not only applied. A flagged item is
