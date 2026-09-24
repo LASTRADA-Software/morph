@@ -325,7 +325,7 @@ TEST_CASE("QuoteModel journals its edits against the attached identity", "[crm][
     }
 }
 
-// ── GetQuote: registered on the wire, driven by nothing (morph#412) ──────
+// ── GetQuote: registered on the wire, driven by nothing ──────────────────
 //
 // `BRIDGE_REGISTER_ACTION(crm::QuoteModel, crm::GetQuote, "GetQuote", ...)`
 // puts this action on the rung's wire surface, and the per-miss audit of

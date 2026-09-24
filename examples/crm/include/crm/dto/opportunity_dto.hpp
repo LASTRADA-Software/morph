@@ -42,7 +42,7 @@ struct OpportunityView {
 
 /// @brief README build order §7 ("Dynamic logic... conditional required
 ///        encoded in the served schema"), using the shipped `requiredWhen`
-///        rule (morph#78) rather than a hand-written check: once a rep
+///        rule rather than a hand-written check: once a rep
 ///        enters an expected close value for the deal, the schema itself
 ///        demands a primary contact before the record can be saved — a
 ///        deal with real money behind it needs someone to actually talk to.

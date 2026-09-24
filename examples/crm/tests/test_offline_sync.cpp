@@ -16,7 +16,7 @@
 
 // ── GCC 16's -Warray-bounds false positive inside libstdc++'s shared_ptr ────
 //
-// morph#725, and the same block as `test_pipeline.cpp`'s -- which carries the
+// The same block as `test_pipeline.cpp`'s -- which carries the
 // full measurement, the sizes, and the reason this wraps only the `#include`
 // block. Short form: at -O2/-O3, GCC 16 speculatively devirtualizes
 // `ModelFactory::create<crm::AccountModel>()`'s `IModelHolder::attachActionLog`
@@ -95,7 +95,7 @@ struct Deal {
 /// Calls `onBackendChanged()` directly, from a thread with a session
 /// installed — the same documented divergence from the real
 /// `switchBackend`-posted path that `test_offline_capture.cpp`'s own
-/// `reconnect()` doc comment names (morph#201): what this exercises is the
+/// `reconnect()` doc comment names: what this exercises is the
 /// *classification* logic, the same code the supported path runs.
 /// @param queue The queue to drain.
 /// @param principal The reconnecting operator.

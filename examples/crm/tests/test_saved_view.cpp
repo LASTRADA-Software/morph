@@ -235,7 +235,7 @@ TEST_CASE("DeleteSavedView naming a nonexistent view is NotFound", "[crm][saved_
 }
 
 // The sibling of `AccountModel`/`LeadModel`/`OpportunityModel`/`QuoteModel`'s
-// own "journals its edits against the attached identity" case (morph#412).
+// own "journals its edits against the attached identity" case.
 // `SavedViewModel::attachActionLog` was called by no test at all, so nothing
 // executed proved this model records what it writes.
 //

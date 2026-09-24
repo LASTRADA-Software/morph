@@ -7,7 +7,7 @@
 
 // ── GCC 16's -Warray-bounds false positive inside libstdc++'s shared_ptr ────
 //
-// morph#725. On `g++ (GCC) 16.2.1` at -O2/-O3 with -Werror, this translation
+// On `g++ (GCC) 16.2.1` at -O2/-O3 with -Werror, this translation
 // unit and `test_offline_sync.cpp` are the only two in the tree that fail to
 // compile, on a diagnostic raised entirely inside libstdc++:
 //

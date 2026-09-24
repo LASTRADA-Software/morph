@@ -56,7 +56,7 @@ live", and each anchor marks one point on it:
   **DocType** JSON defines schema, DB table, form UI, list view, and REST
   API; custom fields are rows merged into the Meta at load time; child
   tables put order lines inside an order form (maps to morph's
-  nested-aggregate schema recursion, #35). Submitted documents are
+  nested-aggregate schema recursion). Submitted documents are
   immutable + amendable — a natural fit for an append-only journal. Docs:
   <https://frappe.io/framework/doctype>
 - Runtime ceiling, for orientation only:
@@ -258,7 +258,7 @@ schemas/layouts). Build order (each step is a usable milestone):
    the served schema. A round-5 correction here said EspoCRM's condition
    *trees* "cannot be adopted as-is" because `x-rules` had no `and`/`or`/`not`
    and combinators would have to be filed as a framework proposal. **The
-   combinators shipped** (morph#78): `And`, `Or` and `Not` with the
+   combinators shipped**: `And`, `Or` and `Not` with the
    `andOf`/`orOf`/`notOf` builders (`include/morph/forms/forms.hpp`), and the
    emitted vocabulary carries `and`/`or`/`not` alongside `engaged`,
    `notEngaged`, `equals`, `greater` and `less`. Condition trees nest to any
@@ -645,7 +645,7 @@ itself, not by this build, and neither gates 7a or 7b.
 `codecov.yml` scores `examples/crm/{src,include/crm}/models/**` and says, of
 this rung's entry specifically, that it "does NOT yet carry a per-miss audit
 establishing which of the 148 uncovered lines are unreachable-by-design rather
-than merely untested" (morph#412). Ledger's and lims's entries carry one; each
+than merely untested". Ledger's and lims's entries carry one; each
 ends by naming two or three defensive guards no caller can reach.
 
 **crm's answer is different, and that is the finding.** Measured over the whole
