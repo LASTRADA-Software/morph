@@ -119,6 +119,17 @@ API surface).
 
 ### Added
 
+- **`DynamicForm.prefill(values)` / `prefillFromJson(text)` — load a stored
+  record for editing.** Every prefill path wrote *control text*, so an editing
+  flow had to turn each wire value into the text its control holds by hand —
+  a `{num,den,dp}` into locale digits, an ISO instant into the display zone, a
+  row of a `std::vector<Row>` into cell texts. `decodeFieldValue(field, value)`
+  is now the inverse of the encoders, and `prefill` replaces the draft from a
+  payload, re-seeds every control and slot (`fieldText`, `rows`), re-selects
+  fetched `Choice`s and never submits. Prefilling and editing nothing
+  assembles the same payload. See `docs/spec/forms/forms.md`, "Prefill"
+  (fixes #814).
+
 - **A host slot can draw a `std::vector<Row>` member, and the form encodes it.**
   A collection of objects had no built-in control and was reported
   unrepresentable, so a form carrying one could not be submitted whatever the

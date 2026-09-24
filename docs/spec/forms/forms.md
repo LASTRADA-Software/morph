@@ -1293,6 +1293,46 @@ which is what `maximum: Infinity` already meant, and matches JSON Schema giving
 a null numeric keyword no meaning. Without that, a null bound would read as the
 bound `0` and reject every positive value.
 
+### Prefill — loading a stored payload for editing
+
+An editing flow opens a saved record, reads its DTO and wants the form to show
+it. `DynamicForm.prefill(values)` takes the payload as an object keyed by wire
+name (a parsed action or section DTO); `prefillFromJson(text)` takes its JSON
+and parses it with `JsonExact`, so an id past 2^53 arrives digit for digit.
+Either replaces the whole draft — a member absent from the payload starts
+blank, as after `resetFields()` — and returns `false`, changing nothing, for
+input that is not an object.
+
+Each value becomes the text the built-in control for that member would hold,
+through `decodeFieldValue(field, value)`, the inverse of `encodeFieldText`:
+
+| Member | Wire value | Draft text |
+|---|---|---|
+| `Quantity` | `{num,den,dp}` | exact digits at the field's canonical `x-decimalPlaces`, rounded half-up, in the display locale (`2450.50`, `2450,50` in `de_DE`); the unit selector returns to the canonical unit |
+| plain number | JSON number | never exponent form; padded to `x-displayDecimals` when declared, never rounded to it |
+| integer | JSON integer | its exact digits |
+| `Timestamp` | ISO-8601 (zone designator optional, read as UTC when absent) | wall clock in `displayOffsetMinutes` |
+| `boolean` | `true`/`false` | `"true"`/`"false"` |
+| closed set / `Choice` | the value | its `valueJson` |
+| `std::vector<T>` | array | entries joined by `", "` |
+| `std::vector<Row>` | array of objects | the rows as `{member: cellText}`, each cell decoded by the row member's own descriptor |
+| string | string | itself |
+
+A value whose shape does not match its field decodes to `""` (blank). The
+round trip is the contract: prefilling a form from a payload and editing
+nothing assembles the same payload, in the canonical spelling the encoders
+produce. Every drawn control re-seeds from the new draft (`prefillRevision`),
+a fetched `Choice` re-selects its row whenever its options arrive, dependent
+`Choice`s are re-fetched for their prefilled parents, and slots see the values
+through `fieldText` / `rows`.
+
+**A prefill never submits**, in auto-submit mode included: the final
+revalidation runs inside the `programmaticEdit` window, so a ready prefilled
+form waits for the user. `src/qt/forms/tests/tst_DynamicFormPrefill.qml` pins
+the round trip for every member kind, locale and zone, slots, the fetched
+`Choice`, and the no-submit rule; removing the control re-seed reddens 5 of its
+11 cases and a wrong `Quantity` decoder 8.
+
 ### What `ready` claims
 
 `DynamicForm.ready` is a claim about the **payload**: `true` only when the body
