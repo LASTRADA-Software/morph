@@ -119,6 +119,18 @@ API surface).
 
 ### Added
 
+- **The MorphForms QML module installs, as the `forms_qml` component.**
+  `cmake --install` of a `MORPH_BUILD_FORMS_QML=ON` build installed the
+  controller-core header and nothing of the QML module, so a packaged morph
+  (e.g. a vcpkg port) could not be used to render a form. It now installs and
+  exports `morph::forms_qml` / `morph::forms_qmlplugin` together with the
+  object libraries a static QML module needs (compiled resources, the plugin's
+  static initialiser), and `qmldir`/`.qmltypes`/sources under
+  `MORPH_INSTALL_QMLDIR` (exported as `morph_QML_IMPORT_PATH`). A consumer
+  links `morph::forms_qmlplugin` and imports `MorphForms`;
+  `scripts/check_forms_qml_install.sh` (CI `install-export-forms-qml`) builds
+  and runs one against an install.
+
 - **A locale numeric entry accepts an explicit `+`.**
   `morph::render::normalizeLocaleNumber` had no notion of a positive sign: a
   leading `+` fell through to the "any other character is malformed" arm, so
@@ -261,6 +273,15 @@ API surface).
   `docs/spec/VERSIONING.md`.
 
 ### Fixed
+
+- **An installed `qt_forms` component compiles.** `forms_controller_core.hpp`
+  includes `morph/qt/qt_executor.hpp`, which was installed only by the `qt`
+  component (`MORPH_BUILD_QT`, which needs Qt WebSockets), so an install built
+  with `MORPH_BUILD_FORMS_QML` alone shipped a header that could not be
+  included: `fatal error C1083: Cannot open include file:
+  'morph/qt/qt_executor.hpp'`. In-tree builds and the header-set verification
+  both read the source tree and could not see it. `qt_forms` now ships the
+  header too; it needs only QtCore.
 
 - **The QML renderer's numeric-entry mirror matched the decimal and group
   separators as one UTF-16 code unit while the C++ edge matched whole
