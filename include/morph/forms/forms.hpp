@@ -290,6 +290,9 @@ struct FieldMeta {
     /// Presentation only: the unit never travels in the payload and nothing
     /// converts through it. **Ignored on a `Quantity` member**, whose unit is
     /// part of its type and already emitted.
+    // Spelled like every sibling's default, which a consumer's
+    // -Wmissing-field-initializers reads as "has a default".
+    // NOLINTNEXTLINE(readability-redundant-member-init)
     std::string_view unit{};
 
     /// @brief Display and entry precision for a plain `double`/`float` member;
@@ -301,6 +304,7 @@ struct FieldMeta {
     /// fraction digits to show and accept. **Ignored on a `Quantity` member**
     /// (its `x-decimalPlaces` is authoritative) and when it exceeds
     /// `morph::math::kMaxDecimalPlaces`.
+    // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
     std::optional<::morph::math::DecimalPlaces> decimals{};
 
     /// @brief Returns a copy with `placeholder` set to @p text.
@@ -2221,24 +2225,33 @@ inline void annotateDeclaredBounds(glz::generic_u64& property, const FieldMeta& 
 }
 
 /// @brief Stamps @p meta's display `unit` (as `ExtUnits`) and `decimals` (as
-///        `x-displayDecimals`) onto @p property, for a non-`Quantity` member.
+///        `x-displayDecimals`) onto @p property, unless @p Member is a
+///        `Quantity`.
 ///
 /// `ExtUnits` is the key a `Quantity` already carries, so every reader of a
 /// unit -- a renderer's suffix label, `SlotRegistry.byUnit`, a view column --
-/// finds a plain member's unit where it finds a `Quantity`'s.
+/// finds a plain member's unit where it finds a `Quantity`'s. A `Quantity`'s
+/// own unit and precision are part of its type; a `FieldMeta` restating them
+/// could only disagree, so for one this is a no-op.
+/// @tparam Member The static type of the member being annotated.
 /// @param property Property node to annotate in place.
 /// @param meta     The field's declared metadata.
-inline void annotateDisplayUnit(glz::generic_u64& property, const FieldMeta& meta) {
-    if (!meta.unit.empty()) {
-        glz::generic_u64 units{};
-        units["unitAscii"] = std::string{meta.unit};
-        units["unitUnicode"] = std::string{meta.unit};
-        property["ExtUnits"] = std::move(units);
-    }
-    if (meta.decimals.has_value() && meta.decimals->value <= ::morph::math::kMaxDecimalPlaces) {
-        property["x-displayDecimals"] = std::uint64_t{meta.decimals->value};
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+template <typename Member>
+void annotateDisplayUnit(glz::generic_u64& property, const FieldMeta& meta) {
+    if constexpr (!units::isQuantity<Member>) {
+        if (!meta.unit.empty()) {
+            glz::generic_u64 units{};
+            units["unitAscii"] = std::string{meta.unit};
+            units["unitUnicode"] = std::string{meta.unit};
+            property["ExtUnits"] = std::move(units);
+        }
+        if (meta.decimals.has_value() && meta.decimals->value <= ::morph::math::kMaxDecimalPlaces) {
+            property["x-displayDecimals"] = std::uint64_t{meta.decimals->value};
+        }
     }
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 /// @brief Whether @p value satisfies every bound @p meta declares.
 ///
@@ -2327,11 +2340,7 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
             property["x-i18nKey"] = std::string{fieldMeta->i18nKey};
         }
         annotateDeclaredBounds(property, *fieldMeta);
-        // A Quantity's unit and precision are part of its type and emitted
-        // below; a FieldMeta restating them could only disagree.
-        if constexpr (!units::isQuantity<Member>) {
-            annotateDisplayUnit(property, *fieldMeta);
-        }
+        annotateDisplayUnit<Member>(property, *fieldMeta);
     }
 
     if constexpr (units::isQuantity<Member>) {
