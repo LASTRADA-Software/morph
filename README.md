@@ -461,9 +461,27 @@ target_link_libraries(your_app PRIVATE morph::net morph::offline_sqlite)
 ```
 
 The components are `net` (`MORPH_BUILD_NET`, POSIX only), `offline_sqlite`
-(`MORPH_BUILD_OFFLINE_SQLITE`), `qt` (`MORPH_BUILD_QT`) and `qt_forms`
-(`MORPH_BUILD_FORMS_QML`). Asking for one that was not installed fails at
-`find_package` and says which.
+(`MORPH_BUILD_OFFLINE_SQLITE`), `qt` (`MORPH_BUILD_QT`), and `qt_forms` and
+`forms_qml` (both `MORPH_BUILD_FORMS_QML`). Asking for one that was not
+installed fails at `find_package` and says which.
+
+`forms_qml` is the `MorphForms` QML module (`DynamicForm`, `SlotRegistry`,
+`CollectionView`, …), built as a static QML module. Link its plugin and import
+it; `qt_forms` is the header-only `FormsControllerCore` an app's controller
+wraps:
+
+```cmake
+find_package(morph CONFIG REQUIRED COMPONENTS forms_qml qt_forms)
+target_link_libraries(your_app PRIVATE morph::forms_qmlplugin morph::qt_forms)
+# For qmllint / qmlls / your own qmlcachegen to see MorphForms' types:
+list(APPEND QML_IMPORT_PATH "${morph_QML_IMPORT_PATH}")
+```
+
+The module resolves from resources embedded in the plugin, so nothing has to
+be deployed next to the application; the installed
+`<libdir>/qml/MorphForms` (`MORPH_INSTALL_QMLDIR`) directory is for tooling.
+`scripts/check_forms_qml_install.sh` builds and runs such an application
+against an install.
 
 **Or vendor the repo.** `add_subdirectory(morph)` or `FetchContent` works and
 gives you the same `morph::morph` target. morph's own install rules turn

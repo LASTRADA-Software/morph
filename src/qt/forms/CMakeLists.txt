@@ -29,7 +29,12 @@ qt_add_qml_module(morph_forms_module
     SOURCES
         I18nCatalog.hpp
         I18nCatalog.cpp
+    # The object libraries a static QML module carries (its compiled
+    # resources, the plugin's static initialiser): an installed module is
+    # unusable without them, so the root CMakeLists.txt installs them with it.
+    OUTPUT_TARGETS morph_forms_output_targets
 )
+set(MORPH_FORMS_QML_OUTPUT_TARGETS ${morph_forms_output_targets} PARENT_SCOPE)
 
 target_link_libraries(morph_forms_module PUBLIC morph::morph Qt6::Quick Qt6::Qml)
 target_compile_features(morph_forms_module PUBLIC cxx_std_23)
