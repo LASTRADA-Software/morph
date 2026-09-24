@@ -13,6 +13,8 @@
 //   x-min/x-max/x-step -> slider track bounds + increment (Ranged fields)
 //   type: "array"    -> comma-separated-with-validation control; encodes to
 //                       a genuine JSON array literal, e.g. "a, b" -> ["a","b"]
+//   type: "number"   -> plain text field encoding a JSON number, for a member
+//                       with no x-decimalPlaces (a bare double/float)
 //   x-submitMode: "explicit" -> suppresses auto-submit-on-validity; renders
 //                       an explicit Submit button (enabled only while ready)
 //                       instead -- see "Explicit submit mode" below
@@ -487,6 +489,9 @@ Frame {
                 // `isArray` is deliberately absent: the array control claims
                 // the property but encodes its items as strings, so an array
                 // of objects is unrepresentable even though a control drew it.
+                // `isNumber` is absent for the same reason: a member declared
+                // both "number" and "object" is satisfied by neither reading,
+                // and the object one is the half no typed text can close.
                 const typedControl = dp !== undefined || optionsAction !== undefined
                         || enumOptionRows.length > 0 || p.format === "date-time"
                         || types.indexOf("integer") !== -1 || types.indexOf("boolean") !== -1
@@ -524,6 +529,16 @@ Frame {
                     isQuantity: dp !== undefined,
                     decimals: opt(dp, 0),
                     isInteger: types.indexOf("integer") !== -1,
+                    // "number" -- a bare `double`/`float`. The plain text
+                    // field draws it, but the JSON *number* encoding is its
+                    // own: the fall-through at the end of fieldJsonLiteral
+                    // would quote the digits. This flag says only what the
+                    // schema's type is, so it is also true for a *precise*
+                    // field spelled "number" with an x-decimalPlaces beside
+                    // it; fieldJsonLiteral asks `isQuantity` first, which is
+                    // what keeps such a field on the exact {num,den,dp}
+                    // encoding.
+                    isNumber: types.indexOf("number") !== -1,
                     // "boolean" -- a CheckBox, not the plain text field's
                     // fall-through (which wrapped the typed text as a JSON
                     // *string*: {"flag":"true"}, or {"flag":"banana"} for
@@ -1338,6 +1353,50 @@ Frame {
                 return null
             return normalised
         }
+        if (f.isNumber) {
+            // A bare `double`/`float` member: `"type": "number"` with no
+            // x-decimalPlaces and no Quantity wrapper, so none of the encoders
+            // above claims it. It needs one of its own -- the generic
+            // fall-through at the end of this function would wrap the typed
+            // digits as a JSON *string*, and the schema asks for a number.
+            // Declaring it unrepresentable instead would be worse than the
+            // wrong value it replaces: a number is exactly what a text field
+            // collects, so a form carrying one would never be submittable.
+            //
+            // Locale-normalised first, like a Quantity's entry: a decimal
+            // field is typed with the locale's decimal separator and
+            // grouping, and neither belongs in the JSON number.
+            const canonicalNumber = normalizeLocaleNumber(text, {
+                                                              decimalSeparator: qtLocale.decimalPoint,
+                                                              groupSeparator: qtLocale.groupSeparator,
+                                                              negativeSign: qtLocale.negativeSign,
+                                                              positiveSign: qtLocale.positiveSign,
+                                                              zeroDigit: qtLocale.zeroDigit
+                                                          })
+            // No exponent and no trailing separator: the grammar a text field
+            // is expected to collect, and every spelling outside it (blank
+            // fraction, stray sign, letters) is refused rather than encoded.
+            if (canonicalNumber === null || !/^-?\d+(\.\d+)?$/.test(canonicalNumber))
+                return null
+            const numberValue = parseFloat(canonicalNumber)
+            // The declared range, which for a plain member is the one glaze
+            // stamps on the type itself: a `float` field carries ±3.4e38, so
+            // this gate refuses a value the member cannot hold. `ready` is a
+            // claim about the payload satisfying the schema, so a bound the
+            // schema states is checked here whether or not the model's own
+            // bound check covers this member kind.
+            if (f.minimum !== undefined && numberValue < f.minimum)
+                return null
+            if (f.maximum !== undefined && numberValue > f.maximum)
+                return null
+            if (violatesMultipleOf(numberValue, f.multipleOf))
+                return null
+            // Digits carried through as typed, never through parseFloat: a
+            // round-trip through a JS number re-spells what the user wrote
+            // ("1e+41" for a long entry) and rounds at the seventeenth digit.
+            // Only the leading-zero run has to go, because JSON forbids it.
+            return canonicalNumber.replace(/^(-?)0+(?=\d)/, "$1")
+        }
         if (f.isBoolean) {
             // Emitted bare, never quoted. The CheckBox only ever stores these
             // two spellings; any other retained value (a prefill from a stale
@@ -1796,7 +1855,8 @@ Frame {
                                      : (fieldColumn.modelData.isQuantity
                                         ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
                                         : (fieldColumn.modelData.isInteger ? "0" : ""))
-                    inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
+                    inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger
+                                       || fieldColumn.modelData.isNumber)
                                       ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                     onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
                     // Re-seed from the retained value whenever this delegate is
