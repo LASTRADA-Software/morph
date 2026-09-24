@@ -32,6 +32,30 @@ Frame {
     property var rows: []
     property var editorRow: null   // the row currently open for edit, or null
 
+    // Client-side slots and chrome, handed on to both editor forms. null (the
+    // default) draws every built-in, as before.
+    property var slotRegistry: null
+
+    // A confirm-guarded action awaiting the host's confirm chrome, or null.
+    property var pendingConfirm: null
+
+    // The host's chrome for `role`, or null for the built-in -- the registry
+    // DynamicForm reads (docs/spec/forms/forms.md, "Chrome slots").
+    function chrome(role) {
+        return slotRegistry ? slotRegistry.resolveChrome(role) : null
+    }
+
+    // Assigns each of `values` to a chrome item's same-named property, only
+    // where the item declares it (DynamicForm.bindChrome's rule).
+    function bindChrome(item, values) {
+        if (!item)
+            return
+        for (const key in values) {
+            if (key in item)
+                item[key] = values[key]
+        }
+    }
+
     readonly property bool isMasterDetail: root.view["v-kind"] === "master-detail"
     readonly property var visibleColumns: (root.view["v-columns"] || []).filter(c => !c["v-hidden"])
     readonly property var rowScopeActions: (root.view["v-actions"] || []).filter(a => a.scope === "row")
@@ -173,6 +197,10 @@ Frame {
         if (!root.controller)
             return
         if (descriptor.confirm) {
+            if (root.chrome("confirmDialog") !== null) {
+                root.pendingConfirm = { action: descriptor, row: row }
+                return
+            }
             confirmDialog.pendingAction = descriptor
             confirmDialog.pendingRow = row
             confirmDialog.open()
@@ -233,6 +261,50 @@ Frame {
         }
     }
 
+    // A host's confirm chrome, loaded while a confirm-guarded action waits:
+    // `message`, `action` (the v-actions descriptor), `row`, and `accept()` /
+    // `reject()`.
+    Loader {
+        active: root.pendingConfirm !== null && root.chrome("confirmDialog") !== null
+        sourceComponent: root.chrome("confirmDialog")
+        onLoaded: root.bindChrome(item, {
+            message: "Are you sure?",
+            action: root.pendingConfirm.action,
+            row: root.pendingConfirm.row,
+            accept: function () {
+                const pending = root.pendingConfirm
+                root.pendingConfirm = null
+                if (pending && root.controller)
+                    root.controller.submitIfValid(pending.action.action,
+                                                  root.bindBodyJson(pending.action.bind || {}, pending.row))
+            },
+            reject: function () { root.pendingConfirm = null }
+        })
+    }
+
+    // A host's editor chrome for the collection kind: it shows the row
+    // editor, which this view reparents into its `contentItem`, while
+    // `open` is true, and calls `close()` to dismiss it.
+    property var editorChrome: root.chrome("editorDialog")
+    Loader {
+        id: editorChromeLoader
+        active: root.editorChrome !== null && !root.isMasterDetail
+        sourceComponent: root.editorChrome
+        onLoaded: {
+            root.bindChrome(item, {
+                title: Qt.binding(function () {
+                    return root.view["v-rowAction"] ? String(root.view["v-rowAction"].action) : ""
+                }),
+                open: Qt.binding(function () { return root.editorRow !== null }),
+                close: function () { root.closeEditor() }
+            })
+            if (item.contentItem)
+                modalForm.parent = item.contentItem
+            else
+                console.warn("CollectionView: an editorDialog chrome must declare `contentItem`")
+        }
+    }
+
     // Collection kind: the row editor is a modal (list-plus-modal fallback of
     // the master-detail split — docs/spec/forms/views.md, "Design
     // decisions"). Master-detail vs. collection is a rendering choice, not a
@@ -240,7 +312,7 @@ Frame {
     Dialog {
         id: editorDialog
         objectName: "editorDialog"
-        visible: !root.isMasterDetail && root.editorRow !== null
+        visible: root.editorChrome === null && !root.isMasterDetail && root.editorRow !== null
         modal: true
         title: root.view["v-rowAction"] ? String(root.view["v-rowAction"].action) : ""
         onClosed: root.closeEditor()
@@ -250,6 +322,7 @@ Frame {
             actionType: root.view["v-rowAction"] ? root.view["v-rowAction"].action : ""
             schema: root.schemas[modalForm.actionType] || ({})
             controller: root.controller
+            slotRegistry: root.slotRegistry
         }
     }
 
@@ -263,12 +336,30 @@ Frame {
             spacing: 4
 
             Label {
+                visible: root.chrome("collectionHeader") === null
                 text: root.opt(root.view["v-title"], root.viewId)
                 font.bold: true
                 font.pixelSize: 16
             }
 
+            // A host's header chrome replaces the title and the column-header
+            // row with its collection actions: `title`, `columns`, `actions`
+            // and `fire(action)`.
+            Loader {
+                active: root.chrome("collectionHeader") !== null
+                visible: active
+                Layout.fillWidth: true
+                sourceComponent: root.chrome("collectionHeader")
+                onLoaded: root.bindChrome(item, {
+                    title: Qt.binding(function () { return root.opt(root.view["v-title"], root.viewId) }),
+                    columns: Qt.binding(function () { return root.visibleColumns }),
+                    actions: Qt.binding(function () { return root.collectionScopeActions }),
+                    fire: function (descriptor) { root.fireCollectionAction(descriptor) }
+                })
+            }
+
             RowLayout {
+                visible: root.chrome("collectionHeader") === null
                 spacing: 8
 
                 Repeater {
@@ -292,8 +383,33 @@ Frame {
                 }
             }
 
+            // A host's row chrome replaces each row's cells and buttons:
+            // `row`, `columns`, `cells` (formatted texts, per visible column),
+            // `rowKey`, `actions`, `canOpen`, `open()` and `fire(action)`.
             Repeater {
-                model: root.rows
+                model: root.chrome("collectionRow") !== null ? root.rows : []
+                Loader {
+                    id: rowChromeLoader
+                    required property var modelData
+                    Layout.fillWidth: true
+                    sourceComponent: root.chrome("collectionRow")
+                    onLoaded: root.bindChrome(item, {
+                        row: rowChromeLoader.modelData,
+                        columns: root.visibleColumns,
+                        cells: root.visibleColumns.map(function (column) {
+                            return root.formatCell(rowChromeLoader.modelData, column)
+                        }),
+                        rowKey: JsonExact.text(rowChromeLoader.modelData[root.opt(root.view["v-rowKey"], "id")]),
+                        actions: root.rowScopeActions,
+                        canOpen: root.view["v-rowAction"] !== undefined,
+                        open: function () { root.openEditor(rowChromeLoader.modelData) },
+                        fire: function (descriptor) { root.fireRowAction(descriptor, rowChromeLoader.modelData) }
+                    })
+                }
+            }
+
+            Repeater {
+                model: root.chrome("collectionRow") === null ? root.rows : []
                 RowLayout {
                     id: rowDelegate
                     required property var modelData
@@ -345,6 +461,7 @@ Frame {
             actionType: root.view["v-rowAction"] ? root.view["v-rowAction"].action : ""
             schema: root.schemas[detailForm.actionType] || ({})
             controller: root.controller
+            slotRegistry: root.slotRegistry
         }
     }
 
