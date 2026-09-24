@@ -104,8 +104,8 @@ enum class Role : std::uint8_t { Viewer, Member, Manager };
 /// The shape carries a constraint the type cannot enforce on its own: because
 /// `value == 0` *is* the "not entered" state, **an event id of `0` is
 /// unrepresentable** -- construct one and it reports `hasValue() == false`,
-/// so a real event would read as "no event" (morph#215). The constraint holds
-/// because these ids are SQLite row ids, which start at 1. `fromRowId()` is
+/// so a real event would read as "no event". The constraint holds because these
+/// ids are SQLite row ids, which start at 1. `fromRowId()` is
 /// the enforcement; use it for every conversion from a stored value.
 struct BoardEventId {
     std::int64_t value{0};
@@ -127,7 +127,7 @@ struct BoardEventId {
         if (rowId == 0) {
             throw KanbanError{
                 "BoardEventId::fromRowId: an event row id of 0 is unrepresentable -- 0 is this "
-                "type's \"not entered\" sentinel (morph#215)"};
+                "type's \"not entered\" sentinel"};
         }
         return BoardEventId{.value = rowId};
     }

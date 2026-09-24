@@ -383,8 +383,8 @@ TEST_CASE("BoardBridge::submitIfValid runs the board forms and keeps the board p
 
 TEST_CASE("BoardBridge::submitIfValid submits CreateRule and re-lists rules",
           "[kanban][gui][qml-bridge][issue344][issue393]") {
-    // CreateRule is the fifth form (morph#393) and the only one that does not
-    // return the rebuilt board state -- BoardPresenter::submitForm decodes
+    // CreateRule is the fifth form and the only one that does not return the
+    // rebuilt board state -- BoardPresenter::submitForm decodes
     // CreateRuleResult on its own branch and re-emits ruleCreated instead of
     // boardOpened, exactly as the typed createRule() call does.
     DbFixture fixture;

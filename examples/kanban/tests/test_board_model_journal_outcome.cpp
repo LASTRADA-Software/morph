@@ -17,12 +17,12 @@
 // These cases pin that a refused mutating action now leaves exactly that
 // entry.
 //
-// morph#757 widened that from the four domain refusals to *any* pre-commit
-// failure. Until then every handler ended `catch (const KanbanError&)`, so
-// `Outcome::Failed` was written for this rung's own refusals and for nothing
-// else -- an `std::invalid_argument` out of `std::stoull`, one of
-// Lightweight's SQL exceptions from a pre-commit query, or a `std::bad_alloc`
-// all reached the caller having journalled nothing at all. Nothing in
+// It is *any* pre-commit failure, not only the four domain refusals. A handler
+// ending `catch (const KanbanError&)` would write `Outcome::Failed` for this
+// rung's own refusals and for nothing else -- an `std::invalid_argument` out of
+// `std::stoull`, one of Lightweight's SQL exceptions from a pre-commit query, or
+// a `std::bad_alloc` would all reach the caller having journalled nothing at
+// all. Nothing in
 // "a rejected attempt is itself audit-worthy" depends on the exception's
 // type; only the `catch` clause did. The last three cases in this file cover
 // the widened path, including the failure mode widening it introduces: the
@@ -139,9 +139,9 @@ enum class Ending : std::uint8_t {
     ///        arrangement, never a pass.
     Returned,
     /// @brief It threw one of this rung's four `KanbanError` types -- the only
-    ///        thing `Outcome::Failed` was written for before morph#757.
+    ///        class a `catch (const KanbanError&)` handler would journal.
     DomainRefusal,
-    /// @brief It threw something else. This is the class morph#757 is about.
+    /// @brief It threw something else. This is the class these cases are about.
     NonDomainFailure,
 };
 
@@ -215,7 +215,7 @@ struct FailedEntry {
 /// `do { try { ... } catch (...) { ... } } while (... && ...)`, which
 /// `readability-function-cognitive-complexity` scores at 4. Six of them
 /// written out in the `TEST_CASE` below put it at 32 against a threshold of
-/// 25 and failed `clang-tidy-diff` on morph#768. The assertions are the same
+/// 25, which fails `clang-tidy-diff`. The assertions are the same
 /// assertions and there are the same number of them -- they are reported
 /// against this function's lines instead of the caller's, which is the whole
 /// of the difference.
@@ -290,7 +290,7 @@ TEST_CASE("A ValidationError refusal on CreateColumn leaves a Failed journal ent
     CHECK_FALSE(entries.front().error.empty());
 }
 
-// ── morph#757: the failure that journalled nothing ───────────────────────────
+// ── The failure a KanbanError-only catch would journal nothing for ───────────
 
 TEST_CASE("A non-KanbanError pre-commit failure leaves a Failed journal entry", "[kanban][journal][morph#757]") {
     DbFixture fixture;
@@ -302,12 +302,12 @@ TEST_CASE("A non-KanbanError pre-commit failure leaves a Failed journal entry", 
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
     model.attachActionLog(log, std::to_string(*projectId));
 
-    // The failure morph#566 observed in CI on this rung, arranged rather than
+    // The failure CI's parallelism produces on this rung, arranged rather than
     // waited for: a real second connection holding a real write lock, so the
     // handler's own pre-commit statement takes a genuine `SQLITE_BUSY` past a
     // genuine (shortened) busy timeout. Not a mock and not a fault-injection
-    // seam in the model -- the handler cannot tell this apart from the
-    // contention that produced the original report.
+    // seam in the model -- the handler cannot tell this apart from real
+    // contention.
     const ScopedShortBusyTimeout shortTimeout{200};
     auto drained = drainPoolIdleMappers();
     const DbBusyFixture busy{"board_columns"};
@@ -315,7 +315,7 @@ TEST_CASE("A non-KanbanError pre-commit failure leaves a Failed journal entry", 
     // Not REQUIRE_THROWS_AS: the point of the case is the exception's type,
     // so "it was not a KanbanError" has to be asserted rather than assumed
     // from the name of whatever Lightweight throws. A `DomainRefusal` here
-    // would mean the case was testing nothing morph#757 changed.
+    // would mean the case was exercising the arm every handler already had.
     REQUIRE(classify([&] { (void)model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}); }) ==
             Ending::NonDomainFailure);
 
@@ -323,13 +323,12 @@ TEST_CASE("A non-KanbanError pre-commit failure leaves a Failed journal entry", 
     // drained mappers can go back (`drainPoolIdleMappers`'s own doc comment).
     drained.clear();
 
-    // Before morph#757 there were zero entries here: the handler's catch
-    // named `KanbanError` and this exception is not one, so it left with the
-    // journal untouched.
+    // A handler whose catch named `KanbanError` would leave zero entries here,
+    // this exception not being one.
     const auto entries = log->entries();
-    // The headline assertion of morph#757, kept in the case body rather than
-    // moved into the helper below: on the tree this ticket started from it
-    // reads `0 == 1`, and that number *is* the defect.
+    // The headline assertion, kept in the case body rather than moved into the
+    // helper below: with a narrower catch it reads `0 == 1`, and that number
+    // *is* the defect.
     REQUIRE(entries.size() == 1);
     checkFailedEntry(entries.front(),
                      FailedEntry{.actionType = morph::model::ActionTraits<kanban::CreateColumn>::typeId(),
@@ -354,8 +353,7 @@ TEST_CASE("A journal that throws on the failure path does not replace the refusa
     REQUIRE_THROWS_AS(model.execute(kanban::CreateColumn{.name = "", .wipLimit = 0}), kanban::ValidationError);
 
     // Without this the case would pass on a tree where the journal was never
-    // consulted on the failure path at all -- which is the tree morph#757
-    // started from.
+    // consulted on the failure path at all.
     CHECK(log->appendAttempts >= 1);
 }
 
@@ -374,8 +372,8 @@ TEST_CASE("A journal that throws on the failure path does not replace a non-doma
     auto drained = drainPoolIdleMappers();
     const DbBusyFixture busy{"board_columns"};
 
-    // The compounded case: a non-domain failure -- the one that only reaches
-    // the journal at all after morph#757 -- while the journal it now writes
+    // The compounded case: a non-domain failure -- the class a narrower catch
+    // would not journal at all -- while the journal it writes
     // to is itself failing. `ValidationError` above proves containment by the
     // exception's type; here there is no type to lean on, so the message is
     // what distinguishes the original failure from the logging one.

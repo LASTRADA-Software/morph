@@ -7,13 +7,12 @@
 // (examples/IMPLEMENTATION.md rule 2, "schema-driven forms only"). If `Login`
 // ever grows a second field, this file does not change.
 //
-// This screen used to be a hand-built `TextField` + `Button`, on the strength
-// of this rung's GUI design spec
-// (docs/superpowers/specs/2026-08-17-kanban-gui-design.md §4) — which settles
-// the two-bridge/property-bag architecture and says nothing about forms at
-// all, so it never justified the exception rule 2 requires. See morph#344, and
-// the rung README's "morph subsystems exercised" section for what is still
-// hand-built here and what that costs.
+// A hand-built `TextField` + `Button` would need rule 2's written exception,
+// and this rung's GUI design spec
+// (docs/superpowers/specs/2026-08-17-kanban-gui-design.md §4) does not supply
+// one: it settles the two-bridge/property-bag architecture and says nothing
+// about forms at all. See the rung README's "morph subsystems exercised"
+// section for what is still hand-built here and what that costs.
 //
 // `projectAdminBridge` defaults to null so this same file also loads with
 // nothing wired up, which is exactly what the offscreen engine-load smoke

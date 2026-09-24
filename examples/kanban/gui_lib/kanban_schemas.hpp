@@ -28,18 +28,18 @@
 /// action a controller does not serve is reported, not silently dropped: see
 /// each bridge's `submitIfValid`.
 ///
-/// **What used to be deliberately absent.** `SetMemberRole` and `CreateRule`
-/// were held back here because each carried a C++ `enum class` member
-/// (`Role`, `RuleMutationType`) that `schemaJson` emitted as a closed `oneOf`
-/// of `const`s and the shipped `DynamicForm` rendered as a **free-text
-/// field**, accepting and submitting any string at all (morph#386). That gap
-/// is closed — `DynamicForm` now draws a closed `oneOf`-of-`const`s enum as a
-/// combo box and refuses a value outside the set — so both actions render
-/// here like every other form (morph#393). `CreateRule::triggerColumnId` also
-/// moved from a raw `ColumnId` to a `morph::forms::Choice<…,
-/// "GetBoardState">`, the shape rule 3 prescribes for a user-chosen foreign
-/// key; `GetBoardState`'s reply returns `columns` as its first array member.
-/// `MoveTaskPosition` stays absent for the opposite reason: it is a drag
+/// **What a renderer has to support for this list to be complete.**
+/// `SetMemberRole` and `CreateRule` each carry a C++ `enum class` member
+/// (`Role`, `RuleMutationType`) that `schemaJson` emits as a closed `oneOf` of
+/// `const`s. A `DynamicForm` that drew that as a **free-text field** would
+/// accept and submit any string at all, which is why neither action could be
+/// listed here; the shipped renderer draws it as a combo box and refuses a value
+/// outside the set, so both render like every other form.
+/// `CreateRule::triggerColumnId` is a `morph::forms::Choice<…,
+/// "GetBoardState">` rather than a raw `ColumnId` — the shape rule 3 prescribes
+/// for a user-chosen foreign key; `GetBoardState`'s reply returns `columns` as
+/// its first array member.
+/// `MoveTaskPosition` is absent for a different reason: it is a drag
 /// gesture, not a form (rule 2(a); see the README).
 
 namespace kanban::gui {

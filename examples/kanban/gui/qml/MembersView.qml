@@ -16,10 +16,9 @@
 // different and worse interaction than the inline picker it would replace.
 // This is examples/IMPLEMENTATION.md rule 2's justification (a) on the
 // row-editing interaction, the same grounds BoardView.qml's header comment
-// gives for why MoveTaskPosition's drag gesture stays hand-built -- not the
-// enum-rendering gap morph#386 fixed, which this file no longer has (the "add
-// member" row's role picker is now the schema-driven combo box DynamicForm
-// draws for `SetMemberRole::role`'s closed set). See morph#393.
+// gives for why MoveTaskPosition's drag gesture stays hand-built. It is not an
+// enum-rendering gap: the "add member" row's role picker is the schema-driven
+// combo box DynamicForm draws for `SetMemberRole::role`'s closed set.
 //
 // `projectAdminBridge` defaults to null and `projectId` defaults to -1 so
 // this same file also loads standalone with nothing wired up, which is

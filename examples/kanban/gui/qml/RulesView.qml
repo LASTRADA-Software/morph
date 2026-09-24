@@ -9,11 +9,10 @@
 // shipped MorphForms DynamicForm) -- no "watch for other trigger kinds"
 // affordance, since RuleTriggerEvent has exactly one member (rule_dto.hpp).
 //
-// Both of this rung's remaining hand-built forms converted together
-// (morph#393): `CreateRule::mutationType` (a `RuleMutationType` enum class)
-// now renders as the schema-driven combo box DynamicForm draws for a closed
-// `oneOf`-of-`const`s set (morph#386 closed the gap that used to force this
-// to a free-text field), and `CreateRule::triggerColumnId` moved from a raw
+// Both of this rung's remaining hand-built forms are schema-driven:
+// `CreateRule::mutationType` (a `RuleMutationType` enum class)
+// renders as the combo box DynamicForm draws for a closed
+// `oneOf`-of-`const`s set, and `CreateRule::triggerColumnId` is a
 // `ColumnId` to a `morph::forms::Choice<…, "GetBoardState">` (rule 3's shape
 // for a user-chosen foreign key) -- so the trigger-column combo box is now
 // server-fetched by DynamicForm itself, via BoardBridge.fetchOptions(), rather

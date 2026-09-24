@@ -13,10 +13,9 @@
 // `DynamicForm` bound to a real bridge produced the fields the schema
 // describes, that the two *hidden* context fields (`CreateTask`'s
 // columnId/swimlaneId, `AddComment`'s taskId) are actually engaged by the view
-// that owns them, or that a submit reaches the model. Those are exactly the
-// claims morph#344 turns on -- "schema generation working is necessary, not
-// sufficient; nothing has been rendered on screen" -- so they get a test that
-// renders on screen.
+// that owns them, or that a submit reaches the model. Schema generation working
+// is necessary and not sufficient -- nothing has been rendered on screen -- so
+// those claims get a test that renders on screen.
 //
 // It stays inside `ladder_kanban_tests` rather than becoming a third binary
 // (bank's `bank_gui_qml_tests` is the ladder's precedent for that shape): this
@@ -191,9 +190,10 @@ void pressSubmit(QObject* form) {
 /// records that adding one with nothing to call it would be a stub. So the
 /// engine warns once per form, for every conforming controller in the ladder,
 /// the moment a *real* controller is attached. The rule-6 smoke test never sees
-/// it because it attaches none. Filed as morph#387; tolerated by exact text
-/// here rather than by dropping the assertion, so any *other* warning — a
-/// misspelled handler, a missing property, a broken binding — still fails.
+/// it because it attaches none. It is filed against the renderer; tolerated
+/// here by exact text rather than by dropping the assertion, so any *other*
+/// warning — a misspelled handler, a missing property, a broken binding — still
+/// fails.
 /// @param engine     The engine to load into (kept alive by the caller).
 /// @param typeName   Unqualified QML type name within `MORPH_LADDER_QML_URI`.
 /// @param properties Initial properties for the root object.
@@ -205,7 +205,7 @@ void pressSubmit(QObject* form) {
             const QString text = warning.toString();
             if (text.contains(QStringLiteral("onOptionsReceived")) &&
                 text.contains(QStringLiteral("MorphForms/qml/DynamicForm.qml"))) {
-                continue;  // morph#387 — see this function's doc comment.
+                continue;  // The renderer's own warning — see this function's doc comment.
             }
             unexpected.append(text);
         }
@@ -277,8 +277,8 @@ TEST_CASE("MembersView renders SetMemberRole through the shipped renderer and su
     // Loaded directly (not via ProjectListView's "Members" button, which this
     // rule-6 file cannot click): MembersView.qml's own projectAdminBridge/
     // projectId initial properties are exactly what ProjectListView.qml wires
-    // into it, and SetMemberRole::role is the closed-set field morph#386 used
-    // to force to a free-text field.
+    // into it, and SetMemberRole::role is a closed-set field, which a renderer
+    // without enum support would draw as free text.
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     const qlonglong projectId = seedProject(*rig);
@@ -297,7 +297,7 @@ TEST_CASE("MembersView renders SetMemberRole through the shipped renderer and su
 
     // `role` is a closed `oneOf`-of-`const`s (Role's glz::meta/glz::enumerate)
     // -- the renderer draws it as a ComboBox with the three named rows, not
-    // a free-text field, which is exactly the gap morph#386 closed.
+    // a free-text field.
     QObject* roleControl = control(form, QStringLiteral("field_role"));
     REQUIRE(roleControl != nullptr);
     const QVariantList roleOptions = form->property("fields").toList();
@@ -327,7 +327,7 @@ TEST_CASE("MembersView renders SetMemberRole through the shipped renderer and su
     // currentIndex -1 -- "no selection" -- so the gate needs `role` engaged
     // too, not just `principal` (DynamicForm.qml's resetFields()/currentIndex
     // comments). Membership is decidable client-side once the schema states
-    // the closed set (morph#386): an out-of-set value here would leave the
+    // the closed set: an out-of-set value here would leave the
     // field's own JSON literal null and the gate unsatisfied, which is a
     // stronger property than the free-text field this form replaced ever had.
     CHECK_FALSE(isReady(form));
@@ -467,7 +467,7 @@ TEST_CASE("BoardView renders CreateColumn/CreateSwimlane/CreateTask through the 
     // Both ids ride out as JSON *numbers*, not quoted strings: the strong-id
     // `$ref` into `$defs` resolved to `{"type":["integer","null"]}` and the
     // renderer typed the field from it. A quoted id here is what the server
-    // rejects with parse_number_failure (morph#189's shape).
+    // rejects with parse_number_failure.
     CHECK(bodyOf(taskForm) ==
           QStringLiteral(R"({"columnId":%1,"swimlaneId":%2,"title":"Fix bug"})").arg(columnId, swimlaneId));
 
@@ -489,9 +489,9 @@ TEST_CASE("RulesView renders CreateRule through the shipped renderer and submits
     // Loaded directly (not via BoardView's "Rules" popup button, which this
     // rule-6 file cannot click): RulesView.qml's own boardBridge initial
     // property is exactly what BoardView.qml wires into it.
-    // `CreateRule::mutationType` is the closed-set field morph#386 used to
-    // force to a free-text field; `triggerColumnId` is the Choice field this
-    // rung's first server-fetched combo box (morph#393).
+    // `CreateRule::mutationType` is a closed-set field, which a renderer without
+    // enum support would draw as free text; `triggerColumnId` is the Choice
+    // field behind this rung's first server-fetched combo box.
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     const qlonglong projectId = seedProject(*rig);
@@ -518,8 +518,7 @@ TEST_CASE("RulesView renders CreateRule through the shipped renderer and submits
     CHECK(form->property("actionType").toString() == QStringLiteral("CreateRule"));
 
     // `mutationType` is a closed `oneOf`-of-`const`s (RuleMutationType's
-    // glz::meta/glz::enumerate) -- a ComboBox, not the free-text field
-    // morph#386 used to force.
+    // glz::meta/glz::enumerate) -- a ComboBox, not a free-text field.
     REQUIRE(control(form, QStringLiteral("field_mutationType")) != nullptr);
 
     // `triggerColumnId` is a Choice (`x-optionsAction: "GetBoardState"`), so

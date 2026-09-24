@@ -49,20 +49,19 @@
 // `next()`'s designed usage. Nothing here needs the eagerly-materialized
 // schedule TESTING.md's description would imply.
 //
-// **No Qt anywhere in this file (fixing morph#128)**: the original version of
-// this test drove everything through `BackendRig{Mode::Local, ...}` and
-// `awaitQt`/`pumpUntil` (examples/common/testkit/pump.hpp), which the CI
-// job's own comment claimed involved "no Qt/GUI" -- a claim morph#128 proved
-// false: `Mode::Local` unconditionally constructs a real `morph::qt::
-// QtExecutor` for client-facing callback delivery (backend_rig.hpp's own
-// doc comment explains why: pool-thread callback delivery would race
-// pumpUntil/awaitQt's unsynchronized reads otherwise), and every one of the
-// 165 ThreadSanitizer warnings morph#128 catalogued bottoms out in genuine
-// Qt-internal frames (QMetaObject::invokeMethod, QCallableObject,
-// QObject::event) reached through that QtExecutor. Since a prebuilt,
-// non-TSan-instrumented Qt package can't be seen through by ThreadSanitizer,
-// those warnings are unusable evidence either way -- real bugs or false
-// positives, TSan cannot tell from outside an instrumented Qt build.
+// **No Qt anywhere in this file**, and this is the file where that costs
+// something. Driving it through `BackendRig{Mode::Local, ...}` and
+// `awaitQt`/`pumpUntil` (examples/common/testkit/pump.hpp) is not "no Qt/GUI":
+// `Mode::Local` unconditionally constructs a real `morph::qt::QtExecutor` for
+// client-facing callback delivery (backend_rig.hpp's own doc comment explains
+// why: pool-thread callback delivery would race pumpUntil/awaitQt's
+// unsynchronized reads otherwise). Run that way under ThreadSanitizer it
+// produces 165 warnings, every one of which bottoms out in genuine Qt-internal
+// frames (QMetaObject::invokeMethod, QCallableObject, QObject::event) reached
+// through that QtExecutor. Since a prebuilt, non-TSan-instrumented Qt package
+// can't be seen through by ThreadSanitizer, those warnings are unusable evidence
+// either way -- real bugs or false positives, TSan cannot tell from outside an
+// instrumented Qt build.
 //
 // This version drives `BoardModel` through a bare `morph::bridge::Bridge`
 // wrapping a `morph::backend::LocalBackend` directly (the exact pattern
@@ -128,7 +127,7 @@ struct InlineExecutor : morph::exec::IExecutor {
     void post(std::function<void()> fn) override { fn(); }
 };
 
-// -- Why the two durations below are two types (morph#735) -------------------
+// -- Why the two durations below are two types -------------------
 //
 // This `waitUntil` used to take `(Pred, milliseconds budget = 20000ms,
 // milliseconds step = 5ms)`: two adjacent, same-type, both-defaulted
@@ -146,16 +145,16 @@ struct InlineExecutor : morph::exec::IExecutor {
 // every route back to the hazard.
 //
 // The same two types, with the same names and the same explicit constructors,
-// are what `tests/test_support.hpp`'s framework `waitUntil` grew in morph#721
+// are what `tests/test_support.hpp`'s framework `waitUntil` takes
 // -- deliberately the same shape rather than a third one. They are redeclared
 // here rather than included because `examples/` does not, and should not,
 // reach into the framework's own test support: this file's target links
 // `morph::ladder_testkit`, not `morph_test_main`'s private headers.
 //
-// A `NOLINT` was not an option: it would remove the *warning* and leave the
-// hazard (morph#404), and morph#715 measured the other near miss -- widening
-// one parameter's type to silence `bugprone-easily-swappable-parameters` while
-// the transposition still compiles.
+// A `NOLINT` is not an option: it would remove the *warning* and leave the
+// hazard. Nor is widening one parameter's type to silence
+// `bugprone-easily-swappable-parameters`, which leaves the transposition
+// compiling.
 
 /// @brief `waitUntil`'s overall polling budget: the longest it may wait before
 ///        giving up and returning `false`.
@@ -194,19 +193,19 @@ inline constexpr std::chrono::milliseconds kDefaultWaitStep{5};
 
 /// @brief Polls @p pred until it returns `true` or @p budget elapses,
 ///        sleeping @p step between polls. Same shape as `morph::testing::
-///        waitUntil` (`tests/test_support.hpp`), which grew these same two
-///        strong types in morph#721, minus the Qt event-loop pump -- nothing
+///        waitUntil` (`tests/test_support.hpp`), which takes these same two
+///        strong types, minus the Qt event-loop pump -- nothing
 ///        here needs one, since no callback in this file is ever queued onto
 ///        a Qt event loop in the first place.
 ///
 /// @p budget is scaled by `MORPH_LADDER_DEADLINE_MS` exactly as every
 /// `pumpUntil` deadline is, via `testkit/deadline.hpp` -- the Qt-free half of
 /// `pump.hpp`, split out precisely so this file can share the knob without
-/// acquiring the `<QCoreApplication>` include that morph#128 exists to keep
-/// out of it. Scaling here rather than at the eight-odd call sites is
+/// acquiring the `<QCoreApplication>` include this file's whole Qt-free rule
+/// exists to keep out. Scaling here rather than at the eight-odd call sites is
 /// deliberate: it is one place, and it reaches the explicit 90s budget below
-/// too. Before this, every other wait in `examples/` honoured the env var and
-/// the slowest test in the ladder was the only one that did not.
+/// too. Without it the slowest test in the ladder would be the only wait in
+/// `examples/` that did not honour the env var.
 ///
 /// @tparam Pred  Predicate polled for completion.
 /// @param pred   Polled until it returns `true`.
@@ -239,8 +238,8 @@ concept WaitUntilCallableWith = requires(Args... args) { waitUntil(args...); };
 /// @brief A stand-in predicate type for the assertions below.
 using ExampleWaitPred = bool (*)();
 
-// The acceptance test for morph#735, kept in the translation unit that owns
-// the hazard so the build reddens if a later edit reintroduces it.
+// The acceptance test for that compile error, kept in the translation unit that
+// owns the hazard so the build reddens if a later edit reintroduces it.
 //
 // What must keep working -- every call site in this file relies on the
 // defaults, and one passes an explicit budget:
@@ -299,11 +298,10 @@ static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep, WaitStep>);
 // spawn, join and verification -- the shape `tests/.clang-tidy:132` describes
 // when it subtracts this check for the framework's own tests: it "measures a
 // whole TEST_CASE body". The example rungs' test configs subtract only the
-// Catch2 chained-comparison finding (a gate removed on 2026-09-23 validates
-// that one claim per file), so the suppression goes here rather than widening
-// theirs. The finding is pre-existing; morph#750 only made it visible by
-// editing a waitUntil call inside the body, which pulls the whole function
-// into clang-tidy-diff's changed-line scope (morph#677).
+// Catch2 chained-comparison finding, so the suppression goes here rather than
+// widening theirs. The finding does not depend on any particular edit -- it is a
+// property of the body -- but clang-tidy-diff only reports it once a changed
+// line pulls the whole function into its scope.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run under ThreadSanitizer",
           "[kanban][stress][tsan]") {

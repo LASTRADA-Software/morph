@@ -9,7 +9,7 @@
 namespace kanban::db {
 
 void setup(const std::string& connectionString) {
-    // morph#740: nothing in Lightweight stops a pooled DataMapper from being
+    // Nothing in Lightweight stops a pooled DataMapper from being
     // returned with a transaction still open on it -- `DataMapperPool::Return`
     // does no transaction cleanup, and the cost lands on the next, unrelated
     // borrower as a 60s stall and a `database is locked` it did not cause.
@@ -29,9 +29,9 @@ void setup(const std::string& connectionString) {
 // All eight tables in one migration, in dependency order, matching
 // bookmarks'/polls' own single-migration schema.cpp. Bounded columns use
 // Varchar(N) matching their entity's SqlAnsiString<N> capacity (Task 4);
-// unbounded columns use NVarchar(0), never Text() -- the fix already applied
-// to bookmarks (PR #90) and polls (PR #91) for this exact DDL/entity
-// mismatch (design spec §7).
+// unbounded columns use NVarchar(0), never Text() -- bookmarks' and polls'
+// schema.cpp carry the same rule, for this exact DDL/entity mismatch
+// (design spec §7).
 
 using namespace Lightweight::SqlColumnTypeDefinitions;
 

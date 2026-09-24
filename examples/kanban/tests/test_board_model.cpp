@@ -549,10 +549,9 @@ TEST_CASE("MoveTaskPosition rejects a taskId that belongs to a different project
     REQUIRE(found != stateB.tasks.end());
 }
 
-// Ledger triage item #14: the swimlane-belongs-to-project check
-// (MoveTaskPosition's inline check next to requireColumnBelongsToProject)
-// had no dedicated unit test -- only ever exercised implicitly by every
-// other test supplying a real swimlane. Same shape as "MoveTaskPosition
+// The swimlane-belongs-to-project check (MoveTaskPosition's inline check next
+// to requireColumnBelongsToProject) is otherwise only exercised implicitly, by
+// every other test supplying a real swimlane. Same shape as "MoveTaskPosition
 // into a column deleted mid-drag throws NotFound" above, but for the
 // swimlane half of the destination.
 TEST_CASE("MoveTaskPosition into a swimlane deleted mid-drag throws NotFound, not a silent orphan write",
@@ -827,13 +826,13 @@ TEST_CASE("Replaying a move-to-Done journal entry does not re-fire its rule", "[
     CHECK(closedTagCount == 1);
 }
 
-// morph#369: `CreateRule`/`GetRules` each carry a `projectId` their own
-// `validate()` insists be present. Neither used to consult it -- the board
-// was named by the handler's attach state alone -- so a handler attached to
-// project A, asked for project B's rules, answered with A's and an `ok`. The
-// argument was load-bearing in the type and inert in the code, and a client
-// that passed the id it meant had no way to tell it had been ignored. Both
-// now refuse a mismatch the way every other cross-project check in
+// `CreateRule`/`GetRules` each carry a `projectId` their own `validate()`
+// insists be present, and each must consult it. If the board were named by the
+// handler's attach state alone, a handler attached to project A and asked for
+// project B's rules would answer with A's and an `ok`: the argument would be
+// load-bearing in the type and inert in the code, and a client that passed the
+// id it meant would have no way to tell it had been ignored. Both refuse a
+// mismatch the way every other cross-project check in
 // board_model.cpp does. alice is a Manager on *both* projects here, so what
 // these pin is the projectId check itself, not the role gate standing in
 // for it.
@@ -1043,7 +1042,7 @@ TEST_CASE("ActionKeyTraits<OpenBoard>::key() rejects a disengaged projectId inst
     CHECK_THROWS_AS(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(disengaged), std::runtime_error);
 
     // The refusal is now `morph::model::keyToString`'s own, not this rung's:
-    // BRIDGE_MODEL_KEY generates the specialisation (morph#183), so the
+    // BRIDGE_MODEL_KEY generates the specialisation, so the
     // hand-written `throw kanban::ValidationError` is gone and the escaping
     // type is morph's plain `std::runtime_error`. Pinned as a negative
     // because it is the one caller-visible difference the migration makes.
@@ -1062,28 +1061,27 @@ TEST_CASE("ActionKeyTraits<OpenBoard>::key() rejects a disengaged projectId inst
     CHECK_FALSE(refusedByTheRung);
 }
 
-// Equivalence pin for morph#183's migration, and a regression guard after it:
-// the two hand-written specialisations were replaced by one
-// `BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)`, and the
-// only way that is safe is if the generated key is the same bytes the
-// hand-written `key()` produced, for every id it accepted.
+// Equivalence pin: one
+// `BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)` stands in for
+// two hand-written specialisations, and the only way that is safe is if the
+// generated key is the same bytes a hand-written `key()` produces, for every id
+// it accepts.
 TEST_CASE("BoardModel's deduced key is the ProjectId itself and encodes exactly as the hand-written key() did",
           "[kanban][model][key]") {
     // The macro deduces `PrimaryKey` from the *member* it is handed, so the
     // model's key type is the strong id (examples/IMPLEMENTATION.md rule 3),
-    // not the unwrapped `std::int64_t` the hand-written
-    // `ModelKeyTraits<BoardModel>` declared. Checked at run time rather than
-    // with `STATIC_REQUIRE` deliberately: this way the assertion *fails*
-    // against the pre-migration header instead of refusing to compile it, so
-    // it is a test that can be seen to fail.
+    // not the unwrapped `std::int64_t` a hand-written
+    // `ModelKeyTraits<BoardModel>` would declare. Checked at run time rather
+    // than with `STATIC_REQUIRE` deliberately: this way the assertion *fails*
+    // against a header that declares the scalar instead of refusing to compile
+    // it, so it is a test that can be seen to fail.
     CHECK((std::same_as<morph::model::PrimaryKeyOf<kanban::BoardModel>, kanban::ProjectId>));
 
-    // The right-hand side is literally the body the hand-written
-    // specialisation had (`morph::model::keyToString(*action.projectId)`), so
-    // this compares generated against hand-written directly rather than
-    // against a re-derived expectation. `9007199254740993` is past 2^53 --
-    // the range morph#286 had to fix elsewhere in this rung -- so a key
-    // encoding that ever went through a double would show up here.
+    // The right-hand side is literally a hand-written specialisation's body
+    // (`morph::model::keyToString(*action.projectId)`), so this compares
+    // generated against hand-written directly rather than against a re-derived
+    // expectation. `9007199254740993` is past 2^53, so a key encoding that ever
+    // went through a double would show up here.
     for (const std::int64_t raw :
          {std::int64_t{1}, std::int64_t{7}, std::int64_t{4294967297}, std::int64_t{9007199254740993}}) {
         const kanban::OpenBoard action{.projectId = kanban::ProjectId{raw}};
