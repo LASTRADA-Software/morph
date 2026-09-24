@@ -13,16 +13,6 @@
 // produce it, so adding an action that also yields an `R` never breaks an
 // existing subscriber.
 
-// A model action handler in this file never returns -- its body is a bare
-// `throw` -- so in that instantiation the dispatcher's `return model.execute(...)`
-// is genuinely unreachable and MSVC says so. The warning is raised at the first
-// instantiation point in this translation unit rather than inside the header
-// that contains the statement, so it is suppressed here rather than there, and
-// file-scoped because more than one case instantiates the same template.
-#if defined(_MSC_VER)
-#pragma warning(disable : 4702)
-#endif
-
 #include <any>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>

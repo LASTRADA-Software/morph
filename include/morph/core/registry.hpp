@@ -740,6 +740,16 @@ public:
             // log is attached and Action is loggable) so it leaves an audit
             // trail rather than silence, and the exception is rethrown
             // unchanged. See docs/spec/journal/journal.md, "Outcome".
+// MSVC's C4702 fires on the `return` below for any action whose handler never
+// returns -- a test double whose body is a bare `throw`, for instance. The
+// warning is correct for that instantiation and wrong as a verdict on this
+// statement, which every other instantiation reaches. It is suppressed here
+// rather than in each translation unit that instantiates such a handler,
+// because the set of those is open-ended: eleven test files already qualify.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
             auto result = [&] {
                 try {
                     return model.execute(action);
@@ -755,6 +765,9 @@ public:
                     throw;
                 }
             }();
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
             // Past this point the model's mutation has committed, so neither
             // step below may be reported as an execution failure. Both can
             // still throw -- resultToJson raises ParseError, and a sink that

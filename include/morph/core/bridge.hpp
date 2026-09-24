@@ -2111,6 +2111,16 @@ public:
             // including why a rejected/throwing execute must not leave the audit
             // trail silent, and why `Model::execute` is the only call inside the
             // try that records Outcome::Failed.
+// MSVC's C4702 fires on the `return` below for any action whose handler never
+// returns -- a test double whose body is a bare `throw`, for instance. The
+// warning is correct for that instantiation and wrong as a verdict on this
+// statement, which every other instantiation reaches. It is suppressed here
+// rather than in each translation unit that instantiates such a handler,
+// because the set of those is open-ended: eleven test files already qualify.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
             auto result = [&] {
                 try {
                     return std::make_shared<R>(model.execute(actionRef));
@@ -2127,6 +2137,9 @@ public:
                     throw;
                 }
             }();
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
             // Past this point the model's mutation has committed, so neither
             // serialising the result nor appending the entry may be reported as
             // an execution failure: both throw (ParseError; a sink that could
