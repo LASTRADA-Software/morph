@@ -703,16 +703,15 @@ TEST_CASE("EventPoller tolerates an empty onFatalError callback on a non-timeout
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// The two failure-classifier helpers, called directly (morph#411)
+// The two failure-classifier helpers, called directly
 // ═════════════════════════════════════════════════════════════════════════
 //
 // `isClientTimeout` and `describeFailure` are declared in
 // `event_poller.hpp`'s `detail` namespace with a documented answer for a null
-// `std::exception_ptr` and for a throw that is not a `std::exception`. Both
-// answers were reachable only through `handleError`, which never produces
-// either shape, so what the header promises was held up by nothing. They are
-// free functions taking an `exception_ptr`, so the promise can simply be
-// called.
+// `std::exception_ptr` and for a throw that is not a `std::exception`. Neither
+// shape is reachable through `handleError`, so going through the poller would
+// leave those two answers asserted by nothing. They are free functions taking
+// an `exception_ptr`, so the promise is called directly instead.
 
 TEST_CASE("isClientTimeout: a null exception is not a timeout", "[testkit][event-poller]") {
     // The distinction this classifier draws decides whether the poller retries

@@ -42,8 +42,8 @@ TEST_CASE("computeDeadlineScale is 1.0 for an unparseable value, not a crash", "
 
 // morph::async::Completion<T> is consumer-facing only (then()/onError()); it has
 // no resolve()/fail() of its own. The producer side is Completion<T>::
-// makeSettleable(execPtr) (issue #55's public "settleable promise" seam,
-// docs/spec/core/completion.md), which returns a {Completion<T>, Promise}
+// makeSettleable(execPtr), the public "settleable promise" seam
+// (docs/spec/core/completion.md), which returns a {Completion<T>, Promise}
 // pair sharing one state -- the Promise exposes resolve()/reject() without
 // ever naming morph::async::detail::CompletionState<T>. Here we use
 // morph::qt::QtExecutor (already linked in via morph::qt) as the executor,

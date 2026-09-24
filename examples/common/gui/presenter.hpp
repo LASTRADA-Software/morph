@@ -121,8 +121,8 @@ protected:
         // from that rig) is destroyed *before* it, and `BackendRig`'s
         // destructor then deliberately pumps the Qt event loop to flush
         // queued posts — resolving completions into a presenter that is
-        // already gone. AddressSanitizer caught that as a
-        // `stack-use-after-scope` write in `finishOne()` (morph#137).
+        // already gone. Without the guard AddressSanitizer reports that as a
+        // `stack-use-after-scope` write in `finishOne()`.
         //
         // The guard covers `onOk`/`onErr` as well as `finishOne()`: a
         // subclass's callback captures *its* `this`, so running it against a

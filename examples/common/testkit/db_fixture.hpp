@@ -159,7 +159,7 @@ private:
     ///        no branch of its own left to miss.
     static void ensureConnectionConfigured() {
         static const bool once = [] {
-            // morph#740: installed here as well as in every rung's own
+            // Installed here as well as in every rung's own
             // `db::setup()`/`db::configure()`, because no ladder test goes
             // through those -- this fixture points Lightweight at the test
             // database itself. Without it the audit would be live only in
@@ -355,15 +355,15 @@ private:
     ///        file — empties it first, so that the tests after this one are
     ///        not reported against it.
     ///
-    /// ── Why it both repairs *and* fails (morph#766) ────────────────────────
+    /// ── Why it both repairs *and* fails ────────────────────────────────────
     ///
     /// The database is one real file (`morph_ladder_test.db` by default),
     /// shared by every test in the binary and kept between runs by design —
     /// see this file's `@file` comment. So a state the drop sweep cannot
     /// handle is not one test's problem: it is every later test's, in this run
     /// and in every run after it, until somebody deletes a file that nothing
-    /// told them about. That was morph#766's expensive half. The cheap half
-    /// was that the throw said only `map::at`, attributed to the `TEST_CASE`
+    /// told them about. That is the expensive half of the failure; the cheap
+    /// half is a throw that says only `map::at`, attributed to the `TEST_CASE`
     /// line, naming neither the fixture, nor the file, nor the fact that the
     /// state is on disk at all.
     ///

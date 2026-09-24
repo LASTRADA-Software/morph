@@ -314,14 +314,12 @@ public:
         // including a nested one chained from inside another posted callback
         // -- has already happened by the time the drain below runs.
         _workerPool.reset();
-        // No event-loop drain here any more. This used to spin
-        // processEvents() for a fixed number of slices to flush posts queued
-        // by those tasks before any client executor was freed -- a workaround
-        // for morph#127, where a queued task delivered after its QtExecutor
-        // died called post() on the freed executor. `QtExecutor` now drops a
-        // task whose executor is already gone, so the hazard is closed in the
-        // framework rather than worked around in this one fixture. A fixed
-        // slice count was never a proof anyway, only a "probably enough".
+        // No event-loop drain here, and none is needed: a post() queued by
+        // one of those tasks and delivered after its QtExecutor has died is
+        // dropped by `QtExecutor` itself, so the hazard is closed in the
+        // framework rather than worked around in this fixture. Spinning
+        // processEvents() for some number of slices would not be a proof of
+        // anything either, only a "probably enough".
     }
 
     [[nodiscard]] Mode mode() const { return _mode; }

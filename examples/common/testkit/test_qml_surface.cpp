@@ -917,8 +917,8 @@ TEST_CASE("QmlSurfaceAudit: a guarded read of a member the bridge DOES have stil
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// The arms nothing executed — each one a promise the audit's own header
-// makes and, until now, kept only by inspection (morph#411)
+// The arms the cases above do not reach — each one a promise the audit's own
+// header makes, and which nothing but these cases executes
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("blankCommentsAndStrings blanks single-quoted and template strings, not just double-quoted",

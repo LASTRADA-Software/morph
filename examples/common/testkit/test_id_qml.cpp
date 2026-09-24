@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Tests for morph::ladder::gui::idNumber/idText/idFromText (morph#169).
+// Tests for morph::ladder::gui::idNumber/idText/idFromText.
 //
-// The extraction replaced hand-written conversions in ten files across five
-// rungs. It is a pure refactor -- every converted site kept the exact
-// representation it already had -- so what these pin is the invariant that
-// made the duplication worth removing rather than any changed behaviour:
+// These helpers carry the conversion that ten files across five rungs would
+// otherwise hand-write, each keeping the exact representation it needs. So what
+// these pin is the invariant that makes one shared copy worth having:
 //
 //   an id the model calls EMPTY and an id the model calls ENGAGED-WITH-ZERO
 //   must not arrive at QML as the same value.
@@ -60,7 +59,7 @@ struct ZeroSentinel {
 // ── The three states that must stay distinct ────────────────────────────────
 
 TEST_CASE("idNumber keeps unset, zero and an ordinary id apart", "[id-qml]") {
-    // This is morph#169's whole reason for existing. Written as three
+    // This is the whole reason these helpers exist. Written as three
     // pairwise inequalities rather than three equalities, because a
     // conversion that collapsed unset onto zero would still satisfy any two
     // of the equalities on their own.
@@ -168,11 +167,10 @@ TEST_CASE("idFromText yields an empty id for text that is not a number", "[id-qm
 TEST_CASE("the text form carries a full-width id exactly", "[id-qml]") {
     // idText/idFromText are exact across the whole int64 range because the
     // digits never become a number in between. This is NOT a claim about what
-    // QML then does with the string: morph#190/#191 found that QML's
-    // JSON.parse/JSON.stringify round trip rounds anything past 2^53, and
-    // idNumber's qlonglong reaches QML through the same numeric engine. Fixing
-    // that belongs to those issues; this only pins that the helper does not
-    // add a second lossy step of its own.
+    // QML then does with the string: QML's JSON.parse/JSON.stringify round trip
+    // rounds anything past 2^53, and idNumber's qlonglong reaches QML through
+    // the same numeric engine. That loss is above this layer; this only pins
+    // that the helper does not add a second lossy step of its own.
     constexpr std::int64_t big = 9007199254740993;  // 2^53 + 1
     CHECK(idText(OptionalId{big}) == QStringLiteral("9007199254740993"));
     CHECK(idFromText<OptionalId>(idText(OptionalId{big})) == OptionalId{big});

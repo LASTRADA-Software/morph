@@ -13,7 +13,7 @@
 /// which signal carries the result. `docs/analysis/qml-bridge-boilerplate.md`
 /// measured the rest of the bridge duplication as O(QML surface) and largely
 /// irreducible; this is one of the two pieces it identified as genuinely
-/// model-independent and worth extracting (morph#168).
+/// model-independent and worth extracting.
 
 namespace morph::ladder::gui {
 

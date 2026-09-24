@@ -176,15 +176,14 @@ TEST_CASE("SeededScript can pick the last generator, which absorbs the leftover 
     // here -- an early break and a run to completion -- so neither goes
     // unexercised.
     //
-    // Each arm is made *certain* rather than sampled (morph#375). This case
-    // used to run one 1:9 script for 60 draws and assert that both values
-    // appeared, which is a property of the sample and not of the walk: the
-    // light generator is missed with probability 0.9^60 = 1.8e-3. The seed is
-    // not fixed either -- SeededScript::resolveSeed lets MORPH_STRESS_SEED
-    // replace every script's seed process-wide, and TESTING.md documents that
-    // variable as the knob for re-running the ladder *stress* suites, so
-    // exporting it re-rolled that lottery for this unit case. A sweep of
-    // seeds 1..3000 found 314, 779 and 2522 failing.
+    // Each arm is made *certain* rather than sampled. Sampling it -- one 1:9
+    // script run for 60 draws, asserting that both values appear -- is a
+    // property of the sample and not of the walk: the light generator is missed
+    // with probability 0.9^60 = 1.8e-3, and the seed is not fixed either, since
+    // SeededScript::resolveSeed lets MORPH_STRESS_SEED replace every script's
+    // seed process-wide and TESTING.md documents that variable as the knob for
+    // re-running the ladder *stress* suites. In the sampled form a sweep of
+    // seeds 1..3000 failed on 314, 779 and 2522.
     //
     // Weighting the other generator 0 collapses the draw range to a single
     // value: _totalWeight is 1, so `uniform_int_distribution<int>{0, 0}`

@@ -159,7 +159,8 @@ unset(_morph_saved_skip_install_rules)
 # (target_compile_options(Lightweight PUBLIC ${ODBC_CFLAGS}), its
 # CMakeLists.txt at the pinned SHA), so it reaches every consumer as a plain
 # `-I` — which clang coverage-instruments, unlike an `-isystem` one. This
-# target is on the coverage path; morph#438 is the failing gate. See
+# target is on the coverage path, so those instrumented third-party headers
+# would land in the coverage report and move its numbers. See
 # cmake/morph_demote_interface_includes.cmake for the whole chain and for why
 # the fix belongs here rather than on each of the five consumers.
 include(${PROJECT_SOURCE_DIR}/cmake/morph_demote_interface_includes.cmake)
@@ -182,18 +183,17 @@ endif()
 # this target (see the note below on Lightweight).
 #
 # Those two TUs live in testkit_src/ rather than beside their headers in
-# testkit/, and that is the whole of what morph#652 fixed. clang-tidy resolves
-# its configuration from the path of the translation unit it is analysing, and
+# testkit/, and the reason is clang-tidy's configuration resolution: it reads
+# the configuration from the path of the translation unit it is analysing, and
 # testkit/.clang-tidy subtracts bugprone-chained-comparison on the argument
 # that the finding is Catch2's REQUIRE expansion rather than a defect. That
 # argument is true of the twenty-one Catch2 sources in that directory and says
-# nothing about a library TU with no REQUIRE in it -- yet while these two sat
-# there, the suppression covered them on the same terms, and the file's own
-# prose claimed it could not ("a hand-written `a < b < c` in the code under
-# test is still reported"). One directory up the suppression cannot reach
-# them, so the claim is true by construction instead of by assertion. The
-# headers stay in testkit/ because every consumer includes them as
-# <testkit/...>; only the two TUs moved.
+# nothing about a library TU with no REQUIRE in it. Placed in testkit/ these two
+# would inherit the suppression on those terms anyway, contradicting the file's
+# own prose ("a hand-written `a < b < c` in the code under test is still
+# reported"); one directory up it cannot reach them, so the claim holds by
+# construction rather than by assertion. The headers stay in testkit/ because
+# every consumer includes them as <testkit/...>; only the TUs are separated.
 #
 # Which is why the two headers are listed as sources below, and they are not
 # there to be compiled. AUTOMOC finds a Q_OBJECT header two ways: next to the
@@ -335,6 +335,6 @@ catch_discover_tests(ladder_common_tests
 # whose name contains a `;` is flattened into two fragments that name no test,
 # and set_tests_properties silently applies to nothing. The case then keeps
 # whatever label discovery gave it and never gains the one the pass exists to
-# add. That was morph#173, found because `ctest -L ladder-<rung>` counted fewer
-# tests than the binary reported. Applying the label at discovery, above,
-# removes the mechanism rather than hardening it.
+# add. The symptom is `ctest -L ladder-<rung>` counting fewer tests than the
+# binary reports. Applying the label at discovery, above, removes the mechanism
+# rather than hardening it.

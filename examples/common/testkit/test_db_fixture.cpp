@@ -35,7 +35,7 @@ struct LadderTestkitProbe {
     // 'TableName'` with `tableName` offered as the fix. That rename compiles
     // and links: the `requires` clause goes false, the `else` branch runs, and
     // this record silently maps to a table called "LadderTestkitProbe" that no
-    // migration ever creates. Suppressed rather than taken (morph#702).
+    // migration ever creates. Suppressed rather than taken.
     //
     // Per declaration, and deliberately not a directory .clang-tidy.
     // examples/bank/include/.clang-tidy exempts the same spelling with
@@ -43,17 +43,14 @@ struct LadderTestkitProbe {
     // and its own reasoning is what argues against copying it here: that file
     // covers twelve declarations in a header-only tree, reached as main files
     // and nothing else. This directory is the opposite shape. It holds
-    // twenty-one Catch2 translation units (the count
-    // a gate removed on 2026-09-23 reads back) and exactly two of these
+    // twenty-one Catch2 translation units and exactly two of these
     // declarations, and a .clang-tidy here is resolved for every one of them —
     // including for the include/morph/** headers they reach, which *do* match
-    // the root `HeaderFilterRegex` (morph#632). It also already carries a
-    // .clang-tidy whose whole justification is "this finding is Catch2 idiom",
-    // a claim a gate removed on 2026-09-23 re-checks against every .cpp that
-    // file governs; `TableName` is ORM protocol rather than Catch2 idiom, so
-    // adding it there would put a second claim into a file whose gate
-    // validates only the first. Two directives subtract one check on one line
-    // each and reach nothing else.
+    // the root `HeaderFilterRegex`. It also already carries a .clang-tidy whose
+    // whole justification is "this finding is Catch2 idiom"; `TableName` is ORM
+    // protocol rather than Catch2 idiom, so adding it there would put a second,
+    // unrelated claim into a file that argues only the first. Two directives
+    // subtract one check on one line each and reach nothing else.
     // NOLINTNEXTLINE(readability-identifier-naming)
     static constexpr std::string_view TableName = "ladder_testkit_probe";
 
@@ -118,17 +115,17 @@ TEST_CASE("DbFixture::computeConnectionString uses ODBC_CONNECTION_STRING verbat
             "DRIVER=PostgreSQL;Database=whatever");
 }
 
-// morph#766: when the shared database holds a foreign key whose target table
-// is gone, Lightweight's SqlSchema::ReadAllTables throws
+// When the shared database holds a foreign key whose target table is gone,
+// Lightweight's SqlSchema::ReadAllTables throws
 // std::out_of_range("map::at") out of DbFixture's constructor — before
 // anything has been dropped, so the bad state survives the run that reported
 // it and every test after it fails the same way, across invocations, until
 // somebody deletes a file nothing names.
 //
-// Two test cases below, because the issue has two halves and either can be
-// fixed without the other: the message has to name the fixture, the file and
-// the remedy, *and* the database has to be usable afterwards. A fix that only
-// improved the message would pass the first and fail the second.
+// Two test cases below, because the requirement has two halves and either can
+// hold without the other: the message has to name the fixture, the file and
+// the remedy, *and* the database has to be usable afterwards. A fixture that
+// only improved the message would satisfy the first and fail the second.
 namespace {
 
 /// @brief Leaves the shared database holding a foreign key whose target table

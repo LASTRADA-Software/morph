@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Tests for morph::ladder::gui::errorText (morph#168).
+// Tests for morph::ladder::gui::errorText.
 //
-// The extraction replaced 13 hand-written copies across six rungs. Most of
-// them lacked a `catch (...)` arm, so this is not a pure refactor -- the
-// behaviour for a non-std::exception throw changes from "escapes the callback"
-// to "returns text". These pin both the preserved behaviour and the fixed one.
+// `errorText()` is the one copy of the conversion six rungs used to hand-write,
+// and it has a `catch (...)` arm, which is the part a hand-written copy most
+// often omits: a non-std::exception throw returns text rather than escaping the
+// callback. These pin both arms.
 
 #include <QString>
 #include <catch2/catch_test_macros.hpp>
