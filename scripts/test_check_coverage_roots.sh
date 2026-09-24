@@ -103,12 +103,12 @@ fi
 
 # 2b. The dependency cache is admitted: its trees are third-party
 # sources that coverage.sh filters out anyway, and they live outside the
-# checkout only because DepCache.cmake shares them across a run's dozen
-# configures instead of re-cloning each time.
+# checkout only because CPM_SOURCE_CACHE points CPM's shared cache there
+# instead of re-cloning for each of a run's dozen configures.
 write_export "$tmp/depcache.json" \
     "${repo_root}/include/morph/core/bridge.hpp" \
     "$tmp/dep-cache/glaze_v7_4_0/include/glaze/glaze.hpp"
-if MORPH_DEP_CACHE="$tmp/dep-cache" run_checker "$tmp/nonexistent-build" "$tmp/depcache.json" > "$tmp/2b.out" 2>&1; then
+if CPM_SOURCE_CACHE="$tmp/dep-cache" run_checker "$tmp/nonexistent-build" "$tmp/depcache.json" > "$tmp/2b.out" 2>&1; then
     note "ok 2b: a file in the configured dependency cache passes"
 else
     fail "2b: a file in the dependency cache was rejected"
@@ -123,7 +123,7 @@ write_export "$tmp/depcache-and-foreign.json" \
     "${repo_root}/include/morph/core/bridge.hpp" \
     "$tmp/dep-cache/glaze_v7_4_0/include/glaze/glaze.hpp" \
     "/home/somebody/repo/morph-wt/999/examples/crm/src/models/account_model.cpp"
-if MORPH_DEP_CACHE="$tmp/dep-cache" run_checker "$tmp/nonexistent-build" \
+if CPM_SOURCE_CACHE="$tmp/dep-cache" run_checker "$tmp/nonexistent-build" \
         "$tmp/depcache-and-foreign.json" > "$tmp/2c.out" 2>&1; then
     fail "2c: with a dependency cache configured, a foreign worktree was accepted too"
     cat "$tmp/2c.out" >&2

@@ -495,7 +495,7 @@ what the interface target would have: Glaze at the pinned version (currently
 7.4), a C++23 standard library (the default logger uses `std::println`), the
 thread library, and each optional subsystem's own dependencies (Qt 6 for
 `morph::qt`, SQLite3 for `morph::offline_sqlite`). If the only Glaze around is
-the copy `FetchContent` dropped in a build directory, that recipe also points
+the copy CPM dropped in its source cache, that recipe also points
 your include path into someone's build tree. Prefer `find_package`.
 
 ## Examples

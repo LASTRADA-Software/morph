@@ -114,7 +114,7 @@ function(morph_add_rung)
     # ── ladder_<rung>_lib: models + db + app bootstrap (native only) ────
     # Lightweight::Lightweight (ODBC) does not exist under Emscripten:
     # examples/common/CMakeLists.txt returns early, before its
-    # FetchContent_MakeAvailable(Lightweight) call, whenever EMSCRIPTEN is
+    # CPMAddPackage(Lightweight) call, whenever EMSCRIPTEN is
     # set. Persistence lives server-side behind the model for a WASM client
     # (IMPLEMENTATION.md rule 4's WASM clause), and ladder_<rung>_gui_wasm
     # never links ladder_<rung>_lib — so this target genuinely never needs
@@ -365,7 +365,7 @@ function(morph_add_rung)
         # emitted, and the wasm link fails on every database symbol those
         # bodies reach (docs/spec/core/registry.md names a browser build as
         # the motivating case). That failure is a wall of undefined symbols
-        # from inside FetchContent'd code, so it is caught here instead.
+        # from inside fetched code, so it is caught here instead.
         if(_gui_wasm_sources AND NOT _gui_wasm_skips AND NOT MORPH_CLIENT_ONLY)
             message(FATAL_ERROR
                 "morph_add_rung: rung '${_rung}' builds ladder_${_rung}_gui_wasm, which needs "

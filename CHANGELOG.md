@@ -11,6 +11,13 @@ API surface).
 
 ### Changed
 
+- **Dependencies are fetched through CPM, and cached by CPM.** glaze, Catch2,
+  doxygen-awesome-css and Lightweight come through `CPMAddPackage` when no
+  installed copy is found, and CPM keeps their sources in `CPM_SOURCE_CACHE`,
+  which defaults to `.cache/cpm` inside the checkout. A second configure of the
+  checkout clones nothing. `cmake/DepCache.cmake` and its `MORPH_DEP_CACHE`
+  environment variable are gone: set `CPM_SOURCE_CACHE` instead.
+
 - **`LocalBackend::execute` no longer rescans the pending-completion list on
   every dispatch.** `trackPending` used to `std::erase_if` the whole `_pending`
   vector before each append, so admitting one call with *n* already in flight

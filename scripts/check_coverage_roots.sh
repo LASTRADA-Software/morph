@@ -78,27 +78,19 @@ readonly profdata="${build_dir}/merged.profdata"
 # symlink would report every file as foreign.
 readonly source_root="$(pwd -P)"
 
-# Third-party dependency sources are legitimately outside the checkout
-# `cmake/DepCache.cmake` points FetchContent at a shared cache so a
-# CI run clones once instead of a dozen times, and those trees then sit under
-# the runner's home rather than under `build/*/_deps`, where they used to be
-# only because FetchContent happened to put them there.
+# Third-party dependency sources may legitimately be outside the checkout.
+# CPM keeps every fetched dependency in CPM_SOURCE_CACHE so a CI run clones
+# once instead of a dozen times. CMakeLists.txt defaults that directory to
+# `.cache/cpm` inside the checkout, which the source-root test below already
+# admits; an explicit `CPM_SOURCE_CACHE` in the environment can put it anywhere,
+# and is admitted here.
 #
 # They are dropped from the report either way -- coverage.sh filters to
 # `include/morph` and the example rungs -- so their absence is intended, not the
 # silence this gate exists to catch. What it is looking for is *morph's own*
 # sources arriving from a foreign worktree, and that hazard is untouched by
 # this: a foreign worktree is not the dependency cache.
-#
-# Resolved exactly as DepCache.cmake resolves it, so the two cannot drift into
-# disagreeing about where the cache is.
-if [ -n "${MORPH_DEP_CACHE:-}" ]; then
-    dep_cache_root="${MORPH_DEP_CACHE}"
-elif [ -n "${CI:-}" ] && [ -n "${HOME:-}" ]; then
-    dep_cache_root="${HOME}/.cache/morph-dep-cache"
-else
-    dep_cache_root=""
-fi
+dep_cache_root="${CPM_SOURCE_CACHE:-}"
 readonly dep_cache_root
 
 if [ -n "$export_json_file" ]; then

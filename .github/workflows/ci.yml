@@ -136,10 +136,10 @@ env:
   #
   # Which artefact this names, checked rather than assumed:
   # ubuntu-24.04's package is 3.4.0-1build1 and it ships /usr/lib/cmake/Catch2,
-  # so `find_package(Catch2 CONFIG QUIET)` at CMakeLists.txt:557 SUCCEEDS on
-  # this runner and the FetchContent v3.8.1 fallback never runs -- reproduced
+  # so the root CMakeLists.txt's `find_package(Catch2 CONFIG QUIET)` SUCCEEDS on
+  # this runner and the CPM v3.8.1 fallback never runs -- reproduced
   # in a clean ubuntu:24.04 container, and corroborated by this job's own log
-  # (no `_deps/catch2-*`, no dep-cache line for Catch2) and by the report above
+  # (no Catch2 fetched by CPM) and by the report above
   # naming /usr/include. The pin therefore guards the installation this job
   # really analyses against. Catch2 reaches the translation units through the
   # compiler's implicit /usr/include with no include flag at all: over the 751
@@ -166,6 +166,16 @@ jobs:
         preset: [cl-debug, cl-release, clangcl-debug, clangcl-release]
     steps:
       - uses: actions/checkout@v4
+
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
 
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -293,6 +303,16 @@ jobs:
         preset: [gcc-debug, gcc-release, clang-debug, clang-release]
     steps:
       - uses: actions/checkout@v4
+
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
 
       - name: Cache apt packages
         uses: actions/cache@v4
@@ -518,6 +538,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
@@ -730,6 +760,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
@@ -930,6 +970,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
 
       - name: Cache apt packages
         uses: actions/cache@v4
@@ -1150,6 +1200,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
@@ -1341,6 +1401,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
@@ -1445,6 +1515,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # need history for the changed-paths diff below
+
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
 
       - name: Determine whether the ladder needs to run
         id: filter
@@ -1916,6 +1996,16 @@ jobs:
         with:
           fetch-depth: 0  # need history for the changed-paths diff below
 
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
       # Same filter as ladder-tests, and now literally the same generator
       # rather than a second hand-copy of the same list: the two jobs build the
       # identical tree and differ only in instrumentation, so a change that
@@ -2219,6 +2309,16 @@ jobs:
             fuzzers: 'OFF'
     steps:
       - uses: actions/checkout@v4
+
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
 
       - name: Cache apt packages
         uses: actions/cache@v4
@@ -2528,6 +2628,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
       - name: Cache apt packages
         uses: actions/cache@v4
         with:
@@ -2711,6 +2821,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # need full history for git diff against base
+
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
 
       - name: Cache apt packages
         uses: actions/cache@v4
@@ -3434,6 +3554,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
 
       # GCC 15 for the same reason the gcc-* presets use it: the default
       # logger needs a standard library with <print>, and ubuntu-24.04 ships

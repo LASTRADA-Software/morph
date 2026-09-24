@@ -111,7 +111,7 @@ include(cmake/compiler_options.cmake)
 
 # Compiler-cache launcher selection: fastcache-cc (when a fastcached daemon
 # answers) -> sccache -> ccache -> none. Included before any target or fetched
-# dependency (FetchContent glaze below) so those get cached too. See
+# dependency (glaze, through CPM, below) so those get cached too. See
 # cmake/CompileCache.cmake for the full selection logic; it declares its own
 # USE_COMPILER_CACHE/FASTCACHE_ADDR options.
 include(cmake/CompileCache.cmake)
@@ -129,23 +129,47 @@ if(MORPH_BUILD_TESTS)
     enable_testing()
 endif()
 
+# ── Dependencies: CPM, over one shared source cache ─────────────────────────
+# Every dependency morph fetches goes through CPMAddPackage, and CPM keeps the
+# sources it clones in CPM_SOURCE_CACHE, keyed on the package and its revision.
+# A second configure -- another preset, another build directory, the install
+# check's scratch tree -- then clones nothing, and CI restores the directory
+# from actions/cache rather than cloning glaze, Catch2, Lightweight and
+# doxygen-awesome-css again on every job: a burst of anonymous clones from one
+# egress address is answered with 401 by github.com, which git reports as
+# "could not read Username". A cache miss still fetches.
+#
+# The default is inside the checkout (.cache/ is ignored), so it needs no
+# setup and is never shared between checkouts by surprise. An explicit
+# -DCPM_SOURCE_CACHE or the environment variable of the same name wins.
+if(NOT DEFINED CPM_SOURCE_CACHE AND NOT DEFINED ENV{CPM_SOURCE_CACHE})
+    set(CPM_SOURCE_CACHE "${CMAKE_CURRENT_SOURCE_DIR}/.cache/cpm" CACHE PATH
+        "Where CPM keeps the sources of every fetched dependency")
+endif()
+include(cmake/CPM.cmake)
+
 # ── glaze ────────────────────────────────────────────────────────────────────
-# On Windows vcpkg provides glaze. On Linux we fall back to FetchContent so
-# that CI does not require vcpkg. The version bound matters: without it an
-# older system/user install (e.g. a stray 4.x in ~/.local) silently shadows
-# the pinned v7.4.0 and breaks schema generation.
+# On Windows vcpkg provides glaze. Elsewhere CPM fetches it, so that CI does
+# not require vcpkg. The version bound matters: without it an older
+# system/user install (e.g. a stray 4.x in ~/.local) silently shadows the
+# pinned v7.4.0 and breaks schema generation.
 # One place for the bound, because morphConfig.cmake has to state it too: an
 # installed morph whose package config asks for a different glaze than the
 # build used would resolve a header set the build never compiled against.
+#
+# find_package first and CPMAddPackage only when it finds nothing, rather than
+# CPM_USE_LOCAL_PACKAGES: that option is global, so it would also change how
+# Lightweight's own CPM dependencies resolve, and it passes the fetched pin as
+# the version it asks find_package for -- which for Catch2 below would refuse
+# the distribution's 3.4.0 that the clang-tidy leg is pinned to analyse.
 set(MORPH_GLAZE_VERSION 7.4)
 find_package(glaze ${MORPH_GLAZE_VERSION} CONFIG QUIET)
 if(NOT glaze_FOUND)
-    include(FetchContent)
-    include(cmake/DepCache.cmake)
-    morph_declare_dep(glaze https://github.com/stephenberry/glaze.git v7.4.0
-        GIT_SHALLOW TRUE)
-    set(glaze_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(glaze)
+    CPMAddPackage(
+        NAME glaze
+        GITHUB_REPOSITORY stephenberry/glaze
+        GIT_TAG v7.4.0
+        OPTIONS "glaze_ENABLE_TESTS OFF")
 endif()
 
 # Emscripten's single-threaded build has no pthreads; requiring Threads there
@@ -563,11 +587,14 @@ endif()
 if(MORPH_BUILD_TESTS)
     find_package(Catch2 CONFIG QUIET)
     if(NOT Catch2_FOUND)
-        include(FetchContent)
-        include(cmake/DepCache.cmake)
-        morph_declare_dep(Catch2 https://github.com/catchorg/Catch2.git v3.8.1
-            GIT_SHALLOW TRUE)
-        FetchContent_MakeAvailable(Catch2)
+        CPMAddPackage(
+            NAME Catch2
+            GITHUB_REPOSITORY catchorg/Catch2
+            GIT_TAG v3.8.1)
+        # Catch2 hands its `extras/` (Catch.cmake, catch_discover_tests) to
+        # its parent scope, which under CPM is the CPMAddPackage function
+        # rather than this directory; tests/ includes Catch from here.
+        list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
     endif()
 
     # ── The `--log-level` gate, shared by every Catch2 suite ────────────────
@@ -621,7 +648,7 @@ endif()
 # treats "not found" as a hard FATAL_ERROR (its own Catch2 does not get
 # fetched -- it relies on MORPH_BUILD_TESTS=ON having already resolved one).
 # Adding examples/ before this point would let that find_package() run before
-# the Tests section's FetchContent fallback ever executes, breaking the
+# the Tests section's CPM fallback ever executes, breaking the
 # no-system-Catch2 case even though MORPH_BUILD_TESTS=ON.
 if(MORPH_BUILD_LADDER)
     add_subdirectory(examples)
@@ -777,7 +804,7 @@ morph_verify_warning_flags()
 # Before this section existed, `cmake --install` on a morph build **exited 0**
 # and installed Glaze's headers plus a working glazeConfig.cmake -- Glaze
 # carries its own install/export rules and gets them for free through
-# FetchContent -- while installing zero morph headers and no
+# FetchContent or CPM -- while installing zero morph headers and no
 # morphConfig.cmake. A consumer running the standard CMake install workflow
 # got a prefix silently holding someone else's dependency and none of the
 # library they meant to install, with nothing to flag it (morph#232). Every
@@ -785,7 +812,7 @@ morph_verify_warning_flags()
 # install(TARGETS ... FILE_SET HEADERS) consumes directly, so the rules below
 # are mechanical rather than a retrofit.
 #
-# Off when morph is a subproject: a parent that FetchContent's or
+# Off when morph is a subproject: a parent that fetches (CPM, FetchContent) or
 # add_subdirectory's morph installs its own artefacts, and inheriting ours
 # would put morph's headers and package config into that project's prefix
 # uninvited -- which is the mirror image of the bug above.
