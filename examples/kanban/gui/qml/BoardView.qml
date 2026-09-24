@@ -64,6 +64,7 @@ import MorphForms
 
 Item {
     id: page
+    objectName: "boardView"
 
     property var boardBridge: null
     property var projectAdminBridge: null
@@ -362,199 +363,258 @@ Item {
             // ── Board area: one section per swimlane (or one flat row) ──
             Item {
                 id: boardRoot
+                objectName: "boardArea"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
 
-                ColumnLayout {
+                // A column delegate is a fixed 240 wide, so a board area
+                // narrower than one column plus the gaps around it shows half a
+                // column and no amount of scrolling makes it usable. This floor
+                // is what the Activity panel beside it has to yield to.
+                Layout.minimumWidth: boardRoot.columnWidth + 2 * boardRoot.columnSpacing
+
+                /// The column delegate's fixed width, and the gap between two of
+                /// them. Named here because the strip's total extent -- the width
+                /// the board must be able to scroll across -- is computed from
+                /// them, and the delegate below reads the same two numbers.
+                readonly property int columnWidth: 240
+                readonly property int columnSpacing: 8
+
+                /// The width every column laid end to end needs. Computed from
+                /// the column count rather than read off the Row's implicit
+                /// width: a Row is a positioner, so a layout that stretches it
+                /// moves nothing inside it, and its implicit width is only right
+                /// once every delegate has been built.
+                readonly property int stripExtent: page.columns.length > 0
+                    ? page.columns.length * boardRoot.columnWidth
+                      + (page.columns.length - 1) * boardRoot.columnSpacing
+                    : 0
+
+                // Without this the columns past the right edge are drawn beyond
+                // boardRoot's clip and there is nothing to reach them with: a
+                // four-column board already overflows the ~960 this area gets at
+                // the default window size.
+                Flickable {
+                    id: boardFlickable
+                    objectName: "boardFlickable"
                     anchors.fill: parent
-                    spacing: 8
+                    // Keeps the strip clear of the bar rather than under it.
+                    anchors.bottomMargin: boardScrollBar.visible ? boardScrollBar.height : 0
+                    clip: true
+                    contentWidth: Math.max(boardRoot.stripExtent, width)
+                    contentHeight: height
+                    flickableDirection: Flickable.HorizontalFlick
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    Repeater {
-                        model: page.laneModel
+                    // A bar that is actually on screen, not just a flick gesture:
+                    // a desktop pointer has no surface to flick, so an off-screen
+                    // column would otherwise still be unreachable.
+                    ScrollBar.horizontal: ScrollBar {
+                        id: boardScrollBar
+                        objectName: "boardScrollBar"
+                        policy: boardFlickable.contentWidth > boardFlickable.width
+                            ? ScrollBar.AlwaysOn
+                            : ScrollBar.AsNeeded
+                    }
 
-                        delegate: ColumnLayout {
-                            id: laneSection
-                            required property var modelData
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            spacing: 4
+                    ColumnLayout {
+                        // Sized from the flickable rather than anchored to it: a
+                        // Flickable's children are parented to its contentItem, whose
+                        // geometry is not the content size, and this layout has to be
+                        // as wide as the strip it holds rather than as wide as the
+                        // viewport that strip is seen through.
+                        width: boardFlickable.contentWidth
+                        height: boardFlickable.height
+                        spacing: 8
 
-                            Label {
-                                visible: laneSection.modelData.showHeader
-                                font.bold: true
-                                text: laneSection.modelData.name
-                            }
+                        Repeater {
+                            model: page.laneModel
 
-                            Row {
+                            delegate: ColumnLayout {
+                                id: laneSection
+                                required property var modelData
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                spacing: 8
+                                spacing: 4
 
-                                Repeater {
-                                    model: page.columns
+                                Label {
+                                    visible: laneSection.modelData.showHeader
+                                    font.bold: true
+                                    text: laneSection.modelData.name
+                                }
 
-                                    delegate: Rectangle {
-                                        id: columnDelegate
-                                        required property var modelData
-                                        width: 240
-                                        height: laneSection.height - (laneSection.modelData.showHeader ? 24 : 0)
-                                        border.width: 2
-                                        border.color: dropArea.containsDrag
-                                                      ? (columnDelegate.atWipLimit ? "#d33" : "steelblue")
-                                                      : "transparent"
-                                        color: palette.base
+                                Row {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    spacing: boardRoot.columnSpacing
 
-                                        readonly property var columnTasks:
-                                            page.tasksFor(columnDelegate.modelData.id, laneSection.modelData.id)
-                                        readonly property bool atWipLimit:
-                                            columnDelegate.modelData.wipLimit > 0
-                                            && columnDelegate.columnTasks.length >= columnDelegate.modelData.wipLimit
+                                    Repeater {
+                                        model: page.columns
 
-                                        ColumnLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 4
-                                            spacing: 4
+                                        delegate: Rectangle {
+                                            id: columnDelegate
+                                            objectName: "boardColumn_" + columnDelegate.modelData.id
+                                            required property var modelData
+                                            width: boardRoot.columnWidth
+                                            height: laneSection.height - (laneSection.modelData.showHeader ? 24 : 0)
+                                            border.width: 2
+                                            border.color: dropArea.containsDrag
+                                                          ? (columnDelegate.atWipLimit ? "#d33" : "steelblue")
+                                                          : "transparent"
+                                            color: palette.base
 
-                                            Label {
-                                                Layout.fillWidth: true
-                                                font.bold: true
-                                                elide: Text.ElideRight
-                                                text: columnDelegate.modelData.name + "  ("
-                                                      + (columnDelegate.modelData.wipLimit === 0
-                                                         ? String(columnDelegate.columnTasks.length)
-                                                         : columnDelegate.columnTasks.length + "/"
-                                                           + columnDelegate.modelData.wipLimit)
-                                                      + ")"
-                                            }
+                                            readonly property var columnTasks:
+                                                page.tasksFor(columnDelegate.modelData.id, laneSection.modelData.id)
+                                            readonly property bool atWipLimit:
+                                                columnDelegate.modelData.wipLimit > 0
+                                                && columnDelegate.columnTasks.length >= columnDelegate.modelData.wipLimit
 
-                                            DynamicForm {
-                                                id: createTaskForm
-                                                objectName: "createTaskForm_"
-                                                            + columnDelegate.modelData.id
-                                                Layout.fillWidth: true
-                                                actionType: "CreateTask"
-                                                schema: page.schemas["CreateTask"] || ({})
-                                                controller: page.boardBridge
+                                            ColumnLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 4
+                                                spacing: 4
 
-                                                // The two hidden context
-                                                // fields (see this file's
-                                                // header comment). Seeded on
-                                                // creation and re-seeded after
-                                                // every successful submit,
-                                                // since resetFields() clears
-                                                // hidden fields too.
-                                                function bindContext() {
-                                                    setFieldValue("columnId",
-                                                                  String(columnDelegate.modelData.id))
-                                                    setFieldValue("swimlaneId",
-                                                                  String(laneSection.modelData.id))
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                    text: columnDelegate.modelData.name + "  ("
+                                                          + (columnDelegate.modelData.wipLimit === 0
+                                                             ? String(columnDelegate.columnTasks.length)
+                                                             : columnDelegate.columnTasks.length + "/"
+                                                               + columnDelegate.modelData.wipLimit)
+                                                          + ")"
                                                 }
 
-                                                function rebind() {
-                                                    resetFields()
-                                                    bindContext()
+                                                DynamicForm {
+                                                    id: createTaskForm
+                                                    objectName: "createTaskForm_"
+                                                                + columnDelegate.modelData.id
+                                                    Layout.fillWidth: true
+                                                    actionType: "CreateTask"
+                                                    schema: page.schemas["CreateTask"] || ({})
+                                                    controller: page.boardBridge
+
+                                                    // The two hidden context
+                                                    // fields (see this file's
+                                                    // header comment). Seeded on
+                                                    // creation and re-seeded after
+                                                    // every successful submit,
+                                                    // since resetFields() clears
+                                                    // hidden fields too.
+                                                    function bindContext() {
+                                                        setFieldValue("columnId",
+                                                                      String(columnDelegate.modelData.id))
+                                                        setFieldValue("swimlaneId",
+                                                                      String(laneSection.modelData.id))
+                                                    }
+
+                                                    function rebind() {
+                                                        resetFields()
+                                                        bindContext()
+                                                    }
+
+                                                    Component.onCompleted: {
+                                                        createTaskForm.bindContext()
+                                                        page.registerTaskForm(createTaskForm)
+                                                    }
+                                                    Component.onDestruction: page.unregisterTaskForm(createTaskForm)
                                                 }
 
-                                                Component.onCompleted: {
-                                                    createTaskForm.bindContext()
-                                                    page.registerTaskForm(createTaskForm)
-                                                }
-                                                Component.onDestruction: page.unregisterTaskForm(createTaskForm)
-                                            }
+                                                ListView {
+                                                    id: taskList
+                                                    Layout.fillWidth: true
+                                                    Layout.fillHeight: true
+                                                    clip: true
+                                                    model: columnDelegate.columnTasks
 
-                                            ListView {
-                                                id: taskList
-                                                Layout.fillWidth: true
-                                                Layout.fillHeight: true
-                                                clip: true
-                                                model: columnDelegate.columnTasks
+                                                    delegate: Rectangle {
+                                                        id: card
+                                                        required property var modelData
+                                                        width: taskList.width
+                                                        height: 48
+                                                        radius: 4
+                                                        color: palette.alternateBase
+                                                        border.width: 1
+                                                        border.color: palette.mid
 
-                                                delegate: Rectangle {
-                                                    id: card
-                                                    required property var modelData
-                                                    width: taskList.width
-                                                    height: 48
-                                                    radius: 4
-                                                    color: palette.alternateBase
-                                                    border.width: 1
-                                                    border.color: palette.mid
+                                                        // Reparented to the
+                                                        // board's root Item for
+                                                        // the duration of the
+                                                        // drag so it visually
+                                                        // floats above the
+                                                        // columns (§6.2 step 1).
+                                                        Drag.active: dragHandler.active
+                                                        Drag.dragType: Drag.Internal
+                                                        Drag.hotSpot.x: width / 2
+                                                        Drag.hotSpot.y: height / 2
 
-                                                    // Reparented to the
-                                                    // board's root Item for
-                                                    // the duration of the
-                                                    // drag so it visually
-                                                    // floats above the
-                                                    // columns (§6.2 step 1).
-                                                    Drag.active: dragHandler.active
-                                                    Drag.dragType: Drag.Internal
-                                                    Drag.hotSpot.x: width / 2
-                                                    Drag.hotSpot.y: height / 2
+                                                        DragHandler {
+                                                            id: dragHandler
+                                                            target: card
 
-                                                    DragHandler {
-                                                        id: dragHandler
-                                                        target: card
-
-                                                        onActiveChanged: {
-                                                            if (active) {
-                                                                const inBoard = card.mapToItem(
-                                                                    boardRoot, 0, 0)
-                                                                card.parent = boardRoot
-                                                                card.x = inBoard.x
-                                                                card.y = inBoard.y
-                                                            } else {
-                                                                card.Drag.drop()
-                                                                card.parent = taskList.contentItem
+                                                            onActiveChanged: {
+                                                                if (active) {
+                                                                    const inBoard = card.mapToItem(
+                                                                        boardRoot, 0, 0)
+                                                                    card.parent = boardRoot
+                                                                    card.x = inBoard.x
+                                                                    card.y = inBoard.y
+                                                                } else {
+                                                                    card.Drag.drop()
+                                                                    card.parent = taskList.contentItem
+                                                                }
                                                             }
                                                         }
-                                                    }
 
-                                                    TapHandler {
-                                                        onTapped: {
-                                                            if (!dragHandler.active) {
-                                                                page.openTaskPopup(card.modelData)
+                                                        TapHandler {
+                                                            onTapped: {
+                                                                if (!dragHandler.active) {
+                                                                    page.openTaskPopup(card.modelData)
+                                                                }
                                                             }
                                                         }
-                                                    }
 
-                                                    Label {
-                                                        anchors.fill: parent
-                                                        anchors.margins: 6
-                                                        elide: Text.ElideRight
-                                                        text: card.modelData.title
+                                                        Label {
+                                                            anchors.fill: parent
+                                                            anchors.margins: 6
+                                                            elide: Text.ElideRight
+                                                            text: card.modelData.title
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
 
-                                        DropArea {
-                                            id: dropArea
-                                            anchors.fill: parent
+                                            DropArea {
+                                                id: dropArea
+                                                anchors.fill: parent
 
-                                            onDropped: (drop) => {
-                                                // §6.2 step 3: destination
-                                                // column/swimlane come from
-                                                // this DropArea; destination
-                                                // position is the nearest
-                                                // index within the
-                                                // destination list to the
-                                                // drop's own y.
-                                                const destTasks = columnDelegate.columnTasks
-                                                const dropY = drop.y
-                                                let position = destTasks.length
-                                                for (let i = 0; i < destTasks.length; ++i) {
-                                                    if (dropY < (i + 0.5) * 48) {
-                                                        position = i
-                                                        break
+                                                onDropped: (drop) => {
+                                                    // §6.2 step 3: destination
+                                                    // column/swimlane come from
+                                                    // this DropArea; destination
+                                                    // position is the nearest
+                                                    // index within the
+                                                    // destination list to the
+                                                    // drop's own y.
+                                                    const destTasks = columnDelegate.columnTasks
+                                                    const dropY = drop.y
+                                                    let position = destTasks.length
+                                                    for (let i = 0; i < destTasks.length; ++i) {
+                                                        if (dropY < (i + 0.5) * 48) {
+                                                            position = i
+                                                            break
+                                                        }
                                                     }
-                                                }
-                                                if (page.boardBridge && drop.source
-                                                    && drop.source.modelData) {
-                                                    page.boardBridge.moveTask(
-                                                        String(drop.source.modelData.id),
-                                                        String(columnDelegate.modelData.id),
-                                                        String(laneSection.modelData.id),
-                                                        position)
+                                                    if (page.boardBridge && drop.source
+                                                        && drop.source.modelData) {
+                                                        page.boardBridge.moveTask(
+                                                            String(drop.source.modelData.id),
+                                                            String(columnDelegate.modelData.id),
+                                                            String(laneSection.modelData.id),
+                                                            position)
+                                                    }
                                                 }
                                             }
                                         }
@@ -569,7 +629,16 @@ Item {
             // ── Activity panel: GetActivity's stream, refreshed on the same
             //    poll tick as the board (design spec §7) ──────────────────
             ColumnLayout {
+                objectName: "activityPanel"
+                // A ColumnLayout nested in a RowLayout fills width by default,
+                // and this one's implicit width is the widest unwrapped
+                // activity summary -- so left to itself it takes the whole row
+                // and the board beside it is squeezed to nothing. It is a
+                // sidebar: it gets a fixed band, the board gets the rest.
+                Layout.fillWidth: false
+                Layout.minimumWidth: 200
                 Layout.preferredWidth: 280
+                Layout.maximumWidth: 320
                 Layout.fillHeight: true
                 spacing: 4
 
