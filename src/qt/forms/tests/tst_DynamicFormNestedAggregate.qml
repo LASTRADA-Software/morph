@@ -19,13 +19,19 @@
 //      the cycle is not what stops the renderer, nesting is. The acyclic case
 //      is in here as the control -- without it, (2) reads as a cycle-specific
 //      defect rather than the general limit it is.
-//   4. The payload is wrong and the form does not say so: an object-typed
-//      member submits as a JSON *string*, an array-of-objects member as an
-//      array of strings, and `ready` is true for both.
+//   4. The form does not claim a payload it cannot assemble. Such a member is
+//      unrepresentable -- the control that was drawn collects text, and text
+//      encodes as a JSON *string* where the schema asks for an object -- so
+//      the form stays short of `ready`, submits nothing, and names the member
+//      in `unrepresentableReason`.
 //
-// (4) is the part worth arguing about, and this file is not the place to
-// argue it. This suite states the current behaviour so that a change to it is
-// visible as a failing test rather than as a silent difference.
+// (4) is the readiness claim, and it is about the payload rather than about
+// which controls happen to be filled: whether the renderer should eventually
+// draw the sub-form, decline the schema or go on flattening it, the answer to
+// "does the body satisfy the schema" is the same. The last two cases here are
+// the boundary in the other direction -- a member the payload legitimately
+// omits, and a flat form -- because the way to break this is to make an
+// ordinary form unready.
 
 import QtQuick
 import QtTest
@@ -124,23 +130,32 @@ TestCase {
         compare(findChild(form, "field_root_children"), null)
     }
 
-    // (4) The wrong payload, stated exactly. `root` must be an object; what
-    // the form offers is a string, and it reports itself ready to send it.
-    function test_the_cyclic_member_submits_as_a_json_string_and_the_form_says_ready() {
+    // (4) `root` must be an object; the only thing the drawn control collects
+    // is text. So the form never reports ready, never assembles a body, and
+    // says which member it is stuck on. Filling the control is not a remedy,
+    // which is exactly why the reason has to be reachable: "fill the required
+    // fields" is advice no input can act on here.
+    function test_the_cyclic_member_leaves_the_form_unready_and_says_why() {
         var form = createTemporaryObject(cyclicComponent, testCase)
         verify(form !== null)
+        var submitsBefore = mockController.submitCount
         compare(form.ready, false)  // both members are required, both blank
+
+        // The reason is a property of the schema, so it is readable before
+        // anything is typed -- a caller can refuse the form up front.
+        compare(form.fields[0].unrepresentable, "")
+        verify(form.fields[1].unrepresentable !== "")
+        verify(form.unrepresentableReason.indexOf("root: ") === 0)
 
         findChild(form, "field_id").text = "7"
         compare(form.ready, false)  // `root` still blank
 
         findChild(form, "field_root").text = "anything"
-        compare(form.ready, true)
-
-        var parsed = JSON.parse(form.previewLine)
-        compare(parsed.id, 7)
-        compare(typeof parsed.root, "string")
-        compare(parsed.root, "anything")
+        compare(form.ready, false)
+        verify(form.unrepresentableReason.indexOf("root: ") === 0)
+        // Nothing to preview, because there is no body to send.
+        compare(form.previewLine, "")
+        compare(mockController.submitCount, submitsBefore)
     }
 
     // --- The acyclic control ---------------------------------------------
@@ -177,10 +192,12 @@ TestCase {
     }
 
     // (3) Same outcome with no cycle anywhere: one control for the whole
-    // sub-object, none for its members, and a string payload.
+    // sub-object, none for its members -- and the same refusal to call the
+    // result ready.
     function test_an_acyclic_nested_aggregate_is_flattened_the_same_way() {
         var form = createTemporaryObject(acyclicComponent, testCase)
         verify(form !== null)
+        var submitsBefore = mockController.submitCount
         compare(form.fields.length, 2)
         verify(findChild(form, "field_address") !== null)
         compare(findChild(form, "field_street"), null)
@@ -188,11 +205,10 @@ TestCase {
 
         findChild(form, "field_id").text = "7"
         findChild(form, "field_address").text = "somewhere"
-        compare(form.ready, true)
-
-        var parsed = JSON.parse(form.previewLine)
-        compare(typeof parsed.address, "string")
-        compare(parsed.address, "somewhere")
+        compare(form.ready, false)
+        verify(form.unrepresentableReason.indexOf("address: ") === 0)
+        compare(form.previewLine, "")
+        compare(mockController.submitCount, submitsBefore)
     }
 
     // --- A recursive collection at the root -------------------------------
@@ -200,7 +216,9 @@ TestCase {
     // `TreeNode` used as the action type itself: `children` is an array whose
     // items `$ref` back to `TreeNode`. The array control is chosen by
     // `type: "array"` alone and encodes every comma-separated entry as a JSON
-    // string, so an array of objects arrives as an array of strings.
+    // string, so it cannot produce the array of *objects* the schema asks for.
+    // A control was drawn, and the member is unrepresentable anyway -- which is
+    // why "a control the renderer drew is filled" is not what `ready` claims.
     property var rootIsCyclicSchema: ({
         type: "object",
         properties: {
@@ -240,25 +258,124 @@ TestCase {
         }
     }
 
-    function test_a_recursive_collection_gets_the_array_control_and_string_items() {
+    function test_a_recursive_collection_gets_the_array_control_but_no_payload() {
         var form = createTemporaryObject(rootCyclicComponent, testCase)
         verify(form !== null)
+        var submitsBefore = mockController.submitCount
         compare(form.fields.length, 2)
         // Declaration order, not JSON key order: `name` carries x-order 0.
         compare(form.fields[0].name, "name")
         compare(form.fields[1].name, "children")
+        // The array control is still the one drawn: what changed is the claim
+        // about the payload, not the rendering.
         compare(form.fields[1].isArray, true)
+        compare(form.fields[0].unrepresentable, "")
+        verify(form.fields[1].unrepresentable !== "")
 
         findChild(form, "field_name").text = "top"
         findChild(form, "field_children").text = "a, b"
+        compare(form.ready, false)
+        verify(form.unrepresentableReason.indexOf("children: ") === 0)
+        compare(form.previewLine, "")
+        compare(mockController.submitCount, submitsBefore)
+    }
+
+    // --- The boundary: what is still ready --------------------------------
+    //
+    // An *optional* nested member is one the payload may legitimately leave
+    // out, so leaving it out is a body the schema accepts and the form says so.
+    // That the member is undrawable is still reachable on its descriptor --
+    // it is not dropped silently, it is declined. Typing into its control
+    // anyway is the case the gate must catch: there is no encoding for that
+    // text, so the form goes unready rather than quoting it into the body.
+    property var optionalNestedSchema: ({
+        type: "object",
+        properties: {
+            id: { type: "integer", "x-order": 0, title: "Id" },
+            note: { type: "string", "x-order": 1, title: "Note" },
+            address: {
+                type: "object",
+                properties: { street: { type: "string", "x-order": 0, title: "Street" } },
+                required: ["street"],
+                "x-order": 2,
+                title: "Address"
+            }
+        },
+        required: ["id"]
+    })
+
+    Component {
+        id: optionalNestedComponent
+        DynamicForm {
+            actionType: "OptionalNestedAction"
+            schema: testCase.optionalNestedSchema
+            controller: mockController
+        }
+    }
+
+    function test_an_optional_unrepresentable_member_may_be_omitted() {
+        var form = createTemporaryObject(optionalNestedComponent, testCase)
+        verify(form !== null)
+        verify(form.fields[2].unrepresentable !== "")
+
+        findChild(form, "field_id").text = "7"
         compare(form.ready, true)
+        compare(form.unrepresentableReason, "")
+        var parsed = JSON.parse(form.previewLine)
+        compare(parsed.id, 7)
+        compare(parsed.address, undefined)
+
+        // ... and the moment something is typed into it, there is no literal
+        // for it and the form stops claiming the body is acceptable.
+        findChild(form, "field_address").text = "somewhere"
+        compare(form.ready, false)
+        verify(form.unrepresentableReason.indexOf("address: ") === 0)
+    }
+
+    // The regression this contract most easily causes: an ordinary flat form
+    // judged unready because a member's schema was misread as a nested
+    // aggregate. A Quantity is `"type": "object"` in the schema and must not
+    // be caught by it, and neither must an array of strings.
+    property var flatSchema: ({
+        type: "object",
+        properties: {
+            id: { type: "integer", "x-order": 0, title: "Id" },
+            note: { type: "string", "x-order": 1, title: "Note" },
+            tags: { type: "array", items: { type: "string" }, "x-order": 2, title: "Tags" },
+            weight: { type: "object", "x-order": 3, "x-decimalPlaces": 2, title: "Weight",
+                      ExtUnits: { unitAscii: "kg", unitUnicode: "kg" } }
+        },
+        required: ["id", "note", "tags", "weight"]
+    })
+
+    Component {
+        id: flatComponent
+        DynamicForm {
+            actionType: "FlatAction"
+            schema: testCase.flatSchema
+            controller: mockController
+        }
+    }
+
+    function test_a_flat_form_names_nothing_unrepresentable_and_reaches_ready() {
+        var form = createTemporaryObject(flatComponent, testCase)
+        verify(form !== null)
+        compare(form.fields.length, 4)
+        for (var i = 0; i < form.fields.length; ++i)
+            compare(form.fields[i].unrepresentable, "")
+
+        findChild(form, "field_id").text = "7"
+        findChild(form, "field_note").text = "hello"
+        findChild(form, "field_tags").text = "a, b"
+        findChild(form, "field_weight").text = "1.25"
+        compare(form.ready, true)
+        compare(form.unrepresentableReason, "")
 
         var parsed = JSON.parse(form.previewLine)
-        compare(parsed.name, "top")
-        verify(Array.isArray(parsed.children))
-        compare(parsed.children.length, 2)
-        compare(typeof parsed.children[0], "string")
-        compare(parsed.children[0], "a")
-        compare(parsed.children[1], "b")
+        compare(parsed.id, 7)
+        compare(parsed.note, "hello")
+        verify(Array.isArray(parsed.tags))
+        compare(parsed.tags[0], "a")
+        compare(parsed.weight.num, 125)
     }
 }

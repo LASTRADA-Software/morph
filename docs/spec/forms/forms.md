@@ -1182,6 +1182,61 @@ which is what `maximum: Infinity` already meant, and matches JSON Schema giving
 a null numeric keyword no meaning. Without that, a null bound would read as the
 bound `0` and reject every positive value.
 
+### What `ready` claims
+
+`DynamicForm.ready` is a claim about the **payload**: `true` only when the body
+the form would submit satisfies the schema the form was generated from. It is
+deliberately *not* the weaker "every control the renderer drew is filled". Under
+that reading the flag would be `true` for a body the action must reject, and the
+rejection would surface at the action boundary rather than in the form, where the
+user could still correct it. Two obligations stated earlier are instances of the
+same rule: a value outside a [closed set](#closed-sets--a-reflected-enum-class)
+leaves the form not ready even though the combo box holds it, and a `boolean`
+field refuses anything but `true`/`false`.
+
+So a member this renderer has **no encoding for** keeps the form short of
+`ready`. `DynamicForm.qml` calls such a member *unrepresentable*, and recognises
+two shapes:
+
+- an **object-typed** member that no typed control claims — a
+  [nested aggregate](#nested-aggregates-recursive-cycle-safe), whose one scalar
+  control collects text where the schema asks for an object;
+- an **array whose `items` are objects** (or arrays), which takes the
+  [`type: "array"` control](#array-fields--type-array) and encodes each entry as
+  a JSON string. A control *was* drawn and the member is unrepresentable anyway,
+  which is precisely why "a control was filled" cannot be what `ready` means.
+
+A `Quantity` and a `Choice` are `"type": "object"` in the schema too and are
+**not** unrepresentable: their own controls encode the shape their schema asks
+for. The test is whether an encoding exists, not what the JSON type is.
+
+Two seams carry the reason, because a gate that only says "no" is not
+actionable:
+
+| Read | Where | Meaning |
+|---|---|---|
+| `fields[i].unrepresentable` | field descriptor | Why no control here can collect what the schema asks for, or `""`. A property of the *schema*, so it is readable before anything is typed — a caller can decline the form up front. |
+| `unrepresentableReason` | form | `"<wire name>: <reason>"` for the member submission is currently stuck on, or `""`. Written by `revalidate()` in the same pass that writes `ready`, so the two cannot disagree. Empty while the form is ready **and** while it is merely unfilled: a blank required field or an unsatisfied rule is the ordinary submit gate, which the user can act on. |
+
+The form's status label shows that reason in place of "fill the required (\*)
+fields" — advice no input can act on — and, being the label the
+[accessibility slice](#renderer-conformance-kit) mirrors into
+`Accessible.description`, announces it rather than merely tinting it.
+
+**An unrepresentable member the payload may legitimately omit does not block
+submission.** Optional and left blank, it is simply absent from the body, and
+that body is one the schema accepts; `unrepresentable` still names it on the
+descriptor, so the member is declined rather than dropped silently. Typing into
+its control is what makes the form unready, since that text has no encoding.
+
+What this does **not** decide is what the renderer should eventually *draw* for
+such a member — a sub-form, a refusal with a diagnostic, or the flattening it
+does today. The readiness answer is the same under all three, so it does not
+wait on that one. `src/qt/forms/tests/tst_DynamicFormNestedAggregate.qml` pins
+both directions: the unready cases with their reasons, and a flat form
+(integer, string, array-of-string, `Quantity`) that names nothing
+unrepresentable and reaches `ready`.
+
 ## Renderer conformance kit
 
 A renderer proves it honors the contract above by consuming a **schema
@@ -2788,28 +2843,40 @@ Four statements, each asserted by that suite:
    `address` object with `street`/`city` members yields `field_address` and
    nothing for `street` or `city`. The cycle is not what stops the renderer —
    nesting is.
-4. **The payload is wrong and the form reports itself ready.** The object-typed
-   member is submitted as a JSON *string* (`{"id":7,"root":"anything"}`), and a
-   recursive collection member takes the `type: "array"` control and submits an
-   array of strings (`{"name":"top","children":["a","b"]}`) where the schema
-   asks for an array of objects. `ready` is `true` in both cases.
+4. **The form does not report itself ready, and says which member stopped it.**
+   The flattened control collects text, and text is a JSON *string* where the
+   schema asks for an object; a recursive collection member takes the
+   `type: "array"` control, which encodes each entry as a string where the
+   schema asks for an array of objects. Neither member has an encoding, so both
+   are *unrepresentable* (see [What `ready` claims](#what-ready-claims)): while
+   the payload would have to carry one, `ready` is `false`, `previewLine` is
+   empty, `submitIfValid` is never called, and `unrepresentableReason` names the
+   member. An optional nested member left blank is not an exception to this: the
+   body omits it, and that is a body the schema accepts.
 
 Measured on Qt 6.11.2, `QT_QPA_PLATFORM=offscreen`, against the real
 `DynamicForm` with a mock controller. The suite was shown to measure the
-renderer rather than pass vacuously: filtering object-typed properties out of
-`DynamicForm.qml`'s `fields` builder — the "decline" alternative — turns 4 of
-its 5 cases red.
+renderer rather than pass vacuously, on each half of point 4 separately: of its
+7 cases, removing `fieldJsonLiteral`'s unrepresentable check — which restores a
+`ready` of `true` for both wrong payloads — turns 4 red on the `ready`
+comparison, and removing `revalidate()`'s `unrepresentableReason` assignment
+turns the same 4 red on the reason instead. What stays green under both is the
+two structural cases — the cycle builds a form, and the member is one control
+rather than a sub-form — and the flat form, which is what makes those four
+failures a statement about readiness rather than about the suite.
 
-Point 4 is a description of today's behaviour, **not** an endorsement of it: a
-`ready` that is `true` for a payload the action must reject is the one part of
-this contract that is arguably wrong, and whether the renderer should draw the
-sub-form, decline the schema with a diagnostic, or keep flattening it is
-undecided. Nothing in this repository has a nested-aggregate member today, so
-nothing depends on the answer yet.
+Point 4 is the readiness contract applied to a nesting the renderer does not
+draw, **not** a concession to it. A renderer may legitimately decline to draw a
+member it cannot represent; it may not then report that the resulting body is
+acceptable. What stays undecided is the other half — whether the renderer should
+draw the sub-form, decline the schema with a diagnostic, or keep flattening —
+and the readiness answer is the same under all three, so it does not wait on
+that. Nothing in this repository has a nested-aggregate member today, so nothing
+depends on the rendering answer yet.
 
 So: an action with a nested-aggregate member — cyclic or otherwise — is a
-document morph generates completely and a form morph draws only down to the
-nesting.
+document morph generates completely, a form morph draws only down to the
+nesting, and a body morph declines to assemble.
 
 Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
 only** regardless of nesting depth: a nested aggregate declaring any of those
