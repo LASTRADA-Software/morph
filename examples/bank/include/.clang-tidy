@@ -87,20 +87,19 @@
 # no `TableName` to exempt; the ignore has nothing to do there and does
 # nothing.
 #
-# One directory up, at `examples/`, is not available and should not be:
-# a gate (since removed) failed outright if `examples/.clang-tidy`
-# existed, because a config there governs every rung's src/, include/ and
-# gui_lib/ together and is the shape in which a narrow suppression quietly
-# becomes a wide one. That gate was written about the Catch2 suppression, and
-# the reasoning holds here regardless of how narrow this key is: the file would
-# be reaching seven rungs' production code on the strength of an argument made
-# about the bank example.
+# One directory up, at `examples/`, is not available and should not be: a
+# config there governs every rung's src/, include/ and gui_lib/ together, which
+# is the shape in which a narrow suppression quietly becomes a wide one. That
+# holds regardless of how narrow this key is -- the file would be reaching seven
+# rungs' production code on the strength of an argument made about the bank
+# example. Nothing gates that placement any more, so it is a rule to keep by
+# hand.
 #
 # That leaves the other 59 declarations -- 13 in crm's `db/`, 12 in ledger's,
 # 11 in kanban's, 9 in lims', 6 in polls', 5 in bookmarks', 1 in pastebin's,
 # and 2 in examples/common/testkit/ -- unexempted and, today, unreported:
 # clang-tidy-diff analyses only changed lines, so a declaration nobody has
-# touched has never been judged (morph#677). They are latent, not fixed, and
+# touched is never judged. They are latent, not fixed, and
 # deliberately left to the rung that owns each one rather than settled from
 # here. The two under examples/common/testkit/ are the sharpest of them,
 # because they sit in .cpp files that do have compile commands in this job's
@@ -111,10 +110,9 @@
 # clang-tidy *replaces* the root configuration rather than extending it, and
 # this file's `CheckOptions` alone enable nothing -- the whole check list gone.
 #
-# This paragraph used to say that happened *silently*, "while still exiting 0
-# on a clean file". It does not (morph#716). Re-measured on this revision with
-# clang-tidy 22.1.8 and the same compile database as the probe above, which is
-# the gap the earlier measurement left open:
+# Dropping the key fails loudly rather than silently, which is worth knowing
+# before reasoning about whether some other config needs protecting. Measured
+# with clang-tidy 22.1.8 and the same compile database as the probe above:
 #
 #     $ sed -i 's/^InheritParentConfig: true$/# &/' examples/bank/include/.clang-tidy
 #     $ clang-tidy -p build examples/bank/include/bank/offline/lightweight_offline_queue.hpp
@@ -123,14 +121,9 @@
 #     1
 #
 # against `6 warnings treated as errors` from the same command with the key in
-# place. So dropping the key is a red build with a message naming the problem,
-# not a quietly unlinted directory. The conclusion is unchanged -- the key is
-# required, and the gate that checked for it in every
-# examples/<rung>/tests/.clang-tidy was right to -- it has since been removed,
-# and the reason is a loud failure caught
-# early rather than a silent one caught never, and a reader deciding whether
-# some other config needs the same protection should be reasoning from the
-# former.
+# place. So the key is required and its absence is a red build with a message
+# naming the problem, not a quietly unlinted directory. Nothing checks for the
+# key, so keeping it here is a rule to hold by hand.
 #
 # ── Reach, stated rather than guessed ────────────────────────────────────────
 #
@@ -139,9 +132,8 @@
 # story: the root `HeaderFilterRegex` is `include/morph/.*`, which no example
 # header matches, so a `TableName` reached from a .cpp is discarded as non-user
 # code regardless of what this file says. The case that reaches CI is
-# clang-tidy-diff analysing a *changed header* as a main file, which is how
-# bank/offline/lightweight_offline_queue.hpp became the first of the 71
-# declarations ever to be judged at all.
+# clang-tidy-diff analysing a *changed header* as a main file, which is the
+# only way any of these 71 declarations is judged at all.
 #
 # The residue: a local variable or ordinary member spelled exactly `TableName`,
 # written anywhere under examples/bank/include/ for some reason unrelated to

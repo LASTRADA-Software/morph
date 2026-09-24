@@ -4,9 +4,9 @@
 # not a check, not a declaration kind, not a directory's worth of code.
 #
 # The long form of this argument, and the probe runs behind every claim below,
-# are in examples/bank/include/.clang-tidy, landed by morph#697. This file is
-# the same key applied to one more header tree (morph#702), with this rung's
-# own numbers rather than bank's. The short form:
+# are in examples/bank/include/.clang-tidy. This file is the same key applied to
+# one more header tree, with this rung's own numbers rather than bank's. The
+# short form:
 #
 #   * The repository-root .clang-tidy sets
 #     `readability-identifier-naming.VariableCase: camelBack`, and a Lightweight
@@ -51,18 +51,17 @@
 #     clang-tidy *replaces* the root configuration rather than extending it.
 #     Measured on the same probe with the key removed and nothing else changed:
 #     `Error: no checks enabled.`, exit 1, both from a direct clang-tidy run
-#     and through clang-tidy-diff.py -- which is louder than
-#     examples/bank/include/.clang-tidy records for the same mutation
-#     (morph#716).
+#     and through clang-tidy-diff.py. So its absence is a red build with a
+#     message naming the problem, not a quietly unlinted directory.
 #
 # ── Scope, and why it is this directory ──────────────────────────────────────
 #
 # clang-tidy resolves configuration by walking up from the file it is
 # analysing and offers no finer granularity than a directory, so the only
-# choice is which directory. One up, at `examples/`, was refused outright by a
-# gate (since removed), because a config there governs every rung's
-# src/, include/ and gui_lib/ together -- a narrow suppression in the shape
-# that quietly becomes a wide one.
+# choice is which directory. One up, at `examples/`, is refused: a config there
+# governs every rung's src/, include/ and gui_lib/ together -- a narrow
+# suppression in the shape that quietly becomes a wide one. Nothing gates that
+# placement, so it is a rule to keep by hand.
 #
 # `examples/polls/include/` is this rung's own header tree. It holds 11 .hpp
 # and no .cpp at all, so this file governs declarations and nothing else, and
@@ -70,7 +69,7 @@
 # (`include/morph/.*`) -- so a `TableName` reached from some .cpp is
 # discarded as non-user code whatever this file says. The case that reaches
 # CI is clang-tidy-diff analysing a *changed header* as a main file, which is
-# the only way any of these declarations has ever been judged (morph#677).
+# the only way any of these declarations is judged at all.
 #
 # Reach on this revision: 6 of the repository's 71 `static constexpr
 # std::string_view TableName` declarations are under this directory, all six
