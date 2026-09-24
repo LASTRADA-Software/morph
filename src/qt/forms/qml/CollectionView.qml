@@ -57,9 +57,10 @@ Frame {
     // form.setFieldValue for us. This only reaches the default
     // (`objectName: "field_" + name`) TextField control DynamicForm.qml
     // draws for a plain scalar field -- a bound field rendered as a Choice/
-    // DateTime/Slider/Multiline/radio-group control (or overridden via
-    // SlotRegistry) is not currently prefillable this way; see
-    // docs/spec/forms/views.md, "Limitations".
+    // DateTime/Slider/Multiline/radio-group control is not currently
+    // prefillable this way. A SlotRegistry override is, when its slot
+    // declares `fieldText`: the hidden TextField still takes the text and the
+    // binding carries it on. See docs/spec/forms/views.md, "Limitations".
     function findControlByObjectName(item, name) {
         if (!item)
             return null

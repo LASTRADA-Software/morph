@@ -410,10 +410,13 @@ pattern:
   + name` convention (the default `TextField` a plain integer/string
   property renders as) and sets its `text`. A `bind` entry targeting a field
   DynamicForm renders as a `Choice` combo box, a `Timestamp`/date-time
-  picker, a slider, a multiline text area, a radio group, or a
-  `SlotRegistry`-overridden control is not currently prefilled — the control
-  is simply left at its own default, exactly as an unbound field would be
-  (no crash, no partial state). Every worked example (`SamplesView`) only
+  picker, a slider, a multiline text area or a radio group is not currently
+  prefilled — the control is simply left at its own default, exactly as an
+  unbound field would be (no crash, no partial state). A
+  `SlotRegistry`-overridden scalar field is prefilled only when its slot
+  declares the optional `fieldText` member ([forms.md](forms.md#theming--component-override-registry)):
+  the hidden default `TextField` still takes the text, and `fieldText` carries
+  the resulting value to the slot. Every worked example (`SamplesView`) only
   ever binds the integer row key, which always renders as a plain
   `TextField`, so this gap does not affect the shipped demo.
 

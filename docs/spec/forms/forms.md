@@ -895,6 +895,52 @@ encodes to a genuine empty array `[]`, not `null`; a `required` array field
 is satisfied by engagement (non-blank text), not by having at least one
 surviving entry.
 
+### Collections of objects — a host slot draws them
+
+A `std::vector<Row>` member is `{"type": "array", "items": {"$ref":
+"#/$defs/Row"}}` (or `items` inlined, for a row type used once), and the row
+type's `$def` is annotated like any object schema — `x-order`, `title`,
+`required`, and every `FieldMeta` key its own `fieldMetadata` declares (see
+[Nested aggregates](#nested-aggregates-recursive-cycle-safe)). The built-in
+controls cannot collect it: the comma-separated array control encodes strings,
+so the member is [unrepresentable](#what-ready-claims) and a form that must
+carry it is not ready.
+
+**A host [slot](#theming--component-override-registry) that claims such a
+member makes it representable.** The renderer describes the row type the way
+it describes the action, and hands the result to the slot:
+
+| Field descriptor key | Meaning |
+|---|---|
+| `isObjectArray` | `true` for an array whose `items` resolve to an object schema with `properties`. |
+| `itemFields` | The row type's member descriptors, in `x-order` order — the same shape as a top-level entry of `fields` (`name`, `label`, `unit`, `decimals`, `readOnly`, `hidden`, `required`, `isQuantity`/`isNumber`/`isInteger`/`isBoolean`/`isEnum`/`enumOptions`, …): a grid's columns. Filled for a top-level collection only; one level is described, never more, so a self-referential row type cannot loop. |
+| `claimedBySlot` | `true` when a registered slot resolves for this member. `unrepresentable` is then `""`. |
+
+The slot edits the rows as **cell texts** — `setRows([{sieve: "31.5",
+passing: "100.0"}, …])`, or `setValue` with the same array as JSON text — where
+each cell holds what the built-in control for that member would hold: the typed
+digits of a number or `Quantity` (in the display locale), `"true"`/`"false"`
+for a boolean, the option's `valueJson` for a closed set. The form then encodes
+**every cell with the encoder the same member would get at the top level**
+(`encodeFieldText`): the same syntax, locale normalisation, precision limit and
+declared bounds, so a `Quantity` cell becomes an exact `{num,den,dp}` and an
+over-precise one is refused, not rounded. A blank optional cell is omitted from
+its row object. The literal is `null` — no value, so the form is not ready —
+when the text is not an array of objects, when a cell does not encode, or when
+a required member of any row is blank. An empty array is a value: `[]` is
+submitted for it.
+
+Cells are always read in the member's **canonical** unit: a row has no unit
+selector of its own. Only a **top-level** collection is handed to a slot; one
+nested inside a row, or inside a nested object, stays unrepresentable. A label
+inside a row resolves through an explicit `x-i18nKey` or its literal only — the
+derived `<action>.<field>` key names top-level members, and no row-level stem
+is defined on the C++ side.
+
+`src/qt/forms/tests/tst_DynamicFormObjectArraySlot.qml` pins the contract
+against submitted bodies. Replacing the cell encoder with plain string quoting
+reddens 3 of its 17 cases.
+
 ### Boolean fields — `type: "boolean"`
 
 glaze emits `{"type": "boolean"}` for a `bool` member, and
@@ -1293,6 +1339,14 @@ fields" — advice no input can act on — and, being the label the
 [accessibility slice](#renderer-conformance-kit) mirrors into
 `Accessible.description`, announces it rather than merely tinting it.
 
+**A slot can supply the missing encoding for a collection of objects.** When a
+registered slot claims a top-level `std::vector<Row>` member, `unrepresentable`
+is `""` for it and the form encodes the rows the slot writes — see
+[Collections of objects](#collections-of-objects--a-host-slot-draws-them). The
+descriptor therefore depends on the slot registry as well as on the schema; the
+`fields` binding reads `SlotRegistry.revision`, so a slot registered after the
+form was built is picked up.
+
 **An unrepresentable member the payload may legitimately omit does not block
 submission.** Optional and left blank, it is simply absent from the body, and
 that body is one the schema accepts; `unrepresentable` still names it on the
@@ -1418,7 +1472,22 @@ forking the renderer:
   `Loader.onLoaded` — `field` is the resolved, merged def+property descriptor,
   and `setValue(text)` is the same set-value path (`setFieldValue`) the
   built-in controls use, so an override participates in the required-gate and
-  auto-fire without special-casing. `SlotRegistry.revision` is bumped on every
+  auto-fire without special-casing.
+
+  A slot may also declare any of four **optional** members, each assigned only
+  when declared (so an existing slot is unaffected):
+
+  | Member | Assigned as | Use |
+  |---|---|---|
+  | `fieldText` | a binding to the field's retained text | Seed and track the control's value. A prefill, `resetFields()`, a `setFieldValue` from code and a tab switch that rebuilds the slot all reach it; without it a slot sees only what it wrote itself. |
+  | `rows` | a binding to the rows of a [collection of objects](#collections-of-objects--a-host-slot-draws-them), as a JS array of `{member: cellText}` (`[]` when none) | Draw the grid. |
+  | `setRows` | `function (rows)` | Write the rows; equivalent to `setValue(JSON.stringify(rows))`. |
+  | `form` | the `DynamicForm` itself | Reach `encodeFieldText(field, text, 0)` (does this cell encode?) and the rest of the form's public surface. |
+
+  Both bindings re-evaluate on `rulesRevision`, which `revalidate()` bumps after
+  every write to the draft. A slot that claims a collection of objects is also
+  what makes that member representable — see
+  [Collections of objects](#collections-of-objects--a-host-slot-draws-them). `SlotRegistry.revision` is bumped on every
   `by*()` call and read inside `resolve()`, for the same reason
   `I18nCatalog.revision` exists: `_byField`/`_byWidget`/`_byUnit`/`_byType` are
   plain objects mutated in place, which does not by itself notify a binding
@@ -2946,7 +3015,9 @@ depends on the rendering answer yet.
 
 So: an action with a nested-aggregate member — cyclic or otherwise — is a
 document morph generates completely, a form morph draws only down to the
-nesting, and a body morph declines to assemble.
+nesting, and a body morph declines to assemble — unless the member is a
+top-level collection of objects a host slot draws, which the form then encodes
+row by row (see [Collections of objects](#collections-of-objects--a-host-slot-draws-them)).
 
 Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
 only** regardless of nesting depth: a nested aggregate declaring any of those
