@@ -985,7 +985,7 @@ is defined on the C++ side.
 
 `src/qt/forms/tests/tst_DynamicFormObjectArraySlot.qml` pins the contract
 against submitted bodies. Replacing the cell encoder with plain string quoting
-reddens 3 of its 17 cases.
+reddens 3 of its 18 cases.
 
 ### Boolean fields — `type: "boolean"`
 
