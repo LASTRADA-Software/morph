@@ -78,6 +78,11 @@
 ///   declaration in C++, so an action's `validate()` enforces exactly what
 ///   the client was served. Bounds are per *field*, unlike
 ///   `UnitTraits::bounds`, which is per unit.
+/// - **`ExtUnits` / `x-displayDecimals`** — for a *non-`Quantity`* field whose
+///   `FieldMeta` declares `unit` / `decimals`: the display unit (in the same
+///   `ExtUnits` shape a `Quantity` carries) and the fraction digits a renderer
+///   shows and accepts. Presentation only — the member keeps its plain JSON
+///   encoding.
 /// - **`x-computed` / `x-readonly`** — for a member listed as the destination
 ///   of an action's `computedFields` declaration: the field is derived from
 ///   sibling inputs (named in `x-computed.inputs`) and must not be rendered as
@@ -188,7 +193,8 @@
 namespace morph::forms {
 
 /// @brief Per-field presentation overrides and scalar bounds: label, help,
-///        placeholder, read-only, hidden, `minimum`/`maximum`/`multipleOf`
+///        placeholder, read-only, hidden, `minimum`/`maximum`/`multipleOf`,
+///        and a plain member's display `unit`/`decimals`
 ///        (docs/spec/forms/forms.md, "Field metadata").
 ///
 /// An action opts in with a `static constexpr std::array<FieldMeta, N>`
@@ -198,7 +204,8 @@ namespace morph::forms {
 /// than `field` defaults to "not declared": an empty `label`/`help`/
 /// `placeholder` means "infer the title, omit the rest"; `readOnly`/`hidden`
 /// default to `false`; a disengaged `minimum`/`maximum`/`multipleOf` emits
-/// nothing and checks nothing. `mergeSchemaExtras` looks up the entry (if any)
+/// nothing and checks nothing; an empty `unit` and a disengaged `decimals`
+/// emit nothing. `mergeSchemaExtras` looks up the entry (if any)
 /// matching each reflected member by wire key and patches the property node;
 /// an entry naming a field that does not exist on the action is ignored.
 ///
@@ -275,6 +282,27 @@ struct FieldMeta {
     /// exactly the same set of values as its magnitude.
     std::optional<::morph::math::Rational> multipleOf{};
 
+    /// @brief Display unit for a member whose C++ type carries none (a plain
+    ///        `double`, `float` or integral member); emitted as the property's
+    ///        `ExtUnits` (`{"unitAscii": unit, "unitUnicode": unit}`), the key
+    ///        a `Quantity` already carries. Empty emits nothing.
+    ///
+    /// Presentation only: the unit never travels in the payload and nothing
+    /// converts through it. **Ignored on a `Quantity` member**, whose unit is
+    /// part of its type and already emitted.
+    std::string_view unit{};
+
+    /// @brief Display and entry precision for a plain `double`/`float` member;
+    ///        emitted as `x-displayDecimals`. Disengaged emits nothing.
+    ///
+    /// Deliberately not `x-decimalPlaces`: that key hands a property the exact
+    /// `{num,den,dp}` encoding, which a `double` cannot decode. This one keeps
+    /// the plain JSON-number encoding and only tells a renderer how many
+    /// fraction digits to show and accept. **Ignored on a `Quantity` member**
+    /// (its `x-decimalPlaces` is authoritative) and when it exceeds
+    /// `morph::math::kMaxDecimalPlaces`.
+    std::optional<::morph::math::DecimalPlaces> decimals{};
+
     /// @brief Returns a copy with `placeholder` set to @p text.
     /// @param text The placeholder hint.
     /// @return The updated descriptor.
@@ -325,6 +353,24 @@ struct FieldMeta {
     [[nodiscard]] constexpr FieldMeta withMultipleOf(::morph::math::Rational step) const noexcept {
         FieldMeta copy = *this;
         copy.multipleOf = step;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `unit` set to @p text.
+    /// @param text The display unit, e.g. `"kg/m³"`.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withUnit(std::string_view text) const noexcept {
+        FieldMeta copy = *this;
+        copy.unit = text;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `decimals` set to @p places.
+    /// @param places Fraction digits to display and accept.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withDecimals(::morph::math::DecimalPlaces places) const noexcept {
+        FieldMeta copy = *this;
+        copy.decimals = places;
         return copy;
     }
 };
@@ -2174,6 +2220,26 @@ inline void annotateDeclaredBounds(glz::generic_u64& property, const FieldMeta& 
     }
 }
 
+/// @brief Stamps @p meta's display `unit` (as `ExtUnits`) and `decimals` (as
+///        `x-displayDecimals`) onto @p property, for a non-`Quantity` member.
+///
+/// `ExtUnits` is the key a `Quantity` already carries, so every reader of a
+/// unit -- a renderer's suffix label, `SlotRegistry.byUnit`, a view column --
+/// finds a plain member's unit where it finds a `Quantity`'s.
+/// @param property Property node to annotate in place.
+/// @param meta     The field's declared metadata.
+inline void annotateDisplayUnit(glz::generic_u64& property, const FieldMeta& meta) {
+    if (!meta.unit.empty()) {
+        glz::generic_u64 units{};
+        units["unitAscii"] = std::string{meta.unit};
+        units["unitUnicode"] = std::string{meta.unit};
+        property["ExtUnits"] = std::move(units);
+    }
+    if (meta.decimals.has_value() && meta.decimals->value <= ::morph::math::kMaxDecimalPlaces) {
+        property["x-displayDecimals"] = std::uint64_t{meta.decimals->value};
+    }
+}
+
 /// @brief Whether @p value satisfies every bound @p meta declares.
 ///
 /// The comparisons run on the exact `math::Rational`, never on a `double`, so
@@ -2261,6 +2327,11 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
             property["x-i18nKey"] = std::string{fieldMeta->i18nKey};
         }
         annotateDeclaredBounds(property, *fieldMeta);
+        // A Quantity's unit and precision are part of its type and emitted
+        // below; a FieldMeta restating them could only disagree.
+        if constexpr (!units::isQuantity<Member>) {
+            annotateDisplayUnit(property, *fieldMeta);
+        }
     }
 
     if constexpr (units::isQuantity<Member>) {
