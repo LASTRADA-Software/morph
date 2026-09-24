@@ -389,6 +389,37 @@ Frame {
         return ""
     }
 
+    // The renderer kind of a resolved property: the control it gets, which
+    // the JSON type alone does not say (a Quantity and a nested object are both
+    // "object", a Choice is "integer", an enum and a date-time are "string").
+    // Asked in the order fieldJsonLiteral encodes in, so the kind names the
+    // encoder the field actually gets.
+    function fieldKind(p, types, dp, optionsAction, isEnum) {
+        if (types.indexOf("array") !== -1) {
+            const itemTypes = jsonTypes(resolveProp(p.items))
+            return itemTypes.indexOf("object") !== -1 ? "objectArray" : "array"
+        }
+        if (isEnum)
+            return "enum"
+        if (optionsAction !== undefined)
+            return "choice"
+        if (p.format === "date-time")
+            return "datetime"
+        if (p.format === "date")
+            return "date"
+        if (dp !== undefined)
+            return "quantity"
+        if (types.indexOf("integer") !== -1)
+            return "integer"
+        if (types.indexOf("boolean") !== -1)
+            return "boolean"
+        if (types.indexOf("number") !== -1)
+            return "number"
+        if (types.indexOf("object") !== -1)
+            return "object"
+        return "string"
+    }
+
     // Value/label pairs for a property that states a **closed set of values**
     // outright, or [] for one that does not. Two spellings, both handled:
     //
@@ -502,9 +533,9 @@ Frame {
 
     // Whether a host slot claims the member `name` -- the same resolution the
     // field delegate performs, so the two cannot disagree.
-    function slotClaims(name, xWidget, unitAscii, jsonType) {
+    function slotClaims(name, xWidget, unitAscii, jsonType, kind) {
         return slotRegistry !== null && slotRegistry !== undefined
-               && slotRegistry.resolve(actionType, name, xWidget, unitAscii, jsonType) !== null
+               && slotRegistry.resolve(actionType, name, xWidget, unitAscii, jsonType, kind) !== null
     }
 
     // Field descriptors for one object schema's properties, in x-order order.
@@ -584,11 +615,12 @@ Frame {
                 const isObjectArray = jsonTypes(itemSchema).indexOf("object") !== -1
                         && itemSchema.properties !== undefined
                 const jsonType = types.length > 0 ? types[0] : ""
+                const kind = fieldKind(p, types, dp, optionsAction, enumOptionRows.length > 0)
                 // Only a top-level collection is handed to a slot: its rows
                 // are stored in the collection's own fieldValues entry, which
                 // a member one level down does not have.
                 const claimedBySlot = depth === 0 && isObjectArray
-                        && slotClaims(name, opt(widget, ""), opt(extUnits.unitAscii, ""), jsonType)
+                        && slotClaims(name, opt(widget, ""), opt(extUnits.unitAscii, ""), jsonType, kind)
                 const derivedKey = function (slot) { return depth === 0 ? i18nFieldKey(name, slot) : undefined }
                 return {
                     name: name,
@@ -724,6 +756,9 @@ Frame {
                     // to "" and SlotRegistry.resolve()'s byWidget tier never
                     // matches.
                     xWidget: opt(widget, ""),
+                    // The control this renderer would draw, named for
+                    // SlotRegistry.byKind (see fieldKind).
+                    kind: kind,
                     unitAscii: opt(extUnits.unitAscii, ""),
                     jsonType: jsonType
                 }
@@ -1932,7 +1967,8 @@ Frame {
                     ? form.slotRegistry.resolve(form.actionType, fieldColumn.modelData.name,
                                                  fieldColumn.modelData.xWidget,
                                                  fieldColumn.modelData.unitAscii,
-                                                 fieldColumn.modelData.jsonType)
+                                                 fieldColumn.modelData.jsonType,
+                                                 fieldColumn.modelData.kind)
                     : null
 
                 Loader {

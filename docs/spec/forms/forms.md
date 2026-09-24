@@ -1527,9 +1527,11 @@ forking the renderer:
 - **`SlotRegistry` (QML type, module `MorphForms`, entirely client-side).** A
   lookup a host app populates at startup: `byField(action, field, component)`,
   `byWidget(xWidget, component)`, `byUnit(unitAscii, component)`,
-  `byType(jsonType, component)`, and `resolve(action, field, xWidget,
-  unitAscii, jsonType)`, which returns the highest-priority match or `null`.
-  Resolution order is **field → `x-widget` → unit → type → built-in default**.
+  `byKind(kind, component)`, `byType(jsonType, component)`, and
+  `resolve(action, field, xWidget, unitAscii, jsonType, kind)`, which returns
+  the highest-priority match or `null` (`kind` is optional; the five-argument
+  call resolves as before). Resolution order is **field → `x-widget` → unit →
+  kind → type → built-in default**.
   `DynamicForm` gains a `slotRegistry` property (`null` by default — no
   behavior change for an app that never sets it); when a field resolves to a
   registered `Component`, `DynamicForm` loads it via a `Loader` and hides its
@@ -1561,6 +1563,31 @@ forking the renderer:
   `I18nCatalog.revision` exists: `_byField`/`_byWidget`/`_byUnit`/`_byType` are
   plain objects mutated in place, which does not by itself notify a binding
   that already read them.
+
+**`byKind` — one host control per kind of control.** The JSON type does not
+name the control a field needs: a `Quantity` and a nested object are both
+`"object"`, a `Choice` is `"integer"`, a closed set and a `Timestamp` are
+`"string"`. Every field descriptor therefore carries `kind`, the control this
+renderer would draw, decided in the order its encoder is chosen:
+
+| `kind` | Member (schema shape) |
+|---|---|
+| `objectArray` | `std::vector<Sub>` (`array` whose `items` are an object) |
+| `array` | any other `std::vector<T>` |
+| `enum` | a closed set (`oneOf` of `const`s, or `enum`) |
+| `choice` | a `Choice` (`x-optionsAction`) |
+| `datetime` | a `Timestamp` (`format: "date-time"`) |
+| `date` | `format: "date"` (drawn as a plain text field by the built-in renderer) |
+| `quantity` | a `Quantity`, or any property with `x-decimalPlaces` |
+| `integer` / `boolean` / `number` | `type` of that name |
+| `object` | a nested aggregate (unrepresentable without a slot) |
+| `string` | everything else |
+
+A host registers one kit component per kind (`byKind("quantity", …)`,
+`byKind("choice", …)`, …); a field, `x-widget` or unit registration still wins,
+and `byType` remains the fallback for a kind with none. Pinned by
+`src/qt/forms/tests/tst_SlotRegistryByKind.qml`; removing the tier from
+`resolve()` reddens 4 of its 5 cases.
 
 ### Chrome slots
 
