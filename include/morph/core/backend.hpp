@@ -96,6 +96,27 @@ struct ActionCall {
     /// sees it (`Bridge::executeVia`, `morph::forms::recomputeAll`).
     std::shared_ptr<void> (*localOp)(::morph::model::detail::IModelHolder& holder, void* action) = nullptr;
 
+    /// @brief Receives a Task handler's outcome on the local path: the opaque
+    ///        result, or the exception (with a null result).
+    using LocalDone = std::function<void(std::shared_ptr<void>, std::exception_ptr)>;
+
+    /// @brief Starts a Task handler against a model holder, on the model's
+    ///        strand, and reports its outcome through the last argument when the
+    ///        Task completes. Set instead of `localOp` for an action whose
+    ///        handler returns `core::async::Task`; see
+    ///        `docs/spec/core/coroutines.md`.
+    ///
+    /// Takes the action's owner rather than a borrowed pointer: the handler's
+    /// frame outlives the call that starts it.
+    void (*localOpAsync)(::morph::model::detail::IModelHolder& holder, std::shared_ptr<void> action,
+                         const std::shared_ptr<::morph::exec::StrandCoroExecutor>& executor,
+                         ::core::async::StopToken token, LocalDone done) = nullptr;
+
+    /// @brief The stop source a Task handler's token comes from, or null for
+    ///        none. `Bridge::executeVia` sets one when an execute deadline is
+    ///        armed, and the deadline requests stop on it.
+    std::shared_ptr<::core::async::StopSource> stopSource;
+
     /// @brief Session context attached to this call.
     ///
     /// Local backends thread it through a thread-local before invoking `localOp`;
@@ -1168,6 +1189,46 @@ public:
     ///                   ordering").
     explicit LocalBackend(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND) : _strand{workerPool} {}
 
+    /// @brief Stops the Task handlers still running, lets the strand drain, and
+    ///        only then closes it. See `docs/spec/core/coroutines.md`,
+    ///        "Teardown".
+    ///
+    /// In that order, because each step needs the one before it:
+    /// 1. Every live Task run's stop is requested. A handler suspended in a
+    ///    morph awaiter resumes, cancelled, through the strand, which is still
+    ///    open. One suspended in a stop-aware core-cpp awaiter resumes on that
+    ///    awaiter's own executor instead, and unwinds there.
+    /// 2. The strand is drained: the resumptions posted to it, and every queued
+    ///    action -- skipped, if `cancelPending` already failed it. A handler's
+    ///    end, and with it leaving the gate and starting the next action,
+    ///    always runs on the strand, wherever the handler finished; the drain
+    ///    does not wait for a handler still unwinding on another executor.
+    /// 3. The strand is closed. A handler that ends after this -- one that
+    ///    unwound elsewhere, or ignored the stop -- finishes inline, where
+    ///    nothing on the drained strand can race it.
+    ///
+    /// Must not run on one of this backend's strand threads, whose drain it
+    /// would wait for; a debug build asserts that.
+    ~LocalBackend() override {
+        std::vector<std::weak_ptr<LocalRun>> runs;
+        {
+            std::scoped_lock const lock{_taskRunsMtx};
+            runs.swap(_taskRuns);
+        }
+        for (auto const& weak : runs) {
+            if (auto const run = weak.lock()) {
+                run->stopSource->request_stop();
+            }
+        }
+        _strand.waitIdle();
+        _strandLink->close();
+    }
+
+    LocalBackend(const LocalBackend&) = delete;
+    LocalBackend& operator=(const LocalBackend&) = delete;
+    LocalBackend(LocalBackend&&) = delete;
+    LocalBackend& operator=(LocalBackend&&) = delete;
+
     /// @brief Creates a model instance via @p factory and registers it.
     ///
     /// The `typeId` parameter is accepted for interface compatibility but not
@@ -1367,88 +1428,65 @@ public:
                 std::make_exception_ptr(std::runtime_error("model not found: id=" + std::to_string(mid.v))));
             return;
         }
-        trackPending(sink);
-        auto* const localOp = call.localOp;
+        auto const admittedEpoch = trackPending(sink);
+        LocalRun run;
+        run.localOp = call.localOp;
+        run.localOpAsync = call.localOpAsync;
+        run.stopSource = std::move(call.stopSource);
         // The action handle travels with `localOp` into the strand task, not
         // just as far as this function: `ActionCall::localOp` borrows the
         // action rather than owning it (see that struct), and `call` is gone
         // long before the task runs.
-        auto action = std::move(call.action);
-        auto session = std::move(call.session);
-        auto const modelTypeId = call.modelTypeId;
-        auto const actionTypeId = call.actionTypeId;
-        // Captured by shared_ptr, never by raw `this`: see the Global
+        run.action = std::move(call.action);
+        run.session = std::move(call.session);
+        run.modelTypeId = call.modelTypeId;
+        run.actionTypeId = call.actionTypeId;
+        run.holder = std::move(holder);
+        run.sink = std::move(sink);
+        run.hydration = std::move(hydration);
+        run.strandLink = _strandLink;
+        run.cancels = _cancels;
+        run.admittedEpoch = admittedEpoch;
+        run.mid = mid;
+        // Held by shared_ptr, never by raw `this`: see the Global
         // Constraints note on `~StrandExecutor`'s member-destruction-order
         // subtlety. A shared_ptr copy has its own lifetime, independent of
         // LocalBackend's, so it stays valid even if the backend is torn down
         // while this task is still queued or running. `hydration` follows the
         // same rule and may be null (a private instance has no entry).
-        auto inFlightCounter = _inFlight;
-        auto const inFlightAfterInc = inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
+        run.inFlightCounter = _inFlight;
+        auto const inFlightAfterInc = run.inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
-        _strand.post(
-            mid, [localOp, holder = std::move(holder), sink = std::move(sink), session = std::move(session),
-                  modelTypeId, actionTypeId, inFlightCounter, hydration, action = std::move(action)]() mutable {
-                auto const start = std::chrono::steady_clock::now();
-                auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
-                bool succeeded = false;
-                // Resolve the sink only after every metric and `endSpan` below are
-                // recorded — nothing synchronizes a `.then()`/`.onError()` callback
-                // (delivered via `cbExec`, which may run inline/synchronously) with
-                // anything after `setValue`/`setException` returns, so resolving first
-                // would let the caller observe completion before these metrics are
-                // emitted. This is a real race, not just a theoretical one.
-                std::shared_ptr<void> value;
-                std::exception_ptr error;
-                try {
-                    ::morph::session::detail::ScopedContext const scoped{session};
-                    // Explicit, because `localOp` is a function pointer now and
-                    // a null one is undefined behaviour rather than the
-                    // `std::bad_function_call` an empty `std::function` used to
-                    // raise. Same outcome for the caller -- the completion
-                    // resolves through its error sink -- with a diagnostic that
-                    // names the field instead of the library.
-                    if (localOp == nullptr) {
-                        throw std::runtime_error{"ActionCall::localOp is null: nothing to execute"};
-                    }
-                    value = localOp(*holder, action.get());
-                    succeeded = true;
-                } catch (...) {
-                    error = std::current_exception();
-                }
-                // Settle hydration the moment the first action's outcome is known —
-                // before `endSpan`, before any metric, and before the `Completion`
-                // resolves. Each of those hands control to host code that is free
-                // to attach to this instance's key, and an attacher reaching the
-                // directory while the outcome is known but unrecorded is handed an
-                // instance whose first action has already failed — exactly what
-                // docs/spec/core/shared_instances.md's Failure modes section says
-                // must not happen. Only the *first* action settles it; `settle` is
-                // a single compare-exchange and ignores every later call.
-                if (hydration) {
-                    hydration->settle(succeeded);
-                }
-                ::morph::observe::detail::endSpan(spanId, succeeded);
-                auto const elapsedMs =
-                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-                std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
-                    {{"modelType", modelTypeId}, {"actionType", actionTypeId}}};
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
-                if (!succeeded) {
-                    ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
-                }
-                auto const inFlightAfterDec = inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
-                                                     static_cast<double>(inFlightAfterDec));
-                // Resolve last: the sink is still settled exactly once, only its
-                // position relative to the now-recorded instrumentation moved.
-                if (succeeded) {
-                    sink->settleValue(std::move(value));
-                } else {
-                    sink->settleException(error);
-                }
-            });
+        // Through the instance's action gate: an action starts only once the one
+        // before it has finished, which a Task handler does when its Task
+        // completes rather than when the strand task that started it returns.
+        if (run.localOpAsync != nullptr) {
+            // A Task run is shared: its completion callback outlives the strand
+            // task, and every Task run can be stopped, deadline or not -- the
+            // destructor stops the ones still running.
+            if (!run.stopSource) {
+                run.stopSource = std::make_shared<::core::async::StopSource>();
+            }
+            auto shared = std::make_shared<LocalRun>(std::move(run));
+            rememberTaskRun(shared);
+            _strand.post(mid, [shared] { shared->holder->actionGate().enter([shared] { startTaskLocal(shared); }); });
+            return;
+        }
+        // An ordinary run travels by value in the strand task, so a dispatch
+        // costs the strand task's one allocation and nothing more:
+        // `bench.alloc_budget` holds that line. The task keeps it while the
+        // handler runs, as it kept its captures before there was a gate; only
+        // a run that has to wait behind a suspended Task handler is moved out,
+        // into the gate's queue.
+        _strand.post(mid, [run = std::move(run)]() mutable {
+            auto& gate = run.holder->actionGate();
+            if (gate.tryEnter()) {
+                startLocal(run);
+                return;
+            }
+            gate.enter([waiting = std::make_shared<LocalRun>(std::move(run))] { startLocal(*waiting); });
+        });
     }
 
     /// @brief Resolves every still-pending completion this backend produced with @p exc.
@@ -1459,6 +1497,10 @@ public:
             std::scoped_lock const lock{_pendingMtx};
             snapshot.swap(_pending);
             _compactAt = kPendingCompactFloor;
+            // Under the same lock as the swap: a run admitted before this
+            // point is in `snapshot` and is failed below, and one admitted
+            // after it is not. See `startLocal`.
+            _cancels->record(exc);
         }
         for (auto& weak : snapshot) {
             if (auto sink = weak.lock()) {
@@ -1543,16 +1585,205 @@ private:
     /// which `cancelPending`'s `weak.lock()` has always skipped. Carrying dead
     /// entries for longer changes nothing it observes.
     /// @param sink Settle sink to track until it expires or is cancelled.
-    void trackPending(const std::shared_ptr<::morph::async::detail::ISettleSink>& sink) {
+    /// @return The cancel epoch @p sink was admitted in: `cancelPending` has
+    ///         failed the dispatch once the epoch has moved on.
+    std::uint64_t trackPending(const std::shared_ptr<::morph::async::detail::ISettleSink>& sink) {
         std::scoped_lock const lock{_pendingMtx};
         if (_pending.size() >= _compactAt) {
             std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
             _compactAt = std::max(kPendingCompactFloor, _pending.size() * 2);
         }
         _pending.emplace_back(sink);
+        return _cancels->epoch();
+    }
+
+    /// What `cancelPending` has done so far, shared with every run: how many
+    /// times it has run, and with what reason the last time.
+    class CancelRecord {
+    public:
+        /// Stores @p reason, then bumps the epoch. Called under `_pendingMtx`.
+        void record(const std::exception_ptr& reason) {
+            {
+                std::scoped_lock const lock{_mtx};
+                _reason = reason;
+            }
+            _epoch.fetch_add(1);
+        }
+
+        /// @return How many times `cancelPending` has run.
+        [[nodiscard]] std::uint64_t epoch() const noexcept { return _epoch.load(); }
+
+        /// @return The reason the last `cancelPending` gave.
+        [[nodiscard]] std::exception_ptr lastReason() {
+            std::scoped_lock const lock{_mtx};
+            return _reason;
+        }
+
+    private:
+        std::atomic<std::uint64_t> _epoch{0};
+        std::mutex _mtx;
+        std::exception_ptr _reason;
+    };
+
+    /// Everything one local dispatch carries from `executeInto` to the moment
+    /// it settles. An ordinary handler's run is held by its strand task, or by
+    /// the gate's queue while it waits there; a Task handler's is shared,
+    /// because its completion callback holds it too.
+    struct LocalRun {
+        std::shared_ptr<void> (*localOp)(::morph::model::detail::IModelHolder&, void*) = nullptr;
+        decltype(detail::ActionCall::localOpAsync) localOpAsync = nullptr;
+        std::shared_ptr<::core::async::StopSource> stopSource;
+        std::shared_ptr<void> action;
+        ::morph::session::Context session;
+        std::string_view modelTypeId;
+        std::string_view actionTypeId;
+        std::shared_ptr<::morph::model::detail::IModelHolder> holder;
+        std::shared_ptr<::morph::async::detail::ISettleSink> sink;
+        std::shared_ptr<detail::HydrationState> hydration;
+        std::shared_ptr<std::atomic<std::size_t>> inFlightCounter;
+        std::shared_ptr<::morph::exec::detail::StrandLink> strandLink;
+        std::shared_ptr<CancelRecord> cancels;
+        std::uint64_t admittedEpoch = 0;
+        ::morph::exec::detail::ModelId mid{};
+        std::chrono::steady_clock::time_point start;
+        ::morph::observe::SpanId spanId{};
+    };
+
+    /// Stamps a dispatch's start once it holds its instance's action gate, and
+    /// settles it instead if `cancelPending` failed it while it waited there.
+    /// @return Whether the handler is to run.
+    static bool admitLocal(LocalRun& run) {
+        run.start = std::chrono::steady_clock::now();
+        run.spanId = ::morph::observe::detail::beginSpan(run.session.requestId, run.modelTypeId, run.actionTypeId);
+        if (run.cancels->epoch() == run.admittedEpoch) {
+            return true;
+        }
+        // `cancelPending` failed this call while it waited for the gate;
+        // the handler does not run for a caller that has been answered.
+        // The sink is settled here, with the reason `cancelPending` gave,
+        // because this may be the only place it can be: `cancelPending`
+        // reaches sinks through `weak_ptr`s, and when the caller has
+        // dropped its `Completion` this run holds the last reference, so
+        // the sink is gone by the time `cancelPending` would reach it.
+        // Where `cancelPending` got there first, this settle is ignored.
+        finishLocal(run, nullptr, run.cancels->lastReason());
+        return false;
+    }
+
+    /// Runs an ordinary handler's dispatch once it holds its instance's action
+    /// gate, on the strand, and finishes it.
+    static void startLocal(LocalRun& run) {
+        if (!admitLocal(run)) {
+            return;
+        }
+        std::shared_ptr<void> value;
+        std::exception_ptr error;
+        try {
+            ::morph::session::detail::ScopedContext const scoped{run.session};
+            // Explicit, because `localOp` is a function pointer now and
+            // a null one is undefined behaviour rather than the
+            // `std::bad_function_call` an empty `std::function` used to
+            // raise. Same outcome for the caller -- the completion
+            // resolves through its error sink -- with a diagnostic that
+            // names the field instead of the library.
+            if (run.localOp == nullptr) {
+                throw std::runtime_error{"ActionCall::localOp is null: nothing to execute"};
+            }
+            value = run.localOp(*run.holder, run.action.get());
+        } catch (...) {
+            error = std::current_exception();
+        }
+        finishLocal(run, std::move(value), error);
+    }
+
+    /// Starts a Task handler once its dispatch holds the instance's action
+    /// gate, on the strand. It finishes when its Task completes, through the
+    /// callback it is handed.
+    static void startTaskLocal(const std::shared_ptr<LocalRun>& run) {
+        if (!admitLocal(*run)) {
+            return;
+        }
+        try {
+            ::morph::session::detail::ScopedContext const scoped{run->session};
+            auto executor =
+                std::make_shared<::morph::exec::StrandCoroExecutor>(run->strandLink, run->mid, run->session);
+            auto token = run->stopSource->get_token();
+            run->localOpAsync(*run->holder, run->action, executor, std::move(token),
+                              [run](std::shared_ptr<void> value, std::exception_ptr error) {
+                                  // A handler whose last await was a core-cpp
+                                  // one ends on that awaiter's executor; what
+                                  // follows its end belongs on the strand.
+                                  run->strandLink->runOnStrand(
+                                      run->mid, [run, value = std::move(value), error = std::move(error)] {
+                                          finishLocal(*run, value, error);
+                                      });
+                              });
+        } catch (...) {
+            finishLocal(*run, nullptr, std::current_exception());
+        }
+    }
+
+    /// Records a finished dispatch and settles its sink, then leaves the action
+    /// gate so the next action on the instance can start. On the strand.
+    static void finishLocal(LocalRun& run, std::shared_ptr<void> value, const std::exception_ptr& error) {
+        bool const succeeded = error == nullptr;
+        // Resolve the sink only after every metric and `endSpan` below are
+        // recorded — nothing synchronizes a `.then()`/`.onError()` callback
+        // (delivered via `cbExec`, which may run inline/synchronously) with
+        // anything after `setValue`/`setException` returns, so resolving first
+        // would let the caller observe completion before these metrics are
+        // emitted. This is a real race, not just a theoretical one.
+        //
+        // Settle hydration the moment the first action's outcome is known —
+        // before `endSpan`, before any metric, and before the `Completion`
+        // resolves. Each of those hands control to host code that is free
+        // to attach to this instance's key, and an attacher reaching the
+        // directory while the outcome is known but unrecorded is handed an
+        // instance whose first action has already failed — exactly what
+        // docs/spec/core/shared_instances.md's Failure modes section says
+        // must not happen. Only the *first* action settles it; `settle` is
+        // a single compare-exchange and ignores every later call.
+        if (run.hydration) {
+            run.hydration->settle(succeeded);
+        }
+        ::morph::observe::detail::endSpan(run.spanId, succeeded);
+        auto const elapsedMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - run.start).count();
+        std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
+            {{"modelType", run.modelTypeId}, {"actionType", run.actionTypeId}}};
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+        if (!succeeded) {
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
+        }
+        auto const inFlightAfterDec = run.inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                             static_cast<double>(inFlightAfterDec));
+        // Resolve last: the sink is still settled exactly once, only its
+        // position relative to the now-recorded instrumentation moved.
+        if (succeeded) {
+            run.sink->settleValue(std::move(value));
+        } else {
+            run.sink->settleException(error);
+        }
+        run.holder->actionGate().leave();
+    }
+
+    /// Records @p run among the Task runs the destructor stops, sweeping the
+    /// ones that have finished amortised, as `trackPending` does.
+    void rememberTaskRun(const std::shared_ptr<LocalRun>& run) {
+        std::scoped_lock const lock{_taskRunsMtx};
+        if (_taskRuns.size() >= _taskRunsCompactAt) {
+            std::erase_if(_taskRuns, [](const auto& weak) { return weak.expired(); });
+            _taskRunsCompactAt = std::max(kPendingCompactFloor, _taskRuns.size() * 2);
+        }
+        _taskRuns.emplace_back(run);
     }
 
     ::morph::exec::detail::StrandExecutor _strand;
+    // The strand as the Task handlers started here see it; closed by the
+    // destructor before `_strand` is destroyed.
+    std::shared_ptr<::morph::exec::detail::StrandLink> _strandLink =
+        std::make_shared<::morph::exec::detail::StrandLink>(_strand);
     std::mutex _regMtx;
     // Every live instance, private and shared alike, plus the shared-instance
     // directory over them — holder, attach count, directory key and hydration
@@ -1584,6 +1815,14 @@ private:
     // re-armed at twice the surviving count after each sweep. Guarded by
     // `_pendingMtx` along with `_pending` itself. See `trackPending`.
     std::size_t _compactAt = kPendingCompactFloor;
+    // Recorded by `cancelPending` under `_pendingMtx`, as it takes the pending
+    // list. Shared with every run, which notes the epoch it was admitted under
+    // and skips its handler if the epoch has moved on by the time it starts.
+    std::shared_ptr<CancelRecord> _cancels = std::make_shared<CancelRecord>();
+    // The Task runs the destructor stops. Weak, so a finished run is not kept.
+    std::mutex _taskRunsMtx;
+    std::vector<std::weak_ptr<LocalRun>> _taskRuns;
+    std::size_t _taskRunsCompactAt = kPendingCompactFloor;
     // Concurrent in-flight executes, for the executeInFlight metric. A
     // shared_ptr (not a plain atomic member) so strand tasks hold their own
     // reference instead of capturing `this` — see execute()'s comment and the

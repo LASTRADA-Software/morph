@@ -11,6 +11,16 @@ API surface).
 
 ### Changed
 
+- **`LocalBackend` no longer runs an action whose call was already failed.**
+  An action still waiting for its model when `Bridge::switchBackend` or
+  `~Bridge` fails its call (`BackendChangedError`, `BridgeDestroyedError`) is
+  now skipped when its turn comes: its handler does not run, and it used to.
+  A skipped action still counts as a failed execute in the
+  `executeErrors` metric and ends its span as failed.
+  `~LocalBackend` also stops the Task handlers it started, then waits for its
+  strand to drain before it returns. See `docs/spec/core/coroutines.md`,
+  "Teardown".
+
 - **morph depends on core-cpp v0.3.0.** It is fetched through CPM, and
   `morph::morph` links its `core::base`, `core::async`, `core::net` and, natively,
   `core::platform`. morph stays header-only, but those are static libraries, so
@@ -135,6 +145,34 @@ API surface).
   same `morph::testkit::configureSession()`.
 
 ### Added
+
+- **Coroutines on `core::async`.**
+  - `Completion<T>` is awaitable: `co_await std::move(completion)` yields `T`
+    or rethrows, resumes in the context the coroutine suspended in, and honours
+    a stop request on the awaiting coroutine's token.
+  - `morph::async::spawn(executor, task)` starts a coroutine from ordinary
+    code, with every step on that executor.
+  - `morph::async::delay(scheduler, duration)` is a stop-aware timer.
+  - `morph::async::resumeContext()` names the executor morph awaiters resume
+    through, so a handler that awaited a core-cpp awaiter (which resumes on
+    its own executor) can go back with `core::async::ResumeOn`.
+  - A model's `execute` may return `core::async::Task<R>`. The bridge drives it
+    on the model's strand, and the model's next action waits until the Task has
+    completed. `ActionTraits<A>::Result` is `R`.
+  - `ActionDispatcher::dispatchAsync` runs Task handlers remotely;
+    `ActionDispatcher::dispatch` throws `std::logic_error` for one, and
+    `ActionDispatcher::dispatchesAsync` says which of the two an action needs.
+  - `RemoteServer` now replies `err "unknown exception"` to a handler that
+    throws something other than a `std::exception`, where it used to send no
+    reply.
+  - `LimitPolicy::executeTimeout` also stops a suspended Task handler, so the
+    model's next action is not held behind it.
+  - A Task handler follows `ActionRecordingError` as an ordinary handler does:
+    once its Task has completed, a result that will not serialise or a journal
+    append that throws reaches the caller as `ActionRecordingError`, and is
+    never journalled as `Outcome::Failed`.
+
+  See `docs/spec/core/coroutines.md`.
 
 - **`SlotRegistry.byKind(kind, component)` — one host control per kind of
   control.** The JSON type `byType` keys on does not identify a control: a

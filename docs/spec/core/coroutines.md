@@ -318,7 +318,11 @@ unwinds and leaves the action gate as above.
 ### Journal and observability
 
 A Task handler is journalled when it completes: `Outcome::Succeeded` with the
-serialised `R`, or `Outcome::Failed` with the exception's `what()`. The
+serialised `R`, or `Outcome::Failed` with the exception's `what()` when the
+handler threw. As for an ordinary handler, `Failed` means the model rejected the
+action and nothing else: once the Task has completed, the model's mutation has
+committed, and a failure to serialise `R` or to append the entry reaches the
+caller as `ActionRecordingError` and is not journalled as `Failed`. The
 execute span and the latency metric cover the time from when the action
 entered the gate to when the Task completed. Suspended time is included,
 because it is time the caller waits.

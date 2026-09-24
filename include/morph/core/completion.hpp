@@ -14,6 +14,7 @@
 
 #include "../attributes.hpp"
 #include "callback_scope.hpp"
+#include "detail/completion_awaiter.hpp"
 #include "executor.hpp"
 #include "logger.hpp"
 
@@ -531,6 +532,25 @@ public:
     ///         only for as long as it is.
     Completion& onErrorDetached(std::function<void(std::exception_ptr)> handler) MORPH_LIFETIMEBOUND {
         return onError(std::move(handler));
+    }
+
+    /// @brief Awaits this completion from a coroutine, consuming it.
+    ///
+    /// `co_await std::move(completion)` yields a copy of the settled value or
+    /// rethrows the stored exception. The coroutine resumes in the resumption
+    /// context it suspended in -- a `spawn`ed task's executor, a Task handler's
+    /// strand -- or, with none, on this completion's executor, where `then()`
+    /// handlers run. A stop requested on the awaiting coroutine's token
+    /// withdraws the await and resumes it with `core::async::OperationCancelled`.
+    /// Rvalue only: awaiting moves the state out, so an lvalue `co_await` would
+    /// hide that the completion is empty afterwards. See
+    /// `docs/spec/core/coroutines.md`.
+    /// @return The awaiter; not for direct use.
+    [[nodiscard]] detail::CompletionAwaiter<T> operator co_await() && {
+        static_assert(std::copy_constructible<T>,
+                      "co_await on a morph::async::Completion<T> copies the settled value out of the shared state, "
+                      "which other handlers may still read, so T must be copy-constructible.");
+        return detail::CompletionAwaiter<T>{std::move(_state)};
     }
 
     /// @brief Returns the underlying shared state (for advanced / internal use).

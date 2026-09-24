@@ -270,6 +270,7 @@ target_sources(morph
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
         include/morph/core/completion.hpp
+        include/morph/core/coroutine.hpp
         include/morph/core/callback_scope.hpp
         include/morph/core/async.hpp
         include/morph/core/timeout_scheduler.hpp
@@ -346,7 +347,9 @@ target_sources(morph
     FILES
         include/morph/detail/fixed_string.hpp
         include/morph/detail/quantity_equation.hpp
+        include/morph/core/detail/completion_awaiter.hpp
         include/morph/core/detail/execute_order_gate.hpp
+        include/morph/core/detail/task_handler.hpp
         include/morph/core/detail/instance_directory.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <cassert>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -65,6 +66,29 @@ public:
         std::unique_lock lock{_mapMtx};
         _cv.wait(lock, [this] { return _inFlight == 0; });
     }
+
+    /// @brief Blocks until no task is queued or running on any strand.
+    ///
+    /// Tasks posted while it waits, including by the tasks it is waiting for,
+    /// are waited for too. Must not be called from one of this executor's own
+    /// tasks, which would wait for itself; a debug build asserts that.
+    void waitIdle() {
+        assert(!runningAnyHere() && "StrandExecutor::waitIdle called from one of its own tasks");
+        std::unique_lock lock{_mapMtx};
+        _cv.wait(lock, [this] { return _inFlight == 0; });
+    }
+
+    /// @brief Whether the calling thread is running a task of @p key's strand.
+    /// @param key The strand to ask about.
+    /// @return True inside that strand's task, false anywhere else.
+    [[nodiscard]] bool runningHere(ModelId key) const noexcept {
+        auto const& running = runningSlot();
+        return running.executor == this && running.key == key;
+    }
+
+    /// @brief Whether the calling thread is running a task of any of this
+    ///        executor's strands.
+    [[nodiscard]] bool runningAnyHere() const noexcept { return runningSlot().executor == this; }
 
     /// @brief Posts @p task to the strand associated with @p key.
     ///
@@ -286,6 +310,7 @@ private:
                 task = strand->pending.pop();
             }
             try {
+                RunningScope const running{this, key};
                 task();
             } catch (const std::exception& exc) {
                 // The strand is where Model::execute() actually runs; a throw
@@ -373,16 +398,42 @@ private:
                     // Inside the `== 0` branch, so a handoff does not signal at
                     // all: the re-arm above has already incremented for the
                     // next dispatch, so the count does not reach zero until the
-                    // strand is quiescent. `~StrandExecutor` is the only waiter
-                    // on this variable, so `notify_all` wakes at most one
-                    // thread and is equivalent to `notify_one` here -- there is
-                    // no herd to wake, and no predicate but `_inFlight == 0`
-                    // for a wakeup to land on and be lost.
+                    // strand is quiescent. `~StrandExecutor` and `waitIdle` are
+                    // the only waiters on this variable, both on the predicate
+                    // `_inFlight == 0`, so there is no herd to wake and no
+                    // other predicate for a wakeup to land on and be lost.
                     _cv.notify_all();
                 }
             }
         });
     }
+
+    /// The strand task the calling thread is running, if any.
+    struct Running {
+        StrandExecutor const* executor = nullptr;
+        ModelId key{};
+    };
+
+    static Running& runningSlot() noexcept {
+        thread_local Running slot;
+        return slot;
+    }
+
+    /// Marks the calling thread as running @p key's task for its lifetime; an
+    /// inline base executor can nest one strand's task inside another's.
+    class RunningScope {
+    public:
+        RunningScope(StrandExecutor const* executor, ModelId key) noexcept
+            : _previous{std::exchange(runningSlot(), Running{.executor = executor, .key = key})} {}
+        RunningScope(const RunningScope&) = delete;
+        RunningScope& operator=(const RunningScope&) = delete;
+        RunningScope(RunningScope&&) = delete;
+        RunningScope& operator=(RunningScope&&) = delete;
+        ~RunningScope() { runningSlot() = _previous; }
+
+    private:
+        Running _previous;
+    };
 
     IExecutor* _base;
     std::mutex _mapMtx;

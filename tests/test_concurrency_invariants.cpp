@@ -275,6 +275,25 @@ TEST_CASE(
             std::this_thread::sleep_for(1ms);
         }
     });
+    // Stops and joins the switcher on every way out of this scope. Without it a
+    // failed REQUIRE below unwinds past a joinable std::thread, whose destructor
+    // calls std::terminate: the failure became an abort() (on Windows, a dialog)
+    // instead of a reported assertion.
+    struct StopAndJoin {
+        std::atomic<bool>* stop;
+        std::thread* thread;
+        StopAndJoin(std::atomic<bool>* stop_, std::thread* thread_) noexcept : stop{stop_}, thread{thread_} {}
+        StopAndJoin(const StopAndJoin&) = delete;
+        StopAndJoin& operator=(const StopAndJoin&) = delete;
+        StopAndJoin(StopAndJoin&&) = delete;
+        StopAndJoin& operator=(StopAndJoin&&) = delete;
+        ~StopAndJoin() {
+            stop->store(true);
+            if (thread->joinable()) {
+                thread->join();
+            }
+        }
+    } const stopSwitcher{&stopSwitch, &switcher};
 
     std::vector<std::thread> producers;
     producers.reserve(numProducers);

@@ -807,6 +807,105 @@ private:
     std::atomic_flag _settled = ATOMIC_FLAG_INIT;
 };
 
+/// @brief `ActionCall::localOpAsync` for an action whose handler returns
+///        `core::async::Task`: the local-path twin of `localOp`.
+///
+/// Recomputes the action's computed fields and enforces its validator exactly
+/// as `localOp` does, starts the handler on the model's strand, and -- when its
+/// Task completes -- journals the outcome and reports it through @p done. See
+/// `docs/spec/core/coroutines.md`. Declared in every build, so `executeVia` can
+/// name it; a `MORPH_CLIENT_ONLY` build never instantiates it.
+/// @tparam Model  Concrete model type.
+/// @tparam Action Concrete action type.
+/// @param holder      The model instance; kept alive by @p done's owner until it has run.
+/// @param actionOwner The action, owned: the handler's frame outlives this call.
+/// @param executor    The model's strand executor.
+/// @param token       The stop token the handler observes.
+/// @param done        Called exactly once, on the strand.
+template <typename Model, typename Action>
+// Validation, the handler call, and the journalling of each outcome, in the
+// order localOp keeps them; splitting it would put that order in two places.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void localTaskOp(::morph::model::detail::IModelHolder& holder, std::shared_ptr<void> actionOwner,
+                 const std::shared_ptr<::morph::exec::StrandCoroExecutor>& executor, ::core::async::StopToken token,
+                 ::morph::backend::detail::ActionCall::LocalDone done) {
+    using R = ::morph::model::ActionTraits<Action>::Result;
+    using Handler = decltype(std::declval<Model&>().execute(std::declval<Action&>()));
+    Action& actionRef = *static_cast<Action*>(actionOwner.get());
+    Handler task;
+    try {
+        ::morph::forms::recomputeAll(actionRef);
+        if (!::morph::model::ActionValidator<Action>::ready(actionRef)) {
+            throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
+                                                  ::morph::model::ActionTraits<Action>::typeId()};
+        }
+        task = holder.template into<Model>().execute(actionRef);
+    } catch (...) {
+        done(nullptr, std::current_exception());
+        return;
+    }
+    ::morph::model::detail::startTaskHandler<R>(
+        executor, std::move(task), std::move(token),
+        [&holder, actionOwner = std::move(actionOwner), done = std::move(done)](std::optional<R> result,
+                                                                                const std::exception_ptr& error) {
+            const Action& action = *static_cast<const Action*>(actionOwner.get());
+            if (error) {
+                // The handler failed, so the action was rejected: recorded
+                // Outcome::Failed, as localOp records a throw from
+                // Model::execute. A journal write that throws here fails the
+                // call with the handler's own exception still.
+                try {
+                    if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
+                        if (holder.hasActionLog()) {
+                            try {
+                                std::rethrow_exception(error);
+                            } catch (const std::exception& exc) {
+                                ::morph::model::detail::recordActionFailure(
+                                    holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                                    std::string{::morph::model::ActionTraits<Action>::typeId()},
+                                    ::morph::model::ActionTraits<Action>::toJson(action),
+                                    ::morph::model::detail::actionPayloadSchema<Action>(), exc.what());
+                            } catch (...) {  // NOLINT(bugprone-empty-catch): as localOp, below
+                                // Not a std::exception: recorded nowhere, as localOp's
+                                // rethrow leaves such a throw unrecorded.
+                            }
+                        }
+                    }
+                } catch (...) {  // NOLINT(bugprone-empty-catch): the handler's exception is reported
+                }
+                done(nullptr, error);
+                return;
+            }
+            // The Task completed, so the model's mutation has committed: as in
+            // localOp, failing to serialise the result or to record it is an
+            // ActionRecordingError, never a rejection.
+            std::shared_ptr<void> value;
+            std::string resultJson;
+            try {
+                auto typed = std::make_shared<R>(std::move(*result));
+                if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
+                    if (holder.hasActionLog()) {
+                        resultJson = ::morph::model::ActionTraits<Action>::resultToJson(*typed);
+                        ::morph::model::detail::recordActionSuccess(
+                            holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                            std::string{::morph::model::ActionTraits<Action>::typeId()},
+                            ::morph::model::ActionTraits<Action>::toJson(action),
+                            ::morph::model::detail::actionPayloadSchema<Action>(), resultJson);
+                    }
+                }
+                value = std::move(typed);
+            } catch (const std::exception& exc) {
+                done(nullptr,
+                     std::make_exception_ptr(::morph::model::ActionRecordingError{std::move(resultJson), exc.what()}));
+                return;
+            } catch (...) {
+                done(nullptr, std::current_exception());
+                return;
+            }
+            done(std::move(value), nullptr);
+        });
+}
+
 }  // namespace detail
 
 /// @brief Central dispatcher that routes typed actions to an `IBackend`.
@@ -2007,9 +2106,25 @@ public:
         // construction: while any copy of it is alive, ~TimeoutScheduler()
         // cannot run at all.
         std::shared_ptr<::morph::async::detail::TimeoutScheduler> schedulerRef;
+#ifndef MORPH_CLIENT_ONLY
+        constexpr bool taskHandler =
+            ::morph::model::isTaskHandler<decltype(std::declval<Model&>().execute(std::declval<Action&>()))>;
+#else
+        // A client-only build never runs a handler locally (see localOp below).
+        constexpr bool taskHandler = false;
+#endif
+        // A Task handler's stop source, when a deadline is armed: the deadline
+        // requests stop on it as well as rejecting the caller's completion, and
+        // LocalBackend hands its token to the handler, so a suspended handler
+        // unwinds at its next co_await. See docs/spec/core/coroutines.md,
+        // "Execute deadlines".
+        std::shared_ptr<::core::async::StopSource> stopSource;
         {
             std::scoped_lock const lock{_executeDeadlineMtx};
             if (_executeDeadline.count() > 0 && _timeoutScheduler) {
+                if constexpr (taskHandler) {
+                    stopSource = std::make_shared<::core::async::StopSource>();
+                }
                 schedulerRef = _timeoutScheduler;
                 // The callback captures the sink alone -- never `this` -- so
                 // it stays safe to fire even while ~Bridge() is running, and
@@ -2027,8 +2142,11 @@ public:
                 // that fires is not one of the two mutually-exclusive
                 // resolution paths and must not decrement `_pendingCalls`,
                 // which stays inflated until the real reply lands.
-                auto const handle = schedulerRef->schedule(_executeDeadline, [sink] {
+                auto const handle = schedulerRef->schedule(_executeDeadline, [sink, stopSource] {
                     sink->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
+                    if (stopSource) {
+                        stopSource->request_stop();
+                    }
                 });
                 // Handed to the sink here, before the dispatch below, so the
                 // write is sequenced before anything that could settle it on
@@ -2056,61 +2174,65 @@ public:
         call.deserializeResult = [](std::string_view jsonStr) -> std::shared_ptr<void> {
             return std::make_shared<R>(::morph::model::ActionTraits<Action>::resultFromJson(jsonStr));
         };
-        call.localOp = [](::morph::model::detail::IModelHolder& holder, void* actionPtr) -> std::shared_ptr<void> {
-            // The action `ActionCall::action` owns, handed back typed. The
-            // backend that invokes this keeps that handle alive across the
-            // call (LocalBackend carries it onto the strand with `localOp`).
-            Action& actionRef = *static_cast<Action*>(actionPtr);
-            // Enforce the action's validator on the local execution path too, so
-            // a caller that constructs an Action by hand and calls
-            // BridgeHandler<Model>::execute<Action>() directly is rejected the
-            // same way a hand-built wire envelope is rejected by
-            // ActionDispatcher::registerAction's runner (registry.hpp). No JSON is
-            // involved on this path, so there is no declared-precision
-            // reconciliation step here (that only applies to decoded wire
-            // payloads); the Quantity fields carry whatever precision the caller
-            // constructed them with. ActionValidator<Action>::ready defaults to
-            // `true` for actions with no validator, so this is a no-op for
-            // unvalidated actions (zero behavior change). The thrown exception is
-            // caught by LocalBackend::execute's strand task (backend.hpp) and
-            // resolves this Completion through onError.
-            //
-            // Overwrite any computed fields from their declared inputs before the
-            // validator runs and the model ever sees the action -- the same
-            // authoritative recompute ActionDispatcher::registerAction's runner
-            // performs for remote topologies (registry.hpp), applied here for the
-            // in-process LocalBackend path (every execute<Action>()/executeJson
-            // call). Recompute must run before the validator check so a validator
-            // inspecting a computed field sees the authoritative value, not
-            // whatever the caller constructed the action with. No-op for actions
-            // with no computedFields. See docs/spec/forms/forms.md.
-            ::morph::forms::recomputeAll(actionRef);
-            if (!::morph::model::ActionValidator<Action>::ready(actionRef)) {
-                throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
-                                                      ::morph::model::ActionTraits<Action>::typeId()};
-            }
+        if constexpr (taskHandler) {
+            call.localOpAsync = &detail::localTaskOp<Model, Action>;
+            call.stopSource = std::move(stopSource);
+        } else {
+            call.localOp = [](::morph::model::detail::IModelHolder& holder, void* actionPtr) -> std::shared_ptr<void> {
+                // The action `ActionCall::action` owns, handed back typed. The
+                // backend that invokes this keeps that handle alive across the
+                // call (LocalBackend carries it onto the strand with `localOp`).
+                Action& actionRef = *static_cast<Action*>(actionPtr);
+                // Enforce the action's validator on the local execution path too, so
+                // a caller that constructs an Action by hand and calls
+                // BridgeHandler<Model>::execute<Action>() directly is rejected the
+                // same way a hand-built wire envelope is rejected by
+                // ActionDispatcher::registerAction's runner (registry.hpp). No JSON is
+                // involved on this path, so there is no declared-precision
+                // reconciliation step here (that only applies to decoded wire
+                // payloads); the Quantity fields carry whatever precision the caller
+                // constructed them with. ActionValidator<Action>::ready defaults to
+                // `true` for actions with no validator, so this is a no-op for
+                // unvalidated actions (zero behavior change). The thrown exception is
+                // caught by LocalBackend::execute's strand task (backend.hpp) and
+                // resolves this Completion through onError.
+                //
+                // Overwrite any computed fields from their declared inputs before the
+                // validator runs and the model ever sees the action -- the same
+                // authoritative recompute ActionDispatcher::registerAction's runner
+                // performs for remote topologies (registry.hpp), applied here for the
+                // in-process LocalBackend path (every execute<Action>()/executeJson
+                // call). Recompute must run before the validator check so a validator
+                // inspecting a computed field sees the authoritative value, not
+                // whatever the caller constructed the action with. No-op for actions
+                // with no computedFields. See docs/spec/forms/forms.md.
+                ::morph::forms::recomputeAll(actionRef);
+                if (!::morph::model::ActionValidator<Action>::ready(actionRef)) {
+                    throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
+                                                          ::morph::model::ActionTraits<Action>::typeId()};
+                }
 #ifdef MORPH_CLIENT_ONLY
-            // A MORPH_CLIENT_ONLY build never links Model::execute's definition
-            // (see docs/spec/core/registry.md, "MORPH_CLIENT_ONLY") -- this
-            // #ifdef, not just the registration macros, is what actually makes
-            // that true: ActionCall::localOp is constructed unconditionally
-            // here regardless of which backend ends up installed, so the
-            // `model.execute(...)` call below would otherwise still force the
-            // linker to resolve it even for a build that only ever installs a
-            // remote backend. LocalBackend must not be used in such a build;
-            // reaching this point means it was anyway.
-            static_cast<void>(holder);
-            throw std::logic_error(
-                "Bridge::executeVia: localOp invoked in a MORPH_CLIENT_ONLY build -- LocalBackend must not be "
-                "used");
+                // A MORPH_CLIENT_ONLY build never links Model::execute's definition
+                // (see docs/spec/core/registry.md, "MORPH_CLIENT_ONLY") -- this
+                // #ifdef, not just the registration macros, is what actually makes
+                // that true: ActionCall::localOp is constructed unconditionally
+                // here regardless of which backend ends up installed, so the
+                // `model.execute(...)` call below would otherwise still force the
+                // linker to resolve it even for a build that only ever installs a
+                // remote backend. LocalBackend must not be used in such a build;
+                // reaching this point means it was anyway.
+                static_cast<void>(holder);
+                throw std::logic_error(
+                    "Bridge::executeVia: localOp invoked in a MORPH_CLIENT_ONLY build -- LocalBackend must not be "
+                    "used");
 #else
-            auto& model = holder.template into<Model>();
-            // Local mode has no client/server split, so this is the same execution
-            // site `ActionDispatcher::registerAction`'s runner is for remote modes
-            // (registry.hpp) — see that overload's doc comment for the full story,
-            // including why a rejected/throwing execute must not leave the audit
-            // trail silent, and why `Model::execute` is the only call inside the
-            // try that records Outcome::Failed.
+                auto& model = holder.template into<Model>();
+                // Local mode has no client/server split, so this is the same execution
+                // site `ActionDispatcher::registerAction`'s runner is for remote modes
+                // (registry.hpp) — see that overload's doc comment for the full story,
+                // including why a rejected/throwing execute must not leave the audit
+                // trail silent, and why `Model::execute` is the only call inside the
+                // try that records Outcome::Failed.
 // MSVC's C4702 fires on the `return` below for any action whose handler never
 // returns -- a test double whose body is a bare `throw`, for instance. The
 // warning is correct for that instantiation and wrong as a verdict on this
@@ -2121,53 +2243,55 @@ public:
 #pragma warning(push)
 #pragma warning(disable : 4702)
 #endif
-            auto result = [&] {
-                try {
-                    return std::make_shared<R>(model.execute(actionRef));
-                } catch (const std::exception& exc [[maybe_unused]]) {
-                    if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
-                        if (holder.hasActionLog()) {
-                            ::morph::model::detail::recordActionFailure(
-                                holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
-                                std::string{::morph::model::ActionTraits<Action>::typeId()},
-                                ::morph::model::ActionTraits<Action>::toJson(actionRef),
-                                ::morph::model::detail::actionPayloadSchema<Action>(), exc.what());
+                auto result = [&] {
+                    try {
+                        return std::make_shared<R>(model.execute(actionRef));
+                    } catch (const std::exception& exc [[maybe_unused]]) {
+                        if constexpr (::morph::model::detail::actionLoggable<Action>() ==
+                                      ::morph::model::Loggable::Yes) {
+                            if (holder.hasActionLog()) {
+                                ::morph::model::detail::recordActionFailure(
+                                    holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                                    std::string{::morph::model::ActionTraits<Action>::typeId()},
+                                    ::morph::model::ActionTraits<Action>::toJson(actionRef),
+                                    ::morph::model::detail::actionPayloadSchema<Action>(), exc.what());
+                            }
                         }
+                        throw;
                     }
-                    throw;
-                }
-            }();
+                }();
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-            // Past this point the model's mutation has committed, so neither
-            // serialising the result nor appending the entry may be reported as
-            // an execution failure: both throw (ParseError; a sink that could
-            // not reach its backend), and inside the try above that throw would
-            // reject this call's Completion as if the model had refused the
-            // action and file an Outcome::Failed entry blaming the action for an
-            // infrastructure fault. ActionRecordingError says what is true
-            // instead -- the action ran, the recording of it did not -- and
-            // carries the result JSON the audit trail never received.
-            if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
-                if (holder.hasActionLog()) {
-                    std::string resultJson;
-                    try {
-                        resultJson = ::morph::model::ActionTraits<Action>::resultToJson(*result);
-                        // entityKey/principal/timestampMs are filled in by recordIfAttached.
-                        ::morph::model::detail::recordActionSuccess(
-                            holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
-                            std::string{::morph::model::ActionTraits<Action>::typeId()},
-                            ::morph::model::ActionTraits<Action>::toJson(actionRef),
-                            ::morph::model::detail::actionPayloadSchema<Action>(), resultJson);
-                    } catch (const std::exception& exc) {
-                        throw ::morph::model::ActionRecordingError{std::move(resultJson), exc.what()};
+                // Past this point the model's mutation has committed, so neither
+                // serialising the result nor appending the entry may be reported as
+                // an execution failure: both throw (ParseError; a sink that could
+                // not reach its backend), and inside the try above that throw would
+                // reject this call's Completion as if the model had refused the
+                // action and file an Outcome::Failed entry blaming the action for an
+                // infrastructure fault. ActionRecordingError says what is true
+                // instead -- the action ran, the recording of it did not -- and
+                // carries the result JSON the audit trail never received.
+                if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
+                    if (holder.hasActionLog()) {
+                        std::string resultJson;
+                        try {
+                            resultJson = ::morph::model::ActionTraits<Action>::resultToJson(*result);
+                            // entityKey/principal/timestampMs are filled in by recordIfAttached.
+                            ::morph::model::detail::recordActionSuccess(
+                                holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                                std::string{::morph::model::ActionTraits<Action>::typeId()},
+                                ::morph::model::ActionTraits<Action>::toJson(actionRef),
+                                ::morph::model::detail::actionPayloadSchema<Action>(), resultJson);
+                        } catch (const std::exception& exc) {
+                            throw ::morph::model::ActionRecordingError{std::move(resultJson), exc.what()};
+                        }
                     }
                 }
-            }
-            return result;
+                return result;
 #endif
-        };
+            };
+        }
         {
             std::scoped_lock const lock{_sessionMtx};
             call.session = _defaultSession;
