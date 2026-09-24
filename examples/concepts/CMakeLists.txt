@@ -46,7 +46,7 @@ if(MORPH_BUILD_TESTS)
         # 8 TUs driving include/morph's journal, offline-queue, validation,
         # transport-limit, versioning, connection-scope, observability and
         # shutdown paths -- ctest-registered, so every sanitizer leg ran them
-        # and learned nothing from them (morph#542).
+        # and learned nothing from them.
         if(DEFINED AF_SANITIZER)
             apply_sanitizers(morph_concepts_tests ${AF_SANITIZER})
         endif()

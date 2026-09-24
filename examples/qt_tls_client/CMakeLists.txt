@@ -13,8 +13,9 @@ apply_warnings(morph_qt_tls_example)
 apply_bigobj(morph_qt_tls_example)
 
 # This example is a ctest case (`qt_tls_example_runs`, below), so on a
-# sanitizer preset it is a suite the job runs -- and, until morph#542, one it
-# ran uninstrumented. It also links morph_qt_impl, which is instrumented on
+# sanitizer preset it is a suite the job runs, so it has to be instrumented or
+# the job reports a clean run over a suite it could not see into. It also links
+# morph_qt_impl, which is instrumented on
 # those presets; a consumer that is not would fail to link against it, the way
 # morph_test_main's comment in the root CMakeLists.txt records.
 if(DEFINED AF_SANITIZER)
