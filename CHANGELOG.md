@@ -352,6 +352,10 @@ API surface).
 
 ### Removed
 
+- **`morph/net/detail/base64.hpp`.** The WebSocket handshake uses core-cpp's
+  `core::base64::encode` (`<core/Base64.hpp>`), and `SocketServer`'s accept loop
+  waits on `core::platform::Wakeup` instead of a self-pipe of its own.
+
 - **The reactive-draft mechanism** — `BridgeHandler::set<&A::field>`,
   `reset<A>`, the action-keyed `subscribe<A>`, and their in-flight coalescing.
   Its job is done better by a stateful model holding the draft itself, and

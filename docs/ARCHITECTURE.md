@@ -4,7 +4,7 @@
 
 `morph` is a typed, asynchronous bridge between a GUI thread and business-object models. Models may live in-process (local mode) or in a remote server process (remote mode). The GUI code is identical in both cases — only the backend implementation changes.
 
-The framework is header-only (C++23, namespace `morph`), depends on Glaze for JSON reflection, and optionally integrates with Qt 6 via a separate target.
+The framework is header-only (C++23, namespace `morph`), depends on Glaze for JSON reflection and on [core-cpp](https://github.com/contour-terminal/core-cpp) for its event-loop timers, base64 and wakeup primitive, and optionally integrates with Qt 6 via a separate target. core-cpp's `core::base`, `core::net` and `core::platform` are static libraries, so while morph's own surface is headers only, a project that links `morph::morph` also builds those.
 
 > **New to morph?** `docs/GETTING-STARTED.md` is the step-by-step tutorial that
 > comes before this document: it builds one small app end to end
@@ -740,7 +740,8 @@ documented behavior.
 
 | Decision | Rationale |
 |---|---|
-| Header-only library | Zero build-system friction; include and use. |
+| Header-only library | Zero build-system friction; include and use. morph's own surface stays headers only; core-cpp's static modules are built with it. |
+| core-cpp for timers, base64 and wakeup | One implementation shared with the other Contour Terminal projects, including a WebAssembly subset whose host-driven loop runs `TimeoutScheduler` on the browser's main thread. |
 | Per-topic public namespaces with per-topic `detail::` | Minimal public surface — callers see only what they need; internals are clearly walled off. |
 | `StrandExecutor` per `ModelId` | Parallelism across models; serial within one model — model authors write single-threaded code. |
 | `Completion<T>` not `std::future<T>` | Callbacks marshal to a specific executor; futures do not. |

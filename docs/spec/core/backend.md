@@ -1805,11 +1805,12 @@ Qt-free reference transport: they speak the same RFC 6455 WebSocket framing as
 raw POSIX (BSD) sockets instead of `QWebSocket`/`QWebSocketServer`. The module
 is header-only, gated behind the CMake option `MORPH_BUILD_NET` (default
 `OFF`; Linux/macOS only — see Limitations), and depends on nothing but `morph`
-itself: the HTTP/1.1 Upgrade handshake (`Sec-WebSocket-Key`/
-`Sec-WebSocket-Accept`, via a hand-rolled SHA-1 + base64) and the masked/
-unmasked text-frame codec are implemented from scratch in
-`include/morph/net/detail/` (`sha1.hpp`, `base64.hpp`, `ws_handshake.hpp`,
-`ws_frame.hpp`, `tcp_socket.hpp`). Because both transports round-trip the same
+and the core-cpp modules `morph` already links: the HTTP/1.1 Upgrade handshake
+(`Sec-WebSocket-Key`/`Sec-WebSocket-Accept`, via a hand-rolled SHA-1 and
+core-cpp's `core::base64::encode`) and the masked/unmasked text-frame codec are
+implemented in `include/morph/net/detail/` (`sha1.hpp`, `ws_handshake.hpp`,
+`ws_frame.hpp`, `tcp_socket.hpp`), and the accept loop's wakeup is core-cpp's
+`core::platform::Wakeup`. Because both transports round-trip the same
 `wire::Envelope`, a `SocketBackend` client and a `QtWebSocketServer`
 interoperate (and vice versa) with no protocol changes on either side.
 
@@ -1992,11 +1993,12 @@ any thread for exactly this purpose, on a **connected** socket.
 
 **The accept loop owns its own wakeup, and does not borrow the kernel's**
 The accept thread never parks in `accept(2)`. `listen()` sets
-`O_NONBLOCK` on the listening socket and creates a self-pipe; the loop waits in
-a single `poll()` over the listening fd and the pipe's read end, and takes a
+`O_NONBLOCK` on the listening socket and creates a `core::platform::Wakeup`
+(an eventfd on Linux, a self-pipe on macOS and the BSDs); the loop waits in a
+single `poll()` over the listening fd and the wakeup's descriptor, and takes a
 ready connection with `TcpSocket::tryAccept()`, which answers `std::nullopt`
-rather than parking when a readiness report has gone stale. `close()` writes one
-byte to the pipe before `join()`, which is what ends the loop.
+rather than parking when a readiness report has gone stale. `close()` signals
+the wakeup before `join()`, which is what ends the loop.
 
 **The listener's non-blocking mode stops at the listener.**
 `TcpSocket`'s fd-adopting constructor clears `O_NONBLOCK` on every descriptor it
@@ -2018,16 +2020,19 @@ That replaces, rather than supplements, the previous mechanism: `close()` no
 longer calls `shutdownBoth()` on the *listening* socket at all. It used to, and
 relied on `shutdown(2)` kicking a parked `accept()` — true on Linux, not a POSIX
 guarantee, and false on macOS/BSD, where the accept thread stayed parked and
-`~SocketServer()` hung with no timeout on its join. Because the pipe is now the
-only wakeup, the mechanism is exercised by every teardown on every platform,
-including CI's: deleting the wakeup `write()` hangs the Linux build too. A
-platform-conditional wakeup would instead have been a macOS-only path that
-Linux-only CI could never execute.
+`~SocketServer()` hung with no timeout on its join. Because the wakeup is the
+only way the loop ends, the mechanism is exercised by every teardown on every
+platform, including CI's: removing the `signal()` hangs the Linux build too.
+The wakeup's kernel object does differ by platform — an eventfd on Linux, a
+self-pipe elsewhere — and morph's Linux-only CI exercises only the first; the
+self-pipe is core-cpp's, covered by its `Wakeup_test` on core-cpp's own macOS
+legs, rather than a morph code path nothing here could execute.
 
 Two consequences follow, both deliberate:
 
-- `listen()` **fails closed** if the pipe cannot be created (`pipe(2)`
-  answering `EMFILE`/`ENFILE`): it returns `false` and spawns no thread, rather
+- `listen()` **fails closed** if the wakeup cannot be created (the kernel out
+  of descriptors, which `core::platform::Wakeup`'s constructor reports by
+  throwing): it returns `false` and spawns no thread, rather
   than starting an accept loop nothing could ever interrupt.
 - `close()` **releases the listening descriptor** once the accept thread has
   joined — after the join, so no fd number can be reused under a `poll()` still
@@ -2438,9 +2443,9 @@ from "dead" apart).
 | Method | Notes |
 |---|---|
 | `SocketServer(server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server`. Does not start listening. |
-| `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup pipe, and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup pipe cannot be created — an accept loop nothing can interrupt is worse than not listening. |
+| `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup (`core::platform::Wakeup`), and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup cannot be created — an accept loop nothing can interrupt is worse than not listening. |
 | `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
-| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by writing one byte to the wakeup pipe it polls — **not** by `shutdownBoth()` on the listening socket, which works only because Linux kicks a parked `accept(2)` on shutdown and leaves macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete. A `_closing.exchange` guard is not enough: it lets a second caller reach `_acceptThread.join()` while the first is inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++. The wakeup write runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
+| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by signalling the wakeup it polls — **not** by `shutdownBoth()` on the listening socket, which works only because Linux kicks a parked `accept(2)` on shutdown and leaves macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete. A `_closing.exchange` guard is not enough: it lets a second caller reach `_acceptThread.join()` while the first is inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++. The wakeup signal runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## `executeInto` — settling the caller's own completion
 
@@ -2511,7 +2516,7 @@ implementation to absorb — see
 | Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor`/`StrandExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
 | Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models) under `_regMtx`. No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
 | `morph::net`'s I/O model | A dedicated I/O thread + `std::condition_variable`, instead of the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and — as a side effect — lets `SocketBackend` be driven safely from multiple threads (`QtWebSocketBackend` cannot be, since it is pinned to one event-loop thread). |
-| `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + base64 + HTTP Upgrade + frame codec), not a third-party library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency to keep morph's default build dependency-free, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
+| `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + HTTP Upgrade + frame codec), with base64 from core-cpp, not a WebSocket library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency beyond core-cpp, which morph links anyway, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
 | `WsFrameReader` reassembles fragments | Accumulates continuation frames and returns only the completed message | Fragmentation is not an exotic case: a peer fragments whenever a message exceeds its outgoing frame size, and Qt's `QWebSocket` defaults that to 512 KiB. Rejecting fragments broke interop with the transport this project ships, for every payload past that size. Control frames interleaved between fragments pass through untouched, and the reassembled total is bounded by `wire::kMaxEnvelopeBytes` so a stream of tiny continuations cannot grow the buffer without limit. |
 | `WsFrameReader` rejects RFC 6455-illegal frames instead of tolerating them | Masking direction, RSV bits, opcode range, control-frame framing, Close status code, minimal length encoding and text-payload UTF-8 are all checked; a violation throws out of `tryExtractFrame()` and the call site drops the connection | The interop requirement above makes what the reader *refuses* part of the transport's contract rather than an implementation detail: a tolerant reader accepts ten classes of illegal frame, and a peer that sends one here gets disconnected instead. The reader is given its role at construction (`expectMasked`) because §5.1 is directional — a server MUST reject an unmasked client frame and a client MUST reject a masked server frame, and that rule is the anti-cache-poisoning defence, not a formality. Text UTF-8 is validated incrementally, since a multi-byte sequence may straddle a fragment boundary. On the sending side the mask key is drawn per frame from a thread-local `std::random_device` rather than a thread-local `std::mt19937`, whose state a peer can reconstruct from 624 observed keys (§5.3); `random_device` has no reproducible state to recover, and holding it thread-local keeps the entropy source open instead of reacquiring it on every outbound message. |
 | Registration continuation delivered via a caller-supplied `IExecutor&`, not on the backend's thread | `bindModel`/`promoteModel` return a `Completion<ModelId>` built with the caller's executor | A per-verb non-blocking twin can only state its threading contract in prose, and a violation of it is a use-after-free. Making the executor an argument moves the choice of delivery thread from fifteen implementors that know nothing about the caller's teardown to the one caller that does, and turns it from a `@note` into a value a call site must produce. Rejected: matching `execute`'s `IExecutor*` — a null pointer makes `Completion` drop every handler silently, which is the same unobservable failure the surface removes. |

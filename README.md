@@ -415,9 +415,20 @@ validates) and enforce security-critical checks inside the model. See
 
 - **Compiler:** C++23 (developed against recent Clang; libstdc++/libc++). The
   default logger uses `std::println`, so a C++23 standard library is required.
-- **Dependencies:** [Glaze](https://github.com/stephenberry/glaze) (JSON
-  reflection), fetched via [vcpkg](https://vcpkg.io) (`vcpkg.json` manifest).
-  Optional: Qt 6 for the WebSocket transport and QML example.
+- **Dependencies:**
+  - [Glaze](https://github.com/stephenberry/glaze) (JSON reflection), from
+    [vcpkg](https://vcpkg.io) (`vcpkg.json` manifest) or fetched through CPM.
+  - [core-cpp](https://github.com/contour-terminal/core-cpp) v0.3.0, the
+    shared C++23 foundation of the Contour Terminal projects, fetched through
+    CPM: morph's timers run on its event loop, and `morph::net` takes base64
+    and its wakeup primitive from it. morph itself stays header-only, but
+    `core::base`, `core::net` and `core::platform` are static libraries, so
+    a project that links `morph::morph` also builds them. Under
+    single-threaded WebAssembly core-cpp builds its WebAssembly subset.
+  - Optional: Qt 6 for the WebSocket transport and QML example.
+  - Fetched dependencies are kept in CPM's source cache, `.cache/cpm` by
+    default (`CPM_SOURCE_CACHE` overrides it), so a second configure clones
+    nothing.
 - **Build system:** CMake (presets in `CMakePresets.json`) + Ninja.
 
 ```sh

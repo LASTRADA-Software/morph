@@ -7,6 +7,7 @@
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <core/Base64.hpp>
 #include <cstdint>
 #include <limits>
 #include <random>
@@ -16,7 +17,6 @@
 #include <system_error>
 #include <vector>
 
-#include "base64.hpp"
 #include "sha1.hpp"
 #include "tcp_socket.hpp"
 
@@ -32,7 +32,7 @@ inline std::string computeAcceptKey(std::string_view clientKey) {
     std::string concatenated{clientKey};
     concatenated += kWebSocketGuid;
     auto digest = sha1Digest(concatenated);
-    return base64Encode(digest);
+    return ::core::base64::encode(digest.begin(), digest.end());
 }
 
 /// @brief Generates a random 16-byte `Sec-WebSocket-Key`, base64-encoded.
@@ -44,7 +44,7 @@ inline std::string generateClientKey() {
     for (auto& b : raw) {
         b = static_cast<std::uint8_t>(dist(gen));
     }
-    return base64Encode(raw);
+    return ::core::base64::encode(raw.begin(), raw.end());
 }
 
 /// @brief The pieces of a `ws://` URL relevant to opening a socket + handshake.
