@@ -1448,6 +1448,15 @@ is hidden, not drawn beside it:
 | `preview` | the monospace JSON preview | `text` (`previewLine`) |
 | `result` | the `ok:`/`err:` reply line | `text`, `ok` |
 
+`CollectionView` and `WizardView` read the same registry for chrome roles of
+their own (`collectionHeader`, `collectionRow`, `confirmDialog`,
+`editorDialog`; `wizardHeader`, `wizardNav` — see
+[views.md](views.md#chrome-slots-and-the-embedded-editors) and
+[workflows_navigation.md](workflows_navigation.md#chrome-slots)), and hand it on
+to every `DynamicForm` they embed. `DateTimePicker` has no chrome of its own: a
+host replaces the whole picker with a field slot (`byKind("datetime", …)`,
+#812).
+
 Every chrome item is also offered `form` (the `DynamicForm`). Values that change
 are assigned as bindings. A role with no registration keeps the built-in
 exactly, so an app that registers nothing sees no change. To **remove** a piece

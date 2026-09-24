@@ -64,10 +64,12 @@ QtObject {
         revision++
     }
 
-    /// Registers @p component as the form's chrome for @p role: one of
+    /// Registers @p component as chrome for @p role: DynamicForm's
     /// "fieldLabel", "fieldHelp", "section", "accordion", "tabset", "header",
-    /// "status", "submitButton", "preview", "result". An unknown role is
-    /// stored and never asked for.
+    /// "status", "submitButton", "preview", "result"; CollectionView's
+    /// "collectionHeader", "collectionRow", "confirmDialog", "editorDialog";
+    /// WizardView's "wizardHeader", "wizardNav". An unknown role is stored and
+    /// never asked for.
     function byChrome(role, component) {
         _byChrome[role] = component
         revision++

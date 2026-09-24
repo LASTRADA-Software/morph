@@ -39,6 +39,32 @@ Frame {
     property var steps: wizardSchema["w-steps"] || []
     property int currentIndex: 0
 
+    // Client-side slots and chrome, handed on to every step's form. null (the
+    // default) draws every built-in, as before.
+    property var slotRegistry: null
+
+    readonly property string headerTitle: (wizard.wizardSchema["w-title"] || wizard.wizardId)
+    readonly property bool canGoBack: wizard.currentIndex > 0
+    readonly property bool canGoNext: wizard.currentIndex < wizard.steps.length - 1 && wizard.currentStepDone
+    readonly property bool onLastStep: wizard.currentIndex >= wizard.steps.length - 1
+
+    // The host's chrome for `role`, or null for the built-in -- the registry
+    // DynamicForm reads (docs/spec/forms/forms.md, "Chrome slots").
+    function chrome(role) {
+        return slotRegistry ? slotRegistry.resolveChrome(role) : null
+    }
+
+    // Assigns each of `values` to a chrome item's same-named property, only
+    // where the item declares it (DynamicForm.bindChrome's rule).
+    function bindChrome(item, values) {
+        if (!item)
+            return
+        for (const key in values) {
+            if (key in item)
+                item[key] = values[key]
+        }
+    }
+
     // A plain two-hop property chain (Repeater.count/currentIndex ->
     // resultOk/resultText), not a function call: reading a property through
     // a user-defined QML function inside another binding does not reliably
@@ -86,10 +112,29 @@ Frame {
         spacing: 8
 
         Label {
-            text: (wizard.wizardSchema["w-title"] || wizard.wizardId)
+            visible: wizard.chrome("wizardHeader") === null
+            text: wizard.headerTitle
                   + "  (" + (wizard.currentIndex + 1) + " / " + wizard.steps.length + ")"
             font.bold: true
             font.pixelSize: 16
+        }
+
+        // A host's header chrome: `title`, `stepIndex`, `stepCount`,
+        // `stepTitle`.
+        Loader {
+            active: wizard.chrome("wizardHeader") !== null
+            visible: active
+            Layout.fillWidth: true
+            sourceComponent: wizard.chrome("wizardHeader")
+            onLoaded: wizard.bindChrome(item, {
+                title: Qt.binding(function () { return wizard.headerTitle }),
+                stepIndex: Qt.binding(function () { return wizard.currentIndex }),
+                stepCount: Qt.binding(function () { return wizard.steps.length }),
+                stepTitle: Qt.binding(function () {
+                    const step = wizard.steps[wizard.currentIndex]
+                    return step && step.title ? String(step.title) : ""
+                })
+            })
         }
 
         StackLayout {
@@ -106,25 +151,49 @@ Frame {
                     actionType: modelData.action
                     schema: wizard.schemas[modelData.action] || ({})
                     controller: wizard.controller
+                    slotRegistry: wizard.slotRegistry
                 }
             }
         }
 
+        // A host's navigation chrome: `canBack`, `canNext`, `lastStep`,
+        // `stepIndex`, `stepCount`, `back()` and `next()` -- the same gates
+        // the built-in buttons use.
+        Loader {
+            active: wizard.chrome("wizardNav") !== null
+            visible: active
+            Layout.fillWidth: true
+            sourceComponent: wizard.chrome("wizardNav")
+            onLoaded: wizard.bindChrome(item, {
+                canBack: Qt.binding(function () { return wizard.canGoBack }),
+                canNext: Qt.binding(function () { return wizard.canGoNext }),
+                lastStep: Qt.binding(function () { return wizard.onLastStep }),
+                stepIndex: Qt.binding(function () { return wizard.currentIndex }),
+                stepCount: Qt.binding(function () { return wizard.steps.length }),
+                back: function () { wizard.goBack() },
+                next: function () {
+                    if (wizard.canGoNext)
+                        wizard.goNext()
+                }
+            })
+        }
+
         RowLayout {
+            visible: wizard.chrome("wizardNav") === null
             Button {
                 objectName: "wizardBack"
                 text: "Back"
-                enabled: wizard.currentIndex > 0
+                enabled: wizard.canGoBack
                 onClicked: wizard.goBack()
             }
             Button {
                 objectName: "wizardNext"
                 text: "Next"
-                enabled: wizard.currentIndex < wizard.steps.length - 1 && wizard.currentStepDone
+                enabled: wizard.canGoNext
                 onClicked: wizard.goNext()
             }
             Label {
-                visible: wizard.currentIndex >= wizard.steps.length - 1
+                visible: wizard.onLastStep
                 text: "Last step — fill it in to finish"
                 opacity: 0.6
                 font.italic: true
