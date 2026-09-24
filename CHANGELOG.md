@@ -147,6 +147,17 @@ API surface).
   rebuilds), `rows`, `setRows(rows)` and `form`. Without a slot nothing changes.
   See `docs/spec/forms/forms.md`, "Collections of objects — a host slot draws
   them".
+- **Chrome slots: a host replaces DynamicForm's labels, containers and buttons,
+  not only its controls.** `SlotRegistry.byChrome(role, component)` /
+  `resolveChrome(role)` register one Component per role — `fieldLabel`,
+  `fieldHelp`, `section`, `accordion` (falls back to `section`), `tabset`,
+  `header`, `status`, `submitButton`, `preview`, `result` — each loaded in place
+  of the built-in, which is hidden. Container chrome declares a `contentItem`
+  the form creates its field grid inside, so every field still exists once and
+  keeps its `field_<name>` objectName. A label chrome gets live `required` and
+  `invalid` states (`DynamicForm.fieldInvalid(name)`); the status line's text is
+  now `DynamicForm.statusText`. With nothing registered, every form renders as
+  before. See `docs/spec/forms/forms.md`, "Chrome slots".
 
 - **A locale numeric entry accepts an explicit `+`.**
   `morph::render::normalizeLocaleNumber` had no notion of a positive sign: a
