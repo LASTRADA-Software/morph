@@ -1223,6 +1223,10 @@ carve-out remains part of the contract; the attribute simply cannot say it. See
 
 ## Cross-references
 
+- [`coroutines.md`](coroutines.md) — action handlers that return
+  `core::async::Task<R>`: how `executeVia`'s `localOpAsync` drives them on the
+  model's strand, the per-instance action gate, and how an execute deadline
+  stops a suspended handler.
 - [`backend.md`](backend.md) — `IBackend`, `LocalBackend`,
   `SimulatedRemoteBackend`, `registerModelWithContext`, `cancelPending`,
   `BackendChangedError`/`BridgeDestroyedError`, reconnect handlers.

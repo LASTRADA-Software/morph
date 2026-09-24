@@ -71,6 +71,8 @@ used locally or serialised for a remote round-trip:
 | `serializeAction` | `std::string (*)(const void* action)` | Serialises `action` to JSON. Only called on the remote path. |
 | `deserializeResult` | `std::shared_ptr<void> (*)(std::string_view)` | Deserialises a JSON reply into the opaque result. Only called on the remote path. Never reads the action. |
 | `localOp` | `std::shared_ptr<void> (*)(IModelHolder&, void* action)` | Executes `action` directly against a model holder. Only called on the local path. |
+| `localOpAsync` | `void (*)(IModelHolder&, std::shared_ptr<void> action, const std::shared_ptr<StrandCoroExecutor>&, core::async::StopToken, LocalDone)` | Set instead of `localOp` when the action's handler returns `core::async::Task`: starts it on the model's strand and reports the result or exception through `LocalDone` when the Task completes. Only called on the local path. See [`coroutines.md`](coroutines.md). |
+| `stopSource` | `std::shared_ptr<core::async::StopSource>` | Null unless `Bridge::executeVia` armed an execute deadline for a Task handler; the deadline requests stop on it and `LocalBackend` hands its token to the handler. |
 | `session` | `morph::session::Context` | Session context. Local backends thread it through a thread-local before invoking `localOp`; remote backends serialise it into the wire envelope. |
 
 There is one member function, `serializeBody()`, which pairs
@@ -1265,7 +1267,7 @@ defaults to `0` ("unbounded"), so an unconfigured server's behavior is unchanged
 
 | Field | Default | Enforcement |
 |---|---|---|
-| `executeTimeout` | `0` (disabled) | A timer arms when `execute` dispatches to the model's strand. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. The model keeps running to completion on its strand; morph never interrupts `Model::execute`. |
+| `executeTimeout` | `0` (disabled) | A timer arms when `execute` dispatches to the model's strand. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
 | `maxLiveModels` | `0` (unbounded) | Checked under `_regMtx` before `register` constructs a new instance; over the cap → `err "too many models"`. The check and the eventual insert are two separate critical sections (to avoid constructing an instance that will be rejected), so a burst of concurrent registers can overshoot the cap by a small, bounded amount — a soft, defense-in-depth limit, not a hard invariant. |
 | `maxInFlightExecutes` | `0` (unbounded) | An atomic counter, incremented when `execute` is admitted for dispatch (before the strand task is posted) and decremented when its reply is sent (success, exception, or timeout — whichever resolves the call first); over the cap → `err "server busy"`, no dispatch. |
 

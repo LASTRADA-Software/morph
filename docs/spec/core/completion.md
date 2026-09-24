@@ -699,6 +699,9 @@ outlives the `Completion`. See [concurrency_and_lifetimes.md](../concurrency_and
 
 ## Cross-references
 
+- [`coroutines.md`](coroutines.md) — awaiting a `Completion<T>` from a
+  coroutine (`operator co_await() &&`), where it resumes, and how a stop
+  withdraws the await.
 - [`executor.md`](executor.md) — `IExecutor` and its implementations; `cbExec`
   is the executor on which every callback is posted.
 - [`logger.md`](logger.md) — `morph::log::logError`, the error-handling sink
