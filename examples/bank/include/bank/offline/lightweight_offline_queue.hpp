@@ -19,7 +19,7 @@
 /// morph owns the interface; the store is the application's. Nothing here is
 /// visible to `include/morph/` — `grep -rn Lightweight include/morph/` returns
 /// nothing, and that is the invariant this file exists to demonstrate rather
-/// than to weaken (morph#549). The framework's own durable queues
+/// than to weaken. The framework's own durable queues
 /// (`FileOfflineQueue`, `SqliteOfflineQueue`) are unchanged and unaffected: an
 /// application that already has an ORM connection open does not need a second
 /// persistence mechanism shipped by the framework, it needs the framework to

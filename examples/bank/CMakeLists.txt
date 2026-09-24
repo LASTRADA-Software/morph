@@ -66,7 +66,7 @@ unset(_morph_saved_skip_install_rules)
 # it has to be here too: whichever of the two sites configures first is the one
 # that actually defines the target, so only calling it from the other would
 # leave the `-I` in place whenever bank configures first. The helper is
-# idempotent, so calling it twice is a no-op the second time (morph#438).
+# idempotent, so calling it twice is a no-op the second time.
 include(${PROJECT_SOURCE_DIR}/cmake/morph_demote_interface_includes.cmake)
 morph_demote_lightweight_odbc_includes()
 
@@ -95,7 +95,7 @@ apply_bigobj(bank_lib)
 # Note: deliberately NOT calling apply_warnings() here — the third-party ORM
 # headers are not -Werror clean and would fail the build.
 #
-# apply_sanitizers() is a separate question and the answer is yes (morph#679).
+# apply_sanitizers() is a separate question and the answer is yes.
 # Until this line, `ladder_bank_server` was the *only* bank target that carried
 # an AF_SANITIZER block, so a sanitizer configure with
 # -DMORPH_BUILD_BANK_EXAMPLE=ON built bank_lib, bank_cli and every bank test
@@ -210,8 +210,8 @@ if(MORPH_BUILD_TESTS)
             tests/test_relations.cpp
             tests/test_stateful_account.cpp
             # Not a behavioural test of bank: the record of why
-            # examples/common/db/pool_transaction_audit.hpp is deliberately not
-            # linked here (morph#752). See the file's own header.
+            # examples/common/db/pool_transaction_audit.hpp is deliberately
+            # not linked here. See the file's own header.
             tests/test_pool_scope.cpp
         )
         # ${PROJECT_SOURCE_DIR}/tests is morph's own test directory, and it is
@@ -219,8 +219,8 @@ if(MORPH_BUILD_TESTS)
         # tests/offline_queue_conformance.hpp, the implementation-agnostic
         # IOfflineQueue suite every shipped queue is measured against. The
         # Lightweight-backed queue in this example is measured against the same
-        # suite, unedited -- that is the whole acceptance gate of morph#549, and
-        # a copy of the suite next to this example would have measured nothing.
+        # suite, unedited -- that is the whole point of the conformance suite,
+        # and a copy of it next to this example would measure nothing.
         target_include_directories(bank_tests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
             ${PROJECT_SOURCE_DIR}/tests)
@@ -230,16 +230,15 @@ if(MORPH_BUILD_TESTS)
         # A ctest command, so this block is not optional: without it the
         # binary runs on a sanitizer leg carrying nothing, and
         # scripts/check_sanitizer_instrumentation.sh fails the job rather than
-        # letting it report a clean run over an uninstrumented suite
-        # (morph#679).
+        # letting it report a clean run over an uninstrumented suite.
         if(DEFINED AF_SANITIZER)
             apply_sanitizers(bank_tests ${AF_SANITIZER})
         endif()
 
         list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)
-        # LABELS "bank" on all three bank suites (morph#679). Bank is not a
-        # rung, so morph_add_rung()'s "ladder"/"ladder-<rung>" labels never
+        # LABELS "bank" on all three bank suites. Bank is not a rung, so
+        # morph_add_rung()'s "ladder"/"ladder-<rung>" labels never
         # reach it and nothing else distinguished a bank test from a core one
         # -- which is what a leg that wants to run bank's suites and only
         # bank's suites needs. Catch2 tags are not ctest labels (no
@@ -249,10 +248,10 @@ if(MORPH_BUILD_TESTS)
         # label that stopped matching fails the leg instead of running nothing.
         #
         # No RESOURCE_LOCK on any of the three calls, and that is a decision
-        # rather than the oversight it was (morph#682). catch_discover_tests
-        # registers one ctest case per TEST_CASE and ctest runs each as its own
-        # process; bank's cases all named one fixed SQLite path under
-        # temp_directory_path() and each deleted it on the way in, so
+        # rather than an oversight. catch_discover_tests registers one ctest
+        # case per TEST_CASE and ctest runs each as its own process; when
+        # bank's cases all named one fixed SQLite path under
+        # temp_directory_path() and each deleted it on the way in,
         # `ctest -j 12 -L bank` failed 21 of 21 with
         # `HY000 (10) - [SQLite]disk I/O error (10)`. The ladder's remedy for
         # the same hazard is RESOURCE_LOCK morph_ladder_test_db (see
@@ -300,9 +299,9 @@ if(MORPH_BUILD_TESTS)
                 #
                 # testkit_src/, not testkit/: the TU sits one directory up
                 # from its own header so that testkit/.clang-tidy's Catch2
-                # suppression cannot reach it (morph#652). The
-                # ${PROJECT_SOURCE_DIR}/examples/common include directory
-                # below is what resolves its <testkit/qml_surface.hpp>.
+                # suppression cannot reach it. The
+                # ${PROJECT_SOURCE_DIR}/examples/common include directory below
+                # is what resolves its <testkit/qml_surface.hpp>.
                 ${PROJECT_SOURCE_DIR}/examples/common/testkit_src/qml_surface.cpp
             )
             target_include_directories(bank_gui_tests PRIVATE
@@ -317,12 +316,12 @@ if(MORPH_BUILD_TESTS)
             target_compile_definitions(bank_gui_tests PRIVATE
                 MORPH_LADDER_SOURCE_ROOT="${PROJECT_SOURCE_DIR}")
             apply_bigobj(bank_gui_tests)
-            # This is the binary that would have caught morph#663: the
-            # out-of-range double -> int64_t conversion lived in
+            # This is the binary that catches an out-of-range
+            # double -> int64_t conversion: it lives in
             # gui/controllers/Format.hpp, which this suite compiles and drives
             # directly (tests/gui/test_bank_gui_format.cpp) with Qt6::Core and
-            # no display. Uninstrumented it exercised the conversion on every
-            # run and said nothing (morph#679).
+            # no display. Uninstrumented, the suite exercises the conversion on
+            # every run and says nothing.
             if(DEFINED AF_SANITIZER)
                 apply_sanitizers(bank_gui_tests ${AF_SANITIZER})
             endif()
@@ -341,7 +340,7 @@ if(MORPH_BUILD_TESTS)
             #
             # This target exists because some of bank's GUI logic is *in* the
             # QML and is invisible from C++. MoveMoneyPage's account picker is
-            # the worked example (morph#296): the controller is entirely
+            # the worked example: the controller is entirely
             # self-consistent when driven directly, and the defect is a
             # ComboBox whose `currentIndex` no binding restores after its model
             # is replaced. Only a live engine over the shipped .qml file can
@@ -385,7 +384,7 @@ if(MORPH_BUILD_TESTS)
                 MORPH_LADDER_TESTKIT_GUI_APP)
             apply_bigobj(bank_gui_qml_tests)
             # Also a ctest command, so also not optional -- see bank_tests
-            # above (morph#679).
+            # above.
             if(DEFINED AF_SANITIZER)
                 apply_sanitizers(bank_gui_qml_tests ${AF_SANITIZER})
             endif()
@@ -396,7 +395,7 @@ if(MORPH_BUILD_TESTS)
             # set for ctest (examples/TESTING.md).
             #
             # It does not cover the *discovery* run, and that gap cost this
-            # repository a permanently red CI leg (morph#690). PROPERTIES are
+            # repository a permanently red CI leg. PROPERTIES are
             # set on the tests Catch2 registers; the run that finds out what
             # those tests are happens first, and under DISCOVERY_MODE PRE_TEST
             # it happens inside ctest rather than inside the build. Catch2's

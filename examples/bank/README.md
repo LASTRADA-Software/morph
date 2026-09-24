@@ -43,9 +43,8 @@ rather than using `morph::qt::forms::FormsControllerCore`), no
 `examples/common/gui` presenter architecture, and no
 [`TESTING.md`](../TESTING.md) dual-deployment-mode rig — its remote coverage is
 `SimulatedRemoteBackend` in `test_remote.cpp` plus the scenario corpus below.
-Bringing those conventions into line is
-[morph#87](https://github.com/LASTRADA-Software/morph/issues/87), which remains
-open; the numbering question that issue also raises is the part that is settled.
+Bringing those conventions into line is open work; the numbering question is
+the part that is settled.
 
 ## Architecture: two type layers
 

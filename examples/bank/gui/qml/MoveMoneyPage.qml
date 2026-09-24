@@ -35,7 +35,7 @@ ColumnLayout {
                     // which is what refresh() does after each deposit,
                     // withdrawal and transfer -- while txns keeps the account
                     // the user chose, so the next deposit went somewhere the
-                    // screen no longer named (morph#296).
+                    // screen no longer named.
                     //
                     // refresh() emits accountsChanged before selectedChanged,
                     // so this re-runs against the list that is already in place.
