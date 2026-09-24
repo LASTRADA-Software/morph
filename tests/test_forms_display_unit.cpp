@@ -108,9 +108,14 @@ glz::generic_u64 schemaDom(std::string const& schema) {
     return dom;
 }
 
-// The object schema a property's `items` (or the property itself) resolves
-// to: a `$ref` into `$defs`, or the node inlined.
-const glz::generic_u64& resolveObject(const glz::generic_u64& dom, const glz::generic_u64& node) {
+// Property @p name of the action's schema -- or, with @p items, the element
+// schema of that array property -- with a `$ref` into `$defs` resolved. A
+// copy, so nothing returned refers into a caller's temporary.
+glz::generic_u64 resolvedProperty(const glz::generic_u64& dom, std::string const& name, bool items) {
+    glz::generic_u64 node = dom["properties"][name];
+    if (items) {
+        node = glz::generic_u64{node["items"]};
+    }
     if (node.contains("$ref")) {
         constexpr std::string_view kPrefix = "#/$defs/";
         std::string const ref = node["$ref"].get<std::string>();
@@ -156,7 +161,7 @@ TEST_CASE("Forms::FieldMeta::UndeclaredDisplayUnitEmitsNothing", "[forms][field_
 }
 
 TEST_CASE("Forms::FieldMeta::DisplayUnitIsIgnoredOnAQuantity", "[forms][field_meta][display_unit]") {
-    auto const schema = morph::forms::schemaJson<FDUQuantityAction>();
+    auto const& schema = morph::forms::schemaJson<FDUQuantityAction>();
     auto const dom = schemaDom(schema);
     auto const& mass = dom["properties"]["mass"];
 
@@ -164,7 +169,7 @@ TEST_CASE("Forms::FieldMeta::DisplayUnitIsIgnoredOnAQuantity", "[forms][field_me
     CHECK_FALSE(mass.contains("x-displayDecimals"));
     // The type's own unit is the only one anywhere in the schema.
     CHECK_FALSE(schema.contains(R"("lb")"));
-    CHECK(resolveObject(dom, mass)["ExtUnits"]["unitAscii"].get<std::string>() == "kg");
+    CHECK(resolvedProperty(dom, "mass", false)["ExtUnits"]["unitAscii"].get<std::string>() == "kg");
 }
 
 TEST_CASE("Forms::FieldMeta::DecimalsPastTheMaximumAreIgnored", "[forms][field_meta][display_unit]") {
@@ -174,8 +179,7 @@ TEST_CASE("Forms::FieldMeta::DecimalsPastTheMaximumAreIgnored", "[forms][field_m
 
 TEST_CASE("Forms::FieldMeta::DisplayUnitReachesARepeatedAggregatesElement", "[forms][field_meta][display_unit]") {
     auto const dom = schemaDom(morph::forms::schemaJson<FDUGradingAction>());
-    auto const& items = dom["properties"]["rows"]["items"];
-    auto const& row = resolveObject(dom, items);
+    auto const row = resolvedProperty(dom, "rows", true);
 
     CHECK(row["properties"]["sieve"]["ExtUnits"]["unitAscii"].get<std::string>() == "mm");
     CHECK(row["properties"]["sieve"]["x-displayDecimals"].as<std::uint64_t>() == 1);
