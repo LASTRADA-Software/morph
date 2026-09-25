@@ -151,6 +151,31 @@ API surface).
   `invalid` states (`DynamicForm.fieldInvalid(name)`); the status line's text is
   now `DynamicForm.statusText`. With nothing registered, every form renders as
   before. See `docs/spec/forms/forms.md`, "Chrome slots".
+- **`DynamicForm.prefill(values)` / `prefillFromJson(text)` — load a stored
+  record for editing.** Every prefill path wrote *control text*, so an editing
+  flow had to turn each wire value into the text its control holds by hand —
+  a `{num,den,dp}` into locale digits, an ISO instant into the display zone, a
+  row of a `std::vector<Row>` into cell texts. `decodeFieldValue(field, value)`
+  is now the inverse of the encoders, and `prefill` replaces the draft from a
+  payload, re-seeds every control and slot (`fieldText`, `rows`), re-selects
+  fetched `Choice`s and never submits. Prefilling and editing nothing
+  assembles the same payload. See `docs/spec/forms/forms.md`, "Prefill"
+  (fixes #814).
+
+- **A host slot can draw a `std::vector<Row>` member, and the form encodes it.**
+  A collection of objects had no built-in control and was reported
+  unrepresentable, so a form carrying one could not be submitted whatever the
+  host drew. When a `SlotRegistry` slot claims such a (top-level) member,
+  `DynamicForm` now describes the row type as `field.itemFields` (the grid's
+  columns: label, unit, decimals, read-only, required, kind flags), accepts the
+  rows as `{member: cellText}` objects, and encodes every cell with the encoder
+  the same member gets at the top level (`encodeFieldText`) — a `Quantity` cell
+  is exact, an over-precise one is refused, a blank required cell keeps the form
+  unready. Slots gain four optional members, assigned only when declared:
+  `fieldText` (the retained value, kept current through prefill, reset and tab
+  rebuilds), `rows`, `setRows(rows)` and `form`. Without a slot nothing changes.
+  See `docs/spec/forms/forms.md`, "Collections of objects — a host slot draws
+  them".
 
 - **`FieldMeta::unit` / `FieldMeta::decimals` — a display unit and precision
   for a plain `double`/`float`/integral member.** A DTO holding lab readings as

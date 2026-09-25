@@ -941,6 +941,52 @@ encodes to a genuine empty array `[]`, not `null`; a `required` array field
 is satisfied by engagement (non-blank text), not by having at least one
 surviving entry.
 
+### Collections of objects — a host slot draws them
+
+A `std::vector<Row>` member is `{"type": "array", "items": {"$ref":
+"#/$defs/Row"}}` (or `items` inlined, for a row type used once), and the row
+type's `$def` is annotated like any object schema — `x-order`, `title`,
+`required`, and every `FieldMeta` key its own `fieldMetadata` declares (see
+[Nested aggregates](#nested-aggregates-recursive-cycle-safe)). The built-in
+controls cannot collect it: the comma-separated array control encodes strings,
+so the member is [unrepresentable](#what-ready-claims) and a form that must
+carry it is not ready.
+
+**A host [slot](#theming--component-override-registry) that claims such a
+member makes it representable.** The renderer describes the row type the way
+it describes the action, and hands the result to the slot:
+
+| Field descriptor key | Meaning |
+|---|---|
+| `isObjectArray` | `true` for an array whose `items` resolve to an object schema with `properties`. |
+| `itemFields` | The row type's member descriptors, in `x-order` order — the same shape as a top-level entry of `fields` (`name`, `label`, `unit`, `decimals`, `readOnly`, `hidden`, `required`, `isQuantity`/`isNumber`/`isInteger`/`isBoolean`/`isEnum`/`enumOptions`, …): a grid's columns. Filled for a top-level collection only; one level is described, never more, so a self-referential row type cannot loop. |
+| `claimedBySlot` | `true` when a registered slot resolves for this member. `unrepresentable` is then `""`. |
+
+The slot edits the rows as **cell texts** — `setRows([{sieve: "31.5",
+passing: "100.0"}, …])`, or `setValue` with the same array as JSON text — where
+each cell holds what the built-in control for that member would hold: the typed
+digits of a number or `Quantity` (in the display locale), `"true"`/`"false"`
+for a boolean, the option's `valueJson` for a closed set. The form then encodes
+**every cell with the encoder the same member would get at the top level**
+(`encodeFieldText`): the same syntax, locale normalisation, precision limit and
+declared bounds, so a `Quantity` cell becomes an exact `{num,den,dp}` and an
+over-precise one is refused, not rounded. A blank optional cell is omitted from
+its row object. The literal is `null` — no value, so the form is not ready —
+when the text is not an array of objects, when a cell does not encode, or when
+a required member of any row is blank. An empty array is a value: `[]` is
+submitted for it.
+
+Cells are always read in the member's **canonical** unit: a row has no unit
+selector of its own. Only a **top-level** collection is handed to a slot; one
+nested inside a row, or inside a nested object, stays unrepresentable. A label
+inside a row resolves through an explicit `x-i18nKey` or its literal only — the
+derived `<action>.<field>` key names top-level members, and no row-level stem
+is defined on the C++ side.
+
+`src/qt/forms/tests/tst_DynamicFormObjectArraySlot.qml` pins the contract
+against submitted bodies. Replacing the cell encoder with plain string quoting
+reddens 3 of its 19 cases.
+
 ### Boolean fields — `type: "boolean"`
 
 glaze emits `{"type": "boolean"}` for a `bool` member, and
@@ -1316,6 +1362,46 @@ which is what `maximum: Infinity` already meant, and matches JSON Schema giving
 a null numeric keyword no meaning. Without that, a null bound would read as the
 bound `0` and reject every positive value.
 
+### Prefill — loading a stored payload for editing
+
+An editing flow opens a saved record, reads its DTO and wants the form to show
+it. `DynamicForm.prefill(values)` takes the payload as an object keyed by wire
+name (a parsed action or section DTO); `prefillFromJson(text)` takes its JSON
+and parses it with `JsonExact`, so an id past 2^53 arrives digit for digit.
+Either replaces the whole draft — a member absent from the payload starts
+blank, as after `resetFields()` — and returns `false`, changing nothing, for
+input that is not an object.
+
+Each value becomes the text the built-in control for that member would hold,
+through `decodeFieldValue(field, value)`, the inverse of `encodeFieldText`:
+
+| Member | Wire value | Draft text |
+|---|---|---|
+| `Quantity` | `{num,den,dp}` | exact digits at the field's canonical `x-decimalPlaces`, rounded half-up, in the display locale (`2450.50`, `2450,50` in `de_DE`); the unit selector returns to the canonical unit |
+| plain number | JSON number | never exponent form; padded to `x-displayDecimals` when declared, never rounded to it |
+| integer | JSON integer | its exact digits |
+| `Timestamp` | ISO-8601 (zone designator optional, read as UTC when absent) | wall clock in `displayOffsetMinutes` |
+| `boolean` | `true`/`false` | `"true"`/`"false"` |
+| closed set / `Choice` | the value | its `valueJson` |
+| `std::vector<T>` | array | entries joined by `", "` |
+| `std::vector<Row>` | array of objects | the rows as `{member: cellText}`, each cell decoded by the row member's own descriptor |
+| string | string | itself |
+
+A value whose shape does not match its field decodes to `""` (blank). The
+round trip is the contract: prefilling a form from a payload and editing
+nothing assembles the same payload, in the canonical spelling the encoders
+produce. Every drawn control re-seeds from the new draft (`prefillRevision`),
+a fetched `Choice` re-selects its row whenever its options arrive, dependent
+`Choice`s are re-fetched for their prefilled parents, and slots see the values
+through `fieldText` / `rows`.
+
+**A prefill never submits**, in auto-submit mode included: the final
+revalidation runs inside the `programmaticEdit` window, so a ready prefilled
+form waits for the user. `src/qt/forms/tests/tst_DynamicFormPrefill.qml` pins
+the round trip for every member kind, locale and zone, slots, the fetched
+`Choice`, and the no-submit rule; removing the control re-seed reddens 5 of its
+11 cases and a wrong `Quantity` decoder 8.
+
 ### What `ready` claims
 
 `DynamicForm.ready` is a claim about the **payload**: `true` only when the body
@@ -1361,6 +1447,14 @@ The form's status label shows that reason in place of "fill the required (\*)
 fields" — advice no input can act on — and, being the label the
 [accessibility slice](#renderer-conformance-kit) mirrors into
 `Accessible.description`, announces it rather than merely tinting it.
+
+**A slot can supply the missing encoding for a collection of objects.** When a
+registered slot claims a top-level `std::vector<Row>` member, `unrepresentable`
+is `""` for it and the form encodes the rows the slot writes — see
+[Collections of objects](#collections-of-objects--a-host-slot-draws-them). The
+descriptor therefore depends on the slot registry as well as on the schema; the
+`fields` binding reads `SlotRegistry.revision`, so a slot registered after the
+form was built is picked up.
 
 **An unrepresentable member the payload may legitimately omit does not block
 submission.** Optional and left blank, it is simply absent from the body, and
@@ -1489,7 +1583,22 @@ forking the renderer:
   `Loader.onLoaded` — `field` is the resolved, merged def+property descriptor,
   and `setValue(text)` is the same set-value path (`setFieldValue`) the
   built-in controls use, so an override participates in the required-gate and
-  auto-fire without special-casing. `SlotRegistry.revision` is bumped on every
+  auto-fire without special-casing.
+
+  A slot may also declare any of four **optional** members, each assigned only
+  when declared (so an existing slot is unaffected):
+
+  | Member | Assigned as | Use |
+  |---|---|---|
+  | `fieldText` | a binding to the field's retained text | Seed and track the control's value. A prefill, `resetFields()`, a `setFieldValue` from code and a tab switch that rebuilds the slot all reach it; without it a slot sees only what it wrote itself. |
+  | `rows` | a binding to the rows of a [collection of objects](#collections-of-objects--a-host-slot-draws-them), as a JS array of `{member: cellText}` (`[]` when none) | Draw the grid. |
+  | `setRows` | `function (rows)` | Write the rows; equivalent to `setValue(JSON.stringify(rows))`. |
+  | `form` | the `DynamicForm` itself | Reach `encodeFieldText(field, text, 0)` (does this cell encode?) and the rest of the form's public surface. |
+
+  Both bindings re-evaluate on `rulesRevision`, which `revalidate()` bumps after
+  every write to the draft. A slot that claims a collection of objects is also
+  what makes that member representable — see
+  [Collections of objects](#collections-of-objects--a-host-slot-draws-them). `SlotRegistry.revision` is bumped on every
   `by*()` call and read inside `resolve()`, for the same reason
   `I18nCatalog.revision` exists: `_byField`/`_byWidget`/`_byUnit`/`_byType` are
   plain objects mutated in place, which does not by itself notify a binding
@@ -3108,7 +3217,9 @@ depends on the rendering answer yet.
 
 So: an action with a nested-aggregate member — cyclic or otherwise — is a
 document morph generates completely, a form morph draws only down to the
-nesting, and a body morph declines to assemble.
+nesting, and a body morph declines to assemble — unless the member is a
+top-level collection of objects a host slot draws, which the form then encodes
+row by row (see [Collections of objects](#collections-of-objects--a-host-slot-draws-them)).
 
 Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
 only** regardless of nesting depth: a nested aggregate declaring any of those

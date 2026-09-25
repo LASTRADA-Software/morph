@@ -26,7 +26,10 @@
 // collection whose items are objects -- is *unrepresentable*: no typed text
 // encodes to the shape the schema asks for. Such a member is named in its
 // field descriptor's `unrepresentable` and keeps the form short of `ready`
-// (docs/spec/forms/forms.md, "What `ready` claims").
+// (docs/spec/forms/forms.md, "What `ready` claims"). The one exception is a
+// collection of objects a host slot claims (SlotRegistry): the slot edits the
+// rows as cell texts and this form encodes each cell with the same encoders
+// its own controls use -- see "Collections of objects" in forms.md.
 //
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
@@ -162,6 +165,10 @@ Frame {
     // counter, not a flag, so nested writes (a reset that itself triggers
     // refreshDependents) cannot re-enable submission early.
     property int programmaticEdit: 0
+
+    // Bumped by prefill(): every drawn control re-reads its value from
+    // fieldValues, exactly as it does when a tab switch recreates it.
+    property int prefillRevision: 0
     property string previewLine: ""
     property string resultText: ""
     property bool resultOk: true
@@ -509,6 +516,8 @@ Frame {
             if (hit !== undefined && hit !== null)
                 return hit
         }
+        if (derivedKey === undefined)
+            return literal
         const hit2 = catalog.lookup(displayLocale, derivedKey)
         if (hit2 !== undefined && hit2 !== null)
             return hit2
@@ -516,9 +525,33 @@ Frame {
     }
 
     // Flat field descriptors, in declaration (x-order) order.
+    //
+    // Reading the registry's revision makes a slot registered after the first
+    // evaluation re-describe the member it claims: whether a collection of
+    // objects is representable depends on it (see describeObject).
     property var fields: {
-        const props = schemaData.properties || {}
-        const required = schemaData.required || []
+        if (slotRegistry)
+            slotRegistry.revision
+        return describeObject(schemaData, 0)
+    }
+
+    // Whether a host slot claims the member `name` -- the same resolution the
+    // field delegate performs, so the two cannot disagree.
+    function slotClaims(name, xWidget, unitAscii, jsonType, kind) {
+        return slotRegistry !== null && slotRegistry !== undefined
+               && slotRegistry.resolve(actionType, name, xWidget, unitAscii, jsonType, kind) !== null
+    }
+
+    // Field descriptors for one object schema's properties, in x-order order.
+    // `depth` is 0 for the action itself and 1 for the element of a top-level
+    // collection of objects (`itemFields` below); element members are
+    // described once and never recursed into further, so a self-referential
+    // row type cannot loop. At depth 1 a label resolves through an explicit
+    // x-i18nKey or the literal only: the derived "<action>.<field>" key names
+    // top-level members.
+    function describeObject(objectSchema, depth) {
+        const props = (objectSchema && objectSchema.properties) || {}
+        const required = (objectSchema && objectSchema.required) || []
         return Object.keys(props)
             .sort(function (a, b) { return opt(props[a]["x-order"], 0) - opt(props[b]["x-order"], 0) })
             .map(function (name) {
@@ -579,15 +612,29 @@ Frame {
                 const typedControl = dp !== undefined || optionsAction !== undefined
                         || enumOptionRows.length > 0 || p.format === "date-time"
                         || types.indexOf("integer") !== -1 || types.indexOf("boolean") !== -1
+                // A collection whose element is an object schema with members
+                // of its own (glaze's std::vector<Sub>): the shape a host
+                // grid slot edits row by row.
+                const itemSchema = types.indexOf("array") !== -1 ? resolveProp(p.items) : {}
+                const isObjectArray = jsonTypes(itemSchema).indexOf("object") !== -1
+                        && itemSchema.properties !== undefined
+                const jsonType = types.length > 0 ? types[0] : ""
+                const kind = fieldKind(p, types, dp, optionsAction, enumOptionRows.length > 0)
+                // Only a top-level collection is handed to a slot: its rows
+                // are stored in the collection's own fieldValues entry, which
+                // a member one level down does not have.
+                const claimedBySlot = depth === 0 && isObjectArray
+                        && slotClaims(name, opt(widget, ""), opt(extUnits.unitAscii, ""), jsonType, kind)
+                const derivedKey = function (slot) { return depth === 0 ? i18nFieldKey(name, slot) : undefined }
                 return {
                     name: name,
                     title: literalTitle,
                     label: resolveText(i18nExplicitFieldKey(i18nOverride, "label"),
-                                       i18nFieldKey(name, "label"), literalTitle),
+                                       derivedKey("label"), literalTitle),
                     description: resolveText(i18nExplicitFieldKey(i18nOverride, "help"),
-                                              i18nFieldKey(name, "help"), literalHelp),
+                                              derivedKey("help"), literalHelp),
                     placeholder: resolveText(i18nExplicitFieldKey(i18nOverride, "placeholder"),
-                                              i18nFieldKey(name, "placeholder"), literalPlaceholder),
+                                              derivedKey("placeholder"), literalPlaceholder),
                     readOnly: opt(raw["x-readonly"], opt(p["x-readonly"], false)),
                     hidden: opt(raw["x-hidden"], opt(p["x-hidden"], false)),
                     unit: unitText,
@@ -644,12 +691,26 @@ Frame {
                     // but each entry is encoded as a JSON string, same as an
                     // array of strings, rather than silently misencoding.
                     isArray: types.indexOf("array") !== -1,
+                    // A collection of objects, and -- for a top-level one --
+                    // its element's member descriptors, in x-order order: the
+                    // columns a grid slot draws (label, unit, decimals,
+                    // readOnly, required, and the kind flags that say how a
+                    // cell's text is encoded). Empty for any other member.
+                    isObjectArray: isObjectArray,
+                    itemFields: (isObjectArray && depth === 0) ? describeObject(itemSchema, depth + 1) : [],
+                    // True when a registered slot draws this collection, which
+                    // is what makes it representable (see `unrepresentable`).
+                    claimedBySlot: claimedBySlot,
                     // Why no control here can collect what the schema asks
                     // for, or "" for every member this renderer represents --
                     // which is every member of a flat action. A non-empty
                     // reason makes the member unencodable, so the form reports
                     // ready only for a payload that legitimately omits it.
-                    unrepresentable: unrepresentableMemberReason(p, types, typedControl),
+                    //
+                    // A top-level collection of objects a slot claims is the
+                    // exception: the slot collects each row's cell texts and
+                    // encodeObjectArray encodes them, so an encoding exists.
+                    unrepresentable: claimedBySlot ? "" : unrepresentableMemberReason(p, types, typedControl),
                     required: required.indexOf(name) !== -1,
                     // `resolveRef` merges the property node *over* the `$def`
                     // it points at, so these three read a per-field bound
@@ -701,9 +762,9 @@ Frame {
                     xWidget: opt(widget, ""),
                     // The control this renderer would draw, named for
                     // SlotRegistry.byKind (see fieldKind).
-                    kind: fieldKind(p, types, dp, optionsAction, enumOptionRows.length > 0),
+                    kind: kind,
                     unitAscii: opt(extUnits.unitAscii, ""),
-                    jsonType: types.length > 0 ? types[0] : ""
+                    jsonType: jsonType
                 }
             })
     }
@@ -1332,6 +1393,62 @@ Frame {
     // returns "[]" -- a genuinely empty array is still a valid array
     // literal, distinct from the field itself being unengaged (handled by
     // fieldJsonLiteral's blank-text check before this is ever called).
+    // A collection-of-objects field's rows, as the JS array a slot wrote with
+    // setRows (JSON text in fieldValues), or [] when there are none yet or the
+    // text is not an array.
+    function objectArrayRows(text) {
+        if (text === undefined || text === null || String(text).trim() === "")
+            return []
+        try {
+            const parsed = JSON.parse(text)
+            return Array.isArray(parsed) ? parsed : []
+        } catch (ignored) {
+            return []
+        }
+    }
+
+    // Encodes a collection of objects from its rows' cell texts: `text` is a
+    // JSON array of `{member: cellText}` objects, one per row, where each cell
+    // text is what the built-in control for that member would hold (a digit
+    // string for a number or Quantity, "true"/"false" for a boolean, the
+    // option's `valueJson` for a closed set). Each cell goes through
+    // encodeFieldText with the element's own member descriptor, so the same
+    // syntax, locale, precision and bound rules apply as at the top level; a
+    // blank optional cell is omitted from its row object. Returns null -- no
+    // literal, so the form is not ready -- when the text is not an array of
+    // objects, a cell does not encode, or a required member is blank.
+    function encodeObjectArray(f, text) {
+        let rows
+        try {
+            rows = JSON.parse(text)
+        } catch (ignored) {
+            return null
+        }
+        if (!Array.isArray(rows))
+            return null
+        const encodedRows = []
+        for (let r = 0; r < rows.length; ++r) {
+            const row = rows[r]
+            if (row === null || typeof row !== "object" || Array.isArray(row))
+                return null
+            const parts = []
+            for (let m = 0; m < f.itemFields.length; ++m) {
+                const member = f.itemFields[m]
+                const cell = row[member.name]
+                const cellText = (cell === undefined || cell === null) ? "" : String(cell)
+                const literal = encodeFieldText(member, cellText, 0)
+                if (literal === null) {
+                    if (cellText.trim() !== "" || member.required)
+                        return null
+                    continue
+                }
+                parts.push(JSON.stringify(member.name) + ":" + literal)
+            }
+            encodedRows.push("{" + parts.join(",") + "}")
+        }
+        return "[" + encodedRows.join(",") + "]"
+    }
+
     function arrayJsonLiteral(text) {
         const items = text.split(",")
             .map(function (item) { return item.trim() })
@@ -1346,7 +1463,16 @@ Frame {
     // revalidate() (the submit body) and optionsRequestBody() (a dependent
     // Choice's parent values).
     function fieldJsonLiteral(f) {
-        const text = (opt(fieldValues[f.name], "")).trim()
+        return encodeFieldText(f, opt(fieldValues[f.name], ""), opt(fieldUnits[f.name], 0))
+    }
+
+    // The encoder behind fieldJsonLiteral, over an explicit text and unit
+    // selection instead of the form's own draft -- so a collection's cells,
+    // which have no entry in fieldValues, go through exactly the rules a
+    // top-level control's text does. `unitIndex` selects from f.unitOptions
+    // (0 is the canonical unit).
+    function encodeFieldText(f, rawText, unitIndex) {
+        const text = String(rawText === undefined || rawText === null ? "" : rawText).trim()
         if (text === "")
             return null
         // A member no control can collect has no literal, whatever was typed:
@@ -1355,6 +1481,9 @@ Frame {
         // makes the form report ready.
         if (f.unrepresentable !== "")
             return null
+        if (f.isObjectArray) {
+            return encodeObjectArray(f, text)
+        }
         if (f.isArray) {
             return arrayJsonLiteral(text)
         }
@@ -1392,7 +1521,7 @@ Frame {
                                                         })
             if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText))
                 return null
-            const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
+            const unit = f.unitOptions[unitIndex]
             // Reject more decimals than the current unit's precision instead
             // of silently rounding them away.
             const fracLen = (canonicalText.split(".")[1] || "").length
@@ -1400,7 +1529,7 @@ Frame {
                 return null
             const value = parseFloat(canonicalText)
             // Bounds are declared against the canonical unit.
-            if (opt(fieldUnits[f.name], 0) === 0) {
+            if (unitIndex === 0) {
                 if (f.minimum !== undefined && value < f.minimum)
                     return null
                 if (f.maximum !== undefined && value > f.maximum)
@@ -1632,6 +1761,167 @@ Frame {
         })
     }
 
+    // --- prefill: a stored payload back into the draft ---------------------
+
+    // The draft text a built-in control would hold for the wire value `value`
+    // of field `f` -- the inverse of encodeFieldText, so that
+    // encodeFieldText(f, decodeFieldValue(f, v), 0) re-encodes `v`. `value` is
+    // parsed JSON, ideally from JsonExact.parse so an integer past 2^53 is
+    // still exact. Numbers come out in the display locale (decimal separator
+    // and digits, no grouping) and a Timestamp in the display zone, because
+    // that is what the form's own entry path reads. Returns "" for an absent
+    // or null value, and for one whose shape does not match the field's.
+    function decodeFieldValue(f, value) {
+        if (value === undefined || value === null)
+            return ""
+        if (f.isObjectArray) {
+            if (!Array.isArray(value))
+                return ""
+            const rows = []
+            for (let r = 0; r < value.length; ++r) {
+                const row = value[r]
+                const cells = {}
+                if (row !== null && typeof row === "object" && !JsonExact.isExact(row)) {
+                    for (let m = 0; m < f.itemFields.length; ++m) {
+                        const member = f.itemFields[m]
+                        const cell = decodeFieldValue(member, row[member.name])
+                        if (cell !== "")
+                            cells[member.name] = cell
+                    }
+                }
+                rows.push(cells)
+            }
+            return JSON.stringify(rows)
+        }
+        if (f.isArray)
+            return Array.isArray(value) ? value.map(function (item) { return JsonExact.text(item) }).join(", ") : ""
+        if (f.isEnum || f.isChoice)
+            return JsonExact.literal(value)
+        if (f.isDateTime)
+            return typeof value === "string" ? utcIsoToZoned(value, displayOffsetMinutes) : ""
+        if (f.isQuantity)
+            return quantityDraftText(value, f.canonDp)
+        if (f.isBoolean)
+            return value === true ? "true" : (value === false ? "false" : "")
+        if (f.isInteger)
+            return (JsonExact.isExact(value) || typeof value === "number") ? JsonExact.text(value) : ""
+        if (f.isNumber)
+            return numberDraftText(value, f.displayDecimals)
+        return typeof value === "string" ? value : ""
+    }
+
+    // Canonical decimal text (-?\d+(\.\d+)?) in the display locale, as typed.
+    function localeDraftNumber(canonical) {
+        return formatCanonicalNumber(canonical, {
+                                         decimalSeparator: qtLocale.decimalPoint,
+                                         groupSeparator: "",
+                                         negativeSign: qtLocale.negativeSign,
+                                         zeroDigit: qtLocale.zeroDigit
+                                     })
+    }
+
+    // A {num,den,dp} Quantity node as draft text at `dp` fraction digits
+    // (the field's canonical precision), rounded half-up on exact digits.
+    function quantityDraftText(node, dp) {
+        if (node === null || typeof node !== "object" || node.num === undefined || node.den === undefined)
+            return ""
+        const numText = JsonExact.text(node.num)
+        const den = Number(JsonExact.text(node.den))
+        if (!/^-?\d+$/.test(numText) || !(den > 0) || den > 1e14 || Math.floor(den) !== den)
+            return ""
+        const neg = numText.startsWith("-")
+        const digits = divRoundDigits((neg ? numText.slice(1) : numText) + "0".repeat(dp), den)
+        let canonical = digits
+        if (dp > 0) {
+            const padded = digits.padStart(dp + 1, "0")
+            canonical = padded.slice(0, -dp) + "." + padded.slice(-dp)
+        }
+        const isZero = /^[0.]*$/.test(canonical)
+        return localeDraftNumber((neg && !isZero ? "-" : "") + canonical)
+    }
+
+    // A plain JSON number as draft text: never in exponent form, padded to
+    // a declared display precision, never rounded to it -- a stored value
+    // finer than that stays visible, and the entry gate then says so.
+    function numberDraftText(value, displayDecimals) {
+        if (JsonExact.isExact(value))
+            return localeDraftNumber(JsonExact.text(value))
+        if (typeof value !== "number" || !isFinite(value))
+            return ""
+        let canonical = String(value)
+        if (/e/i.test(canonical))
+            canonical = value.toFixed(20).replace(/\.?0+$/, "")
+        if (displayDecimals !== undefined) {
+            const fraction = canonical.split(".")[1] || ""
+            if (fraction.length < displayDecimals)
+                canonical = (fraction === "" ? canonical + (displayDecimals > 0 ? "." : "") : canonical)
+                            + "0".repeat(displayDecimals - fraction.length)
+        }
+        return localeDraftNumber(canonical)
+    }
+
+    // An ISO-8601 instant as the display zone's wall clock
+    // ("YYYY-MM-DDTHH:MM:SS"), the inverse of zonedToUtcIso. Text with no zone
+    // designator is read as UTC, which is what a Timestamp serialises to.
+    function utcIsoToZoned(text, offsetMinutes) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/.exec(text)
+        if (!m)
+            return ""
+        let zoneMinutes = 0
+        if (m[7] !== undefined && m[7] !== "Z") {
+            const zone = m[7].replace(":", "")
+            zoneMinutes = (zone.charAt(0) === "-" ? -1 : 1)
+                    * (parseInt(zone.slice(1, 3)) * 60 + parseInt(zone.slice(3, 5)))
+        }
+        const utcMillis = Date.UTC(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]), parseInt(m[4]),
+                                   parseInt(m[5]), m[6] === undefined ? 0 : parseInt(m[6]))
+                - zoneMinutes * 60000
+        const d = new Date(utcMillis + offsetMinutes * 60000)
+        const pad = (v, w) => String(v).padStart(w, "0")
+        return pad(d.getUTCFullYear(), 4) + "-" + pad(d.getUTCMonth() + 1, 2) + "-" + pad(d.getUTCDate(), 2)
+               + "T" + pad(d.getUTCHours(), 2) + ":" + pad(d.getUTCMinutes(), 2) + ":" + pad(d.getUTCSeconds(), 2)
+    }
+
+    // Loads a stored payload -- an object keyed by wire name, e.g. a parsed
+    // action or section DTO -- into the form for editing. Replaces the whole
+    // draft (a member absent from `values` starts blank, as after
+    // resetFields), resets every unit selector to the canonical unit, re-seeds
+    // every drawn control and every slot, re-fetches dependent Choices, and
+    // never submits: prefilling is not a user action. Returns false, changing
+    // nothing, when `values` is not an object.
+    function prefill(values) {
+        if (values === null || typeof values !== "object" || Array.isArray(values) || JsonExact.isExact(values))
+            return false
+        form.withoutAutoSubmit(function () {
+            const draft = {}
+            for (let i = 0; i < form.fields.length; ++i) {
+                const f = form.fields[i]
+                const text = form.decodeFieldValue(f, values[f.name])
+                if (text !== "")
+                    draft[f.name] = text
+            }
+            form.fieldValues = draft
+            form.fieldUnits = ({})
+            form.prefillRevision++
+            for (const parentName in form.dependents)
+                form.refreshDependents(parentName)
+        })
+        return true
+    }
+
+    // prefill() over JSON text, parsed exactly (JsonExact), so an id past
+    // 2^53 reaches the form digit for digit. Returns false for text that does
+    // not parse to an object.
+    function prefillFromJson(jsonText) {
+        let parsed
+        try {
+            parsed = JsonExact.parse(String(jsonText))
+        } catch (ignored) {
+            return false
+        }
+        return form.prefill(parsed)
+    }
+
     // The JSON body to send a Choice field's options action: {parentName:
     // value, ...} built from the current values of its declared parents
     // (x-optionsDependsOn). Returns null when any parent is not yet engaged
@@ -1833,6 +2123,59 @@ Frame {
                 })
             }
 
+            // prefill() rewrote fieldValues: re-read it into every control of
+            // this field, the way each already does when it is created. A
+            // fetched Choice (combo or radio group) also re-selects whenever
+            // its options arrive, since the prefilled value may predate them.
+            function reseedFromDraft() {
+                form.withoutAutoSubmit(function () {
+                    const name = fieldColumn.modelData.name
+                    const retained = form.opt(form.fieldValues[name], "")
+                    entry.text = retained
+                    arrayEntry.text = retained
+                    notesArea.text = retained
+                    if (fieldColumn.modelData.isDateTime)
+                        dateTimeEntry.text = retained
+                    if (fieldColumn.modelData.isBoolean) {
+                        // The rule the CheckBox's creation applies: a required
+                        // box always shows a state, so it holds one.
+                        if (retained === "" && fieldColumn.modelData.required)
+                            form.setFieldValue(name, "false")
+                        boolEntry.checked = retained === "true"
+                    }
+                    if (fieldColumn.modelData.isSlider && retained !== "")
+                        levelSlider.value = Number(retained)
+                    unitSelector.currentIndex = 0
+                    fieldColumn.reselectOption()
+                })
+            }
+
+            function reselectOption() {
+                const data = fieldColumn.modelData
+                if (!data.isEnum && !data.isChoice)
+                    return
+                const retained = form.opt(form.fieldValues[data.name], "")
+                const rows = data.isEnum ? data.enumOptions : (form.fieldOptions[data.name] || [])
+                let index = -1
+                for (let i = 0; i < rows.length; ++i) {
+                    if (rows[i].valueJson === retained) {
+                        index = i
+                        break
+                    }
+                }
+                choiceEntry.currentIndex = index
+                radioGroup.checkedIndex = index
+            }
+
+            Connections {
+                target: form
+                function onPrefillRevisionChanged() { fieldColumn.reseedFromDraft() }
+                function onOptionsRevisionChanged() {
+                    if (fieldColumn.modelData.isChoice)
+                        fieldColumn.reselectOption()
+                }
+            }
+
             RowLayout {
                 id: controlsRow
                 Layout.fillWidth: true
@@ -1859,9 +2202,33 @@ Frame {
                     // same set-value path the built-in controls use, so an
                     // override participates in the required-gate and
                     // auto-fire without special-casing.
+                    //
+                    // Optional, each assigned only when the slot declares it:
+                    // `fieldText` (the retained text, kept current -- a prefill,
+                    // a reset or a rebuilt tab reaches the slot through it),
+                    // `rows` / `setRows(rows)` (a collection of objects as a JS
+                    // array of {member: cellText}), and `form` (this form, for
+                    // encodeFieldText and the rest of its public surface).
                     onLoaded: {
+                        const name = fieldColumn.modelData.name
                         item.field = fieldColumn.modelData
-                        item.setValue = function (text) { form.setFieldValue(fieldColumn.modelData.name, text) }
+                        item.setValue = function (text) { form.setFieldValue(name, text) }
+                        // revalidate() bumps rulesRevision after every write to
+                        // fieldValues, a plain object that notifies nothing.
+                        if ("fieldText" in item)
+                            item.fieldText = Qt.binding(function () {
+                                form.rulesRevision
+                                return form.opt(form.fieldValues[name], "")
+                            })
+                        if ("rows" in item)
+                            item.rows = Qt.binding(function () {
+                                form.rulesRevision
+                                return form.objectArrayRows(form.fieldValues[name])
+                            })
+                        if ("setRows" in item)
+                            item.setRows = function (rows) { form.setFieldValue(name, JSON.stringify(rows)) }
+                        if ("form" in item)
+                            item.form = form
                     }
                 }
 
@@ -1966,6 +2333,8 @@ Frame {
                 }
 
                 DateTimePicker {
+                    id: dateTimeEntry
+                    objectName: "datetime_" + fieldColumn.modelData.name
                     visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isDateTime
                     enabled: !fieldColumn.modelData.readOnly
                     Layout.fillWidth: true
@@ -2156,6 +2525,8 @@ Frame {
                 // Unit selector when the unit system declares convertible
                 // alternatives: switching recalculates the entry exactly.
                 ComboBox {
+                    id: unitSelector
+                    objectName: "unit_" + fieldColumn.modelData.name
                     visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isQuantity
                              && fieldColumn.modelData.unitOptions.length > 1
                     enabled: !fieldColumn.modelData.readOnly
