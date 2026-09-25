@@ -94,6 +94,12 @@ throwing handler is logged and skipped without preventing the handlers attached
 after it from running — fan-out means every attached handler gets its turn,
 independent of an earlier one misbehaving.
 
+A handler attached **after** settlement is posted on its own by
+`attachThen`/`attachOnError` and gets the same `try`/`catch`. Which path a
+handler takes is a race between the producer settling and the consumer
+attaching, so a throw must be logged on both or it reaches the executor — the
+Qt event loop, say — only when the attach happened to lose.
+
 `setException` additionally sets `onErrAttached = (cbExec != nullptr)` — but
 only along the branch where at least one `onErr` handler was already
 registered. It marks the error handled (suppressing the orphan logger) **only
@@ -628,7 +634,7 @@ for the same argument applied to the journal codec.
 | Empty completion | **Null state pointer makes `then`/`onError` no-ops** | Default-constructed `Completion` is a safe placeholder that never signals. |
 | Value handling on dispatch | **Both paths read `*value` in place; neither copies nor moves it** | Handlers are erased as `std::function<void(const T&)>` and the dispatch closures capture `shared_from_this()`, so the copy budget is exactly one per by-value handler and zero per `const T&` handler, whenever it attached. `value` is never consumed, so a `then()` attached after settling still sees the genuine result, and `T` need only be move-constructible. See [Value-handling contract](#value-handling-contract). |
 | Handler fan-out | **`onOk`/`onErr` are `std::vector`s, appended to on each attach** | A single-slot field would let a second `onError()` (or `then()`) on the same still-pending `Completion` silently replace the first handler. Composing (invoking every attached handler, in order) matches the mental model of an observer list and is what call sites composing behaviour via repeated attach expect. |
-| Per-handler exception isolation | **Each composed handler invocation is wrapped in its own `try`/`catch (...)`, logged via `logError` and swallowed** | Fan-out means every attached handler should get its turn regardless of what an earlier one does. Without per-handler isolation, one throwing handler would unwind the whole posted closure and silently skip every handler attached after it — turning a single misbehaving consumer into an outage for unrelated ones sharing the same `Completion`. |
+| Per-handler exception isolation | **Each handler invocation — composed at settlement, or fired alone by a late attach — is wrapped in its own `try`/`catch (...)`, logged via `logError` and swallowed** | Fan-out means every attached handler should get its turn regardless of what an earlier one does. Without per-handler isolation, one throwing handler would unwind the whole posted closure and silently skip every handler attached after it — turning a single misbehaving consumer into an outage for unrelated ones sharing the same `Completion`. |
 | Public settleable-promise seam | **`Completion<T>::Promise`, reachable only via `makeSettleable()`** | Without it, test code needing a `Completion<T>` it can resolve/reject on demand has no seam except reaching into `morph::async::detail::CompletionState<T>` directly. `Promise`'s constructor is private and `friend`ed only to `Completion<T>`, so `detail::CompletionState<T>` never has to appear in a caller's own code. |
 
 ## Limitations

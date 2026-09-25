@@ -196,7 +196,19 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
                 // capturing that local *by copy* before moving it into the
                 // handler costs two copies where the handler asked for at most
                 // one, so a late attacher would pay 2 rather than 1.
-                fireNow = [self = this->shared_from_this(), handler = std::move(handler)]() { handler(*self->value); };
+                //
+                // Isolated exactly as setValue's composed closure isolates each
+                // handler: which of the two paths a handler takes depends only
+                // on whether it was attached before or after settlement, so a
+                // throw must not reach the executor on one path and be logged
+                // on the other.
+                fireNow = [self = this->shared_from_this(), handler = std::move(handler)]() {
+                    try {
+                        handler(*self->value);
+                    } catch (...) {
+                        ::morph::log::logError("[completion] then handler threw; continuing with next handler");
+                    }
+                };
             } else if (!ready) {
                 onOk.push_back(std::move(handler));
             }
@@ -215,7 +227,14 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
             onErrAttached = (cbExec != nullptr);
             if (ready && error) {
                 auto savedErr = error;
-                fireNow = [handler = std::move(handler), savedErr]() mutable { handler(savedErr); };
+                // Isolated as in setException's closure -- see attachThen.
+                fireNow = [handler = std::move(handler), savedErr]() mutable {
+                    try {
+                        handler(savedErr);
+                    } catch (...) {
+                        ::morph::log::logError("[completion] onError handler threw; continuing with next handler");
+                    }
+                };
             } else if (!ready) {
                 onErr.push_back(std::move(handler));
             }
