@@ -298,6 +298,28 @@ the per-action forms, excluding from the standalone-forms list any action a
 view already owns (its query, row-opener, or a `v-actions` target), so
 nothing renders twice.
 
+### Chrome slots and the embedded editors
+
+`CollectionView.slotRegistry` (null by default) is handed to both editor
+`DynamicForm`s, so field slots and form chrome registered once apply inside
+the editor too. The view's own chrome goes through the same
+`SlotRegistry.byChrome` registry ([forms.md, "Chrome slots"](forms.md#chrome-slots)),
+each role replacing the built-in, which is then not drawn; members are
+assigned only where the chrome declares them:
+
+| Role | Replaces | Members |
+|---|---|---|
+| `collectionHeader` | the title and the column-header row with its collection actions | `title`, `columns` (visible `v-columns`), `actions` (collection scope), `fire(action)` |
+| `collectionRow` | one row's cells, Open button and row actions | `row`, `columns`, `cells` (formatted texts), `rowKey`, `actions` (row scope), `canOpen`, `open()`, `fire(action)` |
+| `confirmDialog` | the "Are you sure?" dialog | `message`, `action`, `row`, `accept()`, `reject()` — loaded only while an action waits |
+| `editorDialog` | the collection kind's modal editor | `title`, `open`, `close()`; **must declare `contentItem`**, into which the view reparents the editor form |
+
+`fire()` and `accept()` make exactly the controller calls the built-in buttons
+make (confirmation included), and `open()` runs the same prefill. The root is
+a `Frame`, whose `background`/`padding` a host sets on the instance.
+`src/qt/forms/tests/tst_ViewChrome.qml` pins every role and a fully chromed
+screen, editor open, with no visible built-in `Label` or `Button`.
+
 ## API reference
 
 ### `morph::views::viewSchemaJson<V>()`

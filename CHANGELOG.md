@@ -128,6 +128,18 @@ API surface).
   `resolve()` takes it as an optional sixth argument, consulted after unit and
   before type. See `docs/spec/forms/forms.md`, "Theming / component-override
   registry" (fixes #812).
+- **CollectionView and WizardView chrome goes through `SlotRegistry.byChrome`,
+  and both hand their registry to the forms they embed.** Their title, column
+  headers, row cells and buttons, confirm and editor dialogs, and Back/Next were
+  hard-coded, and the editor/step `DynamicForm`s got no `slotRegistry` at all, so
+  a host's field slots and form chrome stopped at the view's edge. New
+  `slotRegistry` properties and roles `collectionHeader`, `collectionRow`,
+  `confirmDialog`, `editorDialog` (a `contentItem` the editor is reparented
+  into), `wizardHeader` and `wizardNav`; the chrome's `fire()`/`accept()`/
+  `next()` make exactly the built-in buttons' calls, gates included. See
+  `docs/spec/forms/views.md` and `workflows_navigation.md`, "Chrome slots"
+  (fixes #813).
+
 - **Chrome slots: a host replaces DynamicForm's labels, containers and buttons,
   not only its controls.** `SlotRegistry.byChrome(role, component)` /
   `resolveChrome(role)` register one Component per role — `fieldLabel`,
