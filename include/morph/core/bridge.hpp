@@ -2117,7 +2117,7 @@ public:
 // statement, which every other instantiation reaches. It is suppressed here
 // rather than in each translation unit that instantiates such a handler,
 // because the set of those is open-ended: eleven test files already qualify.
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4702)
 #endif
@@ -2137,7 +2137,7 @@ public:
                     throw;
                 }
             }();
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #pragma warning(pop)
 #endif
             // Past this point the model's mutation has committed, so neither
