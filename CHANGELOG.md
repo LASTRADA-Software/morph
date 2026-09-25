@@ -128,6 +128,22 @@ API surface).
   `resolve()` takes it as an optional sixth argument, consulted after unit and
   before type. See `docs/spec/forms/forms.md`, "Theming / component-override
   registry" (fixes #812).
+
+- **`FieldMeta::unit` / `FieldMeta::decimals` — a display unit and precision
+  for a plain `double`/`float`/integral member.** A DTO holding lab readings as
+  plain `double`s had no way to tell a renderer "kg/m³, three decimals": that
+  knowledge lived only in `Quantity`'s type. `unit` is emitted as the
+  property's `ExtUnits` (the key a `Quantity` already carries, so the shipped
+  renderer's unit suffix, `SlotRegistry.byUnit` and view columns all see it
+  unchanged); `decimals` is emitted as the new `x-displayDecimals`, **not**
+  `x-decimalPlaces`, because the latter switches a property to the exact
+  `{num,den,dp}` encoding a `double` cannot decode. `DynamicForm` keeps the
+  JSON-number encoding, refuses an entry with more fraction digits than
+  declared (as it does for a `Quantity`), spells the placeholder from it, and
+  hands slots `field.decimals` / `field.decimalsDeclared`. Both keys are
+  ignored on a `Quantity` member and apply at any nesting depth. See
+  `docs/spec/forms/forms.md`, "Display unit and decimals for a plain member".
+
 - **The MorphForms QML module installs, as the `forms_qml` component.**
   `cmake --install` of a `MORPH_BUILD_FORMS_QML=ON` build installed the
   controller-core header and nothing of the QML module, so a packaged morph

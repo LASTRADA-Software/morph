@@ -15,6 +15,9 @@
 //                       a genuine JSON array literal, e.g. "a, b" -> ["a","b"]
 //   type: "number"   -> plain text field encoding a JSON number, for a member
 //                       with no x-decimalPlaces (a bare double/float)
+//   x-displayDecimals -> a plain number's display/entry precision: at most
+//                       that many fraction digits are accepted, and the
+//                       JSON-number encoding is kept (FieldMeta::decimals)
 //   x-submitMode: "explicit" -> suppresses auto-submit-on-validity; renders
 //                       an explicit Submit button (enabled only while ready)
 //                       instead -- see "Explicit submit mode" below
@@ -478,6 +481,11 @@ Frame {
                 const p = resolveProp(raw)
                 const types = jsonTypes(p)
                 const dp = opt(raw["x-decimalPlaces"], p["x-decimalPlaces"])
+                // A plain number's display precision (FieldMeta::decimals).
+                // Only a "number" with no x-decimalPlaces reads it: the
+                // declared precision of a Quantity is the one that encodes.
+                const displayDp = (dp === undefined && types.indexOf("number") !== -1)
+                        ? opt(raw["x-displayDecimals"], p["x-displayDecimals"]) : undefined
                 const optionsAction = opt(raw["x-optionsAction"], p["x-optionsAction"])
                 // A closed set stated by the schema itself. Read
                 // from `raw`, not the collapsed `p`: resolveProp keeps only
@@ -558,7 +566,13 @@ Frame {
                     dependsOn: opt(raw["x-optionsDependsOn"], opt(p["x-optionsDependsOn"], [])),
                     isDateTime: p.format === "date-time",
                     isQuantity: dp !== undefined,
-                    decimals: opt(dp, 0),
+                    // Fraction digits: a Quantity's declared precision, else a
+                    // plain number's x-displayDecimals, else 0.
+                    // `decimalsDeclared` tells a slot which of "0" and "none
+                    // declared" it is looking at.
+                    decimals: opt(dp, opt(displayDp, 0)),
+                    decimalsDeclared: dp !== undefined || displayDp !== undefined,
+                    displayDecimals: displayDp,
                     isInteger: types.indexOf("integer") !== -1,
                     // "number" -- a bare `double`/`float`. The plain text
                     // field draws it, but the JSON *number* encoding is its
@@ -1412,6 +1426,11 @@ Frame {
             // fraction, stray sign, letters) is refused rather than encoded.
             if (canonicalNumber === null || !/^-?\d+(\.\d+)?$/.test(canonicalNumber))
                 return null
+            // A declared display precision is an entry limit, as a Quantity's
+            // is: more fraction digits are refused rather than rounded away.
+            if (f.displayDecimals !== undefined
+                    && (canonicalNumber.split(".")[1] || "").length > f.displayDecimals)
+                return null
             const numberValue = parseFloat(canonicalNumber)
             // The declared range, which for a plain member is the one glaze
             // stamps on the type itself: a `float` field carries ±3.4e38, so
@@ -1892,7 +1911,11 @@ Frame {
                                      ? fieldColumn.modelData.placeholder
                                      : (fieldColumn.modelData.isQuantity
                                         ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
-                                        : (fieldColumn.modelData.isInteger ? "0" : ""))
+                                        : (fieldColumn.modelData.isInteger ? "0"
+                                           : (fieldColumn.modelData.displayDecimals !== undefined
+                                              ? (fieldColumn.modelData.displayDecimals > 0
+                                                 ? "0." + "0".repeat(fieldColumn.modelData.displayDecimals) : "0")
+                                              : "")))
                     inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger
                                        || fieldColumn.modelData.isNumber)
                                       ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
