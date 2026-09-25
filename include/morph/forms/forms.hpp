@@ -2511,7 +2511,7 @@ template <typename Member>
 void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& property, NestedDefsVisited& visited);
 
 /// @brief Recurses into @p property's own object schema if @p Member (or, for
-///        `std::vector<Sub>`, its element type) is itself a
+///        `std::vector<Sub>` and `std::optional<Sub>`, the `Sub`) is itself a
 ///        `ReflectableAggregate` -- the single decision point shared by
 ///        `mergeSchemaExtras`'s top-level loop and `annotateNestedAggregate`'s
 ///        own loop, so there is exactly one implementation of it.
@@ -2567,6 +2567,20 @@ void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& propert
             // pair this replaces probed the same map twice and needed a
             // standing suppression to say why the subscript was safe.
             annotateNestedAggregateRef<ItemType>(dom, *items, visited);
+        }
+    } else if constexpr (isStdOptional<Member>) {
+        // glaze spells `std::optional<T>` as `{"anyOf": [<T's schema>,
+        // {"type": "null"}]}`, so an optional nested aggregate's object schema
+        // sits in the non-null branch. Each branch goes through the same
+        // decision for `T` (the null one matches nothing), which covers an
+        // optional `std::vector<Sub>` as well.
+        using ValueType = typename std::remove_cvref_t<Member>::value_type;
+        if (auto* const branches = findMember(property, "anyOf")) {
+            if (auto* const list = branches->get_if<glz::generic_u64::array_t>()) {
+                for (auto& branch : *list) {
+                    recurseIntoNestedAggregateIfAny<ValueType>(dom, branch, visited);
+                }
+            }
         }
     }
 }
