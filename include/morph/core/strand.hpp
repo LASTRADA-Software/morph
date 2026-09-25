@@ -115,9 +115,12 @@ class TaskResumer;
 /// @brief In which order `ModelStrands::teardown` stops the Task handlers and
 ///        seals the strands.
 enum class TeardownOrder : std::uint8_t {
-    /// Stop, then seal: a stopped handler unwinds on its strand, which still
-    /// admits its resumption. For a build with threads, where the strands keep
-    /// running on the pool while the owner waits.
+    /// Stop, drain, then seal: a stopped handler unwinds on its strand, which
+    /// still admits its resumption, and the drain before the seal lets
+    /// everything the stop set moving finish there. For a build with threads,
+    /// where the strands keep running on the pool while the owner waits: an
+    /// arrival refused by the seal runs inline on its own thread, and the drain
+    /// first is what keeps a task of its key from running beside it.
     StopThenSeal,
     /// Seal, then stop: a stopped handler's resumption is refused and runs
     /// inline, in the stop. For the single-threaded build, where nothing runs
@@ -258,6 +261,13 @@ public:
     /// handler's end -- is refused and runs inline, so nothing reaches a strand
     /// that the close would drop: not between the drain and the close, and not
     /// on the single-threaded build, where the drain waits for nothing.
+    ///
+    /// With threads, the stop is drained before the seal: until the strands go
+    /// idle, a handler's resumption or end arriving from another thread -- a
+    /// socket's loop -- is still queued, behind its key's other tasks, rather
+    /// than run inline beside one of them on a pool thread, which would enter
+    /// and leave the model's action gate on two threads at once. What arrives
+    /// once the first drain has returned is the stopped handlers' own last steps.
     /// @param stopHandlers Requests stop on every Task handler still running.
     /// @param order        Which of stopping and sealing comes first.
     template <typename Stop>
@@ -267,6 +277,7 @@ public:
             std::forward<Stop>(stopHandlers)();
         } else {
             std::forward<Stop>(stopHandlers)();
+            drain();
             seal();
         }
         drain();

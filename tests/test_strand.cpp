@@ -11,6 +11,7 @@
 #include <coroutine>
 #include <cstddef>
 #include <memory>
+#include <morph/core/detail/task_handler.hpp>
 #include <morph/core/strand.hpp>
 #include <mutex>
 #include <stdexcept>
@@ -444,6 +445,82 @@ TEST_CASE("ModelStrands teardown, sealing first: a handler stopped with nothing 
     CHECK(probe.handle.done());
     CHECK_FALSE(seen.onStrand);
     CHECK(seen.resumerCurrent);
+}
+
+TEST_CASE("ModelStrands teardown: a handler's end arriving after the seal never overlaps its key's queued gate entry",
+          "[strand][coroutine][lifetime]") {
+    // A Task handler holds its model's action gate, parked on another
+    // executor -- a core::net socket's loop -- and a failed call's task is
+    // queued behind it on the same strand, where it tries the gate. The
+    // teardown stops the handler, whose end arrives from the loop thread once
+    // the strands are sealed, so it is refused and runs inline there. Were the
+    // failed call's task still running on a pool thread then, two threads
+    // would be inside one gate: the overlap counter counts that, and TSan
+    // reports the race on the gate's state. The teardown drains before it
+    // seals, so the task has finished by then.
+    using morph::model::detail::ActionGate;
+    ActionGate gate;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto const strands = std::make_shared<ModelStrands>(pool);
+    ModelId const key{24};
+    ModelId const probeKey{25};
+    auto const overlapsBefore = ActionGate::overlapsObserved();
+
+    std::atomic<bool> nextStarted{false};
+    std::atomic<bool> nextSawFailedCall{false};
+    std::atomic<bool> failedCallDone{false};
+    std::atomic<bool> handlerHolds{false};
+    strands->post(key, [&] {
+        handlerHolds = gate.tryEnter();
+        // The action queued behind the handler, which the handler's leave()
+        // starts. It stays inside that leave() until the failed call is done.
+        gate.enter([&] {
+            nextStarted = true;
+            nextSawFailedCall = morph::testing::waitUntil([&] { return failedCallDone.load(); });
+        });
+    });
+    std::atomic<bool> failedCallStarted{false};
+    strands->post(key, [&] {
+        failedCallStarted = true;
+        // Holds the task open for as long as the handler's end may take to
+        // arrive: through it, when the end runs beside the task; to the budget,
+        // when the end is queued behind it.
+        (void)morph::testing::waitUntil([&] { return nextStarted.load(); },
+                                        morph::testing::WaitBudget{std::chrono::milliseconds{500}});
+        if (!gate.tryEnter()) {
+            gate.enter([] {});
+        }
+        failedCallDone = true;
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return failedCallStarted.load(); }));
+    REQUIRE(handlerHolds.load());
+
+    // The loop thread: once the strands are sealed, the handler's end.
+    // A probe's runOnStrand runs inline on the loop thread only once the seal
+    // refuses its post.
+    std::atomic<bool> sealSeen{false};
+    std::thread loop;
+    strands->teardown([&] {
+        loop = std::thread{[&] {
+            auto const self = std::this_thread::get_id();
+            (void)morph::testing::waitUntil([&] {
+                strands->runOnStrand(probeKey, [&] {
+                    if (std::this_thread::get_id() == self) {
+                        sealSeen = true;
+                    }
+                });
+                return sealSeen.load();
+            });
+            strands->runOnStrand(key, [&] { gate.leave(); });
+        }};
+    });
+    loop.join();
+
+    CHECK(sealSeen.load());
+    CHECK(nextStarted.load());
+    CHECK(nextSawFailedCall.load());
+    CHECK(failedCallDone.load());
+    CHECK(ActionGate::overlapsObserved() == overlapsBefore);
 }
 
 // Regression test for ThreadPoolExecutor(0): a zero-worker pool used to accept

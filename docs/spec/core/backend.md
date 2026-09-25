@@ -778,7 +778,9 @@ there, rather than once per backend.
   resumer"), and core-cpp's around-task hook cannot tell the two apart
   ([core-cpp#53](https://github.com/contour-terminal/core-cpp/issues/53)). The same
   holds for an action queued behind the handler, until it installs its own
-  session when it starts.
+  session when it starts, and for a detached chain that a finished handler A
+  left behind: when it comes back after handler B of the same instance
+  started, it runs under B's session and B's resumer.
 - `setReconnectHandler`/`setConnectHandler`/`setDisconnectHandler` — no-op (no transport to (dis)connect).
 - `setSession` — not overridden (the default no-op stands): the local path never serialises a `Context` onto a wire envelope, so there is nothing to stamp.
 

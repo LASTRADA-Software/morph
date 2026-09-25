@@ -252,8 +252,11 @@ What `ModelStrands` adds:
   back through a plain submit -- is still queued until the close.
 - **`teardown(stopHandlers, order)`** is the whole sequence: stop the Task
   handlers and seal, in `order`, then `drain()`, then `close()`. Where threads
-  exist the order is stop then seal, so a stopped handler still unwinds on its
-  strand; on the single-threaded build it is seal then stop, so a stopped
+  exist the order is stop, `drain()`, seal, so a stopped handler still unwinds
+  on its strand, and a handler's end that arrives from a socket's loop while
+  its instance's tasks drain is queued behind them rather than run inline
+  beside one, which would enter the action gate on two threads at once. On
+  the single-threaded build it is seal then stop, so a stopped
   handler's resumption is refused and runs inline in the stop, since nothing
   else could run it. Once sealed, a resumption or a handler's end that arrives
   -- between the drain and the close included -- runs inline where it arrives,

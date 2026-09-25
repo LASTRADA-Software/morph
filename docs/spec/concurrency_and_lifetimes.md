@@ -119,7 +119,9 @@ itself; [`core/executor.md`](core/executor.md), "Strands", says what morph adds.
 - **A strand runs a batch per turn.** It queues itself on the base once however
   many tasks arrive while it is busy, and runs up to 32 before it hands the base
   back. A loaded host adds latency between turns, not more of them.
-- **Closing drops; `teardown()` seals, drains, then closes.** `close()`, and
+- **Closing drops; `teardown()` seals, drains, then closes** -- and, where
+  threads exist, drains once before it seals too, so the stopped handlers'
+  ends reach their strands while those still admit them. `close()`, and
   the destructor, drop what is queued and wait only for a task running on
   another thread. `drain()` blocks until nothing is queued or running on any
   strand, work posted while it waits included. `seal()` refuses the try-forms
