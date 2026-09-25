@@ -192,6 +192,16 @@
 
 namespace morph::forms {
 
+/// @brief What a renderer submits for a string field the user left blank
+///        (`FieldMeta::blankAs`).
+enum class BlankAs : std::uint8_t {
+    /// Blank is "no value": the member is left out of the payload (the default).
+    Omit,
+    /// Blank, once the field was prefilled or edited, is an explicit `""`;
+    /// emitted as `"x-blankAs": "empty"`.
+    Empty,
+};
+
 /// @brief Per-field presentation overrides and scalar bounds: label, help,
 ///        placeholder, read-only, hidden, `minimum`/`maximum`/`multipleOf`,
 ///        and a plain member's display `unit`/`decimals`
@@ -307,6 +317,18 @@ struct FieldMeta {
     // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
     std::optional<::morph::math::DecimalPlaces> decimals{};
 
+    /// @brief What a blank control submits for a `std::string` /
+    ///        `std::optional<std::string>` member; `BlankAs::Empty` emits
+    ///        `"x-blankAs": "empty"`.
+    ///
+    /// An edit form prefilled from a stored record cannot otherwise clear an
+    /// optional string: a blank control is omitted, and an omitted member
+    /// reads as "leave it unchanged". With `Empty` a field the user emptied --
+    /// or one prefilled with `""` -- submits `""`; a field never prefilled
+    /// and never typed into is still omitted. **Ignored on any other member
+    /// type.**
+    BlankAs blankAs{BlankAs::Omit};
+
     /// @brief Returns a copy with `placeholder` set to @p text.
     /// @param text The placeholder hint.
     /// @return The updated descriptor.
@@ -375,6 +397,15 @@ struct FieldMeta {
     [[nodiscard]] constexpr FieldMeta withDecimals(::morph::math::DecimalPlaces places) const noexcept {
         FieldMeta copy = *this;
         copy.decimals = places;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `blankAs` set to @p mode.
+    /// @param mode What a blank control submits.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withBlankAs(BlankAs mode) const noexcept {
+        FieldMeta copy = *this;
+        copy.blankAs = mode;
         return copy;
     }
 };
@@ -2341,6 +2372,11 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
         }
         annotateDeclaredBounds(property, *fieldMeta);
         annotateDisplayUnit<Member>(property, *fieldMeta);
+        if constexpr (std::is_same_v<Member, std::string> || std::is_same_v<Member, std::optional<std::string>>) {
+            if (fieldMeta->blankAs == BlankAs::Empty) {
+                property["x-blankAs"] = std::string{"empty"};
+            }
+        }
     }
 
     if constexpr (units::isQuantity<Member>) {
