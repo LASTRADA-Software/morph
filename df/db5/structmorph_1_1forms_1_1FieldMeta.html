@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('df/db5/structm
 </div><!--header-->
 <div class="contents">
 
-<p>Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only, hidden, <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> (docs/spec/forms/forms.md, "Field metadata").  
+<p>Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only, hidden, <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span>, and a plain member's display <span class="tt"><a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a></span>/<span class="tt"><a class="el" href="#af57735bbefb2f396f906d1c832413727" title="Display and entry precision for a plain double/float member; emitted as x-displayDecimals....">decimals</a></span> (docs/spec/forms/forms.md, "Field metadata").  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&gt;</code></p>
@@ -140,6 +140,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7daa7140f2f62f2eaee2fb2076b124a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span> set to <code class="param">bound</code>.  <br /></td></tr>
 <tr class="memitem:a7b48a4b73994d8dd7d8a44b57af51109" id="r_a7b48a4b73994d8dd7d8a44b57af51109"><td class="memItemLeft">constexpr <a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7b48a4b73994d8dd7d8a44b57af51109">withMultipleOf</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a> step) const noexcept</td></tr>
 <tr class="memdesc:a7b48a4b73994d8dd7d8a44b57af51109"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> set to <code class="param">step</code>.  <br /></td></tr>
+<tr class="memitem:aa6636da984bed65d0aba30158e8dfa27" id="r_aa6636da984bed65d0aba30158e8dfa27"><td class="memItemLeft">constexpr <a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a>&#160;</td><td class="memItemRight"><a class="el" href="#aa6636da984bed65d0aba30158e8dfa27">withUnit</a> (std::string_view text) const noexcept</td></tr>
+<tr class="memdesc:aa6636da984bed65d0aba30158e8dfa27"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a></span> set to <code class="param">text</code>.  <br /></td></tr>
+<tr class="memitem:a5eba2c0842fdeda602b41338813d0141" id="r_a5eba2c0842fdeda602b41338813d0141"><td class="memItemLeft">constexpr <a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5eba2c0842fdeda602b41338813d0141">withDecimals</a> (<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">::morph::math::DecimalPlaces</a> places) const noexcept</td></tr>
+<tr class="memdesc:a5eba2c0842fdeda602b41338813d0141"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy with <span class="tt"><a class="el" href="#af57735bbefb2f396f906d1c832413727" title="Display and entry precision for a plain double/float member; emitted as x-displayDecimals....">decimals</a></span> set to <code class="param">places</code>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -168,13 +172,17 @@ Public Attributes</h2></td></tr>
        ceiling". Same canonical-unit reading as <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>.  <br /></td></tr>
 <tr class="memitem:a3740c426ffb300b255ca32b690e8979c" id="r_a3740c426ffb300b255ca32b690e8979c"><td class="memItemLeft">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">::morph::math::Rational</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c">multipleOf</a> {}</td></tr>
 <tr class="memdesc:a3740c426ffb300b255ca32b690e8979c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The field's value must be an exact integer multiple of this; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span>. Disengaged means "any value".  <br /></td></tr>
+<tr class="memitem:a85533330e32d6d465ee303dc92fab216" id="r_a85533330e32d6d465ee303dc92fab216"><td class="memItemLeft">std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a85533330e32d6d465ee303dc92fab216">unit</a> {}</td></tr>
+<tr class="memdesc:a85533330e32d6d465ee303dc92fab216"><td class="mdescLeft">&#160;</td><td class="mdescRight">Display unit for a member whose C++ type carries none (a plain <span class="tt">double</span>, <span class="tt">float</span> or integral member); emitted as the property's <span class="tt">ExtUnits</span> (<span class="tt">{"unitAscii": <a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a>, "unitUnicode": <a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a>}</span>), the key a <span class="tt">Quantity</span> already carries. Empty emits nothing.  <br /></td></tr>
+<tr class="memitem:af57735bbefb2f396f906d1c832413727" id="r_af57735bbefb2f396f906d1c832413727"><td class="memItemLeft">std::optional&lt;<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">::morph::math::DecimalPlaces</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af57735bbefb2f396f906d1c832413727">decimals</a> {}</td></tr>
+<tr class="memdesc:af57735bbefb2f396f906d1c832413727"><td class="mdescLeft">&#160;</td><td class="mdescRight">Display and entry precision for a plain <span class="tt">double</span>/<span class="tt">float</span> member; emitted as <span class="tt">x-displayDecimals</span>. Disengaged emits nothing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only, hidden, <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> (docs/spec/forms/forms.md, "Field metadata"). </p>
-<p>An action opts in with a <span class="tt">static constexpr std::array&lt;<a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html" title="Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only,...">FieldMeta</a>, N&gt;</span> (or, for the <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe</a>&lt;&gt;()</span> sugar, a <span class="tt">static const</span> array defined out-of-line — see <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe()</a></span>'s documentation) named <span class="tt">fieldMetadata</span>, mirroring the existing <span class="tt">optionalFields</span> convention. Every member other than <span class="tt"><a class="el" href="#abd2b9a17b80041de6f9aaf7eed9f8b0c" title="Wire key of the member this entry describes.">field</a></span> defaults to "not declared": an empty <span class="tt"><a class="el" href="#a18113d5200a965d0050ad5f3a591b94a" title="Display label; empty infers a title-cased name from field.">label</a></span>/<span class="tt"><a class="el" href="#a61b338589ad21fd57f86d3e20fcf990f" title="Help text; empty omits description.">help</a></span>/ <span class="tt"><a class="el" href="#a02bf72763b3d86624f5ab6ab9ac5f1b4" title="In-control placeholder hint; empty omits x-placeholder.">placeholder</a></span> means "infer the title, omit the rest"; <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span>/<span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> default to <span class="tt">false</span>; a disengaged <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> emits nothing and checks nothing. <span class="tt">mergeSchemaExtras</span> looks up the entry (if any) matching each reflected member by wire key and patches the property node; an entry naming a field that does not exist on the action is ignored.</p>
+<div class="textblock"><p>Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only, hidden, <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span>, and a plain member's display <span class="tt"><a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a></span>/<span class="tt"><a class="el" href="#af57735bbefb2f396f906d1c832413727" title="Display and entry precision for a plain double/float member; emitted as x-displayDecimals....">decimals</a></span> (docs/spec/forms/forms.md, "Field metadata"). </p>
+<p>An action opts in with a <span class="tt">static constexpr std::array&lt;<a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html" title="Per-field presentation overrides and scalar bounds: label, help, placeholder, read-only,...">FieldMeta</a>, N&gt;</span> (or, for the <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe</a>&lt;&gt;()</span> sugar, a <span class="tt">static const</span> array defined out-of-line — see <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe()</a></span>'s documentation) named <span class="tt">fieldMetadata</span>, mirroring the existing <span class="tt">optionalFields</span> convention. Every member other than <span class="tt"><a class="el" href="#abd2b9a17b80041de6f9aaf7eed9f8b0c" title="Wire key of the member this entry describes.">field</a></span> defaults to "not declared": an empty <span class="tt"><a class="el" href="#a18113d5200a965d0050ad5f3a591b94a" title="Display label; empty infers a title-cased name from field.">label</a></span>/<span class="tt"><a class="el" href="#a61b338589ad21fd57f86d3e20fcf990f" title="Help text; empty omits description.">help</a></span>/ <span class="tt"><a class="el" href="#a02bf72763b3d86624f5ab6ab9ac5f1b4" title="In-control placeholder hint; empty omits x-placeholder.">placeholder</a></span> means "infer the title, omit the rest"; <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span>/<span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> default to <span class="tt">false</span>; a disengaged <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>/<span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>/<span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> emits nothing and checks nothing; an empty <span class="tt"><a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a></span> and a disengaged <span class="tt"><a class="el" href="#af57735bbefb2f396f906d1c832413727" title="Display and entry precision for a plain double/float member; emitted as x-displayDecimals....">decimals</a></span> emit nothing. <span class="tt">mergeSchemaExtras</span> looks up the entry (if any) matching each reflected member by wire key and patches the property node; an entry naming a field that does not exist on the action is ignored.</p>
 <dl class="section user"><dt>Bounds are per <b>field</b>, and are not presentation</dt><dd>The three numeric members are the one part of this type that is <em>not</em> presentation: <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a9cf203c8a58f1739c806a087c222b8b7" title="Whether every numeric member of action satisfies the minimum/maximum/multipleOf its A::fieldMetadata ...">morph::forms::allFieldBoundsSatisfied</a></span> evaluates them as a C++ predicate, so an action whose <span class="tt">validate()</span> calls it enforces the same declaration the schema advertises — the "the DTO *is* the form definition" rule (<span class="tt">examples/IMPLEMENTATION.md</span> rule 3) applied to a scalar bound, which the <span class="tt">formRules</span> vocabulary cannot express because every comparison node there takes two member pointers, never a literal. They are keyed by field rather than by unit precisely so a floor declared for one <span class="tt">Quantity</span> member does not constrain a sibling of the same type — <span class="tt">UnitTraits::bounds</span> is per-unit and cannot make that distinction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a6054a51698263cc9944bc66a85d21c87" name="a6054a51698263cc9944bc66a85d21c87"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6054a51698263cc9944bc66a85d21c87">&#9670;&#160;</a></span>withPlaceholder()</h2>
@@ -208,7 +216,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00281">281</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,7 +246,7 @@ Public Attributes</h2></td></tr>
 <p>Returns a copy with <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span> set to <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -268,7 +276,7 @@ Public Attributes</h2></td></tr>
 <p>Returns a copy with <span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> set to <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -304,7 +312,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -340,7 +348,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00315">315</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +384,79 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa6636da984bed65d0aba30158e8dfa27" name="aa6636da984bed65d0aba30158e8dfa27"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa6636da984bed65d0aba30158e8dfa27">&#9670;&#160;</a></span>withUnit()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a> morph::forms::FieldMeta::withUnit </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns a copy with <span class="tt"><a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a></span> set to <code class="param">text</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The display unit, e.g. <span class="tt">"kg/m³"</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5eba2c0842fdeda602b41338813d0141" name="a5eba2c0842fdeda602b41338813d0141"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5eba2c0842fdeda602b41338813d0141">&#9670;&#160;</a></span>withDecimals()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html">FieldMeta</a> morph::forms::FieldMeta::withDecimals </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">::morph::math::DecimalPlaces</a></td>          <td class="paramname"><span class="paramname"><em>places</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns a copy with <span class="tt"><a class="el" href="#af57735bbefb2f396f906d1c832413727" title="Display and entry precision for a plain double/float member; emitted as x-displayDecimals....">decimals</a></span> set to <code class="param">places</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">places</td><td>Fraction digits to display and accept. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -395,7 +475,7 @@ Public Attributes</h2></td></tr>
 
 <p>Wire key of the member this entry describes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -413,7 +493,7 @@ Public Attributes</h2></td></tr>
 
 <p>Display label; empty infers a title-cased name from <span class="tt"><a class="el" href="#abd2b9a17b80041de6f9aaf7eed9f8b0c" title="Wire key of the member this entry describes.">field</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00227">227</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -431,7 +511,7 @@ Public Attributes</h2></td></tr>
 
 <p>Help text; empty omits <span class="tt">description</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -449,7 +529,7 @@ Public Attributes</h2></td></tr>
 
 <p>In-control placeholder hint; empty omits <span class="tt">x-placeholder</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -468,7 +548,7 @@ Public Attributes</h2></td></tr>
 <p>Explicit message-key <b>stem</b> override for this field's i18n catalog keys; empty means "derive the stem from the action's
        `ActionTraits&lt;A&gt;::typeId()` and this field's wire key" (see <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5" title="The fully-derived message key for one field text slot.">morph::forms::i18n::fieldKey</a></span>, <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html" title="Stable, schema-derived message-key vocabulary for renderer i18n.">forms/i18n.hpp</a></span>). A non-empty stem replaces only the <span class="tt">&lt;actionTypeId&gt;.&lt;wireField&gt;</span> portion of the key — the per-slot <span class="tt">.<a class="el" href="#a18113d5200a965d0050ad5f3a591b94a" title="Display label; empty infers a title-cased name from field.">label</a></span> / <span class="tt">.<a class="el" href="#a61b338589ad21fd57f86d3e20fcf990f" title="Help text; empty omits description.">help</a></span> / <span class="tt">.<a class="el" href="#a02bf72763b3d86624f5ab6ab9ac5f1b4" title="In-control placeholder hint; empty omits x-placeholder.">placeholder</a></span> suffix is still appended on top of it (see <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec" title="The explicit override key for one field text slot, when the field declares an x-i18nKey stem override...">morph::forms::i18n::explicitFieldKey</a></span>), so <span class="tt">"myKey"</span> expands to <span class="tt">"myKey.label"</span> / <span class="tt">"myKey.help"</span> / <span class="tt">"myKey.placeholder"</span>, never to a single complete key on its own. Emitted as <span class="tt">x-i18nKey</span> only when non-empty. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00243">243</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -487,7 +567,7 @@ Public Attributes</h2></td></tr>
 <p>Widget-selection override; empty means "use the field type's
        own `widget()`, if any". A non-empty value replaces that type-derived default and is emitted as <span class="tt">x-widget</span> (docs/spec/forms/widget_hints.md). Read structurally by <span class="tt">detail::widgetOverride</span>, not through this type by name — see <span class="tt">detail::HasFieldMetadataWidgets</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00243">243</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00250">250</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -505,7 +585,7 @@ Public Attributes</h2></td></tr>
 
 <p>Displayed but not editable when <span class="tt">true</span>; emits <span class="tt">x-readonly</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00252">252</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -523,7 +603,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../d1/db1/structmorph_1_1forms_1_1Not.html" title="Compound condition: the nested condition does not hold. Nests to any depth, and is usable directly as...">Not</a> shown at all when <span class="tt">true</span>; emits <span class="tt">x-hidden</span>. The field still travels in the payload (see <span class="tt">docs/spec/forms/forms.md</span>, "Field metadata is not a security control"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -542,7 +622,7 @@ Public Attributes</h2></td></tr>
 <p>Inclusive lower bound on the field's numeric value; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>. Disengaged means "no floor". </p>
 <p>For a <span class="tt">Quantity</span> member this bounds the <b>scalar value the field denotes</b>, in the canonical unit — not the <span class="tt">{num,den,dp}</span> object the member serialises as. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00264">264</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -561,7 +641,7 @@ Public Attributes</h2></td></tr>
 <p>Inclusive upper bound on the field's numeric value; emitted as the standard JSON-Schema <span class="tt"><a class="el" href="#ad3acbd03534c05fa104b9cf4d4227e95" title="Inclusive upper bound on the field&#39;s numeric value; emitted as the standard JSON-Schema maximum....">maximum</a></span>. Disengaged means "no
        ceiling". Same canonical-unit reading as <span class="tt"><a class="el" href="#a2a98781c5393d60152664354c102cb45" title="Inclusive lower bound on the field&#39;s numeric value; emitted as the standard JSON-Schema minimum....">minimum</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00269">269</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -581,7 +661,45 @@ Public Attributes</h2></td></tr>
 <p><span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a> = 1</span> is how integrality is spelled — the constraint <span class="tt">Quantity</span> cannot carry in its type, since <span class="tt">Quantity&lt;U, Dec&gt;</span> requires <span class="tt">Dec &gt;= 1</span> and therefore always represents tenths exactly.</p>
 <p>A non-positive value is <b>ignored</b> (neither emitted nor checked), matching JSON Schema, which requires <span class="tt"><a class="el" href="#a3740c426ffb300b255ca32b690e8979c" title="The field&#39;s value must be an exact integer multiple of this; emitted as the standard JSON-Schema mult...">multipleOf</a></span> to be strictly positive: a zero divisor has no meaning and a negative one divides exactly the same set of values as its magnitude. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a85533330e32d6d465ee303dc92fab216" name="a85533330e32d6d465ee303dc92fab216"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a85533330e32d6d465ee303dc92fab216">&#9670;&#160;</a></span>unit</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::forms::FieldMeta::unit {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Display unit for a member whose C++ type carries none (a plain <span class="tt">double</span>, <span class="tt">float</span> or integral member); emitted as the property's <span class="tt">ExtUnits</span> (<span class="tt">{"unitAscii": <a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a>, "unitUnicode": <a class="el" href="#a85533330e32d6d465ee303dc92fab216" title="Display unit for a member whose C++ type carries none (a plain double, float or integral member); emi...">unit</a>}</span>), the key a <span class="tt">Quantity</span> already carries. Empty emits nothing. </p>
+<p>Presentation only: the unit never travels in the payload and nothing converts through it. <b>Ignored on a <span class="tt">Quantity</span> member</b>, whose unit is part of its type and already emitted. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00296">296</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af57735bbefb2f396f906d1c832413727" name="af57735bbefb2f396f906d1c832413727"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af57735bbefb2f396f906d1c832413727">&#9670;&#160;</a></span>decimals</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">::morph::math::DecimalPlaces</a>&gt; morph::forms::FieldMeta::decimals {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Display and entry precision for a plain <span class="tt">double</span>/<span class="tt">float</span> member; emitted as <span class="tt">x-displayDecimals</span>. Disengaged emits nothing. </p>
+<p>Deliberately not <span class="tt">x-decimalPlaces</span>: that key hands a property the exact <span class="tt">{num,den,dp}</span> encoding, which a <span class="tt">double</span> cannot decode. This one keeps the plain JSON-number encoding and only tells a renderer how many fraction digits to show and accept. <b>Ignored on a <span class="tt">Quantity</span> member</b> (its <span class="tt">x-decimalPlaces</span> is authoritative) and when it exceeds <span class="tt"><a class="el" href="../../d1/de8/rational_8hpp.html#a9205dc1c167f522dc22f8422c5749a1d" title="Largest decimal precision the type supports: 10^18 is the greatest power of ten that fits in std::int...">morph::math::kMaxDecimalPlaces</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

@@ -2,7 +2,7 @@ var searchData=
 [
   ['undelivered_0',['undelivered',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef',1,'morph::offline::SyncResult']]],
   ['undolast_1',['undoLast',['../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333',1,'morph::journal::SessionLog']]],
-  ['unit_2',['unit',['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#ac3cde474578b6470296685e2a3381062',1,'morph::units::UnitAlternative::unit'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#a99b9778c1b6f0552253eafaf105717fb',1,'morph::units::Quantity::unit']]],
+  ['unit_2',['unit',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a85533330e32d6d465ee303dc92fab216',1,'morph::forms::FieldMeta::unit'],['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#ac3cde474578b6470296685e2a3381062',1,'morph::units::UnitAlternative::unit'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#a99b9778c1b6f0552253eafaf105717fb',1,'morph::units::Quantity::unit']]],
   ['unitalternative_3',['UnitAlternative',['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html',1,'morph::units']]],
   ['unitalternatives_4',['unitAlternatives',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a98aad53730bc9d5da2a7d921c0d10374',1,'morph::units::Quantity']]],
   ['unitenum_5',['UnitEnum',['../d6/db7/conceptmorph_1_1units_1_1UnitEnum.html',1,'morph::units']]],
