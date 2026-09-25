@@ -165,6 +165,10 @@ Frame {
     // counter, not a flag, so nested writes (a reset that itself triggers
     // refreshDependents) cannot re-enable submission early.
     property int programmaticEdit: 0
+
+    // Bumped by prefill(): every drawn control re-reads its value from
+    // fieldValues, exactly as it does when a tab switch recreates it.
+    property int prefillRevision: 0
     property string previewLine: ""
     property string resultText: ""
     property bool resultOk: true
@@ -1756,6 +1760,174 @@ Frame {
         })
     }
 
+    // --- prefill: a stored payload back into the draft ---------------------
+
+    // The draft text a built-in control would hold for the wire value `value`
+    // of field `f` -- the inverse of encodeFieldText, so that
+    // encodeFieldText(f, decodeFieldValue(f, v), 0) re-encodes `v`. `value` is
+    // parsed JSON, ideally from JsonExact.parse so an integer past 2^53 is
+    // still exact. Numbers come out in the display locale (decimal separator
+    // and digits, no grouping) and a Timestamp in the display zone, because
+    // that is what the form's own entry path reads. Returns "" for an absent
+    // or null value, and for one whose shape does not match the field's.
+    function decodeFieldValue(f, value) {
+        if (value === undefined || value === null)
+            return ""
+        if (f.isObjectArray) {
+            if (!Array.isArray(value))
+                return ""
+            const rows = []
+            for (let r = 0; r < value.length; ++r) {
+                const row = value[r]
+                const cells = {}
+                if (row !== null && typeof row === "object" && !JsonExact.isExact(row)) {
+                    for (let m = 0; m < f.itemFields.length; ++m) {
+                        const member = f.itemFields[m]
+                        const cell = decodeFieldValue(member, row[member.name])
+                        if (cell !== "")
+                            cells[member.name] = cell
+                    }
+                }
+                rows.push(cells)
+            }
+            return JSON.stringify(rows)
+        }
+        if (f.isArray)
+            return Array.isArray(value) ? value.map(function (item) { return JsonExact.text(item) }).join(", ") : ""
+        if (f.isEnum || f.isChoice)
+            return JsonExact.literal(value)
+        if (f.isDateTime)
+            return typeof value === "string" ? utcIsoToZoned(value, displayOffsetMinutes) : ""
+        if (f.isQuantity)
+            return quantityDraftText(value, f.canonDp)
+        if (f.isBoolean)
+            return value === true ? "true" : (value === false ? "false" : "")
+        if (f.isInteger)
+            return (JsonExact.isExact(value) || typeof value === "number") ? JsonExact.text(value) : ""
+        if (f.isNumber)
+            return numberDraftText(value, f.displayDecimals)
+        return typeof value === "string" ? value : ""
+    }
+
+    // Canonical decimal text (-?\d+(\.\d+)?) in the display locale, as typed.
+    function localeDraftNumber(canonical) {
+        return formatCanonicalNumber(canonical, {
+                                         decimalSeparator: qtLocale.decimalPoint,
+                                         groupSeparator: "",
+                                         negativeSign: qtLocale.negativeSign,
+                                         zeroDigit: qtLocale.zeroDigit
+                                     })
+    }
+
+    // A {num,den,dp} Quantity node as draft text at `dp` fraction digits
+    // (the field's canonical precision), rounded half-up on exact digits.
+    function quantityDraftText(node, dp) {
+        if (node === null || typeof node !== "object" || node.num === undefined || node.den === undefined)
+            return ""
+        const numText = JsonExact.text(node.num)
+        const den = Number(JsonExact.text(node.den))
+        if (!/^-?\d+$/.test(numText) || !(den > 0) || den > 1e14 || Math.floor(den) !== den)
+            return ""
+        const neg = numText.startsWith("-")
+        const digits = divRoundDigits((neg ? numText.slice(1) : numText) + "0".repeat(dp), den)
+        let canonical = digits
+        if (dp > 0) {
+            const padded = digits.padStart(dp + 1, "0")
+            canonical = padded.slice(0, -dp) + "." + padded.slice(-dp)
+        }
+        const isZero = /^[0.]*$/.test(canonical)
+        return localeDraftNumber((neg && !isZero ? "-" : "") + canonical)
+    }
+
+    // A plain JSON number as draft text: never in exponent form, padded to
+    // a declared display precision, never rounded to it -- a stored value
+    // finer than that stays visible, and the entry gate then says so.
+    function numberDraftText(value, displayDecimals) {
+        if (JsonExact.isExact(value))
+            return localeDraftNumber(JsonExact.text(value))
+        if (typeof value !== "number" || !isFinite(value))
+            return ""
+        let canonical = String(value)
+        if (/e/i.test(canonical))
+            canonical = value.toFixed(20).replace(/\.?0+$/, "")
+        if (displayDecimals !== undefined) {
+            const fraction = canonical.split(".")[1] || ""
+            if (fraction.length < displayDecimals)
+                canonical = (fraction === "" ? canonical + (displayDecimals > 0 ? "." : "") : canonical)
+                            + "0".repeat(displayDecimals - fraction.length)
+        }
+        return localeDraftNumber(canonical)
+    }
+
+    // An ISO-8601 instant as the display zone's wall clock
+    // ("YYYY-MM-DDTHH:MM:SS"), the inverse of zonedToUtcIso. Text with no zone
+    // designator is read as UTC, which is what a Timestamp serialises to.
+    function utcIsoToZoned(text, offsetMinutes) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/.exec(text)
+        if (!m)
+            return ""
+        let zoneMinutes = 0
+        if (m[7] !== undefined && m[7] !== "Z") {
+            const zone = m[7].replace(":", "")
+            zoneMinutes = (zone.charAt(0) === "-" ? -1 : 1)
+                    * (parseInt(zone.slice(1, 3)) * 60 + parseInt(zone.slice(3, 5)))
+        }
+        const utcMillis = Date.UTC(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]), parseInt(m[4]),
+                                   parseInt(m[5]), m[6] === undefined ? 0 : parseInt(m[6]))
+                - zoneMinutes * 60000
+        const d = new Date(utcMillis + offsetMinutes * 60000)
+        const pad = (v, w) => String(v).padStart(w, "0")
+        return pad(d.getUTCFullYear(), 4) + "-" + pad(d.getUTCMonth() + 1, 2) + "-" + pad(d.getUTCDate(), 2)
+               + "T" + pad(d.getUTCHours(), 2) + ":" + pad(d.getUTCMinutes(), 2) + ":" + pad(d.getUTCSeconds(), 2)
+    }
+
+    // Loads a stored payload -- an object keyed by wire name, e.g. a parsed
+    // action or section DTO -- into the form for editing. Replaces the whole
+    // draft (a member absent from `values` starts blank, as after
+    // resetFields), resets every unit selector to the canonical unit, re-seeds
+    // every drawn control and every slot, re-fetches dependent Choices, and
+    // never submits: prefilling is not a user action. Returns false, changing
+    // nothing, when `values` is not an object.
+    function prefill(values) {
+        if (values === null || typeof values !== "object" || Array.isArray(values) || JsonExact.isExact(values))
+            return false
+        // Not withoutAutoSubmit: that revalidates *after* lifting the
+        // suppression, and a prefilled form is usually ready, so the final
+        // pass would submit the record the user only opened.
+        form.programmaticEdit++
+        try {
+            const draft = {}
+            for (let i = 0; i < form.fields.length; ++i) {
+                const f = form.fields[i]
+                const text = form.decodeFieldValue(f, values[f.name])
+                if (text !== "")
+                    draft[f.name] = text
+            }
+            form.fieldValues = draft
+            form.fieldUnits = ({})
+            form.prefillRevision++
+            for (const parentName in form.dependents)
+                form.refreshDependents(parentName)
+            form.revalidate()
+        } finally {
+            form.programmaticEdit--
+        }
+        return true
+    }
+
+    // prefill() over JSON text, parsed exactly (JsonExact), so an id past
+    // 2^53 reaches the form digit for digit. Returns false for text that does
+    // not parse to an object.
+    function prefillFromJson(jsonText) {
+        let parsed
+        try {
+            parsed = JsonExact.parse(String(jsonText))
+        } catch (ignored) {
+            return false
+        }
+        return form.prefill(parsed)
+    }
+
     // The JSON body to send a Choice field's options action: {parentName:
     // value, ...} built from the current values of its declared parents
     // (x-optionsDependsOn). Returns null when any parent is not yet engaged
@@ -1957,6 +2129,59 @@ Frame {
                 })
             }
 
+            // prefill() rewrote fieldValues: re-read it into every control of
+            // this field, the way each already does when it is created. A
+            // fetched Choice (combo or radio group) also re-selects whenever
+            // its options arrive, since the prefilled value may predate them.
+            function reseedFromDraft() {
+                form.withoutAutoSubmit(function () {
+                    const name = fieldColumn.modelData.name
+                    const retained = form.opt(form.fieldValues[name], "")
+                    entry.text = retained
+                    arrayEntry.text = retained
+                    notesArea.text = retained
+                    if (fieldColumn.modelData.isDateTime)
+                        dateTimeEntry.text = retained
+                    if (fieldColumn.modelData.isBoolean) {
+                        // The rule the CheckBox's creation applies: a required
+                        // box always shows a state, so it holds one.
+                        if (retained === "" && fieldColumn.modelData.required)
+                            form.setFieldValue(name, "false")
+                        boolEntry.checked = retained === "true"
+                    }
+                    if (fieldColumn.modelData.isSlider && retained !== "")
+                        levelSlider.value = Number(retained)
+                    unitSelector.currentIndex = 0
+                    fieldColumn.reselectOption()
+                })
+            }
+
+            function reselectOption() {
+                const data = fieldColumn.modelData
+                if (!data.isEnum && !data.isChoice)
+                    return
+                const retained = form.opt(form.fieldValues[data.name], "")
+                const rows = data.isEnum ? data.enumOptions : (form.fieldOptions[data.name] || [])
+                let index = -1
+                for (let i = 0; i < rows.length; ++i) {
+                    if (rows[i].valueJson === retained) {
+                        index = i
+                        break
+                    }
+                }
+                choiceEntry.currentIndex = index
+                radioGroup.checkedIndex = index
+            }
+
+            Connections {
+                target: form
+                function onPrefillRevisionChanged() { fieldColumn.reseedFromDraft() }
+                function onOptionsRevisionChanged() {
+                    if (fieldColumn.modelData.isChoice)
+                        fieldColumn.reselectOption()
+                }
+            }
+
             RowLayout {
                 id: controlsRow
                 Layout.fillWidth: true
@@ -2114,6 +2339,8 @@ Frame {
                 }
 
                 DateTimePicker {
+                    id: dateTimeEntry
+                    objectName: "datetime_" + fieldColumn.modelData.name
                     visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isDateTime
                     enabled: !fieldColumn.modelData.readOnly
                     Layout.fillWidth: true
@@ -2304,6 +2531,8 @@ Frame {
                 // Unit selector when the unit system declares convertible
                 // alternatives: switching recalculates the entry exactly.
                 ComboBox {
+                    id: unitSelector
+                    objectName: "unit_" + fieldColumn.modelData.name
                     visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isQuantity
                              && fieldColumn.modelData.unitOptions.length > 1
                     enabled: !fieldColumn.modelData.readOnly
