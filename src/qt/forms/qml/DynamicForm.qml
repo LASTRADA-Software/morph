@@ -202,6 +202,18 @@ Frame {
     // "no catalog installed" — every label/help/placeholder falls back to
     // its schema literal, exactly as today.
     property var catalog: null
+    // Columns of every field grid the form builds -- a section's, a tab
+    // set's, and the one created inside a host's section/tab-set chrome. A
+    // field spans `x-colspan` of them, clamped to the grid's columns. A host
+    // laying fields out on its own grid (say 12 columns) sets this once.
+    property int gridColumns: 2
+
+    // Columns of the implicit flat bucket -- the whole form when the schema
+    // declares no x-layout, and the trailing group of fields no group names.
+    // One at the default, which is the pre-grouping renderer's single column;
+    // follows `gridColumns` once a host chooses a grid of its own.
+    property int flatGridColumns: gridColumns === 2 ? 1 : gridColumns
+
     property string displayLocale: "C"
     property var qtLocale: Qt.locale(displayLocale)
 
@@ -2289,7 +2301,13 @@ Frame {
             objectName: "column_" + fieldColumn.modelData.name
             required property var modelData
             Layout.fillWidth: true
-            Layout.columnSpan: fieldColumn.modelData.colspan
+            // Clamped to the columns of the grid this delegate sits in, so an
+            // x-colspan wider than the grid fills one row instead of widening it.
+            Layout.columnSpan: {
+                const gridColumnCount = (fieldColumn.parent && fieldColumn.parent.columns > 0)
+                        ? fieldColumn.parent.columns : fieldColumn.modelData.colspan
+                return Math.max(1, Math.min(fieldColumn.modelData.colspan, gridColumnCount))
+            }
             visible: { form.rulesRevision; return !fieldColumn.modelData.hidden && form.fieldVisible(fieldColumn.modelData.name) }
             enabled: { form.rulesRevision; return !form.fieldReadonly(fieldColumn.modelData.name) }
             spacing: 2
@@ -2846,9 +2864,10 @@ Frame {
             }
 
             GridLayout {
+                objectName: "sectionGrid"
                 Layout.fillWidth: true
                 visible: box.sectionChrome === null && !box.collapsed
-                columns: box.runData.section.kind === "flat" ? 1 : 2
+                columns: box.runData.section.kind === "flat" ? form.flatGridColumns : form.gridColumns
 
                 // Empty under a chrome: the fields are created inside it
                 // instead, and one delegate per field is what keeps every
@@ -2874,7 +2893,7 @@ Frame {
                         kind: box.runData.section.kind,
                         section: box.runData.section
                     })
-                    form.createFieldGrid(item, 2, function () { return box.runData.section.fields })
+                    form.createFieldGrid(item, function () { return box.runData.section.fields })
                 }
             }
         }
@@ -2887,8 +2906,10 @@ Frame {
 
         GridLayout {
             id: chromeGrid
+            objectName: "chromeFieldGrid"
             property var gridFields: []
             Layout.fillWidth: true
+            columns: form.gridColumns
 
             Repeater {
                 model: chromeGrid.gridFields
@@ -2898,14 +2919,14 @@ Frame {
     }
 
     // `fieldsOf` is a function so the grid follows a binding (a tab-set
-    // chrome's currentIndex) rather than a snapshot.
-    function createFieldGrid(chromeItem, columns, fieldsOf) {
+    // chrome's currentIndex) rather than a snapshot. The grid has
+    // `gridColumns` columns, like the built-in section and tab-set grids.
+    function createFieldGrid(chromeItem, fieldsOf) {
         if (!chromeItem || !chromeItem.contentItem) {
             console.warn("DynamicForm: a section/tabset chrome must declare `contentItem`; its fields are not shown")
             return null
         }
         return chromeFieldGrid.createObject(chromeItem.contentItem, {
-            columns: columns,
             gridFields: Qt.binding(fieldsOf)
         })
     }
@@ -2942,9 +2963,10 @@ Frame {
             }
 
             GridLayout {
+                objectName: "tabGrid"
                 Layout.fillWidth: true
                 visible: tabsBox.tabsetChrome === null
-                columns: 2
+                columns: form.gridColumns
 
                 Repeater {
                     model: tabsBox.tabsetChrome === null ? tabsBox.runData.sections[tabsBox.currentTab].fields : []
@@ -2966,7 +2988,7 @@ Frame {
                     form.bindChrome(chromeItem, {
                         tabs: tabsBox.runData.sections.map(function (section) { return { title: section.title } })
                     })
-                    form.createFieldGrid(chromeItem, 2, function () {
+                    form.createFieldGrid(chromeItem, function () {
                         const index = ("currentIndex" in chromeItem) ? chromeItem.currentIndex : 0
                         const section = tabsBox.runData.sections[index]
                         return section ? section.fields : []

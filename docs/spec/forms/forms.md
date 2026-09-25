@@ -768,6 +768,27 @@ bar (`renderRuns`), and lays each section's fields out in a 2-column grid
 honoring `x-colspan` — falling back to a single implicit flat section
 (one column, no chrome) when the schema carries no `x-layout` at all.
 
+**A host chooses the grid: `gridColumns`.** `DynamicForm.gridColumns` (default
+`2`) is the column count of every field grid the form builds: each section's,
+each tab set's, and the one it creates inside a host's section or tab-set
+[chrome](#chrome-slots). `flatGridColumns` is the implicit flat bucket's — the
+whole form without `x-layout`, and the trailing group of fields no group names.
+It is `1` at the default, the pre-grouping renderer's single column, and
+follows `gridColumns` as soon as a host sets that to anything else, so one
+property puts the whole form on the host's grid:
+
+```qml
+DynamicForm { gridColumns: 12 }   // x-colspan 6 = half a row, 4 = a third, 12 = full
+```
+
+A field spans `x-colspan` columns (1 when absent), **clamped to its grid's
+column count**, so a span wider than the grid takes one full row rather than
+widening the grid. Both properties are bindings; changing one relays the form.
+With both left at their defaults the layout is unchanged.
+`src/qt/forms/tests/tst_DynamicFormGridColumns.qml` pins it (9 cases); fixing
+every grid back at 2/1 columns reddens 5 of them, and dropping the clamp another
+5.
+
 **Tab switching destroys and rebuilds controls, so they re-seed from
 `fieldValues`.** The tab bar drives its `Repeater` off
 `sections[currentTab].fields`, so leaving a tab destroys that tab's field
@@ -880,7 +901,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-layout` | top-level (object) | object | The form's group structure: `{ "groups": [ { "title": string, "kind": "section"\|"tab"\|"accordion", "fields": [wire-key,…] }, … ] }`, in `A::formLayout` declaration order. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
 | `x-group` | property node (sibling of `$ref`) | string | The title of the group this field belongs to. Omitted for a field in the implicit default group, or when `x-layout` is absent. |
 | `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups`. Omitted under the same conditions as `x-group`. |
-| `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. |
+| `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. `DynamicForm` clamps it to the grid's column count (`gridColumns`, see [Layout & grouping](#layout--grouping--sections-tabs-spans)). |
 | `x-rules` | top-level (object) | array of rule objects | Cross-field rules the renderer must satisfy before enabling submit, and should surface live as inline errors. Emitted only when the action declares `formRules`; absent otherwise. A renderer that ignores it falls back to per-field `required` only. |
 | ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table above (or a condition id: `engaged`, `notEngaged`, `equals`, `and`, `or`, `not`). An unrecognised `kind` — a rule *or* a nested condition — must be treated as "cannot evaluate": a third answer, distinct from both true and false. The renderer neither claims the rule is satisfied nor blocks submission on it; the payload reaches the server, which runs the compiled rule list and has no unrecognised-kind case. See [Renderer fallback](#renderer-fallback) for the full contract and why it is *defer*, not *block*. |
 | ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). Absent on `and`/`or`/`not`, which range over nested conditions (`conditions`/`condition` below) instead of fields directly. |
@@ -1781,8 +1802,8 @@ whatever their text, so an app that wants them decides itself when an empty one
 shows.
 
 **Container chrome hosts the fields; it does not re-create them.** For
-`section`, `accordion` and `tabset`, the form creates its field grid (two
-columns, `x-colspan` honoured, the same field delegates) as a child of the
+`section`, `accordion` and `tabset`, the form creates its field grid
+(`gridColumns` columns, `x-colspan` honoured, the same field delegates) as a child of the
 chrome's `contentItem`, which is expected to be a Layout — a `ColumnLayout` is
 enough. The built-in grid's `Repeater` is emptied under a chrome, so each field
 exists once and its `field_<name>` `objectName` stays unique: prefill,
