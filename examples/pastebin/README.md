@@ -227,22 +227,15 @@ must both work unchanged.
   rather than dressed up: this was closed by construction, not after a
   measured crash.
 
-**Custom-GUI-element justification (`../IMPLEMENTATION.md` rule 2):** at the
-time this rung was built, the shipped `morph::qt::forms::FormsControllerCore
-<Model>` hardcoded its own `Bridge`/`LocalBackend`/executor internally, with
-no way to compose it over `AppContext`'s `Bridge&`/`IExecutor*` — a direct
-conflict with [`../TESTING.md`](../TESTING.md)'s "never construct executors
-or backends themselves" presenter rule, and silently untestable in `Socket`
-mode. The shipped core's own `(Bridge&, IExecutor*, schemasJson)` constructor
-now supports this composition directly, closing the gap framework-side;
-`gui_lib/paste_forms_controller.hpp` still owns a thin controller of its own
-(this rung predates that constructor).
-Pastebin's GUI still renders exclusively from `morph::forms::schemaJson<A>()`
+Pastebin's GUI renders exclusively from `morph::forms::schemaJson<A>()`
 through the real `MorphForms` QML module (justification (b): pure glue, no
-domain logic, no hand-rolled widget) — only the backend-wiring seam is
-rung-owned: a thin controller exposing the same
-`schemaJson()`/`submitIfValid()`/`fetchOptions()` surface, constructed over
-the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
+domain logic, no hand-rolled widget). `gui_lib/paste_qml_bridges.hpp`'s
+`FormsBridge` composes `morph::qt::forms::FormsControllerCore<PasteModel>`
+directly, over the `Bridge&`/`IExecutor*` `AppContext::onReady()` hands it —
+no rung-owned controller sits between them; the shipped core's
+`(Bridge&, IExecutor*, schemasJson)` constructor is exactly the composition
+[`../TESTING.md`](../TESTING.md)'s "never construct executors or backends
+themselves" presenter rule requires.
 
 ## Required tests (from review)
 

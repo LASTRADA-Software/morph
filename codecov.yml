@@ -314,8 +314,8 @@ component_management:
     #     source documents it as unreachable in practice and treats it as
     #     "gone" rather than asserting.
     # `gui_lib/` itself is fully covered: `paste_presenter.cpp`,
-    # `paste_qml_bridges.cpp`, `paste_forms_controller.cpp` and both headers'
-    # inline bodies are at 100% lines, by `tests/test_paste_presenter.cpp` and
+    # `paste_qml_bridges.cpp` and both headers' inline bodies are at 100%
+    # lines, by `tests/test_paste_presenter.cpp` and
     # `tests/test_paste_qml_bridges.cpp`.
     #
     # 96%, not something nearer the 98.22% ceiling, for two reasons: it leaves

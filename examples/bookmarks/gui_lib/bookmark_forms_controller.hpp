@@ -18,21 +18,19 @@ namespace bookmarks::gui {
 ///        `morph::qt::forms::FormsControllerCore<Model>`
 ///        (`schemasJson()`/`submitIfValid()`), composed over an injected
 ///        `Bridge&`/`IExecutor*` instead of constructing its own
-///        `LocalBackend`. The shipped core's own `(Bridge&, IExecutor*,
-///        schemasJson)` constructor now supports this directly, but this
-///        rung still owns a thin controller of its own: it is templated
+///        `LocalBackend`. This rung still owns a thin controller of its own
+///        rather than using the shipped core directly: the core is templated
 ///        over a *single* model, and this rung's forms span three
 ///        (`AuthModel`/`BookmarkModel`/`TagModel`, see "The one thing that
 ///        is genuinely new here" below) — `dispatch()`'s routing has no
 ///        equivalent on the shipped core. Pure glue, no domain logic
 ///        (`examples/IMPLEMENTATION.md` rule 2 justification (b)) — the
 ///        schema/validation/rendering machinery is untouched; only the
-///        backend-wiring seam differs. Verbatim in shape from
-///        `pastebin::gui::PasteFormsController`, which established it.
+///        backend-wiring seam differs.
 ///
 /// @par The one thing that is genuinely new here: routing
-/// The shipped core, and pastebin's copy of it, are templates over a *single*
-/// model, because rung 1 had exactly one. This rung's forms span three
+/// The shipped core is a template over a *single* model. This rung's forms
+/// span three
 /// (`Login` on `AuthModel`, `CreateBookmark`/`EditBookmark`/`ImportBookmarks`
 /// on `BookmarkModel`, `RenameTag`/`MergeTags` on `TagModel`), and
 /// `BridgeHandler<Model>::executeJson` dispatches against the model type it
@@ -60,12 +58,11 @@ namespace bookmarks::gui {
 /// `Bridge`.
 ///
 /// @par No `fetchOptions()`
-/// Deliberately absent, exactly as in `PasteFormsController`: it exists on
-/// the shipped core to serve a `morph::forms::Choice<T, …>` field's combo-box
-/// options, and none of this rung's DTOs declare a `Choice` field —
-/// `CreateBookmark::visibility` is a plain reflected enum, not a
-/// server-fetched choice. Adding an unused `fetchOptions()` would be a stub
-/// with nothing to call it.
+/// Deliberately absent: it exists on the shipped core to serve a
+/// `morph::forms::Choice<T, …>` field's combo-box options, and none of this
+/// rung's DTOs declare a `Choice` field — `CreateBookmark::visibility` is a
+/// plain reflected enum, not a server-fetched choice. Adding an unused
+/// `fetchOptions()` would be a stub with nothing to call it.
 ///
 /// @par Array-typed members
 /// `CreateBookmark::tags`/`EditBookmark::tags` are `std::vector<std::string>`

@@ -3397,7 +3397,7 @@ jobs:
           # the one clang-tidy will ask.
           python3 /tmp/filter-unbuilt-sources.py \
             build/clang-debug/compile_commands.json /tmp/changed.diff /tmp/analysed.diff \
-            /tmp/tidy-db -std=c++23 -Wno-missing-include-dirs
+            /tmp/tidy-db -std=c++23 -Wno-missing-include-dirs -Wno-pragma-once-outside-header
 
           # -path /tmp/tidy-db, not build/clang-debug: that is the augmented
           # database, and pointing clang-tidy at it is the whole fix for
@@ -3412,6 +3412,7 @@ jobs:
               -j "$(nproc)" \
               -extra-arg=-std=c++23 \
               -extra-arg=-Wno-missing-include-dirs \
+              -extra-arg=-Wno-pragma-once-outside-header \
               -quiet \
               < /tmp/analysed.diff \
               2>&1 | tee clang-tidy-report.txt; then

@@ -514,15 +514,17 @@ if(MORPH_BUILD_FORMS_QML)
     # stops being self-contained must fail here, not silently pass (morph#230).
     set_target_properties(morph_qt_forms PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
     target_link_libraries(morph_qt_forms INTERFACE morph Qt6::Core)
-    # qt_executor.hpp is listed here too, not only under morph::qt: the
-    # controller core includes it, and morph::qt (MORPH_BUILD_QT, which needs
-    # Qt WebSockets) is not part of every install that ships this header. It
-    # needs nothing beyond QtCore.
+    # qt_executor.hpp and generic_model_bridge_core.hpp are listed here too,
+    # not only under morph::qt: forms_controller_core.hpp includes both, and
+    # morph::qt (MORPH_BUILD_QT, which needs Qt WebSockets) is not part of
+    # every install that ships this header. Neither needs anything beyond
+    # QtCore.
     target_sources(morph_qt_forms
         INTERFACE
         FILE_SET HEADERS
         BASE_DIRS include
         FILES
+            include/morph/qt/bridge/generic_model_bridge_core.hpp
             include/morph/qt/forms/forms_controller_core.hpp
             include/morph/qt/qt_executor.hpp
     )

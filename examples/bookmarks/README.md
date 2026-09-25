@@ -455,15 +455,12 @@ types nothing.
 Two pieces of glue carry their own written justification, per rule 2's "(b)
 pure glue with no domain logic" clause:
 
-- `gui::BookmarkFormsController` — this rung's copy of
-  `morph::qt::forms::FormsControllerCore`, composed over an injected
-  `Bridge&`/`IExecutor*` rather than constructing its own `LocalBackend`. The
-  shipped core's own composing constructor now supports this directly (the
-  same justification `pastebin::gui::PasteFormsController` carries), plus
-  one genuinely new part this rung's own controller still owns — routing an
-  action-type string to whichever of the three form-serving models owns it,
-  which the shipped core (templated over a single model) has no equivalent
-  for.
+- `gui::BookmarkFormsController` — composed over an injected
+  `Bridge&`/`IExecutor*`, like `morph::qt::forms::FormsControllerCore`'s own
+  composing constructor, plus the one genuinely new part this rung's own
+  controller owns — routing an action-type string to whichever of the three
+  form-serving models owns it, which the shipped core (templated over a
+  single model) has no equivalent for.
 - `gui::FormsBridge::onLoginSucceeded` — installs the token the server
   returned as the shared `Bridge`'s default session, so every subsequent
   action carries it. Infrastructure wiring, not business logic: it decides

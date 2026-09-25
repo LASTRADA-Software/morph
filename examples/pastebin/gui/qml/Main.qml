@@ -90,9 +90,10 @@ ApplicationWindow {
     Connections {
         target: root.formsController
 
-        // The create form submits through PasteFormsController, not through
-        // PastePresenter, so this — not `pasteController.created` — is where a
-        // create's outcome arrives.
+        // The create form submits through FormsBridge (wrapping the shipped
+        // FormsControllerCore<PasteModel>), not through PastePresenter, so
+        // this — not `pasteController.created` — is where a create's outcome
+        // arrives.
         function onReplyReceived(actionType, ok, payload) {
             if (!ok) {
                 root.report(payload, true)
