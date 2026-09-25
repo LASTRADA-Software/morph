@@ -1201,32 +1201,38 @@ public:
     explicit LocalBackend(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND)
         : _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)} {}
 
-    /// @brief Stops the Task handlers still running, seals the strands, lets
-    ///        them drain, and only then closes them
+    /// @brief Stops the Task handlers still running, lets the strands drain,
+    ///        seals them, drains them again, and only then closes them
     ///        (`ModelStrands::teardown`). See `docs/spec/core/coroutines.md`,
     ///        "Teardown".
     ///
-    /// Where threads exist, in that order, because each step needs the one
-    /// before it:
+    /// Where threads exist, in that order:
     /// 1. Every live Task run's stop is requested. A handler suspended in an
     ///    awaitable that resumes on the current executor -- morph's own,
     ///    `core::async::AsyncQueue::pop` -- resumes, cancelled, through its
     ///    strand, which still admits it. One suspended on a `core::net` socket
-    ///    or timer resumes on that loop instead, and unwinds there.
-    /// 2. The strands are sealed: from here on a resumption or a handler's end
+    ///    or timer resumes on that loop instead, and unwinds there; its end is
+    ///    posted to the strand.
+    /// 2. The strands are drained: the resumptions and ends queued on them,
+    ///    and every queued action -- skipped, if `cancelPending` already failed
+    ///    it. This drain comes before the seal because a handler's end that
+    ///    arrives from a loop thread now is still queued behind its instance's
+    ///    other tasks; sealed, it would run inline on the loop thread while
+    ///    this drain ran one of those tasks on a pool thread, two threads
+    ///    inside the instance's action gate.
+    /// 3. The strands are sealed: from here on a resumption or a handler's end
     ///    is refused and runs inline, where it arrives, rather than queued on a
-    ///    strand step 4 would drop.
-    /// 3. The strands are drained: the resumptions queued on them, and every
-    ///    queued action -- skipped, if `cancelPending` already failed it. The
-    ///    drain does not wait for a handler still unwinding on another
+    ///    strand step 5 would drop.
+    /// 4. The strands are drained again, for what reached them between steps
+    ///    2 and 3. It does not wait for a handler still unwinding on another
     ///    executor.
-    /// 4. The strands are closed.
+    /// 5. The strands are closed.
     ///
     /// Must not run on one of this backend's strand threads, whose drain it
     /// would wait for; a debug build asserts that. The single-threaded
-    /// WebAssembly build seals before it stops the handlers, so each stopped
-    /// handler unwinds inline in step 1, and it waits for nothing in step 3:
-    /// nothing else could run the strands.
+    /// WebAssembly build seals, stops the handlers, then closes: sealed first,
+    /// each stopped handler unwinds inline in the stop, and the drains wait for
+    /// nothing, since nothing else could run the strands.
     ~LocalBackend() override {
         std::vector<std::weak_ptr<LocalRun>> runs;
         {

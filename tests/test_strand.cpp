@@ -497,20 +497,29 @@ TEST_CASE("ModelStrands teardown: a handler's end arriving after the seal never 
 
     // The loop thread: once the strands are sealed, the handler's end.
     // A probe's runOnStrand runs inline on the loop thread only once the seal
-    // refuses its post.
+    // refuses its post. One probe is out at a time, at a slow cadence, so the
+    // drain before the seal finds the strands idle between probes instead of
+    // racing a post per poll.
     std::atomic<bool> sealSeen{false};
+    std::atomic<bool> probeOut{false};
     std::thread loop;
     strands->teardown([&] {
         loop = std::thread{[&] {
             auto const self = std::this_thread::get_id();
-            (void)morph::testing::waitUntil([&] {
-                strands->runOnStrand(probeKey, [&] {
-                    if (std::this_thread::get_id() == self) {
-                        sealSeen = true;
+            (void)morph::testing::waitUntil(
+                [&] {
+                    if (!probeOut.exchange(true)) {
+                        strands->runOnStrand(probeKey, [&] {
+                            if (std::this_thread::get_id() == self) {
+                                sealSeen = true;
+                            }
+                            probeOut = false;
+                        });
                     }
-                });
-                return sealSeen.load();
-            });
+                    return sealSeen.load();
+                },
+                morph::testing::WaitBudget{std::chrono::milliseconds{5000}},
+                morph::testing::WaitStep{std::chrono::milliseconds{10}});
             strands->runOnStrand(key, [&] { gate.leave(); });
         }};
     });

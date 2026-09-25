@@ -406,12 +406,15 @@ refused and unwinds inline, and closing them drops only what was queued before
      Its handler does not run, and its caller keeps the error it was given.
   3. It seals the strands: they refuse the try-forms, and a resumption or a
      handler's end that arrives from now on runs inline, where it arrives.
-     Nothing of its instance runs on a strand beside it: step 2 left the
-     strands idle, and what reached them after step 2 returned is the stopped
-     handlers' own last steps, one at a time per handler. Sealing before step
-     2 would let such an end run inline on a loop thread while step 2 ran a
-     task of the same instance on a pool thread, two threads inside that
-     instance's action gate.
+     Nothing of the handler's own chain runs on a strand beside it: step 2
+     left the strands idle, and what reached them after step 2 returned is the
+     stopped handlers' own last steps, one at a time per handler. Sealing
+     before step 2 would let such an end run inline on a loop thread while
+     step 2 ran a task of the same instance on a pool thread, two threads
+     inside that instance's action gate. A `core::async::DetachedTask` the
+     handler started is not part of its chain: its resumption comes back
+     through the same resumer, is refused just the same, and can run inline
+     beside the handler's own step, as it could once the strands were closed.
   4. It waits for the strands to drain again, for whatever reached them
      between steps 2 and 3. It does not wait for a handler still unwinding on
      another executor; that handler's end runs inline.
@@ -434,8 +437,13 @@ refused and unwinds inline, and closing them drops only what was queued before
   handler resumes inline (see [The handler's resumer](#the-handlers-resumer)), holding its model
   instance alive; whatever it does from there runs, and its outcome is
   discarded. If that await never completes, the handler is never resumed and
-  never freed — a leak. A `RemoteServer` needs none of this, since a suspended
-  handler keeps its server alive.
+  never freed — a leak. Such a handler can also overlap the action gate, when
+  a `LocalBackend` is destroyed directly rather than through a `Bridge`, whose
+  `cancelPending` would have failed every queued call: a queued Task handler B
+  whose call was not failed is started by the previous handler's `leave()` in
+  step 4, suspends in such an awaitable, and its end, arriving inline, can run
+  while that `leave()` is still unwinding on the pool thread. A `RemoteServer`
+  needs none of this, since a suspended handler keeps its server alive.
 - **A handler awaiting its own model deadlocks**, as described under the
   action gate.
 - **Direct `Model::execute` calls** from outside the bridge — tests, replay
