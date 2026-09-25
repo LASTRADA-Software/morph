@@ -97,7 +97,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 1368,
+      "line": 1373,
       "source": "if (const auto* inst = _instances.find(modelId)) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_instances` invariant (core audit finding BK2). `_changeAware` is an index over the instance directory: an id enters it in `createHolder` (this file, when the holder answers `isBackendChangeAware()`) in the same `_regMtx`-held critical section that files the instance, and leaves it in `deregisterModel` only when `InstanceDirectory::release` reports the instance actually destroyed. `notifyBackendChanged()` (this function) holds the same `_regMtx` while walking `_changeAware` and looking each id up at this line, so every id it walks is still live -- the null arm cannot occur without a code change that breaks that subset invariant."
     },
