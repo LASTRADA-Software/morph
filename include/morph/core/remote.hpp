@@ -1669,27 +1669,28 @@ private:
     /// gate, on the strand. It replies when its Task completes.
     static void startTaskRemote(const std::shared_ptr<RemoteRun>& run) {
         admitRemote(*run);
+        std::shared_ptr<::morph::exec::detail::TaskResumer> executor;
         try {
             ::morph::session::detail::ScopedContext const scoped{run->env.session};
             auto const& strands = run->self->_strands;
-            auto executor = std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session);
+            executor = std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session);
             strands->enroll(run->mid, executor);
             auto token = run->stopSource ? run->stopSource->get_token() : ::core::async::StopToken{};
             run->self->_dispatcher.dispatchAsync(
                 run->env.modelType, run->env.actionType, *run->holder, run->env.body, executor, std::move(token),
-                [run](std::string result, std::exception_ptr error) {
+                [run, resumer = executor.get()](std::string result, std::exception_ptr error) {
                     // As on LocalBackend: a handler can end on another
                     // executor, and leaving the gate belongs on the strand.
                     // The strands are held here, not reached through the run:
                     // the finish may release the last reference to this server.
                     auto const held = run->self->_strands;
-                    held->withdraw(run->mid);
+                    held->withdraw(run->mid, resumer);
                     held->runOnStrand(run->mid, [run, result = std::move(result), error = std::move(error)] {
                         finishRemote(*run, result, error);
                     });
                 });
         } catch (...) {
-            run->self->_strands->withdraw(run->mid);
+            run->self->_strands->withdraw(run->mid, executor.get());
             finishRemote(*run, std::string{}, std::current_exception());
         }
     }

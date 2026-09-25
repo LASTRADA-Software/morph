@@ -238,14 +238,21 @@ backend's `ModelStrands`, core-cpp's `KeyedStrands` keyed by `ModelId` (see
   current executor therefore hands the handler back to the resumer, whose
   `submit` queues it on the model's strand, serialised with that model's other
   work. A handler that awaits another model's `execute` resumes on its own
-  strand, not on the other model's. The `ParkedWork` overload borrows the frame
-  like the plain handle does, because a handler's frame is always owned by the
-  driver that started it.
+  strand, not on the other model's. The `ParkedWork` overload queues the work
+  with its claim: the handler's own frames belong to the driver and carry none,
+  but a `core::async::DetachedTask` the handler starts, and that parks on an
+  awaitable resuming on the current executor, reaches the resumer with its
+  claim armed, and keeping it is what stops the chain being freed while its
+  handle waits on the strand. Where the strands are closed, the resumer disarms
+  the claim and resumes the chain inline, as it does a handler.
 - **The action's session, around every resumption.** The strands' keyed
   around-task hook installs the session, with the resumer as the current
   executor, around every task of a model instance whose Task handler has
   started and not finished (`ModelStrands::enroll`). The action gate lets one
-  action run on an instance at a time, so an instance has at most one.
+  action run on an instance at a time, so an instance has at most one. The
+  hook is given the task, not what kind of task it is, so the instance's other
+  tasks -- `onBackendChanged`, an action queued behind the handler -- run under
+  the handler's session too (see [`backend.md`](backend.md)).
 - **Held by the driver.** The driver's frame and every `ResumeTarget` taken
   inside the handler hold the resumer, so it lives until the last of them has
   run.

@@ -771,7 +771,13 @@ there, rather than once per backend.
   captured by `shared_ptr`). Cost is O(change-aware models), not O(all models).
   Delivery is asynchronous and serialised against that model's `execute` tasks;
   it never runs under `_regMtx` or `Bridge::_mtx`, so a sink that re-enters the
-  bridge cannot deadlock.
+  bridge cannot deadlock. **While a Task handler of that model instance is
+  suspended, it runs under the handler's session:** the strand installs the
+  suspended handler's session around every task of its instance, not only the
+  handler's own resumptions (see [coroutines.md](coroutines.md), "The handler's
+  resumer"), and core-cpp's around-task hook cannot tell the two apart. The same
+  holds for an action queued behind the handler, until it installs its own
+  session when it starts.
 - `setReconnectHandler`/`setConnectHandler`/`setDisconnectHandler` — no-op (no transport to (dis)connect).
 - `setSession` — not overridden (the default no-op stands): the local path never serialises a `Context` onto a wire envelope, so there is nothing to stamp.
 

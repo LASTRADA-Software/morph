@@ -4,7 +4,9 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <core/async/DetachedTask.hpp>
 #include <core/async/ExecutorContext.hpp>
+#include <core/async/ParkedWork.hpp>
 #include <coroutine>
 #include <cstddef>
 #include <memory>
@@ -174,12 +176,25 @@ TEST_CASE("ModelStrands: a task's throw is logged and the next task still runs",
 
     std::atomic<bool> afterRan{false};
     strands->post(key, [] { throw std::runtime_error("strand bomb"); });
-    strands->post(key, [] { throw 7; });  // NOLINT(hicpp-exception-baseclass) — exercises the catch(...) arm
     strands->post(key, [&] { afterRan.store(true); });
     strands->drain();
 
     REQUIRE(afterRan.load());
     CHECK(log.contains("[strand] task threw: strand bomb"));
+}
+
+TEST_CASE("ModelStrands: a non-std::exception throw is swallowed and the next task still runs", "[strand]") {
+    CapturedLog log;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto const strands = std::make_shared<ModelStrands>(pool);
+    ModelId const key{43};
+
+    std::atomic<bool> afterRan{false};
+    strands->post(key, [] { throw 7; });  // NOLINT(hicpp-exception-baseclass) — exercises the catch(...) arm
+    strands->post(key, [&] { afterRan.store(true); });
+    strands->drain();
+
+    REQUIRE(afterRan.load());
     CHECK(log.contains("[strand] task threw unknown exception"));
 }
 
@@ -273,7 +288,14 @@ TEST_CASE("TaskResumer resumes on its key's strand with the session installed, a
         CHECK(principal == "alice");
         CHECK(resumerCurrent);
 
-        strands->withdraw(key);
+        // A withdraw naming another resumer leaves the enrolment alone.
+        auto const other = std::make_shared<TaskResumer>(strands, key, morph::session::Context{});
+        strands->withdraw(key, other.get());
+        strands->post(key, [&] { resumerCurrent = core::async::currentExecutor() == resumer.get(); });
+        strands->drain();
+        CHECK(resumerCurrent);
+
+        strands->withdraw(key, resumer.get());
         strands->post(key, [&] {
             principal = morph::session::current() != nullptr ? morph::session::current()->principal : "<none>";
             resumerCurrent = core::async::currentExecutor() == resumer.get();
@@ -294,7 +316,59 @@ TEST_CASE("TaskResumer resumes on its key's strand with the session installed, a
         CHECK(seen.resumerCurrent);
     }
 
-    strands->withdraw(key);
+    strands->withdraw(key, resumer.get());
+}
+
+namespace {
+
+/// Parks the awaiting coroutine and hands its `ParkedWork` -- with the claim a
+/// `DetachedTask` chain carries -- to the test, as `AsyncQueue::pop` hands it
+/// to the executor it parked on.
+struct ParkInto {
+    core::async::ParkedWork* out;
+    [[nodiscard]] bool await_ready() const noexcept { return false; }
+    template <typename Promise>
+    void await_suspend(std::coroutine_handle<Promise> awaiting) const {
+        *out = core::async::detail::parkedWorkFor(awaiting);
+    }
+    void await_resume() const noexcept {}
+};
+
+core::async::DetachedTask parkOnce(core::async::ParkedWork* parked, std::atomic<bool>* finished) {
+    co_await ParkInto{parked};
+    finished->store(true);
+}
+
+}  // namespace
+
+TEST_CASE("TaskResumer keeps a detached chain's claim until it resumes it, on the strand or inline",
+          "[strand][coroutine]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto const strands = std::make_shared<ModelStrands>(pool);
+    ModelId const key{13};
+    auto const resumer = std::make_shared<TaskResumer>(strands, key, morph::session::Context{});
+
+    SECTION("on the strand") {
+        core::async::ParkedWork parked;
+        std::atomic<bool> finished{false};
+        parkOnce(&parked, &finished);
+        REQUIRE(parked.abandon.armed());
+        // The claim travels with the handle: dropping it here would free the
+        // frame while its handle is queued.
+        resumer->submit(std::move(parked));
+        strands->drain();
+        CHECK(finished.load());
+    }
+
+    SECTION("inline, once the strands are closed") {
+        strands->close();
+        core::async::ParkedWork parked;
+        std::atomic<bool> finished{false};
+        parkOnce(&parked, &finished);
+        REQUIRE(parked.abandon.armed());
+        resumer->submit(std::move(parked));
+        CHECK(finished.load());
+    }
 }
 
 // Regression test for ThreadPoolExecutor(0): a zero-worker pool used to accept

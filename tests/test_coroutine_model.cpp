@@ -9,6 +9,8 @@
 #include <chrono>
 #include <core/async/AsyncQueue.hpp>
 #include <core/async/Cancellation.hpp>
+#include <core/async/DetachedTask.hpp>
+#include <core/async/ExecutorContext.hpp>
 #include <core/async/IExecutor.hpp>
 #include <core/async/ResumeOn.hpp>
 #include <core/async/Task.hpp>
@@ -113,6 +115,9 @@ struct CoroPopBack {
 struct CoroAway {
     int tag = 0;
 };
+struct CoroDetach {
+    int tag = 0;
+};
 /// A Task handler's action with a validator: only a positive `x` is ready.
 struct CoroValidated {
     int x = 0;
@@ -127,6 +132,7 @@ struct CoroQuick {
 
 using coro_test::CoroAwaitOther;
 using coro_test::CoroAway;
+using coro_test::CoroDetach;
 using coro_test::CoroDouble;
 using coro_test::CoroForeign;
 using coro_test::CoroHold;
@@ -169,6 +175,7 @@ CORO_INT_ACTION(CoroForeign, "Coro_Foreign")
 CORO_INT_ACTION(CoroPop, "Coro_Pop")
 CORO_INT_ACTION(CoroPopBack, "Coro_PopBack")
 CORO_INT_ACTION(CoroAway, "Coro_Away")
+CORO_INT_ACTION(CoroDetach, "Coro_Detach")
 CORO_INT_ACTION(CoroValidated, "Coro_Validated")
 CORO_INT_ACTION(CoroQuick, "Coro_Quick")
 #undef CORO_INT_ACTION
@@ -201,6 +208,8 @@ struct CoroProbe {
     std::unique_ptr<core::async::AsyncQueue<int>> queue;
     /// Where `CoroAway` goes: an executor that is not the model's strand.
     core::async::IExecutor* away = nullptr;
+    /// What the chain `CoroDetach` starts popped, once it has.
+    std::atomic<int> detached{0};
     std::atomic<std::thread::id> popThread;
     std::atomic<std::thread::id> logThread;
 
@@ -335,6 +344,16 @@ struct CoroModel {
         co_return item.value_or(0) + action.tag;
     }
 
+    // Starts a chain nobody owns that parks on a core-cpp queue, and returns:
+    // the chain comes back through this handler's resumer, with its claim.
+    core::async::Task<int> execute(CoroDetach action) {
+        [](core::async::AsyncQueue<int>* queue) -> core::async::DetachedTask {
+            auto const item = co_await queue->pop();
+            probe().detached = item.value_or(-1);
+        }(probe().queue.get());
+        co_return action.tag;
+    }
+
     // Leaves its strand for another executor, and ends there.
     core::async::Task<int> execute(CoroAway action) {
         probe().note("away-start");
@@ -461,6 +480,7 @@ void armHold(morph::exec::IExecutor* exec) {
     probe().holdCancelled = false;
     probe().holdFinished = false;
     probe().ticks = 0;
+    probe().detached = 0;
     probe().popThread = std::thread::id{};
     probe().logThread = std::thread::id{};
     std::scoped_lock const lock{probe().mtx};
@@ -972,6 +992,32 @@ TEST_CASE("a handler that awaits a core-cpp queue comes back to its own strand",
         std::scoped_lock const lock{probe().mtx};
         REQUIRE(probe().onOwnStrand == std::vector<bool>{true});
     }
+    probe().queue.reset();
+}
+
+TEST_CASE("a detached chain a Task handler starts on a core-cpp queue resumes after the handler has finished",
+          "[coroutine][model][foreign]") {
+    coro_test::SchedulerScope const timers;
+    morph::exec::ThreadPoolExecutor pool{2};
+    core::async::ThreadPoolExecutor foreign{1};
+    morph::exec::MainThreadExecutor exec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
+    armHold(&exec);
+    probe().queue = std::make_unique<core::async::AsyncQueue<int>>(foreign, core::async::AsyncQueueOptions{});
+
+    std::optional<int> result;
+    handler.execute(CoroDetach{.tag = 3})
+        .then([&](int value) { result = value; })
+        .onError([](const std::exception_ptr&) {});
+    REQUIRE(pumpUntil(exec, [&] { return result.has_value(); }));
+    REQUIRE(*result == 3);
+
+    // The push hands the parked chain -- a DetachedTask, whose claim is
+    // armed -- to the resumer it parked under. Dropping that claim would free
+    // the frame while its handle waits on the strand.
+    static_cast<void>(probe().queue->push(41));
+    REQUIRE(pumpUntil(exec, [&] { return probe().detached.load() == 41; }));
     probe().queue.reset();
 }
 

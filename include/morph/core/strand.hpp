@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -182,6 +183,16 @@ public:
         return _strands.trySubmit(key, handle);
     }
 
+    /// @brief Queues @p work on @p key's strand, holding its claim until it
+    ///        runs, unless the strands are closed.
+    /// @param key  The model instance.
+    /// @param work The coroutine and its claim; moved from only where this
+    ///        returns true.
+    /// @return Whether it was queued.
+    [[nodiscard]] bool trySubmit(ModelId key, ::core::async::ParkedWork& work) {
+        return _strands.trySubmit(key, work);
+    }
+
     /// @brief Whether the calling thread is inside a task of @p key's strand.
     /// @param key The model instance.
     /// @return True inside that strand's task, at any depth.
@@ -216,7 +227,7 @@ public:
     void close() { _strands.close(); }
 
     /// @brief Installs @p resumer's session and executor around every task of
-    ///        @p key's strand, until `withdraw(key)`.
+    ///        @p key's strand, until `withdraw(key, resumer)`.
     ///
     /// Called on the strand, when a Task handler starts. The action gate lets
     /// one action at a time run on a model instance, so a key has at most one
@@ -225,16 +236,21 @@ public:
     /// @param key     The model instance.
     /// @param resumer The handler's resumer.
     void enroll(ModelId key, const std::shared_ptr<TaskResumer>& resumer) {
-        std::scoped_lock const lock{_enrolledMtx};
+        std::unique_lock const lock{_enrolledMtx};
         _enrolled.insert_or_assign(key, resumer);
         _enrolledCount.store(_enrolled.size(), std::memory_order_release);
     }
 
-    /// @brief Ends `enroll(key, ...)`. Called when the handler has finished.
-    /// @param key The model instance.
-    void withdraw(ModelId key) {
-        std::scoped_lock const lock{_enrolledMtx};
-        _enrolled.erase(key);
+    /// @brief Ends `enroll(key, resumer)`. Called when the handler has
+    ///        finished; a key enrolled for another resumer since is left alone.
+    /// @param key     The model instance.
+    /// @param resumer The resumer that was enrolled for it.
+    void withdraw(ModelId key, const TaskResumer* resumer) {
+        std::unique_lock const lock{_enrolledMtx};
+        if (auto const found = _enrolled.find(key);
+            found != _enrolled.end() && found->second.lock().get() == resumer) {
+            _enrolled.erase(found);
+        }
         _enrolledCount.store(_enrolled.size(), std::memory_order_release);
     }
 
@@ -248,7 +264,9 @@ private:
     };
 
     CoreExecutorOver _base;
-    std::mutex _enrolledMtx;
+    /// Shared by the hook, which only reads: tasks of different keys do not
+    /// serialise on it while handlers are enrolled.
+    std::shared_mutex _enrolledMtx;
     /// How many keys are enrolled: the hook's one atomic load when none is.
     std::atomic<std::size_t> _enrolledCount{0};
     std::unordered_map<ModelId, std::weak_ptr<TaskResumer>, ModelIdHash> _enrolled;
@@ -294,10 +312,23 @@ public:
         }
     }
 
-    /// @brief As `submit(handle)`. The abandon claim is not taken: the driver
-    ///        owns every handler frame, so there is nothing here to free.
-    /// @param work The coroutine to resume.
-    void submit(::core::async::ParkedWork work) override { submit(work.resume); }
+    /// @brief Queues @p work's resumption on the model's strand, with its
+    ///        claim, or resumes it here once the strands are closed.
+    ///
+    /// The claim matters for a chain nobody owns: a `core::async::DetachedTask`
+    /// started inside the handler that parks on an awaitable resuming on the
+    /// current executor reaches here with its claim armed. Dropping the claim
+    /// would free that frame while its handle is still queued.
+    /// @param work The coroutine to resume, and its claim on the chain root.
+    void submit(::core::async::ParkedWork work) override {
+        if (_strands->trySubmit(_key, work)) {
+            return;
+        }
+        // Resumed, so the chain goes back to its owner: disarmed first, as
+        // core-cpp's own executors do before they resume a parked entry.
+        work.abandon.disarm();
+        resumeHere(work.resume);
+    }
 
     /// @brief Resumes @p handle on the calling thread, inside this resumer.
     /// @param handle The coroutine to resume.
@@ -332,7 +363,7 @@ inline void ModelStrands::AroundTask::operator()(const ModelId& key, ::core::asy
     }
     std::shared_ptr<TaskResumer> resumer;
     {
-        std::scoped_lock const lock{self->_enrolledMtx};
+        std::shared_lock const lock{self->_enrolledMtx};
         if (auto const found = self->_enrolled.find(key); found != self->_enrolled.end()) {
             resumer = found->second.lock();
         }

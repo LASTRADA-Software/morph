@@ -1371,7 +1371,7 @@ public:
             }
         }
         for (auto& [modelId, holder] : aware) {
-            _strands->post(modelId, [h = std::move(holder)]() mutable { h->onBackendChanged(); });
+            _strands->post(modelId, [held = std::move(holder)]() mutable { held->onBackendChanged(); });
         }
     }
 
@@ -1716,14 +1716,15 @@ private:
         if (!admitLocal(*run)) {
             return;
         }
+        std::shared_ptr<::morph::exec::detail::TaskResumer> executor;
         try {
             ::morph::session::detail::ScopedContext const scoped{run->session};
-            auto executor = std::make_shared<::morph::exec::detail::TaskResumer>(run->strands, run->mid, run->session);
+            executor = std::make_shared<::morph::exec::detail::TaskResumer>(run->strands, run->mid, run->session);
             run->strands->enroll(run->mid, executor);
             auto token = run->stopSource->get_token();
             run->localOpAsync(*run->holder, run->action, executor, std::move(token),
-                              [run](std::shared_ptr<void> value, std::exception_ptr error) {
-                                  run->strands->withdraw(run->mid);
+                              [run, resumer = executor.get()](std::shared_ptr<void> value, std::exception_ptr error) {
+                                  run->strands->withdraw(run->mid, resumer);
                                   // A handler whose last await resumed on
                                   // another executor -- a `core::net` loop --
                                   // ends there; what follows its end belongs
@@ -1734,7 +1735,7 @@ private:
                                                             });
                               });
         } catch (...) {
-            run->strands->withdraw(run->mid);
+            run->strands->withdraw(run->mid, executor.get());
             finishLocal(*run, nullptr, std::current_exception());
         }
     }
