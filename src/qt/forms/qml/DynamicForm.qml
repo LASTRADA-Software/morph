@@ -537,9 +537,9 @@ Frame {
 
     // Whether a host slot claims the member `name` -- the same resolution the
     // field delegate performs, so the two cannot disagree.
-    function slotClaims(name, xWidget, unitAscii, jsonType) {
+    function slotClaims(name, xWidget, unitAscii, jsonType, kind) {
         return slotRegistry !== null && slotRegistry !== undefined
-               && slotRegistry.resolve(actionType, name, xWidget, unitAscii, jsonType) !== null
+               && slotRegistry.resolve(actionType, name, xWidget, unitAscii, jsonType, kind) !== null
     }
 
     // Field descriptors for one object schema's properties, in x-order order.
@@ -619,11 +619,12 @@ Frame {
                 const isObjectArray = jsonTypes(itemSchema).indexOf("object") !== -1
                         && itemSchema.properties !== undefined
                 const jsonType = types.length > 0 ? types[0] : ""
+                const kind = fieldKind(p, types, dp, optionsAction, enumOptionRows.length > 0)
                 // Only a top-level collection is handed to a slot: its rows
                 // are stored in the collection's own fieldValues entry, which
                 // a member one level down does not have.
                 const claimedBySlot = depth === 0 && isObjectArray
-                        && slotClaims(name, opt(widget, ""), opt(extUnits.unitAscii, ""), jsonType)
+                        && slotClaims(name, opt(widget, ""), opt(extUnits.unitAscii, ""), jsonType, kind)
                 const derivedKey = function (slot) { return depth === 0 ? i18nFieldKey(name, slot) : undefined }
                 return {
                     name: name,
@@ -761,7 +762,7 @@ Frame {
                     xWidget: opt(widget, ""),
                     // The control this renderer would draw, named for
                     // SlotRegistry.byKind (see fieldKind).
-                    kind: fieldKind(p, types, dp, optionsAction, enumOptionRows.length > 0),
+                    kind: kind,
                     unitAscii: opt(extUnits.unitAscii, ""),
                     jsonType: jsonType
                 }

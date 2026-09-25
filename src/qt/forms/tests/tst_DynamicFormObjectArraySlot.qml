@@ -138,6 +138,20 @@ TestCase {
         compare(tags.unrepresentable, "")
     }
 
+    // A slot registered for the kind rather than the member claims the
+    // collection too: the claim is the delegate's own resolution, kind tier
+    // included, so a drawn grid is never left unencoded.
+    function test_a_slot_registered_by_kind_claims_the_collection() {
+        const registry = createTemporaryObject(registryComponent, testCase)
+        registry.byKind("objectArray", gridSlot)
+        const form = createTemporaryObject(gradingForm, testCase, { slotRegistry: registry })
+        const slot = findChild(form, "gridSlot")
+        verify(slot !== null)
+        compare(slot.field.kind, "objectArray")
+        compare(slot.field.claimedBySlot, true)
+        compare(slot.field.unrepresentable, "")
+    }
+
     // ── the element schema a grid draws its columns from ─────────────────────
 
     function test_the_slot_receives_the_element_members_in_order() {
