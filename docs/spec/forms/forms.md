@@ -977,8 +977,10 @@ a required member of any row is blank. An empty array is a value: `[]` is
 submitted for it.
 
 Cells are always read in the member's **canonical** unit: a row has no unit
-selector of its own. Only a **top-level** collection is handed to a slot; one
-nested inside a row, or inside a nested object, stays unrepresentable. A label
+selector of its own. Only a **top-level** collection is handed to a slot. One
+inside a [nested object a slot claims](#nested-objects--a-host-slot-draws-them)
+is encoded by that object's encoder, with the same row rules; one nested inside
+a row stays unrepresentable. A label
 inside a row resolves through an explicit `x-i18nKey` or its literal only — the
 derived `<action>.<field>` key names top-level members, and no row-level stem
 is defined on the C++ side.
@@ -986,6 +988,68 @@ is defined on the C++ side.
 `src/qt/forms/tests/tst_DynamicFormObjectArraySlot.qml` pins the contract
 against submitted bodies. Replacing the cell encoder with plain string quoting
 reddens 3 of its 19 cases.
+
+### Nested objects — a host slot draws them
+
+A member whose type is a struct — `IgnitionSpecimen specimen`, or
+`std::optional<PycnometerDetermination> determination1` — is an object schema
+with `properties`: inlined into the property when the type is used once,
+otherwise a `$ref` into `$defs`, and for a `std::optional` wrapped in
+`{"anyOf": [<that>, {"type": "null"}]}`. Its members are annotated like the
+action's own, `fieldMetadata` included, at every depth and through the
+`std::optional` (see [Nested aggregates](#nested-aggregates-recursive-cycle-safe)).
+The built-in controls cannot collect it, so the member is
+[unrepresentable](#what-ready-claims) — **unless a host
+[slot](#theming--component-override-registry) claims it**, exactly as for a
+[collection of objects](#collections-of-objects--a-host-slot-draws-them):
+
+| Field descriptor key | Meaning |
+|---|---|
+| `isObject` | `true` for a member whose schema resolves to an object with `properties` that no typed control claims — not a `Quantity` or a `Choice`, whose own controls encode their object shape. `kind` is `"object"`. |
+| `objectFields` | The object's member descriptors, in `x-order` order, the same shape as a top-level entry of `fields` (`label`, `unit`, `decimals`, `readOnly`, `required`, the kind flags, …). **Recursive:** a member that is itself an object carries its own `objectFields`, and a collection member its `itemFields`. Described for a top-level member and inside another nested object, down to `maxObjectDepth` (4) levels below the action, and never twice for the same `$defs` type on one path, so a self-referential type stops at its first repetition — that inner member is left unrepresentable. |
+| `claimedBySlot` | `true` when a registered slot resolves for this top-level member. `unrepresentable` is then `""`, for it and for every object or collection described inside it. |
+
+The slot edits the value as **cell texts**: `setObject({massOfContainer:
+"512.3", testTemperature: "538"})`, or `setValue` with the same object as JSON
+text. A leaf cell holds what the member's built-in control would hold, as in a
+row; a nested object member holds a nested object of the same shape; a
+collection member holds an array of row objects. The form encodes **every leaf
+with the encoder the same member would get at the top level**
+(`encodeFieldText`: locale normalisation, precision limit, declared bounds), a
+nested object recursively, and a collection with the row encoder. So for
+`MaxDensitySection { PycnometerTestData data; }`:
+
+```js
+setObject({ useSpecificGravity: "false", testLiquidTemperature: "25.0", testLiquidName: "",
+            determination1: { massPycnometerEmpty: "1450.10", massPycnometerAndSample: "3450.25",
+                              excluded: "false" },
+            determination2: {} })
+// → {"data":{"useSpecificGravity":false,"testLiquidTemperature":25.0,
+//            "determination1":{"massPycnometerEmpty":1450.10,"massPycnometerAndSample":3450.25,
+//                              "excluded":false}}}
+```
+
+- A **blank optional leaf** is omitted. A **blank optional object** — absent,
+  `{}`, or one whose every member is blank (an empty collection counts as
+  blank here) — is omitted too.
+- A **blank required leaf**, or a **blank required object**, makes the literal
+  `null`: no value, so the form is not ready. A required object therefore needs
+  at least one member filled to count as present, even when all of its own
+  members are optional. A value that is not an object, or a cell that does not
+  encode, does the same.
+- A top-level object left blank (`setObject({})`) is simply unfilled: omitted
+  when optional, the ordinary submit gate when required.
+
+Cells are read in each member's **canonical** unit. [Prefill](#prefill--loading-a-stored-payload-for-editing)
+decodes a stored object back into this shape (`decodeFieldValue`, member by
+member, the inverse of the encoder), so prefill → no edit → submit carries the
+same values; a stored optional object whose members are all absent decodes to
+nothing and is then omitted.
+
+`src/qt/forms/tests/tst_DynamicFormObjectSlot.qml` pins the contract against
+submitted bodies, with the two consumer shapes above (`BinderIgnitionSection`,
+`MaxDensitySection`). Replacing the leaf encoder with plain string quoting
+reddens 9 of its 24 cases.
 
 ### Boolean fields — `type: "boolean"`
 
@@ -1448,10 +1512,12 @@ fields" — advice no input can act on — and, being the label the
 [accessibility slice](#renderer-conformance-kit) mirrors into
 `Accessible.description`, announces it rather than merely tinting it.
 
-**A slot can supply the missing encoding for a collection of objects.** When a
-registered slot claims a top-level `std::vector<Row>` member, `unrepresentable`
-is `""` for it and the form encodes the rows the slot writes — see
-[Collections of objects](#collections-of-objects--a-host-slot-draws-them). The
+**A slot can supply the missing encoding for a collection of objects or a
+nested object.** When a registered slot claims a top-level `std::vector<Row>`
+member or a top-level struct member, `unrepresentable` is `""` for it and the
+form encodes the rows or members the slot writes — see
+[Collections of objects](#collections-of-objects--a-host-slot-draws-them) and
+[Nested objects](#nested-objects--a-host-slot-draws-them). The
 descriptor therefore depends on the slot registry as well as on the schema; the
 `fields` binding reads `SlotRegistry.revision`, so a slot registered after the
 form was built is picked up.
@@ -1585,7 +1651,7 @@ forking the renderer:
   built-in controls use, so an override participates in the required-gate and
   auto-fire without special-casing.
 
-  A slot may also declare any of four **optional** members, each assigned only
+  A slot may also declare any of six **optional** members, each assigned only
   when declared (so an existing slot is unaffected):
 
   | Member | Assigned as | Use |
@@ -1593,12 +1659,15 @@ forking the renderer:
   | `fieldText` | a binding to the field's retained text | Seed and track the control's value. A prefill, `resetFields()`, a `setFieldValue` from code and a tab switch that rebuilds the slot all reach it; without it a slot sees only what it wrote itself. |
   | `rows` | a binding to the rows of a [collection of objects](#collections-of-objects--a-host-slot-draws-them), as a JS array of `{member: cellText}` (`[]` when none) | Draw the grid. |
   | `setRows` | `function (rows)` | Write the rows; equivalent to `setValue(JSON.stringify(rows))`. |
+  | `objectValue` | a binding to the value of a [nested object](#nested-objects--a-host-slot-draws-them), as a JS object of `{member: cellText \| nestedValue}` (`{}` when blank) | Draw the sub-form. |
+  | `setObject` | `function (value)` | Write the object; equivalent to `setValue(JSON.stringify(value))`. |
   | `form` | the `DynamicForm` itself | Reach `encodeFieldText(field, text, 0)` (does this cell encode?) and the rest of the form's public surface. |
 
-  Both bindings re-evaluate on `rulesRevision`, which `revalidate()` bumps after
-  every write to the draft. A slot that claims a collection of objects is also
-  what makes that member representable — see
-  [Collections of objects](#collections-of-objects--a-host-slot-draws-them). `SlotRegistry.revision` is bumped on every
+  The bindings re-evaluate on `rulesRevision`, which `revalidate()` bumps after
+  every write to the draft. A slot that claims a collection of objects or a
+  nested object is also what makes that member representable — see
+  [Collections of objects](#collections-of-objects--a-host-slot-draws-them) and
+  [Nested objects](#nested-objects--a-host-slot-draws-them). `SlotRegistry.revision` is bumped on every
   `by*()` call and read inside `resolve()`, for the same reason
   `I18nCatalog.revision` exists: `_byField`/`_byWidget`/`_byUnit`/`_byType` are
   plain objects mutated in place, which does not by itself notify a binding
@@ -1620,7 +1689,7 @@ renderer would draw, decided in the order its encoder is chosen:
 | `date` | `format: "date"` (drawn as a plain text field by the built-in renderer) |
 | `quantity` | a `Quantity`, or any property with `x-decimalPlaces` |
 | `integer` / `boolean` / `number` | `type` of that name |
-| `object` | a nested aggregate (unrepresentable without a slot) |
+| `object` | a nested aggregate, plain or `std::optional` (unrepresentable without a slot; see [Nested objects](#nested-objects--a-host-slot-draws-them)) |
 | `string` | everything else |
 
 A host registers one kit component per kind (`byKind("quantity", …)`,
@@ -2979,7 +3048,10 @@ nested (a measurement with a repeated specimen sub-record, a document with a
 nested address, a category tree), including domains nested more than one
 level deep (an address with a nested geo-coordinate sub-record, say).
 
-Two schema shapes exist for a nested aggregate, and both are recursed into:
+A `std::optional<Sub>` member is recursed into as well: glaze wraps `Sub`'s
+schema in `{"anyOf": [<Sub>, {"type": "null"}]}`, and the non-null branch is
+annotated like a plain member's node. Two schema shapes exist for a nested
+aggregate, and both are recursed into:
 
 - **Deduplicated (`$ref`/`$defs`)** — glaze shares one `$defs` entry, `$ref`'d
   from every property, when the nested type is used **two or more times**
@@ -3218,8 +3290,11 @@ depends on the rendering answer yet.
 So: an action with a nested-aggregate member — cyclic or otherwise — is a
 document morph generates completely, a form morph draws only down to the
 nesting, and a body morph declines to assemble — unless the member is a
-top-level collection of objects a host slot draws, which the form then encodes
-row by row (see [Collections of objects](#collections-of-objects--a-host-slot-draws-them)).
+top-level collection of objects or a top-level nested object a host slot draws,
+which the form then encodes row by row or member by member (see
+[Collections of objects](#collections-of-objects--a-host-slot-draws-them) and
+[Nested objects](#nested-objects--a-host-slot-draws-them)). Everything above
+describes a member **no slot claims**, and is unchanged by that.
 
 Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
 only** regardless of nesting depth: a nested aggregate declaring any of those

@@ -26,10 +26,11 @@
 // collection whose items are objects -- is *unrepresentable*: no typed text
 // encodes to the shape the schema asks for. Such a member is named in its
 // field descriptor's `unrepresentable` and keeps the form short of `ready`
-// (docs/spec/forms/forms.md, "What `ready` claims"). The one exception is a
-// collection of objects a host slot claims (SlotRegistry): the slot edits the
-// rows as cell texts and this form encodes each cell with the same encoders
-// its own controls use -- see "Collections of objects" in forms.md.
+// (docs/spec/forms/forms.md, "What `ready` claims"). The exception is a
+// top-level collection of objects or nested object a host slot claims
+// (SlotRegistry): the slot edits the rows or members as cell texts and this
+// form encodes each cell with the same encoders its own controls use -- see
+// "Collections of objects" and "Nested objects" in forms.md.
 //
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
@@ -528,11 +529,32 @@ Frame {
     //
     // Reading the registry's revision makes a slot registered after the first
     // evaluation re-describe the member it claims: whether a collection of
-    // objects is representable depends on it (see describeObject).
+    // objects or a nested object is representable depends on it (see
+    // describeObject).
     property var fields: {
         if (slotRegistry)
             slotRegistry.revision
-        return describeObject(schemaData, 0)
+        return describeObject(schemaData, 0, "action", [])
+    }
+
+    // How deep `objectFields` / `itemFields` are described below the action.
+    // A bound on what a wide acyclic type graph can cost, not the cycle guard
+    // (that is describeObject's `refChain`).
+    readonly property int maxObjectDepth: 4
+
+    // The `$defs` reference a property's object schema comes from -- its own
+    // `$ref`, or a branch's for a nullable one -- or "" for an inlined one.
+    function objectRefName(raw) {
+        if (!raw)
+            return ""
+        if (typeof raw["$ref"] === "string")
+            return raw["$ref"]
+        const branches = Array.isArray(raw.anyOf) ? raw.anyOf : (Array.isArray(raw.oneOf) ? raw.oneOf : [])
+        for (let i = 0; i < branches.length; ++i) {
+            if (branches[i] && typeof branches[i]["$ref"] === "string")
+                return branches[i]["$ref"]
+        }
+        return ""
     }
 
     // Whether a host slot claims the member `name` -- the same resolution the
@@ -543,13 +565,17 @@ Frame {
     }
 
     // Field descriptors for one object schema's properties, in x-order order.
-    // `depth` is 0 for the action itself and 1 for the element of a top-level
-    // collection of objects (`itemFields` below); element members are
-    // described once and never recursed into further, so a self-referential
-    // row type cannot loop. At depth 1 a label resolves through an explicit
-    // x-i18nKey or the literal only: the derived "<action>.<field>" key names
-    // top-level members.
-    function describeObject(objectSchema, depth) {
+    // `depth` is 0 for the action itself and grows by one per level below it.
+    // `container` names what is described: "action" (depth 0), "object" (a
+    // nested object's members, `objectFields`) or "row" (a collection's
+    // element, `itemFields`). Only the action and a nested object describe
+    // their own object-valued members further; a row's members are described
+    // once and never recursed into. `refChain` holds the `$defs` references on
+    // the path here, so a self-referential type stops at its first repetition
+    // rather than looping, and `maxObjectDepth` bounds the rest. Below depth 0
+    // a label resolves through an explicit x-i18nKey or the literal only: the
+    // derived "<action>.<field>" key names top-level members.
+    function describeObject(objectSchema, depth, container, refChain) {
         const props = (objectSchema && objectSchema.properties) || {}
         const required = (objectSchema && objectSchema.required) || []
         return Object.keys(props)
@@ -618,13 +644,34 @@ Frame {
                 const itemSchema = types.indexOf("array") !== -1 ? resolveProp(p.items) : {}
                 const isObjectArray = jsonTypes(itemSchema).indexOf("object") !== -1
                         && itemSchema.properties !== undefined
+                // A nested aggregate (a plain or std::optional struct member):
+                // an object schema with members of its own that no typed
+                // control claims. A Quantity's {num,den,dp} object is claimed
+                // by its own control and is therefore not one.
+                const isObject = !typedControl && types.indexOf("object") !== -1 && p.properties !== undefined
                 const jsonType = types.length > 0 ? types[0] : ""
                 const kind = fieldKind(p, types, dp, optionsAction, enumOptionRows.length > 0)
-                // Only a top-level collection is handed to a slot: its rows
-                // are stored in the collection's own fieldValues entry, which
-                // a member one level down does not have.
-                const claimedBySlot = depth === 0 && isObjectArray
+                // Only a top-level member is handed to a slot: its value is
+                // stored in the member's own fieldValues entry, which a
+                // member one level down does not have.
+                const claimedBySlot = depth === 0 && (isObjectArray || isObject)
                         && slotClaims(name, opt(widget, ""), opt(extUnits.unitAscii, ""), jsonType, kind)
+                // Whether this member's own members are described: at the
+                // top level and inside a nested object, within the depth
+                // bound, and not for a type already on the path here.
+                const refName = objectRefName(isObjectArray ? raw.items : raw)
+                const describesNested = (container === "action" || container === "object")
+                        && depth < maxObjectDepth && (refName === "" || refChain.indexOf(refName) === -1)
+                const nestedChain = refName === "" ? refChain : refChain.concat([refName])
+                const objectFields = (isObject && describesNested)
+                        ? describeObject(p, depth + 1, "object", nestedChain) : []
+                const itemFields = (isObjectArray && describesNested)
+                        ? describeObject(itemSchema, depth + 1, "row", nestedChain) : []
+                // Inside a nested object, an object or collection member that
+                // is described is encoded by its container's encoder, so it is
+                // representable there.
+                const encodedByContainer = container === "object" && describesNested
+                        && (isObject || isObjectArray)
                 const derivedKey = function (slot) { return depth === 0 ? i18nFieldKey(name, slot) : undefined }
                 return {
                     name: name,
@@ -697,9 +744,18 @@ Frame {
                     // readOnly, required, and the kind flags that say how a
                     // cell's text is encoded). Empty for any other member.
                     isObjectArray: isObjectArray,
-                    itemFields: (isObjectArray && depth === 0) ? describeObject(itemSchema, depth + 1) : [],
-                    // True when a registered slot draws this collection, which
-                    // is what makes it representable (see `unrepresentable`).
+                    itemFields: itemFields,
+                    // A nested object, and -- at the top level and inside
+                    // another nested object -- its member descriptors in
+                    // x-order order, each carrying its own `objectFields` /
+                    // `itemFields` when it is an object or a collection too:
+                    // the layout a sub-form slot draws. Empty for any other
+                    // member.
+                    isObject: isObject,
+                    objectFields: objectFields,
+                    // True when a registered slot draws this collection or
+                    // object, which is what makes it representable (see
+                    // `unrepresentable`).
                     claimedBySlot: claimedBySlot,
                     // Why no control here can collect what the schema asks
                     // for, or "" for every member this renderer represents --
@@ -707,10 +763,13 @@ Frame {
                     // reason makes the member unencodable, so the form reports
                     // ready only for a payload that legitimately omits it.
                     //
-                    // A top-level collection of objects a slot claims is the
-                    // exception: the slot collects each row's cell texts and
-                    // encodeObjectArray encodes them, so an encoding exists.
-                    unrepresentable: claimedBySlot ? "" : unrepresentableMemberReason(p, types, typedControl),
+                    // A top-level collection of objects or nested object a
+                    // slot claims is the exception: the slot collects the cell
+                    // texts and encodeObjectArray / encodeObjectValue encode
+                    // them, so an encoding exists -- as it does for an object
+                    // or a collection described inside such an object.
+                    unrepresentable: (claimedBySlot || encodedByContainer)
+                                     ? "" : unrepresentableMemberReason(p, types, typedControl),
                     required: required.indexOf(name) !== -1,
                     // `resolveRef` merges the property node *over* the `$def`
                     // it points at, so these three read a per-field bound
@@ -1449,6 +1508,98 @@ Frame {
         return "[" + encodedRows.join(",") + "]"
     }
 
+    // A JSON object value that is neither an array nor an exact-integer
+    // wrapper (JsonExact) -- the shape a nested object's value takes.
+    function isPlainObject(value) {
+        return value !== null && typeof value === "object" && !Array.isArray(value) && !JsonExact.isExact(value)
+    }
+
+    // Whether a nested object's value holds nothing: absent, blank text, an
+    // empty collection, or an object all of whose members are blank in turn.
+    function objectValueBlank(value) {
+        if (value === undefined || value === null)
+            return true
+        if (typeof value === "string")
+            return value.trim() === ""
+        if (Array.isArray(value))
+            return value.length === 0
+        if (isPlainObject(value)) {
+            for (const key in value) {
+                if (!objectValueBlank(value[key]))
+                    return false
+            }
+            return true
+        }
+        return false
+    }
+
+    // A nested-object field's value, as the JS object a slot wrote with
+    // setObject (JSON text in fieldValues), or {} when there is none yet or
+    // the text is not an object.
+    function objectDraft(text) {
+        if (text === undefined || text === null || String(text).trim() === "")
+            return ({})
+        try {
+            const parsed = JSON.parse(text)
+            return isPlainObject(parsed) ? parsed : ({})
+        } catch (ignored) {
+            return ({})
+        }
+    }
+
+    // Whether a field's retained text counts as left blank: empty, or -- for
+    // a nested object -- an object that holds nothing (objectValueBlank).
+    function draftIsBlank(f, text) {
+        if (text === "")
+            return true
+        if (!f.isObject)
+            return false
+        try {
+            const parsed = JSON.parse(text)
+            return isPlainObject(parsed) && objectValueBlank(parsed)
+        } catch (ignored) {
+            return false
+        }
+    }
+
+    // Encodes a nested object from its members' cell texts: `value` is a JS
+    // object of `{member: cellText | nestedValue}`, keyed like `memberFields`
+    // (an `objectFields` list). A leaf cell goes through encodeFieldText with
+    // the member's own descriptor, exactly like a row cell in
+    // encodeObjectArray; a nested object member recurses, and a collection
+    // member (an array of row objects, or its JSON text) goes through
+    // encodeObjectArray. A blank optional member -- for a nested object, one
+    // that holds nothing -- is omitted. Returns null -- no literal -- when a
+    // member does not encode, or a required member is blank.
+    function encodeObjectValue(memberFields, value) {
+        const parts = []
+        for (let m = 0; m < memberFields.length; ++m) {
+            const member = memberFields[m]
+            const cell = value[member.name]
+            const blank = cell === undefined || cell === null
+                    || (typeof cell === "string" && cell.trim() === "")
+                    || (member.isObject && objectValueBlank(cell))
+            if (blank) {
+                if (member.required)
+                    return null
+                continue
+            }
+            if (member.unrepresentable !== "")
+                return null
+            let literal = null
+            if (member.isObject)
+                literal = isPlainObject(cell) ? encodeObjectValue(member.objectFields, cell) : null
+            else if (member.isObjectArray)
+                literal = encodeObjectArray(member, Array.isArray(cell) ? JSON.stringify(cell) : String(cell))
+            else
+                literal = encodeFieldText(member, String(cell), 0)
+            if (literal === null)
+                return null
+            parts.push(JSON.stringify(member.name) + ":" + literal)
+        }
+        return "{" + parts.join(",") + "}"
+    }
+
     function arrayJsonLiteral(text) {
         const items = text.split(",")
             .map(function (item) { return item.trim() })
@@ -1481,6 +1632,17 @@ Frame {
         // makes the form report ready.
         if (f.unrepresentable !== "")
             return null
+        if (f.isObject) {
+            let value
+            try {
+                value = JSON.parse(text)
+            } catch (ignored) {
+                return null
+            }
+            if (!isPlainObject(value) || objectValueBlank(value))
+                return null
+            return encodeObjectValue(f.objectFields, value)
+        }
         if (f.isObjectArray) {
             return encodeObjectArray(f, text)
         }
@@ -1648,7 +1810,7 @@ Frame {
             const text = (opt(fieldValues[f.name], "")).trim()
             const literal = fieldJsonLiteral(f)
             if (literal === null) {
-                if (text !== "" || f.required || isDynamicallyRequired(f.name)) {
+                if (!draftIsBlank(f, text) || f.required || isDynamicallyRequired(f.name)) {
                     ok = false
                     // An unrepresentable member blocks submission only when
                     // the payload would have to carry it -- the schema
@@ -1774,6 +1936,10 @@ Frame {
     function decodeFieldValue(f, value) {
         if (value === undefined || value === null)
             return ""
+        if (f.isObject) {
+            const cells = decodeObjectValue(f.objectFields, value)
+            return (cells === null || objectValueBlank(cells)) ? "" : JSON.stringify(cells)
+        }
         if (f.isObjectArray) {
             if (!Array.isArray(value))
                 return ""
@@ -1808,6 +1974,33 @@ Frame {
         if (f.isNumber)
             return numberDraftText(value, f.displayDecimals)
         return typeof value === "string" ? value : ""
+    }
+
+    // A nested object's wire value as the `{member: cellText | nestedValue}`
+    // object encodeObjectValue reads -- its inverse, member by member through
+    // decodeFieldValue, with a nested object that decodes to nothing and an
+    // absent member left out. A collection member decodes to its array of row
+    // cells. Returns null for a value that is not an object.
+    function decodeObjectValue(memberFields, value) {
+        if (!isPlainObject(value))
+            return null
+        const cells = {}
+        for (let m = 0; m < memberFields.length; ++m) {
+            const member = memberFields[m]
+            const memberValue = value[member.name]
+            if (memberValue === undefined || memberValue === null)
+                continue
+            if (member.isObject) {
+                const nested = decodeObjectValue(member.objectFields, memberValue)
+                if (nested !== null && !objectValueBlank(nested))
+                    cells[member.name] = nested
+                continue
+            }
+            const text = decodeFieldValue(member, memberValue)
+            if (text !== "")
+                cells[member.name] = member.isObjectArray ? JSON.parse(text) : text
+        }
+        return cells
     }
 
     // Canonical decimal text (-?\d+(\.\d+)?) in the display locale, as typed.
@@ -2207,8 +2400,10 @@ Frame {
                     // `fieldText` (the retained text, kept current -- a prefill,
                     // a reset or a rebuilt tab reaches the slot through it),
                     // `rows` / `setRows(rows)` (a collection of objects as a JS
-                    // array of {member: cellText}), and `form` (this form, for
-                    // encodeFieldText and the rest of its public surface).
+                    // array of {member: cellText}), `objectValue` /
+                    // `setObject(obj)` (a nested object as a JS object of
+                    // {member: cellText | nestedValue}), and `form` (this form,
+                    // for encodeFieldText and the rest of its public surface).
                     onLoaded: {
                         const name = fieldColumn.modelData.name
                         item.field = fieldColumn.modelData
@@ -2227,6 +2422,13 @@ Frame {
                             })
                         if ("setRows" in item)
                             item.setRows = function (rows) { form.setFieldValue(name, JSON.stringify(rows)) }
+                        if ("objectValue" in item)
+                            item.objectValue = Qt.binding(function () {
+                                form.rulesRevision
+                                return form.objectDraft(form.fieldValues[name])
+                            })
+                        if ("setObject" in item)
+                            item.setObject = function (value) { form.setFieldValue(name, JSON.stringify(value)) }
                         if ("form" in item)
                             item.form = form
                     }

@@ -341,21 +341,72 @@ struct BareQuantityRecord {
     BareQuantitySub bare;
 };
 
+// The two lab-section shapes a host slot draws: a required nested object, and
+// a nested object whose own members are *optional* nested objects (depth 2).
+// glaze spells `std::optional<Sub>` as an `anyOf` over Sub's schema and null,
+// which the recursion has to see through for Sub's FieldMeta to be emitted.
+struct IgnitionSpecimen {
+    double massOfContainer = 0.0;
+    std::optional<double> readoutBinderContent;
+    int testTemperature = 0;
+
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{.field = "massOfContainer", .unit = "g", .decimals = DecimalPlaces{1}},
+    };
+};
+
+struct BinderIgnitionSection {
+    IgnitionSpecimen specimen = {};
+    double calibrationFactor = 0.0;
+};
+
+struct PycnometerDetermination {
+    std::optional<double> massPycnometerEmpty;
+    double massPycnometerAndSample = 0.0;
+    bool excluded = false;
+
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{.field = "massPycnometerAndSample",
+                                .label = "Pycnometer + sample",
+                                .unit = "g",
+                                .decimals = DecimalPlaces{2}},
+    };
+};
+
+struct PycnometerTestData {
+    bool useSpecificGravity = false;
+    std::optional<double> testLiquidTemperature;
+    std::optional<PycnometerDetermination> determination1;
+    std::optional<PycnometerDetermination> determination2;
+};
+
+struct MaxDensitySection {
+    PycnometerTestData data;
+};
+
+// PycnometerDetermination used exactly once, through the optional.
+struct SingleOptionalRecord {
+    std::optional<PycnometerDetermination> only;
+};
+
 }  // namespace nestedforms
 
 using nestedforms::Attachment;
 using nestedforms::Ay;
 using nestedforms::BareQuantityRecord;
+using nestedforms::BinderIgnitionSection;
 using nestedforms::DeclaredOptionalRecord;
 using nestedforms::DeepChain;
 using nestedforms::DeepRecord;
 using nestedforms::DeepSpecimen;
 using nestedforms::kDeepChainLevels;
+using nestedforms::MaxDensitySection;
 using nestedforms::Origin;
 using nestedforms::PlainMetaRecord;
 using nestedforms::Provenance;
 using nestedforms::Record;
 using nestedforms::RichRecord;
+using nestedforms::SingleOptionalRecord;
 using nestedforms::SingleUseRecord;
 using nestedforms::SingleUseVectorRecord;
 using nestedforms::Specimen;
@@ -932,4 +983,75 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: a deep acyclic chain compiles and
     auto const* const leafOrder = morph::forms::detail::findMember(*leaf, "x-order");
     REQUIRE(leafOrder != nullptr);
     CHECK(leafOrder->get<std::uint64_t>() == 0);
+}
+
+// ── std::optional<Sub>: the object schema is inside the anyOf ───────────────
+
+namespace {
+
+// The non-null branch of the `anyOf` glaze writes for a `std::optional<T>`.
+const glz::generic_u64& nonNullBranch(const glz::generic_u64& property MORPH_LIFETIMEBOUND) {
+    REQUIRE(property.contains("anyOf"));
+    auto const& branches = property["anyOf"].get<glz::generic_u64::array_t>();
+    auto const found = std::find_if(branches.begin(), branches.end(), [](const glz::generic_u64& branch) {
+        auto const* const type = branch.contains("type") ? branch["type"].get_if<std::string>() : nullptr;
+        return type == nullptr || *type != "null";
+    });
+    REQUIRE(found != branches.end());
+    return *found;
+}
+
+}  // namespace
+
+TEST_CASE("Forms::SchemaJson::NestedAggregate: a required nested member's own FieldMeta unit and decimals are emitted",
+          "[forms][nested]") {
+    auto const schema = morph::forms::schemaJson<BinderIgnitionSection>();
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    auto const& def = resolveNestedSchema(dom, dom["properties"]["specimen"]);
+    auto const& mass = def["properties"]["massOfContainer"];
+    CHECK(mass["ExtUnits"]["unitAscii"].get<std::string>() == "g");
+    CHECK(mass["x-displayDecimals"].as<std::uint64_t>() == 1);
+    auto const requiredNames = requiredNamesOf(def);
+    CHECK(std::find(requiredNames.begin(), requiredNames.end(), "massOfContainer") != requiredNames.end());
+    CHECK(std::find(requiredNames.begin(), requiredNames.end(), "readoutBinderContent") == requiredNames.end());
+}
+
+TEST_CASE("Forms::SchemaJson::NestedAggregate: an optional nested member two levels down is annotated ($ref form)",
+          "[forms][nested]") {
+    auto const schema = morph::forms::schemaJson<MaxDensitySection>();
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    auto const& data = resolveNestedSchema(dom, dom["properties"]["data"]);
+    auto const dataRequired = requiredNamesOf(data);
+    CHECK(std::find(dataRequired.begin(), dataRequired.end(), "determination1") == dataRequired.end());
+    CHECK(data["properties"]["determination2"]["x-order"].as<std::uint64_t>() == 3);
+
+    // Used twice, so the optional's non-null branch is a $ref into $defs.
+    auto const& branch = nonNullBranch(data["properties"]["determination1"]);
+    REQUIRE(branch.contains("$ref"));
+    auto const& def = resolveNestedSchema(dom, branch);
+    CHECK(def["properties"]["massPycnometerEmpty"]["x-order"].as<std::uint64_t>() == 0);
+    CHECK(def["properties"]["massPycnometerEmpty"]["title"].get<std::string>() == "Mass Pycnometer Empty");
+    auto const& sample = def["properties"]["massPycnometerAndSample"];
+    CHECK(sample["title"].get<std::string>() == "Pycnometer + sample");
+    CHECK(sample["ExtUnits"]["unitUnicode"].get<std::string>() == "g");
+    CHECK(sample["x-displayDecimals"].as<std::uint64_t>() == 2);
+    CHECK(requiredNamesOf(def) == std::vector<std::string>{"massPycnometerAndSample", "excluded"});
+}
+
+TEST_CASE("Forms::SchemaJson::NestedAggregate: a singly-used optional nested member is annotated in its anyOf branch",
+          "[forms][nested]") {
+    auto const schema = morph::forms::schemaJson<SingleOptionalRecord>();
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    auto const& branch = nonNullBranch(dom["properties"]["only"]);
+    CHECK_FALSE(branch.contains("$ref"));  // used once -> inlined into the branch
+    auto const& def = resolveNestedSchema(dom, branch);
+    CHECK(def["properties"]["excluded"]["x-order"].as<std::uint64_t>() == 2);
+    CHECK(def["properties"]["massPycnometerAndSample"]["x-displayDecimals"].as<std::uint64_t>() == 2);
+    REQUIRE(def.contains("required"));
 }
