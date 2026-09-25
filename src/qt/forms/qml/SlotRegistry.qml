@@ -5,8 +5,8 @@
 // registry" / docs/planned/gui_renderer_toolkit.md). Entirely client-side: a
 // slot is a QML Component the host app registers; it never appears in the
 // schema or on the wire, and two renderers of the same schema may register
-// different slots. DynamicForm consults byField/byWidget/byUnit/byType in
-// that priority order and falls back to its own built-in control on a miss.
+// different slots. DynamicForm consults byField/byWidget/byUnit/byKind/byType
+// in that priority order and falls back to its own built-in control on a miss.
 
 import QtQuick
 
@@ -16,6 +16,7 @@ QtObject {
     property var _byField: ({})   // "action field" -> Component
     property var _byWidget: ({})  // x-widget id -> Component
     property var _byUnit: ({})    // unitAscii -> Component
+    property var _byKind: ({})    // renderer kind ("quantity", "choice", ...) -> Component
     property var _byType: ({})    // JSON type ("integer", "string", ...) -> Component
 
     // Bumped on every by*() registration. `_byField`/`_byWidget`/`_byUnit`/
@@ -51,6 +52,18 @@ QtObject {
         revision++
     }
 
+    /// Registers @p component for every field of the given renderer kind --
+    /// the control DynamicForm would otherwise draw, as its field
+    /// descriptor's `kind` names it: "quantity", "choice", "enum", "datetime",
+    /// "date", "boolean", "integer", "number", "string", "array",
+    /// "objectArray" or "object". Unlike the JSON type, a kind tells a
+    /// Quantity from a nested object, a Choice from an integer, and an enum or
+    /// a date-time from free text.
+    function byKind(kind, component) {
+        _byKind[kind] = component
+        revision++
+    }
+
     /// Registers @p component for every field of the given JSON Schema
     /// `type` (e.g. "integer", "string").
     function byType(jsonType, component) {
@@ -58,15 +71,18 @@ QtObject {
         revision++
     }
 
-    /// Resolution order: field -> x-widget -> unit -> type -> null
+    /// Resolution order: field -> x-widget -> unit -> kind -> type -> null
     /// (built-in). Returns the first matching Component, or null on a total
-    /// miss (DynamicForm then renders its own built-in control).
-    function resolve(action, field, xWidget, unitAscii, jsonType) {
+    /// miss (DynamicForm then renders its own built-in control). @p kind is
+    /// optional, so a caller passing the five original arguments resolves
+    /// exactly as before.
+    function resolve(action, field, xWidget, unitAscii, jsonType, kind) {
         registry.revision
         const key = action + " " + field
         if (_byField[key] !== undefined) return _byField[key]
         if (xWidget !== "" && _byWidget[xWidget] !== undefined) return _byWidget[xWidget]
         if (unitAscii !== "" && _byUnit[unitAscii] !== undefined) return _byUnit[unitAscii]
+        if (kind !== undefined && kind !== "" && _byKind[kind] !== undefined) return _byKind[kind]
         if (jsonType !== "" && _byType[jsonType] !== undefined) return _byType[jsonType]
         return null
     }
