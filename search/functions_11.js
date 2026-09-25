@@ -27,12 +27,13 @@ var searchData=
   ['resolve_24',['resolve',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ae001b18cfa29c76490d13960af9ae513',1,'morph::async::Completion::Promise']]],
   ['resolved_25',['resolved',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a5708d29e6b2c89001f5bf74eadf660a1',1,'morph::flows::FlowSession::resolved()'],['../d4/ddc/classmorph_1_1forms_1_1SectionSet.html#a3832a8d068e727605cd499ff472c79db',1,'morph::forms::SectionSet::resolved()']]],
   ['resolvetext_26',['resolveText',['../d8/d22/render_2i18n_8hpp.html#ae18339e4878ba6ecca8dde12df99bee0',1,'morph::render']]],
-  ['rotate_27',['rotate',['../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a8bf8b47e8ea1b01f4b30e5eea819b5bb',1,'morph::journal::FileActionLog']]],
-  ['roundedtodecimalplaces_28',['roundedToDecimalPlaces',['../d5/dda/structmorph_1_1units_1_1Quantity.html#af19ad973981224caceb822181204afaf',1,'morph::units::Quantity']]],
-  ['roundtodecimalplaces_29',['roundToDecimalPlaces',['../d1/de8/rational_8hpp.html#a4ccb9f13703cac09d8fc1db8b42a41b7',1,'morph::math']]],
-  ['rulekey_30',['ruleKey',['../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc',1,'morph::forms::i18n']]],
-  ['rulelist_31',['ruleList',['../d4/d11/forms_8hpp.html#a358de01c6c16cb34980b10c4f2a5f007',1,'morph::forms']]],
-  ['run_32',['run',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b',1,'morph::offline::SyncWorker']]],
-  ['runfor_33',['runFor',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9',1,'morph::exec::MainThreadExecutor']]],
-  ['runonce_34',['runOnce',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a0d4fd8fb8b80488a7a33f3a1100ae39e',1,'morph::exec::MainThreadExecutor']]]
+  ['result_27',['result',['../d5/db1/classmorph_1_1model_1_1ActionRecordingError.html#a0d7ed1325a3c68ab1c45b1064f5b63b3',1,'morph::model::ActionRecordingError']]],
+  ['rotate_28',['rotate',['../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a8bf8b47e8ea1b01f4b30e5eea819b5bb',1,'morph::journal::FileActionLog']]],
+  ['roundedtodecimalplaces_29',['roundedToDecimalPlaces',['../d5/dda/structmorph_1_1units_1_1Quantity.html#af19ad973981224caceb822181204afaf',1,'morph::units::Quantity']]],
+  ['roundtodecimalplaces_30',['roundToDecimalPlaces',['../d1/de8/rational_8hpp.html#a4ccb9f13703cac09d8fc1db8b42a41b7',1,'morph::math']]],
+  ['rulekey_31',['ruleKey',['../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc',1,'morph::forms::i18n']]],
+  ['rulelist_32',['ruleList',['../d4/d11/forms_8hpp.html#a358de01c6c16cb34980b10c4f2a5f007',1,'morph::forms']]],
+  ['run_33',['run',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b',1,'morph::offline::SyncWorker']]],
+  ['runfor_34',['runFor',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9',1,'morph::exec::MainThreadExecutor']]],
+  ['runonce_35',['runOnce',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a0d4fd8fb8b80488a7a33f3a1100ae39e',1,'morph::exec::MainThreadExecutor']]]
 ];

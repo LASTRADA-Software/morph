@@ -116,6 +116,7 @@ var annotated_dup =
       [ "model", null, [
         [ "ActionKeyTraits", "d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html", null ],
         [ "ActionLogPolicy", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],
+        [ "ActionRecordingError", "d5/db1/classmorph_1_1model_1_1ActionRecordingError.html", "d5/db1/classmorph_1_1model_1_1ActionRecordingError" ],
         [ "ActionTraits", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
         [ "ActionValidator", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
         [ "ModelKeyTraits", "d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html", null ],

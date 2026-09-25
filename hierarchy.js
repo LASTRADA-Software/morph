@@ -178,6 +178,7 @@ var hierarchy =
         [ "morph::journal::NullSinkError", "d6/d55/structmorph_1_1journal_1_1NullSinkError.html", null ],
         [ "morph::journal::SchemaMismatchError", "d6/dc8/structmorph_1_1journal_1_1SchemaMismatchError.html", null ],
         [ "morph::journal::SerializationError", "d6/d23/structmorph_1_1journal_1_1SerializationError.html", null ],
+        [ "morph::model::ActionRecordingError", "d5/db1/classmorph_1_1model_1_1ActionRecordingError.html", null ],
         [ "morph::model::ValidationError", "d7/d1a/structmorph_1_1model_1_1ValidationError.html", null ],
         [ "morph::offline::FileOfflineQueueError", "d6/d90/structmorph_1_1offline_1_1FileOfflineQueueError.html", null ],
         [ "morph::offline::OfflineQueueFullError", "d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html", null ],
