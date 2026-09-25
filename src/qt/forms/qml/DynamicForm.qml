@@ -18,6 +18,8 @@
 //   x-displayDecimals -> a plain number's display/entry precision: at most
 //                       that many fraction digits are accepted, and the
 //                       JSON-number encoding is kept (FieldMeta::decimals)
+//   x-blankAs: "empty" -> a string field cleared after a prefill or an edit
+//                       submits "" instead of being omitted
 //   x-submitMode: "explicit" -> suppresses auto-submit-on-validity; renders
 //                       an explicit Submit button (enabled only while ready)
 //                       instead -- see "Explicit submit mode" below
@@ -141,6 +143,11 @@ Frame {
     }
 
     property var fieldValues: ({})
+    // Wire names of the `x-blankAs: "empty"` fields engaged since the last
+    // prefill or reset -- prefilled with a value, or non-blank at any
+    // revalidate() since. Only an engaged field submits "" when blank; an
+    // untouched one is omitted as before.
+    property var blankEngaged: ({})
     property var fieldOptions: ({})
     property var fieldUnits: ({})
     property int optionsRevision: 0
@@ -823,7 +830,14 @@ Frame {
                     // SlotRegistry.byKind (see fieldKind).
                     kind: kind,
                     unitAscii: opt(extUnits.unitAscii, ""),
-                    jsonType: jsonType
+                    jsonType: jsonType,
+                    // `x-blankAs: "empty"` (FieldMeta::blankAs) on a plain
+                    // string member: once engaged, a blank control submits ""
+                    // rather than leaving the member out -- how an edit form
+                    // clears a stored std::optional<std::string>, where an
+                    // omitted member means "leave it unchanged". Ignored on
+                    // every other kind, whose blank has no "" spelling.
+                    blankAsEmpty: kind === "string" && opt(raw["x-blankAs"], p["x-blankAs"]) === "empty"
                 }
             })
     }
@@ -1808,7 +1822,16 @@ Frame {
         for (let i = 0; i < fields.length; ++i) {
             const f = fields[i]
             const text = (opt(fieldValues[f.name], "")).trim()
+            if (f.blankAsEmpty && text !== "")
+                blankEngaged[f.name] = true
             const literal = fieldJsonLiteral(f)
+            // A cleared x-blankAs field is an explicit empty string. A
+            // required one keeps the ordinary gate: blank is still unfilled.
+            if (literal === null && text === "" && f.blankAsEmpty && blankEngaged[f.name] === true
+                    && !f.required && !isDynamicallyRequired(f.name)) {
+                parts.push(JSON.stringify(f.name) + ":\"\"")
+                continue
+            }
             if (literal === null) {
                 if (!draftIsBlank(f, text) || f.required || isDynamicallyRequired(f.name)) {
                     ok = false
@@ -1901,6 +1924,7 @@ Frame {
         form.withoutAutoSubmit(function() {
             form.fieldValues = ({})
             form.fieldUnits = ({})
+            form.blankEngaged = ({})
             for (let i = 0; i < form.fields.length; ++i) {
                 const name = form.fields[i].name
                 const entry = form.findControl(form, "field_" + name)
@@ -2095,6 +2119,15 @@ Frame {
             }
             form.fieldValues = draft
             form.fieldUnits = ({})
+            // A stored string -- "" included -- engages its x-blankAs field,
+            // so clearing it, or submitting it untouched, sends "".
+            const engaged = {}
+            for (let j = 0; j < form.fields.length; ++j) {
+                const g = form.fields[j]
+                if (g.blankAsEmpty && typeof values[g.name] === "string")
+                    engaged[g.name] = true
+            }
+            form.blankEngaged = engaged
             form.prefillRevision++
             for (const parentName in form.dependents)
                 form.refreshDependents(parentName)

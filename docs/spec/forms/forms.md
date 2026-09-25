@@ -404,6 +404,7 @@ struct FieldMeta {
     std::optional<math::Rational> multipleOf{};  // disengaged = any value
     std::string_view unit{};                     // "" = no display unit (plain members only)
     std::optional<math::DecimalPlaces> decimals{};  // disengaged = no display precision
+    BlankAs blankAs{BlankAs::Omit};              // Empty = a cleared string submits "" (strings only)
 };
 
 struct RecordMeasurement {
@@ -610,6 +611,46 @@ struct RecordDensity {
 Neither is checked server-side. Like `placeholder`, they are presentation;
 the one gate that follows from `decimals` is the renderer's entry limit below.
 
+### Clearing a string in an edit form — `blankAs`
+
+A renderer omits a blank control from the payload, and for a create form that
+is right. An **edit** form prefilled from a stored record is different when the
+model reads an absent `std::optional<std::string>` as "leave unchanged" and
+`""` as "clear". There, a user who deletes a prefilled remark sends nothing,
+so the stored text survives. `FieldMeta::blankAs = BlankAs::Empty`
+(or `.withBlankAs(BlankAs::Empty)`) emits `"x-blankAs": "empty"`, which makes the
+blank control submit `""` — but only once the field is **engaged**:
+
+```cpp
+static constexpr std::array fieldMetadata{
+    FieldMeta{.field = "remark", .blankAs = BlankAs::Empty},
+};
+```
+
+| Field state (since the last `prefill` / `resetFields`) | Blank control submits |
+|---|---|
+| Prefilled with a string, `""` included | `"remark": ""` |
+| Non-blank at any point (typed into, `setFieldValue`, a slot's `setValue`), then cleared | `"remark": ""` |
+| Never prefilled with a string and never non-blank; a stored `null` counts as not prefilled | nothing (omitted, as before) |
+
+That rule has two consequences. A stored `""` round-trips: prefill → submit sends `""`.
+A create form in which the user types and then clears a field sends `""` as well.
+
+- **String members only.** The C++ side emits the key only on a
+  `std::string` / `std::optional<std::string>` member. `DynamicForm` reads it only
+  for a field of kind `string`, so a number, a closed set, a `Choice` or a
+  `Timestamp` ignores it. None of those has a `""` spelling.
+- **`required` is unchanged.** A required field left blank is still unfilled,
+  and the form is not ready.
+- **Presentation only.** Nothing changes on the wire or in the model. The key
+  only decides what a renderer assembles.
+
+`tests/test_forms_blank_as.cpp` pins the emission.
+`src/qt/forms/tests/tst_DynamicFormBlankAs.qml` (12 cases) pins the renderer
+against submitted bodies. Making a cleared field never submit `""` reddens 4 of
+those cases. Dropping the engagement rule, so an untouched field also submits
+`""`, reddens 6.
+
 ### Field metadata is not a security control
 
 `x-readonly` and `x-hidden` are presentation only. The field still travels in
@@ -634,8 +675,9 @@ member of the action at all.
 | `multipleOf` | property node (sibling of `$ref`) | number | The field's value must be an exact integer multiple of this, from `FieldMeta::multipleOf`. `1` is how "whole number" is spelled. Omitted when not declared, or when the declared value is not strictly positive. |
 | `ExtUnits` | property node (sibling of `$ref`) | object | A plain member's display unit, from `FieldMeta::unit`, as `{"unitAscii": unit, "unitUnicode": unit}` — the shape a `Quantity` carries. Omitted when empty, and never emitted for a `Quantity` member. See [Display unit and decimals](#display-unit-and-decimals-for-a-plain-member--unit--decimals). |
 | `x-displayDecimals` | property node (sibling of `$ref`) | non-negative integer | A plain number's display and entry precision, from `FieldMeta::decimals`. Omitted when disengaged, above `kMaxDecimalPlaces`, or on a `Quantity` member. |
+| `x-blankAs` | property node (sibling of `$ref`) | string | `"empty"`, from `FieldMeta::blankAs = BlankAs::Empty`: once engaged, a blank string field submits `""` instead of being omitted. Emitted only for `Empty` on a `std::string` / `std::optional<std::string>` member. See [Clearing a string in an edit form](#clearing-a-string-in-an-edit-form--blankas). |
 
-All twelve keys are additive and non-breaking, extending the renderer-contract
+All thirteen keys are additive and non-breaking, extending the renderer-contract
 table below without renaming or retyping any existing key, per this program's
 versioning stance (see "Design principle" above). A
 renderer that ignores them falls back to today's behavior exactly: it shows
