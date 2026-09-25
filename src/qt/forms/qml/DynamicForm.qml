@@ -1892,11 +1892,7 @@ Frame {
     function prefill(values) {
         if (values === null || typeof values !== "object" || Array.isArray(values) || JsonExact.isExact(values))
             return false
-        // Not withoutAutoSubmit: that revalidates *after* lifting the
-        // suppression, and a prefilled form is usually ready, so the final
-        // pass would submit the record the user only opened.
-        form.programmaticEdit++
-        try {
+        form.withoutAutoSubmit(function () {
             const draft = {}
             for (let i = 0; i < form.fields.length; ++i) {
                 const f = form.fields[i]
@@ -1909,10 +1905,7 @@ Frame {
             form.prefillRevision++
             for (const parentName in form.dependents)
                 form.refreshDependents(parentName)
-            form.revalidate()
-        } finally {
-            form.programmaticEdit--
-        }
+        })
         return true
     }
 
