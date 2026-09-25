@@ -1520,6 +1520,72 @@ and `byType` remains the fallback for a kind with none. Pinned by
 `src/qt/forms/tests/tst_SlotRegistryByKind.qml`; removing the tier from
 `resolve()` reddens 4 of its 5 cases.
 
+### Chrome slots
+
+Field slots replace a field's *control*. Everything around the controls — the
+caption, the help line, the section card, the tab bar, the heading, the status
+line, the submit button, the JSON preview and the reply line — is chrome, and a
+host whose visuals come from one UI kit needs to replace that too, or its forms
+stay half-restyled. `SlotRegistry.byChrome(role, component)` registers one
+Component per role, `resolveChrome(role)` returns it (or `null`), and
+`DynamicForm` loads it **in place of** the built-in for that role — the built-in
+is hidden, not drawn beside it:
+
+| Role | Replaces | Members assigned (each only if declared) |
+|---|---|---|
+| `fieldLabel` | the caption and red `*` of every field | `field`, `text` (label), `required` (live, includes `requiredWhen`), `invalid` (live: typed text that does not encode) |
+| `fieldHelp` | the help line of a field that has one | `field`, `text` |
+| `section` | a titled `"section"` group (and `"accordion"`, when no `accordion` chrome is registered) | `title`, `kind`, `section` (`{title, kind, fields}`); **must declare `contentItem`** |
+| `accordion` | a collapsible `"accordion"` group | as `section`; collapsing is the chrome's own |
+| `tabset` | a run of consecutive `"tab"` groups | `tabs` (`[{title}]`), reads the chrome's own `currentIndex`; **must declare `contentItem`** |
+| `header` | the action-type heading | `text` |
+| `status` | the "fill the required (\*) fields" / ready line | `text` (`DynamicForm.statusText`), `ready`, `reason` (`unrepresentableReason`), `explicitSubmit` |
+| `submitButton` | the explicit-mode Submit button | `ready`, `submit()` |
+| `preview` | the monospace JSON preview | `text` (`previewLine`) |
+| `result` | the `ok:`/`err:` reply line | `text`, `ok` |
+
+`CollectionView` and `WizardView` read the same registry for chrome roles of
+their own (`collectionHeader`, `collectionRow`, `confirmDialog`,
+`editorDialog`; `wizardHeader`, `wizardNav` — see
+[views.md](views.md#chrome-slots-and-the-embedded-editors) and
+[workflows_navigation.md](workflows_navigation.md#chrome-slots)), and hand it on
+to every `DynamicForm` they embed. `DateTimePicker` has no chrome of its own: a
+host replaces the whole picker with a field slot (`byKind("datetime", …)`,
+#812).
+
+Every chrome item is also offered `form` (the `DynamicForm`). Values that change
+are assigned as bindings. A role with no registration keeps the built-in
+exactly, so an app that registers nothing sees no change. To **remove** a piece
+of chrome, register an empty `Item`; `preview` and `result` chrome are loaded
+whatever their text, so an app that wants them decides itself when an empty one
+shows.
+
+**Container chrome hosts the fields; it does not re-create them.** For
+`section`, `accordion` and `tabset`, the form creates its field grid (two
+columns, `x-colspan` honoured, the same field delegates) as a child of the
+chrome's `contentItem`, which is expected to be a Layout — a `ColumnLayout` is
+enough. The built-in grid's `Repeater` is emptied under a chrome, so each field
+exists once and its `field_<name>` `objectName` stays unique: prefill,
+`resetFields()` and every test that finds a control by name keep working. A
+`tabset` chrome owns `currentIndex`; the form shows the selected tab's fields
+and, as with the built-in tab bar, rebuilds them on every switch (they re-seed
+from `fieldValues`). The implicit untitled `"flat"` group has no chrome.
+
+`submit()` goes through `DynamicForm.submit()`, whose `ready` guard applies to a
+chrome button exactly as to the built-in one.
+
+`DynamicForm` itself is a `Frame`: its outer border and padding are the
+`Frame`'s `background` and `padding`, which a host sets on the instance
+(`background: null`, `padding: 0`) — no slot is needed for them. The controls a
+field slot does not replace are the style's own `QtQuick.Controls` types; no
+style is imported, so they follow whichever style the application selects.
+
+`src/qt/forms/tests/tst_DynamicFormChrome.qml` pins each role — values handed
+over, built-in hidden, fields created once inside a container — and a form with
+every role registered showing no built-in `Label`, `Button` or `TabBar`.
+Restoring the built-in section `Repeater` under a chrome reddens the
+fields-created-once case.
+
 The registry never appears in the schema or on the wire — two renderers of the
 same schema may register different slots. This is the "escape hatch always
 available" design principle ([above](#design-principle-infer-by-default-declare-to-override))

@@ -285,6 +285,21 @@ over) draft keys on a name collision, mirroring `FlowSession::captureResult`'s
 precedence exactly, just implemented as plain JSON manipulation instead of
 the typed template API (see [Design decisions](#design-decisions)).
 
+### Chrome slots
+
+`WizardView.slotRegistry` (null by default) is handed to every step's
+`DynamicForm`, and two chrome roles replace the stepper's own chrome
+([forms.md, "Chrome slots"](forms.md#chrome-slots)):
+
+| Role | Replaces | Members |
+|---|---|---|
+| `wizardHeader` | the "title (n / m)" heading | `title`, `stepIndex`, `stepCount`, `stepTitle` |
+| `wizardNav` | Back / Next and the last-step note | `canBack`, `canNext`, `lastStep`, `stepIndex`, `stepCount`, `back()`, `next()` |
+
+`next()` is gated by `canNext` — the current step's action must have replied
+ok — exactly as the built-in Next button is, and runs the same prefill.
+Pinned by `src/qt/forms/tests/tst_ViewChrome.qml`.
+
 ## API reference
 
 ### `morph::flows`
