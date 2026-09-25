@@ -297,6 +297,63 @@ struct ValidationError : std::runtime_error {
         : std::runtime_error("action failed validation: " + std::string{modelType} + "/" + std::string{actionType}) {}
 };
 
+/// @brief Thrown when an action executed and its mutation committed, but the
+///        framework could not finish reporting that success.
+///
+/// Raised by the two sites that actually run `Model::execute` — the server
+/// dispatch path (`morph::model::detail::ActionDispatcher::registerAction`'s
+/// runner) and the in-process path (`Bridge::executeVia`'s `localOp`,
+/// `bridge.hpp`) — for anything that fails *after* `Model::execute` returned:
+/// serialising the result (`ActionTraits<Action>::resultToJson`, which throws
+/// `detail::ParseError`) and appending the journal entry (a
+/// `journal::IActionLog` whose `append` could not reach its backend, which
+/// `action_log.hpp` requires it to signal by throwing).
+///
+/// It exists because those failures are not execution failures and must not be
+/// reported as one. An action whose journal append throws has already changed
+/// the model; telling the caller the action was rejected invites a retry of a
+/// write that landed, and recording `journal::Outcome::Failed` for it puts a
+/// permanent lie in the audit trail, attributed to the action rather than to
+/// the infrastructure that failed. So a post-execution failure is a distinct
+/// type carrying a distinct message: the action ran, the reporting did not.
+///
+/// No journal entry is written when the throw came from `resultToJson`. A
+/// `Succeeded` entry carries the result by definition (see
+/// `docs/spec/journal/journal.md`, `LogEntry::result`), and there is none to
+/// carry; the caller is told instead, which is the only channel left.
+///
+/// Deriving from `std::runtime_error` keeps existing `catch (const
+/// std::exception&)` handling working — `RemoteServer::dispatchExecute`'s
+/// strand catch still turns this into an `err` reply, and `LocalBackend`'s
+/// still rejects the `Completion` — while a caller that wants to tell a
+/// committed-but-unrecorded action from a rejected one can catch this type and
+/// read `result()`.
+class ActionRecordingError : public std::runtime_error {
+public:
+    /// @brief Constructs the error with a message of the form
+    ///        `"action executed but was not recorded: <cause>"`.
+    /// @param result JSON-encoded result of the committed action, or `""` when
+    ///               serialising it is what failed.
+    /// @param cause  `std::exception::what()` from the failure that stopped the
+    ///               recording.
+    ActionRecordingError(std::string result, std::string cause)
+        : std::runtime_error("action executed but was not recorded: " + cause),
+          _result(std::move(result)),
+          _cause(std::move(cause)) {}
+
+    /// @brief Returns the committed action's JSON-encoded result.
+    /// @return The result JSON, or `""` when `resultToJson` is what threw.
+    [[nodiscard]] const std::string& result() const noexcept { return _result; }
+
+    /// @brief Returns the underlying failure's message, without this type's prefix.
+    /// @return `std::exception::what()` of the failure that stopped the recording.
+    [[nodiscard]] const std::string& cause() const noexcept { return _cause; }
+
+private:
+    std::string _result;
+    std::string _cause;
+};
+
 /// @brief Whether an action's executions are recorded to an attached action log.
 ///
 /// A strong type instead of a bare `bool` so registration call sites read as
@@ -612,8 +669,17 @@ public:
     /// successful `Model::execute` with `outcome = Outcome::Succeeded` and the
     /// JSON result, and equally on a thrown `std::exception` (a validation
     /// failure, a rejected write) with `outcome = Outcome::Failed` and
-    /// `error = what()`, `result` empty. Either way the exception (if any)
-    /// propagates unchanged after the entry is recorded.
+    /// `error = what()`, `result` empty. An exception from `Model::execute`
+    /// propagates unchanged after the `Failed` entry is recorded.
+    ///
+    /// `Outcome::Failed` means the model rejected the action, and nothing else:
+    /// only `Model::execute` can produce it. Serialising the result and
+    /// appending the entry both run after the model's mutation has committed,
+    /// and both can throw -- `resultToJson` raises `detail::ParseError`, and a
+    /// sink that could not reach its backend is required to say so by throwing
+    /// (`journal/action_log.hpp`). Those surface as `ActionRecordingError`, so
+    /// a committed write is never reported to the caller, or filed in the
+    /// audit trail, as a rejected one.
     ///
     /// Every recorded entry is stamped with `payloadFingerprint<Action>()` in
     /// `LogEntry::schema`, and the same fingerprint is filed under
@@ -622,6 +688,8 @@ public:
     /// shape which wrote an entry is not the shape it is about to decode it
     /// with -- see `docs/spec/journal/journal.md`, "Payload schema fingerprint".
     /// @throws ValidationError if the decoded action fails `ActionValidator<Action>::ready`.
+    /// @throws ActionRecordingError if the action executed but its result could
+    ///         not be serialised or its journal entry could not be appended.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
         ActionEntry& entry = _actions[Key{std::string{modelId}, std::string{actionId}}];
@@ -665,15 +733,55 @@ public:
                 throw ValidationError{ModelTraits<Model>::typeId(), ActionTraits<Action>::typeId()};
             }
             auto& model = holder.template into<Model>();
-            // Both the success and failure paths below record a journal entry
-            // (when a log is attached and Action is loggable) so a rejected or
-            // throwing execution -- a validation failure, a lost connection, a
-            // rejected write -- still leaves an audit trail, not silence. The
-            // exception is rethrown unchanged either way; only the outcome
-            // shape differs. See docs/spec/journal/journal.md, "Outcome".
+            // Model::execute is the only call inside this try, because it is
+            // the only one whose failure means the action was rejected. A
+            // rejected or throwing execution -- a validation failure, a lost
+            // connection, a rejected write -- records Outcome::Failed (when a
+            // log is attached and Action is loggable) so it leaves an audit
+            // trail rather than silence, and the exception is rethrown
+            // unchanged. See docs/spec/journal/journal.md, "Outcome".
+// MSVC's C4702 fires on the `return` below for any action whose handler never
+// returns -- a test double whose body is a bare `throw`, for instance. The
+// warning is correct for that instantiation and wrong as a verdict on this
+// statement, which every other instantiation reaches. It is suppressed here
+// rather than in each translation unit that instantiates such a handler,
+// because the set of those is open-ended: eleven test files already qualify.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
+            auto result = [&] {
+                try {
+                    return model.execute(action);
+                } catch (const std::exception& exc [[maybe_unused]]) {
+                    if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
+                        if (holder.hasActionLog()) {
+                            detail::recordActionFailure(holder, std::string{ModelTraits<Model>::typeId()},
+                                                        std::string{ActionTraits<Action>::typeId()},
+                                                        std::string{payloadJson},
+                                                        detail::actionPayloadSchema<Action>(), exc.what());
+                        }
+                    }
+                    throw;
+                }
+            }();
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+            // Past this point the model's mutation has committed, so neither
+            // step below may be reported as an execution failure. Both can
+            // still throw -- resultToJson raises ParseError, and a sink that
+            // could not reach its backend is required to throw (see
+            // journal/action_log.hpp) -- and inside the try above that throw
+            // would tell the caller a durable write was rejected and file an
+            // Outcome::Failed entry naming the infrastructure fault as the
+            // action's own error. ActionRecordingError instead says what is
+            // true: the action ran, the reporting of it did not. A throw from
+            // resultToJson leaves no entry at all, because a Succeeded entry
+            // carries the result and there is none to carry.
+            std::string resultJson;
             try {
-                auto result = model.execute(action);
-                auto resultJson = ActionTraits<Action>::resultToJson(result);
+                resultJson = ActionTraits<Action>::resultToJson(result);
                 if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
                     if (holder.hasActionLog()) {
                         // entityKey/principal/timestampMs are filled in by recordIfAttached.
@@ -683,18 +791,10 @@ public:
                                                     resultJson);
                     }
                 }
-                return resultJson;
-            } catch (const std::exception& exc [[maybe_unused]]) {
-                if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
-                    if (holder.hasActionLog()) {
-                        detail::recordActionFailure(holder, std::string{ModelTraits<Model>::typeId()},
-                                                    std::string{ActionTraits<Action>::typeId()},
-                                                    std::string{payloadJson}, detail::actionPayloadSchema<Action>(),
-                                                    exc.what());
-                    }
-                }
-                throw;
+            } catch (const std::exception& exc) {
+                throw ActionRecordingError{std::move(resultJson), exc.what()};
             }
+            return resultJson;
         };
         entry.coalesce = ActionLogPolicy<Action>::coalesce;
         entry.schema = detail::actionPayloadSchema<Action>();

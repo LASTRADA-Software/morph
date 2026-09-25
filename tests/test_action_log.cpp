@@ -142,6 +142,133 @@ struct morph::model::ModelTraits<ALLegacyModel> {
     static constexpr std::string_view typeId() { return "AL_LegacyModel"; }
 };
 
+// A result this build cannot serialise: resultToJson throws where a real one
+// raises ParseError on a glaze write error. Serialisation runs after the model
+// has already mutated, so it is the same post-commit failure as a refused
+// journal append, with no journal involved.
+struct ALUnserialisableAction {
+    int amount = 0;
+};
+struct ALUnserialisableModel {
+    int balance = 0;
+    int execute(const ALUnserialisableAction& a) {
+        balance += a.amount;
+        return balance;
+    }
+};
+
+template <>
+struct morph::model::ActionTraits<ALUnserialisableAction> {
+    using Result = int;
+    static constexpr std::string_view typeId() { return "AL_Unserialisable"; }
+    static std::string toJson(const ALUnserialisableAction& a) {
+        return R"({"amount":)" + std::to_string(a.amount) + "}";
+    }
+    static ALUnserialisableAction fromJson(std::string_view json) {
+        ALUnserialisableAction action{};
+        auto pos = json.find(':');
+        if (pos != std::string_view::npos) {
+            action.amount = std::stoi(std::string{json.substr(pos + 1)});
+        }
+        return action;
+    }
+    static std::string resultToJson(const int& /*r*/) {
+        throw morph::model::detail::ParseError{"result will not serialise"};
+    }
+    static int resultFromJson(std::string_view s) { return std::stoi(std::string{s}); }
+};
+template <>
+struct morph::model::ModelTraits<ALUnserialisableModel> {
+    static constexpr std::string_view typeId() { return "AL_UnserialisableModel"; }
+};
+
+// A sink that refuses to record a success.
+//
+// `IActionLog::append` must throw when the entry did not reach the backend --
+// the return type is `void`, so there is no other channel -- and `FileActionLog`
+// does exactly that from eighteen sites; a full disk or a revoked permission
+// reaches it in production. The refusal is aimed at `Outcome::Succeeded` only, so
+// one sink proves both halves at once: that a committed action is not misreported
+// as rejected, and that a genuinely rejected one still records `Outcome::Failed`.
+namespace {
+class SuccessRefusingLog : public IActionLog {
+public:
+    void append(LogEntry entry) override {
+        std::scoped_lock const lock{_mtx};
+        _offered.push_back(entry);
+        if (entry.outcome == morph::journal::Outcome::Succeeded) {
+            throw std::runtime_error("journal sink unavailable");
+        }
+        entry.seq = ++_seq;
+        _stored.push_back(std::move(entry));
+    }
+
+    void flush() override {}
+
+    [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
+        std::scoped_lock const lock{_mtx};
+        if (entityKey.empty()) {
+            return _stored;
+        }
+        std::vector<LogEntry> out;
+        for (const auto& entry : _stored) {
+            if (entry.entityKey == entityKey) {
+                out.push_back(entry);
+            }
+        }
+        return out;
+    }
+
+    /// Every entry the framework asked this sink to record, including the ones it
+    /// refused -- the stronger of the two views, because it also catches a Failed
+    /// entry that was offered and then dropped rather than never written.
+    [[nodiscard]] std::vector<LogEntry> offered() const {
+        std::scoped_lock const lock{_mtx};
+        return _offered;
+    }
+
+private:
+    mutable std::mutex _mtx;
+    std::vector<LogEntry> _stored;
+    std::vector<LogEntry> _offered;
+    std::uint64_t _seq = 0;
+};
+
+// What a caller actually learned from one execution: the dynamic type it saw,
+// and the strings it could read off it.
+struct Reported {
+    bool recordingError = false;
+    std::string what;
+    std::string cause;
+    std::string result;
+};
+
+Reported reportedFrom(const std::exception_ptr& eptr) {
+    Reported seen;
+    try {
+        std::rethrow_exception(eptr);
+    } catch (const morph::model::ActionRecordingError& err) {
+        seen.recordingError = true;
+        seen.what = err.what();
+        seen.cause = err.cause();
+        seen.result = err.result();
+    } catch (const std::exception& exc) {
+        seen.what = exc.what();
+    }
+    return seen;
+}
+
+template <typename Fn>
+Reported reportedFromCall(Fn&& call) {
+    try {
+        std::forward<Fn>(call)();
+    } catch (...) {
+        return reportedFrom(std::current_exception());
+    }
+    return Reported{};
+}
+}  // namespace
+
 // A model that reads morph::journal::isReplaying() from inside execute() --
 // the shape Phase 6's rules engine will use to suppress rule evaluation.
 struct RMModel {
@@ -481,6 +608,185 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when
     REQUIRE(entries[0].result.empty());
     REQUIRE(entries[0].outcome == morph::journal::Outcome::Failed);
     REQUIRE(entries[0].error == "insufficient funds");
+}
+
+// ── A refused recording is not an execution failure ──────────────────────────
+
+TEST_CASE("ActionDispatcher: a sink that refuses the success append does not report the action as failed",
+          "[action_log][dispatch]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<ALModel>("AL_Model");
+    dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
+
+    auto holder = registry.create("AL_Model");
+    auto log = std::make_shared<SuccessRefusingLog>();
+    holder->attachActionLog(log, "acct-sink-down");
+
+    auto depositJson = morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10});
+    auto seen = reportedFromCall([&] { dispatcher.dispatch("AL_Model", "AL_Deposit", *holder, depositJson); });
+
+    // The mutation is durable. That was never in question -- what the caller is
+    // told about it is.
+    REQUIRE(holder->into<ALModel>().balance == 10);
+
+    // 1. The caller learns the action ran and was not recorded, as a distinct
+    //    type carrying the committed result -- not as the model refusing the
+    //    write, and not as the sink's bare message.
+    REQUIRE(seen.recordingError);
+    REQUIRE(seen.what == "action executed but was not recorded: journal sink unavailable");
+    REQUIRE(seen.cause == "journal sink unavailable");
+    REQUIRE(seen.result == "10");
+
+    // 2. No Outcome::Failed entry exists for the committed mutation -- none
+    //    stored, and none even offered to the sink.
+    REQUIRE(log->entries().empty());
+    REQUIRE(log->offered().size() == 1);
+    REQUIRE(log->offered()[0].outcome == morph::journal::Outcome::Succeeded);
+    for (const auto& entry : log->offered()) {
+        REQUIRE(entry.outcome != morph::journal::Outcome::Failed);
+    }
+}
+
+TEST_CASE("ActionDispatcher: a genuine Model::execute throw still records Outcome::Failed with the model's message",
+          "[action_log][dispatch]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<ALModel>("AL_Model");
+    dispatcher.registerAction<ALModel, ALWithdraw>("AL_Model", "AL_Withdraw");
+
+    auto holder = registry.create("AL_Model");
+    // The same refusing sink: it accepts Failed appends, so the only thing that
+    // can change this outcome is the framework deciding a rejected action is a
+    // recording problem.
+    auto log = std::make_shared<SuccessRefusingLog>();
+    holder->attachActionLog(log, "acct-refusing");
+
+    auto withdrawJson = morph::model::ActionTraits<ALWithdraw>::toJson(ALWithdraw{.amount = 50});
+    auto seen = reportedFromCall([&] { dispatcher.dispatch("AL_Model", "AL_Withdraw", *holder, withdrawJson); });
+
+    // 3. The regression this fix could easily cause: a rejected action must
+    //    still surface the model's own exception, unwrapped.
+    REQUIRE_FALSE(seen.recordingError);
+    REQUIRE(seen.what == "insufficient funds");
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].outcome == morph::journal::Outcome::Failed);
+    REQUIRE(entries[0].error == "insufficient funds");
+    REQUIRE(entries[0].result.empty());
+}
+
+TEST_CASE("ActionDispatcher: a result that will not serialise is not recorded as a rejected action",
+          "[action_log][dispatch]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<ALUnserialisableModel>("AL_UnserialisableModel");
+    dispatcher.registerAction<ALUnserialisableModel, ALUnserialisableAction>("AL_UnserialisableModel",
+                                                                             "AL_Unserialisable");
+
+    auto holder = registry.create("AL_UnserialisableModel");
+    auto log = std::make_shared<InMemoryActionLog>();
+    holder->attachActionLog(log, "acct-unserialisable");
+
+    auto seen = reportedFromCall(
+        [&] { dispatcher.dispatch("AL_UnserialisableModel", "AL_Unserialisable", *holder, R"({"amount":7})"); });
+
+    REQUIRE(holder->into<ALUnserialisableModel>().balance == 7);
+    REQUIRE(seen.recordingError);
+    REQUIRE(seen.cause == "result will not serialise");
+    // No result survived serialisation, so there is none to hand back and none
+    // to record: a Succeeded entry carries the result by definition, so the
+    // entry is omitted rather than written empty.
+    REQUIRE(seen.result.empty());
+    REQUIRE(log->entries().empty());
+}
+
+TEST_CASE("Bridge/LocalBackend: a sink that refuses the success append does not report the action as failed",
+          "[action_log][bridge]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    auto log = std::make_shared<SuccessRefusingLog>();
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AL_Model";
+    binding->modelFactory = [log] {
+        auto holder = morph::model::detail::ModelFactory::create<ALModel>();
+        holder->attachActionLog(log, "acct-sink-down-local");
+        return holder;
+    };
+    morph::bridge::BridgeHandler<ALModel> handler{bridge, &cbExec, binding};
+
+    std::exception_ptr failure;
+    std::atomic<bool> settled{false};
+    handler.execute(ALDeposit{.amount = 10})
+        .then([&](int) { settled.store(true); })
+        .onError([&](const std::exception_ptr& eptr) {
+            failure = eptr;
+            settled.store(true);
+        });
+    REQUIRE(morph::testing::waitUntil([&] { return settled.load(); }));
+    REQUIRE(failure);
+    auto seen = reportedFrom(failure);
+
+    REQUIRE(seen.recordingError);
+    REQUIRE(seen.what == "action executed but was not recorded: journal sink unavailable");
+    REQUIRE(seen.cause == "journal sink unavailable");
+    REQUIRE(seen.result == "10");
+
+    // The mutation committed: ALGetBalance is Loggable::No, so it reads the same
+    // instance back without the sink ever being asked.
+    std::atomic<int> balance{-1};
+    handler.execute(ALGetBalance{}).then([&](int v) { balance.store(v); }).onError([](const std::exception_ptr&) {});
+    REQUIRE(morph::testing::waitUntil([&] { return balance.load() != -1; }));
+    REQUIRE(balance.load() == 10);
+
+    REQUIRE(log->entries().empty());
+    REQUIRE(log->offered().size() == 1);
+    for (const auto& entry : log->offered()) {
+        REQUIRE(entry.outcome != morph::journal::Outcome::Failed);
+    }
+}
+
+TEST_CASE("Bridge/LocalBackend: a genuine Model::execute throw still records Outcome::Failed with the model's message",
+          "[action_log][bridge]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    auto log = std::make_shared<SuccessRefusingLog>();
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AL_Model";
+    binding->modelFactory = [log] {
+        auto holder = morph::model::detail::ModelFactory::create<ALModel>();
+        holder->attachActionLog(log, "acct-refusing-local");
+        return holder;
+    };
+    morph::bridge::BridgeHandler<ALModel> handler{bridge, &cbExec, binding};
+
+    std::exception_ptr failure;
+    std::atomic<bool> settled{false};
+    handler.execute(ALWithdraw{.amount = 50})
+        .then([&](int) { settled.store(true); })
+        .onError([&](const std::exception_ptr& eptr) {
+            failure = eptr;
+            settled.store(true);
+        });
+    REQUIRE(morph::testing::waitUntil([&] { return settled.load(); }));
+    REQUIRE(failure);
+    auto seen = reportedFrom(failure);
+
+    REQUIRE_FALSE(seen.recordingError);
+    REQUIRE(seen.what == "insufficient funds");
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].actionType == "AL_Withdraw");
+    REQUIRE(entries[0].entityKey == "acct-refusing-local");
+    REQUIRE(entries[0].outcome == morph::journal::Outcome::Failed);
+    REQUIRE(entries[0].error == "insufficient funds");
+    REQUIRE(entries[0].result.empty());
 }
 
 TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log does not crash", "[action_log][bridge]") {

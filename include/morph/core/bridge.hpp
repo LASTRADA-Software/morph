@@ -2108,35 +2108,64 @@ public:
             // Local mode has no client/server split, so this is the same execution
             // site `ActionDispatcher::registerAction`'s runner is for remote modes
             // (registry.hpp) — see that overload's doc comment for the full story,
-            // including why both the success and failure paths below record a
-            // journal entry (a rejected/throwing execute must not leave the audit
-            // trail silent) and why the exception is rethrown unchanged either way.
-            try {
-                auto result = std::make_shared<R>(model.execute(actionRef));
-                if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
-                    if (holder.hasActionLog()) {
+            // including why a rejected/throwing execute must not leave the audit
+            // trail silent, and why `Model::execute` is the only call inside the
+            // try that records Outcome::Failed.
+// MSVC's C4702 fires on the `return` below for any action whose handler never
+// returns -- a test double whose body is a bare `throw`, for instance. The
+// warning is correct for that instantiation and wrong as a verdict on this
+// statement, which every other instantiation reaches. It is suppressed here
+// rather than in each translation unit that instantiates such a handler,
+// because the set of those is open-ended: eleven test files already qualify.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
+            auto result = [&] {
+                try {
+                    return std::make_shared<R>(model.execute(actionRef));
+                } catch (const std::exception& exc [[maybe_unused]]) {
+                    if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
+                        if (holder.hasActionLog()) {
+                            ::morph::model::detail::recordActionFailure(
+                                holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
+                                std::string{::morph::model::ActionTraits<Action>::typeId()},
+                                ::morph::model::ActionTraits<Action>::toJson(actionRef),
+                                ::morph::model::detail::actionPayloadSchema<Action>(), exc.what());
+                        }
+                    }
+                    throw;
+                }
+            }();
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+            // Past this point the model's mutation has committed, so neither
+            // serialising the result nor appending the entry may be reported as
+            // an execution failure: both throw (ParseError; a sink that could
+            // not reach its backend), and inside the try above that throw would
+            // reject this call's Completion as if the model had refused the
+            // action and file an Outcome::Failed entry blaming the action for an
+            // infrastructure fault. ActionRecordingError says what is true
+            // instead -- the action ran, the recording of it did not -- and
+            // carries the result JSON the audit trail never received.
+            if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
+                if (holder.hasActionLog()) {
+                    std::string resultJson;
+                    try {
+                        resultJson = ::morph::model::ActionTraits<Action>::resultToJson(*result);
                         // entityKey/principal/timestampMs are filled in by recordIfAttached.
                         ::morph::model::detail::recordActionSuccess(
                             holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
                             std::string{::morph::model::ActionTraits<Action>::typeId()},
                             ::morph::model::ActionTraits<Action>::toJson(actionRef),
-                            ::morph::model::detail::actionPayloadSchema<Action>(),
-                            ::morph::model::ActionTraits<Action>::resultToJson(*result));
+                            ::morph::model::detail::actionPayloadSchema<Action>(), resultJson);
+                    } catch (const std::exception& exc) {
+                        throw ::morph::model::ActionRecordingError{std::move(resultJson), exc.what()};
                     }
                 }
-                return result;
-            } catch (const std::exception& exc [[maybe_unused]]) {
-                if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
-                    if (holder.hasActionLog()) {
-                        ::morph::model::detail::recordActionFailure(
-                            holder, std::string{::morph::model::ModelTraits<Model>::typeId()},
-                            std::string{::morph::model::ActionTraits<Action>::typeId()},
-                            ::morph::model::ActionTraits<Action>::toJson(actionRef),
-                            ::morph::model::detail::actionPayloadSchema<Action>(), exc.what());
-                    }
-                }
-                throw;
             }
+            return result;
 #endif
         };
         {
