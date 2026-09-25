@@ -4,7 +4,8 @@
 #include <atomic>
 #include <core/async/Awaitable.hpp>
 #include <core/async/Cancellation.hpp>
-#include <core/async/IExecutor.hpp>
+#include <core/async/ExecutorContext.hpp>
+#include <core/async/ParkedWork.hpp>
 #include <core/async/StopToken.hpp>
 #include <coroutine>
 #include <cstdint>
@@ -18,8 +19,7 @@
 #include "../executor.hpp"
 
 /// @file
-/// @brief The awaiter behind `Completion<T>::operator co_await`, and the
-///        resumption context every morph awaiter resumes through.
+/// @brief The awaiter behind `Completion<T>::operator co_await`.
 ///
 /// A fragment of `completion.hpp` rather than of `coroutine.hpp`, so a
 /// `Completion<T>` is awaitable wherever it is visible. Specified in
@@ -29,42 +29,6 @@ namespace morph::async::detail {
 
 template <typename T>
 struct CompletionState;
-
-/// @brief The calling thread's resumption context: the executor a coroutine
-///        suspending here is resumed through, or null for none.
-///
-/// A thread-local, installed by `ScopedResumeContext` for the duration of each
-/// resumption by the executors that resume coroutines (`spawn`'s adapter and
-/// `StrandCoroExecutor`), and read by every morph awaiter in `await_suspend`.
-/// `core::async::Task` carries a stop token from awaiter to awaitee but no
-/// executor, so this is where "the context a coroutine suspended in" lives.
-/// @return A reference to the calling thread's slot.
-[[nodiscard]] inline ::core::async::IExecutor*& resumeContextSlot() noexcept {
-    thread_local ::core::async::IExecutor* slot = nullptr;
-    return slot;
-}
-
-/// @brief The calling thread's resumption context.
-/// @return The executor installed by the innermost `ScopedResumeContext`, or null.
-[[nodiscard]] inline ::core::async::IExecutor* currentResumeContext() noexcept { return resumeContextSlot(); }
-
-/// @brief Installs a resumption context for its own lifetime, restoring the
-///        previous one after.
-class ScopedResumeContext {
-public:
-    /// @param context The executor coroutines suspending in this scope resume through.
-    explicit ScopedResumeContext(::core::async::IExecutor* context) noexcept
-        : _previous{std::exchange(resumeContextSlot(), context)} {}
-    ~ScopedResumeContext() { resumeContextSlot() = _previous; }
-
-    ScopedResumeContext(const ScopedResumeContext&) = delete;
-    ScopedResumeContext& operator=(const ScopedResumeContext&) = delete;
-    ScopedResumeContext(ScopedResumeContext&&) = delete;
-    ScopedResumeContext& operator=(ScopedResumeContext&&) = delete;
-
-private:
-    ::core::async::IExecutor* _previous;
-};
 
 /// @brief The awaiter `Completion<T>::operator co_await() &&` returns.
 ///
@@ -102,7 +66,9 @@ class CompletionAwaiter {
         std::optional<T> value;
         std::exception_ptr error;
         std::coroutine_handle<> continuation;
-        ::core::async::IExecutor* context = nullptr;
+        /// Where the coroutine was running when it suspended: resumed there.
+        /// Empty outside every executor's task.
+        ::core::async::ResumeTarget context;
         ::morph::exec::IExecutor* fallback = nullptr;
         CallbackScope scope;
         std::optional<::core::async::StopCallback<OnStop>> stopCallback;
@@ -117,8 +83,8 @@ class CompletionAwaiter {
         /// A settled completion, on the completion's executor: resumes in the
         /// suspending context, or right here.
         void resumeSettled() {
-            if (context != nullptr) {
-                context->submit(continuation);
+            if (context) {
+                context.submit(::core::async::ParkedWork{.resume = continuation});
             } else {
                 continuation.resume();
             }
@@ -127,11 +93,11 @@ class CompletionAwaiter {
         /// A stop, on whichever thread requested it: resumes through the
         /// suspending context, or on the completion's executor. Not inline
         /// here, because the requesting thread is not the coroutine's; the
-        /// context itself may resume inline (a `StrandCoroExecutor` whose
-        /// backend has closed its strand does).
+        /// context itself may resume inline (a Task handler's resumer whose
+        /// strands are closed does).
         void resumeCancelled() {
-            if (context != nullptr) {
-                context->submit(continuation);
+            if (context) {
+                context.submit(::core::async::ParkedWork{.resume = continuation});
             } else {
                 fallback->post([handle = continuation] { handle.resume(); });
             }
@@ -191,7 +157,7 @@ public:
             return false;
         }
         shared->continuation = awaiting;
-        shared->context = currentResumeContext();
+        shared->context = ::core::async::ResumeTarget::current();
         shared->fallback = state->cbExec;
 
         if constexpr (::core::async::HasStopToken<Promise>) {

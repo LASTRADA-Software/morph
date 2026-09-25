@@ -203,8 +203,8 @@ endif()
 CPMAddPackage(
     NAME core-cpp
     GITHUB_REPOSITORY contour-terminal/core-cpp
-    GIT_TAG v0.3.0
-    VERSION 0.3.0
+    GIT_TAG v0.4.0
+    VERSION 0.4.0
     SYSTEM YES
     EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
     OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF" "CORE_CPP_WITH_TUI OFF"

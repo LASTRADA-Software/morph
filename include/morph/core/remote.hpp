@@ -211,8 +211,8 @@ public:
     ///
     /// @param workerPool Pool used to process messages asynchronously. Borrowed,
     ///                   not owned: it must outlive this server — and, because
-    ///                   the server's `StrandExecutor` is built on it, keep
-    ///                   running until teardown completes (see
+    ///                   the server's strands run on it, keep running until
+    ///                   teardown completes (see
     ///                   `docs/spec/concurrency_and_lifetimes.md`, "Destruction
     ///                   ordering").
     /// @param dispatcher Action dispatcher; defaults to the process-level
@@ -225,7 +225,7 @@ public:
                           ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
                               ::morph::model::detail::defaultRegistry())
         : _pool{workerPool},
-          _strand{workerPool},
+          _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)},
           _dispatcher{dispatcher},
           _registry{registry},
           _authorizer{::morph::session::allowAllAuthorizer()} {}
@@ -246,7 +246,7 @@ public:
                  ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
                      ::morph::model::detail::defaultRegistry())
         : _pool{workerPool},
-          _strand{workerPool},
+          _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)},
           _dispatcher{dispatcher},
           _registry{registry},
           _authorizer{std::move(authorizer)} {
@@ -1278,7 +1278,7 @@ private:
     // the rejection branches below do it explicitly, through
     // `rejectAndRelease`, so it is freed before their reply goes out; the one
     // path that reaches the strand releases it immediately after
-    // `_strand.post(mid, ...)` (that post is the entire point of taking a
+    // `_strands->post(mid, ...)` (that post is the entire point of taking a
     // ticket, so this path brackets it with `awaitTurn()` rather than
     // releasing up front); and every *implicit* exit — an exception out of
     // `authorize`/`authenticate`/`authorizeInstance`/`missingRequiredFields`,
@@ -1528,11 +1528,11 @@ private:
         // Where per-model ordering is enforced: block (on this pool thread —
         // never the strand itself, and never any other model's strand) until
         // every execute for `mid` that the transport sent before this one has
-        // already made its own `_strand.post(mid, ...)` call below. Every
+        // already made its own `_strands->post(mid, ...)` call below. Every
         // early-return above this point released its ticket immediately without
         // ever waiting here, so a model-not-found/unauthorized/busy rejection
         // for a *different* ticket can never be the thing this wait is stuck
-        // behind — only a ticket that is also headed for `_strand.post` can
+        // behind — only a ticket that is also headed for `_strands->post` can
         // hold this one up, and it can only hold it up for as long as *its own*
         // pre-strand work (identical in kind to this one's) takes, not for the
         // duration of whatever the model's strand does with it afterward.
@@ -1560,16 +1560,13 @@ private:
             // A Task run is shared: its completion callback outlives the strand
             // task.
             auto shared = std::make_shared<RemoteRun>(std::move(run));
-            _strand.post(mid, [shared] { shared->holder->actionGate().enter([shared] { startTaskRemote(shared); }); });
+            _strands->post(mid,
+                           [shared] { shared->holder->actionGate().enter([shared] { startTaskRemote(shared); }); });
         } else {
             // An ordinary run travels by value in the strand task, so an
-            // execute costs the strand task's one allocation, as LocalBackend's
-            // does. The task keeps it while the handler runs: the strand
-            // destroys a task's captures only once it has counted the task
-            // finished, so the last reference to this server, which `self` may
-            // be, is never dropped inside its own strand task. See
-            // `ActionGate::tryEnter`.
-            _strand.post(mid, [run = std::move(run)]() mutable {
+            // execute costs the post's one allocation, as LocalBackend's does.
+            // See `ActionGate::tryEnter`.
+            _strands->post(mid, [run = std::move(run)]() mutable {
                 auto& gate = run.holder->actionGate();
                 if (gate.tryEnter()) {
                     startRemote(run);
@@ -1578,11 +1575,11 @@ private:
                 gate.enter([waiting = std::make_shared<RemoteRun>(std::move(run))] { startRemote(*waiting); });
             });
         }
-        // The ticket's whole job was ordering *this* `_strand.post()` call
+        // The ticket's whole job was ordering *this* `_strands->post()` call
         // relative to any other in-flight execute for `mid` — that call has
         // now happened, in its correct turn, so the next ticket (if any) may
         // proceed immediately. Not tied to the strand task's own completion:
-        // StrandExecutor already serializes everything from here on (that is
+        // the strand already serializes everything from here on (that is
         // its entire job), so holding this ticket any longer would only
         // delay a *different* execute's own pre-strand work for no ordering
         // benefit.
@@ -1674,30 +1671,25 @@ private:
         admitRemote(*run);
         try {
             ::morph::session::detail::ScopedContext const scoped{run->env.session};
-            auto executor = std::make_shared<::morph::exec::StrandCoroExecutor>(run->self->_strandLink, run->mid,
-                                                                                run->env.session);
+            auto const& strands = run->self->_strands;
+            auto executor = std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session);
+            strands->enroll(run->mid, executor);
             auto token = run->stopSource ? run->stopSource->get_token() : ::core::async::StopToken{};
             run->self->_dispatcher.dispatchAsync(
                 run->env.modelType, run->env.actionType, *run->holder, run->env.body, executor, std::move(token),
-                // An init-capture, so the copy is not const, as a copy of
-                // `run` itself would be, and the move below moves.
-                [held = run](std::string result, std::exception_ptr error) mutable {
-                    // As on LocalBackend: a handler can end on a core-cpp
-                    // awaiter's executor, and leaving the gate belongs on the
-                    // strand. Posted even from the strand, and the run moved
-                    // out of this callback into the task: the run holds `self`,
-                    // and this callback's owner, the handler's frame, is
-                    // destroyed inside a strand task. Were the last reference
-                    // to this server dropped there, `~StrandExecutor` would
-                    // wait for that very task; a posted task's captures are
-                    // destroyed only once the strand has counted it finished.
-                    auto owned = std::move(held);
-                    auto const link = owned->self->_strandLink;
-                    auto const mid = owned->mid;
-                    link->postOrRun(mid, [owned = std::move(owned), result = std::move(result),
-                                          error = std::move(error)] { finishRemote(*owned, result, error); });
+                [run](std::string result, std::exception_ptr error) {
+                    // As on LocalBackend: a handler can end on another
+                    // executor, and leaving the gate belongs on the strand.
+                    // The strands are held here, not reached through the run:
+                    // the finish may release the last reference to this server.
+                    auto const held = run->self->_strands;
+                    held->withdraw(run->mid);
+                    held->runOnStrand(run->mid, [run, result = std::move(result), error = std::move(error)] {
+                        finishRemote(*run, result, error);
+                    });
                 });
         } catch (...) {
+            run->self->_strands->withdraw(run->mid);
             finishRemote(*run, std::string{}, std::current_exception());
         }
     }
@@ -1746,11 +1738,10 @@ private:
     }
 
     ::morph::exec::IExecutor& _pool;
-    ::morph::exec::detail::StrandExecutor _strand;
-    // Never closed: a suspended handler's driver frame holds its `RemoteRun`,
-    // and with it this server, so the strand outlives every resumption.
-    std::shared_ptr<::morph::exec::detail::StrandLink> _strandLink =
-        std::make_shared<::morph::exec::detail::StrandLink>(_strand);
+    // One strand per model instance, shared with the Task handlers' resumers.
+    // Never closed before its last owner goes: a suspended handler's driver
+    // frame holds its `RemoteRun`, and with it this server.
+    std::shared_ptr<::morph::exec::detail::ModelStrands> _strands;
     ::morph::model::detail::ActionDispatcher& _dispatcher;
     ::morph::model::detail::ModelRegistryFactory& _registry;
     std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
@@ -1763,7 +1754,7 @@ private:
     // posted back-to-back, can have their pre-strand work (decode, authorize,
     // authenticate, registry lookup) finish on two different pool threads in
     // either order -- so without this gate, whichever one finishes first
-    // reaches `_strand.post(mid, ...)` first, even if the client sent the
+    // reaches `_strands->post(mid, ...)` first, even if the client sent the
     // other one first (`tests/test_remote_execute_ordering.cpp` reproduces
     // this deterministically). A first attempt strand-routed the *entire*
     // dispatch pipeline for a known `modelId`, which closed the race but
@@ -1773,10 +1764,10 @@ private:
     // some other, still-blocked model's strand, and moving the whole
     // pipeline onto the strand collapsed that fast-reject path into the same
     // queue as the slow model's in-flight work. The ticket gate below fixes
-    // only the ordering of the `_strand.post()` call itself, leaving the
+    // only the ordering of the `_strands->post()` call itself, leaving the
     // fast-reject path exactly as fast as it always was.
     //
-    // The gate orders only the *moment of the `_strand.post()` call itself*,
+    // The gate orders only the *moment of the `_strands->post()` call itself*,
     // not the pipeline before it: a ticket is handed out and the dispatch
     // work is handed to `_pool` in one atomic step, synchronously in
     // `handleImpl` (called directly from `handle()`, which runs on
@@ -1786,7 +1777,7 @@ private:
     // to `_pool` as two separate, unlocked steps would let two concurrent
     // transport threads' ticket order and enqueue order diverge).
     // `dispatchExecute` waits for its ticket's
-    // turn only immediately before the pre-existing `_strand.post(mid, ...)`
+    // turn only immediately before the pre-existing `_strands->post(mid, ...)`
     // call, and releases the next ticket's turn either right after posting
     // (live model) or immediately on a "model not found"/other early-return
     // rejection (dead model, unauthorized, over limit, etc. -- none of these
@@ -1823,7 +1814,7 @@ private:
     // is purely the wiring: `handleImpl` calls `_executeGate.takeAndPost(mid,
     // ...)`, which hands out the ticket and posts to `_pool` inside one
     // critical section; `dispatchExecute` calls `ticketGuard.awaitTurn()`
-    // immediately before `_strand.post(mid, ...)`; every exit path releases
+    // immediately before `_strands->post(mid, ...)`; every exit path releases
     // through `ExecuteTicketGuard`, explicitly or via its destructor.
     ::morph::backend::detail::ExecuteOrderGate _executeGate;
     // mutable: health() is const and must still be able to lock this to read

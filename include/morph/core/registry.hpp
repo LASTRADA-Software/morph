@@ -660,7 +660,7 @@ public:
     ///        handler on the model's strand, and hands the serialised result or
     ///        the exception to its last argument when the Task completes.
     using AsyncRunner = void (*)(IModelHolder&, std::string_view,
-                                 const std::shared_ptr<::morph::exec::StrandCoroExecutor>&, ::core::async::StopToken,
+                                 const std::shared_ptr<::morph::exec::detail::TaskResumer>&, ::core::async::StopToken,
                                  DispatchDone);
 
     /// @brief Registers a runner for `(Model, Action)` under the given string ids.
@@ -858,7 +858,7 @@ private:
     /// @param holder      The model instance; kept alive by @p done's owner until
     ///                    @p done has run.
     /// @param payloadJson The action's JSON body.
-    /// @param executor    The model's strand executor.
+    /// @param executor    The handler's resumer, on the model's strand.
     /// @param token       The stop token the handler observes.
     /// @param done        Called exactly once, on the strand.
     template <typename Model, typename Action>
@@ -866,7 +866,7 @@ private:
     // a call; kept in one piece for the same reason runHandler is.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     static void runTaskHandler(IModelHolder& holder, std::string_view payloadJson,
-                               const std::shared_ptr<::morph::exec::StrandCoroExecutor>& executor,
+                               const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor,
                                ::core::async::StopToken token, DispatchDone done) {
         using R = HandlerResultT<decltype(std::declval<Model&>().execute(std::declval<Action&>()))>;
         // Owned here and kept by the completion callback: the handler may take
@@ -966,11 +966,11 @@ public:
     /// @param actionId Action type-id.
     /// @param holder   The model instance; must stay alive until @p done has run.
     /// @param payload  The action's JSON body.
-    /// @param executor The model's strand executor, for a Task handler's resumptions.
+    /// @param executor The handler's resumer, on the model's strand.
     /// @param token    The stop token a Task handler observes.
     /// @param done     Called exactly once, with the result or the exception.
     void dispatchAsync(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
-                       std::string_view payload, const std::shared_ptr<::morph::exec::StrandCoroExecutor>& executor,
+                       std::string_view payload, const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor,
                        ::core::async::StopToken token, DispatchDone done) {
         const ActionEntry* entry = nullptr;
         try {
@@ -1004,7 +1004,7 @@ public:
     ///
     /// Lets a caller that already holds everything an ordinary dispatch needs
     /// call `dispatch` directly, and pay for what a Task handler needs -- a
-    /// strand executor, shared state for its callback -- only when there is one.
+    /// resumer, shared state for its callback -- only when there is one.
     /// @return False for an unknown pair, which `dispatch` then reports.
     [[nodiscard]] bool dispatchesAsync(std::string_view modelId, std::string_view actionId) const {
         auto iter = _actions.find(detail::PairKeyView{modelId, actionId});

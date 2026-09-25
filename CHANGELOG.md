@@ -11,6 +11,22 @@ API surface).
 
 ### Changed
 
+- **morph's per-model strands are core-cpp's `KeyedStrands`.**
+  `morph::exec::detail::StrandExecutor` is gone: a backend's strands are
+  `morph::exec::detail::ModelStrands`, over core-cpp 0.4.0's
+  `core::async::KeyedStrands<ModelId>`, and morph keeps only the adapter to its
+  `IExecutor`, the log of a throwing task and a Task handler's session. What a
+  consumer can see:
+  - A Task handler that awaits `core::async::AsyncQueue::pop` comes back to its
+    model's strand, with its session, a stop included.
+  - An ordinary execute allocates less: `bench.alloc_budget` measures the local
+    round trip.
+  - Under single-threaded WebAssembly, `~LocalBackend` and
+    `~SynchronousBackendAdapter` no longer wait for their strands, which only
+    that thread could run; what is still queued is dropped.
+  - A strand queues itself on the backend's `IExecutor` once per turn and runs
+    up to 32 tasks there, where it used to post each task.
+
 - **`LocalBackend` no longer runs an action whose call was already failed.**
   An action still waiting for its model when `Bridge::switchBackend` or
   `~Bridge` fails its call (`BackendChangedError`, `BridgeDestroyedError`) is
@@ -21,7 +37,7 @@ API surface).
   strand to drain before it returns. See `docs/spec/core/coroutines.md`,
   "Teardown".
 
-- **morph depends on core-cpp v0.3.0.** It is fetched through CPM, and
+- **morph depends on core-cpp v0.4.0.** It is fetched through CPM, and
   `morph::morph` links its `core::base`, `core::async`, `core::net` and, natively,
   `core::platform`. morph stays header-only, but those are static libraries, so
   a project that links morph now builds them. `TimeoutScheduler` runs on
@@ -29,7 +45,7 @@ API surface).
   single-threaded WebAssembly on a loop the browser's timer pumps, where
   `cancel()` now also retires the timer. An install of morph installs
   core-cpp's package next to it, and `find_package(morph)` finds it through
-  `find_dependency(core-cpp 0.3)`.
+  `find_dependency(core-cpp 0.4)`.
 
 - **Dependencies are fetched through CPM, and cached by CPM.** glaze, Catch2,
   doxygen-awesome-css and Lightweight come through `CPMAddPackage` when no
@@ -148,14 +164,12 @@ API surface).
 
 - **Coroutines on `core::async`.**
   - `Completion<T>` is awaitable: `co_await std::move(completion)` yields `T`
-    or rethrows, resumes in the context the coroutine suspended in, and honours
-    a stop request on the awaiting coroutine's token.
+    or rethrows, resumes on the executor the coroutine suspended on (core-cpp's
+    current-executor context), and honours a stop request on the awaiting
+    coroutine's token.
   - `morph::async::spawn(executor, task)` starts a coroutine from ordinary
     code, with every step on that executor.
   - `morph::async::delay(scheduler, duration)` is a stop-aware timer.
-  - `morph::async::resumeContext()` names the executor morph awaiters resume
-    through, so a handler that awaited a core-cpp awaiter (which resumes on
-    its own executor) can go back with `core::async::ResumeOn`.
   - A model's `execute` may return `core::async::Task<R>`. The bridge drives it
     on the model's strand, and the model's next action waits until the Task has
     completed. `ActionTraits<A>::Result` is `R`.

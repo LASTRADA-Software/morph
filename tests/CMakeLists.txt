@@ -22,8 +22,6 @@ add_executable(morph_tests
     test_example.cpp
     test_executor_extra.cpp
     test_strand.cpp
-    test_strand_extra.cpp
-    test_strand_race.cpp
     test_completion.cpp
     test_completion_extra.cpp
     test_completion_multi_handler.cpp
@@ -221,55 +219,10 @@ include(Catch)
 # test fails fast instead of stalling the whole CI job (observed: a single test
 # hanging blocked a Windows runner for over half an hour).
 #
-# That number was never chosen with any particular test in mind, which is
-# fine while every test is sub-second and wrong for the one that is not: the
-# longest, most load-sensitive case in the binary was governed by the same
-# ceiling as the cheapest. So the blanket stays and `[slow]` is
-# registered separately -- DISCOVERY_MODE
-# PRE_TEST defers discovery to ctest invocation time, so a per-test TIMEOUT
-# cannot be set with set_tests_properties() here (nothing is named that test
-# yet at configure time); excluding a tag and giving it its own
-# catch_discover_tests() call is the mechanism that is actually available.
-#
-# (The `equation()` depth test no longer needs the tag: at 70,000 nodes it blew
-# past 120s under TSan because of O(n^2) string building, and with that
-# rendering linear it is back under the blanket cap. The tag is reused
-# here for a different test and a different reason.)
-catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "~[slow]" PROPERTIES TIMEOUT 120)
-
-# `[slow]`: `StrandExecutor never runs two tasks for one key
-# concurrently under contention`. Not slow because it computes anything --
-# 0.14 s on an idle box -- but because the strand serialises 3200 tasks per
-# iteration and every handoff is a thread wakeup that has to wait its turn on
-# the run queue. That cost is set by how contended the host is, and it climbs
-# steeply. Measured on this tree, 12 cores, clang 22.1.8 Release, load made
-# with plain spin loops, whole-case wall clock, one run each:
-#
-#     run queue  1 (idle)  ->    0.14 s
-#     run queue 14         ->   23.8 s
-#     run queue 27         ->  170.5 s
-#     run queue 38         ->  396.4 s   <- load average 31-38 at measurement
-#
-# Every one of those runs *passed*: 40 assertions, `inFlight 1, maxInFlight 1`
-# throughout. What this tag answers is the case being killed while passing, at
-# load average 29-48 -- above the 38 measured here, and the curve is
-# superlinear, so the fitted figure at a run queue of ~50 is roughly 730 s.
-#
-# 900 s is therefore ~2.3x the measured 396 s and ~1.2x that extrapolation. It
-# is also the number this file already uses for its other load-sensitive case
-# (`forms_schema_generation_is_not_route_count_sensitive`, below), chosen there
-# for the same reason: a slow shared runner can be several times a workstation.
-#
-# What this deliberately does **not** do is reduce `kIterations`. Twenty
-# iterations is this case's detection power for a rare interleaving; trading it
-# away to fit a ceiling would make the case cheaper and worse at the only thing
-# it exists for. See the comment on `kIterations` in test_strand_race.cpp.
-#
-# And what it does not buy is immunity: a host oversubscribed past roughly 4.5x
-# will exceed 900 s too. The ceiling is here to catch a *deadlock* -- which is
-# unbounded, not merely large -- and it still does, in 15 minutes instead of 2,
-# for one test out of 3044.
-catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "[slow]" PROPERTIES TIMEOUT 900)
+# The one case that needed more, the strand race test tagged `[slow]`, went
+# with morph's own strand when morph moved to core-cpp's `KeyedStrands`, which
+# carries its own race tests.
+catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
 
 # ── Two-binary journal-path skew test ───────────────────────────────────────
 # The executable form of the journal's data-at-rest contract: an

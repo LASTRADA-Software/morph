@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <core/async/Strand.hpp>
 #include <morph/core/strand.hpp>
 #include <stdexcept>
 #include <vector>
@@ -10,7 +11,9 @@
 TEST_CASE("DeterministicExecutor runs same-key strand tasks in FIFO order under a scripted interleaving",
           "[ladder][testkit][strand-interleaver]") {
     morph::ladder::testkit::DeterministicExecutor det;
-    morph::exec::detail::StrandExecutor strand{det};
+    // One task per turn, as morph's own strand ran them: a turn of several
+    // would run the key's queued tasks inside one step.
+    morph::exec::detail::ModelStrands strand{det, core::async::StrandOptions{.batch = 1}};
 
     std::vector<int> order;
     morph::exec::detail::ModelId key{1};
@@ -30,7 +33,7 @@ TEST_CASE("DeterministicExecutor runs same-key strand tasks in FIFO order under 
     }
 
     // key's two tasks must have run in post order relative to each other
-    // (StrandExecutor's own guarantee); otherKey's task may interleave
+    // (the strand's own guarantee); otherKey's task may interleave
     // anywhere since it is a different key — assert only the same-key
     // relative order, which is the property this harness exists to make
     // reproducible.
@@ -56,16 +59,17 @@ TEST_CASE("DeterministicExecutor::runSchedule executes queued tasks in the calle
     REQUIRE(order == std::vector<int>{3, 1, 2});
 }
 
-TEST_CASE("DeterministicExecutor::runSchedule forces a non-default interleaving across two StrandExecutor keys",
+TEST_CASE("DeterministicExecutor::runSchedule forces a non-default interleaving across two strand keys",
           "[ladder][testkit][strand-interleaver]") {
     // Plain FIFO draining (the previous test case) happens to run `key`'s
     // two tasks with `otherKey`'s task landing *between* them, because
-    // StrandExecutor::post appends a same-key continuation to the *back* of
-    // the base executor's queue rather than re-running it immediately: after
-    // posting key/otherKey/key, the DeterministicExecutor's queue holds only
-    // two entries — [keyTask1, otherKeyTask] — since the second `key` post
-    // finds the strand already running and just enqueues onto the strand's
-    // own pending list rather than posting a third entry to `det`. Stepping
+    // a strand that runs one task per turn hands its base back after each
+    // task and queues itself again at the *back* of the base executor's
+    // queue: after posting key/otherKey/key, the DeterministicExecutor's
+    // queue holds only two entries — [key's strand, otherKey's strand] —
+    // since the second `key` post finds the strand already scheduled and just
+    // enqueues onto the strand's own queue rather than a third entry on
+    // `det`. Stepping
     // that queue FIFO therefore already interleaves otherKey's task between
     // key's two tasks, without any deliberate scripting.
     //
@@ -76,9 +80,11 @@ TEST_CASE("DeterministicExecutor::runSchedule forces a non-default interleaving 
     // queue's current contents before consuming each index (the second
     // `key` task's post-to-`det` entry does not exist yet at schedule-
     // construction time; it only appears once the first `key` task has run
-    // and StrandExecutor re-arms the strand).
+    // and the strand queues itself on `det` again).
     morph::ladder::testkit::DeterministicExecutor det;
-    morph::exec::detail::StrandExecutor strand{det};
+    // One task per turn, as morph's own strand ran them: a turn of several
+    // would run the key's queued tasks inside one step.
+    morph::exec::detail::ModelStrands strand{det, core::async::StrandOptions{.batch = 1}};
 
     std::vector<int> order;
     morph::exec::detail::ModelId key{1};
@@ -88,21 +94,20 @@ TEST_CASE("DeterministicExecutor::runSchedule forces a non-default interleaving 
     strand.post(otherKey, [&] { order.push_back(100); });
     strand.post(key, [&] { order.push_back(2); });
 
-    // det's queue right now: [0] = key's first-task dispatch, [1] = otherKey's
-    // dispatch. key's second task is not queued on `det` yet — it is sitting
-    // in the strand's own pending list, waiting for the strand to be re-armed.
+    // det's queue right now: [0] = key's strand, [1] = otherKey's strand.
+    // key's second task is not queued on `det` itself — it is sitting in the
+    // strand's own queue, waiting for the strand's next turn.
     REQUIRE(det.pending() == 2);
 
-    // Step 1: run index 0 (key's first task). This both runs task 1 *and*
-    // causes StrandExecutor to re-arm the key strand, appending a new
-    // dispatch to the back of det's queue — so afterwards det's queue is
-    // [otherKey's dispatch, key's second-task dispatch].
+    // Step 1: run index 0 (key's strand, one task). This both runs task 1
+    // *and* queues the key's strand on det again, at the back — so
+    // afterwards det's queue is [otherKey's strand, key's strand].
     //
-    // Step 2: run index 1 — *not* index 0 — to run key's second-task
-    // dispatch (the one that only just appeared) ahead of otherKey's,
+    // Step 2: run index 1 — *not* index 0 — to run key's second task (the
+    // entry that only just appeared) ahead of otherKey's,
     // deliberately keeping key's two tasks contiguous.
     //
-    // Step 3: only otherKey's dispatch is left, at index 0.
+    // Step 3: only otherKey's strand is left, at index 0.
     det.runSchedule({0, 1, 0});
 
     REQUIRE(order == std::vector<int>{1, 2, 100});

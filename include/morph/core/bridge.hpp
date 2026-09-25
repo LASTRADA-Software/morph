@@ -581,7 +581,7 @@ void deliverLate(::morph::exec::IExecutor* exec, Action&& action) {
 /// documented fire-and-forget sends precisely so that destruction never spins
 /// a nested event loop. A destructor that blocks on a bounded predicate is
 /// also the framework's existing idiom for exactly this class of hazard —
-/// `~StrandExecutor` blocks until `_inFlight == 0`
+/// `~LocalBackend` blocks until its strands have drained
 /// (docs/spec/concurrency_and_lifetimes.md, "Destruction ordering").
 struct BridgeLifetime {
     /// Held shared by a caller for the whole of its call into the `Bridge`,
@@ -819,7 +819,7 @@ private:
 /// @tparam Action Concrete action type.
 /// @param holder      The model instance; kept alive by @p done's owner until it has run.
 /// @param actionOwner The action, owned: the handler's frame outlives this call.
-/// @param executor    The model's strand executor.
+/// @param executor    The handler's resumer, on the model's strand.
 /// @param token       The stop token the handler observes.
 /// @param done        Called exactly once, on the strand.
 template <typename Model, typename Action>
@@ -827,7 +827,7 @@ template <typename Model, typename Action>
 // order localOp keeps them; splitting it would put that order in two places.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void localTaskOp(::morph::model::detail::IModelHolder& holder, std::shared_ptr<void> actionOwner,
-                 const std::shared_ptr<::morph::exec::StrandCoroExecutor>& executor, ::core::async::StopToken token,
+                 const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor, ::core::async::StopToken token,
                  ::morph::backend::detail::ActionCall::LocalDone done) {
     using R = ::morph::model::ActionTraits<Action>::Result;
     using Handler = decltype(std::declval<Model&>().execute(std::declval<Action&>()));

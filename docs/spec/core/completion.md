@@ -598,7 +598,7 @@ See [`backend.md`, `IBackend::executeInto`](backend.md#executeinto--settling-the
 
 ## `morph/core/async.hpp` — the cheap include
 
-`Completion`, `IExecutor`, `StrandExecutor` and `CallbackScope` are usable
+`Completion`, `IExecutor`, the strands and `CallbackScope` are usable
 without a model, a registry, a wire envelope or a schema, and none of them
 reaches glaze. `core/async.hpp` is a facade over the four headers that carry
 them — it declares nothing of its own, so including it is exactly equivalent to

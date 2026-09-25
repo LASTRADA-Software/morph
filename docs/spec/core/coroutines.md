@@ -29,7 +29,7 @@ three pieces: the awaiter hook in `completion.hpp`, the handler detection in
   - [`delay`](#delay)
 - [Model side](#model-side)
   - [Task handlers](#task-handlers)
-  - [`StrandCoroExecutor`](#strandcoroexecutor)
+  - [The handler's resumer](#the-handlers-resumer)
   - [Not re-entrant: the action gate](#not-re-entrant-the-action-gate)
   - [Execute deadlines](#execute-deadlines)
   - [Journal and observability](#journal-and-observability)
@@ -42,49 +42,51 @@ three pieces: the awaiter hook in `completion.hpp`, the handler detection in
 ## Where a coroutine resumes
 
 `core::async::Task` carries a stop token from awaiter to awaitee, but no
-executor. morph therefore tracks *the resumption context* itself:
+executor. Where a coroutine resumes is core-cpp's current-executor context
+(`<core/async/ExecutorContext.hpp>`):
 
-- It is a `core::async::IExecutor` recorded in a thread-local,
-  `morph::async::detail::currentResumeContext()`.
-- The two morph executors that resume coroutines install it for the duration
-  of each resumption. Those are the adapter `spawn` builds over a
-  `morph::exec::IExecutor`, and `StrandCoroExecutor`.
-- morph's awaiters read it in `await_suspend`, on the thread that is suspending
-  the coroutine, and hand the continuation back to it.
+- An executor that resumes coroutines states itself as the current executor
+  around each resumption, or each batch of them, with
+  `core::async::ExecutorScope`. morph's two do: the adapter `spawn` builds over
+  a `morph::exec::IExecutor`, and a Task handler's resumer (see
+  [The handler's resumer](#the-handlers-resumer)). So do core-cpp's: a strand
+  once per batch, `core::async::ThreadPoolExecutor` once per worker thread,
+  `core::net::EventLoop` once per turn.
+- An awaitable reads it in `await_suspend`, on the thread that is suspending
+  the coroutine, as a `core::async::ResumeTarget`, and hands the continuation
+  back to it. Where the executor's lifetime is shared -- a model instance's
+  strand, a handler's resumer -- the target keeps it alive until then.
 
-The rule every morph awaiter follows:
+The rule:
 
-> **A coroutine resumes in the context it suspended in.** If a resumption
-> context was installed when it suspended, the continuation is submitted to
-> that context. If none was, it resumes wherever the awaited operation
-> completed: for a `Completion<T>` that is the completion's own executor, where
-> its `then()` handlers run; for `delay` it is `TimeoutScheduler`'s thread.
+> **A coroutine resumes on the executor it suspended on.** If an executor was
+> current when it suspended, the continuation is submitted to it. If none was,
+> it resumes wherever the awaited operation completed: for a `Completion<T>`
+> that is the completion's own executor, where its `then()` handlers run; for
+> `delay` it is `TimeoutScheduler`'s thread.
 
-So a coroutine started with `spawn(exec, …)` resumes on `exec` after every
-`co_await` of a morph awaiter, and a Task handler resumes on its model's
-strand after every such `co_await`. This holds even when what it awaited
-completed on some other executor, such as another model's completion
-delivered on the worker pool.
+So a coroutine started with `spawn(exec, …)` resumes on `exec`, and a Task
+handler on its model's strand, after every `co_await` of an awaitable that
+follows the rule. This holds even when what it awaited completed on some other
+executor, such as another model's completion delivered on the worker pool.
 
-**Only morph's awaiters follow this rule.** The context is morph's, and a
-core-cpp awaiter does not know it: `core::async::AsyncQueue::pop`, socket I/O
-and every other core-cpp or third-party awaiter resume the coroutine on their
-own executor, a stop included. The coroutine then carries on there, off its
-strand, until it goes back. `morph::async::resumeContext()` is how: read it
-while still on the strand, and hop back after the foreign await. Until then,
-even a morph awaiter resumes through the context of whatever thread the
-coroutine is now on, which may be none, or another model's strand.
+morph's awaiters (`Completion<T>`, `delay`) and core-cpp's
+`core::async::AsyncQueue::pop` follow it, a stop included. `core::net`'s socket
+and timer awaitables do not: they resume on their `EventLoop`, and a coroutine
+that awaits one carries on on the loop's thread, off its strand, until it goes
+back. Inside a Task handler `core::async::currentExecutor()` is the handler's
+resumer, which lives as long as the handler does, so this is how:
 
 ```cpp
-auto* const strand = morph::async::resumeContext();   // on the strand
-auto item = co_await queue.pop();                      // on the queue's executor
-co_await core::async::ResumeOn{*strand};               // on the strand again
+auto* const strand = core::async::currentExecutor();     // on the strand
+auto bytes = co_await socket.read(buffer);               // on the loop
+co_await core::async::ResumeOn{*strand};                 // on the strand again
 ```
 
 Whatever the handler does between the foreign await and the hop runs beside
 its model's other work, not serialised with it. Its end is safe either way: the
-driver posts what follows a handler's end -- recording it, settling the call,
-leaving the action gate, starting the next action -- to the strand from
+driver runs what follows a handler's end -- recording it, settling the call,
+leaving the action gate, starting the next action -- on the strand, from
 wherever the handler finished.
 
 ## Client side
@@ -109,8 +111,8 @@ core::async::Task<void> refresh(BridgeHandler<AccountModel>& accounts)
 - **How it attaches.** The awaiter uses the completion's ordinary `then` and
   `onError` fan-out, so handlers attached before or after it still run. The
   await is one more handler pair, not a replacement for them.
-- **Where it resumes.** See the rule above: in the resumption context the
-  coroutine suspended in, or on the completion's executor if there was none.
+- **Where it resumes.** See the rule above: on the executor the coroutine
+  suspended on, or on the completion's executor if there was none.
   With a `MainThreadExecutor` as the completion's executor, the coroutine
   resumes inside `runFor`.
 - **An already-settled completion.** The coroutine still suspends and resumes
@@ -137,8 +139,8 @@ a stop callback for the duration of the suspension:
   settles later therefore reaches nothing, and the coroutine's frame, with
   everything it captured, is released as soon as the coroutine unwinds.
 - **The coroutine resumes with `core::async::OperationCancelled`,** thrown
-  from `await_resume`. It resumes in the same context a normal completion
-  would have used: the resumption context, or the completion's executor.
+  from `await_resume`. It resumes where a normal completion would have: on the
+  executor it suspended on, or on the completion's executor.
 - **A token already stopped at `co_await`** resumes with
   `OperationCancelled` without attaching anything to the completion.
 
@@ -179,13 +181,13 @@ auto morph::async::delay(morph::async::detail::TimeoutScheduler& scheduler,
 - **Timing.** The timer is one `TimeoutScheduler` entry, so it fires on the
   scheduler's loop thread natively and on the browser's timer under
   single-threaded WebAssembly.
-- **Where it resumes.** In the awaiting context's resumption executor, or on
-  the scheduler's thread if there is none.
+- **Where it resumes.** On the executor the coroutine suspended on, or on the
+  scheduler's thread if there was none.
 - **Stop-aware.** With a stoppable token the awaiter registers a stop
   callback. A stop cancels the scheduler entry, which releases the timer's
-  capture at once, and resumes the coroutine with `OperationCancelled`: through
-  the awaiting context's resumption executor, or, if there is none, inline on
-  the thread that requested the stop.
+  capture at once, and resumes the coroutine with `OperationCancelled`: on the
+  executor it suspended on, or, if there was none, inline on the thread that
+  requested the stop.
 
 ## Model side
 
@@ -219,37 +221,42 @@ A model's `execute(Action)` may return `core::async::Task<R>`.
   exactly as for an ordinary handler.
 - **How it is driven.** The handler is called on the model's strand. That
   constructs the Task, which is lazy: `core::async::Task` suspends at
-  `initial_suspend`. It is then started on the strand, and every later
-  resumption is submitted through a `StrandCoroExecutor` for that model. When
+  `initial_suspend`. It is then started on the strand, inside the handler's
+  resumer, and every later resumption goes through that resumer. When
   it finishes, the result — or the exception — settles the call exactly where
   an ordinary handler's return value or throw would.
 
-### `StrandCoroExecutor`
+### The handler's resumer
 
-```cpp
-class morph::exec::StrandCoroExecutor final : public core::async::IExecutor;
-```
+A Task handler's resumptions go through one `morph::exec::detail::TaskResumer`,
+made for it when it starts, and its model instance's strand: one of the
+backend's `ModelStrands`, core-cpp's `KeyedStrands` keyed by `ModelId` (see
+[`executor.md`](executor.md), "Strands").
 
-It posts `h.resume()` onto one model's strand. Both `submit` overloads post
-to the strand. The one taking a `ParkedWork` borrows the frame like the plain
-handle does, because a handler's frame is always owned by the driver that
-started it. Each posted resumption installs the executor as the resumption
-context before resuming. Every resumption of a Task handler therefore runs on
-its model's strand, serialised with that model's other work, and a handler
-that awaits another model's `execute` resumes on its own strand rather than on
-the other model's.
+- **The current executor wherever the handler runs**: its first step, started
+  on the strand, and every resumption after. An awaitable that resumes on the
+  current executor therefore hands the handler back to the resumer, whose
+  `submit` queues it on the model's strand, serialised with that model's other
+  work. A handler that awaits another model's `execute` resumes on its own
+  strand, not on the other model's. The `ParkedWork` overload borrows the frame
+  like the plain handle does, because a handler's frame is always owned by the
+  driver that started it.
+- **The action's session, around every resumption.** The strands' keyed
+  around-task hook installs the session, with the resumer as the current
+  executor, around every task of a model instance whose Task handler has
+  started and not finished (`ModelStrands::enroll`). The action gate lets one
+  action run on an instance at a time, so an instance has at most one.
+- **Held by the driver.** The driver's frame and every `ResumeTarget` taken
+  inside the handler hold the resumer, so it lives until the last of them has
+  run.
 
-The executor is shared by the driver and by every posted resumption, so it
-lives until the last of them has run.
-
-It reaches the strand through a link its backend closes on destruction, not
-through the strand itself. Once a `LocalBackend` has closed it there is no
-strand to post to, and the executor resumes the handler inline instead, with
-the same session and resumption context installed, on the thread that
-submitted the resumption. For a `Completion<T>` that is the completion's
-callback executor, where its handlers run; for `delay` it is
-`TimeoutScheduler`'s thread; for a stop it is the thread that requested it.
-Only a handler no stop can reach gets here; see Limitations, "Teardown".
+The resumer shares its backend's strands, so it outlives the backend. Once a
+`LocalBackend` has closed them, `trySubmit` refuses, and the resumer resumes the
+handler inline instead, with the same session installed and itself the current
+executor, on the thread that submitted the resumption. For a `Completion<T>`
+that is the completion's callback executor, where its handlers run; for `delay`
+it is `TimeoutScheduler`'s thread; for a stop it is the thread that requested
+it. Only a handler no stop can reach gets here; see Limitations, "Teardown".
 
 ### Not re-entrant: the action gate
 
@@ -335,8 +342,11 @@ The same code runs on the browser's single main thread:
 - `delay` rides `TimeoutScheduler`'s host-driven loop;
 - a strand's base executor is the Qt executor.
 
-Nothing here starts a thread or blocks, and nothing here depends on
-`__EMSCRIPTEN__`.
+Nothing here starts a thread or blocks. One thing differs, and it is core-cpp's
+`CORE_CPP_ASYNC_HAS_THREADS`, not `__EMSCRIPTEN__`, that decides it: a backend's
+destructor does not wait for its strands to drain, since there is no other
+thread to finish the work and a blocking wait is not allowed; closing them
+drops what is still queued (`ModelStrands::drain`).
 
 ## Failure modes
 
@@ -354,7 +364,8 @@ Nothing here starts a thread or blocks, and nothing here depends on
 | Decision | Chosen | Why |
 |---|---|---|
 | The coroutine type | `core::async::Task<T>` | One coroutine type across the Contour Terminal projects, with a stop token that propagates down a chain of awaits. morph adds awaiters and executors, not a second task type. |
-| Where resumption happens | A thread-local resumption context, installed by morph's resuming executors | `Task`'s promise carries no executor, and a handler that awaits another model's completion must come back to its own strand, not to wherever that completion was delivered. |
+| Where resumption happens | core-cpp's current-executor context, stated by every executor that resumes coroutines and read by every awaitable that follows it | `Task`'s promise carries no executor, and a handler that awaits another model's completion must come back to its own strand, not to wherever that completion was delivered. One context shared with core-cpp brings a handler back from `AsyncQueue::pop` too, which morph's own context could not. |
+| The session across a suspension | The strands' keyed around-task hook, for the instance's one running Task handler | A context carried by `Task` itself would cost every `co_await` of every consumer; the gate makes one handler per instance the only coroutine the hook has to find. |
 | Non-reentrancy | A per-instance action gate on the strand | Holding `ExecuteOrderGate`'s ticket until the Task completes would block a pool thread in `awaitTurn` for the whole suspension. With enough suspended handlers that exhausts the pool that their own awaits need. It would also leave `LocalBackend`, which has no ticket, unordered. |
 | Lvalue `co_await` | Refused at compile time | Awaiting consumes the completion's one await slot and moves the handle; an lvalue await would hide that. |
 
@@ -369,18 +380,18 @@ Nothing here starts a thread or blocks, and nothing here depends on
   failed. So `~LocalBackend` ends them itself, in this order:
   1. It requests stop on every Task run it started that is still alive. Every
      Task run has a stop source for this, whether or not the call has a
-     deadline. A handler suspended in a morph awaiter resumes with
+     deadline. A handler suspended in an awaitable that resumes on the current
+     executor -- morph's own, `AsyncQueue::pop` -- resumes with
      `OperationCancelled` through the strand, which is still open, and
-     unwinds. One suspended in a stop-aware core-cpp awaiter resumes on that
-     awaiter's executor instead and unwinds there; its end is posted to the
-     strand.
-  2. It waits for the strand to drain: the resumptions and ends posted to it,
-     and every action queued behind them. It does not wait for a handler still
-     unwinding on another executor; that handler's end runs inline once the
-     strand is closed, where nothing can race it. An action whose call `cancelPending` had already
-     failed when it reached the gate is skipped. Its handler does not run, and
-     its caller keeps the error it was given.
-  3. It closes the strand.
+     unwinds. One suspended on a `core::net` socket or timer resumes on that
+     loop instead and unwinds there; its end is posted to the strand.
+  2. It waits for the strands to drain: the resumptions and ends queued on
+     them, and every action queued behind them. It does not wait for a handler
+     still unwinding on another executor; that handler's end runs inline once
+     the strands are closed, where nothing can race it. An action whose call
+     `cancelPending` had already failed when it reached the gate is skipped.
+     Its handler does not run, and its caller keeps the error it was given.
+  3. It closes the strands.
 
   A handler that catches `OperationCancelled` and carries on holds up step 2
   while it runs on the strand: its later morph awaits see the stop at once.
@@ -389,7 +400,7 @@ Nothing here starts a thread or blocks, and nothing here depends on
   handler that survives teardown is one suspended where no stop reaches, inside
   an awaitable that does not observe the promise's stop token, such as a
   coroutine type from outside `core::async`. When that await completes, the
-  handler resumes inline (see `StrandCoroExecutor`), holding its model
+  handler resumes inline (see [The handler's resumer](#the-handlers-resumer)), holding its model
   instance alive; whatever it does from there runs, and its outcome is
   discarded. If that await never completes, the handler is never resumed and
   never freed — a leak. A `RemoteServer` needs none of this, since a suspended

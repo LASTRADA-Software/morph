@@ -5,7 +5,7 @@
 /// @file
 /// @brief The asynchronous primitives, on their own — the cheap include.
 ///
-/// `Completion`, `IExecutor` and its implementations, `StrandExecutor` and
+/// `Completion`, `IExecutor` and its implementations, the strands and
 /// `CallbackScope` are useful without a model, a registry, a wire envelope or a
 /// schema, and they are the part of morph that costs almost nothing to compile.
 /// Nothing here reaches glaze.

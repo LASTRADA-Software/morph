@@ -73,7 +73,7 @@ Every nested `detail` namespace under those topics holds implementation symbols.
 │  Internal async core                                            │
 │  IExecutor · ThreadPoolExecutor · MainThreadExecutor            │
 │                                       (executor.hpp)            │
-│  StrandExecutor · ModelId             (strand.hpp)              │
+│  ModelStrands · ModelId               (strand.hpp)              │
 │  CompletionState<T>                   (completion.hpp)          │
 ├─────────────────────────────────────────────────────────────────┤
 │  Cross-cutting                                                  │
@@ -90,7 +90,7 @@ GUI thread
   └─ bridge::BridgeHandler<M>::execute(action)
        └─ bridge::Bridge::executeVia<M, A>
             └─ backend::LocalBackend::execute
-                 └─ StrandExecutor → worker thread → Model::execute(action)
+                 └─ ModelStrands → worker thread → Model::execute(action)
                       └─ async::Completion<T>::then callback → GUI executor
 ```
 
@@ -102,7 +102,7 @@ GUI thread
        └─ bridge::Bridge::executeVia<M, A>
             └─ backend::SimulatedRemoteBackend::execute
                  └─ serialize action → backend::RemoteServer::handle (JSON wire envelope)
-                      └─ ActionDispatcher → StrandExecutor → Model::execute
+                      └─ ActionDispatcher → ModelStrands → Model::execute
                            └─ serialize result → Completion<T>::then → GUI executor
 ```
 
@@ -116,7 +116,7 @@ GUI thread (Qt process)                         Server process
             └─ qt::QtWebSocketBackend::execute   (network client)
                  └─ assign callId, send JSON  ──► qt::QtWebSocketServer::handle
                                                         └─ backend::RemoteServer::handle (JSON wire envelope)
-                                                             └─ ActionDispatcher → StrandExecutor → Model::execute
+                                                             └─ ActionDispatcher → ModelStrands → Model::execute
                  ◄── JSON reply (ok|callId|result) ──────────────────────────────
             └─ resolve pending Completion
        └─ async::Completion<T>::then callback → qt::QtExecutor → GUI thread
@@ -194,11 +194,11 @@ All concurrency runs through `morph::exec::IExecutor::post(fn)`:
 - **`MainThreadExecutor`** — single-threaded queue with `runFor(timeout)` drain; used in non-Qt tests to pump the "GUI" thread. It catches only `std::exception` from a task, logs it via `morph::log`, and continues with the next task.
 - **`QtExecutor`** — posts via `QMetaObject::invokeMethod(Qt::QueuedConnection)`; safe from any thread; drops silently if the target object is deleted.
 
-`morph::exec::detail::StrandExecutor` (below) is where `Model::execute()` actually runs; like `ThreadPoolExecutor`, it catches a task exception (`std::exception` or unknown) and logs it via `morph::log` so a throw neither stalls the strand nor vanishes — the next queued task for that model still runs.
+A model instance's strand (`morph::exec::detail::ModelStrands`, below) is where `Model::execute()` actually runs; like `ThreadPoolExecutor`, it catches a task exception (`std::exception` or unknown) and logs it via `morph::log` so a throw neither stalls the strand nor vanishes — the next queued task for that model still runs.
 
-### StrandExecutor
+### Strands
 
-`morph::exec::detail::StrandExecutor` guarantees that all tasks for the same `ModelId` are serialised while tasks for different models are parallelised. Internally keeps one `std::queue` and a `running` flag per model; tasks are dispatched to the underlying `IExecutor` one at a time.
+`morph::exec::detail::ModelStrands` guarantees that all tasks for the same `ModelId` are serialised while tasks for different models are parallelised. It is core-cpp's `core::async::KeyedStrands<ModelId>` over the backend's `IExecutor`: a strand per model instance with work, made when it gets work and retired when it runs out, which queues itself on the executor once per turn and runs a batch of tasks there. morph adds the adapter to its `IExecutor`, the catch-and-log above, and the Task handler's session around each of the handler's resumptions (see `spec/core/coroutines.md`).
 
 ### Completion<T>
 
@@ -374,7 +374,7 @@ Conflict resolution during offline-to-online sync belongs entirely in the model.
 | `Completion<T>` / `CompletionState<T>` | Fully mutex-protected; callbacks always marshal to the supplied executor. |
 | `Bridge` | Handler list protected by mutex; register/deregister safe from any thread. |
 | Logger | Sink and level accesses protected by mutex. |
-| `StrandExecutor` | Per-strand mutex + atomic running flag; safe from any thread. |
+| `ModelStrands` | core-cpp's `KeyedStrands`: a registry lock taken before each strand's own; safe from any thread. |
 | `Bridge::switchBackend` | Holds bridge mutex while staging + committing; re-registration and notification are atomic with respect to new `execute` calls. Exception-safe: a registration failure rolls back and leaves the old backend and all `currentId`s untouched (no-op). Outgoing-backend cancellation runs after the mutex is released. |
 
 ## Error propagation
@@ -389,7 +389,7 @@ Model::execute(action) throws
 
 If the `Completion` is abandoned (no `.onError` attached, or no callback executor to deliver it on), the destructor logs the exception through the orphan logger. Non-`std::exception` types are logged as "unknown exception".
 
-Task exceptions on the executors themselves are handled independently: `ThreadPoolExecutor` and `StrandExecutor` catch and log every task throw via `morph::log`, and `MainThreadExecutor::runFor` catches `std::exception`. A throwing task therefore never kills a worker or stalls a strand — see "Executors" above.
+Task exceptions on the executors themselves are handled independently: `ThreadPoolExecutor` and `ModelStrands` catch and log every task throw via `morph::log`, and `MainThreadExecutor::runFor` catches `std::exception`. A throwing task therefore never kills a worker or stalls a strand — see "Executors" above.
 
 ## Adding a new model and actions
 
@@ -643,7 +643,7 @@ folder.
 |---|---|
 | `core/logger.hpp` | `LogLevel`, log configuration and level helpers; internals in `morph::log::detail` |
 | `core/executor.hpp` | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` (`morph::exec::`) |
-| `core/strand.hpp` | `ModelId`, `ModelIdHash`, `StrandExecutor` — serialises tasks per model (`morph::exec::detail::`) |
+| `core/strand.hpp` | `ModelId`, `ModelIdHash`, `ModelStrands`, `TaskResumer` — serialises tasks per model over core-cpp's `KeyedStrands` (`morph::exec::detail::`) |
 | `core/completion.hpp` | `CompletionState<T>` (detail) + `Completion<T>` (public) — result handle |
 | `core/model.hpp` | `IModelHolder`, `ModelHolder<T>`, `ModelFactory`, `IBackendChangedSink`, `BackendChangedNotifiable` — type-erased model storage; `IModelHolder::attachActionLog`/`hasActionLog`/`recordIfAttached` (`morph::model::detail::`) |
 | `core/registry.hpp` | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` (public) + `ActionDispatcher` (also tracking each action's `coalesce` policy), `ModelRegistryFactory`, `defaultDispatcher()`, `defaultRegistry()`, `ParseError`, `registerModelOnce`, `registerActionOnce`, `actionLoggable<A>()` (detail). Registration macros `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION` (optional 4th `Loggable` argument), `BRIDGE_REGISTER_VALIDATOR` are defined here at file scope. |
@@ -743,7 +743,7 @@ documented behavior.
 | Header-only library | Zero build-system friction; include and use. morph's own surface stays headers only; core-cpp's static modules are built with it. |
 | core-cpp for timers, base64 and wakeup | One implementation shared with the other Contour Terminal projects, including a WebAssembly subset whose host-driven loop runs `TimeoutScheduler` on the browser's main thread. |
 | Per-topic public namespaces with per-topic `detail::` | Minimal public surface — callers see only what they need; internals are clearly walled off. |
-| `StrandExecutor` per `ModelId` | Parallelism across models; serial within one model — model authors write single-threaded code. |
+| A strand per `ModelId` | Parallelism across models; serial within one model — model authors write single-threaded code. |
 | `Completion<T>` not `std::future<T>` | Callbacks marshal to a specific executor; futures do not. |
 | `IBackend` in `detail::` | Users never type the interface — they construct concrete backends and let conversion happen implicitly. |
 | `HandlerBinding` with atomic `currentId` | Handlers survive backend replacement without re-registering from application code. |

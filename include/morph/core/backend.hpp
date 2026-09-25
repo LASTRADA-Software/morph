@@ -109,7 +109,7 @@ struct ActionCall {
     /// Takes the action's owner rather than a borrowed pointer: the handler's
     /// frame outlives the call that starts it.
     void (*localOpAsync)(::morph::model::detail::IModelHolder& holder, std::shared_ptr<void> action,
-                         const std::shared_ptr<::morph::exec::StrandCoroExecutor>& executor,
+                         const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor,
                          ::core::async::StopToken token, LocalDone done) = nullptr;
 
     /// @brief The stop source a Task handler's token comes from, or null for
@@ -804,11 +804,12 @@ struct ClientTimeoutError : std::runtime_error {
 /// @par Ordering
 /// Control calls are serialised onto one strand, so the wrapped backend sees
 /// them one at a time, as it did when the blocking call itself serialised
-/// callers. `~SynchronousBackendAdapter` waits for any in-flight control call
-/// to finish (`StrandExecutor`'s destructor does), so a reply can never land
-/// in a destroyed adapter; the executor must therefore still be running tasks
-/// when this adapter is destroyed, on the same terms as `StrandExecutor`'s own
-/// `base` (see docs/spec/concurrency_and_lifetimes.md, "Destruction ordering").
+/// callers. `~SynchronousBackendAdapter` waits for every queued and in-flight
+/// control call to finish, so a reply can never land in a destroyed adapter;
+/// the executor must therefore still be running tasks when this adapter is
+/// destroyed (see docs/spec/concurrency_and_lifetimes.md, "Destruction
+/// ordering"). The single-threaded WebAssembly build has no thread to wait
+/// for: there the control calls still queued are dropped.
 ///
 /// @par Reconnect handlers
 /// A control call issued from a reconnect handler runs on the strand, never on
@@ -816,7 +817,6 @@ struct ClientTimeoutError : std::runtime_error {
 /// be delivered by the thread that is running the reconnect handler does not
 /// wait on itself. Whether that is enough to settle `SocketBackend`'s
 /// documented reconnect hazard is not a claim made here.
-// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class SynchronousBackendAdapter : public detail::IBackend {
 public:
     /// @brief Wraps @p inner, running its blocking control calls on @p blockingExec.
@@ -835,6 +835,15 @@ public:
             throw std::invalid_argument{"SynchronousBackendAdapter requires a backend to wrap"};
         }
     }
+
+    /// @brief Waits for every queued and in-flight control call; see
+    ///        "Ordering" above.
+    ~SynchronousBackendAdapter() override { _control.drain(); }
+
+    SynchronousBackendAdapter(const SynchronousBackendAdapter&) = delete;
+    SynchronousBackendAdapter& operator=(const SynchronousBackendAdapter&) = delete;
+    SynchronousBackendAdapter(SynchronousBackendAdapter&&) = delete;
+    SynchronousBackendAdapter& operator=(SynchronousBackendAdapter&&) = delete;
 
     /// @brief The producer side of a `bindModel`/`promoteModel` completion.
     ///
@@ -1153,15 +1162,15 @@ private:
     }
 
     /// @brief The single strand key every control call shares, so they run one
-    ///        at a time. Not a real model id: this `StrandExecutor` is private
-    ///        to the adapter and shares no key space with any backend's own.
+    ///        at a time. Not a real model id: these strands are private to the
+    ///        adapter and share no key space with any backend's own.
     static constexpr ::morph::exec::detail::ModelId kControlStrand{1};
 
     /// @brief Smallest size at which `trackPending` sweeps; see `LocalBackend`'s.
     static constexpr std::size_t kPendingCompactFloor = 32;
 
     std::shared_ptr<detail::IBackend> _inner;
-    ::morph::exec::detail::StrandExecutor _control;
+    ::morph::exec::detail::ModelStrands _control;
     mutable std::mutex _pendingMtx;
     // Every `bindModel`/`promoteModel` record handed to a `_control` task and
     // not yet settled by it. Weak, so a settled task's record drops out on its
@@ -1181,34 +1190,38 @@ class LocalBackend : public detail::IBackend {
 public:
     /// @brief Constructs the backend using @p workerPool to run model actions.
     /// @param workerPool Executor (typically a `ThreadPoolExecutor`) for model
-    ///                   work. Borrowed, not owned: it is handed to this
-    ///                   backend's `StrandExecutor`, so it must outlive the
-    ///                   backend *and* keep running tasks until teardown
-    ///                   completes — destroying it first deadlocks (see
+    ///                   work. Borrowed, not owned: this backend's strands run
+    ///                   on it, so it must outlive the backend *and* keep
+    ///                   running tasks until teardown completes — destroying it
+    ///                   first deadlocks (see
     ///                   `docs/spec/concurrency_and_lifetimes.md`, "Destruction
     ///                   ordering").
-    explicit LocalBackend(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND) : _strand{workerPool} {}
+    explicit LocalBackend(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND)
+        : _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)} {}
 
-    /// @brief Stops the Task handlers still running, lets the strand drain, and
-    ///        only then closes it. See `docs/spec/core/coroutines.md`,
+    /// @brief Stops the Task handlers still running, lets the strands drain,
+    ///        and only then closes them. See `docs/spec/core/coroutines.md`,
     ///        "Teardown".
     ///
     /// In that order, because each step needs the one before it:
-    /// 1. Every live Task run's stop is requested. A handler suspended in a
-    ///    morph awaiter resumes, cancelled, through the strand, which is still
-    ///    open. One suspended in a stop-aware core-cpp awaiter resumes on that
-    ///    awaiter's own executor instead, and unwinds there.
-    /// 2. The strand is drained: the resumptions posted to it, and every queued
-    ///    action -- skipped, if `cancelPending` already failed it. A handler's
-    ///    end, and with it leaving the gate and starting the next action,
-    ///    always runs on the strand, wherever the handler finished; the drain
-    ///    does not wait for a handler still unwinding on another executor.
-    /// 3. The strand is closed. A handler that ends after this -- one that
+    /// 1. Every live Task run's stop is requested. A handler suspended in an
+    ///    awaitable that resumes on the current executor -- morph's own,
+    ///    `core::async::AsyncQueue::pop` -- resumes, cancelled, through its
+    ///    strand, which is still open. One suspended on a `core::net` socket or
+    ///    timer resumes on that loop instead, and unwinds there.
+    /// 2. The strands are drained: the resumptions queued on them, and every
+    ///    queued action -- skipped, if `cancelPending` already failed it. A
+    ///    handler's end, and with it leaving the gate and starting the next
+    ///    action, always runs on the strand, wherever the handler finished; the
+    ///    drain does not wait for a handler still unwinding on another executor.
+    /// 3. The strands are closed. A handler that ends after this -- one that
     ///    unwound elsewhere, or ignored the stop -- finishes inline, where
-    ///    nothing on the drained strand can race it.
+    ///    nothing on the drained strands can race it.
     ///
     /// Must not run on one of this backend's strand threads, whose drain it
-    /// would wait for; a debug build asserts that.
+    /// would wait for; a debug build asserts that. The single-threaded
+    /// WebAssembly build waits for nothing: step 2 is skipped, and closing
+    /// drops what is still queued (see `ModelStrands::drain`).
     ~LocalBackend() override {
         std::vector<std::weak_ptr<LocalRun>> runs;
         {
@@ -1220,8 +1233,8 @@ public:
                 run->stopSource->request_stop();
             }
         }
-        _strand.waitIdle();
-        _strandLink->close();
+        _strands->drain();
+        _strands->close();
     }
 
     LocalBackend(const LocalBackend&) = delete;
@@ -1358,7 +1371,7 @@ public:
             }
         }
         for (auto& [modelId, holder] : aware) {
-            _strand.post(modelId, [h = std::move(holder)]() mutable { h->onBackendChanged(); });
+            _strands->post(modelId, [h = std::move(holder)]() mutable { h->onBackendChanged(); });
         }
     }
 
@@ -1444,16 +1457,15 @@ public:
         run.holder = std::move(holder);
         run.sink = std::move(sink);
         run.hydration = std::move(hydration);
-        run.strandLink = _strandLink;
+        run.strands = _strands;
         run.cancels = _cancels;
         run.admittedEpoch = admittedEpoch;
         run.mid = mid;
-        // Held by shared_ptr, never by raw `this`: see the Global
-        // Constraints note on `~StrandExecutor`'s member-destruction-order
-        // subtlety. A shared_ptr copy has its own lifetime, independent of
-        // LocalBackend's, so it stays valid even if the backend is torn down
-        // while this task is still queued or running. `hydration` follows the
-        // same rule and may be null (a private instance has no entry).
+        // Held by shared_ptr, never by raw `this`. A shared_ptr copy has its
+        // own lifetime, independent of LocalBackend's, so it stays valid even
+        // if the backend is torn down while this task is still queued or
+        // running. `hydration` follows the same rule and may be null (a
+        // private instance has no entry).
         run.inFlightCounter = _inFlight;
         auto const inFlightAfterInc = run.inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
@@ -1470,16 +1482,17 @@ public:
             }
             auto shared = std::make_shared<LocalRun>(std::move(run));
             rememberTaskRun(shared);
-            _strand.post(mid, [shared] { shared->holder->actionGate().enter([shared] { startTaskLocal(shared); }); });
+            _strands->post(mid,
+                           [shared] { shared->holder->actionGate().enter([shared] { startTaskLocal(shared); }); });
             return;
         }
         // An ordinary run travels by value in the strand task, so a dispatch
-        // costs the strand task's one allocation and nothing more:
+        // costs the post's one allocation and nothing more:
         // `bench.alloc_budget` holds that line. The task keeps it while the
         // handler runs, as it kept its captures before there was a gate; only
         // a run that has to wait behind a suspended Task handler is moved out,
         // into the gate's queue.
-        _strand.post(mid, [run = std::move(run)]() mutable {
+        _strands->post(mid, [run = std::move(run)]() mutable {
             auto& gate = run.holder->actionGate();
             if (gate.tryEnter()) {
                 startLocal(run);
@@ -1641,7 +1654,7 @@ private:
         std::shared_ptr<::morph::async::detail::ISettleSink> sink;
         std::shared_ptr<detail::HydrationState> hydration;
         std::shared_ptr<std::atomic<std::size_t>> inFlightCounter;
-        std::shared_ptr<::morph::exec::detail::StrandLink> strandLink;
+        std::shared_ptr<::morph::exec::detail::ModelStrands> strands;
         std::shared_ptr<CancelRecord> cancels;
         std::uint64_t admittedEpoch = 0;
         ::morph::exec::detail::ModelId mid{};
@@ -1705,20 +1718,23 @@ private:
         }
         try {
             ::morph::session::detail::ScopedContext const scoped{run->session};
-            auto executor =
-                std::make_shared<::morph::exec::StrandCoroExecutor>(run->strandLink, run->mid, run->session);
+            auto executor = std::make_shared<::morph::exec::detail::TaskResumer>(run->strands, run->mid, run->session);
+            run->strands->enroll(run->mid, executor);
             auto token = run->stopSource->get_token();
             run->localOpAsync(*run->holder, run->action, executor, std::move(token),
                               [run](std::shared_ptr<void> value, std::exception_ptr error) {
-                                  // A handler whose last await was a core-cpp
-                                  // one ends on that awaiter's executor; what
-                                  // follows its end belongs on the strand.
-                                  run->strandLink->runOnStrand(
-                                      run->mid, [run, value = std::move(value), error = std::move(error)] {
-                                          finishLocal(*run, value, error);
-                                      });
+                                  run->strands->withdraw(run->mid);
+                                  // A handler whose last await resumed on
+                                  // another executor -- a `core::net` loop --
+                                  // ends there; what follows its end belongs
+                                  // on the strand.
+                                  run->strands->runOnStrand(run->mid,
+                                                            [run, value = std::move(value), error = std::move(error)] {
+                                                                finishLocal(*run, value, error);
+                                                            });
                               });
         } catch (...) {
+            run->strands->withdraw(run->mid);
             finishLocal(*run, nullptr, std::current_exception());
         }
     }
@@ -1779,11 +1795,9 @@ private:
         _taskRuns.emplace_back(run);
     }
 
-    ::morph::exec::detail::StrandExecutor _strand;
-    // The strand as the Task handlers started here see it; closed by the
-    // destructor before `_strand` is destroyed.
-    std::shared_ptr<::morph::exec::detail::StrandLink> _strandLink =
-        std::make_shared<::morph::exec::detail::StrandLink>(_strand);
+    // One strand per model instance. Shared with the Task handlers started
+    // here, whose resumers outlive the backend; closed by the destructor.
+    std::shared_ptr<::morph::exec::detail::ModelStrands> _strands;
     std::mutex _regMtx;
     // Every live instance, private and shared alike, plus the shared-instance
     // directory over them — holder, attach count, directory key and hydration
@@ -1825,8 +1839,7 @@ private:
     std::size_t _taskRunsCompactAt = kPendingCompactFloor;
     // Concurrent in-flight executes, for the executeInFlight metric. A
     // shared_ptr (not a plain atomic member) so strand tasks hold their own
-    // reference instead of capturing `this` — see execute()'s comment and the
-    // Global Constraints note on ~StrandExecutor's destruction order.
+    // reference instead of capturing `this` — see execute()'s comment.
     std::shared_ptr<std::atomic<std::size_t>> _inFlight = std::make_shared<std::atomic<std::size_t>>(0);
 };
 

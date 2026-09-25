@@ -2714,11 +2714,11 @@ jobs:
             fi
             # --fair-sched=yes: Valgrind runs one thread at a time, and by
             # default a thread that yields can take the lock straight back.
-            # test_strand_race.cpp's drain-race case has four chasers spinning
-            # on a gate and a producer yielding on a counter, so the pool
-            # worker that has to run each round's task waits on luck: measured
-            # at 1982 s alone, 45 of master's 54 minutes here, and past three
-            # hours on one run of #806. With a fair queue it takes 63 s, 4/4.
+            # A test whose threads spin or yield while they wait for another
+            # thread then waits on luck. The strand drain-race case, removed
+            # with morph's own strand, did: 1982 s alone, 45 of master's 54
+            # minutes here, and past three hours on one run of #806; with a
+            # fair queue, 63 s. Kept for the next test that waits that way.
             valgrind \
               --fair-sched=yes \
               --tool=memcheck \

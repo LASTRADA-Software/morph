@@ -45,10 +45,10 @@ using LogGuard = morph::log::ScopedLoggerOverride;
 // ── Strand: per-producer FIFO under multi-thread contention ───────────────────
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("morph::exec::detail::StrandExecutor: per-producer FIFO preserved across many concurrent producers",
+TEST_CASE("morph::exec::detail::ModelStrands: per-producer FIFO preserved across many concurrent producers",
           "[strand][concurrency][quantum-parity]") {
     morph::exec::ThreadPoolExecutor pool{4};
-    morph::exec::detail::StrandExecutor strand{pool};
+    auto const strand = std::make_shared<morph::exec::detail::ModelStrands>(pool);
     morph::exec::detail::ModelId key{42};
 
     constexpr int numProducers = 8;
@@ -64,7 +64,7 @@ TEST_CASE("morph::exec::detail::StrandExecutor: per-producer FIFO preserved acro
     for (int producerIdx = 0; producerIdx < numProducers; ++producerIdx) {
         producers.emplace_back([&, producerIdx] {
             for (int seq = 0; seq < perProducer; ++seq) {
-                strand.post(key, [&, producerIdx, seq] {
+                strand->post(key, [&, producerIdx, seq] {
                     {
                         std::scoped_lock lock{obsMtx};
                         observed.emplace_back(producerIdx, seq);
@@ -92,11 +92,11 @@ TEST_CASE("morph::exec::detail::StrandExecutor: per-producer FIFO preserved acro
 
 // ── Strand: cross-key concurrency saturates pool ──────────────────────────────
 
-TEST_CASE("morph::exec::detail::StrandExecutor: cross-key concurrency saturates pool size and never exceeds it",
+TEST_CASE("morph::exec::detail::ModelStrands: cross-key concurrency saturates pool size and never exceeds it",
           "[strand][concurrency][quantum-parity]") {
     constexpr std::size_t poolSize = 4;
     morph::exec::ThreadPoolExecutor pool{poolSize};
-    morph::exec::detail::StrandExecutor strand{pool};
+    auto const strand = std::make_shared<morph::exec::detail::ModelStrands>(pool);
 
     constexpr int numKeys = 16;
     std::atomic<int> active{0};
@@ -104,7 +104,7 @@ TEST_CASE("morph::exec::detail::StrandExecutor: cross-key concurrency saturates 
     std::atomic<int> done{0};
 
     for (int key = 1; key <= numKeys; ++key) {
-        strand.post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] {
+        strand->post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] {
             int now = active.fetch_add(1) + 1;
             int prev = peak.load();
             while (now > prev && !peak.compare_exchange_weak(prev, now)) {
@@ -122,23 +122,23 @@ TEST_CASE("morph::exec::detail::StrandExecutor: cross-key concurrency saturates 
 
 // ── Strand: thousands of distinct keys exercise cleanup path ──────────────────
 
-TEST_CASE("morph::exec::detail::StrandExecutor: churn across thousands of distinct keys completes without deadlock",
+TEST_CASE("morph::exec::detail::ModelStrands: churn across thousands of distinct keys completes without deadlock",
           "[strand][churn][quantum-parity]") {
     morph::exec::ThreadPoolExecutor pool{4};
-    morph::exec::detail::StrandExecutor strand{pool};
+    auto const strand = std::make_shared<morph::exec::detail::ModelStrands>(pool);
 
     constexpr int numKeys = 3000;
     std::atomic<int> done{0};
 
     for (int key = 1; key <= numKeys; ++key) {
-        strand.post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] { done.fetch_add(1); });
+        strand->post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] { done.fetch_add(1); });
     }
     REQUIRE(waitUntil([&] { return done.load() == numKeys; }, morph::testing::WaitBudget{10s}));
 
     // Post once more after the churn — confirms the cleanup path left the
     // strand executor in a usable state (regression target for map corruption).
     std::atomic<bool> after{false};
-    strand.post(morph::exec::detail::ModelId{static_cast<uint64_t>(numKeys + 1)}, [&] { after.store(true); });
+    strand->post(morph::exec::detail::ModelId{static_cast<uint64_t>(numKeys + 1)}, [&] { after.store(true); });
     REQUIRE(waitUntil([&] { return after.load(); }));
 }
 

@@ -71,7 +71,7 @@ used locally or serialised for a remote round-trip:
 | `serializeAction` | `std::string (*)(const void* action)` | Serialises `action` to JSON. Only called on the remote path. |
 | `deserializeResult` | `std::shared_ptr<void> (*)(std::string_view)` | Deserialises a JSON reply into the opaque result. Only called on the remote path. Never reads the action. |
 | `localOp` | `std::shared_ptr<void> (*)(IModelHolder&, void* action)` | Executes `action` directly against a model holder. Only called on the local path. |
-| `localOpAsync` | `void (*)(IModelHolder&, std::shared_ptr<void> action, const std::shared_ptr<StrandCoroExecutor>&, core::async::StopToken, LocalDone)` | Set instead of `localOp` when the action's handler returns `core::async::Task`: starts it on the model's strand and reports the result or exception through `LocalDone` when the Task completes. Only called on the local path. See [`coroutines.md`](coroutines.md). |
+| `localOpAsync` | `void (*)(IModelHolder&, std::shared_ptr<void> action, const std::shared_ptr<TaskResumer>&, core::async::StopToken, LocalDone)` | Set instead of `localOp` when the action's handler returns `core::async::Task`: starts it on the model's strand and reports the result or exception through `LocalDone` when the Task completes. Only called on the local path. See [`coroutines.md`](coroutines.md). |
 | `stopSource` | `std::shared_ptr<core::async::StopSource>` | Null unless `Bridge::executeVia` armed an execute deadline for a Task handler; the deadline requests stop on it and `LocalBackend` hands its token to the handler. |
 | `session` | `morph::session::Context` | Session context. Local backends thread it through a thread-local before invoking `localOp`; remote backends serialise it into the wire envelope. |
 
@@ -470,9 +470,11 @@ natively](#the-structural-registration-surface-natively).
   would.
 - **Control calls are serialised** onto one strand, so the wrapped backend sees
   them one at a time, as it did when the blocking call itself serialised
-  callers. `~SynchronousBackendAdapter` waits for any in-flight control call, so
-  the executor must still be running tasks when the adapter is destroyed — the
-  same rule as `StrandExecutor`'s own `base`.
+  callers. `~SynchronousBackendAdapter` waits for every queued and in-flight
+  control call (`ModelStrands::drain`), so the executor must still be running
+  tasks when the adapter is destroyed — the same rule as for any backend's
+  strands. The single-threaded WebAssembly build has no thread to wait for, and
+  drops the control calls still queued.
 - **A control call issued from a reconnect handler runs on the strand**, never
   on the wrapped backend's transport thread — *provided the handler issues it
   through `bindModel`/`promoteModel`*. That proviso is load-bearing, and it is
@@ -725,9 +727,9 @@ declared alongside them so callers catch every dispatch failure from one header:
 ## `LocalBackend` — in-process execution
 
 `LocalBackend` is the concrete in-process backend. It owns a
-`StrandExecutor` (wrapping the `IExecutor&` worker pool, typically a
-`ThreadPoolExecutor`) and a `detail::InstanceDirectory` holding its live model
-instances.
+`ModelStrands` (core-cpp's `KeyedStrands` over the `IExecutor&` worker pool,
+typically a `ThreadPoolExecutor`; see [executor.md](executor.md)) and a
+`detail::InstanceDirectory` holding its live model instances.
 
 Both it and `RemoteServer` keep those instances in one
 `detail::InstanceDirectory` (`core/detail/instance_directory.hpp`): one record
@@ -986,7 +988,7 @@ via `morph::observe::setMetricSink`/`setTraceSink` — see
 envelopes for the *same* model, sent back-to-back on one connection, are raced
 by two pool threads through identical pre-strand work
 (decode/authorize/authenticate/registry lookup). Whichever finishes that work
-first reaches `_strand.post(mid, ...)` first. `StrandExecutor` serialises what
+first reaches `_strands->post(mid, ...)` first. The strand serialises what
 it is given, but it can only serialise it in the order it is given — so with
 more than one pool worker free, the model could observe two actions in the
 opposite order from the one they were sent in. That is a correctness problem
@@ -1017,9 +1019,9 @@ produces the canonical error reply for malformed input exactly as it would
 otherwise.
 
 **Where the order is enforced.** The ticket is waited on at one point only —
-immediately before `_strand.post` — and released immediately after that call
+immediately before `_strands->post` — and released immediately after that call
 returns. It deliberately does **not** span the strand task: once the post has
-happened in the right order, `StrandExecutor` owns the sequencing from there,
+happened in the right order, the strand owns the sequencing from there,
 and holding the ticket any longer would stall a different request's pre-strand
 work for no ordering benefit. The wait itself happens on a pool thread and
 blocks nothing else; a strand is never blocked by this gate.
@@ -2051,7 +2053,7 @@ are:
 
 - **The worker pool must outlive the backend.** Every backend takes an
   `IExecutor& workerPool` by reference (`LocalBackend`, `RemoteServer`) and wraps
-  it in a `StrandExecutor`. The pool (typically a `ThreadPoolExecutor`) must be
+  runs its strands on it. The pool (typically a `ThreadPoolExecutor`) must be
   destroyed *after* the backend that references it — and, in practice, after the
   `Bridge` that owns the backend. Destroying the pool first leaves the strand
   pointing at freed storage.
@@ -2150,7 +2152,7 @@ round-trip; model and GUI authors must not assume any two share a thread:
 |---|---|
 | `serializeAction` | The **calling / GUI thread** — `SimulatedRemoteBackend::execute` invokes it synchronously while building the envelope, before handing off to the pool. |
 | `deserializeResult` | The **reply / pool thread** — invoked inside the `handle()` reply callback when the server's `ok` arrives (for `SimulatedRemoteBackend`, that is a `RemoteServer` worker-pool thread). |
-| `localOp` | The **model strand** (`LocalBackend` only) — posted on the per-`ModelId` `StrandExecutor`, serialised against other actions for the same model. Never invoked on the remote path. |
+| `localOp` | The **model strand** (`LocalBackend` only) — posted on the per-`ModelId` strand, serialised against other actions for the same model. Never invoked on the remote path. |
 
 On the server side, `RemoteServer` runs authorize/authenticate and the model
 lookup on the pool thread that `dispatchMessage` runs on, then runs
@@ -2504,7 +2506,7 @@ implementation to absorb — see
 | `setReconnectHandler` | Default no-op | Only backends with a transport layer (e.g. `QtWebSocketBackend`) need to react to reconnects. `LocalBackend` and `SimulatedRemoteBackend` never invoke it. |
 | `setConnectHandler`/`setDisconnectHandler` on `IBackend`, not only `QtWebSocketBackend` | Same no-op-default pattern as `setReconnectHandler` | Connection state is a property of any transport-backed backend; a UI observing it shouldn't have to downcast to a concrete backend type. A purely local backend has no meaningful connection state, so the base-class hook is simply inert for it — no behavior change, matching the existing `setReconnectHandler` precedent exactly. |
 | `setDisconnectHandler` fires before reconnect scheduling | Ordering choice, not incidental | An instant successful reconnect must not look, from an observer's perspective, like nothing happened — the disconnected state must be visible even when the very next thing that happens is a fresh `connected`. |
-| Strand-per-model | `StrandExecutor` serialises actions per `ModelId` | Actions against the same model run sequentially; different models can run in parallel. No global lock on the pool. |
+| Strand-per-model | `ModelStrands` (core-cpp's `KeyedStrands`) serialises actions per `ModelId` | Actions against the same model run sequentially; different models can run in parallel. No global lock on the pool. |
 | Overwrite `session.principal` on remote execute | `authenticate()` result replaces the client claim before dispatch | The client-asserted `Context::principal` is untrusted; a verifying authorizer makes the token-derived identity authoritative so `session::current()->principal` inside a model is trustworthy. Non-verifying authorizers return `nullopt` and change nothing. |
 | Opaque model ids | Monotonic counter run through a keyed 4-round Feistel permutation (`detail::OpaqueIdGenerator`), key drawn from `std::random_device` at construction | Guarantees uniqueness (Feistel networks are bijections for any round function) while making ids unguessable without the key; self-contained, no external crypto dependency — same posture as the reference HMAC-SHA256 in `session_auth.hpp`. |
 | WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. A lost/undelivered deregister no longer leaks indefinitely: `QtWebSocketServer`'s connection scope reclaims the model at the next disconnect (see Limitations). |
@@ -2515,7 +2517,7 @@ implementation to absorb — see
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
 | `executeTimeout` implementation | A dedicated, lazily-started background thread (`morph::async::detail::TimeoutScheduler`, a thread running core-cpp's `PlatformLoop`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. The deadlines are the loop's own timers, so nothing polls: an armed timer is what bounds the loop's next wait. |
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill; on empty the frame is refused with an `err` reply, and the connection is left open | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Refusing rather than closing keeps a transient burst from taking down the connection. The frame is *answered* rather than discarded because a reply costs nothing at the protocol level and is the difference between a caller's `Completion` failing and it hanging: the id is recovered by the same bounded prefix scan (`peekCallId`) the `maxMessageBytes` branch uses, so no decode of a frame that will not run is needed. |
-| Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor`/`StrandExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
+| Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
 | Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models) under `_regMtx`. No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
 | `morph::net`'s I/O model | A dedicated I/O thread + `std::condition_variable`, instead of the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and — as a side effect — lets `SocketBackend` be driven safely from multiple threads (`QtWebSocketBackend` cannot be, since it is pinned to one event-loop thread). |
 | `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + HTTP Upgrade + frame codec), with base64 from core-cpp, not a WebSocket library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency beyond core-cpp, which morph links anyway, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |

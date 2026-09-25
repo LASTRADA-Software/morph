@@ -32,7 +32,7 @@ find_dependency(glaze @MORPH_GLAZE_VERSION@ CONFIG)
 # natively, core::platform), which morph's install puts next to it. 0.3 is the
 # minor version morph was built against; core-cpp's package accepts only that
 # minor version while core-cpp is 0.x.
-find_dependency(core-cpp 0.3 CONFIG)
+find_dependency(core-cpp 0.4 CONFIG)
 
 if(NOT WIN32 AND NOT EMSCRIPTEN)
     find_dependency(Threads)

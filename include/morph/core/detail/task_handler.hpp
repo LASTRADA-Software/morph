@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <atomic>
 #include <concepts>
-#include <condition_variable>
-#include <core/async/IExecutor.hpp>
-#include <core/async/ParkedWork.hpp>
 #include <core/async/StopToken.hpp>
 #include <core/async/Task.hpp>
 #include <coroutine>
@@ -13,218 +11,19 @@
 #include <exception>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <thread>
 #include <utility>
 
-#include "../../session/session.hpp"
 #include "../strand.hpp"
-#include "completion_awaiter.hpp"
 
 /// @file
-/// @brief What drives a model's Task handler: the strand executor its
-///        resumptions go through, the driver coroutine that starts and finishes
-///        it, the per-instance gate that keeps actions from overlapping, and the
-///        trait that tells a Task handler from an ordinary one.
+/// @brief What drives a model's Task handler: the driver coroutine that starts
+///        and finishes it, the per-instance gate that keeps actions from
+///        overlapping, and the trait that tells a Task handler from an ordinary
+///        one. The resumer its resumptions go through is `strand.hpp`'s.
 ///
 /// Specified in `docs/spec/core/coroutines.md`, "Model side".
-
-namespace morph::exec {
-
-namespace detail {
-
-/// @brief A backend's strand, as the Task handlers it started see it: usable
-///        until the backend closes it.
-///
-/// A suspended Task handler outlives the strand task that started it, and can
-/// outlive the backend too: `Bridge::switchBackend` fails every pending call
-/// and destroys the outgoing `LocalBackend` without waiting for a handler
-/// suspended on work that has not completed. So a `StrandCoroExecutor` holds
-/// this link rather than the strand. The backend shares the link, and its
-/// destructor calls `close()` before the strand is destroyed; `close()` waits
-/// out every `post` already under way, so nothing reaches the strand after
-/// it.
-///
-/// The strand is not shared itself because `~StrandExecutor` waits for its
-/// in-flight tasks. The last owner of a shared strand could be let go by one
-/// of those tasks, and that task's thread would then wait for itself.
-class StrandLink {
-public:
-    /// @param strand The strand; must outlive every `post` that returns true,
-    ///        which `close()` before its destruction guarantees.
-    explicit StrandLink(StrandExecutor& strand MORPH_LIFETIMEBOUND) : _strand{&strand} {}
-
-    /// @brief Posts @p task to @p key's strand, unless the link is closed.
-    /// @param key  The model instance whose strand runs @p task.
-    /// @param task The task.
-    /// @return True if posted; false once closed, leaving @p task unrun.
-    bool post(ModelId key, std::function<void()> task) {
-        StrandExecutor* strand = nullptr;
-        {
-            std::scoped_lock const lock{_mtx};
-            if (_strand == nullptr) {
-                return false;
-            }
-            strand = _strand;
-            ++_posting;
-        }
-        // Outside the lock: over an inline base executor the task runs inside
-        // this call, and a handler it resumes may post again.
-        PostingScope const posting{*this};
-        strand->post(key, std::move(task));
-        return true;
-    }
-
-    /// @brief Whether the calling thread is running a task of @p key's strand.
-    /// @param key The model instance whose strand to ask about.
-    /// @return False once closed: there is no strand left to be on.
-    [[nodiscard]] bool runningHere(ModelId key) {
-        std::scoped_lock const lock{_mtx};
-        return _strand != nullptr && _strand->runningHere(key);
-    }
-
-    /// @brief Posts @p task to @p key's strand, or runs it here if the calling
-    ///        thread is already on that strand or the link is closed.
-    ///
-    /// How a handler's end reaches its strand when the handler finished off it:
-    /// on a core-cpp or other foreign awaiter's executor. Once the link is
-    /// closed its backend has drained the strand, so no strand task is left to
-    /// race @p task. Of the actions still queued in the gate, those whose calls
-    /// `cancelPending` failed are skipped; any other runs after @p task, as the
-    /// gate orders it, never beside it.
-    /// @param key  The model instance whose strand runs @p task.
-    /// @param task The task.
-    void runOnStrand(ModelId key, std::function<void()> task) {
-        if (runningHere(key)) {
-            task();
-            return;
-        }
-        std::function<void()> const fallback = task;
-        if (!post(key, std::move(task))) {
-            fallback();
-        }
-    }
-
-    /// @brief Posts @p task to @p key's strand, even from that strand, or runs
-    ///        it here once the link is closed.
-    ///
-    /// For a task whose captures must be destroyed outside any task of the
-    /// strand: the strand destroys a task only once it has counted it finished,
-    /// and this keeps no copy of @p task behind. A closed link's backend has
-    /// drained the strand, so no strand task is left to race @p task.
-    /// @param key  The model instance whose strand runs @p task.
-    /// @param task The task.
-    void postOrRun(ModelId key, std::function<void()> task) {
-        StrandExecutor* strand = nullptr;
-        {
-            std::scoped_lock const lock{_mtx};
-            if (_strand != nullptr) {
-                strand = _strand;
-                ++_posting;
-            }
-        }
-        if (strand == nullptr) {
-            task();
-            return;
-        }
-        PostingScope const posting{*this};
-        strand->post(key, std::move(task));
-    }
-
-    /// @brief Refuses every later `post`, and waits for those under way.
-    void close() {
-        std::unique_lock lock{_mtx};
-        _strand = nullptr;
-        _idle.wait(lock, [this] { return _posting == 0; });
-    }
-
-private:
-    /// Ends one `post`, whether the strand accepted the task or threw.
-    struct PostingScope {
-        explicit PostingScope(StrandLink& link) noexcept : _link{&link} {}
-        PostingScope(const PostingScope&) = delete;
-        PostingScope& operator=(const PostingScope&) = delete;
-        PostingScope(PostingScope&&) = delete;
-        PostingScope& operator=(PostingScope&&) = delete;
-        ~PostingScope() {
-            std::scoped_lock const lock{_link->_mtx};
-            if (--_link->_posting == 0) {
-                _link->_idle.notify_all();
-            }
-        }
-
-    private:
-        StrandLink* _link;
-    };
-
-    std::mutex _mtx;
-    std::condition_variable _idle;
-    StrandExecutor* _strand;
-    std::size_t _posting = 0;
-};
-
-}  // namespace detail
-
-/// @brief Resumes coroutines on one model's strand.
-///
-/// Every `submit` posts `h.resume()` onto the strand of the model it was made
-/// for, so each resumption of a Task handler runs serialised with that model's
-/// other work. The posted task installs this executor as the resumption context
-/// -- so a handler that awaits another model's completion comes back here rather
-/// than to wherever that completion was delivered -- and the action's session
-/// context, as the strand task that started the handler did.
-///
-/// Once the backend that owns the strand is gone (see `detail::StrandLink`), a
-/// resumption runs inline, on the thread that submitted it, with the same
-/// context installed. The call it belongs to has already failed then, and the
-/// model instance is reachable only through the handler's own frame, so there
-/// is nothing left for the strand to serialise it against.
-///
-/// Shared by the driver and by every posted resumption; always held by
-/// `std::shared_ptr`.
-class StrandCoroExecutor final : public ::core::async::IExecutor,
-                                 public std::enable_shared_from_this<StrandCoroExecutor> {
-public:
-    /// @param link    The link to the strand the model's actions run on.
-    /// @param key     The model instance whose strand resumptions are posted to.
-    /// @param session The action's session context, installed for each resumption.
-    StrandCoroExecutor(std::shared_ptr<detail::StrandLink> link, detail::ModelId key,
-                       ::morph::session::Context session)
-        : _link{std::move(link)}, _key{key}, _session{std::move(session)} {}
-
-    using ::core::async::IExecutor::submit;
-
-    /// @brief Posts @p handle's resumption onto the model's strand, or resumes
-    ///        it here once the strand is gone.
-    /// @param handle The coroutine to resume; borrowed, as every handler frame is
-    ///        owned by the driver that started it.
-    void submit(std::coroutine_handle<> handle) override {
-        auto self = shared_from_this();
-        if (_link->post(_key, [self, handle] { self->resumeHere(handle); })) {
-            return;
-        }
-        resumeHere(handle);
-    }
-
-    /// @brief Posts @p work's resumption onto the model's strand.
-    /// @param work The coroutine to resume. Its abandon claim is not taken: the
-    ///        driver owns every handler frame, so there is nothing here to free.
-    void submit(::core::async::ParkedWork work) override { submit(work.resume); }
-
-private:
-    void resumeHere(std::coroutine_handle<> handle) {
-        ::morph::session::detail::ScopedContext const scoped{_session};
-        ::morph::async::detail::ScopedResumeContext const context{this};
-        handle.resume();
-    }
-
-    std::shared_ptr<detail::StrandLink> _link;
-    detail::ModelId _key;
-    ::morph::session::Context _session;
-};
-
-}  // namespace morph::exec
 
 namespace morph::model {
 
@@ -300,11 +99,9 @@ public:
     /// @brief Takes the gate if it is free, for an action its caller then runs
     ///        itself; otherwise leaves it to `enter` to queue the action.
     ///
-    /// For a caller whose action must stay owned where it is while it runs:
-    /// a backend's strand task, whose captures the strand destroys only once it
-    /// has counted the task finished. The last reference to a `RemoteServer`
-    /// dropped inside the task instead would run `~StrandExecutor`, which waits
-    /// for that very task.
+    /// For a caller whose action stays owned where it is while it runs: a
+    /// backend's strand task, which holds an ordinary run by value, so an
+    /// action on a free gate costs no allocation beyond the post.
     /// @return True if taken: the caller runs its action now, and the action
     ///         holds the gate until it calls `leave()`. False if the action has
     ///         to wait, through `enter`.
@@ -423,14 +220,13 @@ struct TaskHandlerDriver {
 
 /// @brief The driver body: awaits @p task and hands its outcome to @p done.
 /// @tparam R The handler's result type.
-/// @param executor The model's strand executor. Held in the frame: every
-///        awaiter the handler suspends on keeps only a raw pointer to it, as its
-///        resumption context, so it must live until the handler has finished.
+/// @param executor The handler's resumer. Held in the frame, so it lives until
+///        the handler has finished whatever holds it besides.
 /// @param task     The handler's Task, not yet started.
 /// @param done     Called once, on the strand, with the result or the exception.
 /// @return The suspended driver.
 template <typename R>
-TaskHandlerDriver driveTaskHandler(std::shared_ptr<::morph::exec::StrandCoroExecutor> executor,
+TaskHandlerDriver driveTaskHandler(std::shared_ptr<::morph::exec::detail::TaskResumer> executor,
                                    ::core::async::Task<R> task,
                                    std::function<void(std::optional<R>, std::exception_ptr)> done) {
     static_cast<void>(executor);
@@ -449,21 +245,20 @@ TaskHandlerDriver driveTaskHandler(std::shared_ptr<::morph::exec::StrandCoroExec
 
 /// @brief Starts a Task handler on the model's strand, in the calling strand task.
 ///
-/// The handler's first step runs here, with @p executor installed as the
-/// resumption context and the stop token set; every later step is resumed
-/// through @p executor, on the same strand.
+/// The handler's first step runs here, inside @p executor -- the current
+/// executor, with the action's session -- and with the stop token set; every
+/// later step is resumed through @p executor, on the same strand.
 /// @tparam R The handler's result type.
-/// @param executor The model's strand executor.
+/// @param executor The handler's resumer.
 /// @param task     The handler's Task, as the handler call returned it.
 /// @param token    The stop token the handler observes.
 /// @param done     Called once, on the strand, with the result or the exception.
 template <typename R>
-void startTaskHandler(const std::shared_ptr<::morph::exec::StrandCoroExecutor>& executor, ::core::async::Task<R> task,
+void startTaskHandler(const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor, ::core::async::Task<R> task,
                       ::core::async::StopToken token, std::function<void(std::optional<R>, std::exception_ptr)> done) {
     auto driver = driveTaskHandler<R>(executor, std::move(task), std::move(done));
     driver.handle.promise().token = std::move(token);
-    ::morph::async::detail::ScopedResumeContext const context{executor.get()};
-    driver.handle.resume();
+    executor->resumeHere(driver.handle);
 }
 
 }  // namespace detail

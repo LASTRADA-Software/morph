@@ -371,8 +371,8 @@ returns. Consequences:
 - **`switchBackend()` from `onBackendChanged()` is still unsupported** — but for
   a different reason than the lock. The callback runs on the *outgoing* backend's
   strand; a nested `switchBackend` would release the last reference to that
-  backend when it returns, and `~StrandExecutor` blocks until its in-flight tasks
-  finish — including the very task calling it — a self-join hang. Re-registering
+  backend when it returns, and `~LocalBackend` drains its strands — including
+  the very task calling it — a self-join hang, asserted in a debug build. Re-registering
   models or reconciling queue state is the supported reaction; swapping the
   backend again from inside the notification is not.
 
@@ -1079,7 +1079,7 @@ backend — `LocalBackend` erases map entries under its own mutex,
 and `QtWebSocketBackend`/`SocketBackend` are documented fire-and-forget sends
 precisely so destruction never spins a nested event loop. A destructor blocking
 on a bounded predicate is the framework's existing idiom for this hazard —
-`~StrandExecutor` blocks until `_inFlight == 0`
+`~LocalBackend` blocks until its strands have drained
 ([concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md)).
 
 **The lifetime rule.** The gate makes only *destruction* safe in

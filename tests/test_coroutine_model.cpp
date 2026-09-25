@@ -110,6 +110,9 @@ struct CoroPop {
 struct CoroPopBack {
     int tag = 0;
 };
+struct CoroAway {
+    int tag = 0;
+};
 /// A Task handler's action with a validator: only a positive `x` is ready.
 struct CoroValidated {
     int x = 0;
@@ -123,6 +126,7 @@ struct CoroQuick {
 }  // namespace coro_test
 
 using coro_test::CoroAwaitOther;
+using coro_test::CoroAway;
 using coro_test::CoroDouble;
 using coro_test::CoroForeign;
 using coro_test::CoroHold;
@@ -164,6 +168,7 @@ CORO_INT_ACTION(CoroTick, "Coro_Tick")
 CORO_INT_ACTION(CoroForeign, "Coro_Foreign")
 CORO_INT_ACTION(CoroPop, "Coro_Pop")
 CORO_INT_ACTION(CoroPopBack, "Coro_PopBack")
+CORO_INT_ACTION(CoroAway, "Coro_Away")
 CORO_INT_ACTION(CoroValidated, "Coro_Validated")
 CORO_INT_ACTION(CoroQuick, "Coro_Quick")
 #undef CORO_INT_ACTION
@@ -192,8 +197,10 @@ struct CoroProbe {
     std::atomic<bool> holdCancelled{false};
     std::atomic<bool> holdFinished{false};
     std::atomic<int> ticks{0};
-    /// A core-cpp queue whose consumer resumes on the queue's own executor.
+    /// A core-cpp queue, whose consumer resumes on the executor it parked on.
     std::unique_ptr<core::async::AsyncQueue<int>> queue;
+    /// Where `CoroAway` goes: an executor that is not the model's strand.
+    core::async::IExecutor* away = nullptr;
     std::atomic<std::thread::id> popThread;
     std::atomic<std::thread::id> logThread;
 
@@ -264,10 +271,10 @@ CoroProbe& probe() {
 
 namespace {
 
-/// The resumption context a Task handler runs in: its model's strand executor.
+/// The executor a Task handler runs in: its resumer, on its model's strand.
 ::core::async::IExecutor* strandContext() {
-    auto* context = morph::async::detail::currentResumeContext();
-    return dynamic_cast<morph::exec::StrandCoroExecutor*>(context) != nullptr ? context : nullptr;
+    auto* context = core::async::currentExecutor();
+    return dynamic_cast<morph::exec::detail::TaskResumer*>(context) != nullptr ? context : nullptr;
 }
 
 }  // namespace
@@ -278,7 +285,7 @@ struct CoroModel {
         auto* const strand = strandContext();
         probe().noteStrand(strand != nullptr);
         co_await morph::async::delay(scheduler(), 5ms);
-        probe().noteStrand(strand != nullptr && morph::async::detail::currentResumeContext() == strand);
+        probe().noteStrand(strand != nullptr && core::async::currentExecutor() == strand);
         co_return action.x * 2;
     }
 
@@ -289,7 +296,7 @@ struct CoroModel {
         int const looked = co_await std::move(pending);
         // The other model's completion is delivered on its handler's executor;
         // this handler must still resume on its own strand.
-        probe().noteStrand(strand != nullptr && morph::async::detail::currentResumeContext() == strand);
+        probe().noteStrand(strand != nullptr && core::async::currentExecutor() == strand);
         co_return looked + 1;
     }
 
@@ -318,19 +325,27 @@ struct CoroModel {
         return action.tag;
     }
 
-    // Awaits a core-cpp awaiter, then goes back to its strand the documented way.
+    // Awaits a core-cpp queue, which resumes it on the executor it parked on:
+    // its strand, though the push comes from another thread.
     core::async::Task<int> execute(CoroPopBack action) {
-        auto* const strand = morph::async::resumeContext();
+        auto* const strand = strandContext();
         probe().note("popback-start");
         auto const item = co_await probe().queue->pop();
-        probe().noteStrand(strand != nullptr && morph::async::resumeContext() == strand);
-        co_await core::async::ResumeOn{*strand};
-        probe().noteStrand(morph::async::resumeContext() == strand);
+        probe().noteStrand(strand != nullptr && core::async::currentExecutor() == strand);
         co_return item.value_or(0) + action.tag;
     }
 
-    // Parks on a core-cpp awaiter, which resumes it on the queue's executor --
-    // a stop included -- not through the model's strand.
+    // Leaves its strand for another executor, and ends there.
+    core::async::Task<int> execute(CoroAway action) {
+        probe().note("away-start");
+        co_await core::async::ResumeOn{*probe().away};
+        probe().popThread = std::this_thread::get_id();
+        probe().note("away-end");
+        co_return action.tag;
+    }
+
+    // Parks on a core-cpp queue, which resumes it through its strand -- a stop
+    // included.
     core::async::Task<int> execute(CoroPop action) {
         probe().note("pop-start");
         try {
@@ -339,6 +354,7 @@ struct CoroModel {
             co_return item.value_or(0) + action.tag;
         } catch (const core::async::OperationCancelled&) {
             probe().popThread = std::this_thread::get_id();
+            probe().noteStrand(strandContext() != nullptr);
             probe().note("pop-cancelled");
             probe().holdCancelled = true;
             probe().holdFinished = true;
@@ -545,13 +561,12 @@ namespace {
 
 }  // namespace coro_test
 
-TEST_CASE("StrandCoroExecutor resumes a coroutine as one of its strand's tasks, never beside them",
+TEST_CASE("TaskResumer resumes a coroutine as one of its strand's tasks, never beside them",
           "[coroutine][model][strand]") {
     morph::exec::ThreadPoolExecutor pool{4};
-    morph::exec::detail::StrandExecutor strand{pool};
-    auto link = std::make_shared<morph::exec::detail::StrandLink>(strand);
+    auto const strands = std::make_shared<morph::exec::detail::ModelStrands>(pool);
     morph::exec::detail::ModelId const key{7};
-    auto executor = std::make_shared<morph::exec::StrandCoroExecutor>(link, key, morph::session::Context{});
+    auto executor = std::make_shared<morph::exec::detail::TaskResumer>(strands, key, morph::session::Context{});
 
     coro_test::Overlap overlap;
     std::atomic<bool> done{false};
@@ -561,15 +576,15 @@ TEST_CASE("StrandCoroExecutor resumes a coroutine as one of its strand's tasks, 
     // on a pool of four: a step resumed anywhere but on the strand overlaps
     // one of them.
     for (int task = 0; task < 200; ++task) {
-        REQUIRE(link->post(key, [&] {
+        strands->post(key, [&] {
             overlap.step();
             posted.fetch_add(1);
-        }));
+        });
     }
 
     REQUIRE(morph::testing::waitUntil([&] { return done.load() && posted.load() == 200; }));
     REQUIRE(overlap.overlaps.load() == 0);
-    link->close();
+    strands->close();
 }
 
 TEST_CASE("a Task handler can await another model's execute and comes back to its own strand", "[coroutine][model]") {
@@ -835,7 +850,7 @@ TEST_CASE("a handler that ignores the stop resumes inline once its backend is go
 // A core-cpp awaiter resumes a stopped handler on its own executor, not the
 // strand. The handler finishes there, but what follows -- leaving the gate and
 // starting the next action -- must still happen on the strand.
-TEST_CASE("the next action starts on the strand after a handler unwound on a core-cpp awaiter's executor",
+TEST_CASE("an execute deadline stops a handler parked on a core-cpp queue, which unwinds on its strand",
           "[coroutine][model][foreign]") {
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
@@ -859,12 +874,42 @@ TEST_CASE("the next action starts on the strand after a handler unwound on a cor
     {
         std::scoped_lock const lock{probe().mtx};
         REQUIRE(probe().order == std::vector<std::string>{"pop-start", "pop-cancelled", "log-5"});
+        // The stop came from the deadline's thread; the handler still unwound
+        // on its strand, not on the queue's executor.
+        REQUIRE(probe().onOwnStrand == std::vector<bool>{true});
     }
-    // The pop unwound on the queue's executor; the action after it did not.
+    REQUIRE(morph::model::detail::ActionGate::overlapsObserved() == overlapsBefore);
+    probe().queue.reset();
+}
+
+TEST_CASE("the next action starts on the strand after a handler ended on another executor",
+          "[coroutine][model][foreign]") {
+    coro_test::SchedulerScope const timers;
+    morph::exec::ThreadPoolExecutor pool{2};
+    core::async::ThreadPoolExecutor foreign{1};
+    morph::exec::MainThreadExecutor exec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
+    armHold(&exec);
+    probe().away = &foreign;
+    auto const overlapsBefore = morph::model::detail::ActionGate::overlapsObserved();
+
+    handler.execute(CoroAway{.tag = 1}).then([](int) {}).onError([](const std::exception_ptr&) {});
+    handler.execute(CoroLog{.tag = 5}).then([](int) {}).onError([](const std::exception_ptr&) {});
+
+    REQUIRE(pumpUntil(exec, [&] {
+        std::scoped_lock const lock{probe().mtx};
+        return probe().order.size() == 3;
+    }));
+    {
+        std::scoped_lock const lock{probe().mtx};
+        REQUIRE(probe().order == std::vector<std::string>{"away-start", "away-end", "log-5"});
+    }
+    // The handler ended on the foreign executor; the action after it did not.
     REQUIRE(probe().popThread.load() != std::thread::id{});
     REQUIRE(probe().logThread.load() != probe().popThread.load());
     REQUIRE(morph::model::detail::ActionGate::overlapsObserved() == overlapsBefore);
-    probe().queue.reset();
+    probe().away = nullptr;
 }
 
 TEST_CASE("a backend switch stops a handler parked on a core-cpp queue, and skips the action behind it",
@@ -895,11 +940,12 @@ TEST_CASE("a backend switch stops a handler parked on a core-cpp queue, and skip
     REQUIRE(morph::model::detail::ActionGate::overlapsObserved() == overlapsBefore);
     std::scoped_lock const lock{probe().mtx};
     REQUIRE(probe().order == std::vector<std::string>{"pop-start", "pop-cancelled"});
+    // Resumed through its strand, which the backend drains before it closes.
+    REQUIRE(probe().onOwnStrand == std::vector<bool>{true});
     probe().queue.reset();
 }
 
-TEST_CASE("a handler returns to its strand from a core-cpp awaiter with ResumeOn and resumeContext()",
-          "[coroutine][model][foreign]") {
+TEST_CASE("a handler that awaits a core-cpp queue comes back to its own strand", "[coroutine][model][foreign]") {
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     core::async::ThreadPoolExecutor foreign{1};
@@ -922,9 +968,9 @@ TEST_CASE("a handler returns to its strand from a core-cpp awaiter with ResumeOn
     REQUIRE(pumpUntil(exec, [&] { return result.has_value(); }));
     REQUIRE(*result == 42);
     {
-        // Off the strand after the pop, back on it after ResumeOn.
+        // The push came from this thread; the handler resumed on its strand.
         std::scoped_lock const lock{probe().mtx};
-        REQUIRE(probe().onOwnStrand == std::vector<bool>{false, true});
+        REQUIRE(probe().onOwnStrand == std::vector<bool>{true});
     }
     probe().queue.reset();
 }
@@ -1101,10 +1147,9 @@ TEST_CASE("dispatchAsync reports a Task handler's refused journal append as Acti
           "[coroutine][model][action_log][remote]") {
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::exec::detail::StrandExecutor strand{pool};
-    auto link = std::make_shared<morph::exec::detail::StrandLink>(strand);
+    auto const strands = std::make_shared<morph::exec::detail::ModelStrands>(pool);
     morph::exec::detail::ModelId const key{9};
-    auto executor = std::make_shared<morph::exec::StrandCoroExecutor>(link, key, morph::session::Context{});
+    auto executor = std::make_shared<morph::exec::detail::TaskResumer>(strands, key, morph::session::Context{});
     morph::model::detail::ActionDispatcher dispatcher;
     dispatcher.registerAction<CoroModel, CoroDouble>("Coro_Model", "Coro_Double");
     auto holder = morph::model::detail::ModelFactory::create<CoroModel>();
@@ -1113,11 +1158,11 @@ TEST_CASE("dispatchAsync reports a Task handler's refused journal append as Acti
 
     std::promise<std::exception_ptr> outcome;
     auto settled = outcome.get_future();
-    REQUIRE(link->post(key, [&] {
+    strands->post(key, [&] {
         dispatcher.dispatchAsync(
             "Coro_Model", "Coro_Double", *holder, "{}", executor, core::async::StopToken{},
             [&](const std::string&, const std::exception_ptr& error) { outcome.set_value(error); });
-    }));
+    });
     REQUIRE(settled.wait_for(5s) == std::future_status::ready);
     auto const error = settled.get();
 
@@ -1129,7 +1174,7 @@ TEST_CASE("dispatchAsync reports a Task handler's refused journal append as Acti
     auto const offered = log->offered();
     REQUIRE(offered.size() == 1);
     REQUIRE(offered.front().outcome == morph::journal::Outcome::Succeeded);
-    link->close();
+    strands->close();
 }
 
 TEST_CASE("ActionGate queues an action that arrives during its drain behind the ones already waiting",
@@ -1166,39 +1211,6 @@ TEST_CASE("ActionGate queues an action that arrives during its drain behind the 
         gate.leave();
     });
     REQUIRE(ran);
-}
-
-TEST_CASE("StrandLink::postOrRun runs a task in place once the link is closed", "[coroutine][strand]") {
-    morph::exec::ThreadPoolExecutor pool{1};
-    morph::exec::detail::StrandExecutor strand{pool};
-    morph::exec::detail::StrandLink link{strand};
-    morph::exec::detail::ModelId const key{3};
-
-    std::atomic<std::thread::id> postedOn{};
-    link.postOrRun(key, [&] { postedOn = std::this_thread::get_id(); });
-    REQUIRE(morph::testing::waitUntil([&] { return postedOn.load() != std::thread::id{}; }));
-    REQUIRE(postedOn.load() != std::this_thread::get_id());
-
-    link.close();
-    std::thread::id ranOn;
-    link.postOrRun(key, [&] { ranOn = std::this_thread::get_id(); });
-    REQUIRE(ranOn == std::this_thread::get_id());
-}
-
-TEST_CASE("StrandExecutor::runningHere answers for the running task's own strand only", "[coroutine][strand]") {
-    morph::exec::ThreadPoolExecutor pool{1};
-    morph::exec::detail::StrandExecutor strand{pool};
-    std::atomic<bool> done{false};
-    bool own = false;
-    bool other = true;
-    strand.post(morph::exec::detail::ModelId{1}, [&] {
-        own = strand.runningHere(morph::exec::detail::ModelId{1});
-        other = strand.runningHere(morph::exec::detail::ModelId{2});
-        done = true;
-    });
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
-    REQUIRE(own);
-    REQUIRE_FALSE(other);
 }
 
 TEST_CASE("dispatchesAsync tells a Task handler from an ordinary one, and dispatchAsync runs either",
@@ -1267,24 +1279,23 @@ TEST_CASE("a Task handler that throws is journalled as Outcome::Failed, locally 
         REQUIRE(pumpUntil(exec, [&] { return failure != nullptr; }));
     }
 
-    morph::exec::detail::StrandExecutor strand{pool};
-    auto link = std::make_shared<morph::exec::detail::StrandLink>(strand);
+    auto const strands = std::make_shared<morph::exec::detail::ModelStrands>(pool);
     morph::exec::detail::ModelId const key{11};
-    auto executor = std::make_shared<morph::exec::StrandCoroExecutor>(link, key, morph::session::Context{});
+    auto executor = std::make_shared<morph::exec::detail::TaskResumer>(strands, key, morph::session::Context{});
     morph::model::detail::ActionDispatcher dispatcher;
     dispatcher.registerAction<CoroModel, CoroThrow>("Coro_Model", "Coro_Throw");
     auto holder = morph::model::detail::ModelFactory::create<CoroModel>();
     holder->attachActionLog(log, "coro-throws-remote");
     std::promise<std::exception_ptr> outcome;
     auto settled = outcome.get_future();
-    REQUIRE(link->post(key, [&] {
+    strands->post(key, [&] {
         dispatcher.dispatchAsync(
             "Coro_Model", "Coro_Throw", *holder, "{}", executor, core::async::StopToken{},
             [&](const std::string&, const std::exception_ptr& error) { outcome.set_value(error); });
-    }));
+    });
     REQUIRE(settled.wait_for(5s) == std::future_status::ready);
     REQUIRE(settled.get() != nullptr);
-    link->close();
+    strands->close();
 
     auto const offered = log->offered();
     REQUIRE(offered.size() == 2);

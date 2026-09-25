@@ -5,6 +5,7 @@
 #include <chrono>
 #include <core/async/Awaitable.hpp>
 #include <core/async/Cancellation.hpp>
+#include <core/async/ExecutorContext.hpp>
 #include <core/async/IExecutor.hpp>
 #include <core/async/ParkedWork.hpp>
 #include <core/async/StopToken.hpp>
@@ -25,20 +26,19 @@
 
 /// @file
 /// @brief Coroutines on `core::async::Task`: awaiting a `Completion`, starting
-///        a detached flow on a morph executor, waiting on a timer, and the
-///        strand executor Task-returning model handlers resume on.
+///        a detached flow on a morph executor, and waiting on a timer.
 ///
 /// `Completion<T>::operator co_await` itself lives in `completion.hpp`, so a
-/// completion is awaitable wherever it is visible; this header adds `spawn`,
-/// `delay` and `morph::exec::StrandCoroExecutor`. Specified in
-/// `docs/spec/core/coroutines.md`.
+/// completion is awaitable wherever it is visible; this header adds `spawn` and
+/// `delay`, and brings in what drives a Task-returning model handler. Specified
+/// in `docs/spec/core/coroutines.md`.
 
 namespace morph::async {
 
 namespace detail {
 
-/// @brief Resumes coroutines through a `morph::exec::IExecutor`, installing
-///        itself as the resumption context for each resumption.
+/// @brief Resumes coroutines through a `morph::exec::IExecutor`, as the
+///        current executor of each resumption.
 class ExecutorResumer final : public ::core::async::IExecutor, public std::enable_shared_from_this<ExecutorResumer> {
 public:
     /// @param executor Where every resumption is posted; must outlive them all.
@@ -50,7 +50,8 @@ public:
     /// @param handle The coroutine to resume; borrowed.
     void submit(std::coroutine_handle<> handle) override {
         _executor.post([self = shared_from_this(), handle] {
-            ScopedResumeContext const context{self.get()};
+            std::shared_ptr<void> const keep = self;
+            ::core::async::ExecutorScope const scope{*self, &keep, nullptr};
             handle.resume();
         });
     }
@@ -111,27 +112,6 @@ inline SpawnedTask runSpawned(std::shared_ptr<ExecutorResumer> resumer, ::core::
 
 }  // namespace detail
 
-/// @brief The executor morph awaiters resume the calling coroutine through:
-///        its model's strand in a Task handler, the executor a `spawn`ed task
-///        runs on, or null outside both.
-///
-/// Only morph's awaiters (`Completion<T>`, `delay`) resume through it. A
-/// core-cpp awaiter -- `core::async::AsyncQueue::pop`, socket I/O -- resumes
-/// the coroutine on its own executor, and the coroutine carries on there until
-/// it goes back. This is how it goes back: read the context while still on it,
-/// and hop to it after the foreign await.
-///
-/// @code
-/// auto* const strand = morph::async::resumeContext();   // on the strand
-/// auto item = co_await queue.pop();                      // on the queue's executor
-/// co_await core::async::ResumeOn{*strand};               // on the strand again
-/// @endcode
-///
-/// Read it before the foreign await: after it, the calling thread is the
-/// foreign executor's, whose context this is not.
-/// @return The calling thread's resumption context, or null.
-[[nodiscard]] inline ::core::async::IExecutor* resumeContext() noexcept { return detail::currentResumeContext(); }
-
 /// @brief Starts @p task detached, with every resumption -- its first step
 ///        included -- posted to @p executor.
 ///
@@ -149,12 +129,12 @@ inline void spawn(::morph::exec::IExecutor& executor, ::core::async::Task<void> 
 /// @brief The awaiter `delay()` returns: suspends until a `TimeoutScheduler`
 ///        entry fires, or until a stop withdraws it.
 ///
-/// Resumes through the awaiting coroutine's resumption context, or on the
-/// scheduler's thread if there is none. With a stoppable token on the awaiting
-/// promise, a stop cancels the scheduler entry -- releasing its capture at once
-/// -- and resumes the coroutine with `core::async::OperationCancelled` through
-/// the same context, or, with none, inline on the thread that requested the
-/// stop. Exactly one of the timer and the stop resumes it.
+/// Resumes on the executor the awaiting coroutine was running on (core-cpp's
+/// current executor), or on the scheduler's thread if there was none. With a
+/// stoppable token on the awaiting promise, a stop cancels the scheduler entry
+/// -- releasing its capture at once -- and resumes the coroutine with
+/// `core::async::OperationCancelled` on the same executor, or, with none,
+/// inline on the thread that requested the stop. Exactly one of the timer and the stop resumes it.
 class DelayAwaiter {
     enum class Outcome : std::uint8_t { Pending, Fired, Cancelled };
 
@@ -171,7 +151,7 @@ class DelayAwaiter {
         std::atomic<bool> claimed{false};
         std::atomic<detail::TimeoutScheduler::Handle> timer{0};
         std::coroutine_handle<> continuation;
-        ::core::async::IExecutor* context = nullptr;
+        ::core::async::ResumeTarget context;
         detail::TimeoutScheduler* scheduler = nullptr;
         std::optional<::core::async::StopCallback<OnStop>> stopCallback;
 
@@ -183,8 +163,8 @@ class DelayAwaiter {
         }
 
         void resume() const {
-            if (context != nullptr) {
-                context->submit(continuation);
+            if (context) {
+                context.submit(::core::async::ParkedWork{.resume = continuation});
             } else {
                 continuation.resume();
             }
@@ -246,7 +226,7 @@ public:
         auto shared = _shared;
         auto const duration = _duration;
         shared->continuation = awaiting;
-        shared->context = detail::currentResumeContext();
+        shared->context = ::core::async::ResumeTarget::current();
         if constexpr (::core::async::HasStopToken<Promise>) {
             ::core::async::StopToken const token = awaiting.promise().stopToken();
             if (token.stop_requested()) {
