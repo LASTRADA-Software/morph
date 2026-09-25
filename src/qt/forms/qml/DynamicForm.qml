@@ -1503,15 +1503,18 @@ Frame {
     }
 
     // Runs `body` with auto-submit suppressed (see programmaticEdit), then
-    // revalidates once so `ready`/`previewLine` reflect the result.
+    // revalidates once so `ready`/`previewLine` reflect the result. That
+    // closing revalidate stays inside the window: it is part of the
+    // programmatic write, and outside it a form that was already ready -- or
+    // that the write left ready -- would submit with no user action.
     function withoutAutoSubmit(body) {
         form.programmaticEdit++
         try {
             body()
+            form.revalidate()
         } finally {
             form.programmaticEdit--
         }
-        form.revalidate()
     }
 
     // Depth-first lookup of a control by objectName within this form.
