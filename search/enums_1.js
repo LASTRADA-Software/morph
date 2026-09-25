@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['constraintviolationkind_0',['ConstraintViolationKind',['../da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7',1,'morph::forms']]]
+  ['blankas_0',['BlankAs',['../d4/d11/forms_8hpp.html#a08a85983649d14d984e6686cf52fa2a4',1,'morph::forms']]]
 ];

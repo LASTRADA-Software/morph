@@ -27,6 +27,10 @@ var forms_8hpp =
     [ "morph::forms::ComparableAgainstLiteral", "d7/dd1/conceptmorph_1_1forms_1_1ComparableAgainstLiteral.html", null ],
     [ "morph::forms::HasFormRules", "d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html", null ],
     [ "morph::forms::HasExplicitSubmit", "d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html", null ],
+    [ "morph::forms::BlankAs", "d4/d11/forms_8hpp.html#a08a85983649d14d984e6686cf52fa2a4", [
+      [ "Omit", "d4/d11/forms_8hpp.html#a08a85983649d14d984e6686cf52fa2a4a3f9823fc8c5bf8d5efbb0ad3be5f16c9", null ],
+      [ "Empty", "d4/d11/forms_8hpp.html#a08a85983649d14d984e6686cf52fa2a4ace2c8aed9c2fa0cfbed56cbda4d8bf07", null ]
+    ] ],
     [ "morph::forms::engaged", "d4/d11/forms_8hpp.html#a07dfc279ee79367cee103d743a21b940", null ],
     [ "morph::forms::notEngaged", "d4/d11/forms_8hpp.html#ac6c3d1449989868831d152b5d3e0ef6e", null ],
     [ "morph::forms::greater", "d4/d11/forms_8hpp.html#a1afefe4ea53ee4ca21c4103f41d7c592", null ],

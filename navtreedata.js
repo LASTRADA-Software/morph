@@ -54,9 +54,9 @@ var NAVTREEINDEX =
 [
 "annotated.html",
 "d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html",
-"d6/db7/conceptmorph_1_1units_1_1UnitEnum.html",
-"db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#abe59e3f6f1cfa9772a9eaaa0bd003ad4",
-"df/d74/qt__websocket__server_8hpp_source.html"
+"d6/da7/structmorph_1_1forms_1_1RequiredWhen.html#a6a9d011a636bb3a8ac4f2e78ffb229ab",
+"db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#a998542ab6e7b9aeca272f2a05fc452a5",
+"df/d65/structmorph_1_1forms_1_1Choice.html#ac415ebcc3dc0404356f6d5a34c03f780"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

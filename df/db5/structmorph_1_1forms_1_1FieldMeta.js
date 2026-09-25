@@ -8,6 +8,7 @@ var structmorph_1_1forms_1_1FieldMeta =
     [ "withMultipleOf", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a7b48a4b73994d8dd7d8a44b57af51109", null ],
     [ "withUnit", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#aa6636da984bed65d0aba30158e8dfa27", null ],
     [ "withDecimals", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a5eba2c0842fdeda602b41338813d0141", null ],
+    [ "withBlankAs", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#ab040fdb740d0c22091a8bc57a3eba452", null ],
     [ "field", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#abd2b9a17b80041de6f9aaf7eed9f8b0c", null ],
     [ "label", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a18113d5200a965d0050ad5f3a591b94a", null ],
     [ "help", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a61b338589ad21fd57f86d3e20fcf990f", null ],
@@ -20,5 +21,6 @@ var structmorph_1_1forms_1_1FieldMeta =
     [ "maximum", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#ad3acbd03534c05fa104b9cf4d4227e95", null ],
     [ "multipleOf", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a3740c426ffb300b255ca32b690e8979c", null ],
     [ "unit", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#a85533330e32d6d465ee303dc92fab216", null ],
-    [ "decimals", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#af57735bbefb2f396f906d1c832413727", null ]
+    [ "decimals", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#af57735bbefb2f396f906d1c832413727", null ],
+    [ "blankAs", "df/db5/structmorph_1_1forms_1_1FieldMeta.html#adef93e37ac9d09fb581c645af1fccf6d", null ]
 ];
