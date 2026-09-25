@@ -3462,3 +3462,38 @@ jobs:
           CC: gcc-15
           CXX: g++-15
         run: bash scripts/check_install_export.sh
+
+  install-export-forms-qml:
+    name: MorphForms QML module consumability
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # GCC 15 for the same reason install-export uses it (<print>); the GL and
+      # xcb libraries are what the offscreen QPA plugin still links against.
+      - name: Install GCC 15, ninja and the Qt runtime libraries
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-15 g++-15 ninja-build \
+            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
+
+      # Not the distro's Qt: MORPH_BUILD_FORMS_QML needs 6.5+ and Ubuntu 24.04
+      # ships 6.4.2 (see linux-all-features' identical step).
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4.3.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      # Install MorphForms to a scratch prefix, then build and *run* an
+      # application that renders a DynamicForm from it -- plus the vacuity
+      # guard that the same application without the plugin cannot.
+      - name: Install MorphForms and render a form from the prefix
+        env:
+          CC: gcc-15
+          CXX: g++-15
+        run: bash scripts/check_forms_qml_install.sh
