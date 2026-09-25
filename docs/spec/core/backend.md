@@ -775,7 +775,8 @@ there, rather than once per backend.
   suspended, it runs under the handler's session:** the strand installs the
   suspended handler's session around every task of its instance, not only the
   handler's own resumptions (see [coroutines.md](coroutines.md), "The handler's
-  resumer"), and core-cpp's around-task hook cannot tell the two apart. The same
+  resumer"), and core-cpp's around-task hook cannot tell the two apart
+  ([core-cpp#53](https://github.com/contour-terminal/core-cpp/issues/53)). The same
   holds for an action queued behind the handler, until it installs its own
   session when it starts.
 - `setReconnectHandler`/`setConnectHandler`/`setDisconnectHandler` — no-op (no transport to (dis)connect).

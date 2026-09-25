@@ -119,14 +119,19 @@ itself; [`core/executor.md`](core/executor.md), "Strands", says what morph adds.
 - **A strand runs a batch per turn.** It queues itself on the base once however
   many tasks arrive while it is busy, and runs up to 32 before it hands the base
   back. A loaded host adds latency between turns, not more of them.
-- **Closing drops; `drain()` waits.** `close()`, and the destructor, drop what
-  is queued and wait only for a task running on another thread. `drain()` blocks
-  until nothing is queued or running on any strand, work posted while it waits
-  included, so a caller that needs every queued task run calls it first — as
-  `~LocalBackend` and `~SynchronousBackendAdapter` do. It must not be called
-  from one of the strands' own tasks; a debug build asserts that. The
-  single-threaded WebAssembly build has no other thread, so there `drain()`
-  returns at once and closing drops the queue.
+- **Closing drops; `teardown()` seals, drains, then closes.** `close()`, and
+  the destructor, drop what is queued and wait only for a task running on
+  another thread. `drain()` blocks until nothing is queued or running on any
+  strand, work posted while it waits included. `seal()` refuses the try-forms
+  a Task handler's resumer and its end use, so a resumption or an end that
+  arrives afterwards runs inline where it arrives; a plain post is still queued
+  until the close. `~LocalBackend` and
+  `~SynchronousBackendAdapter` call `teardown()`, which does all three, so
+  nothing reaches a strand between its drain and its close. It must not be
+  called from one of the strands' own tasks; a debug build asserts that. The
+  single-threaded WebAssembly build has no other thread: there `drain()`
+  returns at once, and `teardown()` seals before it stops the Task handlers, so
+  each stopped handler unwinds inline.
 
 `LocalBackend` owns one `ModelStrands` over the worker pool; `RemoteServer`
 owns another over its worker pool. Both post model work keyed by `ModelId`.

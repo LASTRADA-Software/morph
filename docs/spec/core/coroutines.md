@@ -252,7 +252,9 @@ backend's `ModelStrands`, core-cpp's `KeyedStrands` keyed by `ModelId` (see
   action run on an instance at a time, so an instance has at most one. The
   hook is given the task, not what kind of task it is, so the instance's other
   tasks -- `onBackendChanged`, an action queued behind the handler -- run under
-  the handler's session too (see [`backend.md`](backend.md)).
+  the handler's session too (see [`backend.md`](backend.md);
+  [core-cpp#53](https://github.com/contour-terminal/core-cpp/issues/53) proposes
+  letting the hook tell them apart).
 - **Held by the driver.** The driver's frame and every `ResumeTarget` taken
   inside the handler hold the resumer, so it lives until the last of them has
   run.
@@ -352,8 +354,10 @@ The same code runs on the browser's single main thread:
 Nothing here starts a thread or blocks. One thing differs, and it is core-cpp's
 `CORE_CPP_ASYNC_HAS_THREADS`, not `__EMSCRIPTEN__`, that decides it: a backend's
 destructor does not wait for its strands to drain, since there is no other
-thread to finish the work and a blocking wait is not allowed; closing them
-drops what is still queued (`ModelStrands::drain`).
+thread to finish the work and a blocking wait is not allowed. It seals them
+before it stops the Task handlers, so each stopped handler's resumption is
+refused and unwinds inline, and closing them drops only what was queued before
+(`ModelStrands::teardown`).
 
 ## Failure modes
 
@@ -392,15 +396,23 @@ drops what is still queued (`ModelStrands::drain`).
      `OperationCancelled` through the strand, which is still open, and
      unwinds. One suspended on a `core::net` socket or timer resumes on that
      loop instead and unwinds there; its end is posted to the strand.
-  2. It waits for the strands to drain: the resumptions and ends queued on
+  2. It seals the strands: they refuse the try-forms, and a resumption or a
+     handler's end that arrives from now on runs inline, where it arrives.
+  3. It waits for the strands to drain: the resumptions and ends queued on
      them, and every action queued behind them. It does not wait for a handler
-     still unwinding on another executor; that handler's end runs inline once
-     the strands are closed, where nothing can race it. An action whose call
-     `cancelPending` had already failed when it reached the gate is skipped.
-     Its handler does not run, and its caller keeps the error it was given.
-  3. It closes the strands.
+     still unwinding on another executor; that handler's end runs inline. An
+     action whose call `cancelPending` had already failed when it reached the
+     gate is skipped. Its handler does not run, and its caller keeps the error
+     it was given.
+  4. It closes the strands. A coroutine outside any Task handler that captured
+     a key's strand itself, and comes back through a plain submit after this,
+     is dropped by the closed strand: its owner has to resume it elsewhere.
 
-  A handler that catches `OperationCancelled` and carries on holds up step 2
+  On the single-threaded WebAssembly build steps 1 and 2 swap: sealed first,
+  every stopped handler's resumption is refused and unwinds inline, in the stop,
+  since nothing else could run the strand; and step 3 waits for nothing.
+
+  A handler that catches `OperationCancelled` and carries on holds up step 3
   while it runs on the strand: its later morph awaits see the stop at once.
   `~LocalBackend` must not run on one of its own strand threads, whose drain
   it would wait for; a debug build asserts it. The only

@@ -112,6 +112,24 @@ struct LoggedTask {
 
 class TaskResumer;
 
+/// @brief In which order `ModelStrands::teardown` stops the Task handlers and
+///        seals the strands.
+enum class TeardownOrder : std::uint8_t {
+    /// Stop, then seal: a stopped handler unwinds on its strand, which still
+    /// admits its resumption. For a build with threads, where the strands keep
+    /// running on the pool while the owner waits.
+    StopThenSeal,
+    /// Seal, then stop: a stopped handler's resumption is refused and runs
+    /// inline, in the stop. For the single-threaded build, where nothing runs
+    /// the strands while the owner tears them down.
+    SealThenStop,
+};
+
+/// @brief The teardown order for this build: `StopThenSeal` where threads
+///        exist, `SealThenStop` where they do not.
+inline constexpr TeardownOrder buildTeardownOrder =
+    CORE_CPP_ASYNC_HAS_THREADS ? TeardownOrder::StopThenSeal : TeardownOrder::SealThenStop;
+
 /// @brief One strand per model instance over a morph executor: work for one
 ///        `ModelId` runs serially and in order, and work for different ids runs
 ///        concurrently where the executor has the threads.
@@ -225,6 +243,35 @@ public:
     ///        another thread is waited for, and later posts are dropped too.
     ///        Idempotent.
     void close() { _strands.close(); }
+
+    /// @brief Refuses the try-forms and keeps running what is queued:
+    ///        `trySubmit` and `runOnStrand`'s post are refused, so their callers
+    ///        run the work inline; a plain `post` is still queued until
+    ///        `close`. Idempotent.
+    void seal() { _strands.seal(); }
+
+    /// @brief Takes the strands down without losing work: stops the Task
+    ///        handlers, seals, drains and closes, with the stop and the seal in
+    ///        @p order.
+    ///
+    /// Whatever arrives once the strands are sealed -- a resumption, a
+    /// handler's end -- is refused and runs inline, so nothing reaches a strand
+    /// that the close would drop: not between the drain and the close, and not
+    /// on the single-threaded build, where the drain waits for nothing.
+    /// @param stopHandlers Requests stop on every Task handler still running.
+    /// @param order        Which of stopping and sealing comes first.
+    template <typename Stop>
+    void teardown(Stop&& stopHandlers, TeardownOrder order = buildTeardownOrder) {
+        if (order == TeardownOrder::SealThenStop) {
+            seal();
+            std::forward<Stop>(stopHandlers)();
+        } else {
+            std::forward<Stop>(stopHandlers)();
+            seal();
+        }
+        drain();
+        close();
+    }
 
     /// @brief Installs @p resumer's session and executor around every task of
     ///        @p key's strand, until `withdraw(key, resumer)`.

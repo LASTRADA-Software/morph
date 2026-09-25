@@ -246,6 +246,18 @@ What `ModelStrands` adds:
   returns at once.
 - **`close()`** closes every strand: queued work is dropped, a task running on
   another thread is waited for, and a later `post` is dropped too.
+- **`seal()`** (core-cpp 0.4.1) refuses the try-forms and keeps running what
+  is queued: `trySubmit` and `runOnStrand`'s post are refused, so their
+  callers run the work inline, while a plain `post` -- and a coroutine coming
+  back through a plain submit -- is still queued until the close.
+- **`teardown(stopHandlers, order)`** is the whole sequence: stop the Task
+  handlers and seal, in `order`, then `drain()`, then `close()`. Where threads
+  exist the order is stop then seal, so a stopped handler still unwinds on its
+  strand; on the single-threaded build it is seal then stop, so a stopped
+  handler's resumption is refused and runs inline in the stop, since nothing
+  else could run it. Once sealed, a resumption or a handler's end that arrives
+  -- between the drain and the close included -- runs inline where it arrives,
+  instead of reaching a strand the close would drop.
 - **The Task handler's context.** `enroll(key, resumer)` installs a Task
   handler's session and resumer around every task of `key`'s strand until
   `withdraw(key)`, through the strands' keyed around-task hook. The hook costs
@@ -286,8 +298,9 @@ as a plain `uint64_t` (`wire::Envelope::modelId`), so a test never needs the
 Destroying the strands, or calling `close()`, drops what is still queued and
 waits for a task running on another thread. It does not wait for the task it is
 called from: a task may release the last reference to the strands' owner, as a
-`RemoteServer`'s may. A backend therefore calls `drain()` before `close()` when
-the queued work must run: `~LocalBackend` and `~SynchronousBackendAdapter` do.
+`RemoteServer`'s may. A backend whose queued work must run tears its strands
+down with `teardown()` instead: `~LocalBackend` and `~SynchronousBackendAdapter`
+do.
 
 > **Destroy the backend before the base pool it runs on.**
 
@@ -400,6 +413,8 @@ rather than being hidden).
 | `idle` | `bool idle() const` | Nothing queued or running. |
 | `drain` | `void drain()` | Blocks until idle, where threads exist. Not from a task of these strands. |
 | `close` | `void close()` | As the destructor. Idempotent. |
+| `seal` | `void seal()` | Refuses `trySubmit` and `runOnStrand`'s post; queued work still runs, and `post` is still admitted. Idempotent. |
+| `teardown` | `template <typename Stop> void teardown(Stop&& stopHandlers, TeardownOrder order = buildTeardownOrder)` | Stop and seal in `order`, then `drain`, then `close`. |
 | `enroll` / `withdraw` | `void enroll(ModelId key, const std::shared_ptr<TaskResumer>&)` / `void withdraw(ModelId key)` | Install / remove a Task handler's session and resumer around `key`'s tasks. |
 
 ## Design decisions
@@ -414,7 +429,7 @@ rather than being hidden).
 | ModelId zero | **Reserved — "not bound"** | A natural sentinel for optional/uninitialised model handles. |
 | The strand | **core-cpp's `KeyedStrands`**, not morph's own | morph's `StrandExecutor` became core-cpp's `Strand` and `KeyedStrands` in 0.4.0, which the other Contour Terminal projects share; morph keeps only what is morph's: the adapter, the throw policy and the Task handler's context. Its two fixed races (a post racing the drain, a recycled strand under the wrong key) are core-cpp's to keep fixed now, in its own race tests. |
 | `ModelStrands` in `detail` | **Not a general-purpose utility** | Exists only for the morph model framework's per-model serialisation. The `ModelId` key is specific to model instances. |
-| Closing drops, `drain` waits | **Two calls** | core-cpp's strands drop queued work when closed, so that a strand can be destroyed from one of its own tasks. A backend whose queued work must run calls `drain()` first. |
+| Closing drops, `drain` waits | **Seal, drain, close, in `teardown`** | core-cpp's strands drop queued work when closed, so that a strand can be destroyed from one of its own tasks. A backend whose queued work must run seals first, so that nothing arriving after the drain is queued only to be dropped, and drains before it closes. |
 | No `std::future` / return value | **Fire-and-forget only** | Executors schedule side-effect tasks. Callers that need results use shared state or futures externally. |
 | No `std::executor` conformance | **Custom interface, not `std::executor`** | C++26 `std::executor` is not yet widely available. This is a minimal in-house abstraction. |
 | `QtExecutor` via `invokeMethod`, not a `QObject` subclass | **Near-stateless free-standing `IExecutor`, target configurable via ctor** | Uses `QMetaObject::invokeMethod(context, fn, Qt::QueuedConnection)`, so callers need no custom `QObject`, event type, or slot — they only optionally supply a `QObject*` to pick the target thread. Defaults to `QCoreApplication::instance()` so existing GUI-thread call sites are unaffected. Keeps the type a drop-in `IExecutor` holding a single pointer, with Qt's event loop as the sole dispatcher. |

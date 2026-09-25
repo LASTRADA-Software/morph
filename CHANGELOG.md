@@ -23,7 +23,9 @@ API surface).
     round trip.
   - Under single-threaded WebAssembly, `~LocalBackend` and
     `~SynchronousBackendAdapter` no longer wait for their strands, which only
-    that thread could run; what is still queued is dropped.
+    that thread could run. `~LocalBackend` seals its strands before it stops
+    its Task handlers, so each one unwinds inline; other work still queued is
+    dropped.
   - A strand queues itself on the backend's `IExecutor` once per turn and runs
     up to 32 tasks there, where it used to post each task.
 
@@ -37,7 +39,7 @@ API surface).
   strand to drain before it returns. See `docs/spec/core/coroutines.md`,
   "Teardown".
 
-- **morph depends on core-cpp v0.4.0.** It is fetched through CPM, and
+- **morph depends on core-cpp v0.4.1.** It is fetched through CPM, and
   `morph::morph` links its `core::base`, `core::async`, `core::net` and, natively,
   `core::platform`. morph stays header-only, but those are static libraries, so
   a project that links morph now builds them. `TimeoutScheduler` runs on

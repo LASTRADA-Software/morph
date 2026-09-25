@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -16,6 +17,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "test_support.hpp"
 
 // morph's strands are core-cpp's `KeyedStrands`, whose ordering and
 // one-strand-per-key invariants core-cpp tests (`Strand_test.cpp`,
@@ -40,12 +43,8 @@ public:
 
     [[nodiscard]] bool contains(std::string_view needle) {
         std::scoped_lock const lock{_mtx};
-        for (auto const& message : _messages) {
-            if (message.find(needle) != std::string::npos) {
-                return true;
-            }
-        }
-        return false;
+        return std::ranges::any_of(_messages,
+                                   [needle](const std::string& message) { return message.contains(needle); });
     }
 
 private:
@@ -80,10 +79,10 @@ struct Seen {
     bool resumerCurrent = false;
 };
 
-Probe record(const std::shared_ptr<ModelStrands>& strands, ModelId key, const TaskResumer* resumer, Seen& seen) {
-    seen.principal = morph::session::current() != nullptr ? morph::session::current()->principal : "";
-    seen.onStrand = strands->runningHere(key);
-    seen.resumerCurrent = core::async::currentExecutor() == resumer;
+Probe record(const ModelStrands* strands, ModelId key, const TaskResumer* resumer, Seen* seen) {
+    seen->principal = morph::session::current() != nullptr ? morph::session::current()->principal : "";
+    seen->onStrand = strands->runningHere(key);
+    seen->resumerCurrent = core::async::currentExecutor() == resumer;
     co_return;
 }
 
@@ -268,7 +267,7 @@ TEST_CASE("TaskResumer resumes on its key's strand with the session installed, a
 
     SECTION("a submit through the strand, as an awaitable that parked there does") {
         Seen seen;
-        Probe probe = record(strands, key, resumer.get(), seen);
+        Probe const probe = record(strands.get(), key, resumer.get(), &seen);
         resumer->submit(probe.handle);
         strands->drain();
         CHECK(probe.handle.done());
@@ -308,7 +307,7 @@ TEST_CASE("TaskResumer resumes on its key's strand with the session installed, a
     SECTION("once closed, a submit resumes inline, still inside the resumer") {
         strands->close();
         Seen seen;
-        Probe probe = record(strands, key, resumer.get(), seen);
+        Probe const probe = record(strands.get(), key, resumer.get(), &seen);
         resumer->submit(probe.handle);
         CHECK(probe.handle.done());
         CHECK(seen.principal == "alice");
@@ -369,6 +368,82 @@ TEST_CASE("TaskResumer keeps a detached chain's claim until it resumes it, on th
         resumer->submit(std::move(parked));
         CHECK(finished.load());
     }
+}
+
+TEST_CASE("ModelStrands teardown: a resumption or a handler's end arriving after the drain runs inline",
+          "[strand][coroutine][lifetime]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto const strands = std::make_shared<ModelStrands>(pool);
+    ModelId const key{21};
+    auto const resumer = std::make_shared<TaskResumer>(strands, key, morph::session::Context{});
+
+    // Teardown's steps, stopped between the drain and the close: work that
+    // arrives here and is queued would be dropped by the close.
+    strands->seal();
+    strands->drain();
+
+    Seen seen;
+    Probe const probe = record(strands.get(), key, resumer.get(), &seen);
+    resumer->submit(probe.handle);
+    CHECK(probe.handle.done());
+    CHECK_FALSE(seen.onStrand);
+    CHECK(seen.resumerCurrent);
+
+    auto const caller = std::this_thread::get_id();
+    std::thread::id finishedOn;
+    strands->runOnStrand(key, [&] { finishedOn = std::this_thread::get_id(); });
+    CHECK(finishedOn == caller);
+
+    strands->close();
+}
+
+TEST_CASE("ModelStrands teardown: after the seal, queued work runs and a handler's end is refused and runs inline",
+          "[strand][lifetime]") {
+    morph::exec::MainThreadExecutor exec;
+    auto const strands = std::make_shared<ModelStrands>(exec);
+    ModelId const key{22};
+    bool ran = false;
+    strands->post(key, [&] { ran = true; });
+    strands->seal();
+    // runOnStrand's post is a try-form, which the seal refuses: the end runs
+    // here, before anything is pumped, rather than behind the queued work.
+    bool endedInline = false;
+    strands->runOnStrand(key, [&] { endedInline = !ran; });
+    CHECK(endedInline);
+    exec.drain();
+    CHECK(ran);
+    strands->close();
+}
+
+TEST_CASE("ModelStrands teardown, sealing first: a handler stopped with nothing to run its strand unwinds inline",
+          "[strand][coroutine][lifetime]") {
+    // The single-threaded build's situation on a native one: the executor is
+    // pumped by the thread that tears the strands down, which is busy doing so.
+    morph::exec::MainThreadExecutor exec;
+    auto const strands = std::make_shared<ModelStrands>(exec);
+    ModelId const key{23};
+    auto const resumer = std::make_shared<TaskResumer>(strands, key, morph::session::Context{});
+    Seen seen;
+    Probe const probe = record(strands.get(), key, resumer.get(), &seen);
+
+    // The stop resumes the suspended handler through its resumer, as a
+    // stop-aware awaiter does. Bounded: were the resumption queued on the
+    // executor nobody pumps, the drain would wait for it for ever, so the test
+    // pumps it itself after the bound and fails.
+    std::atomic<bool> tornDown{false};
+    std::thread teardown{[&] {
+        strands->teardown([&] { resumer->submit(probe.handle); }, morph::exec::detail::TeardownOrder::SealThenStop);
+        tornDown = true;
+    }};
+    bool const inTime = morph::testing::waitUntil([&] { return tornDown.load(); });
+    while (!tornDown.load()) {
+        exec.runOnce();
+    }
+    teardown.join();
+    CHECK(inTime);
+    CHECK(probe.handle.done());
+    CHECK_FALSE(seen.onStrand);
+    CHECK(seen.resumerCurrent);
 }
 
 // Regression test for ThreadPoolExecutor(0): a zero-worker pool used to accept
