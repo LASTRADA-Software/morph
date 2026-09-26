@@ -141,10 +141,11 @@ inline constexpr TeardownOrder buildTeardownOrder =
 /// - the base adapter (`CoreExecutorOver`), owned here;
 /// - posted callables that log a throw (`LoggedTask`);
 /// - the action's session, and the Task handler's resumer as the current
-///   executor, around every task of a model instance whose Task handler has
-///   started and not finished (`enroll`). That is the keyed around-task hook's
-///   job: a handler that comes back to its strand through any awaitable finds
-///   both installed.
+///   executor, around every coroutine resumed on a model instance whose Task
+///   handler has started and not finished (`enroll`). That is the keyed
+///   around-task hook's job: a handler that comes back to its strand through
+///   any awaitable finds both installed, and a callable posted to the same
+///   strand does not.
 ///
 /// Held by `std::shared_ptr`: a `TaskResumer` shares it, so a suspended
 /// handler can still ask whether it is closed after its backend is gone.
@@ -284,8 +285,9 @@ public:
         close();
     }
 
-    /// @brief Installs @p resumer's session and executor around every task of
-    ///        @p key's strand, until `withdraw(key, resumer)`.
+    /// @brief Installs @p resumer's session and executor around every coroutine
+    ///        resumed on @p key's strand, until `withdraw(key, resumer)`; a
+    ///        posted callable runs without them.
     ///
     /// Called on the strand, when a Task handler starts. The action gate lets
     /// one action at a time run on a model instance, so a key has at most one
@@ -313,9 +315,12 @@ public:
     }
 
 private:
-    /// The keyed around-task hook: runs a task inside its model instance's
-    /// enrolled resumer, if it has one. Touches nothing of this object after
-    /// the task has run, which may have released the last reference to it.
+    /// The keyed around-task hook: runs a coroutine resumption inside its model
+    /// instance's enrolled resumer, if it has one. A posted callable --
+    /// `onBackendChanged`, an action queued behind the handler, the handler's
+    /// end -- is not the handler and runs bare. Touches nothing of this object
+    /// after the task has run, which may have released the last reference to
+    /// it.
     struct AroundTask {
         ModelStrands* self;
         void operator()(const ModelId& key, ::core::async::RunTask run) const;
@@ -415,7 +420,8 @@ private:
 };
 
 inline void ModelStrands::AroundTask::operator()(const ModelId& key, ::core::async::RunTask run) const {
-    if (self->_enrolledCount.load(std::memory_order_acquire) == 0) {
+    if (run.kind() != ::core::async::TaskKind::Resumption ||
+        self->_enrolledCount.load(std::memory_order_acquire) == 0) {
         run();
         return;
     }

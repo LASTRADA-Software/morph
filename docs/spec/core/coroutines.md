@@ -247,16 +247,15 @@ backend's `ModelStrands`, core-cpp's `KeyedStrands` keyed by `ModelId` (see
   the claim and resumes the chain inline, as it does a handler.
 - **The action's session, around every resumption.** The strands' keyed
   around-task hook installs the session, with the resumer as the current
-  executor, around every task of a model instance whose Task handler has
-  started and not finished (`ModelStrands::enroll`). The action gate lets one
-  action run on an instance at a time, so an instance has at most one. The
-  hook is given the task, not what kind of task it is, so the instance's other
-  tasks -- `onBackendChanged`, an action queued behind the handler, a detached
+  executor, around every coroutine resumed on a model instance whose Task
+  handler has started and not finished (`ModelStrands::enroll`); it asks the
+  task its kind (core-cpp's `RunTask::kind()`) and runs a posted callable
+  bare. The action gate lets one action run on an instance at a time, so an
+  instance has at most one. So `onBackendChanged`, an action queued behind the
+  handler and the handler's end run without the handler's session. A detached
   chain that an earlier, finished handler A left behind and that comes back
-  after handler B started -- run under the running handler's session and
-  resumer too, B's in the last case (see [`backend.md`](backend.md);
-  [core-cpp#53](https://github.com/contour-terminal/core-cpp/issues/53) proposes
-  letting the hook tell them apart).
+  after handler B started is a resumption, and runs under B's session and
+  resumer (see [`backend.md`](backend.md)).
 - **Held by the driver.** The driver's frame and every `ResumeTarget` taken
   inside the handler hold the resumer, so it lives until the last of them has
   run.

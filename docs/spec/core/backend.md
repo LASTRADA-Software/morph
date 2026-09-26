@@ -771,15 +771,14 @@ there, rather than once per backend.
   captured by `shared_ptr`). Cost is O(change-aware models), not O(all models).
   Delivery is asynchronous and serialised against that model's `execute` tasks;
   it never runs under `_regMtx` or `Bridge::_mtx`, so a sink that re-enters the
-  bridge cannot deadlock. **While a Task handler of that model instance is
-  suspended, it runs under the handler's session:** the strand installs the
-  suspended handler's session around every task of its instance, not only the
-  handler's own resumptions (see [coroutines.md](coroutines.md), "The handler's
-  resumer"), and core-cpp's around-task hook cannot tell the two apart
-  ([core-cpp#53](https://github.com/contour-terminal/core-cpp/issues/53)). The same
-  holds for an action queued behind the handler, until it installs its own
-  session when it starts, and for a detached chain that a finished handler A
-  left behind: when it comes back after handler B of the same instance
+  bridge cannot deadlock. It runs without a session, even while a Task
+  handler of that model instance is suspended: the strand installs a
+  suspended handler's session around the coroutines resumed on its instance
+  only, and a posted callable such as this one is not one of them (see
+  [coroutines.md](coroutines.md), "The handler's resumer"). The same holds
+  for an action queued behind the handler, which installs its own session when
+  it starts. A detached chain that a finished handler A left behind is a
+  resumption, though: when it comes back after handler B of the same instance
   started, it runs under B's session and B's resumer.
 - `setReconnectHandler`/`setConnectHandler`/`setDisconnectHandler` — no-op (no transport to (dis)connect).
 - `setSession` — not overridden (the default no-op stands): the local path never serialises a `Context` onto a wire envelope, so there is nothing to stamp.

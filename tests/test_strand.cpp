@@ -277,25 +277,11 @@ TEST_CASE("TaskResumer resumes on its key's strand with the session installed, a
         CHECK(seen.resumerCurrent);
     }
 
-    SECTION("an ordinary task of an enrolled key runs inside the resumer too, until it is withdrawn") {
-        std::string principal;
-        bool resumerCurrent = false;
-        strands->post(key, [&] {
-            principal = morph::session::current() != nullptr ? morph::session::current()->principal : "";
-            resumerCurrent = core::async::currentExecutor() == resumer.get();
-        });
-        strands->drain();
-        CHECK(principal == "alice");
-        CHECK(resumerCurrent);
-
-        // A withdraw naming another resumer leaves the enrolment alone.
-        auto const other = std::make_shared<TaskResumer>(strands, key, morph::session::Context{});
-        strands->withdraw(key, other.get());
-        strands->post(key, [&] { resumerCurrent = core::async::currentExecutor() == resumer.get(); });
-        strands->drain();
-        CHECK(resumerCurrent);
-
-        strands->withdraw(key, resumer.get());
+    SECTION("a callable posted to an enrolled key runs outside the resumer; a resumption runs inside it") {
+        // onBackendChanged, an action queued behind the handler: neither is
+        // the handler, so neither runs under its session (core-cpp#53).
+        std::string principal = "<unset>";
+        bool resumerCurrent = true;
         strands->post(key, [&] {
             principal = morph::session::current() != nullptr ? morph::session::current()->principal : "<none>";
             resumerCurrent = core::async::currentExecutor() == resumer.get();
@@ -303,6 +289,37 @@ TEST_CASE("TaskResumer resumes on its key's strand with the session installed, a
         strands->drain();
         CHECK(principal == "<none>");
         CHECK_FALSE(resumerCurrent);
+
+        // A coroutine resumed on the key -- an awaitable that parked on the
+        // strand itself, not through the resumer -- runs inside it.
+        Seen seen;
+        Probe const probe = record(strands.get(), key, resumer.get(), &seen);
+        REQUIRE(strands->trySubmit(key, probe.handle));
+        strands->drain();
+        CHECK(probe.handle.done());
+        CHECK(seen.principal == "alice");
+        CHECK(seen.resumerCurrent);
+    }
+
+    SECTION("a resumption of an enrolled key runs inside the resumer until it is withdrawn") {
+        // A withdraw naming another resumer leaves the enrolment alone.
+        auto const other = std::make_shared<TaskResumer>(strands, key, morph::session::Context{});
+        strands->withdraw(key, other.get());
+        Seen stillEnrolled;
+        Probe const first = record(strands.get(), key, resumer.get(), &stillEnrolled);
+        REQUIRE(strands->trySubmit(key, first.handle));
+        strands->drain();
+        CHECK(stillEnrolled.principal == "alice");
+        CHECK(stillEnrolled.resumerCurrent);
+
+        strands->withdraw(key, resumer.get());
+        Seen withdrawn;
+        Probe const second = record(strands.get(), key, resumer.get(), &withdrawn);
+        REQUIRE(strands->trySubmit(key, second.handle));
+        strands->drain();
+        CHECK(second.handle.done());
+        CHECK(withdrawn.principal.empty());
+        CHECK_FALSE(withdrawn.resumerCurrent);
     }
 
     SECTION("once closed, a submit resumes inline, still inside the resumer") {

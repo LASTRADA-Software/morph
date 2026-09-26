@@ -262,9 +262,10 @@ What `ModelStrands` adds:
   -- between the drain and the close included -- runs inline where it arrives,
   instead of reaching a strand the close would drop.
 - **The Task handler's context.** `enroll(key, resumer)` installs a Task
-  handler's session and resumer around every task of `key`'s strand until
-  `withdraw(key)`, through the strands' keyed around-task hook. The hook costs
-  one atomic load per task while no handler is enrolled.
+  handler's session and resumer around every coroutine resumed on `key`'s
+  strand until `withdraw(key, resumer)`, through the strands' keyed around-task
+  hook, which runs a posted callable bare (`RunTask::kind()`). The hook costs
+  one load per task while no handler is enrolled.
 
 `ModelStrands` is held by `std::shared_ptr`: a `TaskResumer` shares it, so a
 handler suspended past its backend's destruction can still ask whether the
@@ -418,7 +419,7 @@ rather than being hidden).
 | `close` | `void close()` | As the destructor. Idempotent. |
 | `seal` | `void seal()` | Refuses `trySubmit` and `runOnStrand`'s post; queued work still runs, and `post` is still admitted. Idempotent. |
 | `teardown` | `template <typename Stop> void teardown(Stop&& stopHandlers, TeardownOrder order = buildTeardownOrder)` | Stop and seal in `order`, then `drain`, then `close`. |
-| `enroll` / `withdraw` | `void enroll(ModelId key, const std::shared_ptr<TaskResumer>&)` / `void withdraw(ModelId key)` | Install / remove a Task handler's session and resumer around `key`'s tasks. |
+| `enroll` / `withdraw` | `void enroll(ModelId key, const std::shared_ptr<TaskResumer>&)` / `void withdraw(ModelId key, const TaskResumer*)` | Install / remove a Task handler's session and resumer around the coroutines resumed on `key`'s strand. |
 
 ## Design decisions
 
