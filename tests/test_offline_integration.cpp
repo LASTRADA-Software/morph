@@ -26,7 +26,6 @@
 #include <morph/offline/sync_worker.hpp>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "test_support.hpp"
@@ -91,31 +90,43 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     // Monitor: failureThreshold=1, onlineThreshold=1, probeInterval=30ms.
     // With networkOnline=false the monitor goes offline after ~30ms.
     // When networkOnline becomes true the monitor recovers after a further ~30ms.
+    std::atomic<bool> backendSwitched{false};
     morph::offline::NetworkMonitor monitor{
         [&] { return networkOnline.load(); }, [] {},  // onOffline — not exercised here
         [&] {
             // onOnline fires on the probe thread — replay then switch backend.
+            // `backendSwitched` is set only *after* switchBackend returns, so a
+            // waiter never observes "queue replayed" as a stand-in for "backend
+            // switched": the two used to be conflated by relying on the fixed
+            // 150ms sleep that preceded this test's waitUntil migration to have
+            // given switchBackend() enough slack to finish too, which held in
+            // practice but was never actually waited for.
             syncWorker.run();
             bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
+            backendSwitched.store(true);
         },
         morph::offline::NetworkMonitor::Config{.probeInterval = 30ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
-    // Wait for monitor to detect offline (one probe interval + margin).
-    std::this_thread::sleep_for(80ms);
-    REQUIRE_FALSE(monitor.isOnline());
+    // Wait for the monitor to detect offline.
+    REQUIRE(morph::testing::waitUntil([&] { return !monitor.isOnline(); }));
 
     // Bring network back online.
     networkOnline.store(true);
 
-    // Wait for monitor to detect recovery and fire onOnline (one probe interval + margin).
-    std::this_thread::sleep_for(150ms);
-
-    // All queued items must have been replayed.
+    // Wait for the monitor to detect recovery, fire onOnline, and replay the queue.
+    REQUIRE(morph::testing::waitUntil([&] {
+        const std::scoped_lock lock{replayMtx};
+        return replayed.size() == 3;
+    }));
     {
-        std::scoped_lock lock{replayMtx};
+        const std::scoped_lock lock{replayMtx};
         REQUIRE(replayed.size() == 3);
     }
     REQUIRE(queue.drain().empty());
+
+    // Wait for the backend switch itself, not just the replay that precedes it
+    // in the same callback -- see the comment on `backendSwitched` above.
+    REQUIRE(morph::testing::waitUntil([&] { return backendSwitched.load(); }));
 
     // morph::bridge::Bridge now routes to remotePool — execute still works.
     std::atomic<int> result{-1};
