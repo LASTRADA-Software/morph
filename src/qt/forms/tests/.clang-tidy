@@ -1,0 +1,34 @@
+# Checks suppressed inside this test directory only, on the same terms as the
+# framework's own tests/.clang-tidy: an entry here is a check whose finding is
+# *test idiom* -- a property of Catch2 -- rather than a defect. One entry, with
+# the reason it cannot fire on anything worth fixing.
+
+# bugprone-chained-comparison: `CHECK(a == b)` expands to
+# `catchAssertionHandler.handleExpr(Catch::Decomposer() <= a == b)`, so the
+# check sees `v0 <= v1 == v2` and reports a chained comparison. Nothing in the
+# test source compares three things: the `<=` it objects to is Catch2's own
+# capture hook, and both fixes it suggests -- parenthesise, or split with a
+# logical operator -- would defeat the expression decomposition that makes a
+# failing assertion print its two operands. Catch2 says so itself; the macro
+# definition carries `/* NOLINT(bugprone-chained-comparison) */` on that very
+# line in 3.15.3. CI pins catch2 3.4.0 -- ubuntu-24.04's package, which
+# predates that comment -- which is why the finding reaches CI here and not on
+# a workstation with a current Catch2.
+#
+# Directory-scoped, and no wider, for the same reason tests/.clang-tidy and
+# every examples/*/tests/.clang-tidy copy is: clang-tidy offers no finer
+# granularity than a directory, so this sits here rather than at `src/qt/`,
+# where it would also cover non-test sources. `InheritParentConfig` keeps
+# every other check the repository-root .clang-tidy enables; exactly one
+# entry is subtracted, and only here.
+#
+# This test directory predates the gate that used to keep this suppression's
+# copies in step across every Catch2 test directory (see tests/.clang-tidy's
+# own note -- "the gate that checked this was removed"); it never received
+# its own copy, which is why an existing test file in this same directory
+# (test_forms_controller_core.cpp) carries the same idiom unflagged only
+# because none of its lines had been part of a diff since it landed.
+
+Checks: '-bugprone-chained-comparison'
+
+InheritParentConfig: true

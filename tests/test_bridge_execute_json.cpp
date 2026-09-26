@@ -79,6 +79,32 @@ TEST_CASE("ActionExecuteRegistry: unknown action type throws", "[bridge][execute
     REQUIRE_THROWS_AS(handler.executeJson("NoSuchAction", "{}"), std::runtime_error);
 }
 
+TEST_CASE("BridgeHandler::servesAction is true for a registered action and false for an unregistered one",
+          "[bridge][execute-json]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<MathModel> handler{bridge, &cbExec};
+
+    CHECK(handler.servesAction("Test_ExecJson_AddNumbers"));
+    CHECK_FALSE(handler.servesAction("NoSuchAction"));
+    // A pure existence check: unlike executeJson, it must not throw for an
+    // action this Model does not serve.
+    CHECK_NOTHROW(handler.servesAction("NoSuchAction"));
+}
+
+TEST_CASE("ActionExecuteRegistry::contains agrees with execute for both Sharing policies", "[bridge][execute-json]") {
+    // registerAction files both the NoSharing and AllowShared executors for
+    // every registered (Model, Action) pair (see registerAction's own doc
+    // comment), so contains<Sharing> must answer the same for either tag,
+    // matching whichever the caller's own handler is instantiated with.
+    auto& registry = morph::bridge::ActionExecuteRegistry::instance();
+    CHECK(registry.contains<morph::bridge::NoSharing>("Test_ExecJson_MathModel", "Test_ExecJson_AddNumbers"));
+    CHECK(registry.contains<morph::bridge::AllowShared>("Test_ExecJson_MathModel", "Test_ExecJson_AddNumbers"));
+    CHECK_FALSE(registry.contains<morph::bridge::NoSharing>("Test_ExecJson_MathModel", "NoSuchAction"));
+    CHECK_FALSE(registry.contains<morph::bridge::NoSharing>("NoSuchModel", "Test_ExecJson_AddNumbers"));
+}
+
 // ── Coverage: registerAction guarded forwarding (bridge.hpp L845-847, L849) ──
 // These target the two uncovered regions in ActionExecuteRegistry::registerAction's
 // executor lambda:

@@ -518,14 +518,19 @@ if(MORPH_BUILD_FORMS_QML)
     # not only under morph::qt: forms_controller_core.hpp includes both, and
     # morph::qt (MORPH_BUILD_QT, which needs Qt WebSockets) is not part of
     # every install that ships this header. Neither needs anything beyond
-    # QtCore.
+    # QtCore. multi_model_bridge_core.hpp/multi_model_forms_controller_core.hpp
+    # and the owned_local_bridge.hpp detail header they (and the single-model
+    # pair) share are the same story.
     target_sources(morph_qt_forms
         INTERFACE
         FILE_SET HEADERS
         BASE_DIRS include
         FILES
+            include/morph/qt/bridge/detail/owned_local_bridge.hpp
             include/morph/qt/bridge/generic_model_bridge_core.hpp
+            include/morph/qt/bridge/multi_model_bridge_core.hpp
             include/morph/qt/forms/forms_controller_core.hpp
+            include/morph/qt/forms/multi_model_forms_controller_core.hpp
             include/morph/qt/qt_executor.hpp
     )
 endif()

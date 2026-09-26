@@ -111,4 +111,14 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
         apply_sanitizers(morph_forms_controller_core_tests ${AF_SANITIZER})
     endif()
     add_test(NAME forms_controller_core COMMAND morph_forms_controller_core_tests)
+
+    # Same rationale, for MultiModelBridgeCore/MultiModelFormsControllerCore.
+    qt_add_executable(morph_multi_model_bridge_core_tests tests/test_multi_model_bridge_core.cpp)
+    target_link_libraries(morph_multi_model_bridge_core_tests PRIVATE morph::qt_forms Catch2::Catch2
+                                                                      morph_test_log_level)
+
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_multi_model_bridge_core_tests ${AF_SANITIZER})
+    endif()
+    add_test(NAME multi_model_bridge_core COMMAND morph_multi_model_bridge_core_tests)
 endif()

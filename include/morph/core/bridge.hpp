@@ -110,6 +110,30 @@ public:
         return iter->second(handler, bodyJson);
     }
 
+    /// @brief Checks whether an executor is registered for `(modelId, actionId)`,
+    ///        specialised for the caller's own `Sharing` policy, without invoking it.
+    ///
+    /// `registerAction` always files both the `NoSharing` and `AllowShared`
+    /// executors for a given `(Model, Action)` pair (see its own doc comment),
+    /// so for any action registered via `BRIDGE_REGISTER_ACTION` this answers
+    /// the same for either `Sharing` -- the template parameter exists for
+    /// symmetry with `execute<Sharing>` and to stay correct if that ever
+    /// changes, not because the two currently disagree.
+    /// @tparam Sharing `NoSharing` or `AllowShared` — the caller's own sharing policy.
+    /// @param modelId  String id of the target model.
+    /// @param actionId String id of the action to check.
+    /// @return `true` if `execute<Sharing>(modelId, actionId, ...)` would find an executor.
+    template <typename Sharing>
+    [[nodiscard]] bool contains(std::string_view modelId, std::string_view actionId) const noexcept {
+        // Same registration-phase latch `execute` closes (see its own doc
+        // comment): this is a read of `_executors` too, so a registration
+        // racing a routing-only caller that never calls `execute` (e.g. one
+        // that only ever probes unrouted actions) must still be caught.
+        ::morph::model::detail::noteRegistryRead(this == &instance());
+        return _executors.contains(
+            KeyView{.modelId = modelId, .actionId = actionId, .sharing = std::type_index{typeid(Sharing)}});
+    }
+
     /// @brief Returns the process-level singleton registry.
     /// @return Reference to the singleton `ActionExecuteRegistry`.
     static ActionExecuteRegistry& instance();
@@ -3187,6 +3211,21 @@ public:
         // lookup below it avoids.
         return ActionExecuteRegistry::instance().execute<Sharing>(::morph::model::ModelTraits<Model>::typeId(),
                                                                   actionType, this, bodyJson);
+    }
+
+    /// @brief Whether `Model` has an action registered under @p actionId, without
+    ///        invoking it.
+    ///
+    /// A pure existence check over `ActionExecuteRegistry` -- the same
+    /// registry `executeJson` dispatches through -- so a caller holding
+    /// several handlers for different models can find the one that serves a
+    /// string action-type id without hand-maintaining that mapping itself
+    /// (see `morph::qt::bridge::MultiModelBridgeCore`, the shipped example).
+    /// @param actionId Action type id to check.
+    /// @return `true` if `executeJson(actionId, ...)` would find a registered action.
+    [[nodiscard]] bool servesAction(std::string_view actionId) const noexcept {
+        return ActionExecuteRegistry::instance().contains<Sharing>(::morph::model::ModelTraits<Model>::typeId(),
+                                                                   actionId);
     }
 
     /// @brief Creates this handler's binding: deferred when shared, immediate otherwise.
