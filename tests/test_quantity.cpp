@@ -658,13 +658,13 @@ TEST_CASE("NamedQuantity slices to a plain Quantity", "[quantity]") {
 //
 // formatRationalDecimal negated the numerator with signed arithmetic, which is
 // UB for INT64_MIN -- confirmed by UBSan at quantity.hpp:101 before the fix.
-// INT64_MIN reaches it because the whole-integer `Rational{value, DecimalPlaces}`
-// constructor does not canonicalise (and `numerator` is a public member), so the
-// clamp in canonicalise() never runs on this path.
+// The ordinary constructors canonicalise INT64_MIN, but `numerator` remains a
+// public member for aggregate-like use, so a caller can still create this state
+// explicitly. The formatter must remain defined for that poisoned value.
 TEST_CASE("formatRationalDecimal: an un-canonicalised INT64_MIN numerator renders exactly",
           "[quantity][rational][morph496]") {
-    morph::math::Rational const value{std::numeric_limits<std::int64_t>::min(), morph::math::DecimalPlaces{0}};
-    // Precondition: this constructor really does keep the trap value.
+    morph::math::Rational value{0, morph::math::DecimalPlaces{0}};
+    value.numerator = std::numeric_limits<std::int64_t>::min();
     REQUIRE(value.numerator == std::numeric_limits<std::int64_t>::min());
     // Under -fsanitize=undefined this line was the UB report; the magnitude must
     // survive the unsigned negation intact rather than wrapping.

@@ -9,6 +9,12 @@ API surface).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Rational` no longer invokes undefined behaviour on `INT64_MIN`.** The whole-integer constructor now canonicalises like the other constructors, and unary negation, `abs`, `reciprocal`, and multiplication cross-cancellation remain defined even if the public `numerator` or `denominator` is manually set to `INT64_MIN`. Unrepresentable magnitude is clamped to `INT64_MAX`, matching the existing saturation policy. `reciprocal` hands the inverted pair to the canonicalising constructor rather than negating a component itself, so the clamp is reported through the usual `error` log instead of applied silently.
+- **`checkedMul` no longer reports success for a product canonicalisation then changes.** A reduced product of exactly `INT64_MIN` fits an `int64_t` but is not a representable `Rational` component — `canonicalise` clamps it to `-INT64_MAX` — so `mulWouldOverflow` now reports it. `checkedMul(Rational{-2^62}, Rational{2})` returns `Overflow` where it previously returned a clamped value as a success; `operator*` saturates to the same `-INT64_MAX/1` it produced before, under the overflow log rather than the clamp log.
+- **`checkedDiv` no longer absorbs an inexact reciprocal.** A divisor carrying a hand-poisoned `INT64_MIN` component has no representable inverse, so `checkedDiv` reports `Overflow` instead of returning the product of the clamped one as a success. `dividedBy`/`operator/` are unchanged and still saturate.
+
 ### Changed
 
 - **`LocalBackend::execute` no longer rescans the pending-completion list on
