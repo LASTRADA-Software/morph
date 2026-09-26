@@ -215,6 +215,36 @@ TEST_CASE("Completion: a throwing last then handler is isolated the same as a no
     REQUIRE(firstFired);
 }
 
+TEST_CASE("Completion: a throwing then handler attached after settlement is isolated too", "[completion]") {
+    // A handler attached after the value is already stored takes the attach's
+    // own fire-now path rather than setValue's composed closure. It must get
+    // the same isolation: otherwise whether a throwing handler reaches the
+    // executor depends only on which side of settlement the attach landed.
+    const LogGuard guard;
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
+    morph::async::Completion<int> comp{state, &exec};
+    state->setValue(1);
+
+    bool laterFired = false;
+    REQUIRE_NOTHROW(comp.then([&](int) { throw std::runtime_error{"handler blew up"}; }));
+    comp.then([&](int) { laterFired = true; });
+    REQUIRE(laterFired);
+}
+
+TEST_CASE("Completion: a throwing onError handler attached after settlement is isolated too", "[completion]") {
+    const LogGuard guard;
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
+    morph::async::Completion<int> comp{state, &exec};
+    state->setException(std::make_exception_ptr(std::runtime_error{"err"}));
+
+    bool laterFired = false;
+    REQUIRE_NOTHROW(comp.onError([&](const std::exception_ptr&) { throw std::runtime_error{"handler blew up"}; }));
+    comp.onError([&](const std::exception_ptr&) { laterFired = true; });
+    REQUIRE(laterFired);
+}
+
 TEST_CASE("Completion: mismatched attach (onError on a value-ready state) is still a no-op for all handlers",
           "[completion][issue-59]") {
     SyncExecutor exec;
