@@ -5,8 +5,8 @@
 //
 // `optionsReceived` only exists on a controller that serves a Choice. A
 // controller that serves none does not declare it, and deliberately does not:
-// `bookmarks::gui::BookmarkFormsController`'s own "No `fetchOptions()`" note
-// records that adding one with nothing to call it would be a stub. So the
+// `bookmarks::gui::FormsBridge`'s own "No `fetchOptions()`/`optionsReceived`"
+// note records that adding one with nothing to call it would be a stub. So the
 // sanctioned shape used to warn once per form instance, the moment a real
 // controller was attached:
 //

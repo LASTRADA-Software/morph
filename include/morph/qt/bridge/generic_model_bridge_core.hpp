@@ -34,9 +34,11 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/qt/bridge/detail/owned_local_bridge.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace morph::qt::bridge {
@@ -103,26 +105,23 @@ public:
             .onError([onError = std::move(onError)](const std::exception_ptr& err) mutable { onError(err); });
     }
 
-private:
-    /// @brief The private pool/executor/backend bundle the schema-only
-    ///        constructor builds and owns. Absent (`_owned` unengaged) when the
-    ///        core instead composes over a caller-supplied `Bridge`/executor.
-    ///
-    /// Declaration order within the struct matters for destruction: `bridge`
-    /// must tear down before `pool`/`gui`, so it is declared last.
-    struct OwnedBridge {
-        ::morph::exec::ThreadPoolExecutor pool{2};
-        ::morph::qt::QtExecutor gui;
-        ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
-    };
+    /// @brief Whether `Model` has an action registered under @p actionId,
+    ///        without invoking it. Forwards to `BridgeHandler::servesAction`;
+    ///        see there for the full contract.
+    /// @param actionId Action type id to check.
+    /// @return `true` if `execute(actionId, ...)` would find a registered action.
+    [[nodiscard]] bool servesAction(std::string_view actionId) const noexcept {
+        return _handler.servesAction(actionId);
+    }
 
+private:
     // Declaration order matters for destruction: _handler must tear down
     // before _owned (its bridge and executor, when this core owns them), so
     // _owned is declared first and _handler after it. When the caller-
     // supplied-Bridge constructor is used, _owned stays unengaged and
     // _handler instead references the caller's Bridge/executor directly --
     // the caller is responsible for outliving _handler in that case.
-    std::optional<OwnedBridge> _owned;
+    std::optional<detail::OwnedLocalBridge> _owned;
     ::morph::bridge::BridgeHandler<Model, Sharing> _handler;
 };
 

@@ -1422,6 +1422,29 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
   home: its own `LabFormsDemo` QML module carries only `Main.qml` and the
   `FormsController` subclass naming `lab::LabModel`; `Main.qml` imports
   `MorphForms` for `DynamicForm`/`I18nCatalog` like any other consumer would.
+- **`include/morph/qt/forms/multi_model_forms_controller_core.hpp`** (same
+  component, same install story) ships
+  `morph::qt::forms::MultiModelFormsControllerCore<Sharing, Model...>`, the
+  multi-model sibling of `FormsControllerCore<Model, Sharing>` for a rung
+  whose forms span more than one registered model
+  (`bookmarks::gui::FormsBridge`, whose forms serve `AuthModel`,
+  `BookmarkModel` and `TagModel`, is the shipped example). Same
+  `schemasJson()`/`submitIfValid()`/`fetchOptions()` surface, over
+  `morph::qt::bridge::MultiModelBridgeCore<Sharing, Model...>`
+  (`include/morph/qt/bridge/multi_model_bridge_core.hpp`) instead of
+  `GenericModelBridgeCore<Model, Sharing>`: it composes one
+  `GenericModelBridgeCore<Model, Sharing>` per `Model` in the pack and routes a
+  submitted action-type id to whichever one serves it, via
+  `GenericModelBridgeCore::servesAction` (which forwards to
+  `BridgeHandler::servesAction`) — a pure existence check over
+  `ActionExecuteRegistry`, the same registry `executeJson` dispatches
+  through — rather than a hand-written `actionType -> Model` table. Models
+  are tried in the order the pack declares them; an action id registered on
+  more than one `Model` in the pack is a configuration bug asserted in debug
+  builds, not a case routed silently. An unrouted action type resolves
+  `onError` directly with `"no model in this client serves action '<id>'"`,
+  the same wording every hand-written router before it agreed on
+  independently.
 
 This is packaging and factoring only: no `x-*` key changed, and a plain
 single-action form renders identically to before the renderer was extracted.
@@ -1435,9 +1458,9 @@ not one, because only one of the two signals is universal:
 - **`optionsReceived(optionsAction, ok, payload)` is optional.** It exists only
   on a controller that serves a `Choice` field; a controller that serves none
   deliberately declares neither it nor `fetchOptions()`
-  (`bookmarks::gui::BookmarkFormsController` and
-  `pastebin::gui::FormsBridge` each carry the reasoning: an unused
-  `fetchOptions()` would be a stub with nothing to call it). Its block gates its
+  (`bookmarks::gui::FormsBridge` and `pastebin::gui::FormsBridge` each carry
+  the reasoning: an unused `fetchOptions()` would be a stub with nothing to
+  call it). Its block gates its
   **target** on the signal being declared — `form.controller.optionsReceived
   !== undefined`, else `null` — so a controller that omits it is never connected
   to and the absence is not a warning. Without the split, every form instance

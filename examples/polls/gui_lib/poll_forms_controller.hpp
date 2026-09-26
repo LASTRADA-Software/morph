@@ -19,24 +19,27 @@ namespace polls::gui {
 /// @brief Owns the *one* `BridgeHandler<PollModel, AllowShared>` a vote-view
 ///        screen dispatches every already-open-poll action through, and
 ///        exposes both the schema-driven `submitIfValid` surface
-///        `bookmarks::gui::BookmarkFormsController` established and the
-///        typed convenience methods that surface cannot cover.
+///        `morph::qt::forms::MultiModelFormsControllerCore` established and
+///        the typed convenience methods that surface cannot cover.
 ///
-/// @par Why this is not a verbatim copy of `BookmarkFormsController`
-/// `BookmarkFormsController` owns one `BridgeHandler` *per model* (three, for
-/// three models) precisely because `BookmarkModel`/`TagModel`/`AuthModel` are
-/// all plain (`NoSharing`) — each handler registers its own private instance
-/// eagerly at construction, so which handler object serves a given call
-/// never matters. `PollModel` is different: it is `AllowShared` and keyed by
-/// `pollId` (`poll_model.hpp`'s own doc comment; this rung's shared-instance
-/// showcase). An `AllowShared` handler starts **unattached** and only joins
-/// the poll's shared instance the first time a payload-keyed action
-/// (`OpenPoll`) dispatches through *that specific handler object* — every
-/// other action on the same poll must reuse that exact handler, or it hits
-/// "handler not bound" (no instance to run against). A second, independently
-/// constructed `BridgeHandler<PollModel, AllowShared>` — as
-/// `BookmarkFormsController`'s per-model shape would produce if copied
-/// verbatim — would need its *own* `OpenPoll` attach before anything routed
+/// @par Why this is not built over `MultiModelFormsControllerCore`
+/// `MultiModelFormsControllerCore` (the core `bookmarks::gui::FormsBridge`
+/// composes) owns one `BridgeHandler` *per model* in its pack precisely
+/// because a rung with several form-serving models all plain (`NoSharing`) —
+/// bookmarks' `BookmarkModel`/`TagModel`/`AuthModel` are — can have each
+/// handler register its own private instance eagerly at construction, so
+/// which handler object serves a given call never matters. `PollModel` is
+/// different: it is `AllowShared` and keyed by `pollId` (`poll_model.hpp`'s
+/// own doc comment; this rung's shared-instance showcase). An `AllowShared`
+/// handler starts **unattached** and only joins the poll's shared instance
+/// the first time a payload-keyed action (`OpenPoll`) dispatches through
+/// *that specific handler object* — every other action on the same poll must
+/// reuse that exact handler, or it hits "handler not bound" (no instance to
+/// run against). A second, independently constructed
+/// `BridgeHandler<PollModel, AllowShared>` — as one more `Model` in a
+/// `MultiModelFormsControllerCore` pack would produce, since this rung has
+/// only one form-serving model and no routing to do — would need its *own*
+/// `OpenPoll` attach before anything routed
 /// through it could work, doubling the shared instance's live attachment
 /// count for no benefit and, worse, silently failing every call issued
 /// before that second attach completed. So this class owns exactly one

@@ -530,8 +530,9 @@ Known gaps:
   now-correct generic path is work nobody has done, not work anybody is
   blocked on. Both that class's doc comment and `poll_schemas.hpp`'s already
   say so.
-- **`PollFormsController` cannot be a verbatim copy of
-  `bookmarks::gui::BookmarkFormsController`'s per-model-handler shape.**
+- **`PollFormsController` cannot be built over
+  `morph::qt::forms::MultiModelFormsControllerCore`'s per-model-handler shape**
+  (the core `bookmarks::gui::FormsBridge` composes for its three models).
   Every one of bookmarks' three models is plain (`NoSharing`), so which
   handler object serves a given call never matters there. `PollModel` is
   `AllowShared` and keyed: an `AllowShared` handler starts unattached and
