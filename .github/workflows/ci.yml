@@ -2196,6 +2196,15 @@ jobs:
   # they compose, which building each alone would not.
   linux-all-features:
     name: Linux / all optional features (${{ matrix.compiler }})
+    # Not on pull_request: this leg's own build (every MORPH_BUILD_* option,
+    # the whole ladder, the fuzz replay, --parallel ctest) runs 45min-1h+, the
+    # longest in this workflow. It still runs on every push to master/main --
+    # unchanged from before this line, so the "closes a real hole" and
+    # "the one leg exercising --parallel ctest" properties below keep their
+    # existing immediacy -- and .github/workflows/nightly-slow-checks.yml runs
+    # an independent copy against master on a schedule, so a gap between
+    # pushes is still covered, just not within a PR's own required checks.
+    if: github.event_name != 'pull_request'
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
     env:
@@ -2524,6 +2533,14 @@ jobs:
   # ── Valgrind (memcheck) ───────────────────────────────────────────────
   valgrind:
     name: Valgrind memcheck
+    # Not on pull_request: this leg alone has run anywhere from ~15 minutes to
+    # over an hour on the runners available to this repo, the least
+    # predictable wait in this workflow. It still runs on every push to
+    # master/main -- unchanged from before this line -- and
+    # .github/workflows/nightly-slow-checks.yml runs an independent copy
+    # against master on a schedule, so a gap between pushes is still covered,
+    # just not within a PR's own required checks.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

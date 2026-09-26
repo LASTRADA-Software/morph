@@ -1,0 +1,453 @@
+name: Nightly slow checks
+
+# Independent backstop for the two legs .github/workflows/ci.yml no longer
+# gates pull requests with: Valgrind memcheck (15min-1h+, the least
+# predictable wait in that workflow) and Linux / all optional features
+# (45min-1h+, the only leg building every MORPH_BUILD_* option together,
+# including MORPH_BUILD_LADDER + MORPH_BUILD_FORMS_QML). Both still run
+# immediately on every push to master/main inside ci.yml itself -- unchanged
+# from before that split -- so this workflow's job is to catch what a push
+# cannot: environment drift between pushes (a moved apt/vcpkg package, a
+# revoked cache entry, a flaky self-hosted runner) on a day nobody pushes.
+#
+# Maintenance note, stated rather than hidden: the two jobs below are
+# deliberate copies of ci.yml's `valgrind` and `linux-all-features` jobs, not
+# a shared definition -- this repository has no reusable-workflow (
+# `workflow_call`) precedent yet, and introducing one here would need to
+# thread `probe-self-hosted`'s outputs and every relevant secret across a
+# call boundary for two jobs, versus accepting that a future change to
+# either original needs a second, deliberate edit here. The nightly copy
+# also drops the self-hosted-runner probe `linux-all-features` uses in
+# ci.yml (kept simple as always-GitHub-hosted, since a schedule has no PR
+# latency to protect) and both copies never write sccache -- their
+# `github.event_name` is `schedule`/`workflow_dispatch`, never `push`, so the
+# unmodified "Save sccache" `if:` condition they inherit is always false and
+# they only ever restore what the last push already wrote.
+
+on:
+  schedule:
+    # 03:17 UTC -- an arbitrary off-peak time, not the top of the hour where
+    # scheduled-workflow load concentrates across all of GitHub.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-slow-checks
+  # Never cancel a still-running nightly for a second scheduled/manual
+  # trigger: unlike ci.yml's per-ref PR runs, there is only one schedule, so
+  # cancelling an in-flight run would only ever discard real progress for no
+  # newer commit to test -- the checkout below always resolves to whatever
+  # master is at trigger time regardless.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  MORPH_TEST_LOG_LEVEL: debug
+  VCPKG_BINARY_SOURCES: "clear;nuget,github,readwrite"
+  SCCACHE_DIR: /home/runner/.cache/sccache
+  SCCACHE_CACHE_SIZE: "1G"
+  FASTCACHE_PREFETCH_GROUP: "${{ github.run_id }}-${{ github.job }}"
+  CLANG_VERSION: "22"
+  CATCH2_VERSION: "3.4.0"
+  QT_VERSION: "6.8.1"
+
+jobs:
+  # ── Valgrind (memcheck) ───────────────────────────────────────────────
+  # Verbatim copy of ci.yml's `valgrind` job -- see that job's own comments
+  # for the reasoning behind each step. Kept in step by hand; there is
+  # nothing that checks the two stay identical (see this file's own top
+  # comment).
+  valgrind:
+    name: Valgrind memcheck (nightly)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-valgrind-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-valgrind-
+
+      - name: Install GCC 15, ninja, catch2, valgrind
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 valgrind
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
+
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-gcc-debug-${{ github.sha }}
+          restore-keys: sccache-gcc-debug-
+
+      - name: Install sccache
+        run: |
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      - name: Configure
+        run: |
+          cmake --preset gcc-debug \
+            -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build --preset gcc-debug -- -j 4
+
+      - name: Run tests under Valgrind
+        run: |
+          status=0
+          for suite in tests/morph_tests tests/net/morph_net_tests tests/offline_sqlite/morph_offline_sqlite_tests; do
+            binary="build/gcc-debug/$suite"
+            if [ ! -x "$binary" ]; then
+              echo "::error::expected Valgrind suite $binary was not built"
+              exit 1
+            fi
+            echo "── memcheck: $suite ──"
+            EXTRA_ARGS=()
+            if [ "$suite" = "tests/morph_tests" ]; then
+              EXTRA_ARGS=("~[oom-injector]" "~[issue108]")
+            fi
+            valgrind \
+              --tool=memcheck \
+              --leak-check=full \
+              --show-leak-kinds=definite,indirect \
+              --errors-for-leak-kinds=definite,indirect \
+              --error-exitcode=1 \
+              --suppressions=cmake/valgrind.supp \
+              "$binary" "${EXTRA_ARGS[@]}" || status=1
+          done
+          exit "$status"
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-gcc-debug-${{ github.sha }}
+
+      - name: Capture a failure excerpt for the issue filer
+        if: failure()
+        run: |
+          {
+            echo "Job: Valgrind memcheck (nightly)"
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Commit: ${{ github.sha }}"
+          } > /tmp/failure-excerpt-valgrind.txt
+
+      - name: Upload failure excerpt
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-excerpt-valgrind
+          path: /tmp/failure-excerpt-valgrind.txt
+          retention-days: 7
+
+  # ── Linux: every optional feature ON ──────────────────────────────────
+  # Verbatim copy of ci.yml's `linux-all-features` job, minus the
+  # self-hosted-runner probe (see this file's own top comment for why) --
+  # see that job's own comments for the reasoning behind each remaining
+  # step.
+  linux-all-features:
+    name: Linux / all optional features (nightly, ${{ matrix.compiler }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: clang
+            preset: clang-debug
+            fuzzers: "ON"
+          - compiler: gcc
+            preset: gcc-debug
+            fuzzers: "OFF"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-all-features-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-all-features-${{ matrix.compiler }}-
+
+      - name: Install toolchain and the non-Qt dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build catch2 \
+            libsqlite3-dev libsodium-dev libssl-dev \
+            unixodbc-dev libsqliteodbc \
+            libyaml-cpp-dev libzip-dev \
+            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            sudo apt-get install -y gcc-15 g++-15
+            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
+            sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
+          else
+            curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+            test -s /tmp/llvm.sh
+            sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
+          fi
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4.3.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
+
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-${{ matrix.preset }}-
+
+      - name: Install sccache
+        run: |
+          curl -sSL --fail -o /tmp/sccache.tar.gz \
+            https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf /tmp/sccache.tar.gz --strip-components=1 -C /usr/local/bin \
+            sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      - name: Configure (every optional feature ON)
+        run: |
+          EXTRA=""
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            EXTRA="-DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}"
+          fi
+          # shellcheck disable=SC2086
+          cmake --preset ${{ matrix.preset }} \
+            -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_FORMS_QML=ON \
+            -DMORPH_BUILD_LADDER=ON \
+            -DMORPH_LADDER_RUNGS=all \
+            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
+            -DMORPH_BUILD_LOAD_TESTS=ON \
+            -DMORPH_BUILD_HMAC_EXAMPLES=ON \
+            -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
+            -DMORPH_BUILD_BANK_EXAMPLE=ON \
+            -DMORPH_BUILD_BANK_GUI=ON \
+            -DMORPH_REQUIRE_VETTED_HMAC=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            $EXTRA
+
+      - name: Build
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: cmake --build --preset ${{ matrix.preset }} -- -j 4
+
+      - name: Check no generated moc include ascends
+        run: bash scripts/check_automoc_includes.sh build/${{ matrix.preset }}
+
+      - name: Test (offscreen Qt platform, ctest in parallel)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset ${{ matrix.preset }} --parallel 4 --output-on-failure
+
+      - name: Verify the fuzz replay covered the committed reproducers
+        if: "!cancelled() && matrix.fuzzers == 'ON'"
+        run: |
+          ctest --preset ${{ matrix.preset }} -R fuzz -V > fuzz-replay.log 2>&1
+          status=0
+          for finding in tests/fuzz/findings/*/*; do
+            if ! grep -qF "$(basename "$finding")" fuzz-replay.log; then
+              echo "::error::fuzz replay never referenced committed reproducer $finding"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
+
+      - name: Capture a failure excerpt for the issue filer
+        if: failure()
+        run: |
+          {
+            echo "Job: Linux / all optional features (nightly, ${{ matrix.compiler }})"
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Commit: ${{ github.sha }}"
+          } > /tmp/failure-excerpt-all-features-${{ matrix.compiler }}.txt
+
+      - name: Upload failure excerpt
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-excerpt-all-features-${{ matrix.compiler }}
+          path: /tmp/failure-excerpt-all-features-${{ matrix.compiler }}.txt
+          retention-days: 7
+
+  # ── Reconcile GitHub issues against tonight's result ──────────────────
+  #
+  # Runs regardless of the two jobs above (`if: always()`), because a
+  # recovery (a previously-red job going green) has to close a stale issue
+  # just as reliably as a new failure has to open one -- an `if: failure()`
+  # gate here would only ever open issues and never close them.
+  #
+  # One issue per job, found by an exact-match marker in the issue body
+  # (`<!-- nightly-marker: <job-id> -->`), not by title or label alone: a
+  # title can be edited by anyone commenting, and a label is not unique
+  # enough to safely say "this is the same failure, not a coincidentally
+  # similar one" when this workflow starts covering more jobs later.
+  #
+  # Verification status inside the filed issue is stated plainly, per
+  # AGENTS.md: "Reproduced" is accurate here (a real scheduled run failed,
+  # against a named commit, with a link to the full log this comment
+  # summarises) -- not "inferred", which would understate it. The `gh api`
+  # calls run in the runner's own actions bot identity via GITHUB_TOKEN, the
+  # same auth every workflow already has; no new secret.
+  reconcile-issues:
+    name: File or close issues for tonight's result
+    needs: [valgrind, linux-all-features]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      # Elevated only on this one job, not the workflow's top-level
+      # `permissions:` -- the two build jobs above never touch the issue
+      # tracker and stay at the repository default (contents: read).
+      issues: write
+    steps:
+      - name: Download failure excerpts (if any)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: failure-excerpt-*
+          path: /tmp/excerpts
+          merge-multiple: true
+
+      # Marker labels, one per job this workflow can report on, created once
+      # (idempotently) rather than assumed to exist -- `gh label create`
+      # fails if the label is already there, so its own exit status is
+      # ignored rather than treated as this step's failure.
+      - name: Ensure marker labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh label create "nightly-check:valgrind" --repo "$REPO" \
+            --description "Auto-filed by nightly-slow-checks.yml for the Valgrind leg" \
+            --color BFDADC 2>/dev/null || true
+          gh label create "nightly-check:all-features" --repo "$REPO" \
+            --description "Auto-filed by nightly-slow-checks.yml for the all-optional-features leg" \
+            --color BFDADC 2>/dev/null || true
+
+      - name: Reconcile
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          VALGRIND_RESULT: ${{ needs.valgrind.result }}
+          ALL_FEATURES_RESULT: ${{ needs.linux-all-features.result }}
+        run: |
+          set -euo pipefail
+
+          # Dedup by an exact-match marker *label*, not a body-text search --
+          # GitHub's issue search is full-text, not a literal-substring match,
+          # so a marker embedded in the body cannot be relied on to find
+          # itself again. A label is matched exactly.
+          reconcile_one() {
+            local marker_label="$1" title="$2" result="$3" excerpt_file="$4"
+
+            # Neither success nor failure: a cancelled or skipped run says
+            # nothing about whether the check itself passes, so it is left
+            # alone rather than filed or closed on stale information.
+            if [ "$result" != "success" ] && [ "$result" != "failure" ]; then
+              echo "ok: ${marker_label} result=${result}, not success or failure -- leaving any existing issue untouched"
+              return 0
+            fi
+
+            local existing
+            existing=$(gh issue list --repo "$REPO" --state open --label "$marker_label" \
+                         --json number --jq '.[0].number // empty')
+
+            if [ "$result" = "success" ]; then
+              if [ -n "$existing" ]; then
+                gh issue comment "$existing" --repo "$REPO" --body \
+                  "Recovered: tonight's scheduled run passed against \`${SHA:0:12}\`. ${RUN_URL}$(printf '\n\n')Closing -- re-open if this regresses again."
+                gh issue close "$existing" --repo "$REPO" --reason "completed"
+                echo "ok: ${marker_label} recovered, closed #${existing}"
+              else
+                echo "ok: ${marker_label} passed, no open issue to close"
+              fi
+              return 0
+            fi
+
+            # result = failure
+            local body_file
+            body_file="$(mktemp)"
+            {
+              echo "Scheduled nightly check failed: **${title}**."
+              echo
+              echo "## Verification status"
+              echo
+              echo "**Reproduced.** This is a real scheduled CI run, not inferred from"
+              echo "reading code. Revision: \`${SHA}\`. Run: ${RUN_URL}"
+              echo
+              echo "## Real output"
+              echo
+              echo '```'
+              if [ -f "$excerpt_file" ]; then
+                cat "$excerpt_file"
+              else
+                echo "(no excerpt captured -- see the run link above for the full log)"
+              fi
+              echo '```'
+              echo
+              echo "## What would change the verdict"
+              echo
+              echo "This issue closes automatically the next time this job's scheduled"
+              echo "run passes (see .github/workflows/nightly-slow-checks.yml's"
+              echo "\`reconcile-issues\` job, matched by the \`${marker_label}\` label"
+              echo "below). Re-opens itself in the same way if it fails again after"
+              echo "that."
+            } > "$body_file"
+
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --repo "$REPO" --body-file "$body_file"
+              echo "ok: ${marker_label} still failing, commented on existing #${existing}"
+            else
+              local issue_url
+              issue_url=$(gh issue create --repo "$REPO" --title "ci: nightly ${title} failed" \
+                            --body-file "$body_file" --label "bug" --label "area: ci" \
+                            --label "$marker_label")
+              echo "ok: ${marker_label} filed ${issue_url}"
+            fi
+          }
+
+          reconcile_one "nightly-check:valgrind" "Valgrind memcheck" "$VALGRIND_RESULT" \
+            "/tmp/excerpts/failure-excerpt-valgrind.txt"
+          reconcile_one "nightly-check:all-features" "Linux / all optional features" "$ALL_FEATURES_RESULT" \
+            "/tmp/excerpts/failure-excerpt-all-features-clang.txt"
