@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: Member List</title>
+<title>morph: morph/qt/bridge/generic_model_bridge_core.hpp File Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/d52/generic__model__bridge__core_8hpp.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,23 +117,48 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d26/classmo
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt; Member List</div></div>
+  <div class="headertitle"><div class="title">generic_model_bridge_core.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
+<div class="textblock"><code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/core/backend.hpp&gt;</code><br />
+<code>#include &lt;morph/core/bridge.hpp&gt;</code><br />
+<code>#include &lt;morph/core/executor.hpp&gt;</code><br />
+<code>#include &lt;morph/qt/qt_executor.hpp&gt;</code><br />
+<code>#include &lt;optional&gt;</code><br />
+<code>#include &lt;string&gt;</code><br />
+<code>#include &lt;utility&gt;</code><br />
+</div>
+<p><a href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">Go to the source code of this file.</a></p>
+<table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
+Classes</h2></td></tr>
+<tr class="memitem:morph_3A_3Aqt_3A_3Abridge_3A_3AGenericModelBridgeCore_3C_20Model_2C_20Sharing_20_3E" id="r_morph_3A_3Aqt_3A_3Abridge_3A_3AGenericModelBridgeCore_3C_20Model_2C_20Sharing_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html">morph::qt::bridge::GenericModelBridgeCore&lt; Model, Sharing &gt;</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Owns, or composes over, the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML bridge, generic over the model type and the handler's sharing policy.  <a href="../../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html#details">More...</a><br /></td></tr>
+</table>
+<a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
+<div class="textblock"><p>Model-agnostic core of a schema-driven Qt/QML bridge: owns (or composes over) the Bridge/BridgeHandler/executor wiring and exposes one operation &ndash; dispatch an action by string id with a JSON body &ndash; generically over <span class="tt">BridgeHandler&lt;Model, Sharing&gt;::executeJson</span>, so an app depends on this directly instead of re-deriving the wiring per model. A concrete <span class="tt">QObject</span>/<span class="tt">QML_ELEMENT</span> wrapper per model (Qt cannot register a class <em>template</em> for QML) forwards to this core and turns its callbacks into signals &ndash; see <span class="tt"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html" title="DynamicForm.qml-facing facade over morph::qt::bridge::GenericModelBridgeCore, naming its one generic ...">morph::qt::forms::FormsControllerCore</a></span>, which specialises this core for the shipped forms renderer, for the reference shape.</p>
+<p>Deliberately does not carry a <span class="tt">schemasJson</span> document itself: that is a forms-rendering concept (the <span class="tt">{actionType: schema}</span> document <span class="tt">DynamicForm.qml</span> parses), not a generic action-dispatch one, and nothing in <span class="tt">execute()</span> reads it. A specialisation that does need to carry a document alongside the dispatch wiring &ndash; <span class="tt">FormsControllerCore</span> is the shipped example &ndash; adds it as its own member instead.</p>
+<p>Two constructor overloads decide who owns the <span class="tt">Bridge</span>:</p><ul>
+<li>The default constructor builds and owns a private <span class="tt">ThreadPoolExecutor</span> + <span class="tt">QtExecutor</span> + <span class="tt">Bridge</span> over a <span class="tt">LocalBackend</span> &ndash; the convenient default for a demo or an app that has no <span class="tt">Bridge</span> of its own.</li>
+<li>The <span class="tt">(Bridge&amp;, IExecutor*)</span> constructor composes over a caller-supplied <span class="tt">Bridge</span>/executor instead &ndash; the caller decides the deployment mode (<span class="tt">LocalBackend</span>, <span class="tt">SimulatedRemoteBackend</span>, <span class="tt">QtWebSocketBackend</span>, ...) and this core never builds a second, always-local <span class="tt">Bridge</span> of its own. The caller's <span class="tt">Bridge</span>/executor must outlive this core. </li>
+</ul>
 
-<p>This is the complete list of members for <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt;</a>, including all inherited members.</p>
-<table class="directory">
-  <tr class="even"><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#a60f5c03b14ba46f1f34a4d5d9d1ba422">fetchOptions</a>(const std::string &amp;optionsAction, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#afbf6107fa29c579dff2228047017b877">FormsControllerCore</a>(std::string schemasJson)</td><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt;</a></td><td class="entry"><span class="mlabel">inline</span><span class="mlabel">explicit</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#a3d451cf8ce707fa5c3c9cbd8c5fc36db">FormsControllerCore</a>(::morph::bridge::Bridge &amp;bridge, ::morph::exec::IExecutor *guiExec, std::string schemasJson)</td><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="odd"><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#ab6583adb832feea53c45648fcd8fc833">schemasJson</a>() const noexcept</td><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-  <tr class="even"><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#a5c58e62338f7dae0917ff99ff3c85f9f">submitIfValid</a>(const std::string &amp;actionType, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td><td class="entry"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt;</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
-</table></div><!-- contents -->
+<p class="definition">Definition in file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
+</div></div><!-- contents -->
 </div><!-- doc-content -->
+<div id="page-nav" class="page-nav-panel">
+<div id="page-nav-resize-handle"></div>
+<div id="page-nav-tree">
+<div id="page-nav-contents">
+</div><!-- page-nav-contents -->
+</div><!-- page-nav-tree -->
+</div><!-- page-nav -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>qt</b></li><li class="navelem"><b>bridge</b></li><li class="navelem"><a href="../../d7/d52/generic__model__bridge__core_8hpp.html">generic_model_bridge_core.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

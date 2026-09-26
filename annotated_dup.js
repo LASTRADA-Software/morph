@@ -160,6 +160,9 @@ var annotated_dup =
         [ "SyncWorker", "d3/d55/classmorph_1_1offline_1_1SyncWorker.html", "d3/d55/classmorph_1_1offline_1_1SyncWorker" ]
       ] ],
       [ "qt", null, [
+        [ "bridge", null, [
+          [ "GenericModelBridgeCore", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore" ]
+        ] ],
         [ "forms", null, [
           [ "FormsControllerCore", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore" ]
         ] ],

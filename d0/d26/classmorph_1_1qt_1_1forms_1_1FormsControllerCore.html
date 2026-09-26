@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::qt::forms::FormsControllerCore&lt; Model &gt; Class Template Reference</title>
+<title>morph: morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt; Class Template Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -117,55 +117,56 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d26/classmo
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::qt::forms::FormsControllerCore&lt; Model &gt; Class Template Reference</div></div>
+  <div class="headertitle"><div class="title">morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt; Class Template Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Owns, or composes over, the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML forms controller, generic over the model type.  
+<p><span class="tt">DynamicForm.qml</span>-facing facade over <span class="tt"><a class="el" href="../../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html" title="Owns, or composes over, the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML bridge,...">morph::qt::bridge::GenericModelBridgeCore</a></span>, naming its one generic dispatch operation <span class="tt"><a class="el" href="#a5c58e62338f7dae0917ff99ff3c85f9f" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span>/<span class="tt"><a class="el" href="#a60f5c03b14ba46f1f34a4d5d9d1ba422" title="Executes optionsAction with bodyJson to fetch a Choice field&#39;s combo-box options, via the same generi...">fetchOptions</a></span> instead of <span class="tt">execute</span>, and carrying the <span class="tt">{actionType: schema}</span> document <span class="tt">DynamicForm.qml</span> renders from &ndash; a forms-specific concept the composed core deliberately does not know about.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>&gt;</code></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a7b6c4eacf300ebaa94a641847a7aaad5" id="r_a7b6c4eacf300ebaa94a641847a7aaad5"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a7b6c4eacf300ebaa94a641847a7aaad5">FormsControllerCore</a> (std::string schemasJson)</td></tr>
-<tr class="memdesc:a7b6c4eacf300ebaa94a641847a7aaad5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the core with its own private, always-local <span class="tt">Bridge</span> (<span class="tt">ThreadPoolExecutor</span> + <span class="tt"><a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop.">QtExecutor</a></span> + <span class="tt">LocalBackend</span>), and the app's pre-assembled <span class="tt">{actionType: schema}</span> JSON (e.g. hand-written like <span class="tt">lab::schemasJson()</span>).  <br /></td></tr>
-<tr class="memitem:a5fe9f97a355a83000e52e225d64c96ba" id="r_a5fe9f97a355a83000e52e225d64c96ba"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a5fe9f97a355a83000e52e225d64c96ba">FormsControllerCore</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *guiExec, std::string schemasJson)</td></tr>
-<tr class="memdesc:a5fe9f97a355a83000e52e225d64c96ba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the core over a caller-supplied <span class="tt">Bridge</span>/executor, instead of building a private, always-local one.  <br /></td></tr>
-<tr class="memitem:a9d0ae1a3f274ce98ef9c5c0aa5bdc767" id="r_a9d0ae1a3f274ce98ef9c5c0aa5bdc767"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a9d0ae1a3f274ce98ef9c5c0aa5bdc767">schemasJson</a> () const noexcept</td></tr>
-<tr class="memdesc:a9d0ae1a3f274ce98ef9c5c0aa5bdc767"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">{actionType: schema}</span> JSON supplied at construction.  <br /></td></tr>
-<tr class="memitem:a9a8ab11ed270dd7cce1614f19a858ef7" id="r_a9a8ab11ed270dd7cce1614f19a858ef7"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
-<tr class="memitem:a9a8ab11ed270dd7cce1614f19a858ef7 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7">submitIfValid</a> (const std::string &amp;actionType, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td></tr>
-<tr class="memdesc:a9a8ab11ed270dd7cce1614f19a858ef7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">bodyJson</code> as <code class="param">actionType's</code> body via the generic <span class="tt">executeJson</span> path, invoking <code class="param">onReply</code> / <code class="param">onError</code> on the GUI thread once the reply arrives.  <br /></td></tr>
-<tr class="memitem:a1b6eed5ade78c6e44ffc6da9107e4a5c" id="r_a1b6eed5ade78c6e44ffc6da9107e4a5c"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
-<tr class="memitem:a1b6eed5ade78c6e44ffc6da9107e4a5c template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1b6eed5ade78c6e44ffc6da9107e4a5c">fetchOptions</a> (const std::string &amp;optionsAction, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td></tr>
-<tr class="memdesc:a1b6eed5ade78c6e44ffc6da9107e4a5c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses. <code class="param">optionsAction</code> is a parameter rather than a hardcoded id, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body.  <br /></td></tr>
+<tr class="memitem:afbf6107fa29c579dff2228047017b877" id="r_afbf6107fa29c579dff2228047017b877"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#afbf6107fa29c579dff2228047017b877">FormsControllerCore</a> (std::string schemasJson)</td></tr>
+<tr class="memdesc:afbf6107fa29c579dff2228047017b877"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the core with its own private, always-local <span class="tt">Bridge</span>. See <span class="tt">GenericModelBridgeCore</span>'s own constructor for the full contract.  <br /></td></tr>
+<tr class="memitem:a3d451cf8ce707fa5c3c9cbd8c5fc36db" id="r_a3d451cf8ce707fa5c3c9cbd8c5fc36db"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a3d451cf8ce707fa5c3c9cbd8c5fc36db">FormsControllerCore</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">::morph::bridge::Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *guiExec, std::string schemasJson)</td></tr>
+<tr class="memdesc:a3d451cf8ce707fa5c3c9cbd8c5fc36db"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the core over a caller-supplied <span class="tt">Bridge</span>/executor. See <span class="tt">GenericModelBridgeCore</span>'s own constructor for the full contract.  <br /></td></tr>
+<tr class="memitem:ab6583adb832feea53c45648fcd8fc833" id="r_ab6583adb832feea53c45648fcd8fc833"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ab6583adb832feea53c45648fcd8fc833">schemasJson</a> () const noexcept</td></tr>
+<tr class="memdesc:ab6583adb832feea53c45648fcd8fc833"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">{actionType: schema}</span> JSON supplied at construction.  <br /></td></tr>
+<tr class="memitem:a5c58e62338f7dae0917ff99ff3c85f9f" id="r_a5c58e62338f7dae0917ff99ff3c85f9f"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
+<tr class="memitem:a5c58e62338f7dae0917ff99ff3c85f9f template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5c58e62338f7dae0917ff99ff3c85f9f">submitIfValid</a> (const std::string &amp;actionType, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td></tr>
+<tr class="memdesc:a5c58e62338f7dae0917ff99ff3c85f9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">bodyJson</code> as <code class="param">actionType's</code> body via the generic <span class="tt">executeJson</span> path, invoking <code class="param">onReply</code> / <code class="param">onError</code> on the GUI thread once the reply arrives.  <br /></td></tr>
+<tr class="memitem:a60f5c03b14ba46f1f34a4d5d9d1ba422" id="r_a60f5c03b14ba46f1f34a4d5d9d1ba422"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
+<tr class="memitem:a60f5c03b14ba46f1f34a4d5d9d1ba422 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a60f5c03b14ba46f1f34a4d5d9d1ba422">fetchOptions</a> (const std::string &amp;optionsAction, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td></tr>
+<tr class="memdesc:a60f5c03b14ba46f1f34a4d5d9d1ba422"><td class="mdescLeft">&#160;</td><td class="mdescRight">Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a5c58e62338f7dae0917ff99ff3c85f9f" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses. <code class="param">optionsAction</code> is a parameter rather than a hardcoded id, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><div class="compoundTemplParams">template&lt;typename Model&gt;<br />
-class morph::qt::forms::FormsControllerCore&lt; Model &gt;</div><p>Owns, or composes over, the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML forms controller, generic over the model type. </p>
+<div class="textblock"><div class="compoundTemplParams">template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt;<br />
+class morph::qt::forms::FormsControllerCore&lt; Model, Sharing &gt;</div><p><span class="tt">DynamicForm.qml</span>-facing facade over <span class="tt"><a class="el" href="../../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html" title="Owns, or composes over, the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML bridge,...">morph::qt::bridge::GenericModelBridgeCore</a></span>, naming its one generic dispatch operation <span class="tt"><a class="el" href="#a5c58e62338f7dae0917ff99ff3c85f9f" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span>/<span class="tt"><a class="el" href="#a60f5c03b14ba46f1f34a4d5d9d1ba422" title="Executes optionsAction with bodyJson to fetch a Choice field&#39;s combo-box options, via the same generi...">fetchOptions</a></span> instead of <span class="tt">execute</span>, and carrying the <span class="tt">{actionType: schema}</span> document <span class="tt">DynamicForm.qml</span> renders from &ndash; a forms-specific concept the composed core deliberately does not know about. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Model</td><td>The registered model type (<span class="tt">BRIDGE_REGISTER_MODEL</span>) whose actions the shipped <span class="tt">DynamicForm.qml</span> renders. </td></tr>
+    <tr><td class="paramname">Sharing</td><td>Forwarded to <span class="tt">GenericModelBridgeCore</span> unchanged &ndash; <span class="tt"><a class="el" href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html" title="BridgeHandler sharing policy: private, one instance per handler.">morph::bridge::NoSharing</a></span> (the default) or <span class="tt"><a class="el" href="../../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html" title="BridgeHandler sharing policy: joins the shared instance directory.">morph::bridge::AllowShared</a></span>. Every shipped forms controller uses the default; <span class="tt">AllowShared</span> compiles and type-checks but has no exercising caller in this repo yet. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a7b6c4eacf300ebaa94a641847a7aaad5" name="a7b6c4eacf300ebaa94a641847a7aaad5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7b6c4eacf300ebaa94a641847a7aaad5">&#9670;&#160;</a></span>FormsControllerCore() <span class="overload">[1/2]</span></h2>
+<a id="afbf6107fa29c579dff2228047017b877" name="afbf6107fa29c579dff2228047017b877"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afbf6107fa29c579dff2228047017b877">&#9670;&#160;</a></span>FormsControllerCore() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model &gt;::FormsControllerCore </td>
+          <td class="memname"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model, Sharing &gt;::FormsControllerCore </td>
           <td>(</td>
           <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>schemasJson</em></span></td><td>)</td>
           <td></td>
@@ -178,33 +179,33 @@ template&lt;typename Model&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs the core with its own private, always-local <span class="tt">Bridge</span> (<span class="tt">ThreadPoolExecutor</span> + <span class="tt"><a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop.">QtExecutor</a></span> + <span class="tt">LocalBackend</span>), and the app's pre-assembled <span class="tt">{actionType: schema}</span> JSON (e.g. hand-written like <span class="tt">lab::schemasJson()</span>). </p>
-<p>Use the <span class="tt">(Bridge&amp;, IExecutor*, <a class="el" href="#a9d0ae1a3f274ce98ef9c5c0aa5bdc767" title="The {actionType: schema} JSON supplied at construction.">schemasJson</a>)</span> overload instead when the app already has a <span class="tt">Bridge</span> (remote/socket mode, or one shared across multiple presenters) that this core should compose over rather than duplicate. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Constructs the core with its own private, always-local <span class="tt">Bridge</span>. See <span class="tt">GenericModelBridgeCore</span>'s own constructor for the full contract. </p>
+<dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">schemasJson</td><td>The full schema set the QML renderer will parse. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a5fe9f97a355a83000e52e225d64c96ba" name="a5fe9f97a355a83000e52e225d64c96ba"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5fe9f97a355a83000e52e225d64c96ba">&#9670;&#160;</a></span>FormsControllerCore() <span class="overload">[2/2]</span></h2>
+<a id="a3d451cf8ce707fa5c3c9cbd8c5fc36db" name="a3d451cf8ce707fa5c3c9cbd8c5fc36db"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3d451cf8ce707fa5c3c9cbd8c5fc36db">&#9670;&#160;</a></span>FormsControllerCore() <span class="overload">[2/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model &gt;::FormsControllerCore </td>
+          <td class="memname"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model, Sharing &gt;::FormsControllerCore </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>bridge</em></span>, </td>
+          <td class="paramtype"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">::morph::bridge::Bridge</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>bridge</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
@@ -224,35 +225,34 @@ template&lt;typename Model&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs the core over a caller-supplied <span class="tt">Bridge</span>/executor, instead of building a private, always-local one. </p>
-<p>The core registers a <span class="tt">BridgeHandler&lt;Model&gt;</span> on <code class="param">bridge</code> exactly as the owning constructor's internal one does, so <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span>/ <span class="tt"><a class="el" href="#a1b6eed5ade78c6e44ffc6da9107e4a5c" title="Executes optionsAction with bodyJson to fetch a Choice field&#39;s combo-box options, via the same generi...">fetchOptions</a></span> dispatch through whatever backend <code class="param">bridge</code> currently has installed (<span class="tt">LocalBackend</span>, <span class="tt">SimulatedRemoteBackend</span>, <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">QtWebSocketBackend</a></span>, ...) &ndash; including a backend <code class="param">bridge</code> switches to later via <span class="tt">Bridge::switchBackend</span>, since the registered handler re-registers itself automatically.</p>
+<p>Constructs the core over a caller-supplied <span class="tt">Bridge</span>/executor. See <span class="tt">GenericModelBridgeCore</span>'s own constructor for the full contract. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">bridge</td><td>The bridge to register this core's handler on. Must outlive this core. </td></tr>
-    <tr><td class="paramname">guiExec</td><td>Executor used to deliver <span class="tt">Completion</span> callbacks (e.g. a <span class="tt"><a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop.">QtExecutor</a></span> for the GUI thread). Must outlive this core. </td></tr>
+    <tr><td class="paramname">guiExec</td><td>Executor used to deliver <span class="tt">Completion</span> callbacks. Must outlive this core. </td></tr>
     <tr><td class="paramname">schemasJson</td><td>The full schema set the QML renderer will parse. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
-<a id="a9d0ae1a3f274ce98ef9c5c0aa5bdc767" name="a9d0ae1a3f274ce98ef9c5c0aa5bdc767"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a9d0ae1a3f274ce98ef9c5c0aa5bdc767">&#9670;&#160;</a></span>schemasJson()</h2>
+<a id="ab6583adb832feea53c45648fcd8fc833" name="ab6583adb832feea53c45648fcd8fc833"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab6583adb832feea53c45648fcd8fc833">&#9670;&#160;</a></span>schemasJson()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">const std::string &amp; <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model &gt;::schemasJson </td>
+          <td class="memname">const std::string &amp; <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model, Sharing &gt;::schemasJson </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td> const</td>
@@ -268,17 +268,17 @@ template&lt;typename Model&gt; </div>
 <p>The <span class="tt">{actionType: schema}</span> JSON supplied at construction. </p>
 <dl class="section return"><dt>Returns</dt><dd>A reference to the cached schema-set JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a9a8ab11ed270dd7cce1614f19a858ef7" name="a9a8ab11ed270dd7cce1614f19a858ef7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a9a8ab11ed270dd7cce1614f19a858ef7">&#9670;&#160;</a></span>submitIfValid()</h2>
+<a id="a5c58e62338f7dae0917ff99ff3c85f9f" name="a5c58e62338f7dae0917ff99ff3c85f9f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5c58e62338f7dae0917ff99ff3c85f9f">&#9670;&#160;</a></span>submitIfValid()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt; </div>
 <div class="memtemplate">
 template&lt;typename OnReply, typename OnError&gt; </div>
 <table class="mlabels">
@@ -286,7 +286,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model &gt;::submitIfValid </td>
+          <td class="memname">void <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model, Sharing &gt;::submitIfValid </td>
           <td>(</td>
           <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>actionType</em></span>, </td>
         </tr>
@@ -331,17 +331,17 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a1b6eed5ade78c6e44ffc6da9107e4a5c" name="a1b6eed5ade78c6e44ffc6da9107e4a5c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1b6eed5ade78c6e44ffc6da9107e4a5c">&#9670;&#160;</a></span>fetchOptions()</h2>
+<a id="a60f5c03b14ba46f1f34a4d5d9d1ba422" name="a60f5c03b14ba46f1f34a4d5d9d1ba422"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a60f5c03b14ba46f1f34a4d5d9d1ba422">&#9670;&#160;</a></span>fetchOptions()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt; </div>
 <div class="memtemplate">
 template&lt;typename OnReply, typename OnError&gt; </div>
 <table class="mlabels">
@@ -349,7 +349,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model &gt;::fetchOptions </td>
+          <td class="memname">void <a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model, Sharing &gt;::fetchOptions </td>
           <td>(</td>
           <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>optionsAction</em></span>, </td>
         </tr>
@@ -376,7 +376,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a9a8ab11ed270dd7cce1614f19a858ef7" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses. <code class="param">optionsAction</code> is a parameter rather than a hardcoded id, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body. </p>
+<p>Executes <code class="param">optionsAction</code> with <code class="param">bodyJson</code> to fetch a <span class="tt">Choice</span> field's combo-box options, via the same generic <span class="tt">executeJson</span> path <span class="tt"><a class="el" href="#a5c58e62338f7dae0917ff99ff3c85f9f" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span> uses. <code class="param">optionsAction</code> is a parameter rather than a hardcoded id, and <code class="param">bodyJson</code> is a true pass-through (not always <span class="tt">"{}"</span>), so a dependent <span class="tt">Choice</span> (<span class="tt">x-optionsDependsOn</span>) can send <span class="tt">{parentField: value, ...}</span> instead of an empty body. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">OnReply</td><td>Callable invoked with the options-action result JSON on success. </td></tr>
@@ -394,7 +394,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
