@@ -1,6 +1,7 @@
 var classmorph_1_1backend_1_1LocalBackend =
 [
     [ "LocalBackend", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a1bbaff0063b89c293f427e07da9f1424", null ],
+    [ "~LocalBackend", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ae060d30d4ba8f9176b35084eb6b5c1cc", null ],
     [ "registerModel", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a29cc7bdc74c43b6f9b5e9db52f1b1977", null ],
     [ "registerModelShared", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a85c8f88e56660fb9d0e2b1b2de4b16ac", null ],
     [ "assignPrimary", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a9f6a36333608f40d0b67907c4cc58fd6", null ],

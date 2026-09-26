@@ -9,6 +9,7 @@ var hierarchy =
     [ "morph::async::CallbackToken", "de/d0d/classmorph_1_1async_1_1CallbackToken.html", null ],
     [ "morph::async::Completion&lt; T &gt;", "dd/de7/classmorph_1_1async_1_1Completion.html", null ],
     [ "morph::async::Completion&lt; T &gt;::Promise", "d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html", null ],
+    [ "morph::async::DelayAwaiter", "dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html", null ],
     [ "morph::backend::detail::IBackend", null, [
       [ "morph::backend::LocalBackend", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html", null ],
       [ "morph::backend::SimulatedRemoteBackend", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html", null ],
@@ -89,6 +90,8 @@ var hierarchy =
     [ "morph::model::ActionLogPolicy&lt; Action &gt;", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],
     [ "morph::model::ActionTraits&lt; Action &gt;", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
     [ "morph::model::ActionValidator&lt; Action &gt;", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
+    [ "morph::model::HandlerResult&lt; T &gt;", "df/d19/structmorph_1_1model_1_1HandlerResult.html", null ],
+    [ "morph::model::HandlerResult&lt;::core::async::Task&lt; R &gt; &gt;", "d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4.html", null ],
     [ "morph::model::ModelKeyTraits&lt; Model &gt;", "d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html", null ],
     [ "morph::model::ModelTraits&lt; Model &gt;", "d2/d14/structmorph_1_1model_1_1ModelTraits.html", null ],
     [ "morph::model::PayloadShapeTag&lt; T &gt;", "d6/d37/structmorph_1_1model_1_1PayloadShapeTag.html", null ],

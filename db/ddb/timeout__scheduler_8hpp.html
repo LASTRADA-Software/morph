@@ -121,32 +121,40 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/ddb/timeout
 </div><!--header-->
 <div class="contents">
 <div class="textblock"><code>#include &lt;chrono&gt;</code><br />
+<code>#include &lt;core/net/EventLoop.hpp&gt;</code><br />
+<code>#include &lt;core/net/PlatformLoop.hpp&gt;</code><br />
+<code>#include &lt;core/platform/Clock.hpp&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;exception&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
-<code>#include &lt;string&gt;</code><br />
-<code>#include &lt;unordered_map&gt;</code><br />
-<code>#include &lt;condition_variable&gt;</code><br />
-<code>#include &lt;map&gt;</code><br />
 <code>#include &lt;mutex&gt;</code><br />
+<code>#include &lt;optional&gt;</code><br />
+<code>#include &lt;unordered_map&gt;</code><br />
+<code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;thread&gt;</code><br />
+<code>#include &lt;vector&gt;</code><br />
 <code>#include &quot;logger.hpp&quot;</code><br />
 </div>
 <p><a href="../../db/ddb/timeout__scheduler_8hpp_source.html">Go to the source code of this file.</a></p>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">TimeoutScheduler</span> — "run this callback once, in N milliseconds, unless
-cancelled first" — in two builds of the same public API.</p>
-<dl class="section user"><dt>Why two builds</dt><dd>The ordinary build owns a dedicated <span class="tt">std::thread</span>. A <b>single-threaded Emscripten</b> build cannot: Qt for WebAssembly is installed here as <span class="tt">wasm_singlethread</span> (<span class="tt">.github/workflows/wasm-ladder.yml</span>) and <span class="tt">cmake/morph_add_rung.cmake</span> passes no <span class="tt">-pthread</span>, so Emscripten's non-pthread <span class="tt">pthread_create</span> stub fails and <span class="tt">std::thread</span>'s constructor throws <span class="tt">std::system_error</span> ("thread constructor failed") — from inside whatever completion callback happened to enable the deadline. Every WASM client in this repository is Qt-event-loop driven and would hit this the moment it called <span class="tt">Bridge::setExecuteDeadline</span> (which <span class="tt">examples/common/gui/event_poller.hpp</span>'s constructor does unconditionally, on every poll open).</dd></dl>
-<p>So under <span class="tt">__EMSCRIPTEN__</span> without <span class="tt">__EMSCRIPTEN_PTHREADS__</span> this class is built on <span class="tt">emscripten_async_call</span> — the browser's own <span class="tt">setTimeout</span> — and fires its callbacks on the single main thread, i.e. on the same thread the Qt event loop and every <span class="tt">QtExecutor</span>-posted completion callback already run on. Deadlines still fire; nothing is silently disabled.</p>
-<dl class="section user"><dt>What differs between the two builds</dt><dd><ul>
-<li><b>Callback thread.</b> Threaded build: a private background thread, so a callback must be prepared to run concurrently with the caller (the one real callback in this codebase, <span class="tt">executeVia</span>'s, only touches a <span class="tt">CompletionState</span>, which is itself mutex-guarded). Browser build: the main thread, never concurrently with anything.</li>
-<li><b>Cancellation.</b> Threaded build: the entry, its callback and everything the callback captured are erased immediately. Browser build: identical for the callback and its captures (the map entry is erased at once), but the underlying browser timer is not itself cleared — it still fires at its original deadline and finds nothing to do. Only a small ticket allocation outlives <span class="tt">cancel()</span>, until that point.</li>
-<li><b>Cancelling a callback that has <em>already started</em>.</b> Threaded build: <span class="tt">cancel()</span> cannot stop it. <span class="tt">run()</span> erases the entry before invoking the callback and drops <span class="tt">_mtx</span> across the invocation, so a <span class="tt">cancel()</span> racing a firing callback takes the same not-found branch as one for a handle that already finished, and returns while that callback is still executing on the scheduler thread. Browser build: the case cannot arise — the timer callback and <span class="tt">cancel()</span> run on the same single thread, so "no callback
-  will start after `cancel()` returns" holds there and only there. See <span class="tt">cancel()</span>'s own comment for what this asks of a caller.</li>
-<li><b>Destruction.</b> Threaded build: the destructor joins its thread, so no callback can be in flight afterwards. Browser build: nothing to join; pending browser timers observe an expired <span class="tt">std::weak_ptr</span> to the scheduler's state and return without invoking anything.</li>
+cancelled first" — over core-cpp's event-loop timers.</p>
+<dl class="section user"><dt>One class, two ways of driving its loop</dt><dd>The deadlines live in a <span class="tt">core::net::PlatformLoop</span>, and the one thing that differs between builds is who turns it:<ul>
+<li><b>Native:</b> the scheduler owns a <span class="tt">std::thread</span> that runs the loop. <span class="tt">schedule()</span> and <span class="tt">cancel()</span> may be called from any thread; they record the request under a mutex and hand the loop a batch to arm or disarm. Callbacks run on that thread, so a callback must be prepared to run concurrently with the caller.</li>
+<li><b>Single-threaded WebAssembly</b> (<span class="tt">__EMSCRIPTEN__</span> without <span class="tt">__EMSCRIPTEN_PTHREADS__</span>): there is no thread to start — Qt for WebAssembly is <span class="tt">wasm_singlethread</span> here and no <span class="tt">-pthread</span> is passed, so <span class="tt">std::thread</span>'s constructor would throw. The loop is host-driven: the browser's own timer pumps it, and <span class="tt">schedule()</span> and <span class="tt">cancel()</span> arm and retire the timer directly. Callbacks run on the main thread, the one the Qt event loop and every <span class="tt">QtExecutor</span>-posted completion already run on.</li>
 </ul>
 </dd></dl>
-<dl class="section warning"><dt>Warning</dt><dd>The browser build has never been compiled or run in this repository — no Emscripten toolchain is available where it was written. Its only verification is the <span class="tt">ladder-wasm</span> CI compile gate. Stated plainly here rather than smoothed over, exactly like <span class="tt">examples/TESTING.md</span>'s note on the WASM clients themselves. </dd></dl>
+<dl class="section user"><dt>What the two builds share</dt><dd><ul>
+<li><span class="tt">cancel()</span> releases the callback, and everything it captured, before it returns — the entry lives in this class's own <span class="tt">pending</span> map, not in the loop — and retires the loop's timer as well.</li>
+<li>The destructor drops every pending callback without firing it.</li>
+<li>A callback that throws is logged through <span class="tt">morph::log</span> and swallowed.</li>
+</ul>
+</dd></dl>
+<dl class="section user"><dt>What differs</dt><dd><ul>
+<li><b>Cancelling a callback that has already started.</b> Native: <span class="tt">cancel()</span> cannot stop it and does not wait for it — the entry is taken out of <span class="tt">pending</span> before the callback is invoked, so a racing <span class="tt">cancel()</span> finds nothing and returns while the callback is still running. WebAssembly: the case cannot arise, because the callback and <span class="tt">cancel()</span> run on the same thread. A caller that must work in both builds cannot rely on the second.</li>
+<li><b>Destruction.</b> Native: the destructor stops the loop and joins its thread, so no callback is in flight afterwards. WebAssembly: nothing to join; the timers are retired and the loop is destroyed. A browser timer already scheduled to pump it finds it gone and runs nothing: from core-cpp 0.3.0 each pump carries a weak reference to the loop, where 0.2.1's wrote into the freed loop. </li>
+</ul>
+</dd></dl>
 
 <p class="definition">Definition in file <a class="el" href="../../db/ddb/timeout__scheduler_8hpp_source.html">timeout_scheduler.hpp</a>.</p>
 </div></div><!-- contents -->

@@ -249,13 +249,13 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/dd8/model__
 <div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> M&gt;</div>
 <div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="keyword">struct </span>KeyTypeOf {<span class="comment"></span></div>
 <div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">    /// @brief The resolved key type.</span></div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>    <span class="keyword">using </span>type = <a class="code hl_struct" href="../../d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html">ModelKeyTraits&lt;M&gt;::PrimaryKey</a>;</div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>    <span class="keyword">using </span><a class="code hl_class" href="../../df/d19/structmorph_1_1model_1_1HandlerResult.html">type</a> = <a class="code hl_struct" href="../../d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html">ModelKeyTraits&lt;M&gt;::PrimaryKey</a>;</div>
 <div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>};</div>
 <div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span> </div>
 <div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="keyword">template</span> &lt;SelfDeclaredKey M&gt;</div>
 <div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="keyword">struct </span>KeyTypeOf&lt;M&gt; {<span class="comment"></span></div>
 <div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="comment">    /// @brief The resolved key type — the model&#39;s own alias takes precedence.</span></div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>    <span class="keyword">using </span>type = M::PrimaryKey;</div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>    <span class="keyword">using </span><a class="code hl_class" href="../../df/d19/structmorph_1_1model_1_1HandlerResult.html">type</a> = M::PrimaryKey;</div>
 <div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>};</div>
 <div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span> </div>
 <div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>}  <span class="comment">// namespace detail</span></div>
@@ -365,7 +365,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/dd8/model__
 <div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> V, <span class="keyword">typename</span> C&gt;</div>
 <div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="keyword">struct </span>MemberType&lt;V C::*&gt; {<span class="comment"></span></div>
 <div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span><span class="comment">    /// @brief The member&#39;s own type.</span></div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>    <span class="keyword">using </span>type = V;</div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>    <span class="keyword">using </span><a class="code hl_class" href="../../df/d19/structmorph_1_1model_1_1HandlerResult.html">type</a> = V;</div>
 <div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>};</div>
 <div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span><span class="comment"></span> </div>
 <div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span><span class="comment">/// @brief Convenience alias for `MemberType&lt;T&gt;::type`.</span></div>
@@ -520,6 +520,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/dd8/model__
 <div class="ttc" id="astructmorph_1_1model_1_1ActionKeyTraits_html"><div class="ttname"><a href="../../d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html">morph::model::ActionKeyTraits</a></div><div class="ttdoc">Declares where an action&#39;s model key comes from.</div><div class="ttdef"><b>Definition</b> <a href="#l00218">model_key.hpp:218</a></div></div>
 <div class="ttc" id="astructmorph_1_1model_1_1ActionKeyTraits_html_a9d5f166812a94406f281cedfcd0eec39"><div class="ttname"><a href="../../d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html#a9d5f166812a94406f281cedfcd0eec39">morph::model::ActionKeyTraits::fromResult</a></div><div class="ttdeci">static constexpr bool fromResult</div><div class="ttdoc">Whether the key comes from the action&#39;s result rather than its payload.</div><div class="ttdef"><b>Definition</b> <a href="#l00223">model_key.hpp:223</a></div></div>
 <div class="ttc" id="astructmorph_1_1model_1_1ActionKeyTraits_html_aacb4ae45bbbe48bef5da5aedbf8f8aad"><div class="ttname"><a href="../../d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html#aacb4ae45bbbe48bef5da5aedbf8f8aad">morph::model::ActionKeyTraits::hasKey</a></div><div class="ttdeci">static constexpr bool hasKey</div><div class="ttdoc">Whether this action carries or establishes its model&#39;s key.</div><div class="ttdef"><b>Definition</b> <a href="#l00220">model_key.hpp:220</a></div></div>
+<div class="ttc" id="astructmorph_1_1model_1_1HandlerResult_html"><div class="ttname"><a href="../../df/d19/structmorph_1_1model_1_1HandlerResult.html">morph::model::type</a></div></div>
 <div class="ttc" id="astructmorph_1_1model_1_1ModelKeyTraits_html"><div class="ttname"><a href="../../d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html">morph::model::ModelKeyTraits</a></div><div class="ttdoc">The key type of a model, when one has been declared for it.</div><div class="ttdef"><b>Definition</b> <a href="#l00094">model_key.hpp:94</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->

@@ -7,7 +7,7 @@ var index =
     [ "Wire protocol", "index.html#wire-protocol", null ],
     [ "Component detail", "index.html#component-detail", [
       [ "Executors", "index.html#executors", null ],
-      [ "StrandExecutor", "index.html#strandexecutor", null ],
+      [ "Strands", "index.html#strands", null ],
       [ "Completion&lt;T&gt;", "index.html#completiont", null ],
       [ "Registry &amp; type erasure", "index.html#registry--type-erasure", null ],
       [ "HandlerBinding — why it exists", "index.html#handlerbinding--why-it-exists", null ],

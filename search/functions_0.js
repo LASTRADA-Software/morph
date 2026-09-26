@@ -30,5 +30,8 @@ var searchData=
   ['authenticate_27',['authenticate',['../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a639b6c6bfe77ba9143b0533788726568',1,'morph::session::IAuthorizer::authenticate()'],['../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#ab46b3d7dabef6cf09d31cf51023762ef',1,'morph::session::SigningAuthorizer::authenticate()']]],
   ['authorize_28',['authorize',['../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901',1,'morph::session::IAuthorizer::authorize()'],['../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html#a15563dffc836682b80f6d15cba956f42',1,'morph::session::AllowAllAuthorizer::authorize()'],['../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#a998542ab6e7b9aeca272f2a05fc452a5',1,'morph::session::SigningAuthorizer::authorize()']]],
   ['authorizeinstance_29',['authorizeInstance',['../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a521dc064df62863d7afbd860301cc52e',1,'morph::session::IAuthorizer']]],
-  ['authorizeregister_30',['authorizeRegister',['../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a2458bb624e5bc3bd7dad6858413135e6',1,'morph::session::IAuthorizer']]]
+  ['authorizeregister_30',['authorizeRegister',['../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a2458bb624e5bc3bd7dad6858413135e6',1,'morph::session::IAuthorizer']]],
+  ['await_5fready_31',['await_ready',['../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#aecc9e2a65087c9fc9d3bd8cf6b6fdec2',1,'morph::async::DelayAwaiter']]],
+  ['await_5fresume_32',['await_resume',['../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a0bfa653c2445caaef6af8f0f8d821f47',1,'morph::async::DelayAwaiter']]],
+  ['await_5fsuspend_33',['await_suspend',['../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a4b2223d2445a7d8eb0ca55c1059f3d4e',1,'morph::async::DelayAwaiter']]]
 ];

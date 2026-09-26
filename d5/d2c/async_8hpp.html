@@ -126,12 +126,12 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d2c/async_8
 <div class="textblock"><code>#include &quot;callback_scope.hpp&quot;</code><br />
 <code>#include &quot;completion.hpp&quot;</code><br />
 <code>#include &quot;executor.hpp&quot;</code><br />
-<code>#include &quot;strand.hpp&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../de/dc1/strand_8hpp_source.html">strand.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d5/d2c/async_8hpp_source.html">Go to the source code of this file.</a></p>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The asynchronous primitives, on their own — the cheap include. </p>
-<p><span class="tt">Completion</span>, <span class="tt">IExecutor</span> and its implementations, <span class="tt">StrandExecutor</span> and <span class="tt">CallbackScope</span> are useful without a model, a registry, a wire envelope or a schema, and they are the part of morph that costs almost nothing to compile. Nothing here reaches glaze.</p>
+<p><span class="tt">Completion</span>, <span class="tt">IExecutor</span> and its implementations, the strands and <span class="tt">CallbackScope</span> are useful without a model, a registry, a wire envelope or a schema, and they are the part of morph that costs almost nothing to compile. Nothing here reaches glaze.</p>
 <p>Measured with clang 22.1.8, <span class="tt">-O2 -fsyntax-only</span>, one translation unit per header, best of three:</p>
 <table class="markdownTable">
 <tr class="markdownTableHead">
@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d2c/async_8
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../d1/d76/completion_8hpp_source.html">core/completion.hpp</a></span>  </td><td class="markdownTableBodyNone">1.20  </td><td class="markdownTableBodyNone">127,450  </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../de/dc1/strand_8hpp_source.html">core/strand.hpp</a></span>  </td><td class="markdownTableBodyNone">1.20  </td><td class="markdownTableBodyNone">127,217  </td></tr>
+<td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../de/dc1/strand_8hpp.html" title="morph&#39;s strands: one per model instance, from core-cpp&#39;s core::async::KeyedStrands,...">core/strand.hpp</a></span>  </td><td class="markdownTableBodyNone">1.20  </td><td class="markdownTableBodyNone">127,217  </td></tr>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">core/bridge.hpp</a></span>  </td><td class="markdownTableBodyNone">3.76  </td><td class="markdownTableBodyNone">267,827  </td></tr>
 </table>

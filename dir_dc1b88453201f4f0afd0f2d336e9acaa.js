@@ -6,6 +6,7 @@ var dir_dc1b88453201f4f0afd0f2d336e9acaa =
     [ "bridge.hpp", "d6/d1e/bridge_8hpp_source.html", null ],
     [ "callback_scope.hpp", "de/d2a/callback__scope_8hpp_source.html", null ],
     [ "completion.hpp", "d1/d76/completion_8hpp_source.html", null ],
+    [ "coroutine.hpp", "de/de0/coroutine_8hpp.html", "de/de0/coroutine_8hpp" ],
     [ "executor.hpp", "d7/d76/executor_8hpp_source.html", null ],
     [ "file_io_ops.hpp", "d3/d58/file__io__ops_8hpp_source.html", null ],
     [ "logger.hpp", "d6/da3/logger_8hpp_source.html", null ],
@@ -16,7 +17,7 @@ var dir_dc1b88453201f4f0afd0f2d336e9acaa =
     [ "payload_shape_tag.hpp", "dd/d09/payload__shape__tag_8hpp.html", "dd/d09/payload__shape__tag_8hpp" ],
     [ "registry.hpp", "d1/da2/registry_8hpp_source.html", null ],
     [ "remote.hpp", "d0/dfc/remote_8hpp_source.html", null ],
-    [ "strand.hpp", "de/dc1/strand_8hpp_source.html", null ],
+    [ "strand.hpp", "de/dc1/strand_8hpp.html", null ],
     [ "timeout_scheduler.hpp", "db/ddb/timeout__scheduler_8hpp.html", null ],
     [ "wire.hpp", "dc/de4/wire_8hpp_source.html", null ]
 ];

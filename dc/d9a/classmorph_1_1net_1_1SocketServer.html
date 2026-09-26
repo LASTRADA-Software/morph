@@ -272,7 +272,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Starts listening for incoming WebSocket connections. </p>
-<p>Fails closed: the accept loop's only way to stop waiting is the wakeup pipe (see <span class="tt">acceptLoop()</span>), so if the pipe cannot be created — <span class="tt">pipe(2)</span> answering <span class="tt">EMFILE</span>/<span class="tt">ENFILE</span> — this reports failure and spawns no thread rather than starting a loop nothing could ever interrupt. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the server bound the requested port <em>and</em> armed its wakeup pipe. </dd></dl>
+<p>Fails closed: the accept loop's only way to stop waiting is its wakeup (see <span class="tt">acceptLoop()</span>), so if that cannot be created — the kernel out of descriptors — this reports failure and spawns no thread rather than starting a loop nothing could ever interrupt. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the server bound the requested port <em>and</em> armed its wakeup. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 

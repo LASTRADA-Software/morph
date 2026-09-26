@@ -130,7 +130,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d37/structm
 struct morph::model::PayloadShapeTag&lt; T &gt;</div><p>Declares a stable shape tag for a type <span class="tt">T</span> whose JSON shape <span class="tt">payloadShape</span> cannot decompose. </p>
 <p>The primary template is deliberately empty: an unspecialised type has no declared tag and keeps rendering as the opaque <span class="tt">x</span>. A specialisation provides</p>
 <div class="fragment"><div class="line"><span class="keyword">static</span> std::string_view name();          <span class="comment">// required</span></div>
-<div class="line"><span class="keyword">using </span>Inner = &lt;type&gt;;                    <span class="comment">// optional</span></div>
+<div class="line"><span class="keyword">using </span>Inner = &lt;<a class="code hl_class" href="../../df/d19/structmorph_1_1model_1_1HandlerResult.html">type</a>&gt;;                    <span class="comment">// optional</span></div>
+<div class="ttc" id="astructmorph_1_1model_1_1HandlerResult_html"><div class="ttname"><a href="../../df/d19/structmorph_1_1model_1_1HandlerResult.html">morph::model::type</a></div></div>
 </div><!-- fragment --><p><span class="tt">name()</span> must return a name that is stable for the lifetime of the returned view (a literal, or a function-local <span class="tt">static const std::string</span>), and must be spelled in these sources rather than derived from a compiler builtin. <span class="tt">Inner</span>, when present, names a type whose shape is rendered <em>inside</em> the tag — for a transparent wrapper such as <span class="tt">Tagged&lt;T, Tag&gt;</span>, whose JSON simply <em>is</em> <span class="tt">T</span>'s, that keeps the underlying shape visible instead of hiding it behind the wrapper's name.</p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">

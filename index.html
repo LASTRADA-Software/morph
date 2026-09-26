@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('index.html',''
 <h1 class="doxsection"><a class="anchor" id="overview"></a>
 Overview</h1>
 <p><span class="tt">morph</span> is a typed, asynchronous bridge between a GUI thread and business-object models. Models may live in-process (local mode) or in a remote server process (remote mode). The GUI code is identical in both cases — only the backend implementation changes.</p>
-<p>The framework is header-only (C++23, namespace <span class="tt">morph</span>), depends on Glaze for JSON reflection, and optionally integrates with Qt 6 via a separate target.</p>
+<p>The framework is header-only (C++23, namespace <span class="tt">morph</span>), depends on Glaze for JSON reflection and on <a href="https://github.com/contour-terminal/core-cpp">core-cpp</a> for its event-loop timers, base64 and wakeup primitive, and optionally integrates with Qt 6 via a separate target. core-cpp's <span class="tt">core::base</span>, <span class="tt">core::net</span> and <span class="tt">core::platform</span> are static libraries, so while morph's own surface is headers only, a project that links <span class="tt">morph::morph</span> also builds those.</p>
 <blockquote class="doxtable">
 <p><b>New to morph?</b> <span class="tt">docs/GETTING-STARTED.md</span> is the step-by-step tutorial that comes before this document: it builds one small app end to end (<span class="tt">examples/pastebin</span>) and explains why each piece exists. This page assumes you are already oriented. (Named, not linked, for the Doxygen reason below.) </p>
 </blockquote>
@@ -190,7 +190,7 @@ Layer diagram</h1>
 <div class="line">│  Internal async core                                            │</div>
 <div class="line">│  IExecutor · ThreadPoolExecutor · MainThreadExecutor            │</div>
 <div class="line">│                                       (executor.hpp)            │</div>
-<div class="line">│  StrandExecutor · ModelId             (strand.hpp)              │</div>
+<div class="line">│  ModelStrands · ModelId               (strand.hpp)              │</div>
 <div class="line">│  CompletionState&lt;T&gt;                   (completion.hpp)          │</div>
 <div class="line">├─────────────────────────────────────────────────────────────────┤</div>
 <div class="line">│  Cross-cutting                                                  │</div>
@@ -203,7 +203,7 @@ Deployment topologies</h1>
 <div class="line">  └─ bridge::BridgeHandler&lt;M&gt;::execute(action)</div>
 <div class="line">       └─ bridge::Bridge::executeVia&lt;M, A&gt;</div>
 <div class="line">            └─ backend::LocalBackend::execute</div>
-<div class="line">                 └─ StrandExecutor → worker thread → Model::execute(action)</div>
+<div class="line">                 └─ ModelStrands → worker thread → Model::execute(action)</div>
 <div class="line">                      └─ async::Completion&lt;T&gt;::then callback → GUI executor</div>
 </div><!-- fragment --><p><b>Simulated-remote mode</b> — model lives behind an in-process <span class="tt">RemoteServer</span> (used in tests):</p>
 <div class="fragment"><div class="line">GUI thread</div>
@@ -211,7 +211,7 @@ Deployment topologies</h1>
 <div class="line">       └─ bridge::Bridge::executeVia&lt;M, A&gt;</div>
 <div class="line">            └─ backend::SimulatedRemoteBackend::execute</div>
 <div class="line">                 └─ serialize action → backend::RemoteServer::handle (JSON wire envelope)</div>
-<div class="line">                      └─ ActionDispatcher → StrandExecutor → Model::execute</div>
+<div class="line">                      └─ ActionDispatcher → ModelStrands → Model::execute</div>
 <div class="line">                           └─ serialize result → Completion&lt;T&gt;::then → GUI executor</div>
 </div><!-- fragment --><p><b>Qt WebSocket mode</b> — model lives in a separate process. Three classes with distinct responsibilities collaborate here: <span class="tt">qt::QtWebSocketBackend</span> is the <b>network client</b> (owns the <span class="tt">QWebSocket</span>, correlates replies to pending <span class="tt">Completion</span>s, handles reconnect); <span class="tt">qt::QtWebSocketServer</span> is the <b>network server</b> (pure transport — receives text frames and forwards them verbatim to <span class="tt">RemoteServer::handle()</span>, sends the reply back); <span class="tt">backend::RemoteServer</span> is the <b>protocol + dispatch</b> layer (parses envelopes, authorizes, routes to models) and is transport-agnostic — the same class also serves the simulated-remote topology above.</p>
 <div class="fragment"><div class="line">GUI thread (Qt process)                         Server process</div>
@@ -221,7 +221,7 @@ Deployment topologies</h1>
 <div class="line">            └─ qt::QtWebSocketBackend::execute   (network client)</div>
 <div class="line">                 └─ assign callId, send JSON  ──► qt::QtWebSocketServer::handle</div>
 <div class="line">                                                        └─ backend::RemoteServer::handle (JSON wire envelope)</div>
-<div class="line">                                                             └─ ActionDispatcher → StrandExecutor → Model::execute</div>
+<div class="line">                                                             └─ ActionDispatcher → ModelStrands → Model::execute</div>
 <div class="line">                 ◄── JSON reply (ok|callId|result) ──────────────────────────────</div>
 <div class="line">            └─ resolve pending Completion</div>
 <div class="line">       └─ async::Completion&lt;T&gt;::then callback → qt::QtExecutor → GUI thread</div>
@@ -271,10 +271,10 @@ Executors</h2>
 <li><b><span class="tt">MainThreadExecutor</span></b> — single-threaded queue with <span class="tt">runFor(timeout)</span> drain; used in non-Qt tests to pump the "GUI" thread. It catches only <span class="tt">std::exception</span> from a task, logs it via <span class="tt">morph::log</span>, and continues with the next task.</li>
 <li><b><span class="tt">QtExecutor</span></b> — posts via <span class="tt">QMetaObject::invokeMethod(Qt::QueuedConnection)</span>; safe from any thread; drops silently if the target object is deleted.</li>
 </ul>
-<p><span class="tt">morph::exec::detail::StrandExecutor</span> (below) is where <span class="tt">Model::execute()</span> actually runs; like <span class="tt">ThreadPoolExecutor</span>, it catches a task exception (<span class="tt">std::exception</span> or unknown) and logs it via <span class="tt">morph::log</span> so a throw neither stalls the strand nor vanishes — the next queued task for that model still runs.</p>
-<h2 class="doxsection"><a class="anchor" id="strandexecutor"></a>
-StrandExecutor</h2>
-<p><span class="tt">morph::exec::detail::StrandExecutor</span> guarantees that all tasks for the same <span class="tt">ModelId</span> are serialised while tasks for different models are parallelised. Internally keeps one <span class="tt">std::queue</span> and a <span class="tt">running</span> flag per model; tasks are dispatched to the underlying <span class="tt">IExecutor</span> one at a time.</p>
+<p>A model instance's strand (<span class="tt">morph::exec::detail::ModelStrands</span>, below) is where <span class="tt">Model::execute()</span> actually runs; like <span class="tt">ThreadPoolExecutor</span>, it catches a task exception (<span class="tt">std::exception</span> or unknown) and logs it via <span class="tt">morph::log</span> so a throw neither stalls the strand nor vanishes — the next queued task for that model still runs.</p>
+<h2 class="doxsection"><a class="anchor" id="strands"></a>
+Strands</h2>
+<p><span class="tt">morph::exec::detail::ModelStrands</span> guarantees that all tasks for the same <span class="tt">ModelId</span> are serialised while tasks for different models are parallelised. It is core-cpp's <span class="tt">core::async::KeyedStrands&lt;ModelId&gt;</span> over the backend's <span class="tt">IExecutor</span>: a strand per model instance with work, made when it gets work and retired when it runs out, which queues itself on the executor once per turn and runs a batch of tasks there. morph adds the adapter to its <span class="tt">IExecutor</span>, the catch-and-log above, and the Task handler's session around each of the handler's resumptions (see <span class="tt">spec/core/coroutines.md</span>).</p>
 <h2 class="doxsection"><a class="anchor" id="completiont"></a>
 Completion&lt;T&gt;</h2>
 <p>Move-only public result handle (<span class="tt"><a class="el" href="dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">morph::async::Completion</a>&lt;T&gt;</span>). Internally backed by <span class="tt">morph::async::detail::CompletionState&lt;T&gt;</span> (mutex-protected value + error + two callback slots). Key invariant: callbacks are always delivered via the <span class="tt">IExecutor</span> supplied at construction, so the GUI thread is never blocked and callbacks always fire on the right thread.</p>
@@ -396,7 +396,7 @@ Thread safety</h1>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone">Logger  </td><td class="markdownTableBodyNone">Sink and level accesses protected by mutex.  </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><span class="tt">StrandExecutor</span>  </td><td class="markdownTableBodyNone">Per-strand mutex + atomic running flag; safe from any thread.  </td></tr>
+<td class="markdownTableBodyNone"><span class="tt">ModelStrands</span>  </td><td class="markdownTableBodyNone">core-cpp's <span class="tt">KeyedStrands</span>: a registry lock taken before each strand's own; safe from any thread.  </td></tr>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt">Bridge::switchBackend</span>  </td><td class="markdownTableBodyNone">Holds bridge mutex while staging + committing; re-registration and notification are atomic with respect to new <span class="tt">execute</span> calls. Exception-safe: a registration failure rolls back and leaves the old backend and all <span class="tt">currentId</span>s untouched (no-op). Outgoing-backend cancellation runs after the mutex is released.  </td></tr>
 </table>
@@ -408,7 +408,7 @@ Error propagation</h1>
 <div class="line">            └─ .onError(fn) handler posted to GUI executor</div>
 <div class="line">                 └─ fn receives exception_ptr; caller rethrows to inspect</div>
 </div><!-- fragment --><p>If the <span class="tt">Completion</span> is abandoned (no <span class="tt">.onError</span> attached, or no callback executor to deliver it on), the destructor logs the exception through the orphan logger. Non-<span class="tt">std::exception</span> types are logged as "unknown exception".</p>
-<p>Task exceptions on the executors themselves are handled independently: <span class="tt">ThreadPoolExecutor</span> and <span class="tt">StrandExecutor</span> catch and log every task throw via <span class="tt">morph::log</span>, and <span class="tt">MainThreadExecutor::runFor</span> catches <span class="tt">std::exception</span>. A throwing task therefore never kills a worker or stalls a strand — see "Executors" above.</p>
+<p>Task exceptions on the executors themselves are handled independently: <span class="tt">ThreadPoolExecutor</span> and <span class="tt">ModelStrands</span> catch and log every task throw via <span class="tt">morph::log</span>, and <span class="tt">MainThreadExecutor::runFor</span> catches <span class="tt">std::exception</span>. A throwing task therefore never kills a worker or stalls a strand — see "Executors" above.</p>
 <h1 class="doxsection"><a class="anchor" id="adding-a-new-model-and-actions"></a>
 Adding a new model and actions</h1>
 <ol type="1">
@@ -435,9 +435,9 @@ Adding a new model and actions</h1>
 <div class="line">handler.<a class="code hl_function" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a08411eb2c1621f941b5a8fab45f29646">execute</a>(MyAction{21})</div>
 <div class="line">    .then([](<span class="keywordtype">int</span> result) { <span class="comment">/* runs on GUI thread */</span> })</div>
 <div class="line">    .onError([](std::exception_ptr e) { <span class="comment">/* runs on GUI thread */</span> });</div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a></div><div class="ttdoc">RAII wrapper that binds a single model type to a Bridge.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l02913">bridge.hpp:2913</a></div></div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a08411eb2c1621f941b5a8fab45f29646"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a08411eb2c1621f941b5a8fab45f29646">morph::bridge::BridgeHandler::execute</a></div><div class="ttdeci">::morph::async::Completion&lt; typename ::morph::model::ActionTraits&lt; Action &gt;::Result &gt; execute(Action action)</div><div class="ttdoc">Dispatches action via the underlying Bridge and returns a Completion.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l02993">bridge.hpp:2993</a></div></div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1Bridge_html"><div class="ttname"><a href="d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a></div><div class="ttdoc">Central dispatcher that routes typed actions to an IBackend.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00822">bridge.hpp:822</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a></div><div class="ttdoc">RAII wrapper that binds a single model type to a Bridge.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l03037">bridge.hpp:3037</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a08411eb2c1621f941b5a8fab45f29646"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a08411eb2c1621f941b5a8fab45f29646">morph::bridge::BridgeHandler::execute</a></div><div class="ttdeci">::morph::async::Completion&lt; typename ::morph::model::ActionTraits&lt; Action &gt;::Result &gt; execute(Action action)</div><div class="ttdoc">Dispatches action via the underlying Bridge and returns a Completion.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l03117">bridge.hpp:3117</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1Bridge_html"><div class="ttname"><a href="d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a></div><div class="ttdoc">Central dispatcher that routes typed actions to an IBackend.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00921">bridge.hpp:921</a></div></div>
 </div><!-- fragment --><h1 class="doxsection"><a class="anchor" id="keyed-shareable-model-instances"></a>
 Keyed, shareable model instances</h1>
 <p>A <span class="tt">BridgeHandler</span> normally registers its own model instance. A model that declares a <b>primary key</b> can instead have its instances shared: handlers that name the same key reach one instance, through a directory the <em>server</em> owns, so the sharing spans clients and not merely handlers.</p>
@@ -486,8 +486,8 @@ API</h2>
 <div class="line"> </div>
 <div class="line">sidebar.<a class="code hl_function" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a08411eb2c1621f941b5a8fab45f29646">execute</a>(Deposit{.amountMinor = 5000});</div>
 <div class="line"><span class="comment">// -&gt; screen&#39;s callback runs: it never had to know Deposit exists</span></div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a0bd97352408cfd46af1ad547676d1940"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940">morph::bridge::BridgeHandler::subscribe</a></div><div class="ttdeci">void subscribe(std::function&lt; void(R)&gt; cb)</div><div class="ttdoc">Subscribes to results of type R produced on the attached instance.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l03246">bridge.hpp:3246</a></div></div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a421fba9e2f183185c0f05f8b43c66d78"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a421fba9e2f183185c0f05f8b43c66d78">morph::bridge::BridgeHandler::attach</a></div><div class="ttdeci">void attach(const ::morph::model::PrimaryKeyOf&lt; M &gt; &amp;key)</div><div class="ttdoc">Attaches (or re-points) this handler to the instance for key.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l03110">bridge.hpp:3110</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a0bd97352408cfd46af1ad547676d1940"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940">morph::bridge::BridgeHandler::subscribe</a></div><div class="ttdeci">void subscribe(std::function&lt; void(R)&gt; cb)</div><div class="ttdoc">Subscribes to results of type R produced on the attached instance.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l03370">bridge.hpp:3370</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a421fba9e2f183185c0f05f8b43c66d78"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a421fba9e2f183185c0f05f8b43c66d78">morph::bridge::BridgeHandler::attach</a></div><div class="ttdeci">void attach(const ::morph::model::PrimaryKeyOf&lt; M &gt; &amp;key)</div><div class="ttdoc">Attaches (or re-points) this handler to the instance for key.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l03234">bridge.hpp:3234</a></div></div>
 </div><!-- fragment --><h2 class="doxsection"><a class="anchor" id="behavior-1"></a>
 Behavior</h2>
 <table class="markdownTable">
@@ -573,7 +573,7 @@ Library headers (<span class="tt">include/morph/</span>)</h2>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt"><a class="el" href="d7/d76/executor_8hpp_source.html">core/executor.hpp</a></span>  </td><td class="markdownTableBodyNone"><span class="tt">IExecutor</span>, <span class="tt">ThreadPoolExecutor</span>, <span class="tt">MainThreadExecutor</span> (<span class="tt">morph::exec::</span>)  </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><span class="tt"><a class="el" href="de/dc1/strand_8hpp_source.html">core/strand.hpp</a></span>  </td><td class="markdownTableBodyNone"><span class="tt">ModelId</span>, <span class="tt">ModelIdHash</span>, <span class="tt">StrandExecutor</span> — serialises tasks per model (<span class="tt">morph::exec::detail::</span>)  </td></tr>
+<td class="markdownTableBodyNone"><span class="tt"><a class="el" href="de/dc1/strand_8hpp.html" title="morph&#39;s strands: one per model instance, from core-cpp&#39;s core::async::KeyedStrands,...">core/strand.hpp</a></span>  </td><td class="markdownTableBodyNone"><span class="tt">ModelId</span>, <span class="tt">ModelIdHash</span>, <span class="tt">ModelStrands</span>, <span class="tt">TaskResumer</span> — serialises tasks per model over core-cpp's <span class="tt">KeyedStrands</span> (<span class="tt">morph::exec::detail::</span>)  </td></tr>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt"><a class="el" href="d1/d76/completion_8hpp_source.html">core/completion.hpp</a></span>  </td><td class="markdownTableBodyNone"><span class="tt">CompletionState&lt;T&gt;</span> (detail) + <span class="tt">Completion&lt;T&gt;</span> (public) — result handle  </td></tr>
 <tr class="markdownTableRowOdd">
@@ -686,42 +686,44 @@ Key design decisions</h1>
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Decision  </th><th class="markdownTableHeadNone">Rationale  </th></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone">Header-only library  </td><td class="markdownTableBodyNone">Zero build-system friction; include and use.  </td></tr>
+<td class="markdownTableBodyNone">Header-only library  </td><td class="markdownTableBodyNone">Zero build-system friction; include and use. morph's own surface stays headers only; core-cpp's static modules are built with it.  </td></tr>
 <tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone">core-cpp for timers, base64 and wakeup  </td><td class="markdownTableBodyNone">One implementation shared with the other Contour Terminal projects, including a WebAssembly subset whose host-driven loop runs <span class="tt">TimeoutScheduler</span> on the browser's main thread.  </td></tr>
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone">Per-topic public namespaces with per-topic <span class="tt">detail::</span>  </td><td class="markdownTableBodyNone">Minimal public surface — callers see only what they need; internals are clearly walled off.  </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><span class="tt">StrandExecutor</span> per <span class="tt">ModelId</span>  </td><td class="markdownTableBodyNone">Parallelism across models; serial within one model — model authors write single-threaded code.  </td></tr>
 <tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone">A strand per <span class="tt">ModelId</span>  </td><td class="markdownTableBodyNone">Parallelism across models; serial within one model — model authors write single-threaded code.  </td></tr>
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><span class="tt">Completion&lt;T&gt;</span> not <span class="tt">std::future&lt;T&gt;</span>  </td><td class="markdownTableBodyNone">Callbacks marshal to a specific executor; futures do not.  </td></tr>
-<tr class="markdownTableRowOdd">
+<tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt">IBackend</span> in <span class="tt">detail::</span>  </td><td class="markdownTableBodyNone">Users never type the interface — they construct concrete backends and let conversion happen implicitly.  </td></tr>
-<tr class="markdownTableRowEven">
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><span class="tt">HandlerBinding</span> with atomic <span class="tt">currentId</span>  </td><td class="markdownTableBodyNone">Handlers survive backend replacement without re-registering from application code.  </td></tr>
-<tr class="markdownTableRowOdd">
+<tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt">LogLevel : uint8_t</span>  </td><td class="markdownTableBodyNone">Minimises storage; 5 levels fit in one byte.  </td></tr>
-<tr class="markdownTableRowEven">
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone">Glaze for JSON  </td><td class="markdownTableBodyNone">Reflects aggregate types automatically; no hand-written serialisation per action.  </td></tr>
-<tr class="markdownTableRowOdd">
+<tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt">CompletionState&lt;T&gt;</span> internal only  </td><td class="markdownTableBodyNone">Keeps the public API free of state-handling machinery; implementation can change without breaking callers.  </td></tr>
-<tr class="markdownTableRowEven">
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone">JSON <span class="tt">Envelope</span> wire protocol  </td><td class="markdownTableBodyNone">Self-describing and forward-compatible (unknown keys ignored); carries a <span class="tt">callId</span> so async WebSocket replies can be correlated back to pending <span class="tt">Completion</span> objects.  </td></tr>
-<tr class="markdownTableRowOdd">
+<tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone">Subscriptions keyed on the result type, scoped to the instance  </td><td class="markdownTableBodyNone">A subscriber is a renderer: it names the state it draws, not the actions that produce it, so a new action never breaks it. Scoping to the instance is what lets two screens on one shared model see each other's work without a query-invalidation vocabulary.  </td></tr>
-<tr class="markdownTableRowEven">
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><span class="tt">ActionValidator&lt;A&gt;</span> is action-typed, not model-typed  </td><td class="markdownTableBodyNone">Different actions on the same model have different readiness requirements; pinning the predicate to the action keeps GUI code oblivious to model internals.  </td></tr>
-<tr class="markdownTableRowOdd">
+<tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><span class="tt">set&lt;auto FieldPtr&gt;(value)</span> over <span class="tt">set&lt;Action&gt;(&amp;Action::f, value)</span>  </td><td class="markdownTableBodyNone">Member-pointer NTTP encodes both the action type and the field type; the call site stays terse without losing type safety.  </td></tr>
-<tr class="markdownTableRowEven">
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><span class="tt">Rational</span> wire codec canonicalises on read  </td><td class="markdownTableBodyNone">Wire input is untrusted; every deserialised value passes the reducing constructor, so invariants hold no matter what a client sends.  </td></tr>
-<tr class="markdownTableRowOdd">
+<tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone">One optionality: empty state inside <span class="tt">Quantity</span>  </td><td class="markdownTableBodyNone">Drafts and lab data genuinely have "no value yet" with the unit still known; a second <span class="tt">std::optional</span> wrapper would split one concept across two types.  </td></tr>
-<tr class="markdownTableRowEven">
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone">Units are enum NTTPs with app-defined algebra  </td><td class="markdownTableBodyNone">Mixing units is a compile error and result units are deduced, while morph stays domain-agnostic — the application owns the enum, metadata, and algebra.  </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><span class="tt">required</span> derived from types + one opt-out list  </td><td class="markdownTableBodyNone">The same declaration drives the schema, the client submit gate, and <span class="tt">validate()</span> — required-ness cannot drift between server and GUI.  </td></tr>
 <tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone">Combo-box options declared as an action reference (<span class="tt">Choice&lt;T, "ListX"&gt;</span>)  </td><td class="markdownTableBodyNone">Option lists are living data, so the single source is the action that serves them; the schema only carries the <em>reference</em>, and every renderer resolves it through the same dispatch seam as submits.  </td></tr>
+<td class="markdownTableBodyNone"><span class="tt">required</span> derived from types + one opt-out list  </td><td class="markdownTableBodyNone">The same declaration drives the schema, the client submit gate, and <span class="tt">validate()</span> — required-ness cannot drift between server and GUI.  </td></tr>
 <tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone">Combo-box options declared as an action reference (<span class="tt">Choice&lt;T, "ListX"&gt;</span>)  </td><td class="markdownTableBodyNone">Option lists are living data, so the single source is the action that serves them; the schema only carries the <em>reference</em>, and every renderer resolves it through the same dispatch seam as submits.  </td></tr>
+<tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone">Strict (non-clamping) datetime codec  </td><td class="markdownTableBodyNone"><span class="tt">Rational</span> clamps hostile input because any int pair still denotes a value; a malformed timestamp denotes nothing — rejecting the read beats fabricating an epoch.  </td></tr>
 </table>
 </div></div><!-- PageDoc -->

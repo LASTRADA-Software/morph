@@ -7,5 +7,6 @@ var searchData=
   ['tokenissuanceerror_4',['TokenIssuanceError',['../d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html',1,'morph::session']]],
   ['tokenissuer_5',['TokenIssuer',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html',1,'morph::session']]],
   ['tokenverifier_6',['TokenVerifier',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html',1,'morph::session']]],
-  ['tracesink_7',['TraceSink',['../d5/d5e/structmorph_1_1observe_1_1TraceSink.html',1,'morph::observe']]]
+  ['tracesink_7',['TraceSink',['../d5/d5e/structmorph_1_1observe_1_1TraceSink.html',1,'morph::observe']]],
+  ['type_8',['type',['../df/d19/structmorph_1_1model_1_1HandlerResult.html',1,'morph::model']]]
 ];

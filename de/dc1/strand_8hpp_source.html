@@ -120,414 +120,455 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dc1/strand_
   <div class="headertitle"><div class="title">strand.hpp</div></div>
 </div><!--header-->
 <div class="contents">
-<div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">// SPDX-License-Identifier: Apache-2.0</span></div>
+<a href="../../de/dc1/strand_8hpp.html">Go to the documentation of this file.</a><div class="fragment"><div class="line"><a id="l00001" name="l00001"></a><span class="lineno">    1</span><span class="comment">// SPDX-License-Identifier: Apache-2.0</span></div>
 <div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span> </div>
 <div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="preprocessor">#pragma once</span></div>
-<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="preprocessor">#include &lt;condition_variable&gt;</span></div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="preprocessor">#include &lt;cstdint&gt;</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="preprocessor">#include &lt;deque&gt;</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="preprocessor">#include &lt;exception&gt;</span></div>
-<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="preprocessor">#include &lt;functional&gt;</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="preprocessor">#include &lt;memory&gt;</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="preprocessor">#include &lt;mutex&gt;</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="preprocessor">#include &lt;string&gt;</span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="preprocessor">#include &lt;unordered_map&gt;</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="preprocessor">#include &lt;utility&gt;</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span> </div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="preprocessor">#include &quot;../attributes.hpp&quot;</span></div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#include &quot;executor.hpp&quot;</span></div>
-<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#include &quot;logger.hpp&quot;</span></div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span> </div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="keyword">namespace </span>morph::exec::detail {</div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="comment"></span> </div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="comment">/// @brief Opaque identifier for a model instance inside a backend.</span></div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="comment">///</span></div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">/// The value 0 is reserved and means &quot;not bound&quot;. All non-zero values are</span></div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">/// assigned by the backend and are stable for the lifetime of the model.</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="keyword">struct </span>ModelId {<span class="comment"></span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">    /// @brief Raw numeric id. Zero means unbound.</span></div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span>    uint64_t v{0};</div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment"></span> </div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">    /// @brief Three-way comparison — enables `==`, `!=`, `&lt;`, `&lt;=`, `&gt;`, `&gt;=`.</span></div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span>    <span class="keyword">auto</span> operator&lt;=&gt;(<span class="keyword">const</span> ModelId&amp;) <span class="keyword">const</span> = <span class="keywordflow">default</span>;</div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span>};</div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment"></span> </div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// @brief Hash functor so `ModelId` can be used as an `unordered_map` key.</span></div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="keyword">struct </span>ModelIdHash {<span class="comment"></span></div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment">    /// @brief Returns the hash of @p mid.</span></div>
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>    std::size_t operator()(ModelId mid) <span class="keyword">const</span> <span class="keyword">noexcept</span> { <span class="keywordflow">return</span> std::hash&lt;uint64_t&gt;{}(mid.v); }</div>
-<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span>};</div>
-<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment"></span> </div>
-<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span><span class="comment">/// @brief Per-key serialising executor built on top of an arbitrary `IExecutor`.</span></div>
-<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span><span class="comment">///</span></div>
-<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span><span class="comment">/// Tasks posted with the same `ModelId` key are always executed in FIFO order</span></div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="comment">/// with no overlap, even when the underlying executor is a thread pool. Tasks</span></div>
-<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span><span class="comment">/// with different keys may run concurrently.</span></div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="comment">///</span></div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="comment">/// This removes the need for per-model mutexes: the model&#39;s `execute()` method</span></div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span><span class="comment">/// is always called from exactly one task at a time.</span></div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span><span class="comment">// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)</span></div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span><span class="keyword">class </span>StrandExecutor {</div>
-<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span><span class="comment">    /// @brief Constructs the strand executor wrapping @p base.</span></div>
-<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span><span class="comment">    /// @param base Underlying executor that actually runs the tasks. Borrowed,</span></div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span><span class="comment">    ///             not owned: it must outlive this `StrandExecutor` *and* keep</span></div>
-<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="comment">    ///             running tasks until the destructor&#39;s wait has completed —</span></div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">    ///             destroying it first deadlocks (see</span></div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">    ///             `docs/spec/concurrency_and_lifetimes.md`, &quot;Destruction</span></div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">    ///             ordering&quot;).</span></div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span>    <span class="keyword">explicit</span> StrandExecutor(IExecutor&amp; base MORPH_LIFETIMEBOUND) : _base{&amp;base} {}</div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment"></span> </div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">    /// @brief Blocks until all in-flight tasks have completed, then destroys the executor.</span></div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">    /// Waits for all in-flight lambdas to complete before destroying the map.</span></div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="comment">    /// Without this, a pool thread running scheduleNext can access _strands</span></div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="comment">    /// after it has been destroyed (TSan: data race on destructor vs erase).</span></div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>    ~StrandExecutor() {</div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>        std::unique_lock lock{_mapMtx};</div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>        _cv.wait(lock, [<span class="keyword">this</span>] { <span class="keywordflow">return</span> _inFlight == 0; });</div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span>    }</div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment"></span> </div>
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="comment">    /// @brief Posts @p task to the strand associated with @p key.</span></div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">    /// The task is guaranteed to run after all previously posted tasks for the</span></div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">    /// same key have completed. Tasks for different keys may interleave freely.</span></div>
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="comment">    /// Thread-safe.</span></div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment">    /// @param key  Model identifier that selects the strand.</span></div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment">    /// @param task Callable to execute.</span></div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span>    <span class="keywordtype">void</span> post(ModelId key, std::function&lt;<span class="keywordtype">void</span>()&gt; task) {</div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span>        std::shared_ptr&lt;Strand&gt; strand;</div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>        <span class="keywordtype">bool</span> schedule = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>        {</div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>            <span class="comment">// Hold _mapMtx across the whole slot-lookup + push + re-arm</span></div>
-<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span>            <span class="comment">// decision, and take strand-&gt;mtx *while still holding _mapMtx*. The</span></div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>            <span class="comment">// drain-and-erase step in scheduleNext makes its &quot;keep-running vs.</span></div>
-<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>            <span class="comment">// erase&quot; decision under the same {_mapMtx, strand-&gt;mtx} pair, so the</span></div>
-<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span>            <span class="comment">// two are mutually exclusive.</span></div>
-<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span>            <span class="comment">//</span></div>
-<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span>            <span class="comment">// Doing the lookup and the re-arm under separate locks once opened a</span></div>
-<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span>            <span class="comment">// window: a post() could capture a strand, release _mapMtx, then</span></div>
-<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span>            <span class="comment">// re-arm it under strand-&gt;mtx *after* a concurrent drain had already</span></div>
-<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span>            <span class="comment">// erased it from the map — orphaning a live strand and letting a</span></div>
-<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span>            <span class="comment">// later post(key) create a second strand for the same key that ran</span></div>
-<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span>            <span class="comment">// concurrently. Because the map lookup and the re-arm now share</span></div>
-<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span>            <span class="comment">// _mapMtx with the erase, the strand we push into is always the map&#39;s</span></div>
-<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span>            <span class="comment">// current entry for this key: a strand that becomes `running` here is</span></div>
-<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span>            <span class="comment">// guaranteed to still be the map entry, and it cannot be erased</span></div>
-<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span>            <span class="comment">// out from under us (the erase needs _mapMtx too, and never fires</span></div>
-<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span>            <span class="comment">// while pending is non-empty).</span></div>
-<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span>            <span class="comment">//</span></div>
-<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span>            <span class="comment">// Lock order is _mapMtx → strand-&gt;mtx, matching scheduleNext —</span></div>
-<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span>            <span class="comment">// which acquires the two sequentially rather than with one</span></div>
-<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span>            <span class="comment">// scoped_lock over both, precisely to keep this order (see its own</span></div>
-<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span>            <span class="comment">// comment). A freshly created strand&#39;s mtx</span></div>
-<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>            <span class="comment">// is uncontended; an existing strand&#39;s mtx can only be held</span></div>
-<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>            <span class="comment">// elsewhere under the same _mapMtx-first order, so no deadlock.</span></div>
-<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span>            std::scoped_lock <span class="keyword">const</span> mapLock{_mapMtx};</div>
-<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span>            <span class="keyword">auto</span> slotIter = _strands.find(key);</div>
-<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>            <span class="keywordflow">if</span> (slotIter == _strands.end()) {</div>
-<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>                slotIter = installStrand(key);</div>
-<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>            }</div>
-<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>            strand = slotIter-&gt;second;</div>
-<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>            std::scoped_lock <span class="keyword">const</span> strandLock{strand-&gt;mtx};</div>
-<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>            strand-&gt;pending.push(std::move(task));</div>
-<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>            <span class="keywordflow">if</span> (!strand-&gt;running) {</div>
-<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>                strand-&gt;running = <span class="keyword">true</span>;</div>
-<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>                schedule = <span class="keyword">true</span>;</div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>                <span class="comment">// Account for the strand lambda we are about to dispatch *while</span></div>
-<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span>                <span class="comment">// still holding _mapMtx*, before releasing it. If we deferred the</span></div>
-<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>                <span class="comment">// ++_inFlight into scheduleNext (which re-takes _mapMtx), a window</span></div>
-<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>                <span class="comment">// opened between releasing _mapMtx here and re-acquiring it there</span></div>
-<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span>                <span class="comment">// in which ~StrandExecutor could observe _inFlight == 0, destroy</span></div>
-<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>                <span class="comment">// _strands, and let scheduleNext touch freed state. Incrementing</span></div>
-<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>                <span class="comment">// under this lock makes &quot;decided to schedule&quot; and &quot;counted as</span></div>
-<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span>                <span class="comment">// in-flight&quot; atomic, so the destructor never sees a zero it should</span></div>
-<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>                <span class="comment">// not.</span></div>
-<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>                ++_inFlight;</div>
-<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span>            }</div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span>        }</div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span>        <span class="keywordflow">if</span> (schedule) {</div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>            scheduleNext(std::move(strand), key);</div>
-<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>        }</div>
-<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span>    }</div>
-<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span> </div>
-<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="keyword">private</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="comment">    /// @brief FIFO of tasks queued on one strand, with the head task held inline.</span></div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment">    /// Behaviourally a `std::queue&lt;std::function&lt;void()&gt;&gt;` restricted to the</span></div>
-<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment">    /// three operations the strand uses, and used under exactly the same</span></div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">    /// discipline: every call happens with the owning `Strand::mtx` held, so</span></div>
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span><span class="comment">    /// this type does no locking of its own.</span></div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span><span class="comment">    /// It exists because of what the *container* cost, not what the strand</span></div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span><span class="comment">    /// did with it. The drain-and-erase step in `scheduleNext` destroys the</span></div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span><span class="comment">    /// whole `Strand` as soon as the queue empties, so a workload that</span></div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment">    /// dispatches one action at a time against a model builds a fresh queue on</span></div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">    /// every call and puts exactly one task in it. libstdc++&#39;s `std::deque`</span></div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">    /// allocates its node map *and* a first 512-byte buffer in its default</span></div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment">    /// constructor, which comes to 576 bytes of the 760 a deque-only strand</span></div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">    /// costs per local dispatch. Holding the head task in the strand makes</span></div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">    /// that case allocation-free; the overflow deque is constructed only when</span></div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">    /// a second task is genuinely queued behind a running one, after which the</span></div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">    /// cost is the deque&#39;s as before.</span></div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    /// This changes no lifetime or locking rule: the erase still happens when</span></div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span><span class="comment">    /// `empty()` becomes true, still under the `{_mapMtx, strand-&gt;mtx}` pair.</span></div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span>    <span class="keyword">class </span>PendingQueue {</div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>    <span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">        /// @brief Reports whether the queue holds no task.</span></div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment">        /// @return `true` when nothing is queued.</span></div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>        [[nodiscard]] <span class="keywordtype">bool</span> empty() const noexcept { <span class="keywordflow">return</span> !_hasHead; }</div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment"></span> </div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">        /// @brief Appends @p task to the back of the queue.</span></div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">        /// @param task Callable to queue. An *empty* `std::function` is queued</span></div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">        ///             and later dispatched like any other: occupancy is</span></div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment">        ///             tracked by a separate flag rather than by testing the</span></div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment">        ///             callable, so this type never silently drops one.</span></div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>        <span class="keywordtype">void</span> push(std::function&lt;<span class="keywordtype">void</span>()&gt;&amp;&amp; task) {</div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>            <span class="keywordflow">if</span> (!_hasHead) {</div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>                _head = std::move(task);</div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>                _hasHead = <span class="keyword">true</span>;</div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>                <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>            }</div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>            <span class="keywordflow">if</span> (!_overflow) {</div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>                _overflow = std::make_unique&lt;std::deque&lt;std::function&lt;void()&gt;&gt;&gt;();</div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>            }</div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>            _overflow-&gt;push_back(std::move(task));</div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>        }</div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment"></span> </div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">        /// @brief Removes the task at the front of the queue and returns it.</span></div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">        /// @return The front task.</span></div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">        /// @pre `!empty()`.</span></div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>        std::function&lt;void()&gt; pop() {</div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>            std::function&lt;void()&gt; task = std::move(_head);</div>
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span>            <span class="keywordflow">if</span> (_overflow &amp;&amp; !_overflow-&gt;empty()) {</div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>                _head = std::move(_overflow-&gt;front());</div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>                _overflow-&gt;pop_front();</div>
-<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>                <span class="comment">// A moved-from std::function is valid but unspecified; clear it</span></div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>                <span class="comment">// explicitly so the slot holds no captured state while idle.</span></div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>                _head = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>                _hasHead = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>            }</div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span>            <span class="keywordflow">return</span> task;</div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span>        }</div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span> </div>
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span>    <span class="keyword">private</span>:</div>
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span>        std::function&lt;void()&gt; _head;</div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>        std::unique_ptr&lt;std::deque&lt;std::function&lt;void()&gt;&gt;&gt; _overflow;</div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>        <span class="keywordtype">bool</span> _hasHead = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>    };</div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span> </div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span>    <span class="keyword">struct </span>Strand {</div>
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span>        IExecutor* base = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span>        std::mutex mtx;</div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>        PendingQueue pending;</div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>        <span class="keywordtype">bool</span> running = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>    };</div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="comment"></span> </div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment">    /// @brief The `ModelId` → strand map. Named so the recycled node type can be.</span></div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>    <span class="keyword">using </span>StrandMap = std::unordered_map&lt;ModelId, std::shared_ptr&lt;Strand&gt;, ModelIdHash&gt;;</div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment"></span> </div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">    /// @brief Returns an iterator to the strand for @p key, creating the entry.</span></div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span><span class="comment">    /// **Precondition:** the caller holds `_mapMtx` and has already</span></div>
-<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment">    /// established that `key` has no entry.</span></div>
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span><span class="comment">    /// This is a pure allocation optimisation and changes no lifetime or</span></div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span><span class="comment">    /// locking rule. The drain step in `scheduleNext` removes the whole map</span></div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span><span class="comment">    /// entry as soon as the queue empties, so a workload that dispatches one</span></div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment">    /// action at a time against a model would otherwise pay for a fresh map</span></div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment">    /// node *and* a fresh `make_shared&lt;Strand&gt;` on every call — 2 allocations</span></div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// and 152 bytes on top of the queue&#39;s own share.</span></div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    /// Rather than keep the slot alive across the drain (which would need a</span></div>
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">    /// deregistration hook and would trade this churn for a per-model entry</span></div>
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">    /// nothing reclaims), the drain `extract`s the node instead of erasing it</span></div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="comment">    /// and parks it in `_spare`, and this re-keys and re-inserts that one</span></div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment">    /// node. The entry still leaves the map at the same point under the same</span></div>
-<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment">    /// locks, so the map is bounded exactly as before; `_spare` holds at most</span></div>
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">    /// one node and is freed with the executor.</span></div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span><span class="comment">    /// Reusing the parked node&#39;s `Strand` as well is guarded by sole</span></div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment">    /// ownership. `use_count() == 1` means the recycled node holds the only</span></div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment">    /// reference, so nothing else can reach the object and reusing it is</span></div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="comment">    /// indistinguishable from constructing a new one. That is the whole</span></div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="comment">    /// argument, and it is deliberately not &quot;the previous owner makes no</span></div>
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span><span class="comment">    /// further access&quot;: a strand lambda that is still finishing does hold a</span></div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="comment">    /// reference, and when it does, this constructs a fresh `Strand` exactly</span></div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="comment">    /// as before and recycles only the node.</span></div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span><span class="comment">    /// The parked strand needs no reset. It is only ever extracted from a</span></div>
-<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span><span class="comment">    /// strand observed `!running` with an empty `pending` under</span></div>
-<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span><span class="comment">    /// `{_mapMtx, strand-&gt;mtx}`, which is the state a fresh one is in. A</span></div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span><span class="comment">    /// runtime re-check of that here would be an arm nothing can take, so it</span></div>
-<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span><span class="comment">    /// is written down rather than branched on.</span></div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span><span class="comment">    /// @param key Model identifier to install a strand for.</span></div>
-<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span><span class="comment">    /// @return Iterator to the entry for @p key.</span></div>
-<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>    StrandMap::iterator installStrand(ModelId key) {</div>
-<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>        <span class="keywordflow">if</span> (!_spare) {</div>
-<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>            <span class="keyword">auto</span> <span class="keyword">const</span> iter = _strands.emplace(key, std::make_shared&lt;Strand&gt;()).first;</div>
-<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>            iter-&gt;second-&gt;base = _base;</div>
-<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>            <span class="keywordflow">return</span> iter;</div>
-<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span>        }</div>
-<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span>        _spare.key() = key;</div>
-<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span>        <span class="keyword">auto</span>&amp; reused = _spare.mapped();</div>
-<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span>        <span class="keywordflow">if</span> (reused.use_count() != 1) {</div>
-<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span>            reused = std::make_shared&lt;Strand&gt;();</div>
-<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>        }</div>
-<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span>        reused-&gt;base = _base;</div>
-<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span>        <span class="comment">// `insert` consumes the node. Were the precondition ever violated it</span></div>
-<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span>        <span class="comment">// would instead hand the node back inside the returned object, which</span></div>
-<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span>        <span class="comment">// frees it — the same fate the old `erase` gave it — and `position`</span></div>
-<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span>        <span class="comment">// would name the existing entry, so the caller is right either way</span></div>
-<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span>        <span class="comment">// and there is nothing to branch on.</span></div>
-<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span>        <span class="keywordflow">return</span> _strands.insert(std::move(_spare)).position;</div>
-<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span>    }</div>
-<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span><span class="comment"></span> </div>
-<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span><span class="comment">    /// @brief Dispatches one strand lambda onto the base executor.</span></div>
-<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span><span class="comment">    /// **Precondition:** the caller must have already incremented `_inFlight`</span></div>
-<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span><span class="comment">    /// (under `_mapMtx`) to account for this dispatch. `post()` does so in the</span></div>
-<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span><span class="comment">    /// same critical section that decides to schedule, and the re-entrant call</span></div>
-<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">    /// below does so under the `_mapMtx` it already holds. Keeping the increment</span></div>
-<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">    /// with the *decision* (rather than here) closes the window where</span></div>
-<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">    /// `~StrandExecutor` could observe `_inFlight == 0` between the decision and</span></div>
-<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">    /// this dispatch and destroy `_strands` out from under us.</span></div>
-<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span>    <span class="keywordtype">void</span> scheduleNext(std::shared_ptr&lt;Strand&gt; strand, ModelId key) {</div>
-<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>        <span class="comment">// Read `base` out before the capture list moves `strand` into the</span></div>
-<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>        <span class="comment">// lambda: `strand-&gt;base` and the lambda&#39;s construction are</span></div>
-<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>        <span class="comment">// unsequenced within one call expression, so reading through the</span></div>
-<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>        <span class="comment">// moved-from pointer would be a real hazard rather than a stylistic</span></div>
-<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>        <span class="comment">// one. The lambda&#39;s capture is non-const (hence `mutable` and the</span></div>
-<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>        <span class="comment">// by-value parameter) so the drain below can release it early.</span></div>
-<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>        IExecutor* <span class="keyword">const</span> base = strand-&gt;base;</div>
-<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>        base-&gt;post([<span class="keyword">this</span>, strand = std::move(strand), key]() <span class="keyword">mutable</span> {</div>
-<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>            std::function&lt;void()&gt; task;</div>
-<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>            {</div>
-<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>                std::scoped_lock <span class="keyword">const</span> lock{strand-&gt;mtx};</div>
-<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>                task = strand-&gt;pending.pop();</div>
-<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>            }</div>
-<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>            <span class="keywordflow">try</span> {</div>
-<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>                task();</div>
-<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>            } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
-<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>                <span class="comment">// The strand is where Model::execute() actually runs; a throw</span></div>
-<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>                <span class="comment">// here must not stall the strand or vanish — log and continue so</span></div>
-<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>                <span class="comment">// the next queued task for this model still runs.</span></div>
-<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span>                ::morph::log::logError(<span class="stringliteral">&quot;[strand] task threw: &quot;</span> + std::string{exc.what()});</div>
-<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span>            } <span class="keywordflow">catch</span> (...) {</div>
-<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>                ::morph::log::logError(<span class="stringliteral">&quot;[strand] task threw unknown exception&quot;</span>);</div>
-<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>            }</div>
-<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>            <span class="comment">// Decide &quot;keep running vs. drain-and-erase&quot; atomically across the</span></div>
-<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span>            <span class="comment">// map slot and the strand&#39;s pending queue. Doing it in two steps</span></div>
-<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>            <span class="comment">// (flip running under strand-&gt;mtx, then erase under _mapMtx) opened</span></div>
-<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>            <span class="comment">// a window where another post() could re-arm this strand after we</span></div>
-<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>            <span class="comment">// unlocked strand-&gt;mtx but before we erased the map entry. The</span></div>
-<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>            <span class="comment">// subsequent erase then orphaned a live strand: a later post(key)</span></div>
-<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span>            <span class="comment">// would create a *new* strand for the same key, and the two</span></div>
-<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span>            <span class="comment">// strands could run model tasks concurrently → data race.</span></div>
-<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span>            <span class="keywordtype">bool</span> more = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span>            {</div>
-<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>                <span class="comment">// Same lock order as post(): _mapMtx first, then strand-&gt;mtx.</span></div>
-<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>                <span class="comment">// Acquiring them sequentially (rather than via a single</span></div>
-<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>                <span class="comment">// scoped_lock over both, whose std::lock back-off can grab them</span></div>
-<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span>                <span class="comment">// in address order) keeps a single, consistent ordering across</span></div>
-<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span>                <span class="comment">// every site that holds both, so there is no lock-ordering</span></div>
-<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span>                <span class="comment">// deadlock. This is the point where &quot;drain-and-erase&quot; is decided</span></div>
-<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span>                <span class="comment">// atomically w.r.t. a concurrent post(): a post() re-arming this</span></div>
-<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span>                <span class="comment">// strand and this block erasing it cannot interleave, because</span></div>
-<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span>                <span class="comment">// both hold _mapMtx across the whole decision.</span></div>
-<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span>                std::scoped_lock <span class="keyword">const</span> mapLock{_mapMtx};</div>
-<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>                std::scoped_lock <span class="keyword">const</span> strandLock{strand-&gt;mtx};</div>
-<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span>                more = !strand-&gt;pending.empty();</div>
-<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span>                <span class="keywordflow">if</span> (!more) {</div>
-<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span>                    strand-&gt;running = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span>                    <span class="keyword">auto</span> iter = _strands.find(key);</div>
-<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>                    <span class="keywordflow">if</span> (iter != _strands.end() &amp;&amp; iter-&gt;second == strand) {</div>
-<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span>                        <span class="comment">// `extract`, not `erase`: same removal, same moment,</span></div>
-<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>                        <span class="comment">// same locks — the entry leaves the map here exactly as</span></div>
-<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>                        <span class="comment">// before, and every reason the erase had to happen</span></div>
-<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>                        <span class="comment">// under {_mapMtx, strand-&gt;mtx} still applies unchanged.</span></div>
-<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>                        <span class="comment">// The difference is only that the detached node&#39;s</span></div>
-<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>                        <span class="comment">// memory is parked for `installStrand` to re-key</span></div>
-<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span>                        <span class="comment">// instead of being returned to the allocator. Any node</span></div>
-<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span>                        <span class="comment">// already parked is freed by this assignment, so at</span></div>
-<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>                        <span class="comment">// most one is ever held. Freeing it runs no user code</span></div>
-<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span>                        <span class="comment">// under these locks: a parked strand was parked</span></div>
-<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span>                        <span class="comment">// because its pending queue was empty, so there is no</span></div>
-<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span>                        <span class="comment">// captured task left to destroy.</span></div>
-<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span>                        _spare = _strands.extract(iter);</div>
-<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span>                    }</div>
-<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span>                } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span>                    <span class="comment">// Account for the re-armed dispatch *before* releasing</span></div>
-<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span>                    <span class="comment">// _mapMtx (scheduleNext&#39;s precondition). Because this run&#39;s</span></div>
-<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span>                    <span class="comment">// own decrement below has not happened yet, _inFlight is</span></div>
-<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span>                    <span class="comment">// briefly 2 here and never dips to 0 across the handoff, so</span></div>
-<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span>                    <span class="comment">// ~StrandExecutor cannot slip in and destroy _strands between</span></div>
-<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>                    <span class="comment">// the two runs.</span></div>
-<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>                    ++_inFlight;</div>
-<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span>                }</div>
-<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span>            }</div>
-<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span>            <span class="keywordflow">if</span> (more) {</div>
-<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span>                scheduleNext(strand, key);</div>
-<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span>                <span class="comment">// Drop this run&#39;s co-ownership here rather than leaving it to</span></div>
-<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span>                <span class="comment">// the lambda&#39;s destruction a few lines below. Nothing after</span></div>
-<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span>                <span class="comment">// this point touches the strand, and releasing it early is</span></div>
-<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span>                <span class="comment">// what lets `installStrand` see `use_count() == 1` on the</span></div>
-<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span>                <span class="comment">// node just parked in `_spare`: the next post() for this key</span></div>
-<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span>                <span class="comment">// is typically already blocked on _mapMtx when the block above</span></div>
-<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span>                <span class="comment">// releases it, so a reference held until the lambda dies would</span></div>
-<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span>                <span class="comment">// usually still be there when that post looks. This only</span></div>
-<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span>                <span class="comment">// affects *whether the object is recycled*, never whether the</span></div>
-<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span>                <span class="comment">// recycling is safe — a post that looks too early simply sees</span></div>
-<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span>                <span class="comment">// two owners and constructs a fresh Strand.</span></div>
-<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span>                <span class="comment">//</span></div>
-<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span>                <span class="comment">// Safe to be the last owner here: no lock is held (the block</span></div>
-<div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span>                <span class="comment">// above released both), so this never destroys a mutex it is</span></div>
-<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span>                <span class="comment">// standing on. If the extract above did run, `_spare` owns the</span></div>
-<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span>                <span class="comment">// strand and this merely decrements.</span></div>
-<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span>                strand.reset();</div>
-<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span>            }</div>
-<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span>            <span class="comment">// Decrement after all map access is done; wake destructor if it is waiting.</span></div>
-<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span>            {</div>
-<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span>                std::scoped_lock <span class="keyword">const</span> lock{_mapMtx};</div>
-<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span>                <span class="keywordflow">if</span> (--_inFlight == 0) {</div>
-<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span>                    <span class="comment">// Inside the `== 0` branch, so a handoff does not signal at</span></div>
-<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span>                    <span class="comment">// all: the re-arm above has already incremented for the</span></div>
-<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span>                    <span class="comment">// next dispatch, so the count does not reach zero until the</span></div>
-<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span>                    <span class="comment">// strand is quiescent. `~StrandExecutor` is the only waiter</span></div>
-<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>                    <span class="comment">// on this variable, so `notify_all` wakes at most one</span></div>
-<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span>                    <span class="comment">// thread and is equivalent to `notify_one` here -- there is</span></div>
-<div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span>                    <span class="comment">// no herd to wake, and no predicate but `_inFlight == 0`</span></div>
-<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span>                    <span class="comment">// for a wakeup to land on and be lost.</span></div>
-<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span>                    _cv.notify_all();</div>
-<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span>                }</div>
-<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span>            }</div>
-<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span>        });</div>
-<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span>    }</div>
-<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span> </div>
-<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>    IExecutor* _base;</div>
-<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>    std::mutex _mapMtx;</div>
-<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>    std::condition_variable _cv;</div>
-<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>    <span class="keywordtype">int</span> _inFlight{0};</div>
-<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>    StrandMap _strands;<span class="comment"></span></div>
-<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span><span class="comment">    /// @brief The one detached map node kept for reuse. Guarded by `_mapMtx`.</span></div>
-<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span><span class="comment">    /// Declared after `_strands` so it is destroyed first: the node owns</span></div>
-<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span><span class="comment">    /// storage obtained from the map&#39;s allocator, and returning it before the</span></div>
-<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span><span class="comment">    /// container goes away keeps that ordering obvious even though the default</span></div>
-<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span><span class="comment">    /// allocator is stateless.</span></div>
-<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span>    StrandMap::node_type _spare;</div>
-<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>};</div>
-<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span> </div>
-<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>}  <span class="comment">// namespace morph::exec::detail</span></div>
+<div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="preprocessor">#include &lt;atomic&gt;</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="preprocessor">#include &lt;core/async/ExecutorContext.hpp&gt;</span></div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="preprocessor">#include &lt;core/async/IExecutor.hpp&gt;</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="preprocessor">#include &lt;core/async/KeyedStrands.hpp&gt;</span></div>
+<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="preprocessor">#include &lt;core/async/ParkedWork.hpp&gt;</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="preprocessor">#include &lt;core/async/Strand.hpp&gt;</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="preprocessor">#include &lt;coroutine&gt;</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="preprocessor">#include &lt;cstddef&gt;</span></div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="preprocessor">#include &lt;cstdint&gt;</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="preprocessor">#include &lt;exception&gt;</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="preprocessor">#include &lt;functional&gt;</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="preprocessor">#include &lt;memory&gt;</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#include &lt;mutex&gt;</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#include &lt;shared_mutex&gt;</span></div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#include &lt;string&gt;</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &lt;type_traits&gt;</span></div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#include &lt;unordered_map&gt;</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &lt;utility&gt;</span></div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span> </div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="preprocessor">#include &quot;../attributes.hpp&quot;</span></div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="preprocessor">#include &quot;../session/session.hpp&quot;</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="preprocessor">#include &quot;executor.hpp&quot;</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="preprocessor">#include &quot;logger.hpp&quot;</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment"></span> </div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">/// @file</span></div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// @brief morph&#39;s strands: one per model instance, from core-cpp&#39;s</span></div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">///        `core::async::KeyedStrands`, over a morph executor.</span></div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">///</span></div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// Specified in `docs/spec/core/executor.md`, &quot;Strands&quot;.</span></div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span> </div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="keyword">namespace </span>morph::exec::detail {</div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment"></span> </div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment">/// @brief Opaque identifier for a model instance inside a backend.</span></div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">///</span></div>
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment">/// The value 0 is reserved and means &quot;not bound&quot;. All non-zero values are</span></div>
+<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span><span class="comment">/// assigned by the backend and are stable for the lifetime of the model.</span></div>
+<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span><span class="keyword">struct </span>ModelId {<span class="comment"></span></div>
+<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span><span class="comment">    /// @brief Raw numeric id. Zero means unbound.</span></div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span>    uint64_t v{0};</div>
+<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span><span class="comment"></span> </div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="comment">    /// @brief Three-way comparison — enables `==`, `!=`, `&lt;`, `&lt;=`, `&gt;`, `&gt;=`.</span></div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>    <span class="keyword">auto</span> operator&lt;=&gt;(<span class="keyword">const</span> ModelId&amp;) <span class="keyword">const</span> = <span class="keywordflow">default</span>;</div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>};</div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span><span class="comment"></span> </div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span><span class="comment">/// @brief Hash functor so `ModelId` can be used as an `unordered_map` key.</span></div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span><span class="keyword">struct </span>ModelIdHash {<span class="comment"></span></div>
+<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span><span class="comment">    /// @brief Returns the hash of @p mid.</span></div>
+<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span>    std::size_t operator()(ModelId mid) <span class="keyword">const</span> <span class="keyword">noexcept</span> { <span class="keywordflow">return</span> std::hash&lt;uint64_t&gt;{}(mid.v); }</div>
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>};</div>
+<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="comment"></span> </div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">/// @brief A `core::async::IExecutor` over a morph executor: how a core-cpp</span></div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">///        strand&#39;s pump reaches a thread pool, a main-thread pump or Qt.</span></div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">///</span></div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">/// A strand hands its base one bare coroutine handle per turn, which this</span></div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">/// posts as a lambda holding nothing else: trivially copyable, so it fits a</span></div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">/// `std::function`&#39;s small buffer and a turn costs no allocation. The lambda</span></div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">/// does not refer to this object, so it may be destroyed while a pump it</span></div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">/// posted is still queued: the pump finds its strand closed and ends.</span></div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="keyword">class </span>CoreExecutorOver final : <span class="keyword">public</span> ::core::async::IExecutor {</div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="comment">    /// @param executor Where every resumption is posted. Borrowed: it must</span></div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment">    ///        outlive every strand over this object and run what it queued.</span></div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>    <span class="keyword">explicit</span> CoreExecutorOver(::morph::exec::IExecutor&amp; executor MORPH_LIFETIMEBOUND) : _executor{&amp;executor} {}</div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span> </div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>    <span class="keyword">using </span>::core::async::IExecutor::submit;</div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="comment"></span> </div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment">    /// @brief Posts @p handle&#39;s resumption.</span></div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">    /// @param handle The coroutine to resume; borrowed.</span></div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span>    <span class="keywordtype">void</span> submit(std::coroutine_handle&lt;&gt; handle)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span>        _executor-&gt;post([handle] { handle.resume(); });</div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>    }</div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment"></span> </div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">    /// @brief Posts @p work&#39;s resumption. An executor that drops the task</span></div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">    ///        unrun releases its claim, which frees a chain nobody owns.</span></div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment">    /// @param work The coroutine to resume, and its claim.</span></div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>    <span class="keywordtype">void</span> submit(::core::async::ParkedWork work)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>        _executor-&gt;post([work] {</div>
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span>            work.abandon.disarm();</div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>            work.resume.resume();</div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>        });</div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span>    }</div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span> </div>
+<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span>    ::morph::exec::IExecutor* _executor;</div>
+<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span>};</div>
+<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="comment"></span> </div>
+<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment">/// @brief A callable posted to a strand, with its throw logged rather than</span></div>
+<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">///        propagated.</span></div>
+<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="comment">///</span></div>
+<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment">/// A core-cpp strand lets a task&#39;s throw propagate to whoever resumed its</span></div>
+<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">/// pump, and under MSVC&#39;s `cl` ends the process instead. morph&#39;s strands have</span></div>
+<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">/// always logged a throwing task and gone on with the next; this keeps that</span></div>
+<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">/// policy in morph, inside the one allocation the post costs.</span></div>
+<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span><span class="comment">/// @tparam F The callable&#39;s type.</span></div>
+<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> F&gt;</div>
+<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span><span class="keyword">struct </span>LoggedTask {</div>
+<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span>    F fn;</div>
+<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span> </div>
+<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>    <span class="keywordtype">void</span> operator()() {</div>
+<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>        <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span>            fn();</div>
+<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span>        } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
+<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>            ::morph::log::logError(<span class="stringliteral">&quot;[strand] task threw: &quot;</span> + std::string{exc.what()});</div>
+<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>        } <span class="keywordflow">catch</span> (...) {</div>
+<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>            ::morph::log::logError(<span class="stringliteral">&quot;[strand] task threw unknown exception&quot;</span>);</div>
+<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>        }</div>
+<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>    }</div>
+<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>};</div>
+<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span> </div>
+<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="keyword">class </span>TaskResumer;</div>
+<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment"></span> </div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span><span class="comment">/// @brief In which order `ModelStrands::teardown` stops the Task handlers and</span></div>
+<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="comment">///        seals the strands.</span></div>
+<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span><span class="keyword">enum class</span> TeardownOrder : std::uint8_t {<span class="comment"></span></div>
+<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span><span class="comment">    /// Stop, drain, then seal: a stopped handler unwinds on its strand, which</span></div>
+<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span><span class="comment">    /// still admits its resumption, and the drain before the seal lets</span></div>
+<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span><span class="comment">    /// everything the stop set moving finish there. For a build with threads,</span></div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span><span class="comment">    /// where the strands keep running on the pool while the owner waits: an</span></div>
+<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span><span class="comment">    /// arrival refused by the seal runs inline on its own thread, and the drain</span></div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">    /// first is what keeps a task of its key from running beside it.</span></div>
+<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>    StopThenSeal,<span class="comment"></span></div>
+<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">    /// Seal, then stop: a stopped handler&#39;s resumption is refused and runs</span></div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">    /// inline, in the stop. For the single-threaded build, where nothing runs</span></div>
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">    /// the strands while the owner tears them down.</span></div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>    SealThenStop,</div>
+<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>};</div>
+<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment"></span> </div>
+<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">/// @brief The teardown order for this build: `StopThenSeal` where threads</span></div>
+<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="comment">///        exist, `SealThenStop` where they do not.</span></div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="keyword">inline</span> <span class="keyword">constexpr</span> TeardownOrder buildTeardownOrder =</div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>    CORE_CPP_ASYNC_HAS_THREADS ? TeardownOrder::StopThenSeal : TeardownOrder::SealThenStop;</div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment"></span> </div>
+<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment">/// @brief One strand per model instance over a morph executor: work for one</span></div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">///        `ModelId` runs serially and in order, and work for different ids runs</span></div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span><span class="comment">///        concurrently where the executor has the threads.</span></div>
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span><span class="comment">///</span></div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span><span class="comment">/// `core::async::KeyedStrands&lt;ModelId&gt;`, with what morph adds to it:</span></div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span><span class="comment">/// - the base adapter (`CoreExecutorOver`), owned here;</span></div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span><span class="comment">/// - posted callables that log a throw (`LoggedTask`);</span></div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment">/// - the action&#39;s session, and the Task handler&#39;s resumer as the current</span></div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">///   executor, around every coroutine resumed on a model instance whose Task</span></div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">///   handler has started and not finished (`enroll`). That is the keyed</span></div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment">///   around-task hook&#39;s job: a handler that comes back to its strand through</span></div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">///   any awaitable finds both installed, and a callable posted to the same</span></div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">///   strand does not.</span></div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">///</span></div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">/// Held by `std::shared_ptr`: a `TaskResumer` shares it, so a suspended</span></div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">/// handler can still ask whether it is closed after its backend is gone.</span></div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="keyword">class </span>ModelStrands final {</div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment">    /// @param base    Where every strand&#39;s pump runs. Borrowed: it must outlive</span></div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">    ///                this object and keep running tasks until `drain` has</span></div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">    ///                returned.</span></div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment">    /// @param options How each strand shares @p base; its `aroundTask` must be</span></div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment">    ///                unset, since these strands install their own.</span></div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>    <span class="keyword">explicit</span> ModelStrands(::morph::exec::IExecutor&amp; base MORPH_LIFETIMEBOUND,</div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>                          ::core::async::StrandOptions options = {})</div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>        : _base{base}, _strands{_base, options, ::core::async::KeyedAroundTask&lt;ModelId&gt;::of(_hook)} {}</div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span> </div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>    ModelStrands(<span class="keyword">const</span> ModelStrands&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>    ModelStrands&amp; operator=(<span class="keyword">const</span> ModelStrands&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>    ModelStrands(ModelStrands&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>    ModelStrands&amp; operator=(ModelStrands&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>    ~ModelStrands() = <span class="keywordflow">default</span>;</div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment"></span> </div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// @brief Queues @p task on @p key&#39;s strand, after everything queued there</span></div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    ///        before it. Dropped once the strands are closed.</span></div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    /// @param key  The model instance.</span></div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    /// @param task The callable; held by value in one allocation, and its throw</span></div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    ///        is logged.</span></div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> F&gt;</div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>    <span class="keywordtype">void</span> post(ModelId key, F&amp;&amp; task) {</div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>        _strands.post(key, LoggedTask&lt;std::decay_t&lt;F&gt;&gt;{std::forward&lt;F&gt;(task)});</div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>    }</div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment"></span> </div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">    /// @brief Runs @p task here if the calling thread is on @p key&#39;s strand,</span></div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment">    ///        posts it there otherwise, and runs it here once the strands are</span></div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">    ///        closed.</span></div>
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span><span class="comment">    /// How a Task handler&#39;s end reaches its strand when the handler finished</span></div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span><span class="comment">    /// off it. Once the strands are closed their backend has drained them, so</span></div>
+<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span><span class="comment">    /// no strand task is left to race @p task.</span></div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span><span class="comment">    /// @param key  The model instance.</span></div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">    /// @param task The callable.</span></div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> F&gt;</div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>    <span class="keywordtype">void</span> runOnStrand(ModelId key, F task) {</div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>        <span class="keywordflow">if</span> (runningHere(key)) {</div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span>            task();</div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span>        }</div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span>        LoggedTask&lt;F&gt; logged{std::move(task)};</div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span>        <span class="keywordflow">if</span> (!_strands.tryPost(key, logged)) {</div>
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>            logged();</div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>        }</div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>    }</div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment"></span> </div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment">    /// @brief Queues @p handle on @p key&#39;s strand, unless the strands are closed.</span></div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment">    /// @param key    The model instance.</span></div>
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span><span class="comment">    /// @param handle The coroutine to resume there; borrowed.</span></div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment">    /// @return Whether it was queued.</span></div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>    [[nodiscard]] <span class="keywordtype">bool</span> trySubmit(ModelId key, std::coroutine_handle&lt;&gt; handle) {</div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>        <span class="keywordflow">return</span> _strands.trySubmit(key, handle);</div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>    }</div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment"></span> </div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span><span class="comment">    /// @brief Queues @p work on @p key&#39;s strand, holding its claim until it</span></div>
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment">    ///        runs, unless the strands are closed.</span></div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">    /// @param key  The model instance.</span></div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">    /// @param work The coroutine and its claim; moved from only where this</span></div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span><span class="comment">    ///        returns true.</span></div>
+<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment">    /// @return Whether it was queued.</span></div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>    [[nodiscard]] <span class="keywordtype">bool</span> trySubmit(ModelId key, ::core::async::ParkedWork&amp; work) {</div>
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>        <span class="keywordflow">return</span> _strands.trySubmit(key, work);</div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>    }</div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span><span class="comment"></span> </div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment">    /// @brief Whether the calling thread is inside a task of @p key&#39;s strand.</span></div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment">    /// @param key The model instance.</span></div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// @return True inside that strand&#39;s task, at any depth.</span></div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span>    [[nodiscard]] <span class="keywordtype">bool</span> runningHere(ModelId key) <span class="keyword">const</span> <span class="keyword">noexcept</span> { <span class="keywordflow">return</span> _strands.runningHere(key); }</div>
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment"></span> </div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">    /// @brief Whether the calling thread is inside a task of any of these strands.</span></div>
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="comment">    /// @return True inside any of their tasks.</span></div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>    [[nodiscard]] <span class="keywordtype">bool</span> runningAnyHere() const noexcept { <span class="keywordflow">return</span> _strands.runningAnyHere(); }</div>
+<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment"></span> </div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">    /// @brief Whether nothing is queued or running on any strand.</span></div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="comment">    /// @return True when idle. Racy by nature where other threads post.</span></div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>    [[nodiscard]] <span class="keywordtype">bool</span> idle()<span class="keyword"> const </span>{ <span class="keywordflow">return</span> _strands.idle(); }</div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment"></span> </div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment">    /// @brief Blocks until nothing is queued or running on any strand,</span></div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="comment">    ///        including work posted while it waits, where the build has</span></div>
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="comment">    ///        threads.</span></div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="comment">    /// Not from one of these strands&#39; own tasks, which would wait for itself: a</span></div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="comment">    /// debug build asserts that. The single-threaded WebAssembly build has no</span></div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span><span class="comment">    /// other thread to finish the work and allows no blocking wait, so there</span></div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span><span class="comment">    /// this returns at once and `close` drops what is queued; a host that wants</span></div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span><span class="comment">    /// it run pumps its executor until `idle()` first.</span></div>
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>    <span class="keywordtype">void</span> drain() {</div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span><span class="preprocessor">#if CORE_CPP_ASYNC_HAS_THREADS</span></div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>        _strands.waitIdle();</div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>    }</div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span><span class="comment"></span> </div>
+<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span><span class="comment">    /// @brief Closes every strand: queued work is dropped, a task running on</span></div>
+<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span><span class="comment">    ///        another thread is waited for, and later posts are dropped too.</span></div>
+<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span><span class="comment">    ///        Idempotent.</span></div>
+<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>    <span class="keywordtype">void</span> close() { _strands.close(); }</div>
+<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span><span class="comment"></span> </div>
+<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span><span class="comment">    /// @brief Refuses the try-forms and keeps running what is queued:</span></div>
+<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span><span class="comment">    ///        `trySubmit` and `runOnStrand`&#39;s post are refused, so their callers</span></div>
+<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span><span class="comment">    ///        run the work inline; a plain `post` is still queued until</span></div>
+<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span><span class="comment">    ///        `close`. Idempotent.</span></div>
+<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>    <span class="keywordtype">void</span> seal() { _strands.seal(); }</div>
+<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span><span class="comment"></span> </div>
+<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span><span class="comment">    /// @brief Takes the strands down without losing work: stops the Task</span></div>
+<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span><span class="comment">    ///        handlers, seals, drains and closes, with the stop and the seal in</span></div>
+<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span><span class="comment">    ///        @p order.</span></div>
+<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span><span class="comment">    /// Whatever arrives once the strands are sealed -- a resumption, a</span></div>
+<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span><span class="comment">    /// handler&#39;s end -- is refused and runs inline, so nothing reaches a strand</span></div>
+<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span><span class="comment">    /// that the close would drop: not between the drain and the close, and not</span></div>
+<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span><span class="comment">    /// on the single-threaded build, where the drain waits for nothing.</span></div>
+<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span><span class="comment">    /// With threads, the stop is drained before the seal: until the strands go</span></div>
+<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span><span class="comment">    /// idle, a handler&#39;s resumption or end arriving from another thread -- a</span></div>
+<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span><span class="comment">    /// socket&#39;s loop -- is still queued, behind its key&#39;s other tasks, rather</span></div>
+<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span><span class="comment">    /// than run inline beside one of them on a pool thread, which would enter</span></div>
+<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">    /// and leave the model&#39;s action gate on two threads at once. What arrives</span></div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">    /// once the first drain has returned is the stopped handlers&#39; own last steps.</span></div>
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">    /// @param stopHandlers Requests stop on every Task handler still running.</span></div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">    /// @param order        Which of stopping and sealing comes first.</span></div>
+<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Stop&gt;</div>
+<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>    <span class="keywordtype">void</span> teardown(Stop&amp;&amp; stopHandlers, TeardownOrder order = buildTeardownOrder) {</div>
+<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>        <span class="keywordflow">if</span> (order == TeardownOrder::SealThenStop) {</div>
+<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>            seal();</div>
+<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>            std::forward&lt;Stop&gt;(stopHandlers)();</div>
+<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>        } <span class="keywordflow">else</span> {</div>
+<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>            std::forward&lt;Stop&gt;(stopHandlers)();</div>
+<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>            drain();</div>
+<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>            seal();</div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>        }</div>
+<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>        drain();</div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>        close();</div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>    }</div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span><span class="comment"></span> </div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span><span class="comment">    /// @brief Installs @p resumer&#39;s session and executor around every coroutine</span></div>
+<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span><span class="comment">    ///        resumed on @p key&#39;s strand, until `withdraw(key, resumer)`; a</span></div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span><span class="comment">    ///        posted callable runs without them.</span></div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span><span class="comment">    /// Called on the strand, when a Task handler starts. The action gate lets</span></div>
+<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span><span class="comment">    /// one action at a time run on a model instance, so a key has at most one</span></div>
+<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span><span class="comment">    /// suspended handler to resume. Held weakly: the handler&#39;s driver owns the</span></div>
+<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span><span class="comment">    /// resumer.</span></div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span><span class="comment">    /// @param key     The model instance.</span></div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span><span class="comment">    /// @param resumer The handler&#39;s resumer.</span></div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>    <span class="keywordtype">void</span> enroll(ModelId key, <span class="keyword">const</span> std::shared_ptr&lt;TaskResumer&gt;&amp; resumer) {</div>
+<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span>        std::unique_lock <span class="keyword">const</span> lock{_enrolledMtx};</div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>        _enrolled.insert_or_assign(key, resumer);</div>
+<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>        _enrolledCount.store(_enrolled.size(), std::memory_order_release);</div>
+<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>    }</div>
+<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span><span class="comment"></span> </div>
+<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span><span class="comment">    /// @brief Ends `enroll(key, resumer)`. Called when the handler has</span></div>
+<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span><span class="comment">    ///        finished; a key enrolled for another resumer since is left alone.</span></div>
+<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span><span class="comment">    /// @param key     The model instance.</span></div>
+<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span><span class="comment">    /// @param resumer The resumer that was enrolled for it.</span></div>
+<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>    <span class="keywordtype">void</span> withdraw(ModelId key, <span class="keyword">const</span> TaskResumer* resumer) {</div>
+<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>        std::unique_lock <span class="keyword">const</span> lock{_enrolledMtx};</div>
+<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>        <span class="keywordflow">if</span> (<span class="keyword">auto</span> <span class="keyword">const</span> found = _enrolled.find(key);</div>
+<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span>            found != _enrolled.end() &amp;&amp; found-&gt;second.lock().get() == resumer) {</div>
+<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span>            _enrolled.erase(found);</div>
+<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span>        }</div>
+<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span>        _enrolledCount.store(_enrolled.size(), std::memory_order_release);</div>
+<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span>    }</div>
+<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span> </div>
+<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span><span class="keyword">private</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span><span class="comment">    /// The keyed around-task hook: runs a coroutine resumption inside its model</span></div>
+<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span><span class="comment">    /// instance&#39;s enrolled resumer, if it has one. A posted callable --</span></div>
+<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span><span class="comment">    /// `onBackendChanged`, an action queued behind the handler, the handler&#39;s</span></div>
+<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span><span class="comment">    /// end -- is not the handler and runs bare. Touches nothing of this object</span></div>
+<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span><span class="comment">    /// after the task has run, which may have released the last reference to</span></div>
+<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span><span class="comment">    /// it.</span></div>
+<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span>    <span class="keyword">struct </span>AroundTask {</div>
+<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>        ModelStrands* self;</div>
+<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>        <span class="keywordtype">void</span> operator()(<span class="keyword">const</span> ModelId&amp; key, ::core::async::RunTask run) <span class="keyword">const</span>;</div>
+<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>    };</div>
+<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span> </div>
+<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>    CoreExecutorOver _base;<span class="comment"></span></div>
+<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span><span class="comment">    /// Shared by the hook, which only reads: tasks of different keys do not</span></div>
+<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span><span class="comment">    /// serialise on it while handlers are enrolled.</span></div>
+<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>    std::shared_mutex _enrolledMtx;<span class="comment"></span></div>
+<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span><span class="comment">    /// How many keys are enrolled: the hook&#39;s one atomic load when none is.</span></div>
+<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span>    std::atomic&lt;std::size_t&gt; _enrolledCount{0};</div>
+<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span>    std::unordered_map&lt;ModelId, std::weak_ptr&lt;TaskResumer&gt;, ModelIdHash&gt; _enrolled;</div>
+<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span>    AroundTask _hook{<span class="keyword">this</span>};<span class="comment"></span></div>
+<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span><span class="comment">    /// Last, so it is destroyed first: its strands reference the base and the</span></div>
+<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span><span class="comment">    /// hook.</span></div>
+<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span>    ::core::async::KeyedStrands&lt;ModelId, ModelIdHash&gt; _strands;</div>
+<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span>};</div>
+<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span><span class="comment"></span> </div>
+<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span><span class="comment">/// @brief Resumes one Task handler&#39;s coroutines on its model instance&#39;s strand.</span></div>
+<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span><span class="comment">///</span></div>
+<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span><span class="comment">/// The current executor wherever the handler runs, so every awaitable that</span></div>
+<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span><span class="comment">/// resumes on the current executor -- morph&#39;s `Completion` and `delay`,</span></div>
+<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span><span class="comment">/// core-cpp&#39;s `AsyncQueue::pop` -- brings the handler back here, and `submit`</span></div>
+<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span><span class="comment">/// queues it on the strand. Each resumption runs with the action&#39;s session</span></div>
+<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span><span class="comment">/// installed: through the strand&#39;s around-task hook (`ModelStrands::enroll`),</span></div>
+<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span><span class="comment">/// or here.</span></div>
+<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span><span class="comment">///</span></div>
+<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span><span class="comment">/// Once the strands are closed, a resumption runs inline, on the thread that</span></div>
+<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span><span class="comment">/// submitted it, with the same context installed. The call it belongs to has</span></div>
+<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span><span class="comment">/// already failed then, and the model instance is reachable only through the</span></div>
+<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span><span class="comment">/// handler&#39;s own frame, so there is nothing left for the strand to serialise it</span></div>
+<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span><span class="comment">/// against.</span></div>
+<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span><span class="comment">///</span></div>
+<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span><span class="comment">/// Always held by `std::shared_ptr`.</span></div>
+<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span><span class="keyword">class </span>TaskResumer final : <span class="keyword">public</span> ::core::async::IExecutor, <span class="keyword">public</span> std::enable_shared_from_this&lt;TaskResumer&gt; {</div>
+<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span><span class="comment">    /// @param strands The strands the model&#39;s actions run on.</span></div>
+<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span><span class="comment">    /// @param key     The model instance whose strand resumptions are queued on.</span></div>
+<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span><span class="comment">    /// @param session The action&#39;s session context, installed for each resumption.</span></div>
+<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span>    TaskResumer(std::shared_ptr&lt;ModelStrands&gt; strands, ModelId key, ::morph::session::Context session)</div>
+<div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span>        : _strands{std::move(strands)}, _key{key}, _session{std::move(session)} {}</div>
+<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span> </div>
+<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span>    <span class="keyword">using </span>::core::async::IExecutor::submit;</div>
+<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span><span class="comment"></span> </div>
+<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span><span class="comment">    /// @brief Queues @p handle&#39;s resumption on the model&#39;s strand, or resumes</span></div>
+<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span><span class="comment">    ///        it here once the strands are closed.</span></div>
+<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span><span class="comment">    /// @param handle The coroutine to resume; borrowed, as every handler frame</span></div>
+<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span><span class="comment">    ///        is owned by the driver that started it.</span></div>
+<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span>    <span class="keywordtype">void</span> submit(std::coroutine_handle&lt;&gt; handle)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span>        <span class="keywordflow">if</span> (!_strands-&gt;trySubmit(_key, handle)) {</div>
+<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span>            resumeHere(handle);</div>
+<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span>        }</div>
+<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span>    }</div>
+<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span><span class="comment"></span> </div>
+<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span><span class="comment">    /// @brief Queues @p work&#39;s resumption on the model&#39;s strand, with its</span></div>
+<div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span><span class="comment">    ///        claim, or resumes it here once the strands are closed.</span></div>
+<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span><span class="comment">    /// The claim matters for a chain nobody owns: a `core::async::DetachedTask`</span></div>
+<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span><span class="comment">    /// started inside the handler that parks on an awaitable resuming on the</span></div>
+<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span><span class="comment">    /// current executor reaches here with its claim armed. Dropping the claim</span></div>
+<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span><span class="comment">    /// would free that frame while its handle is still queued.</span></div>
+<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span><span class="comment">    /// @param work The coroutine to resume, and its claim on the chain root.</span></div>
+<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span>    <span class="keywordtype">void</span> submit(::core::async::ParkedWork work)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>        <span class="keywordflow">if</span> (_strands-&gt;trySubmit(_key, work)) {</div>
+<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>        }</div>
+<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>        <span class="comment">// Resumed, so the chain goes back to its owner: disarmed first, as</span></div>
+<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>        <span class="comment">// core-cpp&#39;s own executors do before they resume a parked entry.</span></div>
+<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span>        work.abandon.disarm();</div>
+<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span>        resumeHere(work.resume);</div>
+<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span>    }</div>
+<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span><span class="comment"></span> </div>
+<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span><span class="comment">    /// @brief Resumes @p handle on the calling thread, inside this resumer.</span></div>
+<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span><span class="comment">    /// @param handle The coroutine to resume.</span></div>
+<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span>    <span class="keywordtype">void</span> resumeHere(std::coroutine_handle&lt;&gt; handle) {</div>
+<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>        within([handle] { handle.resume(); });</div>
+<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>    }</div>
+<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span><span class="comment"></span> </div>
+<div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span><span class="comment">    /// @brief Calls @p body with the action&#39;s session installed and this</span></div>
+<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span><span class="comment">    ///        resumer as the current executor.</span></div>
+<div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span><span class="comment">    /// Touches no member after @p body returns: the body may release the last</span></div>
+<div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span><span class="comment">    /// owner but the one this call holds.</span></div>
+<div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span><span class="comment">    /// @param body The work, called once.</span></div>
+<div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Body&gt;</div>
+<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span>    <span class="keywordtype">void</span> within(Body&amp;&amp; body) {</div>
+<div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span>        std::shared_ptr&lt;void&gt; <span class="keyword">const</span> keep = shared_from_this();</div>
+<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>        ::morph::session::detail::ScopedContext <span class="keyword">const</span> scoped{_session};</div>
+<div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span>        ::core::async::ExecutorScope <span class="keyword">const</span> scope{*<span class="keyword">this</span>, &amp;keep, <span class="keyword">nullptr</span>};</div>
+<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>        std::forward&lt;Body&gt;(body)();</div>
+<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>    }</div>
+<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span> </div>
+<div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span>    std::shared_ptr&lt;ModelStrands&gt; _strands;</div>
+<div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span>    ModelId _key;</div>
+<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span>    ::morph::session::Context _session;</div>
+<div class="line"><a id="l00420" name="l00420"></a><span class="lineno">  420</span>};</div>
+<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span> </div>
+<div class="line"><a id="l00422" name="l00422"></a><span class="lineno">  422</span><span class="keyword">inline</span> <span class="keywordtype">void</span> ModelStrands::AroundTask::operator()(<span class="keyword">const</span> ModelId&amp; key, ::core::async::RunTask run)<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span>    <span class="keywordflow">if</span> (run.kind() != ::core::async::TaskKind::Resumption ||</div>
+<div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span>        self-&gt;_enrolledCount.load(std::memory_order_acquire) == 0) {</div>
+<div class="line"><a id="l00425" name="l00425"></a><span class="lineno">  425</span>        run();</div>
+<div class="line"><a id="l00426" name="l00426"></a><span class="lineno">  426</span>        <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00427" name="l00427"></a><span class="lineno">  427</span>    }</div>
+<div class="line"><a id="l00428" name="l00428"></a><span class="lineno">  428</span>    std::shared_ptr&lt;TaskResumer&gt; resumer;</div>
+<div class="line"><a id="l00429" name="l00429"></a><span class="lineno">  429</span>    {</div>
+<div class="line"><a id="l00430" name="l00430"></a><span class="lineno">  430</span>        std::shared_lock <span class="keyword">const</span> lock{self-&gt;_enrolledMtx};</div>
+<div class="line"><a id="l00431" name="l00431"></a><span class="lineno">  431</span>        <span class="keywordflow">if</span> (<span class="keyword">auto</span> <span class="keyword">const</span> found = self-&gt;_enrolled.find(key); found != self-&gt;_enrolled.end()) {</div>
+<div class="line"><a id="l00432" name="l00432"></a><span class="lineno">  432</span>            resumer = found-&gt;second.lock();</div>
+<div class="line"><a id="l00433" name="l00433"></a><span class="lineno">  433</span>        }</div>
+<div class="line"><a id="l00434" name="l00434"></a><span class="lineno">  434</span>    }</div>
+<div class="line"><a id="l00435" name="l00435"></a><span class="lineno">  435</span>    <span class="keywordflow">if</span> (!resumer) {</div>
+<div class="line"><a id="l00436" name="l00436"></a><span class="lineno">  436</span>        run();</div>
+<div class="line"><a id="l00437" name="l00437"></a><span class="lineno">  437</span>        <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00438" name="l00438"></a><span class="lineno">  438</span>    }</div>
+<div class="line"><a id="l00439" name="l00439"></a><span class="lineno">  439</span>    resumer-&gt;within(run);</div>
+<div class="line"><a id="l00440" name="l00440"></a><span class="lineno">  440</span>}</div>
+<div class="line"><a id="l00441" name="l00441"></a><span class="lineno">  441</span> </div>
+<div class="line"><a id="l00442" name="l00442"></a><span class="lineno">  442</span>}  <span class="comment">// namespace morph::exec::detail</span></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>core</b></li><li class="navelem"><b>strand.hpp</b></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>core</b></li><li class="navelem"><a href="../../de/dc1/strand_8hpp.html">strand.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

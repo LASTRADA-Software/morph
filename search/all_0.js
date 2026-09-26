@@ -79,5 +79,8 @@ var searchData=
   ['authorizeinstance_76',['authorizeInstance',['../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a521dc064df62863d7afbd860301cc52e',1,'morph::session::IAuthorizer']]],
   ['authorizeregister_77',['authorizeRegister',['../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a2458bb624e5bc3bd7dad6858413135e6',1,'morph::session::IAuthorizer']]],
   ['auto_20built_20guis_78',['auto built GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs'],['../index.html#morphforms--schemas-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;morph::forms&lt;/span&gt; — schemas for auto-built GUIs']]],
-  ['aware_20execution_20history_79',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]]
+  ['await_5fready_79',['await_ready',['../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#aecc9e2a65087c9fc9d3bd8cf6b6fdec2',1,'morph::async::DelayAwaiter']]],
+  ['await_5fresume_80',['await_resume',['../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a0bfa653c2445caaef6af8f0f8d821f47',1,'morph::async::DelayAwaiter']]],
+  ['await_5fsuspend_81',['await_suspend',['../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a4b2223d2445a7d8eb0ca55c1059f3d4e',1,'morph::async::DelayAwaiter']]],
+  ['aware_20execution_20history_82',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]]
 ];

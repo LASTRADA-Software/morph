@@ -163,6 +163,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a27fcb0841f4763225331bd5405ed94c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a success callback whose lifetime is deliberately unmanaged.  <br /></td></tr>
 <tr class="memitem:adb478319b8a269982c2d4dc2e2a1fb2b" id="r_adb478319b8a269982c2d4dc2e2a1fb2b"><td class="memItemLeft"><a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#adb478319b8a269982c2d4dc2e2a1fb2b">onErrorDetached</a> (std::function&lt; void(std::exception_ptr)&gt; handler)</td></tr>
 <tr class="memdesc:adb478319b8a269982c2d4dc2e2a1fb2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers an error callback whose lifetime is deliberately unmanaged.  <br /></td></tr>
+<tr class="memitem:a1488ba469044eff69471123f51a69e71" id="r_a1488ba469044eff69471123f51a69e71"><td class="memItemLeft">detail::CompletionAwaiter&lt; T &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1488ba469044eff69471123f51a69e71">operator co_await</a> () &amp;&amp;</td></tr>
+<tr class="memdesc:a1488ba469044eff69471123f51a69e71"><td class="mdescLeft">&#160;</td><td class="mdescRight">Awaits this completion from a coroutine, consuming it.  <br /></td></tr>
 <tr class="memitem:a49bb64dd60ef3d17baf9a36e7b5f1481" id="r_a49bb64dd60ef3d17baf9a36e7b5f1481"><td class="memItemLeft">std::shared_ptr&lt; detail::CompletionState&lt; T &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a49bb64dd60ef3d17baf9a36e7b5f1481">state</a> () const</td></tr>
 <tr class="memdesc:a49bb64dd60ef3d17baf9a36e7b5f1481"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the underlying shared state (for advanced / internal use).  <br /></td></tr>
 </table><table class="memberdecls">
@@ -191,7 +193,7 @@ class morph::async::Completion&lt; T &gt;</div><p>Move-only handle representing 
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00382">382</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00383">383</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac7fe8818f9e79746106a776255a9a47d" name="ac7fe8818f9e79746106a776255a9a47d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac7fe8818f9e79746106a776255a9a47d">&#9670;&#160;</a></span>Completion()</h2>
@@ -231,7 +233,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00392">392</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,7 +303,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00418">418</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -340,7 +342,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00433">433</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00434">434</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -385,7 +387,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00458">458</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -429,7 +431,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00474">474</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00475">475</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -474,7 +476,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00492">492</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00493">493</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -518,7 +520,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00506">506</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00507">507</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -557,7 +559,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00521">521</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00522">522</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -596,7 +598,39 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00532">532</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00533">533</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1488ba469044eff69471123f51a69e71" name="a1488ba469044eff69471123f51a69e71"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1488ba469044eff69471123f51a69e71">&#9670;&#160;</a></span>operator co_await()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename T&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">detail::CompletionAwaiter&lt; T &gt; <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a>&lt; T &gt;::operator co_await </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> &amp;&amp;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Awaits this completion from a coroutine, consuming it. </p>
+<p><span class="tt">co_await std::move(completion)</span> yields a copy of the settled value or rethrows the stored exception. The coroutine resumes in the resumption context it suspended in &ndash; a <span class="tt"><a class="el" href="../../de/de0/coroutine_8hpp.html#af6b5841e8c8bc8b2e06b896be4540fbb" title="Starts task detached, with every resumption – its first step included – posted to executor.">spawn</a></span>ed task's executor, a Task handler's strand &ndash; or, with none, on this completion's executor, where <span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span> handlers run. A stop requested on the awaiting coroutine's token withdraws the await and resumes it with <span class="tt">core::async::OperationCancelled</span>. Rvalue only: awaiting moves the state out, so an lvalue <span class="tt">co_await</span> would hide that the completion is empty afterwards. See <span class="tt">docs/spec/core/coroutines.md</span>. </p><dl class="section return"><dt>Returns</dt><dd>The awaiter; not for direct use. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00549">549</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -628,7 +662,7 @@ template&lt;typename T&gt; </div>
 <p>Returns the underlying shared state (for advanced / internal use). </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the completion state, or <span class="tt">nullptr</span> for empty completions. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00538">538</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00558">558</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -667,7 +701,7 @@ executor)</span> already provided by hand is available through this factory inst
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">{<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;, <a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a>}</span> pair sharing one <span class="tt">CompletionState&lt;T&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00610">610</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00630">630</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>

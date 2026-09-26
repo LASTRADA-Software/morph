@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/dfd/observa
 <div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">///   them, precisely so a completion callback cannot observe the dispatch as</span></div>
 <div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">///   finished before its metrics land. An exception thrown out of instrumentation</span></div>
 <div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">///   would therefore skip `setValue`/`setException` entirely and be swallowed by</span></div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">///   `StrandExecutor`&#39;s catch-and-log, leaving that `Completion` unsettled</span></div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">///   the strand&#39;s catch-and-log (`LoggedTask`), leaving that `Completion` unsettled</span></div>
 <div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">///   forever — a hung caller with neither a value nor an error, caused by a bug</span></div>
 <div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">///   in a metrics callback.</span></div>
 <div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">///</span></div>

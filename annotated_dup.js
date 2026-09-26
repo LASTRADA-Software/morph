@@ -11,7 +11,8 @@ var annotated_dup =
       [ "async", null, [
         [ "CallbackScope", "d7/d9f/classmorph_1_1async_1_1CallbackScope.html", "d7/d9f/classmorph_1_1async_1_1CallbackScope" ],
         [ "CallbackToken", "de/d0d/classmorph_1_1async_1_1CallbackToken.html", "de/d0d/classmorph_1_1async_1_1CallbackToken" ],
-        [ "Completion", "dd/de7/classmorph_1_1async_1_1Completion.html", "dd/de7/classmorph_1_1async_1_1Completion" ]
+        [ "Completion", "dd/de7/classmorph_1_1async_1_1Completion.html", "dd/de7/classmorph_1_1async_1_1Completion" ],
+        [ "DelayAwaiter", "dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html", "dc/d3b/classmorph_1_1async_1_1DelayAwaiter" ]
       ] ],
       [ "backend", null, [
         [ "BackendChangedError", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError" ],
@@ -119,6 +120,8 @@ var annotated_dup =
         [ "ActionRecordingError", "d5/db1/classmorph_1_1model_1_1ActionRecordingError.html", "d5/db1/classmorph_1_1model_1_1ActionRecordingError" ],
         [ "ActionTraits", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
         [ "ActionValidator", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
+        [ "HandlerResult", "df/d19/structmorph_1_1model_1_1HandlerResult.html", "df/d19/structmorph_1_1model_1_1HandlerResult" ],
+        [ "HandlerResult&lt;::core::async::Task&lt; R &gt; &gt;", "d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4.html", "d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4" ],
         [ "ModelKeyTraits", "d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html", null ],
         [ "ModelTraits", "d2/d14/structmorph_1_1model_1_1ModelTraits.html", null ],
         [ "PayloadShapeTag", "d6/d37/structmorph_1_1model_1_1PayloadShapeTag.html", null ],

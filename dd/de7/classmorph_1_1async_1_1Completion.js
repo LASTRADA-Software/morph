@@ -13,5 +13,6 @@ var classmorph_1_1async_1_1Completion =
     [ "onError", "dd/de7/classmorph_1_1async_1_1Completion.html#af748b7227c5c0c9a4ad674a06dad2187", null ],
     [ "thenDetached", "dd/de7/classmorph_1_1async_1_1Completion.html#a27fcb0841f4763225331bd5405ed94c9", null ],
     [ "onErrorDetached", "dd/de7/classmorph_1_1async_1_1Completion.html#adb478319b8a269982c2d4dc2e2a1fb2b", null ],
+    [ "operator co_await", "dd/de7/classmorph_1_1async_1_1Completion.html#a1488ba469044eff69471123f51a69e71", null ],
     [ "state", "dd/de7/classmorph_1_1async_1_1Completion.html#a49bb64dd60ef3d17baf9a36e7b5f1481", null ]
 ];

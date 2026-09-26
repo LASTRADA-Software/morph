@@ -7,7 +7,7 @@ var searchData=
   ['session_20—_20per_20call_20context_20authentication_4',['&lt;span class=&quot;tt&quot;&gt;session/&lt;/span&gt; — per-call context + authentication',['../index.html#session--per-call-context--authentication',1,'']]],
   ['sessions_5',['Authenticated sessions',['../index.html#authenticated-sessions',1,'']]],
   ['shareable_20model_20instances_6',['Keyed, shareable model instances',['../index.html#keyed-shareable-model-instances',1,'']]],
-  ['strandexecutor_7',['StrandExecutor',['../index.html#strandexecutor',1,'']]],
+  ['strands_7',['Strands',['../index.html#strands',1,'']]],
   ['subscriptions_8',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
   ['syncworker_9',['SyncWorker',['../index.html#syncworker',1,'']]]
 ];

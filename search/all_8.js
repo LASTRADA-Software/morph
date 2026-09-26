@@ -39,6 +39,8 @@ var searchData=
   ['issuedatms_36',['issuedAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#afb6785806e6a8a89687140e50bd9f6c5',1,'morph::session::SessionToken']]],
   ['istagged_37',['IsTagged',['../d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html',1,'morph::util::detail']]],
   ['istagged_38',['isTagged',['../d9/ded/tagged_8hpp.html#a00c6d7d7ea7e5988e1103b1bc63014e1',1,'morph::util']]],
-  ['iszero_39',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
-  ['it_20exists_40',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['istask_39',['isTask',['../df/d19/structmorph_1_1model_1_1HandlerResult.html#aeafb0b916920f6a7f96b4753b3ab9c2d',1,'morph::model::HandlerResult::isTask'],['../d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4.html#a22c9f56829837fd82875b7e6a3e82ef4',1,'morph::model::HandlerResult&lt;::core::async::Task&lt; R &gt; &gt;::isTask']]],
+  ['istaskhandler_40',['isTaskHandler',['../d9/d37/task__handler_8hpp.html#abe5ef353e6a2b4b74680daa92ef2efc5',1,'morph::model']]],
+  ['iszero_41',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
+  ['it_20exists_42',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
 ];
