@@ -28,6 +28,7 @@ without knowing their concrete types.
   - [ModelRegistryFactory](#modelregistryfactory)
   - [ActionExecuteRegistry](#actionexecuteregistry)
 - [Registration macros](#registration-macros)
+  - [Moving a registrar out of the header](#moving-a-registrar-out-of-the-header)
 - [`MORPH_CLIENT_ONLY` — suppressing model-owning registrars](#morph_client_only--suppressing-model-owning-registrars)
   - [`BRIDGE_REGISTER_ACTION_FOR_CLIENT` — a header seam for `MORPH_CLIENT_ONLY`](#bridge_register_action_for_client--a-header-seam-for-morph_client_only)
   - [BRIDGE_REGISTER_MODEL](#bridge_register_model)
@@ -959,6 +960,187 @@ A client-side alternative, `BRIDGE_REGISTER_ACTION_FOR_CLIENT`, avoids the
 `MORPH_CLIENT_ONLY`](#bridge_register_action_for_client--a-header-seam-for-morph_client_only)
 below.
 
+### Moving a registrar out of the header
+
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION`'s registrar initialiser is
+not free to repeat per translation unit. Its right-hand side --
+`registerModelOnce<M>(...)` / `registerActionOnce<M, A>(...)` -- is an
+ordinary (non-template) function call written where the macro is expanded,
+so its body is compiled there: `registerActionOnce<M, A>`'s call into
+`ActionDispatcher::registerAction<Model, Action>` instantiates the runner
+closure, which odr-uses `ActionTraits<A>::toJson`/`fromJson`/`resultToJson`/
+`resultFromJson` (each a glaze codec over `A`) and files a `describe` thunk
+over `buildActionDescription<A>` (`forms::schemaJson<A>`, another glaze
+codec). None of that is triggered by the `ActionTraits<A>` *specialisation*
+by itself -- a class's inline member functions are only compiled when
+odr-used, and nothing odr-uses them until the registrar's initialiser calls
+them. So a model header that many translation units `#include` pays for this
+instantiation-and-optimisation work once per including TU, for codecs the
+overwhelming majority of those TUs never call.
+
+**A prior measurement** (clang 22.1.8, gcc 16.2.1, Linux, 12
+cores, compiler cache off, best of two): stripping only
+`examples/kanban/include/kanban/models/board_model.hpp`'s 17
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` lines cost **26.93 CPU-s** at
+`-O3 -c` and **2.63 CPU-s** at `-fsyntax-only`, on the rung's own real compile
+command -- the `-fsyntax-only`/`-O3` gap showing the cost is
+instantiate-and-optimise work, not parsing.
+
+**Re-measured for this fix** (AppleClang 17.0.0, macOS, `-O3 -c`, a stub
+translation unit that only `#include`s the header, best of two; **not**
+isolated -- another build was running concurrently on this machine, so
+CPU-seconds is reported rather than wall-clock, and the numbers below are a
+lower bound, not a ceiling): the current header, using
+`BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION`, costs **7.81 CPU-s**;
+restoring the pre-fix `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` content
+(`git show origin/master:.../board_model.hpp`) costs **20.81 CPU-s** -- a
+**13.00 CPU-s** reduction per translation unit, on a different compiler and
+machine than the original measurement but the same mechanism and the same
+header. `-fsyntax-only` drops from 7.55 to 4.68 CPU-s (2.87 CPU-s), the same
+proportionally-smaller gap the original measurement found. The compiled
+object file corroborates it directly: the pre-fix stub's `.o` is
+**3,331,704 bytes** (7155 symbols, 1,348,458 `__TEXT` bytes); the post-fix
+stub's is **3,232 bytes** (24 symbols, 172 `__TEXT` bytes) -- the registrar's
+codecs, dispatch closures, and schema generator are simply absent from the
+object file once the registration is deferred to `board_model.cpp`.
+
+`BRIDGE_DECLARE_MODEL(M, NAME)` and `BRIDGE_DECLARE_ACTION(M, A, NAME, ...)`
+emit **only** the trait specialisation half of what
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` emit -- `ModelTraits<M>` /
+`ActionTraits<A>` -- which stays free to repeat per TU exactly as it always
+was (see ["Header placement is legal"](#header-placement-is-legal) above).
+`BRIDGE_REGISTER_MODEL_SOURCE(M)` and `BRIDGE_REGISTER_ACTION_SOURCE(M, A)`
+emit the registrar half -- the same `registerModelOnce`/`registerActionOnce`/
+`registerActionExecutorOnce` calls `BRIDGE_REGISTER_MODEL`/
+`BRIDGE_REGISTER_ACTION` emit directly -- for a `.cpp` to call exactly once.
+Neither `NAME` is repeated at the `.cpp` call site: both `SOURCE` macros read
+it back off the trait specialisation `DECLARE` already installed
+(`ModelTraits<M>::typeId()` / `ActionTraits<A>::typeId()`), so a `DECLARE`/
+`SOURCE` pair cannot register under a different string than the one the
+type's own traits report.
+
+```cpp
+// board_model.hpp -- every translation unit that includes this pays only for
+// the trait specialisation, not for the registrar's codec instantiation.
+BRIDGE_DECLARE_MODEL(BoardModel, "BoardModel")
+BRIDGE_DECLARE_ACTION(BoardModel, CreateSwimlane, "CreateSwimlane")
+
+// board_model.cpp -- the one translation unit that pays the registration
+// cost, once, for the whole program.
+BRIDGE_REGISTER_MODEL_SOURCE(BoardModel)
+BRIDGE_REGISTER_ACTION_SOURCE(BoardModel, CreateSwimlane)
+```
+
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` are unchanged and remain the
+right choice for a model whose registration cost is not worth splitting
+across two macro calls in two files -- this is a decomposition of the
+existing macros' expansion, not a replacement for them, and both shapes are
+usable in the same program (see [Failure modes](#failure-modes)'s
+last-write-wins entry if the same type is accidentally registered by both).
+
+#### The link-time canary: closing `BRIDGE_DECLARE_*`'s own new hazard
+
+Splitting declaration from registration introduces a mistake that could not
+previously happen: `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` in the
+header with no matching `BRIDGE_REGISTER_MODEL_SOURCE`/
+`BRIDGE_REGISTER_ACTION_SOURCE` anywhere in the program -- an omitted `.cpp`,
+or a `.cpp` that exists but was never added to the target. Left unguarded,
+this would reproduce exactly the failure mode `MORPH_CLIENT_ONLY`'s own doc
+comment names: the program compiles and links cleanly, and the first symptom
+is `ModelRegistryFactory::create`'s or `ActionDispatcher::dispatch`'s runtime
+`"unknown model type"` / `"unknown action"`, far from the missing `.cpp`.
+
+`BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` close this at **link time**
+instead. Each also emits a call to a function template --
+`detail::modelSourceRegistrationRequired<M>()` /
+`detail::actionSourceRegistrationRequired<M, A>()` -- behind an `extern
+template` declaration. `extern template` is what makes this work: it
+suppresses this translation unit's own implicit instantiation of the
+function (which has a trivial, always-visible definition) and instead
+requires an *explicit* instantiation to exist somewhere else in the link.
+`BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` are the only
+macros that provide one. So:
+
+- **Declared and registered** (the normal case): the `.cpp`'s explicit
+  instantiation satisfies every header's `extern template` reference. Link
+  succeeds, exactly as before.
+- **Declared, never registered**: no explicit instantiation exists anywhere
+  in the link. Every translation unit that included the header carries an
+  unresolved reference to `modelSourceRegistrationRequired<M>` /
+  `actionSourceRegistrationRequired<M, A>`, and the final link fails with an
+  unresolved external symbol naming the missing model/action by type --
+  before the program ever runs, let alone dispatches anything.
+
+The function bodies do nothing; only whether an explicit instantiation
+exists anywhere the linker looks is being tested. This is a stricter relative
+of the "declare here, must be provided from over there" idiom
+`registerActionExecutorOnce` already relies on (declared in `registry.hpp`,
+*generically* defined in `bridge.hpp` -- see the "Hard requirement" note
+above): that idiom only proves "this translation unit transitively included
+`bridge.hpp`", since any TU that does gets a visible, callable generic
+definition for *any* `(Model, Action)`. The canary needs a stronger
+guarantee -- "some translation unit in this exact link explicitly registered
+*this* `(Model, Action)`, not merely code that theoretically could" -- so it
+pairs `extern template` (suppressing implicit instantiation from the header's
+own, deliberately trivial, generic definition) with an explicit instantiation
+only `BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` emit,
+rather than reusing `registerActionExecutorOnce`'s plain
+declare-in-one-header/define-in-another shape verbatim.
+
+**Confirmed empirically**
+(`tests/compile_checks/declare_only_no_source_link.cpp` and
+`declare_only_source_provided.cpp`, run via the `try_compile()` block in
+`tests/CMakeLists.txt`): a program that declares a real, fully-defined model
+and action via `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` but never calls
+either `SOURCE` macro fails to link with an unresolved symbol naming the
+canary function; adding a second translation unit that does call both
+`SOURCE` macros for the same model/action makes the same program link
+cleanly (`try_compile()`, not `try_run()` -- link success is what the canary
+claims, and is all this check exercises). Verified on Clang and GCC (both
+link the missing-registration probe as "undefined reference"/"symbol(s) not
+found"); not verified on MSVC, though
+`extern template` is standard since C++11 and MSVC has supported it since
+Visual Studio 2013.
+
+**Suppressed under `MORPH_CLIENT_ONLY`**, exactly like the two registrars
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` emit directly: a
+`MORPH_CLIENT_ONLY` build legitimately never registers a model at all (see
+[`MORPH_CLIENT_ONLY`](#morph_client_only--suppressing-model-owning-registrars)
+below), so requiring an explicit instantiation there would turn every such
+build's intended behaviour into a link failure.
+
+**What this does not close: `dlopen`/`LoadLibrary` plugins.** The canary
+requires the `SOURCE` macro's explicit instantiation to be part of the *same
+link* as the header's `extern template` reference -- exactly the population
+["Static initialisation only fires in linked translation
+units"](#static-initialisation-only-fires-in-linked-translation-units)'s
+`dlopen` case describes as running *after* `main` starts, i.e. never part of
+the host executable's own link at all. A model meant to be registered from a
+dynamically loaded module must therefore keep using the combined
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` inside that module -- not
+`BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` with the registration deferred
+to the host -- or the host executable simply fails to link at all, with
+nothing in its own build able to satisfy the canary.
+
+**What the static-library case does -- untested, stated as inferred, not
+measured.** A registration-only `.cpp` built into a static-library member the
+linker never pulls in (the *other* entry in that same section) previously
+registered nothing and surfaced only as a runtime `"unknown model type"`. The
+canary's explicit instantiation lives in that same member, so every
+`BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` site now carries an `extern
+template` reference into it too -- but which of two outcomes that produces
+depends on link order, and this has not been built and checked either way:
+a linker that resolves a static archive by repeatedly rescanning it until no
+more members are pulled in (the common case when the registering `.cpp` sits
+in the *same* archive as its callers) would plausibly pull the member in on
+the strength of the canary reference alone, which would fix registration
+outright rather than merely fail loudly; one that scans archives once,
+left to right, without `--start-group`, would instead leave the reference
+unresolved and fail to *link*. Either outcome is better than the
+pre-canary silent runtime failure. The
+`--whole-archive`/`-force_load`/`/WHOLEARCHIVE` guidance in that section
+remains the guaranteed fix regardless of which applies.
+
 ### `BRIDGE_REGISTER_VALIDATOR(A, FN)`
 
 Specialises `ActionValidator<A>` with a custom predicate.
@@ -1190,6 +1372,10 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `BRIDGE_REGISTER_MODEL` | `(M, NAME)` | `ModelTraits<M>` specialisation + static-init factory registration. |
 | `BRIDGE_REGISTER_ACTION` | `(M, A, NAME, ...)` | `ActionTraits<A>` specialisation + static-init dispatcher and executor registration. Optional 4th arg: `Loggable`. `Result` deduced from `decltype(M::execute(A))`, requiring `M` complete. |
 | `BRIDGE_REGISTER_ACTION_FOR_CLIENT` | `(M, A, RESULT, NAME, ...)` | Same as `BRIDGE_REGISTER_ACTION`, except `Result` is the explicitly-named `RESULT` argument — `M` may be forward-declared only. See ["a header seam for `MORPH_CLIENT_ONLY`"](#bridge_register_action_for_client--a-header-seam-for-morph_client_only). |
+| `BRIDGE_DECLARE_MODEL` | `(M, NAME)` | `ModelTraits<M>` specialisation + a link-time canary requiring `BRIDGE_REGISTER_MODEL_SOURCE(M)` somewhere in the link. No registration. See ["Moving a registrar out of the header"](#moving-a-registrar-out-of-the-header). |
+| `BRIDGE_REGISTER_MODEL_SOURCE` | `(M)` | Static-init factory registration for a `M` already declared via `BRIDGE_DECLARE_MODEL`. Reads `NAME` back off `ModelTraits<M>::typeId()`. |
+| `BRIDGE_DECLARE_ACTION` | `(M, A, NAME, ...)` | `ActionTraits<A>` specialisation + a link-time canary requiring `BRIDGE_REGISTER_ACTION_SOURCE(M, A)` somewhere in the link. Optional 4th arg: `Loggable`. No registration. |
+| `BRIDGE_REGISTER_ACTION_SOURCE` | `(M, A)` | Static-init dispatcher and executor registration for an `A` already declared via `BRIDGE_DECLARE_ACTION`. Reads `NAME` back off `ActionTraits<A>::typeId()`. |
 | `BRIDGE_REGISTER_VALIDATOR` | `(A, FN)` | `ActionValidator<A>` specialisation + custom predicate. |
 
 ### Detail helpers
@@ -1205,6 +1391,8 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `registerModelOnce<M>(id)` | Static-init helper; returns `true`. |
 | `registerActionOnce<M, A>(modelId, actionId)` | Static-init helper; returns `true`. |
 | `registerActionExecutorOnce<M, A>(modelId, actionId)` | Static-init helper; only declared in `registry.hpp`, defined in `bridge.hpp`. |
+| `modelSourceRegistrationRequired<M>()` | Link-time canary: `BRIDGE_DECLARE_MODEL` calls it behind `extern template`; `BRIDGE_REGISTER_MODEL_SOURCE` is the only macro that explicitly instantiates it. See ["The link-time canary"](#the-link-time-canary-closing-bridge_declare_s-own-new-hazard). |
+| `actionSourceRegistrationRequired<M, A>()` | Same canary, for `BRIDGE_DECLARE_ACTION`/`BRIDGE_REGISTER_ACTION_SOURCE`. |
 | `registrationPhaseFlag()` | The process-wide registration-phase `std::atomic<bool>`. See ["The registration-phase latch"](#the-registration-phase-latch). |
 | `noteRegistryRead(isProcessRegistry)` | Closes the latch on the first read of a process-level registry. Debug builds only; empty under `NDEBUG`. |
 | `reopenRegistrationPhaseForTesting()` | Re-opens the latch. Test-only. |
@@ -1317,6 +1505,7 @@ and separately `noteRegistryRead` emptied).
 | `coalesce` for an unknown pair | Does **not** throw — defaults to `false` (every entry kept). | `ActionDispatcher::coalesce` |
 | Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. This is the intended outcome rather than an accepted defect: the same OOM without `noexcept` terminates anyway, because the caller is the dynamic initialiser of a non-local variable. See ["Why all three are `noexcept` while allocating"](#why-all-three-are-noexcept-while-allocating). | `registry.hpp` |
 | A `register*Once` call after the registration phase closes (e.g. a `dlopen`ed module registering once dispatch has begun) | **Debug build:** the `assert` fires and the process aborts with a message naming this hazard. **Release build:** unchanged — undefined behaviour, racing the map's internals against concurrent `find`s, with no diagnostic. The latch detects the violation; it does not make it safe. | `registry.hpp`, `bridge.hpp` — see ["The registration-phase latch"](#the-registration-phase-latch) |
+| `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` used with no matching `BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` anywhere in the same link | **Fails to link** — an unresolved external symbol naming `modelSourceRegistrationRequired<M>` / `actionSourceRegistrationRequired<M, A>`, before the program ever runs. Contrast the row above: this is the one registration mistake in this table that is *not* deferred to runtime. See ["The link-time canary"](#the-link-time-canary-closing-bridge_declare_s-own-new-hazard). | `registry.hpp` |
 
 Note the asymmetry the design accepts intentionally: the **typed local path**
 (`BridgeHandler::execute<Action>()`, `Model::execute(action)`) is checked by the
@@ -1342,6 +1531,14 @@ testing obligation, not a compile-time guarantee.
   compile-time guarantee that every remotely executed pair was actually
   registered** (registration is a static-init side effect that can be silently
   dropped; see [Registration rules and invariants](#registration-rules-and-invariants)).
+  A model/action registered via `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION`
+  plus `BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` gets a
+  **link-time**, not compile-time, version of this guarantee instead — see
+  ["The link-time canary"](#the-link-time-canary-closing-bridge_declare_s-own-new-hazard)
+  — but only for pairs that opt into the split macros; the combined
+  `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` carry no such check, because
+  for them declaration and registration are the same macro call and cannot
+  drift apart.
 - **Global mutable singletons with no teardown or reset.** `defaultDispatcher()`
   and `defaultRegistry()` (and `ActionExecuteRegistry::instance()`) are
   function-local `static`s that live for the whole process and expose no clear /

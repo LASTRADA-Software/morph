@@ -510,6 +510,109 @@ target_link_libraries(morph_client_only_runtime_throw PRIVATE morph_guard_probe_
 morph_suppress_test_dialogs(morph_client_only_runtime_throw)
 add_test(NAME morph_client_only_runtime_throw COMMAND morph_client_only_runtime_throw)
 set_tests_properties(morph_client_only_runtime_throw PROPERTIES TIMEOUT 60)
+# ── BRIDGE_DECLARE_MODEL/BRIDGE_DECLARE_ACTION link-time canary ─────────────
+# Configure-time proof that a model/action declared via BRIDGE_DECLARE_MODEL/
+# BRIDGE_DECLARE_ACTION but never registered via BRIDGE_REGISTER_MODEL_SOURCE/
+# BRIDGE_REGISTER_ACTION_SOURCE anywhere in the link fails to LINK -- see
+# docs/spec/core/registry.md, "Moving a registrar out of the header". Reuses
+# MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS, as the MORPH_CLIENT_ONLY guard above
+# does.
+#
+# Two probes, in opposite directions, prove the canary does something real:
+#   - declare_only_no_source_link.cpp ALONE: must FAIL TO LINK. It declares a
+#     real, fully-defined model/action and never calls
+#     BRIDGE_REGISTER_MODEL_SOURCE/BRIDGE_REGISTER_ACTION_SOURCE for either.
+#   - declare_only_no_source_link.cpp PLUS declare_only_source_provided.cpp
+#     (which does call both SOURCE macros for the same model/action): must
+#     LINK. If this direction also failed, the first probe would be proving
+#     nothing about the canary specifically.
+unset(MORPH_DECLARE_SOURCE_CANARY_MISSING_FAILS CACHE)
+try_compile(MORPH_DECLARE_SOURCE_CANARY_MISSING_FAILS
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/declare_only_no_source_link.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    OUTPUT_VARIABLE MORPH_DECLARE_SOURCE_CANARY_MISSING_OUTPUT
+)
+if(MORPH_DECLARE_SOURCE_CANARY_MISSING_FAILS)
+    message(FATAL_ERROR
+        "BRIDGE_DECLARE_MODEL/BRIDGE_DECLARE_ACTION canary check failed: "
+        "compile_checks/declare_only_no_source_link.cpp LINKED successfully "
+        "even though it never calls BRIDGE_REGISTER_MODEL_SOURCE/"
+        "BRIDGE_REGISTER_ACTION_SOURCE. The whole point of BRIDGE_DECLARE_* "
+        "is that a forgotten .cpp-side registration call fails to link "
+        "instead of silently compiling into a runtime \"unknown model "
+        "type\"/\"unknown action\" -- see docs/spec/core/registry.md, "
+        "\"Moving a registrar out of the header\".\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_DECLARE_SOURCE_CANARY_MISSING_OUTPUT}")
+endif()
+
+unset(MORPH_DECLARE_SOURCE_CANARY_PROVIDED_LINKS CACHE)
+try_compile(MORPH_DECLARE_SOURCE_CANARY_PROVIDED_LINKS
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/declare_only_no_source_link.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/declare_only_source_provided.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    OUTPUT_VARIABLE MORPH_DECLARE_SOURCE_CANARY_PROVIDED_OUTPUT
+)
+if(NOT MORPH_DECLARE_SOURCE_CANARY_PROVIDED_LINKS)
+    message(FATAL_ERROR
+        "BRIDGE_DECLARE_MODEL/BRIDGE_DECLARE_ACTION canary check failed: "
+        "declare_only_no_source_link.cpp + declare_only_source_provided.cpp "
+        "failed to link, even though the latter calls "
+        "BRIDGE_REGISTER_MODEL_SOURCE/BRIDGE_REGISTER_ACTION_SOURCE for "
+        "exactly the model/action the former declares (so the canary check "
+        "above is not proving anything if this direction also fails).\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_DECLARE_SOURCE_CANARY_PROVIDED_OUTPUT}")
+endif()
+
+# The two try_compile() checks above only prove the *registration-suppression*
+# half of the guard (static-init-time link resolution). The other half --
+# that Bridge::executeVia's localOp actually throws std::logic_error at
+# *runtime* under MORPH_CLIENT_ONLY, instead of silently calling
+# Model::execute -- needs the probe to actually run, not just link. try_run()
+# compiles AND executes compile_checks/client_only_runtime_throw.cpp,
+# capturing its exit code (0 = the expected std::logic_error was caught).
+unset(MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED CACHE)
+unset(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE CACHE)
+try_run(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED
+    "${CMAKE_CURRENT_BINARY_DIR}/client_only_runtime_throw_check"
+    "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_runtime_throw.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
+    # CMAKE_THREAD_LIBS_INIT (a raw linker-flag string set by the outer
+    # project's find_package(Threads REQUIRED) at CMakeLists.txt:102, e.g.
+    # "-lpthread" on Linux, empty on platforms needing nothing extra) rather
+    # than the Threads::Threads *target*: unlike Qt6::Core/Network/WebSockets
+    # (an exported find_package(Qt6) target, used the same way by the
+    # MORPH_QT_NO_SSL_GUARD_COMPILES check above), the CMake-bundled
+    # FindThreads module's imported target does not reliably resolve inside
+    # try_run()'s isolated scratch project on every platform -- confirmed by
+    # a real CI failure on Windows/MSVC ("Target ... links to: Threads::Threads
+    # ... but the target was not found").
+    LINK_LIBRARIES "${CMAKE_THREAD_LIBS_INIT}"
+    COMPILE_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT
+    RUN_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT
+)
+if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_runtime_throw.cpp failed to compile with "
+        "MORPH_CLIENT_ONLY defined.\n"
+        "--- compiler output ---\n"
+        "${MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT}")
+endif()
+if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE EQUAL 0)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_runtime_throw.cpp did not observe the "
+        "expected std::logic_error from Bridge::executeVia's localOp under "
+        "MORPH_CLIENT_ONLY (exit code ${MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE}).\n"
+        "--- program output ---\n"
+        "${MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT}")
+endif()
 
 # BRIDGE_REGISTER_ACTION_FOR_CLIENT lets a MORPH_CLIENT_ONLY client
 # register an action's ActionTraits (JSON codecs + an explicitly-named Result

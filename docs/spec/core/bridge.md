@@ -869,6 +869,17 @@ static-init time. The `inline` keyword lets the definition in this header be
 included and instantiated across many translation units without an ODR/link
 violation; the registration itself runs from the macro's static initializer.
 
+`BRIDGE_REGISTER_ACTION_SOURCE(M, A)` — the `.cpp`-side half of
+`BRIDGE_REGISTER_ACTION` decomposed into a header-only declaration
+(`BRIDGE_DECLARE_ACTION`) plus a registration call, for a model header whose
+per-TU registration cost is worth moving out (see
+[registry.md, "Moving a registrar out of the
+header"](registry.md#moving-a-registrar-out-of-the-header)) — emits
+exactly the same two initializers as (b) above, so it carries the identical
+`#include <morph/core/bridge.hpp>` requirement: the translation unit calling
+`BRIDGE_REGISTER_ACTION_SOURCE` must include this header, or the link fails
+on the same unresolved `registerActionExecutorOnce<M, A>` symbol.
+
 ## `MemberPointerTraits`
 
 Declared as `morph::bridge::detail::MemberPointerTraits`.
