@@ -103,13 +103,17 @@ namespace bookmarks::gui {
 /// @par Why this class holds a `CallbackScope`
 /// `submitIfValid` hands the wrapped core two callbacks that capture
 /// `this`; the success arm also reaches `_bridge` through `onLoginSucceeded`.
-/// They are attached to a `Completion`, which **always** resolves through the
-/// executor — never inline, even in `Local` mode
-/// (`docs/spec/core/completion.md`) — so an in-flight reply outlives its
+/// For a *routed* action type they are attached to a `Completion`, which
+/// **always** resolves through the executor — never inline, even in `Local`
+/// mode (`docs/spec/core/completion.md`) — so an in-flight reply outlives its
 /// dispatch call by construction, and this object can be destroyed before the
 /// reply lands. Both shells own their bridges by `unique_ptr` in `main()` and
 /// destroy them when the process tears down (`gui/main.cpp`,
-/// `gui_wasm/main_wasm.cpp`), which is exactly such a window.
+/// `gui_wasm/main_wasm.cpp`), which is exactly such a window. An *unrouted*
+/// action type is the one exception: the composed core's `onError` runs
+/// synchronously, on `submitIfValid`'s own call frame, since no model ever
+/// took the dispatch — still through the same guarded callback, so this is a
+/// difference in timing, not in which callback runs or how it is guarded.
 ///
 /// The rung's three neighbours are already covered and neither mechanism
 /// reaches here: `BookmarkPresenter`/`TagPresenter`/`SharedFeedPresenter`
