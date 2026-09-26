@@ -2407,6 +2407,31 @@ not a behavior change to the existing loopback-only default.
 | Member | Type | Default |
 |---|---|---|
 | `backlog` | `int` | `64` |
+| `handshakeTimeout` | `std::chrono::milliseconds` | `10 s` |
+| `sendTimeout` | `std::chrono::milliseconds` | `30 s` |
+
+`handshakeTimeout` bounds the whole RFC 6455 Upgrade read (accept to the
+terminating `\r\n\r\n`), not each individual `recv` the way
+`SocketBackendConfig::handshakeTimeout` (`SO_RCVTIMEO`) does — a peer that
+never sends a complete request has no legitimate reason to behave that way, so
+this bound carries no false-positive cost and is enforced as a single deadline
+across `readHttpHeaderBlock`'s read loop, via `poll()` with the remaining
+budget on each iteration, rather than a socket option that would only bound
+each read and let a byte-at-a-time peer stretch the total to
+`handshakeTimeout` times the header's 64 KiB cap. `sendTimeout` is `SO_SNDTIMEO`
+on the accepted socket (the same mechanism and default as
+`SocketBackendConfig::sendTimeout`, applied once in `acceptLoop` and never
+cleared — unlike the client side, a `SocketServer` connection's steady-state
+replies are meant to be bounded too): without it, a peer that stops reading
+fills the kernel send buffer and parks whichever `RemoteServer` worker-pool
+thread is calling `ClientConnection::sendText` forever, and that method's
+existing failed-send handling (`closed.store(true); socket.shutdownBoth()`) —
+which is what stops the connection from continuing to execute actions whose
+replies go nowhere — never gets a chance to run. Both are `0`-disables opt-outs
+that restore the pre-existing block-forever behavior; deliberately not opt-in,
+since neither has the false-positive risk that ruled out an `idleTimeout`
+(reaping an idle-by-design desktop client with no keepalive to tell "idle"
+from "dead" apart).
 
 ### `SocketServer` (namespace `morph::net`)
 
