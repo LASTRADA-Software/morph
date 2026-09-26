@@ -307,11 +307,12 @@ TEST_CASE("StrandExecutor never runs two tasks for one key concurrently under co
 //
 //   1. A pilot task is posted alone on the key. Its last act is to publish the
 //      round number, so the chaser threads learn the strand is about to drain.
-//   2. `kChasers` threads spin on that publication and post the instant it
-//      flips -- that is, while the drain block following the pilot's body is
-//      deciding "keep running vs. erase". A per-thread stagger walks each post
-//      across the handful of instructions that decision spans, so the window is
-//      sampled at many offsets rather than one.
+//   2. `kChasers` threads wake on that publication and post while the drain
+//      block following the pilot's body is deciding "keep running vs.
+//      erase". A per-thread stagger spins each post across the handful of
+//      instructions that decision spans, so the window is sampled at many
+//      offsets rather than one -- the wake itself is coarse, but the offsets
+//      it is followed by are not.
 //   3. The round ends only once every one of its tasks has run, so the strand
 //      really does empty before the next pilot. The gap is the point of the
 //      test, and is exactly what sustained saturation destroys.
@@ -358,10 +359,25 @@ TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain",
         std::atomic<int> inFlight{0};
         std::atomic<int> maxInFlight{0};
         std::atomic<int> outOfOrder{0};
-        std::atomic<int> completed{0};
-        // Round number whose pilot task has finished its body. Release/acquire:
-        // the chasers must not start posting for round r before it is set.
-        std::atomic<int> gate{0};
+        // `completed` and `gate` are plain (not atomic): every access to
+        // either one, below, happens under `roundMtx` -- the writes inside
+        // the lambdas that call `notify_all`, and the reads inside the two
+        // `wait()` predicates, which `condition_variable::wait` only
+        // evaluates with the lock held. The mutex already orders these
+        // accesses, so an independent atomic ordering would add nothing.
+        int completed = 0;
+        int gate = 0;
+
+        // Blocking rendezvous for the two coarse, per-round waits below (a
+        // chaser waiting for `gate` to open, and the main thread waiting for
+        // the round's `completed` count) -- not for the stagger loop inside
+        // the burst, which stays a spin because it *is* the race window this
+        // case samples. Waiting on this instead of spinning is what keeps the
+        // rendezvous cheap under Valgrind's single-threaded scheduling, where
+        // a spin-wait burns real instrumented time on every iteration instead
+        // of yielding the (only) running thread.
+        std::mutex roundMtx;
+        std::condition_variable roundCv;
 
         auto body = [&](int producer, int seq) {
             int const cur = inFlight.fetch_add(1) + 1;
@@ -378,7 +394,22 @@ TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain",
             }
             ++executedPlain;
             inFlight.fetch_sub(1);
-            completed.fetch_add(1, std::memory_order_release);
+            // The update has to happen under `roundMtx`, so that
+            // `condition_variable::wait`'s check-then-block on the main
+            // thread below is atomic with respect to this same mutex: a
+            // notification can never land in the gap between the waiter's
+            // predicate check and it actually blocking. Notifying only on
+            // the round's last task (rather than on every one of its
+            // `kPerRound` tasks) is safe for the same reason: which
+            // increment crosses the threshold is uniquely determined while
+            // the lock is held.
+            bool const roundDone = [&] {
+                const std::scoped_lock lock{roundMtx};
+                return (++completed % kPerRound) == 0;
+            }();
+            if (roundDone) {
+                roundCv.notify_all();
+            }
         };
 
         {
@@ -394,16 +425,13 @@ TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain",
                     // engine that would itself synchronise the threads.
                     auto rng = (static_cast<unsigned>(chaser) * 2654435761U) + 1U;
                     for (int round = 0; round < kRounds; ++round) {
-                        // Spin rather than yield: the window this case aims at
-                        // is a few instructions wide, and a yield overshoots it
-                        // by orders of magnitude. The periodic yield is only a
-                        // starvation guard for hosts with fewer cores than this
-                        // case has threads (a CI runner has four); it fires once
-                        // per 4096 spins, so it costs the rendezvous nothing.
-                        for (unsigned spins = 0; gate.load(std::memory_order_acquire) <= round; ++spins) {
-                            if ((spins & 0xFFFU) == 0xFFFU) {
-                                std::this_thread::yield();
-                            }
+                        // Coarse rendezvous: block until the pilot has opened
+                        // this round's gate. This is not the race window --
+                        // see the stagger loop below, which is -- so there is
+                        // nothing to lose by waiting instead of spinning here.
+                        {
+                            std::unique_lock<std::mutex> lock{roundMtx};
+                            roundCv.wait(lock, [&] { return gate > round; });
                         }
                         for (int post = 0; post < kBurst; ++post) {
                             rng = (rng * 1664525U) + 1013904223U;
@@ -422,17 +450,28 @@ TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain",
             }
 
             for (int round = 0; round < kRounds; ++round) {
-                strand.post(key, [&body, &gate, round] {
+                strand.post(key, [&body, &gate, &roundMtx, &roundCv, round] {
                     body(0, round);
                     // Published last: the chasers' posts have to arrive while
                     // the drain that follows this body is running, not before.
-                    gate.store(round + 1, std::memory_order_release);
+                    // Under `roundMtx` for the same reason as `completed` in
+                    // `body()` above -- otherwise a chaser's wait can miss
+                    // this notification and block past the last round.
+                    {
+                        const std::scoped_lock lock{roundMtx};
+                        gate = round + 1;
+                    }
+                    roundCv.notify_all();
                 });
                 // Wait out the round rather than pipelining it. This is the
                 // quiet moment -- the strand drains to empty here, which is the
-                // only state from which the erase can fire at all.
-                while (completed.load(std::memory_order_acquire) < (round + 1) * kPerRound) {
-                    std::this_thread::yield();
+                // only state from which the erase can fire at all. Blocking
+                // rather than spinning: this coarse wait is not the race
+                // window either, so there is nothing to lose by not burning a
+                // core on it while Valgrind runs everything single-threaded.
+                {
+                    std::unique_lock<std::mutex> lock{roundMtx};
+                    roundCv.wait(lock, [&] { return completed >= (round + 1) * kPerRound; });
                 }
             }
 
@@ -445,11 +484,11 @@ TEST_CASE("StrandExecutor keeps one strand per key when a post races the drain",
         }
 
         constexpr int kExpected = kRounds * kPerRound;
-        INFO("iteration " << iter << ": completed " << completed.load() << " of " << kExpected);
+        INFO("iteration " << iter << ": completed " << completed << " of " << kExpected);
         // `CHECK`, not `REQUIRE`, for everything but the last line: each of
         // these answers a different question about the same run and stopping at
         // the first one would hide the others (see the case above).
-        CHECK(completed.load() == kExpected);
+        CHECK(completed == kExpected);
         // Lost updates to the plain state: the sanitizer-free reading of the
         // same defect the TSan legs see as a data race on it.
         CHECK(executedPlain == static_cast<long long>(kExpected));
