@@ -11,13 +11,14 @@
 
 /// @file
 /// The one schema document every bookmarks form renders from, assembled in
-/// one place so every shell that builds a `BookmarkFormsController` — the
+/// one place so every shell that builds a `bookmarks::gui::FormsBridge` — the
 /// desktop client (`gui/main.cpp`), a future WASM client, and the tests —
 /// builds the *identical* map instead of each assembling its own
 /// (`examples/TESTING.md`'s "same client code" requirement). Same split
-/// `pastebin::gui::pasteSchemasJson()` uses, and for the same reason:
-/// `BookmarkFormsController` takes the document as a constructor argument by
-/// design, so whatever composes it decides which actions it serves.
+/// `pastebin::gui::pasteSchemasJson()` uses, and for the same reason: the
+/// composed `morph::qt::forms::MultiModelFormsControllerCore` takes the
+/// document as a constructor argument by design, so whatever composes it
+/// decides which actions it serves.
 
 namespace bookmarks::gui {
 

@@ -19,9 +19,12 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/callback_scope.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/qt/forms/multi_model_forms_controller_core.hpp>
 
-#include "bookmark_forms_controller.hpp"
 #include "bookmark_presenter.hpp"
+#include "bookmarks/models/auth_model.hpp"
+#include "bookmarks/models/bookmark_model.hpp"
+#include "bookmarks/models/tag_model.hpp"
 #include "shared_feed_presenter.hpp"
 #include "tag_presenter.hpp"
 #endif
@@ -44,7 +47,7 @@
 /// its own, and that is a deliberate deviation from this task's brief. A
 /// standalone `AuthBridge` taking `(Bridge&, IExecutor*)` — the presenter
 /// rule-2 constructor every adapter here has — would have to own a second
-/// `BookmarkFormsController`, and therefore a second `BridgeHandler` for
+/// `MultiModelFormsControllerCore`, and therefore a second `BridgeHandler` for
 /// *each* of this rung's three form-serving models: six registered instances
 /// per client where four is the number `bookmarks::app::App`'s own
 /// `kMaxLiveModels` comment budgets for. The alternative (handing one
@@ -82,16 +85,23 @@ namespace bookmarks::gui {
 [[nodiscard]] std::optional<LoginResult> decodeLoginResult(const std::string& resultJson);
 #endif
 
-/// @brief QML-facing face of `bookmarks::gui::BookmarkFormsController`, plus
-///        this client's one session-installing seam.
+/// @brief QML-facing face of
+///        `morph::qt::forms::MultiModelFormsControllerCore<NoSharing, AuthModel,
+///        BookmarkModel, TagModel>`, plus this client's one session-installing
+///        seam.
 ///
 /// Same surface `DynamicForm.qml` expects of a controller — a `schemasJson`
 /// property, `submitIfValid(actionType, bodyJson)`, and a `replyReceived`
 /// signal — so the shipped renderer needs no bookmarks-specific knowledge,
-/// and one instance serves the login screen and every domain form alike.
+/// and one instance serves the login screen and every domain form alike. The
+/// composed core routes each action type to whichever of the three models
+/// serves it (`docs/spec/forms/forms.md`'s `MultiModelFormsControllerCore`
+/// entry); this class adds nothing to that routing, only the one
+/// session-installing step `onLoginSucceeded` below performs on a successful
+/// `Login`.
 ///
 /// @par Why this class holds a `CallbackScope`
-/// `submitIfValid` hands the wrapped controller two callbacks that capture
+/// `submitIfValid` hands the wrapped core two callbacks that capture
 /// `this`; the success arm also reaches `_bridge` through `onLoginSucceeded`.
 /// They are attached to a `Completion`, which **always** resolves through the
 /// executor — never inline, even in `Local` mode
@@ -120,6 +130,15 @@ namespace bookmarks::gui {
 /// is worth: this is a by-construction hazard closed pre-emptively, not a
 /// crash that was observed here. Nothing in this rung's suite reproduced a
 /// use-after-free through `FormsBridge`.
+///
+/// @par No `fetchOptions()`/`optionsReceived`
+/// Deliberately absent, even though the composed
+/// `MultiModelFormsControllerCore` itself provides `fetchOptions()`: it
+/// exists there to serve a `morph::forms::Choice<T, ...>` field's combo-box
+/// options, and none of this rung's DTOs (`bookmarks/dto/*.hpp`) declare a
+/// `Choice` field — `CreateBookmark::visibility` is a plain reflected enum,
+/// not a server-fetched choice. Adding an unused `Q_INVOKABLE fetchOptions()`
+/// here would be a stub with nothing to call it.
 class FormsBridge : public QObject {
     Q_OBJECT
 
@@ -175,15 +194,16 @@ private:
     void onLoginSucceeded(const LoginResult& result);
 
     ::morph::bridge::Bridge& _bridge;
-    BookmarkFormsController _controller;
+    ::morph::qt::forms::MultiModelFormsControllerCore<::morph::bridge::NoSharing, AuthModel, BookmarkModel, TagModel>
+        _core;
 
     /// @brief Lifetime gate for the `this`-capturing reply callbacks
     ///        `submitIfValid` attaches — see this class's own doc comment.
     ///
     /// **Declared last on purpose**, and it must stay last: reverse-order
-    /// member destruction is what makes the gate close before `_controller`
-    /// (and the three `BridgeHandler`s inside it) is torn down. Anything added
-    /// to this class goes *above* this line.
+    /// member destruction is what makes the gate close before `_core` (and
+    /// the three `BridgeHandler`s inside it) is torn down. Anything added to
+    /// this class goes *above* this line.
     ///
     /// `requestStop()`/`reset()` are deliberately not called anywhere: this
     /// bridge has no "user navigated away" or "supersede the previous query"

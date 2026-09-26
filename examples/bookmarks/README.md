@@ -452,15 +452,17 @@ submit button either, and every form is bound to the live controller. The one
 non-form input on the whole screen is the per-row selection checkbox, which
 types nothing.
 
-Two pieces of glue carry their own written justification, per rule 2's "(b)
+`gui_lib/bookmark_qml_bridges.hpp`'s `FormsBridge` composes
+`morph::qt::forms::MultiModelFormsControllerCore<NoSharing, AuthModel,
+BookmarkModel, TagModel>` directly, over the `Bridge&`/`IExecutor*`
+`AppContext::onReady()` hands it — no rung-owned routing controller sits
+between them; the shipped core routes each action-type string to whichever of
+the three form-serving models owns it, via a plain existence check over
+`ActionExecuteRegistry` rather than a hand-written table.
+
+One piece of glue carries its own written justification, per rule 2's "(b)
 pure glue with no domain logic" clause:
 
-- `gui::BookmarkFormsController` — composed over an injected
-  `Bridge&`/`IExecutor*`, like `morph::qt::forms::FormsControllerCore`'s own
-  composing constructor, plus the one genuinely new part this rung's own
-  controller owns — routing an action-type string to whichever of the three
-  form-serving models owns it, which the shipped core (templated over a
-  single model) has no equivalent for.
 - `gui::FormsBridge::onLoginSucceeded` — installs the token the server
   returned as the shared `Bridge`'s default session, so every subsequent
   action carries it. Infrastructure wiring, not business logic: it decides

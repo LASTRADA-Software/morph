@@ -7,8 +7,9 @@
 /// This file is the *only* difference between the browser client and the
 /// desktop client (`gui/main.cpp`). Everything with behaviour in it — the
 /// presenters (`gui_lib/bookmark_presenter.hpp`, `gui_lib/tag_presenter.hpp`,
-/// `gui_lib/shared_feed_presenter.hpp`), the forms controller
-/// (`gui_lib/bookmark_forms_controller.hpp`), the QML adapters
+/// `gui_lib/shared_feed_presenter.hpp`), the forms-controller composition
+/// (`gui_lib/bookmark_qml_bridges.hpp`'s `FormsBridge`, over the shipped
+/// `morph::qt::forms::MultiModelFormsControllerCore`), the QML adapters
 /// (`gui_lib/bookmark_qml_bridges.hpp`), the schema document
 /// (`gui_lib/bookmark_schemas.hpp`) and the QML itself (`gui/qml/Main.qml`,
 /// built into the `Bookmarks` module both binaries link) — is shared
