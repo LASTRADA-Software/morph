@@ -38,11 +38,15 @@ void ProjectAdminPresenter::login(const QString& username) {
 void ProjectAdminPresenter::submitForm(const QString& actionType, const QString& bodyJson) {
     // `executeJson` is the type-erased counterpart of the typed `execute`
     // calls below: the schema renderer only ever knows an action by the string
-    // the schema names it with. This is the actionType->handler table
-    // `bookmarks::gui::BookmarkFormsController::dispatch` already has: two
-    // models behind one controller, and the unroutable case reports rather
-    // than silently dropping — QML names types as strings, so a typo has to
-    // arrive somewhere a human reads it.
+    // the schema names it with. This is the same actionType->model shape
+    // `morph::qt::forms::MultiModelFormsControllerCore` routes generically for
+    // a rung whose routing has no side effects of its own
+    // (`bookmarks::gui::FormsBridge` is the shipped example) -- hand-written
+    // here instead because every branch below also does something the generic
+    // core cannot: re-decoding the body for a typed signal, installing the
+    // session, redacting a token. The unroutable case reports rather than
+    // silently dropping — QML names types as strings, so a typo has to arrive
+    // somewhere a human reads it.
     const std::string type = actionType.toStdString();
     if (type == "CreateProject") {
         // Decoded here, not merely relayed, so this path emits the *same*

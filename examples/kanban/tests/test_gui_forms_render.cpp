@@ -186,8 +186,8 @@ void pressSubmit(QObject* form) {
 /// `DynamicForm.qml` declares `onOptionsReceived` in a `Connections` block
 /// whose `target` is the controller, unconditionally. A controller that serves
 /// no `morph::forms::Choice` field has no such signal — and deliberately so:
-/// `bookmarks::gui::BookmarkFormsController`'s own "No `fetchOptions()`" note
-/// records that adding one with nothing to call it would be a stub. So the
+/// `bookmarks::gui::FormsBridge`'s own "No `fetchOptions()`/`optionsReceived`"
+/// note records that adding one with nothing to call it would be a stub. So the
 /// engine warns once per form, for every conforming controller in the ladder,
 /// the moment a *real* controller is attached. The rule-6 smoke test never sees
 /// it because it attaches none. It is filed against the renderer; tolerated
