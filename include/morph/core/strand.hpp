@@ -1,20 +1,35 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <condition_variable>
+#include <atomic>
+#include <core/async/ExecutorContext.hpp>
+#include <core/async/IExecutor.hpp>
+#include <core/async/KeyedStrands.hpp>
+#include <core/async/ParkedWork.hpp>
+#include <core/async/Strand.hpp>
+#include <coroutine>
+#include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
 #include "../attributes.hpp"
+#include "../session/session.hpp"
 #include "executor.hpp"
 #include "logger.hpp"
+
+/// @file
+/// @brief morph's strands: one per model instance, from core-cpp's
+///        `core::async::KeyedStrands`, over a morph executor.
+///
+/// Specified in `docs/spec/core/executor.md`, "Strands".
 
 namespace morph::exec::detail {
 
@@ -36,366 +51,392 @@ struct ModelIdHash {
     std::size_t operator()(ModelId mid) const noexcept { return std::hash<uint64_t>{}(mid.v); }
 };
 
-/// @brief Per-key serialising executor built on top of an arbitrary `IExecutor`.
+/// @brief A `core::async::IExecutor` over a morph executor: how a core-cpp
+///        strand's pump reaches a thread pool, a main-thread pump or Qt.
 ///
-/// Tasks posted with the same `ModelId` key are always executed in FIFO order
-/// with no overlap, even when the underlying executor is a thread pool. Tasks
-/// with different keys may run concurrently.
-///
-/// This removes the need for per-model mutexes: the model's `execute()` method
-/// is always called from exactly one task at a time.
-// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
-class StrandExecutor {
+/// A strand hands its base one bare coroutine handle per turn, which this
+/// posts as a lambda holding nothing else: trivially copyable, so it fits a
+/// `std::function`'s small buffer and a turn costs no allocation. The lambda
+/// does not refer to this object, so it may be destroyed while a pump it
+/// posted is still queued: the pump finds its strand closed and ends.
+class CoreExecutorOver final : public ::core::async::IExecutor {
 public:
-    /// @brief Constructs the strand executor wrapping @p base.
-    /// @param base Underlying executor that actually runs the tasks. Borrowed,
-    ///             not owned: it must outlive this `StrandExecutor` *and* keep
-    ///             running tasks until the destructor's wait has completed —
-    ///             destroying it first deadlocks (see
-    ///             `docs/spec/concurrency_and_lifetimes.md`, "Destruction
-    ///             ordering").
-    explicit StrandExecutor(IExecutor& base MORPH_LIFETIMEBOUND) : _base{&base} {}
+    /// @param executor Where every resumption is posted. Borrowed: it must
+    ///        outlive every strand over this object and run what it queued.
+    explicit CoreExecutorOver(::morph::exec::IExecutor& executor MORPH_LIFETIMEBOUND) : _executor{&executor} {}
 
-    /// @brief Blocks until all in-flight tasks have completed, then destroys the executor.
-    ///
-    /// Waits for all in-flight lambdas to complete before destroying the map.
-    /// Without this, a pool thread running scheduleNext can access _strands
-    /// after it has been destroyed (TSan: data race on destructor vs erase).
-    ~StrandExecutor() {
-        std::unique_lock lock{_mapMtx};
-        _cv.wait(lock, [this] { return _inFlight == 0; });
+    using ::core::async::IExecutor::submit;
+
+    /// @brief Posts @p handle's resumption.
+    /// @param handle The coroutine to resume; borrowed.
+    void submit(std::coroutine_handle<> handle) override {
+        _executor->post([handle] { handle.resume(); });
     }
 
-    /// @brief Posts @p task to the strand associated with @p key.
-    ///
-    /// The task is guaranteed to run after all previously posted tasks for the
-    /// same key have completed. Tasks for different keys may interleave freely.
-    /// Thread-safe.
-    /// @param key  Model identifier that selects the strand.
-    /// @param task Callable to execute.
-    void post(ModelId key, std::function<void()> task) {
-        std::shared_ptr<Strand> strand;
-        bool schedule = false;
-        {
-            // Hold _mapMtx across the whole slot-lookup + push + re-arm
-            // decision, and take strand->mtx *while still holding _mapMtx*. The
-            // drain-and-erase step in scheduleNext makes its "keep-running vs.
-            // erase" decision under the same {_mapMtx, strand->mtx} pair, so the
-            // two are mutually exclusive.
-            //
-            // Doing the lookup and the re-arm under separate locks once opened a
-            // window: a post() could capture a strand, release _mapMtx, then
-            // re-arm it under strand->mtx *after* a concurrent drain had already
-            // erased it from the map — orphaning a live strand and letting a
-            // later post(key) create a second strand for the same key that ran
-            // concurrently. Because the map lookup and the re-arm now share
-            // _mapMtx with the erase, the strand we push into is always the map's
-            // current entry for this key: a strand that becomes `running` here is
-            // guaranteed to still be the map entry, and it cannot be erased
-            // out from under us (the erase needs _mapMtx too, and never fires
-            // while pending is non-empty).
-            //
-            // Lock order is _mapMtx → strand->mtx, matching scheduleNext —
-            // which acquires the two sequentially rather than with one
-            // scoped_lock over both, precisely to keep this order (see its own
-            // comment). A freshly created strand's mtx
-            // is uncontended; an existing strand's mtx can only be held
-            // elsewhere under the same _mapMtx-first order, so no deadlock.
-            std::scoped_lock const mapLock{_mapMtx};
-            auto slotIter = _strands.find(key);
-            if (slotIter == _strands.end()) {
-                slotIter = installStrand(key);
-            }
-            strand = slotIter->second;
-            std::scoped_lock const strandLock{strand->mtx};
-            strand->pending.push(std::move(task));
-            if (!strand->running) {
-                strand->running = true;
-                schedule = true;
-                // Account for the strand lambda we are about to dispatch *while
-                // still holding _mapMtx*, before releasing it. If we deferred the
-                // ++_inFlight into scheduleNext (which re-takes _mapMtx), a window
-                // opened between releasing _mapMtx here and re-acquiring it there
-                // in which ~StrandExecutor could observe _inFlight == 0, destroy
-                // _strands, and let scheduleNext touch freed state. Incrementing
-                // under this lock makes "decided to schedule" and "counted as
-                // in-flight" atomic, so the destructor never sees a zero it should
-                // not.
-                ++_inFlight;
-            }
-        }
-        if (schedule) {
-            scheduleNext(std::move(strand), key);
-        }
-    }
-
-private:
-    /// @brief FIFO of tasks queued on one strand, with the head task held inline.
-    ///
-    /// Behaviourally a `std::queue<std::function<void()>>` restricted to the
-    /// three operations the strand uses, and used under exactly the same
-    /// discipline: every call happens with the owning `Strand::mtx` held, so
-    /// this type does no locking of its own.
-    ///
-    /// It exists because of what the *container* cost, not what the strand
-    /// did with it. The drain-and-erase step in `scheduleNext` destroys the
-    /// whole `Strand` as soon as the queue empties, so a workload that
-    /// dispatches one action at a time against a model builds a fresh queue on
-    /// every call and puts exactly one task in it. libstdc++'s `std::deque`
-    /// allocates its node map *and* a first 512-byte buffer in its default
-    /// constructor, which comes to 576 bytes of the 760 a deque-only strand
-    /// costs per local dispatch. Holding the head task in the strand makes
-    /// that case allocation-free; the overflow deque is constructed only when
-    /// a second task is genuinely queued behind a running one, after which the
-    /// cost is the deque's as before.
-    ///
-    /// This changes no lifetime or locking rule: the erase still happens when
-    /// `empty()` becomes true, still under the `{_mapMtx, strand->mtx}` pair.
-    class PendingQueue {
-    public:
-        /// @brief Reports whether the queue holds no task.
-        /// @return `true` when nothing is queued.
-        [[nodiscard]] bool empty() const noexcept { return !_hasHead; }
-
-        /// @brief Appends @p task to the back of the queue.
-        /// @param task Callable to queue. An *empty* `std::function` is queued
-        ///             and later dispatched like any other: occupancy is
-        ///             tracked by a separate flag rather than by testing the
-        ///             callable, so this type never silently drops one.
-        void push(std::function<void()>&& task) {
-            if (!_hasHead) {
-                _head = std::move(task);
-                _hasHead = true;
-                return;
-            }
-            if (!_overflow) {
-                _overflow = std::make_unique<std::deque<std::function<void()>>>();
-            }
-            _overflow->push_back(std::move(task));
-        }
-
-        /// @brief Removes the task at the front of the queue and returns it.
-        /// @return The front task.
-        /// @pre `!empty()`.
-        std::function<void()> pop() {
-            std::function<void()> task = std::move(_head);
-            if (_overflow && !_overflow->empty()) {
-                _head = std::move(_overflow->front());
-                _overflow->pop_front();
-            } else {
-                // A moved-from std::function is valid but unspecified; clear it
-                // explicitly so the slot holds no captured state while idle.
-                _head = nullptr;
-                _hasHead = false;
-            }
-            return task;
-        }
-
-    private:
-        std::function<void()> _head;
-        std::unique_ptr<std::deque<std::function<void()>>> _overflow;
-        bool _hasHead = false;
-    };
-
-    struct Strand {
-        IExecutor* base = nullptr;
-        std::mutex mtx;
-        PendingQueue pending;
-        bool running = false;
-    };
-
-    /// @brief The `ModelId` → strand map. Named so the recycled node type can be.
-    using StrandMap = std::unordered_map<ModelId, std::shared_ptr<Strand>, ModelIdHash>;
-
-    /// @brief Returns an iterator to the strand for @p key, creating the entry.
-    ///
-    /// **Precondition:** the caller holds `_mapMtx` and has already
-    /// established that `key` has no entry.
-    ///
-    /// This is a pure allocation optimisation and changes no lifetime or
-    /// locking rule. The drain step in `scheduleNext` removes the whole map
-    /// entry as soon as the queue empties, so a workload that dispatches one
-    /// action at a time against a model would otherwise pay for a fresh map
-    /// node *and* a fresh `make_shared<Strand>` on every call — 2 allocations
-    /// and 152 bytes on top of the queue's own share.
-    /// Rather than keep the slot alive across the drain (which would need a
-    /// deregistration hook and would trade this churn for a per-model entry
-    /// nothing reclaims), the drain `extract`s the node instead of erasing it
-    /// and parks it in `_spare`, and this re-keys and re-inserts that one
-    /// node. The entry still leaves the map at the same point under the same
-    /// locks, so the map is bounded exactly as before; `_spare` holds at most
-    /// one node and is freed with the executor.
-    ///
-    /// Reusing the parked node's `Strand` as well is guarded by sole
-    /// ownership. `use_count() == 1` means the recycled node holds the only
-    /// reference, so nothing else can reach the object and reusing it is
-    /// indistinguishable from constructing a new one. That is the whole
-    /// argument, and it is deliberately not "the previous owner makes no
-    /// further access": a strand lambda that is still finishing does hold a
-    /// reference, and when it does, this constructs a fresh `Strand` exactly
-    /// as before and recycles only the node.
-    ///
-    /// The parked strand needs no reset. It is only ever extracted from a
-    /// strand observed `!running` with an empty `pending` under
-    /// `{_mapMtx, strand->mtx}`, which is the state a fresh one is in. A
-    /// runtime re-check of that here would be an arm nothing can take, so it
-    /// is written down rather than branched on.
-    /// @param key Model identifier to install a strand for.
-    /// @return Iterator to the entry for @p key.
-    StrandMap::iterator installStrand(ModelId key) {
-        if (!_spare) {
-            auto const iter = _strands.emplace(key, std::make_shared<Strand>()).first;
-            iter->second->base = _base;
-            return iter;
-        }
-        _spare.key() = key;
-        auto& reused = _spare.mapped();
-        if (reused.use_count() != 1) {
-            reused = std::make_shared<Strand>();
-        }
-        reused->base = _base;
-        // `insert` consumes the node. Were the precondition ever violated it
-        // would instead hand the node back inside the returned object, which
-        // frees it — the same fate the old `erase` gave it — and `position`
-        // would name the existing entry, so the caller is right either way
-        // and there is nothing to branch on.
-        return _strands.insert(std::move(_spare)).position;
-    }
-
-    /// @brief Dispatches one strand lambda onto the base executor.
-    ///
-    /// **Precondition:** the caller must have already incremented `_inFlight`
-    /// (under `_mapMtx`) to account for this dispatch. `post()` does so in the
-    /// same critical section that decides to schedule, and the re-entrant call
-    /// below does so under the `_mapMtx` it already holds. Keeping the increment
-    /// with the *decision* (rather than here) closes the window where
-    /// `~StrandExecutor` could observe `_inFlight == 0` between the decision and
-    /// this dispatch and destroy `_strands` out from under us.
-    void scheduleNext(std::shared_ptr<Strand> strand, ModelId key) {
-        // Read `base` out before the capture list moves `strand` into the
-        // lambda: `strand->base` and the lambda's construction are
-        // unsequenced within one call expression, so reading through the
-        // moved-from pointer would be a real hazard rather than a stylistic
-        // one. The lambda's capture is non-const (hence `mutable` and the
-        // by-value parameter) so the drain below can release it early.
-        IExecutor* const base = strand->base;
-        base->post([this, strand = std::move(strand), key]() mutable {
-            std::function<void()> task;
-            {
-                std::scoped_lock const lock{strand->mtx};
-                task = strand->pending.pop();
-            }
-            try {
-                task();
-            } catch (const std::exception& exc) {
-                // The strand is where Model::execute() actually runs; a throw
-                // here must not stall the strand or vanish — log and continue so
-                // the next queued task for this model still runs.
-                ::morph::log::logError("[strand] task threw: " + std::string{exc.what()});
-            } catch (...) {
-                ::morph::log::logError("[strand] task threw unknown exception");
-            }
-            // Decide "keep running vs. drain-and-erase" atomically across the
-            // map slot and the strand's pending queue. Doing it in two steps
-            // (flip running under strand->mtx, then erase under _mapMtx) opened
-            // a window where another post() could re-arm this strand after we
-            // unlocked strand->mtx but before we erased the map entry. The
-            // subsequent erase then orphaned a live strand: a later post(key)
-            // would create a *new* strand for the same key, and the two
-            // strands could run model tasks concurrently → data race.
-            bool more = false;
-            {
-                // Same lock order as post(): _mapMtx first, then strand->mtx.
-                // Acquiring them sequentially (rather than via a single
-                // scoped_lock over both, whose std::lock back-off can grab them
-                // in address order) keeps a single, consistent ordering across
-                // every site that holds both, so there is no lock-ordering
-                // deadlock. This is the point where "drain-and-erase" is decided
-                // atomically w.r.t. a concurrent post(): a post() re-arming this
-                // strand and this block erasing it cannot interleave, because
-                // both hold _mapMtx across the whole decision.
-                std::scoped_lock const mapLock{_mapMtx};
-                std::scoped_lock const strandLock{strand->mtx};
-                more = !strand->pending.empty();
-                if (!more) {
-                    strand->running = false;
-                    auto iter = _strands.find(key);
-                    if (iter != _strands.end() && iter->second == strand) {
-                        // `extract`, not `erase`: same removal, same moment,
-                        // same locks — the entry leaves the map here exactly as
-                        // before, and every reason the erase had to happen
-                        // under {_mapMtx, strand->mtx} still applies unchanged.
-                        // The difference is only that the detached node's
-                        // memory is parked for `installStrand` to re-key
-                        // instead of being returned to the allocator. Any node
-                        // already parked is freed by this assignment, so at
-                        // most one is ever held. Freeing it runs no user code
-                        // under these locks: a parked strand was parked
-                        // because its pending queue was empty, so there is no
-                        // captured task left to destroy.
-                        _spare = _strands.extract(iter);
-                    }
-                } else {
-                    // Account for the re-armed dispatch *before* releasing
-                    // _mapMtx (scheduleNext's precondition). Because this run's
-                    // own decrement below has not happened yet, _inFlight is
-                    // briefly 2 here and never dips to 0 across the handoff, so
-                    // ~StrandExecutor cannot slip in and destroy _strands between
-                    // the two runs.
-                    ++_inFlight;
-                }
-            }
-            if (more) {
-                scheduleNext(strand, key);
-            } else {
-                // Drop this run's co-ownership here rather than leaving it to
-                // the lambda's destruction a few lines below. Nothing after
-                // this point touches the strand, and releasing it early is
-                // what lets `installStrand` see `use_count() == 1` on the
-                // node just parked in `_spare`: the next post() for this key
-                // is typically already blocked on _mapMtx when the block above
-                // releases it, so a reference held until the lambda dies would
-                // usually still be there when that post looks. This only
-                // affects *whether the object is recycled*, never whether the
-                // recycling is safe — a post that looks too early simply sees
-                // two owners and constructs a fresh Strand.
-                //
-                // Safe to be the last owner here: no lock is held (the block
-                // above released both), so this never destroys a mutex it is
-                // standing on. If the extract above did run, `_spare` owns the
-                // strand and this merely decrements.
-                strand.reset();
-            }
-            // Decrement after all map access is done; wake destructor if it is waiting.
-            {
-                std::scoped_lock const lock{_mapMtx};
-                if (--_inFlight == 0) {
-                    // Inside the `== 0` branch, so a handoff does not signal at
-                    // all: the re-arm above has already incremented for the
-                    // next dispatch, so the count does not reach zero until the
-                    // strand is quiescent. `~StrandExecutor` is the only waiter
-                    // on this variable, so `notify_all` wakes at most one
-                    // thread and is equivalent to `notify_one` here -- there is
-                    // no herd to wake, and no predicate but `_inFlight == 0`
-                    // for a wakeup to land on and be lost.
-                    _cv.notify_all();
-                }
-            }
+    /// @brief Posts @p work's resumption. An executor that drops the task
+    ///        unrun releases its claim, which frees a chain nobody owns.
+    /// @param work The coroutine to resume, and its claim.
+    void submit(::core::async::ParkedWork work) override {
+        _executor->post([work] {
+            work.abandon.disarm();
+            work.resume.resume();
         });
     }
 
-    IExecutor* _base;
-    std::mutex _mapMtx;
-    std::condition_variable _cv;
-    int _inFlight{0};
-    StrandMap _strands;
-    /// @brief The one detached map node kept for reuse. Guarded by `_mapMtx`.
-    ///
-    /// Declared after `_strands` so it is destroyed first: the node owns
-    /// storage obtained from the map's allocator, and returning it before the
-    /// container goes away keeps that ordering obvious even though the default
-    /// allocator is stateless.
-    StrandMap::node_type _spare;
+private:
+    ::morph::exec::IExecutor* _executor;
 };
+
+/// @brief A callable posted to a strand, with its throw logged rather than
+///        propagated.
+///
+/// A core-cpp strand lets a task's throw propagate to whoever resumed its
+/// pump, and under MSVC's `cl` ends the process instead. morph's strands have
+/// always logged a throwing task and gone on with the next; this keeps that
+/// policy in morph, inside the one allocation the post costs.
+/// @tparam F The callable's type.
+template <typename F>
+struct LoggedTask {
+    F fn;
+
+    void operator()() {
+        try {
+            fn();
+        } catch (const std::exception& exc) {
+            ::morph::log::logError("[strand] task threw: " + std::string{exc.what()});
+        } catch (...) {
+            ::morph::log::logError("[strand] task threw unknown exception");
+        }
+    }
+};
+
+class TaskResumer;
+
+/// @brief In which order `ModelStrands::teardown` stops the Task handlers and
+///        seals the strands.
+enum class TeardownOrder : std::uint8_t {
+    /// Stop, drain, then seal: a stopped handler unwinds on its strand, which
+    /// still admits its resumption, and the drain before the seal lets
+    /// everything the stop set moving finish there. For a build with threads,
+    /// where the strands keep running on the pool while the owner waits: an
+    /// arrival refused by the seal runs inline on its own thread, and the drain
+    /// first is what keeps a task of its key from running beside it.
+    StopThenSeal,
+    /// Seal, then stop: a stopped handler's resumption is refused and runs
+    /// inline, in the stop. For the single-threaded build, where nothing runs
+    /// the strands while the owner tears them down.
+    SealThenStop,
+};
+
+/// @brief The teardown order for this build: `StopThenSeal` where threads
+///        exist, `SealThenStop` where they do not.
+inline constexpr TeardownOrder buildTeardownOrder =
+    CORE_CPP_ASYNC_HAS_THREADS ? TeardownOrder::StopThenSeal : TeardownOrder::SealThenStop;
+
+/// @brief One strand per model instance over a morph executor: work for one
+///        `ModelId` runs serially and in order, and work for different ids runs
+///        concurrently where the executor has the threads.
+///
+/// `core::async::KeyedStrands<ModelId>`, with what morph adds to it:
+/// - the base adapter (`CoreExecutorOver`), owned here;
+/// - posted callables that log a throw (`LoggedTask`);
+/// - the action's session, and the Task handler's resumer as the current
+///   executor, around every coroutine resumed on a model instance whose Task
+///   handler has started and not finished (`enroll`). That is the keyed
+///   around-task hook's job: a handler that comes back to its strand through
+///   any awaitable finds both installed, and a callable posted to the same
+///   strand does not.
+///
+/// Held by `std::shared_ptr`: a `TaskResumer` shares it, so a suspended
+/// handler can still ask whether it is closed after its backend is gone.
+class ModelStrands final {
+public:
+    /// @param base    Where every strand's pump runs. Borrowed: it must outlive
+    ///                this object and keep running tasks until `drain` has
+    ///                returned.
+    /// @param options How each strand shares @p base; its `aroundTask` must be
+    ///                unset, since these strands install their own.
+    explicit ModelStrands(::morph::exec::IExecutor& base MORPH_LIFETIMEBOUND,
+                          ::core::async::StrandOptions options = {})
+        : _base{base}, _strands{_base, options, ::core::async::KeyedAroundTask<ModelId>::of(_hook)} {}
+
+    ModelStrands(const ModelStrands&) = delete;
+    ModelStrands& operator=(const ModelStrands&) = delete;
+    ModelStrands(ModelStrands&&) = delete;
+    ModelStrands& operator=(ModelStrands&&) = delete;
+    ~ModelStrands() = default;
+
+    /// @brief Queues @p task on @p key's strand, after everything queued there
+    ///        before it. Dropped once the strands are closed.
+    /// @param key  The model instance.
+    /// @param task The callable; held by value in one allocation, and its throw
+    ///        is logged.
+    template <typename F>
+    void post(ModelId key, F&& task) {
+        _strands.post(key, LoggedTask<std::decay_t<F>>{std::forward<F>(task)});
+    }
+
+    /// @brief Runs @p task here if the calling thread is on @p key's strand,
+    ///        posts it there otherwise, and runs it here once the strands are
+    ///        closed.
+    ///
+    /// How a Task handler's end reaches its strand when the handler finished
+    /// off it. Once the strands are closed their backend has drained them, so
+    /// no strand task is left to race @p task.
+    /// @param key  The model instance.
+    /// @param task The callable.
+    template <typename F>
+    void runOnStrand(ModelId key, F task) {
+        if (runningHere(key)) {
+            task();
+            return;
+        }
+        LoggedTask<F> logged{std::move(task)};
+        if (!_strands.tryPost(key, logged)) {
+            logged();
+        }
+    }
+
+    /// @brief Queues @p handle on @p key's strand, unless the strands are closed.
+    /// @param key    The model instance.
+    /// @param handle The coroutine to resume there; borrowed.
+    /// @return Whether it was queued.
+    [[nodiscard]] bool trySubmit(ModelId key, std::coroutine_handle<> handle) {
+        return _strands.trySubmit(key, handle);
+    }
+
+    /// @brief Queues @p work on @p key's strand, holding its claim until it
+    ///        runs, unless the strands are closed.
+    /// @param key  The model instance.
+    /// @param work The coroutine and its claim; moved from only where this
+    ///        returns true.
+    /// @return Whether it was queued.
+    [[nodiscard]] bool trySubmit(ModelId key, ::core::async::ParkedWork& work) {
+        return _strands.trySubmit(key, work);
+    }
+
+    /// @brief Whether the calling thread is inside a task of @p key's strand.
+    /// @param key The model instance.
+    /// @return True inside that strand's task, at any depth.
+    [[nodiscard]] bool runningHere(ModelId key) const noexcept { return _strands.runningHere(key); }
+
+    /// @brief Whether the calling thread is inside a task of any of these strands.
+    /// @return True inside any of their tasks.
+    [[nodiscard]] bool runningAnyHere() const noexcept { return _strands.runningAnyHere(); }
+
+    /// @brief Whether nothing is queued or running on any strand.
+    /// @return True when idle. Racy by nature where other threads post.
+    [[nodiscard]] bool idle() const { return _strands.idle(); }
+
+    /// @brief Blocks until nothing is queued or running on any strand,
+    ///        including work posted while it waits, where the build has
+    ///        threads.
+    ///
+    /// Not from one of these strands' own tasks, which would wait for itself: a
+    /// debug build asserts that. The single-threaded WebAssembly build has no
+    /// other thread to finish the work and allows no blocking wait, so there
+    /// this returns at once and `close` drops what is queued; a host that wants
+    /// it run pumps its executor until `idle()` first.
+    void drain() {
+#if CORE_CPP_ASYNC_HAS_THREADS
+        _strands.waitIdle();
+#endif
+    }
+
+    /// @brief Closes every strand: queued work is dropped, a task running on
+    ///        another thread is waited for, and later posts are dropped too.
+    ///        Idempotent.
+    void close() { _strands.close(); }
+
+    /// @brief Refuses the try-forms and keeps running what is queued:
+    ///        `trySubmit` and `runOnStrand`'s post are refused, so their callers
+    ///        run the work inline; a plain `post` is still queued until
+    ///        `close`. Idempotent.
+    void seal() { _strands.seal(); }
+
+    /// @brief Takes the strands down without losing work: stops the Task
+    ///        handlers, seals, drains and closes, with the stop and the seal in
+    ///        @p order.
+    ///
+    /// Whatever arrives once the strands are sealed -- a resumption, a
+    /// handler's end -- is refused and runs inline, so nothing reaches a strand
+    /// that the close would drop: not between the drain and the close, and not
+    /// on the single-threaded build, where the drain waits for nothing.
+    ///
+    /// With threads, the stop is drained before the seal: until the strands go
+    /// idle, a handler's resumption or end arriving from another thread -- a
+    /// socket's loop -- is still queued, behind its key's other tasks, rather
+    /// than run inline beside one of them on a pool thread, which would enter
+    /// and leave the model's action gate on two threads at once. What arrives
+    /// once the first drain has returned is the stopped handlers' own last steps.
+    /// @param stopHandlers Requests stop on every Task handler still running.
+    /// @param order        Which of stopping and sealing comes first.
+    template <typename Stop>
+    void teardown(Stop&& stopHandlers, TeardownOrder order = buildTeardownOrder) {
+        if (order == TeardownOrder::SealThenStop) {
+            seal();
+            std::forward<Stop>(stopHandlers)();
+        } else {
+            std::forward<Stop>(stopHandlers)();
+            drain();
+            seal();
+        }
+        drain();
+        close();
+    }
+
+    /// @brief Installs @p resumer's session and executor around every coroutine
+    ///        resumed on @p key's strand, until `withdraw(key, resumer)`; a
+    ///        posted callable runs without them.
+    ///
+    /// Called on the strand, when a Task handler starts. The action gate lets
+    /// one action at a time run on a model instance, so a key has at most one
+    /// suspended handler to resume. Held weakly: the handler's driver owns the
+    /// resumer.
+    /// @param key     The model instance.
+    /// @param resumer The handler's resumer.
+    void enroll(ModelId key, const std::shared_ptr<TaskResumer>& resumer) {
+        std::unique_lock const lock{_enrolledMtx};
+        _enrolled.insert_or_assign(key, resumer);
+        _enrolledCount.store(_enrolled.size(), std::memory_order_release);
+    }
+
+    /// @brief Ends `enroll(key, resumer)`. Called when the handler has
+    ///        finished; a key enrolled for another resumer since is left alone.
+    /// @param key     The model instance.
+    /// @param resumer The resumer that was enrolled for it.
+    void withdraw(ModelId key, const TaskResumer* resumer) {
+        std::unique_lock const lock{_enrolledMtx};
+        if (auto const found = _enrolled.find(key);
+            found != _enrolled.end() && found->second.lock().get() == resumer) {
+            _enrolled.erase(found);
+        }
+        _enrolledCount.store(_enrolled.size(), std::memory_order_release);
+    }
+
+private:
+    /// The keyed around-task hook: runs a coroutine resumption inside its model
+    /// instance's enrolled resumer, if it has one. A posted callable --
+    /// `onBackendChanged`, an action queued behind the handler, the handler's
+    /// end -- is not the handler and runs bare. Touches nothing of this object
+    /// after the task has run, which may have released the last reference to
+    /// it.
+    struct AroundTask {
+        ModelStrands* self;
+        void operator()(const ModelId& key, ::core::async::RunTask run) const;
+    };
+
+    CoreExecutorOver _base;
+    /// Shared by the hook, which only reads: tasks of different keys do not
+    /// serialise on it while handlers are enrolled.
+    std::shared_mutex _enrolledMtx;
+    /// How many keys are enrolled: the hook's one atomic load when none is.
+    std::atomic<std::size_t> _enrolledCount{0};
+    std::unordered_map<ModelId, std::weak_ptr<TaskResumer>, ModelIdHash> _enrolled;
+    AroundTask _hook{this};
+    /// Last, so it is destroyed first: its strands reference the base and the
+    /// hook.
+    ::core::async::KeyedStrands<ModelId, ModelIdHash> _strands;
+};
+
+/// @brief Resumes one Task handler's coroutines on its model instance's strand.
+///
+/// The current executor wherever the handler runs, so every awaitable that
+/// resumes on the current executor -- morph's `Completion` and `delay`,
+/// core-cpp's `AsyncQueue::pop` -- brings the handler back here, and `submit`
+/// queues it on the strand. Each resumption runs with the action's session
+/// installed: through the strand's around-task hook (`ModelStrands::enroll`),
+/// or here.
+///
+/// Once the strands are closed, a resumption runs inline, on the thread that
+/// submitted it, with the same context installed. The call it belongs to has
+/// already failed then, and the model instance is reachable only through the
+/// handler's own frame, so there is nothing left for the strand to serialise it
+/// against.
+///
+/// Always held by `std::shared_ptr`.
+class TaskResumer final : public ::core::async::IExecutor, public std::enable_shared_from_this<TaskResumer> {
+public:
+    /// @param strands The strands the model's actions run on.
+    /// @param key     The model instance whose strand resumptions are queued on.
+    /// @param session The action's session context, installed for each resumption.
+    TaskResumer(std::shared_ptr<ModelStrands> strands, ModelId key, ::morph::session::Context session)
+        : _strands{std::move(strands)}, _key{key}, _session{std::move(session)} {}
+
+    using ::core::async::IExecutor::submit;
+
+    /// @brief Queues @p handle's resumption on the model's strand, or resumes
+    ///        it here once the strands are closed.
+    /// @param handle The coroutine to resume; borrowed, as every handler frame
+    ///        is owned by the driver that started it.
+    void submit(std::coroutine_handle<> handle) override {
+        if (!_strands->trySubmit(_key, handle)) {
+            resumeHere(handle);
+        }
+    }
+
+    /// @brief Queues @p work's resumption on the model's strand, with its
+    ///        claim, or resumes it here once the strands are closed.
+    ///
+    /// The claim matters for a chain nobody owns: a `core::async::DetachedTask`
+    /// started inside the handler that parks on an awaitable resuming on the
+    /// current executor reaches here with its claim armed. Dropping the claim
+    /// would free that frame while its handle is still queued.
+    /// @param work The coroutine to resume, and its claim on the chain root.
+    void submit(::core::async::ParkedWork work) override {
+        if (_strands->trySubmit(_key, work)) {
+            return;
+        }
+        // Resumed, so the chain goes back to its owner: disarmed first, as
+        // core-cpp's own executors do before they resume a parked entry.
+        work.abandon.disarm();
+        resumeHere(work.resume);
+    }
+
+    /// @brief Resumes @p handle on the calling thread, inside this resumer.
+    /// @param handle The coroutine to resume.
+    void resumeHere(std::coroutine_handle<> handle) {
+        within([handle] { handle.resume(); });
+    }
+
+    /// @brief Calls @p body with the action's session installed and this
+    ///        resumer as the current executor.
+    ///
+    /// Touches no member after @p body returns: the body may release the last
+    /// owner but the one this call holds.
+    /// @param body The work, called once.
+    template <typename Body>
+    void within(Body&& body) {
+        std::shared_ptr<void> const keep = shared_from_this();
+        ::morph::session::detail::ScopedContext const scoped{_session};
+        ::core::async::ExecutorScope const scope{*this, &keep, nullptr};
+        std::forward<Body>(body)();
+    }
+
+private:
+    std::shared_ptr<ModelStrands> _strands;
+    ModelId _key;
+    ::morph::session::Context _session;
+};
+
+inline void ModelStrands::AroundTask::operator()(const ModelId& key, ::core::async::RunTask run) const {
+    if (run.kind() != ::core::async::TaskKind::Resumption ||
+        self->_enrolledCount.load(std::memory_order_acquire) == 0) {
+        run();
+        return;
+    }
+    std::shared_ptr<TaskResumer> resumer;
+    {
+        std::shared_lock const lock{self->_enrolledMtx};
+        if (auto const found = self->_enrolled.find(key); found != self->_enrolled.end()) {
+            resumer = found->second.lock();
+        }
+    }
+    if (!resumer) {
+        run();
+        return;
+    }
+    resumer->within(run);
+}
 
 }  // namespace morph::exec::detail

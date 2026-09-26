@@ -6,7 +6,7 @@
 namespace pastebin::gui {
 
 PastePresenter::PastePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : Presenter{parent}, _handler{bridge, executor} {
+    : Presenter{parent}, _executor{executor}, _handler{bridge, executor} {
     trackBound(_handler.whenBound());
 }
 
@@ -37,9 +37,21 @@ void PastePresenter::remove(DeletePaste action) {
 }
 
 void PastePresenter::list(ListPastes action) {
-    track<ListPastesResult>(
-        _handler.execute(std::move(action)), [this](ListPastesResult result) { emit listed(std::move(result)); },
-        [this](const std::exception_ptr& err) { reportError(err); });
+    trackFlow(*_executor, listFlow(QPointer<PastePresenter>{this}, _handler.execute(std::move(action))));
+}
+
+core::async::Task<void> PastePresenter::listFlow(QPointer<PastePresenter> self,
+                                                 ::morph::async::Completion<ListPastesResult> pending) {
+    try {
+        ListPastesResult result = co_await std::move(pending);
+        if (!self.isNull()) {
+            emit self->listed(std::move(result));
+        }
+    } catch (...) {
+        if (!self.isNull()) {
+            self->reportError(std::current_exception());
+        }
+    }
 }
 
 }  // namespace pastebin::gui

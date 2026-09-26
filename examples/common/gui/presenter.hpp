@@ -8,6 +8,13 @@
 #include <functional>
 #include <morph/core/completion.hpp>
 
+// moc reads only the Q_OBJECT declarations below; the coroutine machinery is
+// for the compiler.
+#ifndef Q_MOC_RUN
+#include <core/async/Task.hpp>
+#include <morph/core/coroutine.hpp>
+#endif
+
 /// @file
 /// Shared presenter base (examples/TESTING.md, "Presenter architecture" rule
 /// 3): "Observable quiescence." Every ladder presenter derives from this so
@@ -176,7 +183,39 @@ protected:
             });
     }
 
+    /// @brief Runs @p flow -- a coroutine that `co_await`s completions -- on
+    ///        @p executor, counted in `busy()` until it finishes.
+    ///
+    /// The coroutine counterpart of `track()`: started with
+    /// `morph::async::spawn`, so every step of @p flow runs on @p executor,
+    /// whichever thread the completions it awaits settle on. A flow that may
+    /// outlive this presenter checks a `QPointer` after each `co_await`, as
+    /// `track()`'s handlers do. See docs/spec/core/coroutines.md.
+    /// @param executor Where the flow runs: the executor the presenter's
+    ///        completions deliver on.
+    /// @param flow     The coroutine to run.
+    void trackFlow(::morph::exec::IExecutor& executor, ::core::async::Task<void> flow) {
+        _inFlight.fetch_add(1);
+        ::morph::async::spawn(executor, finishAfter(QPointer<Presenter>{this}, std::move(flow)));
+    }
+
 private:
+    /// @brief Awaits @p flow, then counts it finished, whether it returned or threw.
+    static ::core::async::Task<void> finishAfter(QPointer<Presenter> self, ::core::async::Task<void> flow) {
+        std::exception_ptr escaped;
+        try {
+            co_await std::move(flow);
+        } catch (...) {
+            escaped = std::current_exception();
+        }
+        if (!self.isNull()) {
+            self->finishOne();
+        }
+        if (escaped) {
+            std::rethrow_exception(escaped);
+        }
+    }
+
     void finishOne() {
         if (_inFlight.fetch_sub(1) == 1) {
             emit idle();

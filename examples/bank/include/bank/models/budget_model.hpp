@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <core/async/Task.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 
@@ -20,7 +21,10 @@ public:
     dto::BudgetInfo execute(const dto::SetBudget& action);
     dto::CommandResult execute(const dto::DeleteBudget& action);
     dto::BudgetList execute(const dto::ListBudgets& action);
-    dto::SpendingReport execute(const dto::SpendingByKind& action);
+    /// A coroutine handler (docs/spec/core/coroutines.md): the bridge drives it
+    /// on this model's strand. It does not suspend today; a report that awaited
+    /// another model's execute would, with no change to its callers.
+    core::async::Task<dto::SpendingReport> execute(dto::SpendingByKind action);
 };
 
 }  // namespace bank

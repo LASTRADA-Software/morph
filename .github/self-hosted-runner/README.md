@@ -465,10 +465,11 @@ needed for that case.
 
 ## Dependency clones and HTTP/2
 
-`CMakeLists.txt` falls back to `FetchContent` for glaze when no installed
-copy is found, so every Linux configure step does one anonymous
-`git clone https://github.com/stephenberry/glaze.git` — the only
-unauthenticated clone in the build. Inside this image that clone fails
+`CMakeLists.txt` fetches glaze through CPM when no installed copy is
+found, so a Linux configure whose CPM source cache (`.cache/cpm`, restored
+by `actions/cache`) misses does one anonymous
+`git clone https://github.com/stephenberry/glaze.git` — an unauthenticated
+clone. Inside this image that clone fails
 most of the time: GitHub answers the `info/refs` GET with 200 and then
 the `git-upload-pack` POST on the same reused HTTP/2 connection with a
 spurious `401` and `www-authenticate: Basic realm="GitHub"`, which

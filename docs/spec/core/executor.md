@@ -13,7 +13,7 @@ threading, and serialisation semantics differ per implementation.
 - [`ThreadPoolExecutor`](#threadpoolexecutor)
 - [`MainThreadExecutor`](#mainthreadexecutor)
 - [`QtExecutor`](#qtexecutor)
-- [`StrandExecutor` and `ModelId`](#strandexecutor-and-modelid)
+- [Strands: `ModelStrands` and `ModelId`](#strands-modelstrands-and-modelid)
 - [Lifetime & ownership](#lifetime--ownership)
 - [Thread safety](#thread-safety)
 - [Failure modes](#failure-modes)
@@ -24,7 +24,7 @@ threading, and serialisation semantics differ per implementation.
 
 ## Type overview
 
-There are seven types, split across `morph::exec` (in `executor.hpp`),
+There are nine types, split across `morph::exec` (in `executor.hpp`),
 `morph::exec::detail` (in `strand.hpp`), and `morph::qt` (in
 `qt/qt_executor.hpp`):
 
@@ -36,14 +36,16 @@ There are seven types, split across `morph::exec` (in `executor.hpp`),
 | `QtExecutor` | `morph::qt` | Posts tasks to a Qt event loop; they run on the configured context object's thread (the `QCoreApplication`/GUI thread by default). |
 | `ModelId` | `morph::exec::detail` | Opaque 64-bit identifier for a model instance, used as a strand key. |
 | `ModelIdHash` | `morph::exec::detail` | Hash functor so `ModelId` can be an `unordered_map` key. |
-| `StrandExecutor` | `morph::exec::detail` | Per-key serialising wrapper — tasks with the same `ModelId` never overlap. |
+| `ModelStrands` | `morph::exec::detail` | One strand per `ModelId` over an `IExecutor`: core-cpp's `core::async::KeyedStrands`, with what morph adds. Tasks with the same `ModelId` never overlap. |
+| `CoreExecutorOver` | `morph::exec::detail` | A `core::async::IExecutor` over a morph `IExecutor`: how a core-cpp strand's pump reaches it. |
+| `TaskResumer` | `morph::exec::detail` | A Task handler's resumer: the current executor while the handler runs, queuing its resumptions on its model's strand (see [`coroutines.md`](coroutines.md)). |
 
 `IExecutor` and the two thread-based concrete executors live in the public
 `morph::exec` namespace. `QtExecutor` lives in `morph::qt` (in the separate
 `qt/qt_executor.hpp` header) because it depends on Qt; only the GUI/bridge layer
-pulls it in. `StrandExecutor`, `ModelId`, and `ModelIdHash` live in
-`morph::exec::detail` because they are implementation details of the morph model
-framework, not general-purpose utilities.
+pulls it in. `ModelStrands`, `CoreExecutorOver`, `TaskResumer`, `ModelId` and
+`ModelIdHash` live in `morph::exec::detail` because they are implementation
+details of the morph model framework, not general-purpose utilities.
 
 ## `IExecutor` — the abstract interface
 
@@ -64,15 +66,14 @@ FIFO order from a single mutex-protected queue.
 
 `n` is **clamped to a minimum of 1**. A pool with zero workers would accept
 posted tasks that no thread could ever run, so every `post()` would hang forever
-and any `StrandExecutor` built on it would deadlock in its destructor waiting on
-`_inFlight`. Passing `0` therefore yields a usable single-worker pool rather than
+and any strands built on it would never drain. Passing `0` therefore yields a usable single-worker pool rather than
 a silently dead one; values `≥ 1` spawn exactly that many workers.
 
 The destructor signals stop, notifies all workers, and joins every thread. The
 workers **drain** the queue before exiting: once `_stop` is set the loop exits
 only when `_stop && _q.empty()`, so workers keep popping and running
-already-queued tasks (including strand lambdas re-posted from within a running
-task) until the queue is empty. The join therefore blocks until every task
+already-queued tasks (including a strand's next turn, queued from within a
+running task) until the queue is empty. The join therefore blocks until every task
 queued before destruction has run. The one thing not covered is a task
 `post()`ed concurrently with or after destruction: it races the last worker's
 exit and may be silently lost. Exceptions from tasks are caught in the worker
@@ -190,204 +191,130 @@ pointer. There is **no** per-task implicit cancellation — callers that capture
 `QObject` must guard it themselves (e.g. `QPointer` or a liveness token) (see
 [Limitations](#limitations)).
 
-## `StrandExecutor` and `ModelId`
+## Strands: `ModelStrands` and `ModelId`
 
-A per-key serialising executor built on top of any `IExecutor`. Tasks posted
-with the same `ModelId` key execute in FIFO order with no overlap, even when the
-underlying executor is a thread pool. Tasks with different keys may run
-concurrently.
+A strand per model instance over any `IExecutor`. Tasks posted with the same
+`ModelId` key execute in FIFO order with no overlap, even when the underlying
+executor is a thread pool. Tasks with different keys may run concurrently.
 
 `ModelId` is an opaque 64-bit identifier. Zero is reserved and means "not
 bound". Non-zero values are assigned by the backend and are stable for the
 lifetime of the model. It supports three-way comparison and can be used as an
 `unordered_map` key via `ModelIdHash`.
 
-Internally `StrandExecutor` maintains a map of `ModelId → shared_ptr<Strand>`
-(shared state per key). A `Strand` holds a pointer to the base `IExecutor`, a
-mutex, a pending queue, and a `running` flag. The executor also tracks an
-`_inFlight` counter (guarded by the map mutex) that the destructor waits on,
-and a single-slot `_spare` node handle (also guarded by the map mutex) that
-recycles one detached map entry — see
-[Lifetime & ownership](#lifetime--ownership).
+The strands are core-cpp's `core::async::KeyedStrands<ModelId, ModelIdHash>`
+(`<core/async/KeyedStrands.hpp>`, since core-cpp 0.4.0), which was written after
+the `StrandExecutor` morph had here and replaces it. What it guarantees, core-cpp
+specifies and tests:
 
-The pending queue is `StrandExecutor::PendingQueue`, not `std::queue`. It is a
-FIFO with the head task stored **inside** the `Strand` and a lazily constructed
-`std::deque` behind it, and it exists purely to make the common case cheaper:
-because the drain step below detaches the whole map entry as soon as the queue
-empties, a serial workload (one action at a time, each waited out) starts from
-an empty queue on every dispatch and puts exactly one task in it — and
-libstdc++'s
-`std::deque` allocates its node map *and* a 512-byte first buffer in its
-default constructor, whether or not anything is ever pushed. See
-[Lifetime & ownership](#lifetime--ownership) below for the measurement.
-`PendingQueue` does no locking of its own; every access is
-under the owning `Strand::mtx`, exactly as the `std::queue` it replaced was,
-and it tracks occupancy with a flag rather than by testing the callable, so an
-empty `std::function` is queued and dispatched like any other. It changes no
-lifetime or locking rule: the removal still fires when `empty()` becomes true,
-still under the `{_mapMtx, strand->mtx}` pair.
+- **One strand per key, made when the key gets work and retired when it runs
+  out,** under the registry's lock, so a post that races a retirement never
+  leaves two strands for one key. Up to 32 retired strands are kept, with their
+  pump frames, queue room and map nodes, for the next key that needs one: in the
+  steady state a post costs one allocation (the callable) and nothing else. A
+  kept strand and a kept map node each still hold the key they last served, so
+  up to 64 `ModelId`s outlive their work; a `ModelId` is eight bytes.
+- **A pump per strand, a batch per turn.** A strand queues itself on the base
+  once however many tasks arrive while it is busy, runs at most
+  `StrandOptions::batch` (32) tasks per turn, and hands the base back.
+- **A current executor per batch.** A strand states itself with
+  `core::async::ExecutorScope` while it runs, so `runningHere(key)` answers
+  inside its tasks, and an awaitable that resumes on the current executor
+  brings a coroutine back to it (see [`coroutines.md`](coroutines.md)).
 
-**`_inFlight` is incremented with the *decision* to dispatch, not lazily.**
-`post()` increments `_inFlight` in the same `_mapMtx` critical section that flips
-`running` true and decides to schedule, before releasing the lock; the re-arm
-step in the strand task likewise increments under the `_mapMtx` it already holds,
-before the current run's own decrement. This closes an internal window that would
-otherwise exist if the increment were deferred to a later `_mapMtx` acquisition
-in `scheduleNext`: between releasing `_mapMtx` in `post()` and re-taking it to
-count the dispatch, `~StrandExecutor` could acquire `_mapMtx`, observe
-`_inFlight == 0`, and destroy the map before the dispatched lambda touched it.
-Because "decided to schedule" and "counted as in-flight" are now atomic under one
-lock, and the re-arm's increment precedes the prior run's decrement, `_inFlight`
-never dips to a spurious 0 across a scheduling hand-off. (This is distinct from
-the caller-discipline rule below, which concerns a `post()` that genuinely
-arrives after teardown has begun.)
+What `ModelStrands` adds:
 
-**The per-key serialisation invariant:** at most one live `Strand` exists per
-`ModelId`, and any strand that is (or becomes) `running` is the strand currently
-stored in the map for that key. This is what guarantees a key's tasks never
-overlap — a single strand runs them one at a time.
+- **The base adapter.** `CoreExecutorOver` turns the morph `IExecutor` into a
+  `core::async::IExecutor`. A strand hands its base one bare coroutine handle
+  per turn, which the adapter posts as a lambda holding that handle alone:
+  trivially copyable, so it fits `std::function`'s small buffer and a turn costs
+  no allocation. The lambda does not refer to the adapter.
+- **A throw is logged, not propagated.** `post(key, fn)` wraps `fn` in
+  `LoggedTask`, which catches what it throws and logs it: `std::exception` as
+  `"[strand] task threw: " + what()`, any other type as `"[strand] task threw
+  unknown exception"`. The next task for the key runs as usual. A core-cpp strand
+  would propagate the throw to whoever resumed its pump, and under MSVC's `cl`
+  end the process.
+- **`runOnStrand(key, fn)`** runs `fn` at once when the calling thread is inside
+  a task of `key`'s strand, posts it there otherwise, and runs it at once when
+  the strands are closed. It is how a Task handler's end reaches its strand from
+  wherever the handler finished.
+- **`drain()`** blocks until nothing is queued or running on any strand,
+  including work posted while it waits; not from one of the strands' own tasks,
+  which a debug build asserts. The single-threaded WebAssembly build has no
+  other thread to finish the work and allows no blocking wait, so there it
+  returns at once.
+- **`close()`** closes every strand: queued work is dropped, a task running on
+  another thread is waited for, and a later `post` is dropped too.
+- **`seal()`** (core-cpp 0.4.1) refuses the try-forms and keeps running what
+  is queued: `trySubmit` and `runOnStrand`'s post are refused, so their
+  callers run the work inline, while a plain `post` -- and a coroutine coming
+  back through a plain submit -- is still queued until the close.
+- **`teardown(stopHandlers, order)`** is the whole sequence: stop the Task
+  handlers and seal, in `order`, then `drain()`, then `close()`. Where threads
+  exist the order is stop, `drain()`, seal, so a stopped handler still unwinds
+  on its strand, and a handler's end that arrives from a socket's loop while
+  its instance's tasks drain is queued behind them rather than run inline
+  beside one, which would enter the action gate on two threads at once. On
+  the single-threaded build it is seal then stop, so a stopped
+  handler's resumption is refused and runs inline in the stop, since nothing
+  else could run it. Once sealed, a resumption or a handler's end that arrives
+  -- between the drain and the close included -- runs inline where it arrives,
+  instead of reaching a strand the close would drop.
+- **The Task handler's context.** `enroll(key, resumer)` installs a Task
+  handler's session and resumer around every coroutine resumed on `key`'s
+  strand until `withdraw(key, resumer)`, through the strands' keyed around-task
+  hook, which runs a posted callable bare (`RunTask::kind()`). The hook costs
+  one load per task while no handler is enrolled.
 
-Two operations can violate that invariant if they interleave: `post()` pushing a
-task and flipping `running` true, and `scheduleNext`'s drain step clearing
-`running` and *erasing* the map entry when the queue empties. Holding the
-combined `{_mapMtx, strand->mtx}` lock only inside the drain step is **not**
-enough: the earlier design took `_mapMtx` in `post()` only long enough to look
-the strand up, released it, and then re-armed the strand under `strand->mtx`
-alone. A concurrent drain could erase the strand in that gap, orphaning a live
-strand — and the next `post(key)` would then create a *second* strand for the
-same key, so two strands ran the key's tasks concurrently.
+`ModelStrands` is held by `std::shared_ptr`: a `TaskResumer` shares it, so a
+handler suspended past its backend's destruction can still ask whether the
+strands are closed.
 
-The fix makes **both** sides hold `_mapMtx` across their whole decision. `post()`
-takes `_mapMtx`, does the slot lookup/create, and then — *still holding
-`_mapMtx`* — takes `strand->mtx` to push the task and set `running`. The drain
-step takes the same two locks in the same order. Because the map lookup, the
-re-arm, and the erase are all serialised by `_mapMtx`, a strand that becomes
-`running` in `post()` is guaranteed to still be the map entry, and the drain
-never erases a strand whose `pending` queue is non-empty. The orphaning window is
-gone. Lock order is always `_mapMtx` → `strand->mtx`; both sites acquire them as
-two sequential `scoped_lock`s in that order (rather than one `scoped_lock` over
-the pair, whose `std::lock` back-off can grab them in address order), so a single
-consistent order holds everywhere and there is no lock-ordering deadlock.
-
-Each strand task is the point where the model's own code actually runs, so the
-task wrapper catches exceptions and logs them via `morph::log::logError` (see
-[Failure modes](#failure-modes)) before deciding whether to keep the strand
-running. A throw therefore neither stalls the strand nor skips the drain-and-erase
-bookkeeping: the next queued task for that key still runs.
-
-The destructor waits for all in-flight tasks to complete (`_inFlight == 0`)
-before destroying the strand map.
-
-**Testing per-model ordering without naming `StrandExecutor`/`ModelId`.**
-`RemoteServer` (see `backend.md`) owns a `StrandExecutor` internally, but every
-task it ever dispatches — the top-level `handle()` post and the internal
-per-model strand dispatch alike — funnels through the single `IExecutor` the
-server was constructed with. A caller that wants a deterministic, hand-stepped
-interleaving harness against `RemoteServer`'s real per-model ordering does not
-need to touch `morph::exec::detail::StrandExecutor` or
-`morph::exec::detail::ModelId` at all: constructing the server against a
-single-step, test-controlled `IExecutor` (see `tests/test_support.hpp`'s
-`morph::testing::StepExecutor`) and driving it one task at a time is enough —
-`RemoteServer`'s own wire replies carry the model id as a plain `uint64_t`
-(`wire::Envelope::modelId`), so a test never needs the `ModelId` vocabulary
-either.
+**Testing per-model ordering without naming `ModelStrands`/`ModelId`.**
+`RemoteServer` (see `backend.md`) owns its strands internally, but every
+task it ever dispatches — the top-level `handle()` post and every strand's turn
+alike — funnels through the single `IExecutor` the server was constructed with.
+A caller that wants a deterministic, hand-stepped interleaving harness against
+`RemoteServer`'s real per-model ordering does not need to touch
+`morph::exec::detail::ModelStrands` or `morph::exec::detail::ModelId` at all:
+constructing the server against a single-step, test-controlled `IExecutor` (see
+`tests/test_support.hpp`'s `morph::testing::StepExecutor`) and driving it one
+task at a time is enough — `RemoteServer`'s own wire replies carry the model id
+as a plain `uint64_t` (`wire::Envelope::modelId`), so a test never needs the
+`ModelId` vocabulary either.
 
 ## Lifetime & ownership
 
-`StrandExecutor` stores a raw pointer to the base `IExecutor` (`_base`, copied
-into each `Strand::base`). It does **not** own the base and never extends its
-lifetime. Two invariants make the arrangement safe, and violating either is a
-latent bug:
+`ModelStrands` holds its base `IExecutor` by reference (inside
+`CoreExecutorOver`) and does not own it. Two rules follow:
 
-1. **The base `IExecutor` must outlive the `StrandExecutor`.** Every strand
-   dispatch calls `strand->base->post(...)`, and `~StrandExecutor` blocks until
-   the last of those dispatched lambdas has run. So the base must still be alive
-   for the whole life of the strand, *including* the destructor's wait.
+1. **The base `IExecutor` must outlive the strands and keep running tasks until
+   `drain()` has returned.** Every strand's turn is posted to it, and `drain()`
+   waits for the turns that are queued. A pool destroyed first would drop them,
+   and the drain would wait forever.
+2. **What the strands posted must still run, or be dropped by the base.** A
+   strand's pump that the base runs after the strands were closed finds its
+   strand closed and ends. One the base drops unrun (a `MainThreadExecutor`
+   destroyed with its queue) leaks that strand's state: close the strands, and
+   pump the base, before destroying it.
 
-2. **The base must actually run — not lose — every task the strand posts.**
-   `~StrandExecutor` only returns once `_inFlight` reaches 0, and `_inFlight` is
-   decremented *inside* the dispatched lambda, after the task runs. `_inFlight`
-   is incremented on the strand thread *before* the lambda is handed to
-   `base->post()`. If a posted lambda never runs — because it was handed to a
-   pool that is already being destroyed or has already joined its workers — that
-   decrement never happens and the strand destructor waits forever.
+Destroying the strands, or calling `close()`, drops what is still queued and
+waits for a task running on another thread. It does not wait for the task it is
+called from: a task may release the last reference to the strands' owner, as a
+`RemoteServer`'s may. A backend whose queued work must run tears its strands
+down with `teardown()` instead: `~LocalBackend` and `~SynchronousBackendAdapter`
+do.
 
-These two combine into the framework's most important ordering rule for these
-types. `~ThreadPoolExecutor` **drains** its queue (workers run every
-already-queued task before joining), whereas `~StrandExecutor` **blocks** until
-`_inFlight == 0`. Draining is not enough to make arbitrary teardown order safe,
-because the strand can still be *dispatching* while the pool tears down.
-Therefore:
+> **Destroy the backend before the base pool it runs on.**
 
-> **Always destroy the `StrandExecutor` before the base pool it wraps.**
+With member declaration order this means the pool must be declared *before*
+the backend (members destroy in reverse order), or the two must be torn down
+explicitly in that order.
 
-If the base `ThreadPoolExecutor` is destroyed first, two things go wrong. A
-strand lambda still in flight may call `base->post()` on a pool whose destructor
-has run — undefined behaviour (use-after-free on the pool's queue/mutex). Even
-absent UB, a lambda posted after the pool's workers have already observed
-`_stop && _q.empty()` and exited is never run, so its `--_inFlight` never
-happens and the subsequent `~StrandExecutor` deadlocks on its condition variable
-forever. With member declaration order this means the pool must be declared
-*before* the strand (members destroy in reverse order), or the two must be torn
-down explicitly in that order.
-
-A second rule follows from the same wait: **no `post()` may race with or follow
-`~StrandExecutor`.** The destructor takes `_mapMtx` and waits for
-`_inFlight == 0`, but it does not block new `post()` calls. A `post()` that
-arrives concurrently with (or after) destruction can enqueue work and re-arm a
-strand after the destructor believed it had quiesced, reintroducing exactly the
-data race the `_inFlight` wait exists to prevent. Callers must ensure all task
-sources are shut down before the `StrandExecutor` is destroyed.
-
-The strand map is self-cleaning: when a strand drains (its `pending` queue is
-empty), `scheduleNext` clears `running` and removes the map entry under the
-combined `{_mapMtx, strand->mtx}` lock. Live memory therefore tracks the set of
-*currently active* models rather than every model ever seen — there is no
-per-model registration to leak.
-
-**The cost it would otherwise carry is allocation churn.** A model posted to
-serially — one action at a time, each waited out — never has a task queued at
-the instant the previous one finishes, so it never keeps a strand: every
-dispatch misses in the map, and a naive implementation rebuilds the map node
-and the `Strand` each time. Measured with
-`tests/bench/bench_dispatch_allocations.cpp` (see
-[testing_strategy.md](../testing_strategy.md)), x86-64 Linux, GCC 16.2.1 /
-libstdc++, `-O2`, that comes to **4 allocations and 760 of the 1990 bytes** a
-local `execute` round trip costs — 38% of the bytes, for a strand that is
-rebuilt and thrown away. 576 of those bytes are not the strand at all but
-`std::queue`'s `std::deque` eagerly allocating a node map and a 512-byte first
-buffer in its default constructor, which is why the pending queue is
-`PendingQueue`, holding the head task inline: that alone cuts the strand's
-share to **2 allocations and 152 bytes** and the whole round trip to 18.9
-allocations / 1396 bytes.
-
-**The remaining two allocations — the map node and the `Strand` itself — are
-recycled rather than removed.** Removing them means keeping the slot alive
-across the drain, which trades the churn for a per-model entry nothing
-reclaims, since `StrandExecutor` has no deregistration hook. Recycling avoids
-that trade: the entry leaves the map at exactly the same moment, under exactly
-the same locks; the drain calls `extract` instead of `erase` and parks the
-detached node in a single-slot `_spare` member, and the next `post()` that
-misses re-keys that node and inserts it back. The map stays bounded by the
-removal — `_spare` holds **at most one** node, is guarded by `_mapMtx` like the
-map itself, and is freed with the executor.
-
-Reusing the parked node's `Strand` object is guarded additionally by
-`use_count() == 1`: the recycled node is then the only owner, so no strand task
-can still reach the object and reusing it is indistinguishable from
-constructing a new one. When that guard fails — a finishing strand lambda still
-holds its `shared_ptr` when the next `post()` looks — a fresh `Strand` is
-constructed and only the node is recycled. To make the guard
-usually hold, the strand lambda drops its `shared_ptr` immediately after the
-drain block rather than at its own destruction; nothing after that point
-touches the strand. That timing affects *whether* the object is recycled, never
-whether the recycling is safe.
-
-Measured with the same instrument, x86-64 Linux, **clang 22.1.8 / libstdc++
-16.2.1, Release**: recycling takes the round trip from **18.90 allocations /
-1394.8 bytes** to **16.95 / 1244.6** — the full 2 allocations and ~150 bytes
-the strand had left. Six alternating runs of each binary; spread within 0.1
-allocations and 2 bytes per call. The magnitude is libstdc++-specific.
+The strand registry is self-cleaning: a key's strand is retired when its queue
+runs out, so live strands track the model instances with work, not every model
+ever seen. Retired strands kept for reuse are bounded at 32.
 
 ## Thread safety
 
@@ -401,20 +328,11 @@ concurrently.
 - `MainThreadExecutor` guards its queue with `_m`. `post()` may be called from
   any thread, but `runFor()` must be called only from the single owning
   ("main") thread; concurrent `runFor()` calls are not supported.
-- `StrandExecutor` uses two lock levels: `_mapMtx` protects the `_strands` map,
-  the `_spare` recycled node and the `_inFlight` counter, and each
-  `Strand::mtx` protects that strand's
-  `pending` queue and `running` flag. Both operations that can break the
-  per-key invariant hold `_mapMtx` across their whole decision: `post()` takes
-  `_mapMtx`, does the slot lookup/create, and then — still holding `_mapMtx` —
-  takes `strand->mtx` to push and re-arm; the drain-and-erase step in
-  `scheduleNext` takes the same two locks in the same order. This serialises the
-  lookup, the re-arm, and the erase, so a concurrent `post()` can no longer
-  re-arm a strand *after* a drain has erased it (which would orphan a live
-  strand and let two strands for one key run concurrently). Lock order is always
-  `_mapMtx` → `strand->mtx`, acquired as two sequential `scoped_lock`s (not one
-  `scoped_lock` over the pair) so a single consistent order holds at every site
-  and there is no lock-ordering deadlock. The net guarantee: tasks with the same
+- `ModelStrands`' members are callable from any thread. Its locking is
+  core-cpp's: the registry's lock is taken before any strand's own, so a post
+  and a retirement for one key are serialised (see `KeyedStrands.hpp`). The
+  enrolled-handler table has a mutex of its own, taken by the around-task hook
+  only while a handler is enrolled. The net guarantee: tasks with the same
   `ModelId` never overlap; tasks with different keys may run in parallel on the
   base pool.
 - `QtExecutor` holds only a `QObject*` context pointer; its thread safety is
@@ -428,14 +346,14 @@ concurrently.
 | Executor | What happens when a task throws |
 |---|---|
 | `ThreadPoolExecutor` | The worker `loop` catches it. `std::exception` is logged as `"[thread-pool] task threw: " + what()`; any other type is logged as `"[thread-pool] task threw unknown exception"`. The worker keeps looping. |
-| `StrandExecutor` | The strand task wrapper catches it. `std::exception` is logged as `"[strand] task threw: " + what()`; any other type is logged as `"[strand] task threw unknown exception"`. The strand's drain/erase bookkeeping and `_inFlight` decrement still run, so the next task for the key proceeds. |
+| `ModelStrands` | `LoggedTask`, around every posted callable, catches it. `std::exception` is logged as `"[strand] task threw: " + what()`; any other type is logged as `"[strand] task threw unknown exception"`. The next task for the key proceeds. |
 | `MainThreadExecutor` | `runFor` catches **only** `std::exception`, logged as `"[main-thread] callback threw: " + what()`, then continues with the next task. **Any non-`std::exception` type propagates out of `runFor()`** and is the caller's problem. |
 | `QtExecutor` | No `try`/`catch` of its own. A throwing task propagates into whoever drives the target thread's event loop (`QCoreApplication::exec` by default, or the worker thread's loop for a custom context); Qt's default behaviour is to `std::terminate`. Tasks posted through it must not let exceptions escape. |
 
 All logging goes through `morph::log::logError`. The design principle: a task
 failure must never kill a worker/strand or abort sibling tasks, but it must also
 never be *invisible*. Previously these exceptions were swallowed silently; they
-are now logged. `ThreadPoolExecutor` and `StrandExecutor` catch `(...)` and so
+are now logged. `ThreadPoolExecutor` and `ModelStrands` catch `(...)` and so
 contain every exception type; `MainThreadExecutor` deliberately narrows its
 `catch` to `std::exception` (a non-standard throw surfaces on the drain thread
 rather than being hidden).
@@ -486,27 +404,36 @@ rather than being hidden).
 |---|---|---|
 | `operator()` | `std::size_t operator()(ModelId mid) const noexcept` | Hashes `mid.v`. |
 
-### `StrandExecutor` (`morph::exec::detail`)
+### `ModelStrands` (`morph::exec::detail`)
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor | `explicit StrandExecutor(IExecutor& base)` | Wraps `base`. |
-| dtor | `~StrandExecutor()` | Blocks until `_inFlight == 0`. Requires the base to outlive it and to run every posted task — otherwise deadlocks (see Lifetime & ownership). |
-| `post` | `void post(ModelId key, std::function<void()> task)` | Enqueues for strand `key`. FIFO per key, concurrent across keys. Thread-safe. Task exceptions caught and logged. Must not race/follow the destructor. |
+| ctor | `explicit ModelStrands(IExecutor& base, core::async::StrandOptions options = {})` | Strands over `base`. `options.aroundTask` must be unset. |
+| dtor | `~ModelStrands()` | Closes the strands: drops what is queued, waits for a task running on another thread. |
+| `post` | `template <typename F> void post(ModelId key, F&& task)` | Queues on `key`'s strand. FIFO per key, concurrent across keys. Thread-safe. One allocation; the throw is logged. Dropped once closed. |
+| `runOnStrand` | `template <typename F> void runOnStrand(ModelId key, F task)` | Runs here on `key`'s strand, posts off it, runs here once closed. |
+| `trySubmit` | `bool trySubmit(ModelId key, std::coroutine_handle<> handle)` | Queues a resumption unless closed. |
+| `runningHere` / `runningAnyHere` | `bool runningHere(ModelId key) const noexcept` / `bool runningAnyHere() const noexcept` | Whether the calling thread is inside a task of `key`'s strand / of any. |
+| `idle` | `bool idle() const` | Nothing queued or running. |
+| `drain` | `void drain()` | Blocks until idle, where threads exist. Not from a task of these strands. |
+| `close` | `void close()` | As the destructor. Idempotent. |
+| `seal` | `void seal()` | Refuses `trySubmit` and `runOnStrand`'s post; queued work still runs, and `post` is still admitted. Idempotent. |
+| `teardown` | `template <typename Stop> void teardown(Stop&& stopHandlers, TeardownOrder order = buildTeardownOrder)` | Stop and seal in `order`, then `drain`, then `close`. |
+| `enroll` / `withdraw` | `void enroll(ModelId key, const std::shared_ptr<TaskResumer>&)` / `void withdraw(ModelId key, const TaskResumer*)` | Install / remove a Task handler's session and resumer around the coroutines resumed on `key`'s strand. |
 
 ## Design decisions
 
 | Decision | Choice | Why |
 |---|---|---|
 | Task signature | `std::function<void()>` | Simple, universal. Every executor accepts the same callable type. No return value, no cancellation. |
-| Exception handling | **Caught and logged, never propagated out of a worker/strand** | A task failure must not crash unrelated tasks *or* vanish. `ThreadPoolExecutor` and `StrandExecutor` catch `(...)` and log via `morph::log::logError`; `MainThreadExecutor` narrows its catch to `std::exception` so a non-standard throw surfaces on the synchronous drain thread. See [Failure modes](#failure-modes). |
-| ThreadPoolExecutor drain-on-dtor | **Drain the queue, then join** | Workers run every already-queued task before exiting, so a `StrandExecutor`'s in-flight lambdas complete and decrement `_inFlight` as long as the pool outlives the strand. There is no public `waitIdle`/graceful-shutdown API; tasks posted after destruction begins may be lost, so the caller must still synchronise teardown order externally. |
+| Exception handling | **Caught and logged, never propagated out of a worker/strand** | A task failure must not crash unrelated tasks *or* vanish. `ThreadPoolExecutor` and `ModelStrands` catch `(...)` and log via `morph::log::logError`; `MainThreadExecutor` narrows its catch to `std::exception` so a non-standard throw surfaces on the synchronous drain thread. See [Failure modes](#failure-modes). |
+| ThreadPoolExecutor drain-on-dtor | **Drain the queue, then join** | Workers run every already-queued task before exiting, so a strand's queued turn still runs, and finds its strand closed, as long as the pool outlives the strands. There is no public `waitIdle`/graceful-shutdown API; tasks posted after destruction begins may be lost, so the caller must still synchronise teardown order externally. |
 | MainThreadExecutor's `runFor` | **Wall-clock deadline** | Lets the caller batch-process tasks without spinning. The condition-variable wait avoids busy-waiting. |
 | MainThreadExecutor's `runOnce`/`drain` | **Thin wrappers sharing `runFor`'s dequeue-and-invoke step, added alongside it** | `runOnce()` steps exactly one task without blocking; `drain()` loops `runOnce()` until the queue is empty. Neither waits on new tasks from other threads, unlike `runFor()`'s deadline-scoped wait — this gives event-loop integrations and tests deterministic, non-blocking single-step control without replacing `runFor()`'s existing behavior. |
 | ModelId zero | **Reserved — "not bound"** | A natural sentinel for optional/uninitialised model handles. |
-| StrandExecutor in `detail` | **Not a general-purpose utility** | Exists only for the morph model framework's per-model serialisation. The `ModelId` key is specific to model instances. |
-| StrandExecutor destructor | **Waits for in-flight tasks** | Without this, a pool thread running `scheduleNext` can access `_strands` after it has been destroyed (TSan: data race on destructor vs erase). |
-| Strand per-key invariant | **`post()` *and* drain-and-erase both hold `_mapMtx` across their whole decision** | Serialises lookup, re-arm, and erase so at most one live strand exists per key and any `running` strand is the map's current entry. Holding the combined lock only in the drain step was insufficient — `post()` re-armed under `strand->mtx` alone after releasing `_mapMtx`, so a drain could erase the strand in that gap, orphan it, and let a second strand for the same key run concurrently. |
+| The strand | **core-cpp's `KeyedStrands`**, not morph's own | morph's `StrandExecutor` became core-cpp's `Strand` and `KeyedStrands` in 0.4.0, which the other Contour Terminal projects share; morph keeps only what is morph's: the adapter, the throw policy and the Task handler's context. Its two fixed races (a post racing the drain, a recycled strand under the wrong key) are core-cpp's to keep fixed now, in its own race tests. |
+| `ModelStrands` in `detail` | **Not a general-purpose utility** | Exists only for the morph model framework's per-model serialisation. The `ModelId` key is specific to model instances. |
+| Closing drops, `drain` waits | **Seal, drain, close, in `teardown`** | core-cpp's strands drop queued work when closed, so that a strand can be destroyed from one of its own tasks. A backend whose queued work must run seals first, so that nothing arriving after the drain is queued only to be dropped, and drains before it closes. |
 | No `std::future` / return value | **Fire-and-forget only** | Executors schedule side-effect tasks. Callers that need results use shared state or futures externally. |
 | No `std::executor` conformance | **Custom interface, not `std::executor`** | C++26 `std::executor` is not yet widely available. This is a minimal in-house abstraction. |
 | `QtExecutor` via `invokeMethod`, not a `QObject` subclass | **Near-stateless free-standing `IExecutor`, target configurable via ctor** | Uses `QMetaObject::invokeMethod(context, fn, Qt::QueuedConnection)`, so callers need no custom `QObject`, event type, or slot — they only optionally supply a `QObject*` to pick the target thread. Defaults to `QCoreApplication::instance()` so existing GUI-thread call sites are unaffected. Keeps the type a drop-in `IExecutor` holding a single pointer, with Qt's event loop as the sole dispatcher. |
@@ -517,7 +444,7 @@ rather than being hidden).
 These are honest, known gaps — accepted trade-offs, not bugs:
 
 - **Unbounded queues / no backpressure.** `ThreadPoolExecutor`, `MainThreadExecutor`,
-  and each `Strand::pending` are all unbounded `std::queue`s. A producer that
+  and each strand's queue are all unbounded. A producer that
   outruns consumption grows memory without limit; `post()` never blocks or
   rejects. There is no bounded-queue option, no high-water mark, and no way for a
   caller to learn the queue is backing up.
@@ -533,20 +460,15 @@ These are honest, known gaps — accepted trade-offs, not bugs:
   drains already-queued tasks but there is no method to wait until the queue is
   empty, to flush pending work before shutdown, or to reject work posted during
   shutdown (such a task may be lost). Callers who need to coordinate around
-  in-flight work must synchronise externally. (`StrandExecutor` waits for
-  `_inFlight`, but that is a lifetime-safety wait, not a general drain API, and it
-  relies on the base pool still running the strand's dispatched lambdas.)
-- **Strand allocation churn.** The self-cleaning map (see
-  [Lifetime & ownership](#lifetime--ownership)) is good for memory — live entries
-  track active models — but a bursty model re-allocates a `Strand` every time its
-  queue empties and refills, instead of reusing one long-lived strand per key.
+  in-flight work must synchronise externally. (`ModelStrands::drain` waits for
+  the strands, but it relies on the base pool still running their turns.)
 
 ## Lifetime annotations
 
-`StrandExecutor`'s constructor marks its `IExecutor& base` `MORPH_LIFETIMEBOUND`
-(`morph/attributes.hpp`), so Clang diagnoses a call site that hands it a base
-executor which does not outlive the strand — the deadlock described above, caught
-at compile time instead of at teardown. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+`ModelStrands`' and `CoreExecutorOver`'s constructors mark their
+`IExecutor& base` `MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`), so Clang
+diagnoses a call site that hands one a base executor which does not outlive it —
+the hang described above, caught at compile time instead of at teardown. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
 
 ## Cross-references
 
@@ -557,7 +479,7 @@ at compile time instead of at teardown. See [concurrency_and_lifetimes.md](../co
   per-task logging here plugs into (currently also summarised under
   *Error propagation* in `../../ARCHITECTURE.md`).
 - `concurrency_and_lifetimes.md` — the broader threading and teardown-ordering
-  model; the "destroy strand before base pool" rule above is a concrete instance
+  model; the "destroy the backend before the base pool" rule above is a concrete instance
   of it (see also *Thread safety* in `../../ARCHITECTURE.md`).
 - [`bridge.md`](bridge.md) — the bridge wires backends to a GUI executor and a
   strand-backed dispatcher; it is the primary consumer of these types.

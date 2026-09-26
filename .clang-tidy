@@ -27,6 +27,12 @@ CheckOptions:
     value: CamelCase
   - key:   readability-identifier-naming.FunctionCase
     value: camelBack
+  # The C++ coroutine protocol: names the compiler looks up, which no naming
+  # convention can change.
+  - key:   readability-identifier-naming.FunctionIgnoredRegexp
+    value: "^(await_ready|await_suspend|await_resume|get_return_object|initial_suspend|final_suspend|return_void|return_value|yield_value|unhandled_exception)$"
+  - key:   readability-identifier-naming.ClassIgnoredRegexp
+    value: "^promise_type$"
   - key:   readability-identifier-naming.VariableCase
     value: camelBack
   - key:   readability-identifier-naming.MemberPrefix

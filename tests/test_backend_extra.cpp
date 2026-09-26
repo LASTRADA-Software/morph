@@ -352,8 +352,8 @@ TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the
 
     // Declared *before* the pool and the backend, so they outlive them. Only the
     // one parked task that is actually running has left the strand queue when
-    // this scope ends; the other 47 are still queued, and `~StrandExecutor` /
-    // `~ThreadPoolExecutor` run them during teardown — after any state declared
+    // this scope ends; the other 47 are still queued, and `~LocalBackend` /
+    // `~ThreadPoolExecutor` drain them during teardown — after any state declared
     // below the pool has already been destroyed. Getting this backwards is a
     // stack-use-after-scope on `gate`, which is exactly what ASan reported the
     // first time round, not a theoretical one.
@@ -420,11 +420,13 @@ TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the
     backend.cancelPending(std::make_exception_ptr(morph::backend::BackendChangedError{}));
     auto const cancelledCount = cancelled.load(std::memory_order_relaxed);
 
-    // Release the parked ops and drain them before any assertion can abandon the
-    // fixture: `~StrandExecutor` blocks until the running task returns, and a
-    // `CHECK` that fires mid-teardown should not leave that to chance.
+    // Release the parked op that is running before any assertion can abandon
+    // the fixture: `~LocalBackend` blocks until its strand is idle, and a
+    // `CHECK` that fires mid-teardown should not leave that to chance. Only
+    // that one runs: the ones queued behind it were failed by `cancelPending`
+    // while they waited, so they are skipped rather than run.
     gate.store(true, std::memory_order_release);
-    REQUIRE(morph::testing::waitUntil([&] { return parkedRan.load(std::memory_order_relaxed) == kRounds; },
+    REQUIRE(morph::testing::waitUntil([&] { return parkedRan.load(std::memory_order_relaxed) == 1; },
                                       morph::testing::WaitBudget{std::chrono::milliseconds{10000}}));
     live.clear();
 

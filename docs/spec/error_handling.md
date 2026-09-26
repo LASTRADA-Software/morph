@@ -142,12 +142,12 @@ rather than swallow.
 | Executor | Catch behavior | Log prefix |
 |---|---|---|
 | `ThreadPoolExecutor` | Catches `std::exception` and `...` per task; worker loops on | `[thread-pool] task threw: <what>` / `[thread-pool] task threw unknown exception` |
-| `StrandExecutor` | Catches `std::exception` and `...` per task; next queued task for the same key still runs | `[strand] task threw: <what>` / `[strand] task threw unknown exception` |
+| `ModelStrands` | `LoggedTask` catches `std::exception` and `...` around every posted callable; next queued task for the same key still runs | `[strand] task threw: <what>` / `[strand] task threw unknown exception` |
 | `MainThreadExecutor::runFor` | Catches **only** `std::exception`; continues with the next task | `[main-thread] callback threw: <what>` |
 
 Notes that matter:
 
-- The `StrandExecutor` is where `Model::execute` actually runs (for both
+- A model instance's strand is where `Model::execute` actually runs (for both
   `LocalBackend` and `RemoteServer`). In normal operation the backend's own
   `try/catch` converts a throwing `execute` into `setException` **before** the
   strand's catch could see it, so `[strand] task threw:` fires only for

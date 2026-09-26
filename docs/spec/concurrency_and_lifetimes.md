@@ -8,7 +8,7 @@ subtle footguns live in the seams **between** subsystems, not inside any one of
 them.
 
 Read this before wiring up a `Bridge`, a `RemoteServer`, or a
-`ThreadPoolExecutor`/`StrandExecutor` pair, and before changing any teardown
+`ThreadPoolExecutor` and the strands over it, and before changing any teardown
 sequence.
 
 ## Contents
@@ -37,7 +37,11 @@ is the concrete executor's job:
 | `ThreadPoolExecutor` | N fixed worker threads, FIFO MPMC queue | Runs model work (`Model::execute`) and remote message processing. |
 | `MainThreadExecutor` | The thread that calls `runFor()` | Stand-in "GUI" thread in non-Qt tests; pumped manually. |
 | `QtExecutor` | The Qt GUI thread | Real GUI executor; posts via `QMetaObject::invokeMethod(Qt::QueuedConnection)`. |
-| `StrandExecutor` | *Borrows* a base `IExecutor` (usually the pool) | Serialises tasks per `ModelId` on top of the base executor. It owns no thread. |
+| `ModelStrands` | *Borrows* a base `IExecutor` (usually the pool) | Serialises tasks per `ModelId` on top of the base executor: core-cpp's `KeyedStrands`, which reaches the base through `CoreExecutorOver`. It owns no thread. |
+
+A strand's own unit of work is a coroutine resumption, not a callable: it
+queues its pump on the base once per turn, through the adapter, and a posted
+callable is one task of that turn. That is still one `IExecutor::post` per turn.
 
 Because everything funnels through `post`, the concurrency model is fully
 determined by *which executor a task is posted to*. Model code never blocks the
@@ -47,9 +51,9 @@ GUI, and the GUI thread never runs model work — the executors enforce the spli
 
 | Work | Runs on | Scheduled by |
 |---|---|---|
-| `Model::execute(action)` (local mode) | Worker pool, inside a per-`ModelId` strand | `LocalBackend::execute` → `StrandExecutor::post` |
-| `Model::onBackendChanged()` (local mode) | Worker pool, inside the model's per-`ModelId` strand (serialised with its `execute`) | `LocalBackend::notifyBackendChanged` → `StrandExecutor::post` |
-| `ActionDispatcher::dispatch` → `Model::execute` (remote mode) | `RemoteServer`'s worker pool, inside a per-`ModelId` strand | `RemoteServer::dispatchExecute` → `StrandExecutor::post` |
+| `Model::execute(action)` (local mode) | Worker pool, inside a per-`ModelId` strand | `LocalBackend::execute` → `ModelStrands::post` |
+| `Model::onBackendChanged()` (local mode) | Worker pool, inside the model's per-`ModelId` strand (serialised with its `execute`) | `LocalBackend::notifyBackendChanged` → `ModelStrands::post` |
+| `ActionDispatcher::dispatch` → `Model::execute` (remote mode) | `RemoteServer`'s worker pool, inside a per-`ModelId` strand | `RemoteServer::dispatchExecute` → `ModelStrands::post` |
 | Remote message decode / envelope handling | `RemoteServer`'s worker pool | `RemoteServer::handle` → `_pool.post` |
 | `Completion::then` / `onError` callbacks | The `cbExec` executor supplied at dispatch (the GUI executor for `BridgeHandler`) | `CompletionState::setValue`/`setException` → `cbExec->post` |
 | Subscription result / error sinks (`BridgeHandler::subscribe`) | The handler's `guiExec` | Same as `Completion` callbacks — they *are* completion callbacks |
@@ -96,64 +100,46 @@ Key consequences:
 
 ## The strand model — one strand per `ModelId`
 
-`StrandExecutor` (`strand.hpp`) sits on top of an arbitrary base `IExecutor` and
-turns it into a set of per-key serial queues:
+`ModelStrands` (`strand.hpp`) sits on top of an arbitrary base `IExecutor` and
+turns it into a set of per-key serial queues. It is core-cpp's
+`core::async::KeyedStrands<ModelId>`, which specifies and tests the strand
+itself; [`core/executor.md`](core/executor.md), "Strands", says what morph adds.
 
 - `post(ModelId key, task)` appends `task` to the strand for `key`. Tasks with
   the same key run in FIFO order with **no overlap**; tasks with different keys
   may run concurrently on different pool threads. This is what removes the need
   for per-model mutexes.
-- Each strand is a `shared_ptr<Strand>` in a map guarded by `_mapMtx`. When a
-  strand's queue drains, the map entry is removed — `extract`ed into a
-  single-slot `_spare` the next miss re-keys, which recycles the node's memory
-  without changing when the entry leaves the map (see
-  [`core/executor.md`](core/executor.md), "Lifetime & ownership"). The
-  invariant is: **at most one
-  live strand per `ModelId`, and any `running` strand is the one currently in the
-  map** — that is what keeps a key's tasks from overlapping. Both sides that can
-  break it hold `_mapMtx` across their *whole* decision: `post()` takes `_mapMtx`,
-  looks up (or creates) the strand, and — still under `_mapMtx` — takes
-  `strand->mtx` to push the task and set `running`; the drain step takes the same
-  two locks in the same order to decide "keep running vs. erase". An earlier
-  design held the combined lock only inside the drain step while `post()` re-armed
-  the strand under `strand->mtx` alone (after releasing `_mapMtx`); a concurrent
-  drain could then erase the strand in that gap, orphaning a live strand, and the
-  next `post(key)` created a *second* strand for the same key — two strands
-  running the model's tasks concurrently (a data race). Serialising the lookup,
-  the re-arm, and the erase under `_mapMtx` closes that window: the drain never
-  erases a strand whose `pending` queue is non-empty, and a strand that becomes
-  `running` in `post()` is guaranteed to still be the map entry. Lock order is
-  always `_mapMtx` → `strand->mtx`, acquired as two sequential `scoped_lock`s at
-  both sites, so no lock-ordering deadlock.
-- `_inFlight` counts strand lambdas currently dispatched to the base executor.
-  The destructor waits on `_cv` until `_inFlight == 0` before destroying the
-  map, so no pool thread can touch `_strands` after the executor is gone.
-- **The drain's own work is one handoff per task and one notification per
-  quiescence, whatever the host is doing.** `_cv` is signalled only where
-  `--_inFlight` reaches zero, and `~StrandExecutor` is its only waiter, so the
-  `notify_all` wakes at most one thread — a handoff between two tasks for one
-  key signals nothing. What a loaded host adds is therefore *latency between*
-  those operations, not more of them: a drain of N tasks costs N dispatches
-  whose wall clock is the base executor's wakeup latency under the run queue of
-  the moment. Measured on a 12-thread host, the same drain's per-task cost
-  spans three orders of magnitude with machine load while every count above
-  stays fixed. A task body that calls `std::this_thread::yield()` pays far more
-  again, because a yielding thread goes to the back of the run queue with no
-  sleeper credit; that is a property of the posted task, not of the strand.
-- **`~StrandExecutor` is a complete-drain barrier, not only a use-after-free
-  guard.** The re-arm in `scheduleNext` increments `_inFlight` for the next
-  dispatch *before* the current dispatch decrements its own, so the count never
-  dips to zero across a handoff; and a lambda that finds `pending` empty is the
-  only one that lets it reach zero. So once every caller has stopped posting —
-  which the "no `post()` may race or follow `~StrandExecutor`" corollary below
-  requires anyway — `_inFlight == 0` means **every queued task has run**, not
-  merely that none is running right now. Code that needs a strand quiesced
-  should therefore destroy it and rely on that wait, rather than poll a counter
-  against a wall-clock budget: the barrier is exact and does not depend on how
-  fast or how loaded the host is.
+- **At most one live strand per `ModelId`.** A key's strand is made when the key
+  gets work and retired when its queue runs out, and the retirement and a post
+  for the same key are serialised under the registry's lock, so a post never
+  finds a strand that has just been retired beside a new one. A coroutine that
+  parked on a strand that was retired meanwhile comes back to the key's current
+  strand. morph's own `StrandExecutor` had to fix this invariant twice; it is
+  core-cpp's to keep now.
+- **A strand runs a batch per turn.** It queues itself on the base once however
+  many tasks arrive while it is busy, and runs up to 32 before it hands the base
+  back. A loaded host adds latency between turns, not more of them.
+- **Closing drops; `teardown()` stops, drains, seals, drains again, then
+  closes** where threads exist, so the stopped handlers' ends reach their
+  strands while those still admit them; on the single-threaded build it seals,
+  stops, then closes. `close()`, and
+  the destructor, drop what is queued and wait only for a task running on
+  another thread. `drain()` blocks until nothing is queued or running on any
+  strand, work posted while it waits included. `seal()` refuses the try-forms
+  a Task handler's resumer and its end use, so a resumption or an end that
+  arrives afterwards runs inline where it arrives; a plain post is still queued
+  until the close. `~LocalBackend` and
+  `~SynchronousBackendAdapter` call `teardown()`, which does all of it, so
+  nothing reaches a strand between its last drain and its close. It must not be
+  called from one of the strands' own tasks; a debug build asserts that. The
+  single-threaded WebAssembly build has no other thread: there `drain()`
+  returns at once, and `teardown()` seals before it stops the Task handlers, so
+  each stopped handler unwinds inline.
 
-`LocalBackend` owns one `StrandExecutor` over the worker pool; `RemoteServer`
+`LocalBackend` owns one `ModelStrands` over the worker pool; `RemoteServer`
 owns another over its worker pool. Both post model work keyed by `ModelId`.
+Each shares its strands with the resumers of the Task handlers it started (see
+[`core/coroutines.md`](core/coroutines.md)).
 
 ## Completion callback marshalling
 
@@ -181,33 +167,32 @@ rules encode recent fixes to real deadlocks and use-after-frees.
 
 | This… | must outlive / be destroyed after… | Consequence if violated |
 |---|---|---|
-| base `IExecutor` (e.g. `ThreadPoolExecutor`) | the `StrandExecutor` built on it | **Deadlock** in `~StrandExecutor` (see below) |
+| base `IExecutor` (e.g. `ThreadPoolExecutor`) | the strands built on it, and the backend that owns them | **Hang** in the backend's drain (see below) |
 | `Bridge` | its `BridgeHandler`s (for normal `execute`/`set` calls) | Fine at teardown (order-independent, see below); a *call* on a handler whose bridge is gone is still UB |
 | `RemoteServer` (heap, `make_shared`) | every `SimulatedRemoteBackend`/transport holding `RemoteServer&` | Dangling `RemoteServer&` → use-after-free |
 | worker pool | the backend that posts to it (`LocalBackend`, `RemoteServer`) | Same deadlock/UAF family as the strand rule |
 | `session::Context` passed to `ScopedContext` | the scope in which the model runs | Dangling thread-local `Context*` |
 
-### base `IExecutor` must outlive its `StrandExecutor` — and keep running
+### base `IExecutor` must outlive its strands — and keep running
 
-This is the sharpest edge in the framework. `~StrandExecutor` **blocks** until
-`_inFlight == 0`, i.e. until every lambda it dispatched to the base executor has
-actually run. `~ThreadPoolExecutor` **drains** its queue — after `_stop` is set,
-workers keep running already-queued tasks until the queue is empty, then join —
-so tasks already queued when destruction begins do run and decrement `_inFlight`.
+This is the sharpest edge in the framework. `~LocalBackend` and
+`~SynchronousBackendAdapter` **block** in `ModelStrands::drain()` until every
+turn their strands queued on the base executor has run. `~ThreadPoolExecutor`
+**drains** its queue — after `_stop` is set, workers keep running
+already-queued tasks until the queue is empty, then join — so turns already
+queued when destruction begins do run.
 
-Draining is not enough to make arbitrary teardown order safe, because the strand
-can still be *dispatching* while the pool tears down. If you destroy the pool
-**first**, two things go wrong: an in-flight strand lambda may call
-`base->post()` on a pool whose destructor has already run (undefined behaviour —
-use-after-free on the pool), and a lambda posted after the workers have observed
-`_stop && _q.empty()` and exited is never run, so its `--_inFlight` never happens
-and `~StrandExecutor` waits forever → **deadlock**. The pool must be destroyed
-*after* every `StrandExecutor` (and hence after `LocalBackend` / `RemoteServer`,
-which own the strands).
+Draining is not enough to make arbitrary teardown order safe, because a strand
+can still be *queuing* turns while the pool tears down. If you destroy the pool
+**first**, two things go wrong: a strand may post its next turn to a pool whose
+destructor has already run (undefined behaviour — use-after-free on the pool),
+and a turn posted after the workers have observed `_stop && _q.empty()` and
+exited is never run, so the strand never goes idle and the backend's drain
+waits forever → **hang**. The pool must be destroyed *after* every backend that
+owns strands over it.
 
-Corollary: **no `post()` may race or follow `~StrandExecutor`.** Once the strand
-executor's destructor has started, posting to it is undefined. Stop feeding a
-backend before you tear it down.
+Corollary: **stop feeding a backend before you tear it down.** A post that races
+the destructor may land after the drain, and is dropped by the close.
 
 Correct teardown order (innermost-first):
 
@@ -253,7 +238,7 @@ passes, the `Bridge` finishes being destroyed, and `Bridge::deregisterHandler`
 then iterates the freed `_handlers`. The gate turns check-then-call into one
 indivisible step.
 
-**`~Bridge` therefore blocks**, like `~StrandExecutor` above and for the same
+**`~Bridge` therefore blocks**, like a backend's drain above and for the same
 reason. The wait is bounded and cannot cycle: the only guarded region is
 `deregisterHandler`, whose sole outward call is `IBackend::deregisterModel`, and
 no shipped backend blocks on another thread there — `LocalBackend` erases map
@@ -547,8 +532,8 @@ what makes the model-side contract both true and safe:
 - **`switchBackend` from `onBackendChanged()` is still unsupported.** Not because
   of `_mtx` (that is free now) but because the callback runs on the *outgoing*
   backend's strand; a nested switch drops the last reference to that backend when
-  it returns, and `~StrandExecutor` blocks until in-flight strand tasks finish —
-  including the one calling it — a self-join hang. Re-register or reconcile from
+  it returns, and `~LocalBackend` drains its strands, which includes the one
+  calling it — a self-join hang, asserted in a debug build. Re-register or reconcile from
   the callback; do not swap the backend again inside it.
 - **`executeVia` IS safe from `onBackendChanged()`.** It never takes `_mtx`; it
   reads a **lock-free snapshot** of the backend `shared_ptr` (via `_backendMtx`,
@@ -764,13 +749,13 @@ BridgeHandler(s)          ← first to go (or any order vs. Bridge, on any threa
   Bridge
     backend               ← LocalBackend / SimulatedRemoteBackend
       RemoteServer         ← only in remote mode; keep its shared_ptr alive this long
-        ThreadPoolExecutor ← LAST: it must outlive every StrandExecutor it backs
+        ThreadPoolExecutor ← LAST: it must outlive every strand it backs
 ```
 
 One-liners to remember:
 
-- Never destroy the pool before the strand/backend → `~StrandExecutor` deadlocks.
-- Never `post()` to a `StrandExecutor` whose destructor has begun.
+- Never destroy the pool before the backend → the backend's drain hangs.
+- Never `post()` to a backend whose destructor has begun.
 - `onBackendChanged()` runs posted on the model's strand (not inline under
   `_mtx`): `registerHandler`/`deregisterHandler`/`executeVia` are safe from it,
   but never call `switchBackend` there (it self-joins the strand it runs on).
@@ -789,7 +774,7 @@ One-liners to remember:
 ## Cross-references
 
 - [`executor.md`](core/executor.md) — `IExecutor`, `ThreadPoolExecutor`,
-  `StrandExecutor`, `ModelId`; the "destroy strand before base pool" rule in
+  `ModelStrands`, `ModelId`; the "destroy the backend before the base pool" rule in
   detail.
 - [`completion.md`](core/completion.md) — `Completion<T>` / `CompletionState<T>`
   internals and orphan-error logging.

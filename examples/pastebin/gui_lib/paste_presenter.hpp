@@ -87,6 +87,19 @@ private:
     ///        stays a plain member function, not a template.
     void reportError(const std::exception_ptr& err);
 
+#ifndef Q_MOC_RUN
+    /// @brief `list()` as a coroutine: awaits the page and emits `listed`,
+    ///        or `failed`. Run through `trackFlow`, so it resumes on the
+    ///        presenter's executor and counts in `busy()`.
+    /// @param self    The presenter, checked after the await: the flow may
+    ///                outlive it.
+    /// @param pending The `ListPastes` completion.
+    /// @return The flow.
+    static core::async::Task<void> listFlow(QPointer<PastePresenter> self,
+                                            ::morph::async::Completion<ListPastesResult> pending);
+#endif
+
+    ::morph::exec::IExecutor* _executor;
     ::morph::bridge::BridgeHandler<PasteModel> _handler;
 };
 

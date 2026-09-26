@@ -11,6 +11,51 @@ API surface).
 
 ### Changed
 
+- **morph's per-model strands are core-cpp's `KeyedStrands`.**
+  `morph::exec::detail::StrandExecutor` is gone: a backend's strands are
+  `morph::exec::detail::ModelStrands`, over core-cpp 0.4.0's
+  `core::async::KeyedStrands<ModelId>`, and morph keeps only the adapter to its
+  `IExecutor`, the log of a throwing task and a Task handler's session. What a
+  consumer can see:
+  - A Task handler that awaits `core::async::AsyncQueue::pop` comes back to its
+    model's strand, with its session, a stop included.
+  - An ordinary execute allocates less: `bench.alloc_budget` measures the local
+    round trip.
+  - Under single-threaded WebAssembly, `~LocalBackend` and
+    `~SynchronousBackendAdapter` no longer wait for their strands, which only
+    that thread could run. `~LocalBackend` seals its strands before it stops
+    its Task handlers, so each one unwinds inline; other work still queued is
+    dropped.
+  - A strand queues itself on the backend's `IExecutor` once per turn and runs
+    up to 32 tasks there, where it used to post each task.
+
+- **`LocalBackend` no longer runs an action whose call was already failed.**
+  An action still waiting for its model when `Bridge::switchBackend` or
+  `~Bridge` fails its call (`BackendChangedError`, `BridgeDestroyedError`) is
+  now skipped when its turn comes: its handler does not run, and it used to.
+  A skipped action still counts as a failed execute in the
+  `executeErrors` metric and ends its span as failed.
+  `~LocalBackend` also stops the Task handlers it started, then waits for its
+  strand to drain before it returns. See `docs/spec/core/coroutines.md`,
+  "Teardown".
+
+- **morph depends on core-cpp v0.5.0.** It is fetched through CPM, and
+  `morph::morph` links its `core::base`, `core::async`, `core::net` and, natively,
+  `core::platform`. morph stays header-only, but those are static libraries, so
+  a project that links morph now builds them. `TimeoutScheduler` runs on
+  core-cpp's event-loop timers: natively on a thread of its own, and under
+  single-threaded WebAssembly on a loop the browser's timer pumps, where
+  `cancel()` now also retires the timer. An install of morph installs
+  core-cpp's package next to it, and `find_package(morph)` finds it through
+  `find_dependency(core-cpp 0.5)`.
+
+- **Dependencies are fetched through CPM, and cached by CPM.** glaze, Catch2,
+  doxygen-awesome-css and Lightweight come through `CPMAddPackage` when no
+  installed copy is found, and CPM keeps their sources in `CPM_SOURCE_CACHE`,
+  which defaults to `.cache/cpm` inside the checkout. A second configure of the
+  checkout clones nothing. `cmake/DepCache.cmake` and its `MORPH_DEP_CACHE`
+  environment variable are gone: set `CPM_SOURCE_CACHE` instead.
+
 - **`LocalBackend::execute` no longer rescans the pending-completion list on
   every dispatch.** `trackPending` used to `std::erase_if` the whole `_pending`
   vector before each append, so admitting one call with *n* already in flight
@@ -118,6 +163,32 @@ API surface).
   same `morph::testkit::configureSession()`.
 
 ### Added
+
+- **Coroutines on `core::async`.**
+  - `Completion<T>` is awaitable: `co_await std::move(completion)` yields `T`
+    or rethrows, resumes on the executor the coroutine suspended on (core-cpp's
+    current-executor context), and honours a stop request on the awaiting
+    coroutine's token.
+  - `morph::async::spawn(executor, task)` starts a coroutine from ordinary
+    code, with every step on that executor.
+  - `morph::async::delay(scheduler, duration)` is a stop-aware timer.
+  - A model's `execute` may return `core::async::Task<R>`. The bridge drives it
+    on the model's strand, and the model's next action waits until the Task has
+    completed. `ActionTraits<A>::Result` is `R`.
+  - `ActionDispatcher::dispatchAsync` runs Task handlers remotely;
+    `ActionDispatcher::dispatch` throws `std::logic_error` for one, and
+    `ActionDispatcher::dispatchesAsync` says which of the two an action needs.
+  - `RemoteServer` now replies `err "unknown exception"` to a handler that
+    throws something other than a `std::exception`, where it used to send no
+    reply.
+  - `LimitPolicy::executeTimeout` also stops a suspended Task handler, so the
+    model's next action is not held behind it.
+  - A Task handler follows `ActionRecordingError` as an ordinary handler does:
+    once its Task has completed, a result that will not serialise or a journal
+    append that throws reaches the caller as `ActionRecordingError`, and is
+    never journalled as `Outcome::Failed`.
+
+  See `docs/spec/core/coroutines.md`.
 
 - **`SlotRegistry.byKind(kind, component)` — one host control per kind of
   control.** The JSON type `byType` keys on does not identify a control: a
@@ -334,6 +405,10 @@ API surface).
   strong id types.
 
 ### Removed
+
+- **`morph/net/detail/base64.hpp`.** The WebSocket handshake uses core-cpp's
+  `core::base64::encode` (`<core/Base64.hpp>`), and `SocketServer`'s accept loop
+  waits on `core::platform::Wakeup` instead of a self-pipe of its own.
 
 - **The reactive-draft mechanism** — `BridgeHandler::set<&A::field>`,
   `reset<A>`, the action-keyed `subscribe<A>`, and their in-flight coalescing.

@@ -111,7 +111,7 @@ include(cmake/compiler_options.cmake)
 
 # Compiler-cache launcher selection: fastcache-cc (when a fastcached daemon
 # answers) -> sccache -> ccache -> none. Included before any target or fetched
-# dependency (FetchContent glaze below) so those get cached too. See
+# dependency (glaze and core-cpp, through CPM, below) so those get cached too. See
 # cmake/CompileCache.cmake for the full selection logic; it declares its own
 # USE_COMPILER_CACHE/FASTCACHE_ADDR options.
 include(cmake/CompileCache.cmake)
@@ -129,23 +129,100 @@ if(MORPH_BUILD_TESTS)
     enable_testing()
 endif()
 
+# ── Dependencies: CPM, over one shared source cache ─────────────────────────
+# Every dependency morph fetches goes through CPMAddPackage, and CPM keeps the
+# sources it clones in CPM_SOURCE_CACHE, keyed on the package and its revision.
+# A second configure -- another preset, another build directory, the install
+# check's scratch tree -- then clones nothing, and CI restores the directory
+# from actions/cache rather than cloning glaze, Catch2, Lightweight and
+# doxygen-awesome-css again on every job: a burst of anonymous clones from one
+# egress address is answered with 401 by github.com, which git reports as
+# "could not read Username". A cache miss still fetches.
+#
+# The default is inside the checkout (.cache/ is ignored), so it needs no
+# setup and is never shared between checkouts by surprise. An explicit
+# -DCPM_SOURCE_CACHE or the environment variable of the same name wins.
+if(NOT DEFINED CPM_SOURCE_CACHE AND NOT DEFINED ENV{CPM_SOURCE_CACHE})
+    set(CPM_SOURCE_CACHE "${CMAKE_CURRENT_SOURCE_DIR}/.cache/cpm" CACHE PATH
+        "Where CPM keeps the sources of every fetched dependency")
+endif()
+include(cmake/CPM.cmake)
+
 # ── glaze ────────────────────────────────────────────────────────────────────
-# On Windows vcpkg provides glaze. On Linux we fall back to FetchContent so
-# that CI does not require vcpkg. The version bound matters: without it an
-# older system/user install (e.g. a stray 4.x in ~/.local) silently shadows
-# the pinned v7.4.0 and breaks schema generation.
+# On Windows vcpkg provides glaze. Elsewhere CPM fetches it, so that CI does
+# not require vcpkg. The version bound matters: without it an older
+# system/user install (e.g. a stray 4.x in ~/.local) silently shadows the
+# pinned v7.4.0 and breaks schema generation.
 # One place for the bound, because morphConfig.cmake has to state it too: an
 # installed morph whose package config asks for a different glaze than the
 # build used would resolve a header set the build never compiled against.
+#
+# find_package first and CPMAddPackage only when it finds nothing, rather than
+# CPM_USE_LOCAL_PACKAGES: that option is global, so it would also change how
+# Lightweight's own CPM dependencies resolve, and it passes the fetched pin as
+# the version it asks find_package for -- which for Catch2 below would refuse
+# the distribution's 3.4.0 that the clang-tidy leg is pinned to analyse.
 set(MORPH_GLAZE_VERSION 7.4)
 find_package(glaze ${MORPH_GLAZE_VERSION} CONFIG QUIET)
 if(NOT glaze_FOUND)
-    include(FetchContent)
-    include(cmake/DepCache.cmake)
-    morph_declare_dep(glaze https://github.com/stephenberry/glaze.git v7.4.0
-        GIT_SHALLOW TRUE)
-    set(glaze_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(glaze)
+    CPMAddPackage(
+        NAME glaze
+        GITHUB_REPOSITORY stephenberry/glaze
+        GIT_TAG v7.4.0
+        OPTIONS "glaze_ENABLE_TESTS OFF")
+endif()
+
+# ── core-cpp ────────────────────────────────────────────────────────────────
+# The shared C++23 foundation of the Contour Terminal projects: morph takes
+# its event loop and timers, base64 and the wakeup primitive from it. Only the
+# modules morph links are built (EXCLUDE_FROM_ALL, unless morph installs; see
+# below), none of core-cpp's own tests, examples, TUI or TLS, and nothing is
+# fetched on its behalf: with those off it needs no dependency but the thread
+# library. Under Emscripten it
+# builds its single-threaded WebAssembly subset, which is what morph uses
+# there. SYSTEM, so morph's warning set does not apply to core-cpp's headers.
+#
+# morph stays a header-only INTERFACE target, but core::base, core::net and
+# core::platform are static libraries, so every consumer of morph now builds
+# them.
+#
+# morph's install exports morph::morph, which links core-cpp's modules, so an
+# install of morph has to install core-cpp too: CMake refuses an export that
+# names a target in no export set. CORE_CPP_INSTALL follows MORPH_INSTALL for
+# that, and morphConfig.cmake finds the installed core-cpp package in turn.
+# MORPH_INSTALL is described with the install rules below. EXCLUDE_FROM_ALL
+# is off while morph installs: CMake leaves an excluded subdirectory's install
+# rules out of the parent's install, so `cmake --install` would install
+# morph's package without the core-cpp package it depends on.
+option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
+if(MORPH_INSTALL)
+    set(_morph_core_cpp_exclude_from_all NO)
+else()
+    set(_morph_core_cpp_exclude_from_all YES)
+endif()
+CPMAddPackage(
+    NAME core-cpp
+    GITHUB_REPOSITORY contour-terminal/core-cpp
+    GIT_TAG v0.5.0
+    VERSION 0.5.0
+    SYSTEM YES
+    EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
+    OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF" "CORE_CPP_WITH_TUI OFF"
+            "CORE_CPP_WITH_TLS OFF" "CORE_CPP_FETCH_DEPS OFF" "CORE_CPP_INSTALL ${MORPH_INSTALL}")
+unset(_morph_core_cpp_exclude_from_all)
+
+# A sanitizer leg instruments core-cpp's compiled modules with morph's own
+# targets: TimeoutScheduler's loop thread runs inside core::net, and a
+# ThreadSanitizer that cannot see one side of a hand-off reports races that
+# are not there and misses ones that are. core-cpp lists those targets in the
+# CORE_CPP_TARGETS global property for exactly this.
+if(DEFINED AF_SANITIZER)
+    get_property(_morph_core_cpp_targets GLOBAL PROPERTY CORE_CPP_TARGETS)
+    foreach(_morph_core_cpp_target IN LISTS _morph_core_cpp_targets)
+        apply_sanitizers(${_morph_core_cpp_target} ${AF_SANITIZER})
+    endforeach()
+    unset(_morph_core_cpp_targets)
+    unset(_morph_core_cpp_target)
 endif()
 
 # Emscripten's single-threaded build has no pthreads; requiring Threads there
@@ -163,7 +240,10 @@ target_include_directories(morph INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(morph INTERFACE glaze::glaze)
+target_link_libraries(morph INTERFACE glaze::glaze core::base core::async core::net)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(morph INTERFACE core::platform)
+endif()
 if(NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(morph INTERFACE Threads::Threads)
 endif()
@@ -190,6 +270,7 @@ target_sources(morph
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
         include/morph/core/completion.hpp
+        include/morph/core/coroutine.hpp
         include/morph/core/callback_scope.hpp
         include/morph/core/async.hpp
         include/morph/core/timeout_scheduler.hpp
@@ -266,7 +347,9 @@ target_sources(morph
     FILES
         include/morph/detail/fixed_string.hpp
         include/morph/detail/quantity_equation.hpp
+        include/morph/core/detail/completion_awaiter.hpp
         include/morph/core/detail/execute_order_gate.hpp
+        include/morph/core/detail/task_handler.hpp
         include/morph/core/detail/instance_directory.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
@@ -563,11 +646,14 @@ endif()
 if(MORPH_BUILD_TESTS)
     find_package(Catch2 CONFIG QUIET)
     if(NOT Catch2_FOUND)
-        include(FetchContent)
-        include(cmake/DepCache.cmake)
-        morph_declare_dep(Catch2 https://github.com/catchorg/Catch2.git v3.8.1
-            GIT_SHALLOW TRUE)
-        FetchContent_MakeAvailable(Catch2)
+        CPMAddPackage(
+            NAME Catch2
+            GITHUB_REPOSITORY catchorg/Catch2
+            GIT_TAG v3.8.1)
+        # Catch2 hands its `extras/` (Catch.cmake, catch_discover_tests) to
+        # its parent scope, which under CPM is the CPMAddPackage function
+        # rather than this directory; tests/ includes Catch from here.
+        list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
     endif()
 
     # ── The `--log-level` gate, shared by every Catch2 suite ────────────────
@@ -592,6 +678,33 @@ if(MORPH_BUILD_TESTS)
     add_library(morph_test_log_level INTERFACE)
     target_include_directories(morph_test_log_level INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
     target_link_libraries(morph_test_log_level INTERFACE morph::morph Catch2::Catch2)
+
+    # On Windows a failed assert(), an abort() or a crash in a test opens a
+    # modal dialog (CRT assert, abort, Windows Error Reporting) and waits for a
+    # click: under ctest nobody clicks, so the test holds the run until its
+    # timeout, and on a desktop it lands on the user's screen. core-cpp's
+    # core::testing_dialogs is one object whose static initialiser calls
+    # core::testing::suppressWindowsDialogs() before main() runs: CRT reports
+    # and abort()'s message go to stderr, abort() asks for no fault report,
+    # Windows Error Reporting shows no UI, and the process exits, so the test
+    # fails loudly instead. It is linked into test executables only, never into
+    # morph or the example applications.
+    #
+    # Every Catch2 suite reaches it through morph_test_log_level, which each of
+    # them links (through morph_test_main or directly, for the ones that own a
+    # QCoreApplication main). An OBJECT library's objects reach only the target
+    # that links it directly, so they are named as an interface link item too,
+    # as core-cpp's own core::testing_main does. Test executables without
+    # Catch2 call morph_suppress_test_dialogs() themselves.
+    function(morph_suppress_test_dialogs target)
+        if(WIN32 AND TARGET core-cpp-testing_dialogs)
+            target_link_libraries(${target} PRIVATE core::testing_dialogs)
+        endif()
+    endfunction()
+    if(WIN32 AND TARGET core-cpp-testing_dialogs)
+        target_link_libraries(morph_test_log_level INTERFACE
+            core::testing_dialogs "$<TARGET_OBJECTS:core-cpp-testing_dialogs>")
+    endif()
 
     # STATIC, not OBJECT: the only symbol it carries is `main`, which is always
     # an undefined symbol in the linking executable, so the archive member is
@@ -621,7 +734,7 @@ endif()
 # treats "not found" as a hard FATAL_ERROR (its own Catch2 does not get
 # fetched -- it relies on MORPH_BUILD_TESTS=ON having already resolved one).
 # Adding examples/ before this point would let that find_package() run before
-# the Tests section's FetchContent fallback ever executes, breaking the
+# the Tests section's CPM fallback ever executes, breaking the
 # no-system-Catch2 case even though MORPH_BUILD_TESTS=ON.
 if(MORPH_BUILD_LADDER)
     add_subdirectory(examples)
@@ -732,7 +845,6 @@ if(MORPH_BUILD_NET)
             FILE_SET HEADERS
             BASE_DIRS include
             FILES
-                include/morph/net/detail/base64.hpp
                 include/morph/net/detail/sha1.hpp
                 include/morph/net/detail/ws_handshake.hpp
                 include/morph/net/detail/tcp_socket.hpp
@@ -777,7 +889,7 @@ morph_verify_warning_flags()
 # Before this section existed, `cmake --install` on a morph build **exited 0**
 # and installed Glaze's headers plus a working glazeConfig.cmake -- Glaze
 # carries its own install/export rules and gets them for free through
-# FetchContent -- while installing zero morph headers and no
+# FetchContent or CPM -- while installing zero morph headers and no
 # morphConfig.cmake. A consumer running the standard CMake install workflow
 # got a prefix silently holding someone else's dependency and none of the
 # library they meant to install, with nothing to flag it (morph#232). Every
@@ -785,11 +897,13 @@ morph_verify_warning_flags()
 # install(TARGETS ... FILE_SET HEADERS) consumes directly, so the rules below
 # are mechanical rather than a retrofit.
 #
-# Off when morph is a subproject: a parent that FetchContent's or
+# Off when morph is a subproject: a parent that fetches (CPM, FetchContent) or
 # add_subdirectory's morph installs its own artefacts, and inheriting ours
 # would put morph's headers and package config into that project's prefix
 # uninvited -- which is the mirror image of the bug above.
-option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
+#
+# MORPH_INSTALL itself is declared above, before core-cpp is added, because
+# core-cpp's own install rules follow it.
 
 if(MORPH_INSTALL)
     include(GNUInstallDirs)

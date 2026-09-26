@@ -64,6 +64,7 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
 
     qt_add_executable(morph_forms_qml_tests tests/tst_main.cpp)
     target_link_libraries(morph_forms_qml_tests PRIVATE morph_forms_moduleplugin Qt6::QuickTest)
+    morph_suppress_test_dialogs(morph_forms_qml_tests)
 
     if(DEFINED AF_SANITIZER)
         apply_sanitizers(morph_forms_qml_tests ${AF_SANITIZER})

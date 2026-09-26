@@ -665,7 +665,7 @@ root `CMakeLists.txt` — don't repeat that eight times):
   target that reaches a rung's models or tests carries this guard, so a
   `--preset clang-tsan` configure of the ladder actually instruments the
   code it builds (`.github/workflows/ci.yml`'s `kanban-tsan` job is the
-  first CI leg that exercises this). Lightweight's `FetchContent`
+  first CI leg that exercises this). Lightweight's CPM
   acquisition is hoisted once into `examples/common`, not repeated per
   rung. One trap when implementing it: `catch_discover_tests` cannot carry
   a **multi-value** `LABELS`. It forwards `PROPERTIES` as a flat list

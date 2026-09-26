@@ -29,6 +29,7 @@ catch_discover_tests(morph_bench DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 60 L
 # docs/spec/testing_strategy.md.
 add_executable(morph_bench_alloc bench_dispatch_allocations.cpp)
 target_link_libraries(morph_bench_alloc PRIVATE morph::morph)
+morph_suppress_test_dialogs(morph_bench_alloc)
 apply_warnings(morph_bench_alloc)
 # -Wmismatched-new-delete pairs a `new` the compiler inlined with the
 # `std::free` inside the *replaced* `operator delete` and calls it a mismatch.
