@@ -2,7 +2,7 @@ var searchData=
 [
   ['schema_0',['schema',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a4bf6f8bdd1b73a40955203c9e45dd992',1,'morph::journal::LogEntry']]],
   ['scope_1',['scope',['../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html#a897df9394a2c0a240e650e759c0713ba',1,'morph::views::ActionDescriptor']]],
-  ['sendtimeout_2',['sendTimeout',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec',1,'morph::net::SocketBackendConfig']]],
+  ['sendtimeout_2',['sendTimeout',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec',1,'morph::net::SocketBackendConfig::sendTimeout'],['../d4/db0/structmorph_1_1net_1_1SocketServerConfig.html#ad5d6b90e070444d5ed25ca09b3a3aae2',1,'morph::net::SocketServerConfig::sendTimeout']]],
   ['seq_3',['seq',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d',1,'morph::journal::LogEntry']]],
   ['session_4',['session',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a873839ca79760b994eee91b5fb516c18',1,'morph::wire::Envelope']]],
   ['shared_5',['shared',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6a9bcf3280fc77ddb3924ed83fd73141',1,'morph::wire::Envelope']]],

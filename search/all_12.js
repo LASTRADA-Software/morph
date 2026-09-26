@@ -26,7 +26,7 @@ var searchData=
   ['sections_2ehpp_23',['sections.hpp',['../d0/d29/sections_8hpp.html',1,'']]],
   ['sectionset_24',['SectionSet',['../d4/ddc/classmorph_1_1forms_1_1SectionSet.html',1,'morph::forms::SectionSet&lt; Model, Sections &gt;'],['../d4/ddc/classmorph_1_1forms_1_1SectionSet.html#ab8617782308337f358d695144de8c262',1,'morph::forms::SectionSet::SectionSet()']]],
   ['sendcontrolforid_25',['sendControlForId',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a35878a08af138c734b9153176a06f3d5',1,'morph::net::SocketBackend']]],
-  ['sendtimeout_26',['sendTimeout',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec',1,'morph::net::SocketBackendConfig']]],
+  ['sendtimeout_26',['sendTimeout',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec',1,'morph::net::SocketBackendConfig::sendTimeout'],['../d4/db0/structmorph_1_1net_1_1SocketServerConfig.html#ad5d6b90e070444d5ed25ca09b3a3aae2',1,'morph::net::SocketServerConfig::sendTimeout']]],
   ['seq_27',['seq',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d',1,'morph::journal::LogEntry']]],
   ['serializationerror_28',['SerializationError',['../d6/d23/structmorph_1_1journal_1_1SerializationError.html',1,'morph::journal']]],
   ['session_29',['session',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a873839ca79760b994eee91b5fb516c18',1,'morph::wire::Envelope']]],
