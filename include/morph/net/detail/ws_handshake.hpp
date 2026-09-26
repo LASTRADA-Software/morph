@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <poll.h>
+
+#include <algorithm>
 #include <array>
+#include <cerrno>
+#include <chrono>
 #include <cstdint>
+#include <limits>
 #include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "base64.hpp"
@@ -263,16 +270,61 @@ struct HandshakeReadResult {
     std::string leftover;
 };
 
+/// Blocks until @p socket is readable or @p deadline passes, retrying across
+/// `EINTR` by recomputing what remains rather than re-arming the full wait --
+/// mirrors `TcpSocket::connect()`'s own remaining-budget poll loop. Split out
+/// of `readHttpHeaderBlock` so that function's own branching stays readable.
+/// @throws std::runtime_error once @p deadline passes, or on a `poll()` error
+///         other than `EINTR`.
+inline void waitReadableUntil(const TcpSocket& socket, std::chrono::steady_clock::time_point deadline) {
+    for (;;) {
+        auto const remaining =
+            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+        if (remaining.count() <= 0) {
+            throw std::runtime_error("readHttpHeaderBlock: handshake timed out");
+        }
+        auto const waitMs = static_cast<int>(
+            std::min<std::chrono::milliseconds::rep>(remaining.count(), std::numeric_limits<int>::max()));
+        pollfd pfd{};
+        pfd.fd = socket.nativeHandle();
+        pfd.events = POLLIN;
+        int const pollRc = ::poll(&pfd, 1, waitMs);
+        if (pollRc > 0) {
+            return;  // readable (or hung up) -- the caller's recvSome will not block
+        }
+        if (pollRc == 0) {
+            throw std::runtime_error("readHttpHeaderBlock: handshake timed out");
+        }
+        if (errno != EINTR) {
+            throw std::runtime_error("readHttpHeaderBlock: poll failed: " + std::system_category().message(errno));
+        }
+        // EINTR: loop back and recompute the remaining budget.
+    }
+}
+
 /// @brief Reads bytes from @p socket until the `\r\n\r\n` header terminator.
-/// @param socket Connected socket to read from.
+/// @param socket  Connected socket to read from.
+/// @param timeout Bound on the *whole* read, from the first byte to the
+///                terminator; zero disables it (block indefinitely). Enforced
+///                by polling for readiness with the remaining budget before
+///                each `recvSome` -- deliberately not `SO_RCVTIMEO`, which
+///                restarts on every `recv` and so only bounds each individual
+///                read: a peer trickling one byte per interval could then
+///                stretch the whole handshake to roughly @p timeout times the
+///                64 KiB header cap below. A single deadline across the loop
+///                keeps @p timeout an honest bound on the total.
 /// @return The header text and any leftover bytes read past the terminator.
 /// @throws std::runtime_error if the peer closes before completing the header,
-///         or if the header exceeds a ~64 KiB safety cap. The check runs before
+///         if the header exceeds a ~64 KiB safety cap (the check runs before
 ///         each `recvSome`, so the true bound is 64 KiB rounded up to the next
-///         read chunk (tests/net/test_handshake_over_socket.cpp says the same).
-inline HandshakeReadResult readHttpHeaderBlock(TcpSocket& socket) {
+///         read chunk -- tests/net/test_handshake_over_socket.cpp says the
+///         same), or if @p timeout elapses before the terminator arrives.
+inline HandshakeReadResult readHttpHeaderBlock(TcpSocket& socket,
+                                               std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) {
     std::string buf;
     char chunk[4096];
+    bool const bounded = timeout.count() > 0;
+    auto const deadline = std::chrono::steady_clock::now() + timeout;
     for (;;) {
         auto pos = buf.find("\r\n\r\n");
         if (pos != std::string::npos) {
@@ -283,6 +335,9 @@ inline HandshakeReadResult readHttpHeaderBlock(TcpSocket& socket) {
         }
         if (buf.size() > 64u * 1024u) {
             throw std::runtime_error("readHttpHeaderBlock: header exceeds maximum size (64 KiB)");
+        }
+        if (bounded) {
+            waitReadableUntil(socket, deadline);
         }
         std::size_t got = socket.recvSome(chunk, sizeof(chunk));
         if (got == 0) {
@@ -303,19 +358,22 @@ inline std::string performClientHandshake(TcpSocket& socket, const ParsedWsUrl& 
     std::string key = generateClientKey();
     std::string request = buildClientHandshakeRequest(url, key);
     socket.sendAll(request.data(), request.size());
-    HandshakeReadResult result = readHttpHeaderBlock(socket);
+    HandshakeReadResult const result = readHttpHeaderBlock(socket);
     verifyServerHandshakeResponse(result.header, key);
     return result.leftover;
 }
 
 /// @brief Performs the server side of the WebSocket handshake over @p socket.
-/// @param socket Freshly accepted socket.
+/// @param socket           Freshly accepted socket.
+/// @param handshakeTimeout Bound on the whole handshake read; see
+///                         `readHttpHeaderBlock`. Zero disables it.
 /// @return Leftover bytes read past the request header — feed these into a
 ///         `WsFrameReader` before reading further from the socket.
 /// @throws std::runtime_error if the client's request is malformed or missing
-///         the required headers.
-inline std::string performServerHandshake(TcpSocket& socket) {
-    HandshakeReadResult result = readHttpHeaderBlock(socket);
+///         the required headers, or if @p handshakeTimeout elapses first.
+inline std::string performServerHandshake(TcpSocket& socket,
+                                          std::chrono::milliseconds handshakeTimeout = std::chrono::milliseconds{0}) {
+    HandshakeReadResult const result = readHttpHeaderBlock(socket, handshakeTimeout);
     ClientHandshakeRequest req = parseClientHandshakeRequest(result.header);
     std::string response = buildServerHandshakeResponse(req.key);
     socket.sendAll(response.data(), response.size());

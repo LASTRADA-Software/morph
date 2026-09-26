@@ -36,15 +36,25 @@ struct NetEchoAction {
     int value = 0;
 };
 struct NetEchoFail {};
+// Returns a `size`-byte reply -- used by the sendTimeout regression test
+// below to overflow a shrunk receive window in a handful of round trips
+// instead of needing thousands of tiny ones.
+struct NetEchoBig {
+    int size = 0;
+};
 
 struct NetEchoModel {
     int execute(NetEchoAction action) { return action.value; }
     int execute(NetEchoFail) { throw std::runtime_error("echo failed"); }
+    // {size, 'x'} would resolve to std::initializer_list<char> and narrow the size_t to char, a hard compile error.
+    // NOLINTNEXTLINE(modernize-return-braced-init-list)
+    std::string execute(NetEchoBig action) { return std::string(static_cast<std::size_t>(action.size), 'x'); }
 };
 
 BRIDGE_REGISTER_MODEL(NetEchoModel, "NetEchoModel")
 BRIDGE_REGISTER_ACTION(NetEchoModel, NetEchoAction, "NetEchoAction")
 BRIDGE_REGISTER_ACTION(NetEchoModel, NetEchoFail, "NetEchoFail")
+BRIDGE_REGISTER_ACTION(NetEchoModel, NetEchoBig, "NetEchoBig")
 
 namespace {
 
@@ -1416,3 +1426,178 @@ TEST_CASE("SocketServer: a finished connection's fd and thread are reclaimed bef
     CHECK(after < baseline + (static_cast<std::size_t>(kRounds) / 2));
 }
 #endif  // _WIN32
+
+// ── morph#534: handshakeTimeout and sendTimeout ─────────────────────────────
+// Neither knob existed before this change: `SocketServerConfig` had only
+// `backlog`. Both regression tests below fail on unfixed code -- the first by
+// timing out its own bounded wait (the connection is never closed), the
+// second the same way (the stalled reply write blocks forever instead of
+// throwing, so the connection is never retired).
+
+TEST_CASE("SocketServer: handshakeTimeout retires a connection that never completes its handshake",
+          "[net][socket_server][morph534]") {
+    // Slowloris, minimal form: connect and send one byte that is not a
+    // complete HTTP request, then go silent. `performServerHandshake()`'s
+    // `readHttpHeaderBlock()` loop has nothing else in it that returns --
+    // without a timeout this parks `clientLoop` (and the fd) forever.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer::Config cfg;
+    cfg.handshakeTimeout = std::chrono::milliseconds{200};
+    morph::net::SocketServer wsServer{*server, 0, cfg};
+    REQUIRE(wsServer.listen());
+
+    auto sock = morph::net::detail::TcpSocket::connect("127.0.0.1", wsServer.port(), std::chrono::milliseconds{2000});
+    char const one = 'G';
+    sock.sendAll(&one, 1);
+
+    // Give the timeout time to fire and clientLoop time to return -- well
+    // over the 200ms handshakeTimeout above.
+    std::this_thread::sleep_for(std::chrono::milliseconds{600});
+
+    // A finished connection's fd is reclaimed lazily, on the *next* accept
+    // (see "a finished connection's fd and thread are reclaimed before
+    // shutdown" above, and reapFinishedClients()'s own doc comment) -- so a
+    // well-behaved probe connection has to arrive before the stalled
+    // connection's socket actually closes. This also proves the accept loop
+    // itself was never wedged by the earlier bad connection.
+    RawWsClient probe{wsServer.port()};
+    probe.send(morph::wire::makeRegister("NetEchoModel"));
+    REQUIRE(probe.receive().kind == "ok");
+
+    // Pre-fix, clientLoop's `performServerHandshake()` call never returns
+    // (blocked in `recvSome` forever), so it never sets `finished`, and
+    // `reapFinishedClients()` -- run above, from the probe's own accept --
+    // never removes or closes it: this poll would time out (rc == 0).
+    pollfd pfd{};
+    pfd.fd = sock.nativeHandle();
+    pfd.events = POLLIN;
+    int const rc = ::poll(&pfd, 1, 2000);
+    REQUIRE(rc > 0);
+    char buf[1];
+    ssize_t const n = ::recv(sock.nativeHandle(), buf, 1, 0);
+    CHECK(n == 0);  // EOF: the server closed the connection, not sent data
+}
+
+TEST_CASE("SocketServer: a stalled reply write on a still-readable connection retires it instead of hanging",
+          "[net][socket_server][morph534]") {
+    // Regression test for the acceptance clause #534's rescope comment added
+    // on top of PR #558: a reply write that fails on a connection whose read
+    // direction is still live (no reset, no FIN -- just a peer that stopped
+    // draining its socket) must stop that connection from dispatching further
+    // frames into RemoteServer. `ClientConnection::sendText()`'s catch already
+    // retires the connection on a *failed* send (`socket.shutdownBoth()`), but
+    // nothing before this change ever makes `sendAll` fail here: no timeout is
+    // set on the accepted socket, so a `send()` against a full, undrained
+    // receive window blocks forever instead of throwing.
+    //
+    // Deliberately not the "peer reset" scenario the existing sendText test
+    // above covers -- that connection is already dead on both sides. Here the
+    // TCP connection stays fully open; only the client stops reading, which is
+    // what actually needs `sendTimeout` (a reset fails the very next `send()`
+    // immediately, with no timeout involved at all).
+    //
+    // The stall this reproduces is genuinely unbounded pre-fix, so the wait
+    // below runs on a background thread with a bounded budget and detaches on
+    // stall rather than blocking the test binary -- same pattern as
+    // "SocketServer: destruction completes promptly with the accept loop
+    // parked in accept()" above.
+    struct Stack {
+        morph::exec::ThreadPoolExecutor pool{2};
+        std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(pool);
+        morph::net::SocketServer wsServer;
+        explicit Stack(morph::net::SocketServer::Config cfg) : wsServer{*server, 0, cfg} {}
+    };
+    morph::net::SocketServer::Config cfg;
+    cfg.sendTimeout = std::chrono::milliseconds{300};
+    auto stack = std::make_shared<Stack>(cfg);
+    REQUIRE(stack->wsServer.listen());
+    std::uint16_t const port = stack->wsServer.port();
+
+    auto socket = std::make_shared<morph::net::detail::TcpSocket>(
+        morph::net::detail::TcpSocket::connect("127.0.0.1", port, std::chrono::milliseconds{2000}));
+    // Shrink the receive window so a modest flood of replies overflows it
+    // without needing megabytes of traffic. The OS may clamp this upward to
+    // some platform minimum; either way it is far smaller than an unbounded
+    // default.
+    int const tinyBuf = 1024;
+    ::setsockopt(socket->nativeHandle(), SOL_SOCKET, SO_RCVBUF, &tinyBuf, sizeof(tinyBuf));
+
+    morph::net::detail::ParsedWsUrl const url{.host = "127.0.0.1", .port = port, .path = "/"};
+    std::string const leftover = morph::net::detail::performClientHandshake(*socket, url);
+    auto reader = std::make_shared<morph::net::detail::WsFrameReader>(/*expectMasked=*/false);
+    reader->feed(leftover);
+
+    auto sendEnvelope = [&](const morph::wire::Envelope& env) {
+        std::string frame = morph::net::detail::encodeWsFrame(morph::net::detail::WsOpcode::kText,
+                                                              morph::wire::encode(env), /*mask=*/true);
+        socket->sendAll(frame.data(), frame.size());
+    };
+    auto recvOne = [&]() -> morph::wire::Envelope {
+        for (;;) {
+            if (auto frame = reader->tryExtractFrame()) {
+                return morph::wire::decode(frame->payload);
+            }
+            char buf[4096];
+            std::size_t const got = socket->recvSome(buf, sizeof(buf));
+            if (got == 0) {
+                throw std::runtime_error("peer closed");
+            }
+            reader->feed(std::string_view{buf, got});
+        }
+    };
+
+    sendEnvelope(morph::wire::makeRegister("NetEchoModel"));
+    auto reg = recvOne();
+    REQUIRE(reg.kind == "ok");
+    REQUIRE(stack->server->health().liveModels == 1U);
+
+    // Flood large replies without ever reading them: the client's receive
+    // window fills, the server's `sendAll` for a later reply stalls, and
+    // (with the fix) `sendTimeout` bounds that stall. The connection is never
+    // reset or closed by the client -- its read direction stays live
+    // throughout. `NetEchoBig` (64 KiB per reply) overflows even an
+    // OS-clamped-up receive window in a handful of round trips, rather than
+    // needing thousands of tiny ones to add up.
+    constexpr int kFloodCount = 64;
+    constexpr int kReplyBytes = 65536;
+    for (int i = 0; i < kFloodCount; ++i) {
+        morph::wire::Envelope req;
+        req.kind = "execute";
+        req.callId = static_cast<std::uint64_t>(i + 1);
+        req.modelId = reg.modelId;
+        req.modelType = "NetEchoModel";
+        req.actionType = "NetEchoBig";
+        req.body = R"({"size":)" + std::to_string(kReplyBytes) + "}";
+        try {
+            sendEnvelope(req);
+        } catch (const std::exception&) {
+            // The client's own send can fail too, once the connection is torn
+            // down from the server side -- irrelevant to what this test
+            // checks, so just stop feeding it.
+            break;
+        }
+    }
+    // No further recvOne() calls: the client deliberately never drains
+    // anything from here on.
+
+    auto reclaimed = std::make_shared<std::atomic<bool>>(false);
+    std::thread waiter{[stack, reclaimed] {
+        morph::testing::waitUntil([&] { return stack->server->health().liveModels == 0U; },
+                                  morph::testing::WaitBudget{std::chrono::seconds{15}});
+        reclaimed->store(true);
+    }};
+
+    bool const finished = morph::testing::waitUntil([reclaimed] { return reclaimed->load(); },
+                                                    morph::testing::WaitBudget{std::chrono::seconds{20}});
+    if (!finished) {
+        waiter.detach();
+        FAIL("connection was never retired after its reply write stalled against a full, still-open receive window");
+    }
+    waiter.join();
+
+    // The connection must actually have been retired -- clientLoop exited and
+    // its ScopeGuard reclaimed the model -- not merely "eventually true by
+    // coincidence".
+    REQUIRE(stack->server->health().liveModels == 0U);
+}

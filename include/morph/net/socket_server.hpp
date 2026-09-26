@@ -8,6 +8,7 @@
 #include <array>
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <morph/core/remote.hpp>
@@ -28,6 +29,22 @@ namespace morph::net {
 struct SocketServerConfig {
     /// @brief Pending-connection backlog passed to the listening socket.
     int backlog = 64;
+
+    /// @brief Bound on completing the RFC 6455 Upgrade handshake, from
+    /// accept() to the request's terminating `\r\n\r\n`. See
+    /// `readHttpHeaderBlock`'s `timeout` parameter for how this is enforced
+    /// and why (deliberately not `SocketBackendConfig::handshakeTimeout`'s
+    /// `SO_RCVTIMEO` approach). Zero disables it (the previous behavior:
+    /// block forever).
+    std::chrono::milliseconds handshakeTimeout{10000};
+
+    /// @brief Bound on a single `::send` that is making no progress, applied
+    /// to every accepted connection via `SO_SNDTIMEO` (see `acceptLoop`).
+    /// Without it, a peer that stops reading parks whichever thread is
+    /// replying in `sendAll` forever, and `ClientConnection::sendText`'s
+    /// existing failed-send handling never gets a chance to run. Zero
+    /// disables it (the previous behavior: block forever).
+    std::chrono::milliseconds sendTimeout{30000};
 };
 
 /// @brief Raw-socket WebSocket server front for `morph::backend::RemoteServer`.
@@ -60,7 +77,8 @@ public:
     ///               `docs/spec/concurrency_and_lifetimes.md`, "Destruction
     ///               ordering").
     /// @param port   TCP port to listen on. Pass 0 to let the OS pick a free port.
-    /// @param cfg    Backlog tuning. Default: 64-connection backlog.
+    /// @param cfg    Backlog and timeout tuning. Default: 64-connection
+    ///               backlog, 10s handshake timeout, 30s send timeout.
     // Copy/move are implicitly deleted by the non-copyable/non-movable
     // std::mutex/std::thread members below — no explicit `= delete` needed
     // (matches the rest of the codebase's convention, e.g. `LocalBackend`).
@@ -270,6 +288,13 @@ private:
             if (_closing.load()) {
                 return;
             }
+            if (_cfg.sendTimeout.count() > 0) {
+                // See `SocketServerConfig::sendTimeout`. Applies to both
+                // `ClientConnection::sendText()` and `sendControlFrame()`,
+                // which share this socket. Best-effort, like every other
+                // socket-option application in this class.
+                static_cast<void>(clientSocket->setSendTimeout(_cfg.sendTimeout));
+            }
             // Before taking on another one: nothing else removes a finished
             // connection, so without this an fd and a joinable thread handle
             // accumulate per connection *ever accepted*, not per live
@@ -357,7 +382,7 @@ private:
 
         std::string leftover;
         try {
-            leftover = ::morph::net::detail::performServerHandshake(conn->socket);
+            leftover = ::morph::net::detail::performServerHandshake(conn->socket, _cfg.handshakeTimeout);
         } catch (const std::exception&) {
             conn->closed.store(true);
             return;
