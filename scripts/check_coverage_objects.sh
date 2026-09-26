@@ -76,6 +76,9 @@ coverage_exclusion_reason() {
         morph_client_only_guard_links|morph_client_only_runtime_throw|morph_client_only_facade)
             echo "the MORPH_CLIENT_ONLY guard probes (tests/CMakeLists.txt), which exit 0 when the guard holds: configure-time try_compile()/try_run() checks until core-cpp's compiled modules made them build-time targets, and never measured then either; they compile morph's headers under MORPH_CLIENT_ONLY, so instrumenting them would score that configuration against the library's"
             ;;
+        morph_declare_source_canary)
+            echo "the BRIDGE_DECLARE_MODEL/BRIDGE_DECLARE_ACTION link canary's positive probe (tests/CMakeLists.txt): what it asserts is that the program links at all, and the fixture model it registers exists nowhere else in the tree, so instrumenting it would only score probe-unique template instantiations against the library"
+            ;;
         fuzz_wire_decode|fuzz_dispatch_execute)
             echo "libFuzzer harnesses (MORPH_BUILD_FUZZERS=ON only, which the coverage leg does not set); apply_fuzzer() builds them at -O1 under -fsanitize=fuzzer,address, a different instrumentation from apply_coverage()'s"
             ;;
