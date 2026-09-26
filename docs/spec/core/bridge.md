@@ -1100,6 +1100,7 @@ make teardown order-independent.)
 | `instance` | `static ActionExecuteRegistry& instance()` | Process-level singleton. |
 | `registerAction` | `template<Model, Action> void registerAction(string_view modelId, string_view actionId)` | Registers an executor that deserializes JSON → `ActionTraits::fromJson`, calls `BridgeHandler<Model, Sharing>::execute<>`, serializes result back. Files **two** entries — one per sharing tag (`NoSharing`, `AllowShared`) — from one generic-lambda template. Defined out-of-line after `BridgeHandler`. |
 | `execute` | `template<Sharing> Completion<string> execute(string_view modelId, string_view actionId, void* handler, string_view bodyJson) const` | Lookup + invoke, under the caller's own sharing policy. Key is `(modelId, actionId, typeid(Sharing))`. Throws `runtime_error` on an unknown key. |
+| `contains` | `template<Sharing> bool contains(string_view modelId, string_view actionId) const noexcept` | Existence check over the same key `execute` looks up, without invoking anything. Since `registerAction` always files both sharing tags together, this answers the same for either `Sharing` for any action registered via `BRIDGE_REGISTER_ACTION`. Backs `BridgeHandler::servesAction`. |
 
 ### `Bridge`
 
