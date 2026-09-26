@@ -17,9 +17,10 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/callback_scope.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/qt/forms/forms_controller_core.hpp>
 
-#include "paste_forms_controller.hpp"
 #include "paste_presenter.hpp"
+#include "pastebin/models/paste_model.hpp"
 #endif
 
 /// @file
@@ -32,10 +33,11 @@
 /// pattern.
 ///
 /// @par Why these adapters exist at all
-/// Neither Task 10 class is directly consumable from QML — deliberately.
-/// `PasteFormsController` is a plain class (no `Q_OBJECT`) whose
-/// `submitIfValid` takes C++ callbacks, and `PastePresenter`'s signals carry
-/// raw C++ DTOs (`PasteView`, `ListPastesResult`) that QML has no reading of.
+/// Neither wrapped class is directly consumable from QML — deliberately.
+/// `morph::qt::forms::FormsControllerCore<PasteModel>` is a plain class (no
+/// `Q_OBJECT`) whose `submitIfValid` takes C++ callbacks, and
+/// `PastePresenter`'s signals carry raw C++ DTOs (`PasteView`,
+/// `ListPastesResult`) that QML has no reading of.
 /// The two classes below are the thinnest possible translation from those
 /// surfaces to the `QString`/`QVariantMap` shapes QML binds against. They
 /// decide nothing: every conditional and every rule stays in the model, and
@@ -68,7 +70,7 @@
 
 namespace pastebin::gui {
 
-/// @brief QML-facing face of `pastebin::gui::PasteFormsController`.
+/// @brief QML-facing face of `morph::qt::forms::FormsControllerCore<PasteModel>`.
 ///
 /// Same surface `DynamicForm.qml` expects of a controller — a `schemasJson`
 /// property, `submitIfValid(actionType, bodyJson)`, and a `replyReceived`
@@ -101,6 +103,14 @@ namespace pastebin::gui {
 /// is worth: this is a by-construction hazard closed pre-emptively, not a
 /// crash that was observed here. Nothing in this rung's suite reproduced a
 /// use-after-free through `FormsBridge`.
+///
+/// @par No `fetchOptions()`/`optionsReceived`
+/// Deliberately absent: they exist on `FormsControllerCore` to serve a
+/// `morph::forms::Choice<T, ...>` field's combo-box options, and none of
+/// pastebin's DTOs (`pastebin/dto/paste_dto.hpp`) declare a `Choice` field —
+/// `CreatePaste`'s `Visibility`/`Editability` enums render as plain enum
+/// widgets, not a server-fetched `Choice`. Adding an unused
+/// `Q_INVOKABLE fetchOptions()` here would be a stub with nothing to call it.
 class FormsBridge : public QObject {
     Q_OBJECT
 
@@ -134,13 +144,13 @@ signals:
 
 private:
 #ifndef Q_MOC_RUN
-    PasteFormsController _controller;
+    ::morph::qt::forms::FormsControllerCore<PasteModel> _core;
 
     /// @brief Lifetime gate for the `this`-capturing reply callbacks
     ///        `submitIfValid` attaches — see this class's own doc comment.
     ///
     /// **Declared last on purpose**, and it must stay last: reverse-order
-    /// member destruction is what makes the gate close before `_controller`
+    /// member destruction is what makes the gate close before `_core`
     /// (and the `BridgeHandler` inside it) is torn down. Anything added to
     /// this class goes *above* this line.
     ///

@@ -1436,7 +1436,7 @@ not one, because only one of the two signals is universal:
   on a controller that serves a `Choice` field; a controller that serves none
   deliberately declares neither it nor `fetchOptions()`
   (`bookmarks::gui::BookmarkFormsController` and
-  `pastebin::gui::PasteFormsController` each carry the reasoning: an unused
+  `pastebin::gui::FormsBridge` each carry the reasoning: an unused
   `fetchOptions()` would be a stub with nothing to call it). Its block gates its
   **target** on the signal being declared — `form.controller.optionsReceived
   !== undefined`, else `null` — so a controller that omits it is never connected

@@ -6,9 +6,9 @@
 ///
 /// This file is the *only* difference between the browser client and the
 /// desktop client (`gui/main.cpp`). Everything with behaviour in it — the
-/// presenters (`gui_lib/paste_presenter.hpp`), the forms controller
-/// (`gui_lib/paste_forms_controller.hpp`), the QML adapters
-/// (`gui_lib/paste_qml_bridges.hpp`), the schema document
+/// presenters (`gui_lib/paste_presenter.hpp`), the QML adapters
+/// (`gui_lib/paste_qml_bridges.hpp`), which wrap the shipped
+/// `morph::qt::forms::FormsControllerCore`, the schema document
 /// (`gui_lib/paste_schemas.hpp`) and the QML itself (`gui/qml/Main.qml`, built
 /// into the `Pastebin` module both binaries link) — is shared verbatim. That
 /// is `examples/TESTING.md`'s "same client code" requirement, and its explicit

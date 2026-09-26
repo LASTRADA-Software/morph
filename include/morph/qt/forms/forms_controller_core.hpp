@@ -3,80 +3,65 @@
 #pragma once
 
 /// @file
-/// Model-agnostic core of the shipped Qt/QML forms renderer's controller:
-/// owns (or composes over) the Bridge/BridgeHandler/executor wiring, and
-/// exposes the two operations `DynamicForm.qml` needs -- submit and
-/// options-fetch -- generically over `BridgeHandler<Model>::executeJson`, so
-/// an app depends on this directly instead of re-deriving the wiring per app.
-/// A concrete `QObject`/`QML_ELEMENT` wrapper per app (Qt cannot register a
-/// class *template* for QML) forwards to this core and turns its callbacks
-/// into signals -- see `examples/forms/gui_qml/FormsController.hpp` for the
-/// reference wrapper.
+/// Forms-specific facade over `morph::qt::bridge::GenericModelBridgeCore`:
+/// gives the shipped Qt/QML forms renderer's controller the two operation
+/// names `DynamicForm.qml` actually calls -- `submitIfValid` and
+/// `fetchOptions` -- over the same generic dispatch the composed core
+/// already provides. A concrete `QObject`/`QML_ELEMENT` wrapper per app (Qt
+/// cannot register a class *template* for QML) forwards to this facade and
+/// turns its callbacks into signals -- see
+/// `examples/forms/gui_qml/FormsController.hpp` for the reference wrapper.
 ///
-/// Two constructor overloads decide who owns the `Bridge`:
-/// - The single-argument (schema-only) constructor builds and owns a private
-///   `ThreadPoolExecutor` + `QtExecutor` + `Bridge` over a `LocalBackend` --
-///   the convenient default for a demo or an app that has no `Bridge` of its
-///   own.
-/// - The `(Bridge&, IExecutor*, schemasJson)` constructor composes over a
-///   caller-supplied `Bridge`/executor instead -- the caller decides the
-///   deployment mode (`LocalBackend`, `SimulatedRemoteBackend`,
-///   `QtWebSocketBackend`, ...) and this core never builds a second, always-
-///   local `Bridge` of its own. The caller's `Bridge`/executor must outlive
-///   this core.
+/// Composes rather than inherits `GenericModelBridgeCore`: neither type
+/// declares a virtual destructor (there is no polymorphic dispatch anywhere
+/// in this seam -- every consumer names its concrete `Model` type), and
+/// public inheritance from a class not designed for it invites deleting a
+/// derived object through a base pointer, which is undefined behaviour
+/// without one. Composition sidesteps the question entirely.
+///
+/// See `morph::qt::bridge::GenericModelBridgeCore` for the constructor
+/// overloads (owning vs. composing a `Bridge`) and the underlying dispatch
+/// mechanism.
 
-#include <memory>
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/qt/qt_executor.hpp>
-#include <optional>
+#include <morph/qt/bridge/generic_model_bridge_core.hpp>
 #include <string>
 #include <utility>
 
 namespace morph::qt::forms {
 
-/// @brief Owns, or composes over, the Bridge/BridgeHandler/executor plumbing
-///        behind a schema-driven QML forms controller, generic over the
-///        model type.
+/// @brief `DynamicForm.qml`-facing facade over
+///        `morph::qt::bridge::GenericModelBridgeCore`, naming its one generic
+///        dispatch operation `submitIfValid`/`fetchOptions` instead of
+///        `execute`, and carrying the `{actionType: schema}` document
+///        `DynamicForm.qml` renders from -- a forms-specific concept the
+///        composed core deliberately does not know about.
 ///
-/// @tparam Model The registered model type (`BRIDGE_REGISTER_MODEL`) whose
-///               actions the shipped `DynamicForm.qml` renders.
-template <typename Model>
+/// @tparam Model   The registered model type (`BRIDGE_REGISTER_MODEL`) whose
+///                 actions the shipped `DynamicForm.qml` renders.
+/// @tparam Sharing Forwarded to `GenericModelBridgeCore` unchanged --
+///                 `morph::bridge::NoSharing` (the default) or
+///                 `morph::bridge::AllowShared`. Every shipped forms
+///                 controller uses the default; `AllowShared` compiles and
+///                 type-checks but has no exercising caller in this repo yet.
+template <typename Model, typename Sharing = ::morph::bridge::NoSharing>
 class FormsControllerCore {
 public:
-    /// @brief Constructs the core with its own private, always-local `Bridge`
-    ///        (`ThreadPoolExecutor` + `QtExecutor` + `LocalBackend`), and the
-    ///        app's pre-assembled `{actionType: schema}` JSON (e.g.
-    ///        hand-written like `lab::schemasJson()`).
-    ///
-    /// Use the `(Bridge&, IExecutor*, schemasJson)` overload instead when the
-    /// app already has a `Bridge` (remote/socket mode, or one shared across
-    /// multiple presenters) that this core should compose over rather than
-    /// duplicate.
+    /// @brief Constructs the core with its own private, always-local `Bridge`.
+    ///        See `GenericModelBridgeCore`'s own constructor for the full
+    ///        contract.
     /// @param schemasJson The full schema set the QML renderer will parse.
-    explicit FormsControllerCore(std::string schemasJson)
-        : _owned{std::in_place}, _handler{_owned->bridge, &_owned->gui}, _schemasJson{std::move(schemasJson)} {}
+    explicit FormsControllerCore(std::string schemasJson) : _schemasJson{std::move(schemasJson)} {}
 
-    /// @brief Constructs the core over a caller-supplied `Bridge`/executor,
-    ///        instead of building a private, always-local one.
-    ///
-    /// The core registers a `BridgeHandler<Model>` on @p bridge exactly as
-    /// the owning constructor's internal one does, so `submitIfValid`/
-    /// `fetchOptions` dispatch through whatever backend @p bridge currently
-    /// has installed (`LocalBackend`, `SimulatedRemoteBackend`,
-    /// `QtWebSocketBackend`, ...) -- including a backend @p bridge switches
-    /// to later via `Bridge::switchBackend`, since the registered handler
-    /// re-registers itself automatically.
-    ///
+    /// @brief Constructs the core over a caller-supplied `Bridge`/executor.
+    ///        See `GenericModelBridgeCore`'s own constructor for the full
+    ///        contract.
     /// @param bridge      The bridge to register this core's handler on. Must
     ///                     outlive this core.
-    /// @param guiExec     Executor used to deliver `Completion` callbacks
-    ///                    (e.g. a `QtExecutor` for the GUI thread). Must
-    ///                    outlive this core.
+    /// @param guiExec     Executor used to deliver `Completion` callbacks.
+    ///                    Must outlive this core.
     /// @param schemasJson The full schema set the QML renderer will parse.
-    FormsControllerCore(morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* guiExec, std::string schemasJson)
-        : _handler{bridge, guiExec}, _schemasJson{std::move(schemasJson)} {}
+    FormsControllerCore(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* guiExec, std::string schemasJson)
+        : _core{bridge, guiExec}, _schemasJson{std::move(schemasJson)} {}
 
     /// @brief The `{actionType: schema}` JSON supplied at construction.
     /// @return A reference to the cached schema-set JSON.
@@ -93,9 +78,7 @@ public:
     /// @param onError    Failure callback.
     template <typename OnReply, typename OnError>
     void submitIfValid(const std::string& actionType, const std::string& bodyJson, OnReply onReply, OnError onError) {
-        _handler.executeJson(actionType, bodyJson)
-            .then([onReply = std::move(onReply)](std::string resultJson) mutable { onReply(std::move(resultJson)); })
-            .onError([onError = std::move(onError)](const std::exception_ptr& err) mutable { onError(err); });
+        _core.execute(actionType, bodyJson, std::move(onReply), std::move(onError));
     }
 
     /// @brief Executes @p optionsAction with @p bodyJson to fetch a `Choice`
@@ -114,32 +97,11 @@ public:
     template <typename OnReply, typename OnError>
     void fetchOptions(const std::string& optionsAction, const std::string& bodyJson, OnReply onReply,
                       OnError onError) {
-        _handler.executeJson(optionsAction, bodyJson)
-            .then([onReply = std::move(onReply)](std::string resultJson) mutable { onReply(std::move(resultJson)); })
-            .onError([onError = std::move(onError)](const std::exception_ptr& err) mutable { onError(err); });
+        _core.execute(optionsAction, bodyJson, std::move(onReply), std::move(onError));
     }
 
 private:
-    /// @brief The private pool/executor/backend bundle the schema-only
-    ///        constructor builds and owns. Absent (`_owned` unengaged) when the
-    ///        core instead composes over a caller-supplied `Bridge`/executor.
-    ///
-    /// Declaration order within the struct matters for destruction: `bridge`
-    /// must tear down before `pool`/`gui`, so it is declared last.
-    struct OwnedBridge {
-        morph::exec::ThreadPoolExecutor pool{2};
-        ::morph::qt::QtExecutor gui;
-        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    };
-
-    // Declaration order matters for destruction: _handler must tear down
-    // before _owned (its bridge and executor, when this core owns them), so
-    // _owned is declared first and _handler after it. When the caller-
-    // supplied-Bridge constructor is used, _owned stays unengaged and
-    // _handler instead references the caller's Bridge/executor directly --
-    // the caller is responsible for outliving _handler in that case.
-    std::optional<OwnedBridge> _owned;
-    morph::bridge::BridgeHandler<Model> _handler;
+    ::morph::qt::bridge::GenericModelBridgeCore<Model, Sharing> _core;
     std::string _schemasJson;
 };
 
