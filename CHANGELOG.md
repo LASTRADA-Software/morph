@@ -39,7 +39,7 @@ API surface).
   strand to drain before it returns. See `docs/spec/core/coroutines.md`,
   "Teardown".
 
-- **morph depends on core-cpp v0.4.1.** It is fetched through CPM, and
+- **morph depends on core-cpp v0.4.2.** It is fetched through CPM, and
   `morph::morph` links its `core::base`, `core::async`, `core::net` and, natively,
   `core::platform`. morph stays header-only, but those are static libraries, so
   a project that links morph now builds them. `TimeoutScheduler` runs on

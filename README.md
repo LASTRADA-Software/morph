@@ -418,7 +418,7 @@ validates) and enforce security-critical checks inside the model. See
 - **Dependencies:**
   - [Glaze](https://github.com/stephenberry/glaze) (JSON reflection), from
     [vcpkg](https://vcpkg.io) (`vcpkg.json` manifest) or fetched through CPM.
-  - [core-cpp](https://github.com/contour-terminal/core-cpp) v0.4.1, the
+  - [core-cpp](https://github.com/contour-terminal/core-cpp) v0.4.2, the
     shared C++23 foundation of the Contour Terminal projects, fetched through
     CPM: morph's timers run on its event loop, and `morph::net` takes base64
     and its wakeup primitive from it. morph itself stays header-only, but
