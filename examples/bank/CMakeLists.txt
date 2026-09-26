@@ -28,7 +28,6 @@ if(EMSCRIPTEN)
     return()
 endif()
 
-include(FetchContent)
 
 # ── Lightweight ORM (SQLite via ODBC) ────────────────────────────────────────
 # Lightweight resolves reflection-cpp / stdexec via CPM and finds yaml-cpp /
@@ -38,13 +37,9 @@ set(LIGHTWEIGHT_BUILD_EXAMPLES  OFF CACHE BOOL "" FORCE)
 set(LIGHTWEIGHT_BUILD_TOOLS     OFF CACHE BOOL "" FORCE)
 set(LIGHTWEIGHT_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
 
-include(${CMAKE_SOURCE_DIR}/cmake/DepCache.cmake)
 # Kept in sync with examples/common/CMakeLists.txt's identical pin -- see that
-# file's comment for why this is a commit SHA, not a tag, and why GIT_SHALLOW
-# is FALSE.
-morph_declare_dep(Lightweight https://github.com/LASTRADA-Software/Lightweight.git
-    bbb972a78e1962b968a2c6ad93f7dade736eaa01
-    GIT_SHALLOW FALSE)
+# file's comment for why this is a commit SHA, not a tag.
+
 # Lightweight's own install() rules unconditionally reference
 # $<TARGET_PDB_FILE:Lightweight> on WIN32 (its CMakeLists.txt), which CMake
 # only allows for linker-created artifacts (DLL/EXE) -- invalid whenever
@@ -52,13 +47,16 @@ morph_declare_dep(Lightweight https://github.com/LASTRADA-Software/Lightweight.g
 # forced by examples/common/CMakeLists.txt when it fetches Lightweight
 # first in the same configure), and it fails at generate time even though
 # nothing in this tree ever runs `cmake --install`. Skipping install-rule
-# generation for just this FetchContent_MakeAvailable call sidesteps the
+# generation for just this CPMAddPackage call sidesteps the
 # bad generator expression without touching Lightweight's vendored
 # CMakeLists.txt -- same fix as examples/common/CMakeLists.txt's own
 # Lightweight fetch.
 set(_morph_saved_skip_install_rules ${CMAKE_SKIP_INSTALL_RULES})
 set(CMAKE_SKIP_INSTALL_RULES ON)
-FetchContent_MakeAvailable(Lightweight)
+CPMAddPackage(
+    NAME Lightweight
+    GITHUB_REPOSITORY LASTRADA-Software/Lightweight
+    GIT_TAG bbb972a78e1962b968a2c6ad93f7dade736eaa01)
 set(CMAKE_SKIP_INSTALL_RULES ${_morph_saved_skip_install_rules})
 unset(_morph_saved_skip_install_rules)
 

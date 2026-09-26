@@ -2,154 +2,159 @@
 
 #pragma once
 #include <chrono>
+#include <core/net/EventLoop.hpp>
+#include <core/net/PlatformLoop.hpp>
+#include <core/platform/Clock.hpp>
 #include <cstdint>
 #include <exception>
 #include <functional>
-#include <string>
+#include <mutex>
+#include <optional>
 #include <unordered_map>
-
-/// @file
-/// `TimeoutScheduler` — "run this callback once, in N milliseconds, unless
-/// cancelled first" — in two builds of the same public API.
-///
-/// @par Why two builds
-/// The ordinary build owns a dedicated `std::thread`. A **single-threaded
-/// Emscripten** build cannot: Qt for WebAssembly is installed here as
-/// `wasm_singlethread` (`.github/workflows/wasm-ladder.yml`) and
-/// `cmake/morph_add_rung.cmake` passes no `-pthread`, so Emscripten's
-/// non-pthread `pthread_create` stub fails and `std::thread`'s constructor
-/// throws `std::system_error` ("thread constructor failed") — from inside
-/// whatever completion callback happened to enable the deadline. Every WASM
-/// client in this repository is Qt-event-loop driven and would hit this the
-/// moment it called `Bridge::setExecuteDeadline` (which
-/// `examples/common/gui/event_poller.hpp`'s constructor does
-/// unconditionally, on every poll open).
-///
-/// So under `__EMSCRIPTEN__` without `__EMSCRIPTEN_PTHREADS__` this class is
-/// built on `emscripten_async_call` — the browser's own `setTimeout` — and
-/// fires its callbacks on the single main thread, i.e. on the same thread the
-/// Qt event loop and every `QtExecutor`-posted completion callback already
-/// run on. Deadlines still fire; nothing is silently disabled.
-///
-/// @par What differs between the two builds
-/// - **Callback thread.** Threaded build: a private background thread, so a
-///   callback must be prepared to run concurrently with the caller (the one
-///   real callback in this codebase, `executeVia`'s, only touches a
-///   `CompletionState`, which is itself mutex-guarded). Browser build: the
-///   main thread, never concurrently with anything.
-/// - **Cancellation.** Threaded build: the entry, its callback and everything
-///   the callback captured are erased immediately. Browser build: identical
-///   for the callback and its captures (the map entry is erased at once), but
-///   the underlying browser timer is not itself cleared — it still fires at
-///   its original deadline and finds nothing to do. Only a small ticket
-///   allocation outlives `cancel()`, until that point.
-/// - **Cancelling a callback that has *already started*.** Threaded build:
-///   `cancel()` cannot stop it. `run()` erases the entry before invoking the
-///   callback and drops `_mtx` across the invocation, so a `cancel()` racing a
-///   firing callback takes the same not-found branch as one for a handle that
-///   already finished, and returns while that callback is still executing on
-///   the scheduler thread. Browser build: the case cannot arise — the timer
-///   callback and `cancel()` run on the same single thread, so "no callback
-///   will start after `cancel()` returns" holds there and only there. See
-///   `cancel()`'s own comment for what this asks of a caller.
-/// - **Destruction.** Threaded build: the destructor joins its thread, so no
-///   callback can be in flight afterwards. Browser build: nothing to join;
-///   pending browser timers observe an expired `std::weak_ptr` to the
-///   scheduler's state and return without invoking anything.
-///
-/// @warning The browser build has never been compiled or run in this
-/// repository — no Emscripten toolchain is available where it was written.
-/// Its only verification is the `ladder-wasm` CI compile gate. Stated plainly
-/// here rather than smoothed over, exactly like `examples/TESTING.md`'s note
-/// on the WASM clients themselves.
+#include <utility>
 
 #if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-#define MORPH_TIMEOUT_SCHEDULER_BROWSER_TIMERS 1
-#include <emscripten/emscripten.h>
-
-#include <limits>
-#include <memory>
-#include <utility>
+#define MORPH_TIMEOUT_SCHEDULER_HOST_DRIVEN 1
 #else
-#include <condition_variable>
-#include <map>
-#include <mutex>
 #include <thread>
+#include <vector>
 #endif
 
 #include "logger.hpp"
 
+/// @file
+/// `TimeoutScheduler` — "run this callback once, in N milliseconds, unless
+/// cancelled first" — over core-cpp's event-loop timers.
+///
+/// @par One class, two ways of driving its loop
+/// The deadlines live in a `core::net::PlatformLoop`, and the one thing that
+/// differs between builds is who turns it:
+/// - **Native:** the scheduler owns a `std::thread` that runs the loop.
+///   `schedule()` and `cancel()` may be called from any thread; they record
+///   the request under a mutex and hand the loop a batch to arm or disarm.
+///   Callbacks run on that thread, so a callback must be prepared to run
+///   concurrently with the caller.
+/// - **Single-threaded WebAssembly** (`__EMSCRIPTEN__` without
+///   `__EMSCRIPTEN_PTHREADS__`): there is no thread to start — Qt for
+///   WebAssembly is `wasm_singlethread` here and no `-pthread` is passed, so
+///   `std::thread`'s constructor would throw. The loop is host-driven: the
+///   browser's own timer pumps it, and `schedule()` and `cancel()` arm and
+///   retire the timer directly. Callbacks run on the main thread, the one the
+///   Qt event loop and every `QtExecutor`-posted completion already run on.
+///
+/// @par What the two builds share
+/// - `cancel()` releases the callback, and everything it captured, before it
+///   returns — the entry lives in this class's own `pending` map, not in the
+///   loop — and retires the loop's timer as well.
+/// - The destructor drops every pending callback without firing it.
+/// - A callback that throws is logged through `morph::log` and swallowed.
+///
+/// @par What differs
+/// - **Cancelling a callback that has already started.** Native: `cancel()`
+///   cannot stop it and does not wait for it — the entry is taken out of
+///   `pending` before the callback is invoked, so a racing `cancel()` finds
+///   nothing and returns while the callback is still running. WebAssembly:
+///   the case cannot arise, because the callback and `cancel()` run on the
+///   same thread. A caller that must work in both builds cannot rely on the
+///   second.
+/// - **Destruction.** Native: the destructor stops the loop and joins its
+///   thread, so no callback is in flight afterwards. WebAssembly: nothing to
+///   join; the timers are retired and the loop is destroyed. A browser timer
+///   already scheduled to pump it finds it gone and runs nothing: from
+///   core-cpp 0.3.0 each pump carries a weak reference to the loop, where
+///   0.2.1's wrote into the freed loop.
+
 namespace morph::async::detail {
 
-#ifndef MORPH_TIMEOUT_SCHEDULER_BROWSER_TIMERS
-
-/// @brief Background scheduler that invokes a callback once after a delay, unless cancelled first.
+/// @brief Invokes a callback once after a delay, unless cancelled first.
 ///
 /// Neither `Bridge` nor `RemoteServer` is bound to a specific `IExecutor`
-/// with a delayed-post primitive, so a single dedicated thread per instance
-/// tracks pending deadlines and fires callbacks when they elapse. Used by
+/// with a delayed-post primitive, so each owns one of these. Used by
 /// `RemoteServer` to enforce `LimitPolicy::executeTimeout` (server-side —
 /// see `docs/spec/core/backend.md`) and by `Bridge::setExecuteDeadline`
-/// (client-side — see `docs/spec/core/completion.md`). See this file's `@file`
-/// comment for the single-threaded-WASM build of the same API.
+/// (client-side — see `docs/spec/core/completion.md`). See this file's
+/// `@file` comment for how the native and single-threaded WebAssembly builds
+/// drive it.
 class TimeoutScheduler {
 public:
     /// @brief Opaque identifier for one scheduled callback.
     using Handle = std::uint64_t;
 
-    /// @brief Starts the background thread.
-    TimeoutScheduler() : _thread{[this] { run(); }} {}
+#ifndef MORPH_TIMEOUT_SCHEDULER_HOST_DRIVEN
+    /// @brief Starts the thread that runs the scheduler's event loop.
+    TimeoutScheduler() : _thread{[this] { _loop.run(); }} {}
 
-    /// @brief Stops the background thread and joins it.
+    /// @brief Drops every pending callback without firing it, stops the loop
+    ///        and joins its thread.
+    ///
+    /// The timers are retired on the loop's own thread, before it stops, so
+    /// the loop is destroyed with nothing armed.
     ~TimeoutScheduler() {
-        {
-            std::scoped_lock const lock{_mtx};
-            _stop = true;
-        }
-        _cv.notify_all();
+        auto dropped = takePending();
+        _loop.post([this] {
+            disarmAll();
+            _loop.stop();
+        });
         _thread.join();
+        // `dropped` is destroyed here, with the loop's thread gone and every
+        // member still alive: a capture whose destructor calls back into this
+        // scheduler finds it whole.
     }
+#else
+    /// @brief Creates the scheduler. Starts no thread: the browser's timer
+    ///        pumps the loop.
+    TimeoutScheduler() = default;
+
+    /// @brief Drops every pending callback without firing it and retires the
+    ///        loop's timers.
+    ~TimeoutScheduler() {
+        auto dropped = takePending();
+        disarmAll();
+        // `dropped` is destroyed here, with every member still alive.
+    }
+#endif
 
     TimeoutScheduler(const TimeoutScheduler&) = delete;
     TimeoutScheduler& operator=(const TimeoutScheduler&) = delete;
     TimeoutScheduler(TimeoutScheduler&&) = delete;
     TimeoutScheduler& operator=(TimeoutScheduler&&) = delete;
 
-    /// @brief Schedules @p callback to run after @p delay on the scheduler's
-    ///        background thread, unless cancelled first via `cancel()`.
+    /// @brief Schedules @p callback to run after @p delay, unless cancelled
+    ///        first via `cancel()`.
     /// @param delay    Time to wait before firing.
-    /// @param callback Invoked on the scheduler thread if not cancelled in time.
+    /// @param callback Invoked on the loop's thread (the main thread under
+    ///                 single-threaded WebAssembly) if not cancelled in time.
     ///                 Exceptions it throws are logged and swallowed.
     /// @return Handle usable with `cancel()`.
     Handle schedule(std::chrono::milliseconds delay, std::function<void()> callback) {
-        auto const deadline = std::chrono::steady_clock::now() + delay;
-        std::scoped_lock const lock{_mtx};
-        Handle const handle = ++_nextHandle;
-        auto iter = _entries.emplace(deadline, Entry{handle, std::move(callback)});
-        _index[handle] = iter;
-        _cv.notify_all();
+        auto const deadline = _loop.clock().now() + delay;
+        Handle handle{};
+        {
+            std::scoped_lock const lock{_mtx};
+            handle = ++_nextHandle;
+            _pending.emplace(handle, std::move(callback));
+        }
+        submit(Request{.handle = handle, .deadline = deadline});
         return handle;
     }
 
-    /// @brief Cancels a previously scheduled callback: stops one that has not
-    ///        started, and returns without waiting for one that has.
+    /// @brief Cancels a previously scheduled callback: releases one that has
+    ///        not started, and returns without waiting for one that has.
     ///
     /// Two cases, and telling them apart is the caller's business because the
     /// scheduler cannot:
     ///
-    /// - **@p handle has not started.** Its entry — and anything its callback
-    ///   captured — is erased right away, the callback never runs, and the
-    ///   caller does not have to wait for the original deadline for that memory
-    ///   to be released.
-    /// - **@p handle is already running.** `run()` erases the entry *before* it
-    ///   invokes the callback, so this call finds nothing, takes the same
-    ///   no-op branch as a handle that already finished, and **returns while
-    ///   the callback is still executing** on the scheduler thread. The
-    ///   callback is neither interrupted nor waited for.
+    /// - **@p handle has not started.** Its callback — and anything it
+    ///   captured — is released before this returns, the callback never runs,
+    ///   and the loop's timer is retired.
+    /// - **@p handle is already running** (native build only). The callback
+    ///   was taken out of `pending` before it was invoked, so this call finds
+    ///   nothing and **returns while the callback is still executing** on the
+    ///   loop's thread. It is neither interrupted nor waited for.
     ///
     /// So `cancel()` returning does **not** mean "no callback is in flight".
     /// The only thing in this class that means that is `~TimeoutScheduler`,
-    /// which joins the scheduler thread. A caller must therefore keep every
+    /// which joins the loop's thread. A caller must therefore keep every
     /// scheduled callback safe to run *after* its `cancel()`: both callbacks in
     /// this repository (`Bridge::executeVia`'s deadline and `RemoteServer`'s
     /// `LimitPolicy::executeTimeout`) capture a `shared_ptr` to the state they
@@ -165,175 +170,136 @@ public:
     /// A no-op if @p handle already fired, is firing, or was already cancelled.
     /// @param handle Handle returned by a prior `schedule()` call.
     void cancel(Handle handle) {
-        std::scoped_lock const lock{_mtx};
-        auto found = _index.find(handle);
-        if (found == _index.end()) {
-            return;
+        // Moved out under the lock and destroyed after it, so a capture whose
+        // destructor calls back into this scheduler cannot deadlock on _mtx.
+        std::function<void()> released;
+        {
+            std::scoped_lock const lock{_mtx};
+            auto found = _pending.find(handle);
+            if (found == _pending.end()) {
+                return;
+            }
+            released = std::move(found->second);
+            _pending.erase(found);
         }
-        _entries.erase(found->second);
-        _index.erase(found);
+        submit(Request{.handle = handle, .deadline = std::nullopt});
     }
 
 private:
-    struct Entry {
+    /// One change for the loop to apply: arm @p handle's timer at a deadline,
+    /// or, with none, retire it.
+    struct Request {
         Handle handle;
-        std::function<void()> callback;
+        std::optional<::core::platform::SteadyTimePoint> deadline;
     };
 
-    void run() {
-        std::unique_lock lock{_mtx};
-        while (!_stop) {
-            if (_entries.empty()) {
-                _cv.wait(lock);
-                continue;
-            }
-            auto const nextDeadline = _entries.begin()->first;
-            _cv.wait_until(lock, nextDeadline);
-            if (_stop) {
-                break;
-            }
-            auto now = std::chrono::steady_clock::now();
-            while (!_entries.empty() && _entries.begin()->first <= now) {
-                auto iter = _entries.begin();
-                Entry entry = std::move(iter->second);
-                _index.erase(entry.handle);
-                _entries.erase(iter);
-                lock.unlock();
-                try {
-                    entry.callback();
-                } catch (const std::exception& exc) {
-                    ::morph::log::logError("[timeout-scheduler] callback threw: {}", exc.what());
-                } catch (...) {
-                    ::morph::log::logError("[timeout-scheduler] callback threw unknown exception");
-                }
-                lock.lock();
-                now = std::chrono::steady_clock::now();
-            }
+    /// The state an armed loop timer hands back to `fire()`. Held in
+    /// `_timers`, whose nodes do not move, so its address is stable for as
+    /// long as the timer is armed.
+    struct Timer {
+        TimeoutScheduler* owner;
+        Handle handle;
+        ::core::net::TimerId id;
+    };
+
+    /// Applies @p request on the loop's thread. Natively that means queueing
+    /// it and waking the loop once per batch rather than once per request —
+    /// `Bridge` schedules and cancels one deadline per call.
+    void submit(Request request) {
+#ifndef MORPH_TIMEOUT_SCHEDULER_HOST_DRIVEN
+        bool wake = false;
+        {
+            std::scoped_lock const lock{_mtx};
+            wake = _requests.empty();
+            _requests.push_back(request);
         }
-    }
-
-    std::mutex _mtx;
-    std::condition_variable _cv;
-    std::multimap<std::chrono::steady_clock::time_point, Entry> _entries;
-    std::unordered_map<Handle, std::multimap<std::chrono::steady_clock::time_point, Entry>::iterator> _index;
-    Handle _nextHandle{0};
-    bool _stop{false};
-    std::thread _thread;
-};
-
+        if (wake) {
+            _loop.post([this] { applyRequests(); });
+        }
 #else
-
-/// @brief Single-threaded-Emscripten build of the same API, backed by the
-///        browser's `setTimeout` (`emscripten_async_call`) instead of a
-///        thread. See this file's `@file` comment for why it exists and
-///        exactly how its behaviour differs.
-class TimeoutScheduler {
-public:
-    /// @brief Opaque identifier for one scheduled callback.
-    using Handle = std::uint64_t;
-
-    /// @brief Creates the scheduler. Starts no thread — there is none to start.
-    TimeoutScheduler() = default;
-
-    /// @brief Drops every still-pending callback without firing it.
-    ///
-    /// Browser timers already queued outlive this object; each holds only a
-    /// `std::weak_ptr` to `_state` and returns immediately once it expires,
-    /// which is precisely at this destructor. Matches the threaded build's
-    /// "`~TimeoutScheduler` drops pending entries without firing them".
-    ~TimeoutScheduler() = default;
-
-    TimeoutScheduler(const TimeoutScheduler&) = delete;
-    TimeoutScheduler& operator=(const TimeoutScheduler&) = delete;
-    TimeoutScheduler(TimeoutScheduler&&) = delete;
-    TimeoutScheduler& operator=(TimeoutScheduler&&) = delete;
-
-    /// @brief Schedules @p callback to run after @p delay on the main
-    ///        (browser) thread, unless cancelled first via `cancel()`.
-    /// @param delay    Time to wait before firing.
-    /// @param callback Invoked on the main thread if not cancelled in time.
-    ///                 Exceptions it throws are logged and swallowed.
-    /// @return Handle usable with `cancel()`.
-    Handle schedule(std::chrono::milliseconds delay, std::function<void()> callback) {
-        Handle const handle = ++_state->nextHandle;
-        _state->pending.emplace(handle, std::move(callback));
-        // Owned by the browser timer, deleted by `fire` below whether or not
-        // the entry is still live by then. A raw `new` rather than a
-        // `unique_ptr` because the ownership genuinely crosses a C callback
-        // boundary that cannot carry a smart pointer.
-        auto* ticket = new Ticket{_state, handle};
-        ::emscripten_async_call(&TimeoutScheduler::fire, ticket, clampMillis(delay));
-        return handle;
+        apply(request);
+#endif
     }
 
-    /// @brief Cancels a previously scheduled callback immediately.
-    ///
-    /// If @p handle has not fired yet, its callback (and anything that
-    /// callback captured) is released right away, exactly like the threaded
-    /// build. The browser timer itself is left to elapse and find nothing —
-    /// see the `@file` comment. A no-op if @p handle already fired or was
-    /// already cancelled.
-    ///
-    /// Unlike the threaded build, "already fired" here can only mean
-    /// *finished*: `fire()` and this function run on the same single thread, so
-    /// a callback cannot be mid-flight while `cancel()` is called. This build
-    /// therefore does give the guarantee the threaded one does not — no
-    /// callback runs after `cancel()` returns — and a caller that must work in
-    /// both builds still cannot rely on it.
-    /// @param handle Handle returned by a prior `schedule()` call.
-    void cancel(Handle handle) { _state->pending.erase(handle); }
-
-private:
-    struct State {
-        std::unordered_map<Handle, std::function<void()> > pending;
-        Handle nextHandle{0};
-    };
-
-    struct Ticket {
-        std::weak_ptr<State> state;
-        Handle handle;
-    };
-
-    /// @brief @p delay as the `int` milliseconds `emscripten_async_call`
-    ///        takes, saturating rather than wrapping (a `std::chrono`
-    ///        duration can hold far more than an `int` can).
-    ///
-    /// @note This is a real, documented behavioural asymmetry from the
-    /// threaded build, which honours the full `std::chrono::milliseconds`
-    /// range unconditionally: a delay beyond `INT_MAX` ms (~24.85 days) fires
-    /// at ~24.85 days here instead of at its true, much later requested time.
-    /// `emscripten_async_call`'s `int` parameter is a hard platform
-    /// constraint with no larger-range alternative to fall back to, so this
-    /// is accepted rather than worked around. No caller in this codebase
-    /// currently requests a deadline anywhere near that range.
-    /// @param delay The requested delay.
-    /// @return A non-negative millisecond count that fits in an `int`.
-    [[nodiscard]] static int clampMillis(std::chrono::milliseconds delay) noexcept {
-        auto const count = delay.count();
-        if (count <= 0) {
-            return 0;
+#ifndef MORPH_TIMEOUT_SCHEDULER_HOST_DRIVEN
+    /// Loop thread: applies every request queued since the last batch.
+    void applyRequests() {
+        std::vector<Request> batch;
+        {
+            std::scoped_lock const lock{_mtx};
+            batch.swap(_requests);
         }
-        if (count > static_cast<decltype(count)>(std::numeric_limits<int>::max())) {
-            return std::numeric_limits<int>::max();
+        for (auto const& request : batch) {
+            apply(request);
         }
-        return static_cast<int>(count);
     }
+#endif
 
-    /// @brief The C callback the browser timer invokes.
-    /// @param arg The `Ticket*` handed to `emscripten_async_call`; always
-    ///        deleted here, whether or not its entry is still live.
-    static void fire(void* arg) {
-        std::unique_ptr<Ticket> const ticket{static_cast<Ticket*>(arg)};
-        auto state = ticket->state.lock();
-        if (!state) {
+    /// Loop thread: arms or retires one timer.
+    void apply(Request const& request) {
+        if (!request.deadline) {
+            disarm(request.handle);
             return;
         }
-        auto found = state->pending.find(ticket->handle);
-        if (found == state->pending.end()) {
-            return;  // cancelled before this timer elapsed
+        {
+            // Cancelled before the loop got to it: nothing to arm.
+            std::scoped_lock const lock{_mtx};
+            if (!_pending.contains(request.handle)) {
+                return;
+            }
         }
-        std::function<void()> callback = std::move(found->second);
-        state->pending.erase(found);
+        auto [slot, inserted] =
+            _timers.try_emplace(request.handle, Timer{.owner = this, .handle = request.handle, .id = {}});
+        if (inserted) {
+            slot->second.id = _loop.addTimer(*request.deadline, &TimeoutScheduler::fire, &slot->second);
+        }
+    }
+
+    /// Loop thread: retires @p handle's timer, if it is still armed.
+    void disarm(Handle handle) {
+        auto found = _timers.find(handle);
+        if (found == _timers.end()) {
+            return;
+        }
+        static_cast<void>(_loop.cancelTimer(found->second.id));
+        _timers.erase(found);
+    }
+
+    /// Empties `_pending` under the lock, so no timer can fire what it held,
+    /// and hands its callbacks to the destructor to release outside it.
+    std::unordered_map<Handle, std::function<void()>> takePending() {
+        std::unordered_map<Handle, std::function<void()>> taken;
+        std::scoped_lock const lock{_mtx};
+        taken.swap(_pending);
+        return taken;
+    }
+
+    /// Loop thread: retires every armed timer.
+    void disarmAll() {
+        for (auto const& entry : _timers) {
+            static_cast<void>(_loop.cancelTimer(entry.second.id));
+        }
+        _timers.clear();
+    }
+
+    /// The loop's timer callback, on the loop's thread.
+    /// @param state The `Timer` this timer was armed with.
+    static void fire(void* state) {
+        auto const& timer = *static_cast<Timer const*>(state);
+        TimeoutScheduler& self = *timer.owner;
+        Handle const handle = timer.handle;
+        self._timers.erase(handle);  // `timer` is gone from here on
+
+        std::function<void()> callback;
+        {
+            std::scoped_lock const lock{self._mtx};
+            auto found = self._pending.find(handle);
+            if (found == self._pending.end()) {
+                return;  // cancelled after the timer came due
+            }
+            callback = std::move(found->second);
+            self._pending.erase(found);
+        }
         try {
             callback();
         } catch (const std::exception& exc) {
@@ -343,13 +309,21 @@ private:
         }
     }
 
-    /// @brief Held by `shared_ptr` so a browser timer that outlives this
-    ///        object detects that fact instead of writing to freed storage —
-    ///        the same weak-token pattern as `morph::bridge::Bridge`'s
-    ///        `_callbacks` `CallbackScope` (exposed as `Bridge::liveness()`).
-    std::shared_ptr<State> _state{std::make_shared<State>()};
-};
-
+    /// Guards `_pending`, `_nextHandle` and, natively, `_requests`.
+    std::mutex _mtx;
+    std::unordered_map<Handle, std::function<void()>> _pending;
+    Handle _nextHandle{0};
+#ifndef MORPH_TIMEOUT_SCHEDULER_HOST_DRIVEN
+    std::vector<Request> _requests;
 #endif
+    /// Loop thread only.
+    std::unordered_map<Handle, Timer> _timers;
+    /// Declared after everything its timers point into, so it is destroyed
+    /// first.
+    ::core::net::PlatformLoop _loop;
+#ifndef MORPH_TIMEOUT_SCHEDULER_HOST_DRIVEN
+    std::thread _thread;
+#endif
+};
 
 }  // namespace morph::async::detail

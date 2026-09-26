@@ -84,7 +84,7 @@ dto::BudgetList BudgetModel::execute(const dto::ListBudgets& action) {
     return out;
 }
 
-dto::SpendingReport BudgetModel::execute(const dto::SpendingByKind& action) {
+core::async::Task<dto::SpendingReport> BudgetModel::execute(dto::SpendingByKind action) {
     // This action is addressed by account id and carries no `owner` field, so
     // `resolveOwner` never sees it and cannot be what scopes it. `db::loadOwned`
     // is: it navigates the row to its owner and compares that with the session
@@ -122,7 +122,7 @@ dto::SpendingReport BudgetModel::execute(const dto::SpendingByKind& action) {
     for (const auto& [kind, spend] : byKind) {
         report.byKind.push_back(spend);
     }
-    return report;
+    co_return report;
 }
 
 }  // namespace bank

@@ -154,8 +154,8 @@ code called from the framework's hot paths:
   / `endSpan` and settles the caller's `Completion` *after* them, precisely so a
   completion callback cannot observe the dispatch as finished before its metrics
   land. An exception escaping instrumentation would therefore skip
-  `setValue`/`setException` entirely and be swallowed by `StrandExecutor`'s
-  catch-and-log, leaving that `Completion` unsettled forever — a hung caller
+  `setValue`/`setException` entirely and be swallowed by the strand's
+  catch-and-log (`LoggedTask`), leaving that `Completion` unsettled forever — a hung caller
   with neither a value nor an error, caused by a bug in a metrics callback.
 
 A sink that throws is otherwise ignored (a failed `beginSpan` degrades to the
@@ -173,8 +173,7 @@ concept. `LocalBackend`'s in-flight counter is a
 `std::shared_ptr<std::atomic<std::size_t>>` rather than a plain member: its
 strand-posted tasks capture a copy of the `shared_ptr`, never `this`, so the
 counter stays valid even if the backend is destroyed while a task is still
-queued or running (see [backend.md](backend.md)'s Lifetime & ownership and
-the `~StrandExecutor` note below).
+queued or running (see [backend.md](backend.md)'s Lifetime & ownership).
 
 ## API reference
 

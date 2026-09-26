@@ -640,7 +640,7 @@ public:
 /// third ticket already existing.
 ///
 /// Only the *arming window* is intercepted: once `n` posts have been captured
-/// every later post (notably `StrandExecutor`'s, which `RemoteServer` routes
+/// every later post (notably the strands', which `RemoteServer` routes
 /// through this same executor) passes straight through.
 class HoldNextPostsExecutor : public morph::exec::IExecutor {
 public:

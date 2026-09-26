@@ -81,7 +81,7 @@ struct FlowStepExplodesNonStdResult {
 // how fast the backend would otherwise run it. Used to drive a stale reply
 // for a step FlowSession has since navigated away from via back() (as
 // opposed to advance(): both FlowStepOne and FlowStepSlow share one model
-// instance, hence one StrandExecutor key -- see strand.hpp -- so a second,
+// instance, hence one ModelStrands key -- see strand.hpp -- so a second,
 // later-queued step's dispatch cannot even *start* until an earlier one
 // queued ahead of it on the same model returns; back() sidesteps that
 // entirely, since it touches only FlowSession's own local state and never
@@ -590,7 +590,7 @@ TEST_CASE("FlowSession: a late error for a step left behind via back() does not 
     // The test above ("a late error for a step already left behind...")
     // reads as though it exercises fireStep's `stepIndex == _activeStep`
     // guard's False arm (line 464's condition), but it does not: FlowStepOne
-    // and FlowStepTwo share one model instance, hence one StrandExecutor key
+    // and FlowStepTwo share one model instance, hence one ModelStrands key
     // (strand.hpp), so every dispatch against that model -- including a
     // second, independent fire of the *same* step -- runs strictly in
     // enqueue order, one at a time. The stale "explode" fire there always

@@ -40,6 +40,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # CPM's source cache (CMakeLists.txt defaults CPM_SOURCE_CACHE to
+      # .cache/cpm): restored, a configure clones nothing; missed, it clones
+      # and this step saves the result for the next run.
+      - name: Cache CPM sources
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
       - name: Install build tools
         run: |
           sudo apt-get update -q

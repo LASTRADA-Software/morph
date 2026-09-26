@@ -125,7 +125,7 @@ inline ObserveState& observeState() {
 ///   them, precisely so a completion callback cannot observe the dispatch as
 ///   finished before its metrics land. An exception thrown out of instrumentation
 ///   would therefore skip `setValue`/`setException` entirely and be swallowed by
-///   `StrandExecutor`'s catch-and-log, leaving that `Completion` unsettled
+///   the strand's catch-and-log (`LoggedTask`), leaving that `Completion` unsettled
 ///   forever — a hung caller with neither a value nor an error, caused by a bug
 ///   in a metrics callback.
 ///

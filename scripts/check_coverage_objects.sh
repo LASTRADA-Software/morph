@@ -73,6 +73,9 @@ coverage_exclusion_reason() {
         morph_journal_skew_old|morph_journal_skew_new)
             echo "two probe programs registering a model that exists nowhere else in the tree; instrumenting them would add template instantiations unique to the probe and score them against the library, and what the probe asserts is about a journal file on disk rather than about coverage"
             ;;
+        morph_client_only_guard_links|morph_client_only_runtime_throw|morph_client_only_facade)
+            echo "the MORPH_CLIENT_ONLY guard probes (tests/CMakeLists.txt), which exit 0 when the guard holds: configure-time try_compile()/try_run() checks until core-cpp's compiled modules made them build-time targets, and never measured then either; they compile morph's headers under MORPH_CLIENT_ONLY, so instrumenting them would score that configuration against the library's"
+            ;;
         fuzz_wire_decode|fuzz_dispatch_execute)
             echo "libFuzzer harnesses (MORPH_BUILD_FUZZERS=ON only, which the coverage leg does not set); apply_fuzzer() builds them at -O1 under -fsanitize=fuzzer,address, a different instrumentation from apply_coverage()'s"
             ;;

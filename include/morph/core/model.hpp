@@ -16,6 +16,7 @@
 // masking; this file uses std::same_as and `concept` without including it.
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
+#include "detail/task_handler.hpp"
 #include "strand.hpp"
 
 namespace morph::model::detail {
@@ -131,6 +132,15 @@ struct IModelHolder {
     /// Called by `LocalBackend::notifyBackendChanged` through this base-class
     /// virtual — no `dynamic_cast`, no RTTI dependency on this path.
     virtual void onBackendChanged() {}
+
+    /// @brief The gate every action on this instance enters before it runs.
+    ///
+    /// Held from an action's start to its end -- for a Task handler, until its
+    /// Task completes -- so the next action does not start while a handler is
+    /// suspended. Touched only on this instance's strand. See `ActionGate` and
+    /// `docs/spec/core/coroutines.md`, "Not re-entrant: the action gate".
+    /// @return This instance's gate.
+    [[nodiscard]] ActionGate& actionGate() noexcept { return _actionGate; }
 
     /// @brief Down-casts to a concrete `Model` reference.
     ///
@@ -284,6 +294,7 @@ protected:
     virtual void onIdentityAttached(const std::string& primaryKey) { (void)primaryKey; }
 
 private:
+    ActionGate _actionGate;
     std::shared_ptr<::morph::journal::IActionLog> _actionLog;
     std::string _contextKey;
     bool _outboxManaged{false};

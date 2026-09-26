@@ -31,7 +31,7 @@ namespace morph::ladder::testkit {
 ///        the test explicitly asks, one at a time -- never on its own thread.
 ///
 /// Where `DeterministicExecutor` (strand_interleaver.hpp) sits *underneath* a
-/// `StrandExecutor` to control the delivery order of continuations, this sits
+/// `ModelStrands` to control the delivery order of continuations, this sits
 /// where a production `ThreadPoolExecutor` would: it is the worker. Injected
 /// as the executor a model or App posts background work to, it turns
 /// "eventually the job finishes" into a sequence of exact, assertable states:

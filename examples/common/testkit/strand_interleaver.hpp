@@ -13,18 +13,18 @@
 /// The strand interleaver's companion harness to the fault proxy
 /// (examples/TESTING.md): without it, strand-ordering bugs (kanban's
 /// MoveTaskPosition centerpiece) are probabilistic stress runs rather than
-/// reproducible interleavings. Sits underneath a StrandExecutor as its `base`
+/// reproducible interleavings. Sits underneath morph's strands as their base
 /// IExecutor so a test controls exactly which posted task runs next.
 ///
 /// `test_strand_interleaver.cpp`'s own tests place this class underneath a
-/// real `morph::exec::detail::StrandExecutor` keyed by real
+/// real `morph::exec::detail::ModelStrands` keyed by real
 /// `morph::exec::detail::ModelId`s and name both directly — the production
 /// components whose per-key ordering guarantee is the point of this harness.
 /// A stand-in would prove nothing here: unlike `morph::testing::StepExecutor`
 /// (a public seam, used elsewhere to interleave `RemoteServer` dispatch
-/// *without* naming `StrandExecutor`), these particular tests exist to test
-/// `StrandExecutor` itself. This is a deliberate, accepted testkit-layer
-/// reach-in into a `detail::` namespace, not a gap awaiting a public seam.
+/// *without* naming `ModelStrands`), these particular tests exist to test the
+/// strands themselves. This is a deliberate, accepted testkit-layer reach-in
+/// into a `detail::` namespace, not a gap awaiting a public seam.
 
 namespace morph::ladder::testkit {
 
@@ -33,11 +33,11 @@ namespace morph::ladder::testkit {
 ///
 /// Single-threaded by construction: `post()` just appends to a deque under a
 /// mutex (posts can legitimately arrive from other threads — e.g. a
-/// `StrandExecutor` posting a same-key continuation from inside a running
-/// task — but every task itself runs synchronously on whichever thread calls
+/// strand queueing its next turn from inside a running task — but every task
+/// itself runs synchronously on whichever thread calls
 /// `step()`/`runSchedule()`).
 ///
-/// Unlike `ThreadPoolExecutor`/`StrandExecutor`, a task's exception is not
+/// Unlike `ThreadPoolExecutor` and morph's strands, a task's exception is not
 /// caught and logged here: it propagates straight out of `step()`/
 /// `runSchedule()` to the caller. That is deliberate — the caller is a test,
 /// and the exception is often a `REQUIRE` failure the test needs to see

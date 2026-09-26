@@ -652,6 +652,17 @@ public:
     /// @brief Type-erased action runner: deserialises, executes, and serialises the result.
     using Runner = std::function<std::string(IModelHolder&, std::string_view)>;
 
+    /// @brief Receives the outcome of an asynchronous dispatch: the JSON result,
+    ///        or the exception (with an empty result).
+    using DispatchDone = std::function<void(std::string, std::exception_ptr)>;
+
+    /// @brief Type-erased runner for a Task handler: deserialises, starts the
+    ///        handler on the model's strand, and hands the serialised result or
+    ///        the exception to its last argument when the Task completes.
+    using AsyncRunner = void (*)(IModelHolder&, std::string_view,
+                                 const std::shared_ptr<::morph::exec::detail::TaskResumer>&, ::core::async::StopToken,
+                                 DispatchDone);
+
     /// @brief Registers a runner for `(Model, Action)` under the given string ids.
     ///
     /// This is the single execution site used by `RemoteServer` (every remote and
@@ -693,109 +704,16 @@ public:
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
         ActionEntry& entry = _actions[Key{std::string{modelId}, std::string{actionId}}];
-        entry.runner = [](IModelHolder& holder, std::string_view payloadJson) {
-            auto action = ActionTraits<Action>::fromJson(payloadJson);
-            // Retag any Quantity fields to their declared precision so a
-            // hand-built wire payload matches the schema's advertised
-            // x-decimalPlaces, exactly as the client bridge dispatch path
-            // (ActionExecuteRegistry::registerAction, bridge.hpp) already does.
-            // No-op for actions with no Quantity members. See
-            // docs/spec/forms/forms.md.
-            ::morph::forms::reconcileDeclaredPrecision(action);
-            // Pre-decode wire validation seam: reject a Quantity field whose
-            // engaged value falls outside its unit's declared bounds
-            // (UnitTraits<E>::bounds), before the action's own validate()
-            // (a business-rule check) ever runs. No-op for actions with no
-            // Quantity members, or whose units declare no bounds(). See
-            // docs/spec/forms/forms.md, "Pre-decode wire validation".
-            ::morph::forms::enforceQuantityBounds(action);
-            // Overwrite any computed fields from their declared inputs. This is
-            // the true server-side execution site for every remote and Qt
-            // WebSocket topology (RemoteServer -> ActionDispatcher::dispatch) --
-            // the one path a hand-built wire envelope reaches directly,
-            // bypassing every client-side gate. A tampered computed value on
-            // the wire is discarded here, before the validator check and
-            // Model::execute run. No-op for actions with no computedFields. See
-            // docs/spec/forms/forms.md.
-            ::morph::forms::recomputeAll(action);
-            // Enforce the action's validator on the server dispatch path — the
-            // one path an untrusted remote client can drive directly with a
-            // hand-built envelope, bypassing the client-side gates
-            // (morph::flows::FlowSession::set<> and
-            // ActionExecuteRegistry::registerAction). ActionValidator<Action>::ready
-            // auto-detects a `bool validate() const` member and defaults to
-            // `true` for actions with no validator, so this is a no-op for
-            // unvalidated actions (zero behavior change) and a hard gate for
-            // validated ones. The exception propagates out of this lambda to
-            // ActionDispatcher::dispatch's caller (RemoteServer::dispatchExecute's
-            // strand catch turns it into an `err` reply).
-            if (!ActionValidator<Action>::ready(action)) {
-                throw ValidationError{ModelTraits<Model>::typeId(), ActionTraits<Action>::typeId()};
-            }
-            auto& model = holder.template into<Model>();
-            // Model::execute is the only call inside this try, because it is
-            // the only one whose failure means the action was rejected. A
-            // rejected or throwing execution -- a validation failure, a lost
-            // connection, a rejected write -- records Outcome::Failed (when a
-            // log is attached and Action is loggable) so it leaves an audit
-            // trail rather than silence, and the exception is rethrown
-            // unchanged. See docs/spec/journal/journal.md, "Outcome".
-// MSVC's C4702 fires on the `return` below for any action whose handler never
-// returns -- a test double whose body is a bare `throw`, for instance. The
-// warning is correct for that instantiation and wrong as a verdict on this
-// statement, which every other instantiation reaches. It is suppressed here
-// rather than in each translation unit that instantiates such a handler,
-// because the set of those is open-ended: eleven test files already qualify.
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4702)
-#endif
-            auto result = [&] {
-                try {
-                    return model.execute(action);
-                } catch (const std::exception& exc [[maybe_unused]]) {
-                    if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
-                        if (holder.hasActionLog()) {
-                            detail::recordActionFailure(holder, std::string{ModelTraits<Model>::typeId()},
-                                                        std::string{ActionTraits<Action>::typeId()},
-                                                        std::string{payloadJson},
-                                                        detail::actionPayloadSchema<Action>(), exc.what());
-                        }
-                    }
-                    throw;
-                }
-            }();
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-            // Past this point the model's mutation has committed, so neither
-            // step below may be reported as an execution failure. Both can
-            // still throw -- resultToJson raises ParseError, and a sink that
-            // could not reach its backend is required to throw (see
-            // journal/action_log.hpp) -- and inside the try above that throw
-            // would tell the caller a durable write was rejected and file an
-            // Outcome::Failed entry naming the infrastructure fault as the
-            // action's own error. ActionRecordingError instead says what is
-            // true: the action ran, the reporting of it did not. A throw from
-            // resultToJson leaves no entry at all, because a Succeeded entry
-            // carries the result and there is none to carry.
-            std::string resultJson;
-            try {
-                resultJson = ActionTraits<Action>::resultToJson(result);
-                if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
-                    if (holder.hasActionLog()) {
-                        // entityKey/principal/timestampMs are filled in by recordIfAttached.
-                        detail::recordActionSuccess(holder, std::string{ModelTraits<Model>::typeId()},
-                                                    std::string{ActionTraits<Action>::typeId()},
-                                                    std::string{payloadJson}, detail::actionPayloadSchema<Action>(),
-                                                    resultJson);
-                    }
-                }
-            } catch (const std::exception& exc) {
-                throw ActionRecordingError{std::move(resultJson), exc.what()};
-            }
-            return resultJson;
-        };
+        if constexpr (isTaskHandler<decltype(std::declval<Model&>().execute(std::declval<Action&>()))>) {
+            entry.asyncRunner = &runTaskHandler<Model, Action>;
+            entry.runner = [](IModelHolder&, std::string_view) -> std::string {
+                throw std::logic_error{
+                    "ActionDispatcher::dispatch: this action's handler returns core::async::Task and cannot complete "
+                    "synchronously; dispatch it with dispatchAsync"};
+            };
+        } else {
+            entry.runner = &runHandler<Model, Action>;
+        }
         entry.coalesce = ActionLogPolicy<Action>::coalesce;
         entry.schema = detail::actionPayloadSchema<Action>();
         // Deliberately a thunk, not the description itself: registration runs
@@ -806,6 +724,217 @@ public:
         entry.describe = []() -> const ActionDescription& { return actionDescription<Action>(); };
     }
 
+private:
+    /// @brief Decodes @p payloadJson into an `Action` and applies every gate
+    ///        that must run before any handler sees it.
+    /// @tparam Model  Concrete model type.
+    /// @tparam Action Concrete action type.
+    /// @param payloadJson The action's JSON body.
+    /// @return The decoded, reconciled, recomputed and validated action.
+    /// @throws ValidationError if the action fails `ActionValidator<Action>::ready`.
+    template <typename Model, typename Action>
+    static Action prepareAction(std::string_view payloadJson) {
+        auto action = ActionTraits<Action>::fromJson(payloadJson);
+        // Retag any Quantity fields to their declared precision so a
+        // hand-built wire payload matches the schema's advertised
+        // x-decimalPlaces, exactly as the client bridge dispatch path
+        // (ActionExecuteRegistry::registerAction, bridge.hpp) already does.
+        // No-op for actions with no Quantity members. See
+        // docs/spec/forms/forms.md.
+        ::morph::forms::reconcileDeclaredPrecision(action);
+        // Pre-decode wire validation seam: reject a Quantity field whose
+        // engaged value falls outside its unit's declared bounds
+        // (UnitTraits<E>::bounds), before the action's own validate()
+        // (a business-rule check) ever runs. No-op for actions with no
+        // Quantity members, or whose units declare no bounds(). See
+        // docs/spec/forms/forms.md, "Pre-decode wire validation".
+        ::morph::forms::enforceQuantityBounds(action);
+        // Overwrite any computed fields from their declared inputs. This is
+        // the true server-side execution site for every remote and Qt
+        // WebSocket topology (RemoteServer -> ActionDispatcher::dispatch) --
+        // the one path a hand-built wire envelope reaches directly,
+        // bypassing every client-side gate. A tampered computed value on
+        // the wire is discarded here, before the validator check and
+        // Model::execute run. No-op for actions with no computedFields. See
+        // docs/spec/forms/forms.md.
+        ::morph::forms::recomputeAll(action);
+        // Enforce the action's validator on the server dispatch path — the
+        // one path an untrusted remote client can drive directly with a
+        // hand-built envelope, bypassing the client-side gates
+        // (morph::flows::FlowSession::set<> and
+        // ActionExecuteRegistry::registerAction). ActionValidator<Action>::ready
+        // auto-detects a `bool validate() const` member and defaults to
+        // `true` for actions with no validator, so this is a no-op for
+        // unvalidated actions (zero behavior change) and a hard gate for
+        // validated ones. The exception propagates out of this lambda to
+        // ActionDispatcher::dispatch's caller (RemoteServer::dispatchExecute's
+        // strand catch turns it into an `err` reply).
+        if (!ActionValidator<Action>::ready(action)) {
+            throw ValidationError{ModelTraits<Model>::typeId(), ActionTraits<Action>::typeId()};
+        }
+        return action;
+    }
+
+    /// @brief The runner of an ordinary handler: prepares the action, runs
+    ///        `Model::execute`, journals the outcome and returns the JSON result.
+    /// @tparam Model  Concrete model type.
+    /// @tparam Action Concrete action type.
+    /// @param holder      The model instance.
+    /// @param payloadJson The action's JSON body.
+    /// @return The JSON-encoded result.
+    template <typename Model, typename Action>
+    static std::string runHandler(IModelHolder& holder, std::string_view payloadJson) {
+        auto action = prepareAction<Model, Action>(payloadJson);
+        auto& model = holder.template into<Model>();
+        // Model::execute is the only call inside this try, because it is
+        // the only one whose failure means the action was rejected. A
+        // rejected or throwing execution -- a validation failure, a lost
+        // connection, a rejected write -- records Outcome::Failed (when a
+        // log is attached and Action is loggable) so it leaves an audit
+        // trail rather than silence, and the exception is rethrown
+        // unchanged. See docs/spec/journal/journal.md, "Outcome".
+// MSVC's C4702 fires on the `return` below for any action whose handler never
+// returns -- a test double whose body is a bare `throw`, for instance. The
+// warning is correct for that instantiation and wrong as a verdict on this
+// statement, which every other instantiation reaches. It is suppressed here
+// rather than in each translation unit that instantiates such a handler,
+// because the set of those is open-ended: eleven test files already qualify.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
+        auto result = [&] {
+            try {
+                return model.execute(action);
+            } catch (const std::exception& exc [[maybe_unused]]) {
+                if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
+                    if (holder.hasActionLog()) {
+                        detail::recordActionFailure(holder, std::string{ModelTraits<Model>::typeId()},
+                                                    std::string{ActionTraits<Action>::typeId()},
+                                                    std::string{payloadJson}, detail::actionPayloadSchema<Action>(),
+                                                    exc.what());
+                    }
+                }
+                throw;
+            }
+        }();
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+        // Past this point the model's mutation has committed, so neither
+        // step below may be reported as an execution failure. Both can
+        // still throw -- resultToJson raises ParseError, and a sink that
+        // could not reach its backend is required to throw (see
+        // journal/action_log.hpp) -- and inside the try above that throw
+        // would tell the caller a durable write was rejected and file an
+        // Outcome::Failed entry naming the infrastructure fault as the
+        // action's own error. ActionRecordingError instead says what is
+        // true: the action ran, the reporting of it did not. A throw from
+        // resultToJson leaves no entry at all, because a Succeeded entry
+        // carries the result and there is none to carry.
+        std::string resultJson;
+        try {
+            resultJson = ActionTraits<Action>::resultToJson(result);
+            if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
+                if (holder.hasActionLog()) {
+                    // entityKey/principal/timestampMs are filled in by recordIfAttached.
+                    detail::recordActionSuccess(holder, std::string{ModelTraits<Model>::typeId()},
+                                                std::string{ActionTraits<Action>::typeId()}, std::string{payloadJson},
+                                                detail::actionPayloadSchema<Action>(), resultJson);
+                }
+            }
+        } catch (const std::exception& exc) {
+            throw ActionRecordingError{std::move(resultJson), exc.what()};
+        }
+        return resultJson;
+    }
+
+    /// @brief The runner of a Task handler: prepares the action, starts the
+    ///        handler on the model's strand, and -- when its Task completes --
+    ///        journals the outcome and hands the JSON result or the exception to
+    ///        @p done. See `docs/spec/core/coroutines.md`.
+    /// @tparam Model  Concrete model type.
+    /// @tparam Action Concrete action type.
+    /// @param holder      The model instance; kept alive by @p done's owner until
+    ///                    @p done has run.
+    /// @param payloadJson The action's JSON body.
+    /// @param executor    The handler's resumer, on the model's strand.
+    /// @param token       The stop token the handler observes.
+    /// @param done        Called exactly once, on the strand.
+    template <typename Model, typename Action>
+    // runHandler's decode, validation and journalling, around a Task instead of
+    // a call; kept in one piece for the same reason runHandler is.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+    static void runTaskHandler(IModelHolder& holder, std::string_view payloadJson,
+                               const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor,
+                               ::core::async::StopToken token, DispatchDone done) {
+        using R = HandlerResultT<decltype(std::declval<Model&>().execute(std::declval<Action&>()))>;
+        // Owned here and kept by the completion callback: the handler may take
+        // the action by reference, and its frame outlives this call.
+        std::shared_ptr<Action> action;
+        ::core::async::Task<R> task;
+        try {
+            action = std::make_shared<Action>(prepareAction<Model, Action>(payloadJson));
+            task = holder.template into<Model>().execute(*action);
+        } catch (...) {
+            done(std::string{}, std::current_exception());
+            return;
+        }
+        detail::startTaskHandler<R>(
+            executor, std::move(task), std::move(token),
+            [&holder, action, payload = std::string{payloadJson}, done = std::move(done)](
+                std::optional<R> result, const std::exception_ptr& error) mutable {
+                if (error) {
+                    // The handler failed, so the action was rejected: recorded
+                    // Outcome::Failed, as runHandler records a throw from
+                    // Model::execute. A journal write that throws here fails the
+                    // call with the handler's own exception still.
+                    try {
+                        if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
+                            if (holder.hasActionLog()) {
+                                try {
+                                    std::rethrow_exception(error);
+                                } catch (const std::exception& exc) {
+                                    detail::recordActionFailure(holder, std::string{ModelTraits<Model>::typeId()},
+                                                                std::string{ActionTraits<Action>::typeId()}, payload,
+                                                                detail::actionPayloadSchema<Action>(), exc.what());
+                                } catch (...) {  // NOLINT(bugprone-empty-catch): as runHandler
+                                    // Not a std::exception: recorded nowhere, as runHandler's
+                                    // rethrow leaves such a throw unrecorded.
+                                }
+                            }
+                        }
+                    } catch (...) {  // NOLINT(bugprone-empty-catch): the handler's exception is reported
+                    }
+                    done(std::string{}, error);
+                    return;
+                }
+                // The Task completed, so the model's mutation has committed: as in
+                // runHandler, failing to serialise the result or to record it is an
+                // ActionRecordingError, never a rejection.
+                std::string resultJson;
+                try {
+                    resultJson = ActionTraits<Action>::resultToJson(*result);
+                    if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
+                        if (holder.hasActionLog()) {
+                            detail::recordActionSuccess(holder, std::string{ModelTraits<Model>::typeId()},
+                                                        std::string{ActionTraits<Action>::typeId()}, payload,
+                                                        detail::actionPayloadSchema<Action>(), resultJson);
+                        }
+                    }
+                } catch (const std::exception& exc) {
+                    done(std::string{},
+                         std::make_exception_ptr(ActionRecordingError{std::move(resultJson), exc.what()}));
+                    return;
+                } catch (...) {
+                    done(std::string{}, std::current_exception());
+                    return;
+                }
+                done(std::move(resultJson), nullptr);
+            });
+    }
+
+public:
     /// @brief Dispatches an action against @p holder and returns the JSON-encoded result.
     std::string dispatch(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
                          std::string_view payload) {
@@ -825,6 +954,61 @@ public:
             throw std::runtime_error("unknown action: " + std::string{modelId} + "/" + std::string{actionId});
         }
         return iter->second.runner(holder, payload);
+    }
+
+    /// @brief Dispatches an action against @p holder and hands its JSON result,
+    ///        or its exception, to @p done -- at once for an ordinary handler,
+    ///        when its Task completes for a Task handler.
+    ///
+    /// Called on the model's strand. A Task handler is started there and
+    /// resumed through @p executor; see `docs/spec/core/coroutines.md`.
+    /// @param modelId  Model type-id.
+    /// @param actionId Action type-id.
+    /// @param holder   The model instance; must stay alive until @p done has run.
+    /// @param payload  The action's JSON body.
+    /// @param executor The handler's resumer, on the model's strand.
+    /// @param token    The stop token a Task handler observes.
+    /// @param done     Called exactly once, with the result or the exception.
+    void dispatchAsync(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
+                       std::string_view payload, const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor,
+                       ::core::async::StopToken token, DispatchDone done) {
+        const ActionEntry* entry = nullptr;
+        try {
+            detail::noteRegistryRead(this == &defaultDispatcher());
+            auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+            if (iter == _actions.end()) {
+                throw std::runtime_error("unknown action: " + std::string{modelId} + "/" + std::string{actionId});
+            }
+            entry = &iter->second;
+        } catch (...) {
+            done(std::string{}, std::current_exception());
+            return;
+        }
+        if (entry->asyncRunner != nullptr) {
+            entry->asyncRunner(holder, payload, executor, std::move(token), std::move(done));
+            return;
+        }
+        std::string result;
+        try {
+            result = entry->runner(holder, payload);
+        } catch (...) {
+            done(std::string{}, std::current_exception());
+            return;
+        }
+        done(std::move(result), nullptr);
+    }
+
+    /// @brief Returns whether `(modelId, actionId)` has a Task handler, which
+    ///        only `dispatchAsync` can run, rather than an ordinary one, which
+    ///        `dispatch` runs too.
+    ///
+    /// Lets a caller that already holds everything an ordinary dispatch needs
+    /// call `dispatch` directly, and pay for what a Task handler needs -- a
+    /// resumer, shared state for its callback -- only when there is one.
+    /// @return False for an unknown pair, which `dispatch` then reports.
+    [[nodiscard]] bool dispatchesAsync(std::string_view modelId, std::string_view actionId) const {
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        return iter != _actions.end() && iter->second.asyncRunner != nullptr;
     }
 
     /// @brief Returns whether `(modelId, actionId)` was registered with
@@ -957,6 +1141,8 @@ private:
     struct ActionEntry {
         /// @brief Type-erased decode/execute/encode runner.
         Runner runner;
+        /// @brief The Task handler runner, or null for an ordinary handler.
+        AsyncRunner asyncRunner = nullptr;
         /// @brief `ActionLogPolicy<Action>::coalesce` as registered.
         bool coalesce = false;
         /// @brief `payloadFingerprint<Action>()` as registered.
@@ -1459,8 +1645,10 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 #define BRIDGE_REGISTER_ACTION_3(M, A, NAME) BRIDGE_REGISTER_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
 
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE) \
-    BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, decltype(std::declval<M&>().execute(std::declval<A>())), NAME, LOGGABLE)
+#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                       \
+    BRIDGE_DETAIL_ACTION_TRAITS_BODY(                                                                        \
+        M, A, ::morph::model::HandlerResultT<decltype(std::declval<M&>().execute(std::declval<A>()))>, NAME, \
+        LOGGABLE)
 // clang-format on
 /// @endcond
 

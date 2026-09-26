@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -43,8 +44,11 @@ struct LimitPolicy {
     ///        sends an `err "timeout"` reply and discards the eventual strand
     ///        result. `0` = no timeout (today's behavior).
     ///
-    /// The model action itself is never interrupted — it keeps running to
-    /// completion on its strand. This bounds the *caller's wait*, not the model.
+    /// An ordinary handler is never interrupted — it keeps running to
+    /// completion on its strand, so this bounds the *caller's wait*, not the
+    /// model. A handler returning `core::async::Task` is also asked to stop: its
+    /// stop token is requested, and it unwinds at its next stop-aware
+    /// `co_await` (see `docs/spec/core/coroutines.md`).
     std::chrono::milliseconds executeTimeout{0};
 
     /// @brief Max models this `RemoteServer` will hold live at once, across all
@@ -207,8 +211,8 @@ public:
     ///
     /// @param workerPool Pool used to process messages asynchronously. Borrowed,
     ///                   not owned: it must outlive this server — and, because
-    ///                   the server's `StrandExecutor` is built on it, keep
-    ///                   running until teardown completes (see
+    ///                   the server's strands run on it, keep running until
+    ///                   teardown completes (see
     ///                   `docs/spec/concurrency_and_lifetimes.md`, "Destruction
     ///                   ordering").
     /// @param dispatcher Action dispatcher; defaults to the process-level
@@ -221,7 +225,7 @@ public:
                           ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
                               ::morph::model::detail::defaultRegistry())
         : _pool{workerPool},
-          _strand{workerPool},
+          _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)},
           _dispatcher{dispatcher},
           _registry{registry},
           _authorizer{::morph::session::allowAllAuthorizer()} {}
@@ -242,7 +246,7 @@ public:
                  ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
                      ::morph::model::detail::defaultRegistry())
         : _pool{workerPool},
-          _strand{workerPool},
+          _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)},
           _dispatcher{dispatcher},
           _registry{registry},
           _authorizer{std::move(authorizer)} {
@@ -1274,7 +1278,7 @@ private:
     // the rejection branches below do it explicitly, through
     // `rejectAndRelease`, so it is freed before their reply goes out; the one
     // path that reaches the strand releases it immediately after
-    // `_strand.post(mid, ...)` (that post is the entire point of taking a
+    // `_strands->post(mid, ...)` (that post is the entire point of taking a
     // ticket, so this path brackets it with `awaitTurn()` rather than
     // releasing up front); and every *implicit* exit — an exception out of
     // `authorize`/`authenticate`/`authorizeInstance`/`missingRequiredFields`,
@@ -1486,9 +1490,14 @@ private:
         };
 
         ::morph::async::detail::TimeoutScheduler::Handle timeoutHandle{};
+        // Requested by the timeout alongside its reply, so a Task handler still
+        // suspended when the caller is answered unwinds and leaves the action
+        // gate rather than holding the model until its await completes.
+        std::shared_ptr<::core::async::StopSource> stopSource;
         if (limits.executeTimeout.count() > 0) {
             std::scoped_lock const lock{_limitsMtx};
             if (_timeoutScheduler) {
+                stopSource = std::make_shared<::core::async::StopSource>();
                 // The literal, not wire::kExecuteTimeoutMessage, on purpose:
                 // a scenario-coverage script (since removed) statically scanned this
                 // file for a string literal passed directly to makeErr to
@@ -1508,20 +1517,22 @@ private:
                 // mid-flight when the dispatch finishes therefore still calls
                 // `complete`, and `complete`'s reply-exactly-once flag drops
                 // it rather than double-answering the call.
-                timeoutHandle = _timeoutScheduler->schedule(limits.executeTimeout, [complete, callId]() mutable {
-                    complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
-                });
+                timeoutHandle =
+                    _timeoutScheduler->schedule(limits.executeTimeout, [complete, callId, stopSource]() mutable {
+                        complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
+                        stopSource->request_stop();
+                    });
             }
         }
 
         // Where per-model ordering is enforced: block (on this pool thread —
         // never the strand itself, and never any other model's strand) until
         // every execute for `mid` that the transport sent before this one has
-        // already made its own `_strand.post(mid, ...)` call below. Every
+        // already made its own `_strands->post(mid, ...)` call below. Every
         // early-return above this point released its ticket immediately without
         // ever waiting here, so a model-not-found/unauthorized/busy rejection
         // for a *different* ticket can never be the thing this wait is stuck
-        // behind — only a ticket that is also headed for `_strand.post` can
+        // behind — only a ticket that is also headed for `_strands->post` can
         // hold this one up, and it can only hold it up for as long as *its own*
         // pre-strand work (identical in kind to this one's) takes, not for the
         // duration of whatever the model's strand does with it afterward.
@@ -1533,79 +1544,42 @@ private:
         // would let a rejection skip past this wait's ticket and park it here
         // for good.
         ticketGuard.awaitTurn();
-        _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), hydration = std::move(hydration),
-                           complete, timeoutHandle]() mutable {
-            auto const start = std::chrono::steady_clock::now();
-            auto const spanId =
-                ::morph::observe::detail::beginSpan(env.session.requestId, env.modelType, env.actionType);
-            // Metrics and endSpan are recorded before `complete(...)` runs (below)
-            // so a caller observing completion — via handle()'s reply or the
-            // timeout path racing it — can never see the reply before this
-            // dispatch's own instrumentation is recorded. This mirrors the
-            // reply-exactly-once contract `complete` already provides: whichever
-            // path wins the race, the metrics for *this* strand task are always
-            // emitted here, exactly once, regardless of which path's reply the
-            // caller actually receives.
-            try {
-                ::morph::session::detail::ScopedContext const scoped{env.session};
-                // `dispatch` (registry.hpp, ActionDispatcher::registerAction's runner)
-                // now throws morph::model::ValidationError when the decoded action
-                // fails ActionValidator<Action>::ready(...), before Model::execute
-                // runs. No special-casing is needed here: ValidationError derives
-                // from std::runtime_error, so it is caught by the handler below and
-                // turned into an ordinary `err` reply carrying its message and
-                // callId, exactly like any other dispatch failure. See
-                // docs/spec/core/registry.md.
-                auto result = self->_dispatcher.dispatch(env.modelType, env.actionType, *holder, env.body);
-                {
-                    std::scoped_lock const lock{self->_limitsMtx};
-                    if (self->_timeoutScheduler) {
-                        self->_timeoutScheduler->cancel(timeoutHandle);
-                    }
+        RemoteRun run;
+        run.self = self;
+        run.env = std::move(env);
+        run.holder = std::move(holder);
+        run.hydration = std::move(hydration);
+        run.complete = complete;
+        run.timeoutHandle = timeoutHandle;
+        run.stopSource = std::move(stopSource);
+        run.mid = mid;
+        // Through the instance's action gate: an action starts only once the one
+        // before it has finished, which a Task handler does when its Task
+        // completes rather than when the strand task that started it returns.
+        if (_dispatcher.dispatchesAsync(run.env.modelType, run.env.actionType)) {
+            // A Task run is shared: its completion callback outlives the strand
+            // task.
+            auto shared = std::make_shared<RemoteRun>(std::move(run));
+            _strands->post(mid,
+                           [shared] { shared->holder->actionGate().enter([shared] { startTaskRemote(shared); }); });
+        } else {
+            // An ordinary run travels by value in the strand task, so an
+            // execute costs the post's one allocation, as LocalBackend's does.
+            // See `ActionGate::tryEnter`.
+            _strands->post(mid, [run = std::move(run)]() mutable {
+                auto& gate = run.holder->actionGate();
+                if (gate.tryEnter()) {
+                    startRemote(run);
+                    return;
                 }
-                // Settle hydration before `endSpan`, before the metrics and
-                // before `complete` -- each hands control to host code that is
-                // free to attach to this instance's key, and an attacher
-                // reaching the directory while the outcome is known but
-                // unrecorded is handed an instance whose first action has
-                // already failed. See shared_instances.md's Failure modes.
-                if (hydration) {
-                    hydration->settle(true);
-                }
-                ::morph::observe::detail::endSpan(spanId, true);
-                auto const elapsedMs =
-                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-                std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
-                    {{"modelType", env.modelType}, {"actionType", env.actionType}}};
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
-                complete(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
-            } catch (const std::exception& exc) {
-                {
-                    std::scoped_lock const lock{self->_limitsMtx};
-                    if (self->_timeoutScheduler) {
-                        self->_timeoutScheduler->cancel(timeoutHandle);
-                    }
-                }
-                // Settled before `endSpan` for the reason given in the success
-                // branch above.
-                if (hydration) {
-                    hydration->settle(false);
-                }
-                ::morph::observe::detail::endSpan(spanId, false);
-                auto const elapsedMs =
-                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-                std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
-                    {{"modelType", env.modelType}, {"actionType", env.actionType}}};
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
-                complete(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
-            }
-        });
-        // The ticket's whole job was ordering *this* `_strand.post()` call
+                gate.enter([waiting = std::make_shared<RemoteRun>(std::move(run))] { startRemote(*waiting); });
+            });
+        }
+        // The ticket's whole job was ordering *this* `_strands->post()` call
         // relative to any other in-flight execute for `mid` — that call has
         // now happened, in its correct turn, so the next ticket (if any) may
         // proceed immediately. Not tied to the strand task's own completion:
-        // StrandExecutor already serializes everything from here on (that is
+        // the strand already serializes everything from here on (that is
         // its entire job), so holding this ticket any longer would only
         // delay a *different* execute's own pre-strand work for no ordering
         // benefit.
@@ -1635,8 +1609,140 @@ private:
         return ::morph::exec::detail::ModelId{id};
     }
 
+    /// Everything one dispatched execute carries from `dispatchExecute` to its
+    /// reply. An ordinary handler's run is held by its strand task, or by the
+    /// gate's queue while it waits there; a Task handler's is shared, because
+    /// its completion callback holds it too. Holding `self` is what keeps the server, and with
+    /// it `_dispatcher`, alive until the reply is delivered.
+    struct RemoteRun {
+        std::shared_ptr<RemoteServer> self;
+        ::morph::wire::Envelope env;
+        std::shared_ptr<::morph::model::detail::IModelHolder> holder;
+        std::shared_ptr<detail::HydrationState> hydration;
+        std::function<void(std::string)> complete;
+        ::morph::async::detail::TimeoutScheduler::Handle timeoutHandle{};
+        /// Null without an `executeTimeout`.
+        std::shared_ptr<::core::async::StopSource> stopSource;
+        ::morph::exec::detail::ModelId mid{};
+        std::chrono::steady_clock::time_point start;
+        ::morph::observe::SpanId spanId{};
+    };
+
+    /// Stamps an execute's start once it holds its instance's action gate.
+    ///
+    /// Metrics and endSpan are recorded before `complete(...)` runs (in
+    /// finishRemote) so a caller observing completion — via handle()'s reply
+    /// or the timeout path racing it — can never see the reply before this
+    /// dispatch's own instrumentation is recorded. This mirrors the
+    /// reply-exactly-once contract `complete` already provides: whichever
+    /// path wins the race, the metrics for *this* dispatch are always
+    /// emitted, exactly once, regardless of which path's reply the caller
+    /// actually receives.
+    ///
+    /// A handler whose decoded action fails ActionValidator<Action>::ready(...)
+    /// throws morph::model::ValidationError before Model::execute runs. No
+    /// special-casing is needed: it becomes an ordinary `err` reply carrying its
+    /// message and callId, exactly like any other dispatch failure. See
+    /// docs/spec/core/registry.md.
+    static void admitRemote(RemoteRun& run) {
+        run.start = std::chrono::steady_clock::now();
+        run.spanId =
+            ::morph::observe::detail::beginSpan(run.env.session.requestId, run.env.modelType, run.env.actionType);
+    }
+
+    /// Runs an ordinary handler's execute once it holds its instance's action
+    /// gate, on the strand, and replies.
+    static void startRemote(RemoteRun& run) {
+        admitRemote(run);
+        std::string result;
+        std::exception_ptr error;
+        try {
+            ::morph::session::detail::ScopedContext const scoped{run.env.session};
+            result = run.self->_dispatcher.dispatch(run.env.modelType, run.env.actionType, *run.holder, run.env.body);
+        } catch (...) {
+            error = std::current_exception();
+        }
+        finishRemote(run, std::move(result), error);
+    }
+
+    /// Starts a Task handler's execute once it holds its instance's action
+    /// gate, on the strand. It replies when its Task completes.
+    static void startTaskRemote(const std::shared_ptr<RemoteRun>& run) {
+        admitRemote(*run);
+        std::shared_ptr<::morph::exec::detail::TaskResumer> executor;
+        try {
+            ::morph::session::detail::ScopedContext const scoped{run->env.session};
+            auto const& strands = run->self->_strands;
+            executor = std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session);
+            strands->enroll(run->mid, executor);
+            auto token = run->stopSource ? run->stopSource->get_token() : ::core::async::StopToken{};
+            run->self->_dispatcher.dispatchAsync(
+                run->env.modelType, run->env.actionType, *run->holder, run->env.body, executor, std::move(token),
+                [run, resumer = executor.get()](std::string result, std::exception_ptr error) {
+                    // As on LocalBackend: a handler can end on another
+                    // executor, and leaving the gate belongs on the strand.
+                    // The strands are held here, not reached through the run:
+                    // the finish may release the last reference to this server.
+                    auto const held = run->self->_strands;
+                    held->withdraw(run->mid, resumer);
+                    held->runOnStrand(run->mid, [run, result = std::move(result), error = std::move(error)] {
+                        finishRemote(*run, result, error);
+                    });
+                });
+        } catch (...) {
+            run->self->_strands->withdraw(run->mid, executor.get());
+            finishRemote(*run, std::string{}, std::current_exception());
+        }
+    }
+
+    /// Records a finished execute, replies, and leaves the action gate so the
+    /// next execute on the instance can start. On the strand.
+    static void finishRemote(RemoteRun& run, std::string result, const std::exception_ptr& error) {
+        auto& self = *run.self;
+        {
+            std::scoped_lock const lock{self._limitsMtx};
+            if (self._timeoutScheduler) {
+                self._timeoutScheduler->cancel(run.timeoutHandle);
+            }
+        }
+        bool const succeeded = error == nullptr;
+        // Settle hydration before `endSpan`, before the metrics and before
+        // `complete` -- each hands control to host code that is free to attach
+        // to this instance's key, and an attacher reaching the directory while
+        // the outcome is known but unrecorded is handed an instance whose first
+        // action has already failed. See shared_instances.md's Failure modes.
+        if (run.hydration) {
+            run.hydration->settle(succeeded);
+        }
+        ::morph::observe::detail::endSpan(run.spanId, succeeded);
+        auto const elapsedMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - run.start).count();
+        std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
+            {{"modelType", run.env.modelType}, {"actionType", run.env.actionType}}};
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+        if (succeeded) {
+            run.complete(::morph::wire::encode(::morph::wire::makeOk(run.env.callId, std::move(result))));
+        } else {
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
+            std::string message = "unknown exception";
+            try {
+                std::rethrow_exception(error);
+            } catch (const std::exception& exc) {
+                message = exc.what();
+            } catch (...) {  // NOLINT(bugprone-empty-catch): the message stays "unknown exception"
+                // Keeps "unknown exception": the reply still goes out, so the
+                // caller's completion does not wait for its deadline.
+            }
+            run.complete(::morph::wire::encode(::morph::wire::makeErr(message, run.env.callId)));
+        }
+        run.holder->actionGate().leave();
+    }
+
     ::morph::exec::IExecutor& _pool;
-    ::morph::exec::detail::StrandExecutor _strand;
+    // One strand per model instance, shared with the Task handlers' resumers.
+    // Never closed before its last owner goes: a suspended handler's driver
+    // frame holds its `RemoteRun`, and with it this server.
+    std::shared_ptr<::morph::exec::detail::ModelStrands> _strands;
     ::morph::model::detail::ActionDispatcher& _dispatcher;
     ::morph::model::detail::ModelRegistryFactory& _registry;
     std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
@@ -1649,7 +1755,7 @@ private:
     // posted back-to-back, can have their pre-strand work (decode, authorize,
     // authenticate, registry lookup) finish on two different pool threads in
     // either order -- so without this gate, whichever one finishes first
-    // reaches `_strand.post(mid, ...)` first, even if the client sent the
+    // reaches `_strands->post(mid, ...)` first, even if the client sent the
     // other one first (`tests/test_remote_execute_ordering.cpp` reproduces
     // this deterministically). A first attempt strand-routed the *entire*
     // dispatch pipeline for a known `modelId`, which closed the race but
@@ -1659,10 +1765,10 @@ private:
     // some other, still-blocked model's strand, and moving the whole
     // pipeline onto the strand collapsed that fast-reject path into the same
     // queue as the slow model's in-flight work. The ticket gate below fixes
-    // only the ordering of the `_strand.post()` call itself, leaving the
+    // only the ordering of the `_strands->post()` call itself, leaving the
     // fast-reject path exactly as fast as it always was.
     //
-    // The gate orders only the *moment of the `_strand.post()` call itself*,
+    // The gate orders only the *moment of the `_strands->post()` call itself*,
     // not the pipeline before it: a ticket is handed out and the dispatch
     // work is handed to `_pool` in one atomic step, synchronously in
     // `handleImpl` (called directly from `handle()`, which runs on
@@ -1672,7 +1778,7 @@ private:
     // to `_pool` as two separate, unlocked steps would let two concurrent
     // transport threads' ticket order and enqueue order diverge).
     // `dispatchExecute` waits for its ticket's
-    // turn only immediately before the pre-existing `_strand.post(mid, ...)`
+    // turn only immediately before the pre-existing `_strands->post(mid, ...)`
     // call, and releases the next ticket's turn either right after posting
     // (live model) or immediately on a "model not found"/other early-return
     // rejection (dead model, unauthorized, over limit, etc. -- none of these
@@ -1709,7 +1815,7 @@ private:
     // is purely the wiring: `handleImpl` calls `_executeGate.takeAndPost(mid,
     // ...)`, which hands out the ticket and posts to `_pool` inside one
     // critical section; `dispatchExecute` calls `ticketGuard.awaitTurn()`
-    // immediately before `_strand.post(mid, ...)`; every exit path releases
+    // immediately before `_strands->post(mid, ...)`; every exit path releases
     // through `ExecuteTicketGuard`, explicitly or via its destructor.
     ::morph::backend::detail::ExecuteOrderGate _executeGate;
     // mutable: health() is const and must still be able to lock this to read

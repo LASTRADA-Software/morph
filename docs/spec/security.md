@@ -338,7 +338,11 @@ testable without wall-clock dependence.
 #### Canonical base64url — no signature malleability
 
 `detail::base64UrlDecode` decodes **canonically**: it is a bijection over valid
-tokens, so exactly one token string maps to any given byte sequence. base64url
+tokens, so exactly one token string maps to any given byte sequence. It is
+`session_auth.hpp`'s own, and deliberately not core-cpp's `core::base64`, which
+`morph::net`'s WebSocket handshake uses: the handshake only encodes, with the
+standard alphabet, whereas a token decoder must refuse every non-canonical
+input below, a promise `core::base64::decode` does not make. base64url
 is a *bit*-oriented encoding, and a naive decoder that silently discards the
 leftover bits of the final symbol would let several distinct strings decode to
 the same MAC — a token-string malleability that lets an attacker perturb the

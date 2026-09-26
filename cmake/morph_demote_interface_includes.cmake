@@ -70,7 +70,7 @@ include_guard(GLOBAL)
 # whose own argument must not be mistaken for an include directory.
 #
 # Idempotent by construction: a second call finds no `-I` left and returns
-# without touching anything. Both FetchContent_MakeAvailable(Lightweight) sites
+# without touching anything. Both CPMAddPackage(Lightweight) sites
 # call it, since whichever configures first is the one that defines the target.
 function(morph_demote_interface_includes_to_system target)
     if(NOT TARGET "${target}")
@@ -133,7 +133,7 @@ function(morph_demote_interface_includes_to_system target)
     target_include_directories("${target}" SYSTEM INTERFACE ${_morph_dirs})
 endfunction()
 
-# Call immediately after FetchContent_MakeAvailable(Lightweight), from every
+# Call immediately after CPMAddPackage(Lightweight), from every
 # site that makes it available -- see this file's header for why.
 function(morph_demote_lightweight_odbc_includes)
     morph_demote_interface_includes_to_system(Lightweight)

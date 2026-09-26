@@ -3,7 +3,7 @@
 // Covers the public deterministic-interleaving-harness seam for `RemoteServer`
 // hand-stepping `RemoteServer`'s real per-model
 // ordering via `morph::testing::StepExecutor`, without naming
-// `morph::exec::detail::StrandExecutor` or `morph::exec::detail::ModelId`.
+// `morph::exec::detail::ModelStrands` or `morph::exec::detail::ModelId`.
 
 #include <catch2/catch_test_macros.hpp>
 #include <functional>

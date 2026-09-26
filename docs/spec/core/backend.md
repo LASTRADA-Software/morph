@@ -71,6 +71,8 @@ used locally or serialised for a remote round-trip:
 | `serializeAction` | `std::string (*)(const void* action)` | Serialises `action` to JSON. Only called on the remote path. |
 | `deserializeResult` | `std::shared_ptr<void> (*)(std::string_view)` | Deserialises a JSON reply into the opaque result. Only called on the remote path. Never reads the action. |
 | `localOp` | `std::shared_ptr<void> (*)(IModelHolder&, void* action)` | Executes `action` directly against a model holder. Only called on the local path. |
+| `localOpAsync` | `void (*)(IModelHolder&, std::shared_ptr<void> action, const std::shared_ptr<TaskResumer>&, core::async::StopToken, LocalDone)` | Set instead of `localOp` when the action's handler returns `core::async::Task`: starts it on the model's strand and reports the result or exception through `LocalDone` when the Task completes. Only called on the local path. See [`coroutines.md`](coroutines.md). |
+| `stopSource` | `std::shared_ptr<core::async::StopSource>` | Null unless `Bridge::executeVia` armed an execute deadline for a Task handler; the deadline requests stop on it and `LocalBackend` hands its token to the handler. |
 | `session` | `morph::session::Context` | Session context. Local backends thread it through a thread-local before invoking `localOp`; remote backends serialise it into the wire envelope. |
 
 There is one member function, `serializeBody()`, which pairs
@@ -468,9 +470,11 @@ natively](#the-structural-registration-surface-natively).
   would.
 - **Control calls are serialised** onto one strand, so the wrapped backend sees
   them one at a time, as it did when the blocking call itself serialised
-  callers. `~SynchronousBackendAdapter` waits for any in-flight control call, so
-  the executor must still be running tasks when the adapter is destroyed — the
-  same rule as `StrandExecutor`'s own `base`.
+  callers. `~SynchronousBackendAdapter` waits for every queued and in-flight
+  control call (`ModelStrands::drain`), so the executor must still be running
+  tasks when the adapter is destroyed — the same rule as for any backend's
+  strands. The single-threaded WebAssembly build has no thread to wait for, and
+  drops the control calls still queued.
 - **A control call issued from a reconnect handler runs on the strand**, never
   on the wrapped backend's transport thread — *provided the handler issues it
   through `bindModel`/`promoteModel`*. That proviso is load-bearing, and it is
@@ -723,9 +727,9 @@ declared alongside them so callers catch every dispatch failure from one header:
 ## `LocalBackend` — in-process execution
 
 `LocalBackend` is the concrete in-process backend. It owns a
-`StrandExecutor` (wrapping the `IExecutor&` worker pool, typically a
-`ThreadPoolExecutor`) and a `detail::InstanceDirectory` holding its live model
-instances.
+`ModelStrands` (core-cpp's `KeyedStrands` over the `IExecutor&` worker pool,
+typically a `ThreadPoolExecutor`; see [executor.md](executor.md)) and a
+`detail::InstanceDirectory` holding its live model instances.
 
 Both it and `RemoteServer` keep those instances in one
 `detail::InstanceDirectory` (`core/detail/instance_directory.hpp`): one record
@@ -767,7 +771,15 @@ there, rather than once per backend.
   captured by `shared_ptr`). Cost is O(change-aware models), not O(all models).
   Delivery is asynchronous and serialised against that model's `execute` tasks;
   it never runs under `_regMtx` or `Bridge::_mtx`, so a sink that re-enters the
-  bridge cannot deadlock.
+  bridge cannot deadlock. It runs without a session, even while a Task
+  handler of that model instance is suspended: the strand installs a
+  suspended handler's session around the coroutines resumed on its instance
+  only, and a posted callable such as this one is not one of them (see
+  [coroutines.md](coroutines.md), "The handler's resumer"). The same holds
+  for an action queued behind the handler, which installs its own session when
+  it starts. A detached chain that a finished handler A left behind is a
+  resumption, though: when it comes back after handler B of the same instance
+  started, it runs under B's session and B's resumer.
 - `setReconnectHandler`/`setConnectHandler`/`setDisconnectHandler` — no-op (no transport to (dis)connect).
 - `setSession` — not overridden (the default no-op stands): the local path never serialises a `Context` onto a wire envelope, so there is nothing to stamp.
 
@@ -984,7 +996,7 @@ via `morph::observe::setMetricSink`/`setTraceSink` — see
 envelopes for the *same* model, sent back-to-back on one connection, are raced
 by two pool threads through identical pre-strand work
 (decode/authorize/authenticate/registry lookup). Whichever finishes that work
-first reaches `_strand.post(mid, ...)` first. `StrandExecutor` serialises what
+first reaches `_strands->post(mid, ...)` first. The strand serialises what
 it is given, but it can only serialise it in the order it is given — so with
 more than one pool worker free, the model could observe two actions in the
 opposite order from the one they were sent in. That is a correctness problem
@@ -1015,9 +1027,9 @@ produces the canonical error reply for malformed input exactly as it would
 otherwise.
 
 **Where the order is enforced.** The ticket is waited on at one point only —
-immediately before `_strand.post` — and released immediately after that call
+immediately before `_strands->post` — and released immediately after that call
 returns. It deliberately does **not** span the strand task: once the post has
-happened in the right order, `StrandExecutor` owns the sequencing from there,
+happened in the right order, the strand owns the sequencing from there,
 and holding the ticket any longer would stall a different request's pre-strand
 work for no ordering benefit. The wait itself happens on a pool thread and
 blocks nothing else; a strand is never blocked by this gate.
@@ -1265,7 +1277,7 @@ defaults to `0` ("unbounded"), so an unconfigured server's behavior is unchanged
 
 | Field | Default | Enforcement |
 |---|---|---|
-| `executeTimeout` | `0` (disabled) | A timer arms when `execute` dispatches to the model's strand. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. The model keeps running to completion on its strand; morph never interrupts `Model::execute`. |
+| `executeTimeout` | `0` (disabled) | A timer arms when `execute` dispatches to the model's strand. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
 | `maxLiveModels` | `0` (unbounded) | Checked under `_regMtx` before `register` constructs a new instance; over the cap → `err "too many models"`. The check and the eventual insert are two separate critical sections (to avoid constructing an instance that will be rejected), so a burst of concurrent registers can overshoot the cap by a small, bounded amount — a soft, defense-in-depth limit, not a hard invariant. |
 | `maxInFlightExecutes` | `0` (unbounded) | An atomic counter, incremented when `execute` is admitted for dispatch (before the strand task is posted) and decremented when its reply is sent (success, exception, or timeout — whichever resolves the call first); over the cap → `err "server busy"`, no dispatch. |
 
@@ -1276,10 +1288,10 @@ than a generic `std::runtime_error`, on both `SimulatedRemoteBackend` and
 
 The background timer that enforces `executeTimeout` is
 `morph::async::detail::TimeoutScheduler` (`include/morph/core/timeout_scheduler.hpp`)
-— a single dedicated thread per `RemoteServer` (mirroring `NetworkMonitor`'s
-condition-variable wait loop), lazily started by `setLimitPolicy` the first time
-`executeTimeout` is configured, so a server that never uses the feature pays no
-extra thread. The class lives in `morph::async::detail` rather than
+— one per `RemoteServer`, each a thread running a core-cpp
+`core::net::PlatformLoop` whose timers hold the deadlines, lazily created by
+`setLimitPolicy` the first time `executeTimeout` is configured, so a server
+that never uses the feature pays no extra thread. The class lives in `morph::async::detail` rather than
 `morph::backend::detail` because `Bridge` uses the same primitive for the
 *client*-side `setExecuteDeadline` — see [`completion.md`](completion.md),
 "Client-side execute deadline".
@@ -1805,11 +1817,12 @@ Qt-free reference transport: they speak the same RFC 6455 WebSocket framing as
 raw POSIX (BSD) sockets instead of `QWebSocket`/`QWebSocketServer`. The module
 is header-only, gated behind the CMake option `MORPH_BUILD_NET` (default
 `OFF`; Linux/macOS only — see Limitations), and depends on nothing but `morph`
-itself: the HTTP/1.1 Upgrade handshake (`Sec-WebSocket-Key`/
-`Sec-WebSocket-Accept`, via a hand-rolled SHA-1 + base64) and the masked/
-unmasked text-frame codec are implemented from scratch in
-`include/morph/net/detail/` (`sha1.hpp`, `base64.hpp`, `ws_handshake.hpp`,
-`ws_frame.hpp`, `tcp_socket.hpp`). Because both transports round-trip the same
+and the core-cpp modules `morph` already links: the HTTP/1.1 Upgrade handshake
+(`Sec-WebSocket-Key`/`Sec-WebSocket-Accept`, via a hand-rolled SHA-1 and
+core-cpp's `core::base64::encode`) and the masked/unmasked text-frame codec are
+implemented in `include/morph/net/detail/` (`sha1.hpp`, `ws_handshake.hpp`,
+`ws_frame.hpp`, `tcp_socket.hpp`), and the accept loop's wakeup is core-cpp's
+`core::platform::Wakeup`. Because both transports round-trip the same
 `wire::Envelope`, a `SocketBackend` client and a `QtWebSocketServer`
 interoperate (and vice versa) with no protocol changes on either side.
 
@@ -1992,11 +2005,12 @@ any thread for exactly this purpose, on a **connected** socket.
 
 **The accept loop owns its own wakeup, and does not borrow the kernel's**
 The accept thread never parks in `accept(2)`. `listen()` sets
-`O_NONBLOCK` on the listening socket and creates a self-pipe; the loop waits in
-a single `poll()` over the listening fd and the pipe's read end, and takes a
+`O_NONBLOCK` on the listening socket and creates a `core::platform::Wakeup`
+(an eventfd on Linux, a self-pipe on macOS and the BSDs); the loop waits in a
+single `poll()` over the listening fd and the wakeup's descriptor, and takes a
 ready connection with `TcpSocket::tryAccept()`, which answers `std::nullopt`
-rather than parking when a readiness report has gone stale. `close()` writes one
-byte to the pipe before `join()`, which is what ends the loop.
+rather than parking when a readiness report has gone stale. `close()` signals
+the wakeup before `join()`, which is what ends the loop.
 
 **The listener's non-blocking mode stops at the listener.**
 `TcpSocket`'s fd-adopting constructor clears `O_NONBLOCK` on every descriptor it
@@ -2018,16 +2032,19 @@ That replaces, rather than supplements, the previous mechanism: `close()` no
 longer calls `shutdownBoth()` on the *listening* socket at all. It used to, and
 relied on `shutdown(2)` kicking a parked `accept()` — true on Linux, not a POSIX
 guarantee, and false on macOS/BSD, where the accept thread stayed parked and
-`~SocketServer()` hung with no timeout on its join. Because the pipe is now the
-only wakeup, the mechanism is exercised by every teardown on every platform,
-including CI's: deleting the wakeup `write()` hangs the Linux build too. A
-platform-conditional wakeup would instead have been a macOS-only path that
-Linux-only CI could never execute.
+`~SocketServer()` hung with no timeout on its join. Because the wakeup is the
+only way the loop ends, the mechanism is exercised by every teardown on every
+platform, including CI's: removing the `signal()` hangs the Linux build too.
+The wakeup's kernel object does differ by platform — an eventfd on Linux, a
+self-pipe elsewhere — and morph's Linux-only CI exercises only the first; the
+self-pipe is core-cpp's, covered by its `Wakeup_test` on core-cpp's own macOS
+legs, rather than a morph code path nothing here could execute.
 
 Two consequences follow, both deliberate:
 
-- `listen()` **fails closed** if the pipe cannot be created (`pipe(2)`
-  answering `EMFILE`/`ENFILE`): it returns `false` and spawns no thread, rather
+- `listen()` **fails closed** if the wakeup cannot be created (the kernel out
+  of descriptors, which `core::platform::Wakeup`'s constructor reports by
+  throwing): it returns `false` and spawns no thread, rather
   than starting an accept loop nothing could ever interrupt.
 - `close()` **releases the listening descriptor** once the accept thread has
   joined — after the join, so no fd number can be reused under a `poll()` still
@@ -2044,7 +2061,7 @@ are:
 
 - **The worker pool must outlive the backend.** Every backend takes an
   `IExecutor& workerPool` by reference (`LocalBackend`, `RemoteServer`) and wraps
-  it in a `StrandExecutor`. The pool (typically a `ThreadPoolExecutor`) must be
+  runs its strands on it. The pool (typically a `ThreadPoolExecutor`) must be
   destroyed *after* the backend that references it — and, in practice, after the
   `Bridge` that owns the backend. Destroying the pool first leaves the strand
   pointing at freed storage.
@@ -2143,7 +2160,7 @@ round-trip; model and GUI authors must not assume any two share a thread:
 |---|---|
 | `serializeAction` | The **calling / GUI thread** — `SimulatedRemoteBackend::execute` invokes it synchronously while building the envelope, before handing off to the pool. |
 | `deserializeResult` | The **reply / pool thread** — invoked inside the `handle()` reply callback when the server's `ok` arrives (for `SimulatedRemoteBackend`, that is a `RemoteServer` worker-pool thread). |
-| `localOp` | The **model strand** (`LocalBackend` only) — posted on the per-`ModelId` `StrandExecutor`, serialised against other actions for the same model. Never invoked on the remote path. |
+| `localOp` | The **model strand** (`LocalBackend` only) — posted on the per-`ModelId` strand, serialised against other actions for the same model. Never invoked on the remote path. |
 
 On the server side, `RemoteServer` runs authorize/authenticate and the model
 lookup on the pool thread that `dispatchMessage` runs on, then runs
@@ -2438,9 +2455,9 @@ from "dead" apart).
 | Method | Notes |
 |---|---|
 | `SocketServer(server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server`. Does not start listening. |
-| `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup pipe, and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup pipe cannot be created — an accept loop nothing can interrupt is worse than not listening. |
+| `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup (`core::platform::Wakeup`), and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup cannot be created — an accept loop nothing can interrupt is worse than not listening. |
 | `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
-| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by writing one byte to the wakeup pipe it polls — **not** by `shutdownBoth()` on the listening socket, which works only because Linux kicks a parked `accept(2)` on shutdown and leaves macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete. A `_closing.exchange` guard is not enough: it lets a second caller reach `_acceptThread.join()` while the first is inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++. The wakeup write runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
+| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by signalling the wakeup it polls — **not** by `shutdownBoth()` on the listening socket, which works only because Linux kicks a parked `accept(2)` on shutdown and leaves macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete. A `_closing.exchange` guard is not enough: it lets a second caller reach `_acceptThread.join()` while the first is inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++. The wakeup signal runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## `executeInto` — settling the caller's own completion
 
@@ -2497,7 +2514,7 @@ implementation to absorb — see
 | `setReconnectHandler` | Default no-op | Only backends with a transport layer (e.g. `QtWebSocketBackend`) need to react to reconnects. `LocalBackend` and `SimulatedRemoteBackend` never invoke it. |
 | `setConnectHandler`/`setDisconnectHandler` on `IBackend`, not only `QtWebSocketBackend` | Same no-op-default pattern as `setReconnectHandler` | Connection state is a property of any transport-backed backend; a UI observing it shouldn't have to downcast to a concrete backend type. A purely local backend has no meaningful connection state, so the base-class hook is simply inert for it — no behavior change, matching the existing `setReconnectHandler` precedent exactly. |
 | `setDisconnectHandler` fires before reconnect scheduling | Ordering choice, not incidental | An instant successful reconnect must not look, from an observer's perspective, like nothing happened — the disconnected state must be visible even when the very next thing that happens is a fresh `connected`. |
-| Strand-per-model | `StrandExecutor` serialises actions per `ModelId` | Actions against the same model run sequentially; different models can run in parallel. No global lock on the pool. |
+| Strand-per-model | `ModelStrands` (core-cpp's `KeyedStrands`) serialises actions per `ModelId` | Actions against the same model run sequentially; different models can run in parallel. No global lock on the pool. |
 | Overwrite `session.principal` on remote execute | `authenticate()` result replaces the client claim before dispatch | The client-asserted `Context::principal` is untrusted; a verifying authorizer makes the token-derived identity authoritative so `session::current()->principal` inside a model is trustworthy. Non-verifying authorizers return `nullopt` and change nothing. |
 | Opaque model ids | Monotonic counter run through a keyed 4-round Feistel permutation (`detail::OpaqueIdGenerator`), key drawn from `std::random_device` at construction | Guarantees uniqueness (Feistel networks are bijections for any round function) while making ids unguessable without the key; self-contained, no external crypto dependency — same posture as the reference HMAC-SHA256 in `session_auth.hpp`. |
 | WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. A lost/undelivered deregister no longer leaks indefinitely: `QtWebSocketServer`'s connection scope reclaims the model at the next disconnect (see Limitations). |
@@ -2506,12 +2523,12 @@ implementation to absorb — see
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
 | No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
-| `executeTimeout` implementation | A dedicated, lazily-started background thread (`morph::async::detail::TimeoutScheduler`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. |
+| `executeTimeout` implementation | A dedicated, lazily-started background thread (`morph::async::detail::TimeoutScheduler`, a thread running core-cpp's `PlatformLoop`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. The deadlines are the loop's own timers, so nothing polls: an armed timer is what bounds the loop's next wait. |
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill; on empty the frame is refused with an `err` reply, and the connection is left open | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Refusing rather than closing keeps a transient burst from taking down the connection. The frame is *answered* rather than discarded because a reply costs nothing at the protocol level and is the difference between a caller's `Completion` failing and it hanging: the id is recovered by the same bounded prefix scan (`peekCallId`) the `maxMessageBytes` branch uses, so no decode of a frame that will not run is needed. |
-| Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor`/`StrandExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
+| Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
 | Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models) under `_regMtx`. No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
 | `morph::net`'s I/O model | A dedicated I/O thread + `std::condition_variable`, instead of the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and — as a side effect — lets `SocketBackend` be driven safely from multiple threads (`QtWebSocketBackend` cannot be, since it is pinned to one event-loop thread). |
-| `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + base64 + HTTP Upgrade + frame codec), not a third-party library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency to keep morph's default build dependency-free, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
+| `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + HTTP Upgrade + frame codec), with base64 from core-cpp, not a WebSocket library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency beyond core-cpp, which morph links anyway, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
 | `WsFrameReader` reassembles fragments | Accumulates continuation frames and returns only the completed message | Fragmentation is not an exotic case: a peer fragments whenever a message exceeds its outgoing frame size, and Qt's `QWebSocket` defaults that to 512 KiB. Rejecting fragments broke interop with the transport this project ships, for every payload past that size. Control frames interleaved between fragments pass through untouched, and the reassembled total is bounded by `wire::kMaxEnvelopeBytes` so a stream of tiny continuations cannot grow the buffer without limit. |
 | `WsFrameReader` rejects RFC 6455-illegal frames instead of tolerating them | Masking direction, RSV bits, opcode range, control-frame framing, Close status code, minimal length encoding and text-payload UTF-8 are all checked; a violation throws out of `tryExtractFrame()` and the call site drops the connection | The interop requirement above makes what the reader *refuses* part of the transport's contract rather than an implementation detail: a tolerant reader accepts ten classes of illegal frame, and a peer that sends one here gets disconnected instead. The reader is given its role at construction (`expectMasked`) because §5.1 is directional — a server MUST reject an unmasked client frame and a client MUST reject a masked server frame, and that rule is the anti-cache-poisoning defence, not a formality. Text UTF-8 is validated incrementally, since a multi-byte sequence may straddle a fragment boundary. On the sending side the mask key is drawn per frame from a thread-local `std::random_device` rather than a thread-local `std::mt19937`, whose state a peer can reconstruct from 624 observed keys (§5.3); `random_device` has no reproducible state to recover, and holding it thread-local keeps the entropy source open instead of reacquiring it on every outbound message. |
 | Registration continuation delivered via a caller-supplied `IExecutor&`, not on the backend's thread | `bindModel`/`promoteModel` return a `Completion<ModelId>` built with the caller's executor | A per-verb non-blocking twin can only state its threading contract in prose, and a violation of it is a use-after-free. Making the executor an argument moves the choice of delivery thread from fifteen implementors that know nothing about the caller's teardown to the one caller that does, and turns it from a `@note` into a value a call site must produce. Rejected: matching `execute`'s `IExecutor*` — a null pointer makes `Completion` drop every handler silently, which is the same unobservable failure the surface removes. |

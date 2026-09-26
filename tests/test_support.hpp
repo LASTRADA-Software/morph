@@ -42,10 +42,10 @@ struct InlineExecutor : ::morph::exec::IExecutor {
 /// be driven with fully deterministic, hand-stepped task ordering by
 /// constructing it against a `StepExecutor` instead of a `ThreadPoolExecutor`.
 /// `RemoteServer` posts every dispatch (both the top-level `handle()` post and
-/// the per-model strand dispatch its internal `StrandExecutor` performs) onto
+/// the per-model strand dispatch its internal `ModelStrands` performs) onto
 /// whichever `IExecutor` it was constructed with, so controlling that one
 /// executor is enough to control ordering end-to-end — no need to name
-/// `morph::exec::detail::StrandExecutor` or `morph::exec::detail::ModelId` to
+/// `morph::exec::detail::ModelStrands` or `morph::exec::detail::ModelId` to
 /// get there. A test picks which of several pending tasks (e.g. two different
 /// models' queued work) to run next via `runOne()`, observing `RemoteServer`'s
 /// real per-model serialisation (a strand never posts its next task until the
@@ -123,7 +123,7 @@ private:
 /// Without this, strand-ordering bugs in code built over `IExecutor` (see
 /// `test_remote_execute_ordering.cpp`'s use of it against `RemoteServer`, or
 /// `examples/common/testkit/strand_interleaver.hpp`'s identical copy against
-/// `StrandExecutor` in the ladder's own tests) are probabilistic stress runs
+/// `ModelStrands` in the ladder's own tests) are probabilistic stress runs
 /// instead of reproducible interleavings: a test controls exactly which
 /// posted task runs next, rather than hoping real OS thread scheduling
 /// happens to hit the race on a given run.
@@ -143,7 +143,7 @@ private:
 /// codebase's established convention for small, self-contained internal
 /// details that would otherwise need new cross-module plumbing to share.
 ///
-/// Unlike `ThreadPoolExecutor`/`StrandExecutor`, a task's exception is not
+/// Unlike `ThreadPoolExecutor`/`ModelStrands`, a task's exception is not
 /// caught and logged here: it propagates straight out of `step()`/
 /// `runSchedule()` to the caller. That is deliberate — the caller is a test,
 /// and the exception is often a `REQUIRE` failure the test needs to see

@@ -486,7 +486,7 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
     // `processEvents` slice runs, draining both before either is observed).
     // `DeterministicExecutor` (testkit/strand_interleaver.hpp -- the
     // established "control exactly which posted task runs next" harness,
-    // same one `test_strand_interleaver.cpp` drives a `StrandExecutor`
+    // same one `test_strand_interleaver.cpp` drives a `ModelStrands`
     // through) is a plain `IExecutor`, so it can stand in as the presenter's
     // own client-facing executor: `step()` runs exactly the oldest-queued
     // callback and nothing else.

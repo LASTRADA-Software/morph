@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Direct unit coverage for morph::async::detail::TimeoutScheduler (the
-// threaded build, compiled whenever __EMSCRIPTEN__ without
-// __EMSCRIPTEN_PTHREADS__ is not defined -- see timeout_scheduler.hpp's @file
-// comment for the single-threaded browser build, which this file's own
-// target never compiles and cannot exercise). Bridge::executeVia and
-// RemoteServer only ever call schedule()/cancel() with callbacks that don't
-// throw, so this file covers the case they don't: a scheduled callback that
-// throws is logged and swallowed rather than propagating out of the
-// scheduler's background thread.
+// Direct unit coverage for morph::async::detail::TimeoutScheduler, in the
+// build that owns a thread for its loop -- see timeout_scheduler.hpp's @file
+// comment for the single-threaded WebAssembly build, which this file's own
+// target never compiles. Bridge::executeVia and RemoteServer only ever call
+// schedule()/cancel() with callbacks that don't throw, so this file covers
+// the cases they don't: a callback that throws is logged and swallowed rather
+// than propagating out of the loop's thread, cancel() releases what a
+// callback captured before it returns, and the destructor drops what is still
+// pending instead of waiting for it.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <memory>
 #include <morph/core/timeout_scheduler.hpp>
 #include <stdexcept>
 #include <thread>
+
+#include "test_support.hpp"
 
 using morph::async::detail::TimeoutScheduler;
 using namespace std::chrono_literals;
@@ -99,6 +102,41 @@ TEST_CASE("TimeoutScheduler: cancel() before the deadline prevents the callback 
     REQUIRE_FALSE(fired.load());
 }
 
+TEST_CASE("TimeoutScheduler: cancel() releases the callback's captures before it returns", "[timeout_scheduler]") {
+    TimeoutScheduler scheduler;
+    auto token = std::make_shared<int>(0);
+    std::weak_ptr<int> const observer = token;
+
+    // Far enough out that nothing but cancel() can release it within the case.
+    auto const handle = scheduler.schedule(60s, [token = std::move(token)] { static_cast<void>(token); });
+    REQUIRE_FALSE(observer.expired());
+
+    scheduler.cancel(handle);
+    REQUIRE(observer.expired());
+}
+
+TEST_CASE("TimeoutScheduler: the destructor drops pending callbacks without firing them", "[timeout_scheduler]") {
+    std::atomic<bool> fired{false};
+    std::weak_ptr<int> observer;
+    auto const started = std::chrono::steady_clock::now();
+    {
+        TimeoutScheduler scheduler;
+        auto token = std::make_shared<int>(0);
+        observer = token;
+        scheduler.schedule(60s, [&fired, token = std::move(token)] {
+            static_cast<void>(token);
+            fired = true;
+        });
+    }
+    auto const elapsed = std::chrono::steady_clock::now() - started;
+
+    // Dropped, not fired, and not waited for: a destructor that let the
+    // deadline run out would take the full minute and set `fired`.
+    REQUIRE_FALSE(fired.load());
+    REQUIRE(observer.expired());
+    REQUIRE(elapsed < 10s);
+}
+
 // ── What `cancel()` does about a callback that has already started ───────────
 //
 // The header states the distinction these two cases make:
@@ -151,4 +189,55 @@ TEST_CASE("TimeoutScheduler: the destructor -- unlike cancel() -- waits for a ru
     // The contrast that makes the cancel() case above a real distinction rather
     // than a timing accident: this one *is* "no callback in flight afterwards".
     REQUIRE(finished.load());
+}
+
+TEST_CASE("TimeoutScheduler: a dropped callback's capture may call back into the scheduler it is dropped by",
+          "[timeout_scheduler]") {
+    // Cancels its own entry from its destructor: when the scheduler drops the
+    // callback holding the last reference to this, that destructor runs inside
+    // ~TimeoutScheduler and calls cancel() on the scheduler being destroyed.
+    struct CancelOnDestroy {
+        TimeoutScheduler* scheduler = nullptr;
+        TimeoutScheduler::Handle other{};
+        std::atomic<bool>* destroyed = nullptr;
+        CancelOnDestroy() = default;
+        CancelOnDestroy(const CancelOnDestroy&) = delete;
+        CancelOnDestroy& operator=(const CancelOnDestroy&) = delete;
+        CancelOnDestroy(CancelOnDestroy&&) = delete;
+        CancelOnDestroy& operator=(CancelOnDestroy&&) = delete;
+        ~CancelOnDestroy() {
+            scheduler->cancel(other);
+            *destroyed = true;
+        }
+    };
+
+    std::atomic<bool> destroyed{false};
+    {
+        TimeoutScheduler scheduler;
+        auto guard = std::make_shared<CancelOnDestroy>();
+        guard->scheduler = &scheduler;
+        guard->destroyed = &destroyed;
+        guard->other = scheduler.schedule(60s, [] {});
+        scheduler.schedule(60s, [guard] { static_cast<void>(guard); });
+        guard.reset();
+        REQUIRE_FALSE(destroyed.load());
+    }
+    // The destructor released the capture, whose cancel() found the scheduler
+    // whole: its lock usable and the other entry already taken out.
+    REQUIRE(destroyed.load());
+}
+
+TEST_CASE("TimeoutScheduler: destroyed with a timer still armed, it retires the timer and never runs its callback",
+          "[timeout_scheduler]") {
+    std::atomic<bool> ran{false};
+    {
+        TimeoutScheduler scheduler;
+        static_cast<void>(scheduler.schedule(1h, [&] { ran = true; }));
+        // Requests reach the loop in order, so once this one has fired the one
+        // above is armed: the destructor then has a timer to retire.
+        std::atomic<bool> armed{false};
+        static_cast<void>(scheduler.schedule(0ms, [&] { armed = true; }));
+        REQUIRE(morph::testing::waitUntil([&] { return armed.load(); }));
+    }
+    REQUIRE_FALSE(ran.load());
 }

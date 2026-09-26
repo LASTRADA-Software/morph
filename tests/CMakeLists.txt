@@ -22,13 +22,14 @@ add_executable(morph_tests
     test_example.cpp
     test_executor_extra.cpp
     test_strand.cpp
-    test_strand_extra.cpp
-    test_strand_race.cpp
     test_completion.cpp
     test_completion_extra.cpp
     test_completion_multi_handler.cpp
     test_completion_promise.cpp
     test_completion_value_contract.cpp
+    test_coroutine_client.cpp
+    test_coroutine_model.cpp
+    test_async_delay.cpp
     test_model.cpp
     test_logger.cpp
     test_observability.cpp
@@ -218,55 +219,10 @@ include(Catch)
 # test fails fast instead of stalling the whole CI job (observed: a single test
 # hanging blocked a Windows runner for over half an hour).
 #
-# That number was never chosen with any particular test in mind, which is
-# fine while every test is sub-second and wrong for the one that is not: the
-# longest, most load-sensitive case in the binary was governed by the same
-# ceiling as the cheapest. So the blanket stays and `[slow]` is
-# registered separately -- DISCOVERY_MODE
-# PRE_TEST defers discovery to ctest invocation time, so a per-test TIMEOUT
-# cannot be set with set_tests_properties() here (nothing is named that test
-# yet at configure time); excluding a tag and giving it its own
-# catch_discover_tests() call is the mechanism that is actually available.
-#
-# (The `equation()` depth test no longer needs the tag: at 70,000 nodes it blew
-# past 120s under TSan because of O(n^2) string building, and with that
-# rendering linear it is back under the blanket cap. The tag is reused
-# here for a different test and a different reason.)
-catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "~[slow]" PROPERTIES TIMEOUT 120)
-
-# `[slow]`: `StrandExecutor never runs two tasks for one key
-# concurrently under contention`. Not slow because it computes anything --
-# 0.14 s on an idle box -- but because the strand serialises 3200 tasks per
-# iteration and every handoff is a thread wakeup that has to wait its turn on
-# the run queue. That cost is set by how contended the host is, and it climbs
-# steeply. Measured on this tree, 12 cores, clang 22.1.8 Release, load made
-# with plain spin loops, whole-case wall clock, one run each:
-#
-#     run queue  1 (idle)  ->    0.14 s
-#     run queue 14         ->   23.8 s
-#     run queue 27         ->  170.5 s
-#     run queue 38         ->  396.4 s   <- load average 31-38 at measurement
-#
-# Every one of those runs *passed*: 40 assertions, `inFlight 1, maxInFlight 1`
-# throughout. What this tag answers is the case being killed while passing, at
-# load average 29-48 -- above the 38 measured here, and the curve is
-# superlinear, so the fitted figure at a run queue of ~50 is roughly 730 s.
-#
-# 900 s is therefore ~2.3x the measured 396 s and ~1.2x that extrapolation. It
-# is also the number this file already uses for its other load-sensitive case
-# (`forms_schema_generation_is_not_route_count_sensitive`, below), chosen there
-# for the same reason: a slow shared runner can be several times a workstation.
-#
-# What this deliberately does **not** do is reduce `kIterations`. Twenty
-# iterations is this case's detection power for a rare interleaving; trading it
-# away to fit a ceiling would make the case cheaper and worse at the only thing
-# it exists for. See the comment on `kIterations` in test_strand_race.cpp.
-#
-# And what it does not buy is immunity: a host oversubscribed past roughly 4.5x
-# will exceed 900 s too. The ceiling is here to catch a *deadlock* -- which is
-# unbounded, not merely large -- and it still does, in 15 minutes instead of 2,
-# for one test out of 3044.
-catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST TEST_SPEC "[slow]" PROPERTIES TIMEOUT 900)
+# The one case that needed more, the strand race test tagged `[slow]`, went
+# with morph's own strand when morph moved to core-cpp's `KeyedStrands`, which
+# carries its own race tests.
+catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
 
 # ── Two-binary journal-path skew test ───────────────────────────────────────
 # The executable form of the journal's data-at-rest contract: an
@@ -304,6 +260,7 @@ foreach(_skew_role old new)
     target_compile_definitions(morph_journal_skew_${_skew_role}
         PRIVATE MORPH_SKEW_ROLE_${_skew_role_upper})
     target_link_libraries(morph_journal_skew_${_skew_role} PRIVATE morph::morph)
+    morph_suppress_test_dialogs(morph_journal_skew_${_skew_role})
     apply_warnings(morph_journal_skew_${_skew_role})
     if(DEFINED AF_SANITIZER)
         apply_sanitizers(morph_journal_skew_${_skew_role} ${AF_SANITIZER})
@@ -414,6 +371,11 @@ endif()
 get_target_property(MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS morph INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(MORPH_VETTED_HMAC_GUARD_GLAZE_INCLUDE_DIRS glaze::glaze INTERFACE_INCLUDE_DIRECTORIES)
 list(APPEND MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS ${MORPH_VETTED_HMAC_GUARD_GLAZE_INCLUDE_DIRS})
+# core-cpp's headers, spelled out rather than read from core::base: its
+# include directories are $<BUILD_INTERFACE:...> generator expressions, which
+# a try_compile() here would receive unevaluated. `src/` holds the headers and
+# the binary directory's `include/` the generated <core/Config.hpp>.
+list(APPEND MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS "${core-cpp_SOURCE_DIR}/src" "${core-cpp_BINARY_DIR}/include")
 string(REPLACE ";" "\\;" MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS "${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}")
 
 unset(MORPH_VETTED_HMAC_GUARD_BLOCKS_DEFAULT CACHE)
@@ -461,12 +423,9 @@ if(NOT MORPH_VETTED_HMAC_GUARD_DEFAULT_WORKS_UNGATED)
 endif()
 
 # ── MORPH_CLIENT_ONLY guard check ────────────────────────────────────────────
-# Configure-time proof that MORPH_CLIENT_ONLY actually suppresses the two
-# model-owning registrars (registerModelOnce, registerActionOnce) -- see
-# docs/spec/core/registry.md, "MORPH_CLIENT_ONLY". Reuses
-# MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS (morph + glaze include dirs; see that
-# guard's own comments above for why try_compile needs them forwarded this
-# way rather than via LINK_LIBRARIES).
+# Proof that MORPH_CLIENT_ONLY actually suppresses the two model-owning
+# registrars (registerModelOnce, registerActionOnce) -- see
+# docs/spec/core/registry.md, "MORPH_CLIENT_ONLY".
 #
 # compile_checks/client_only_no_model_link.cpp declares (never defines)
 # ClientOnlyModel's constructor and execute(). Two probes, in opposite
@@ -475,27 +434,36 @@ endif()
 #   - WITH MORPH_CLIENT_ONLY defined: must LINK (the model-owning registrars
 #     are macroed away, so nothing in the program ever references either
 #     undefined symbol).
-#   - WITHOUT it (today's default): must FAIL TO LINK (the registrars' lambda
-#     bodies do reference them, and the linker cannot resolve either symbol).
-unset(MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE CACHE)
-try_compile(MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE
-    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_no_model_link.cpp"
-    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
-    CXX_STANDARD 23
-    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
-    OUTPUT_VARIABLE MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE_OUTPUT
-)
-if(NOT MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE)
-    message(FATAL_ERROR
-        "MORPH_CLIENT_ONLY guard check failed: "
-        "compile_checks/client_only_no_model_link.cpp failed to link with "
-        "MORPH_CLIENT_ONLY defined, even though ClientOnlyModel's constructor "
-        "and execute() are never called anywhere in that program (the "
-        "model-owning registrars must be fully suppressed).\n"
-        "--- compiler/linker output ---\n"
-        "${MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE_OUTPUT}")
-endif()
+#   - WITHOUT it (today's default): must FAIL TO LINK, and must fail on
+#     ClientOnlyModel's symbols (the registrars' lambda bodies do reference
+#     them, and the linker cannot resolve either).
+#
+# The probes that must link, and the two that must also run, are ordinary
+# build-time targets rather than try_compile()/try_run(): morph's headers use
+# core-cpp's compiled modules (core::net's event loop, through
+# TimeoutScheduler), and a try_compile() scratch project can link only
+# imported targets -- core-cpp's are built by this project, after configure.
+# A probe that fails to link now fails the build rather than the configure;
+# the run probes are ctest cases. The probes link morph's dependencies
+# directly rather than morph::morph, whose interface carries MORPH_CLIENT_ONLY
+# when that option is on, so each probe decides the macro for itself.
+add_library(morph_guard_probe_deps INTERFACE)
+target_include_directories(morph_guard_probe_deps INTERFACE "${PROJECT_SOURCE_DIR}/include")
+target_link_libraries(morph_guard_probe_deps INTERFACE
+    glaze::glaze core::base core::async core::net core::platform
+    $<TARGET_NAME_IF_EXISTS:Threads::Threads>)
 
+add_executable(morph_client_only_guard_links compile_checks/client_only_no_model_link.cpp)
+target_compile_definitions(morph_client_only_guard_links PRIVATE MORPH_CLIENT_ONLY)
+target_link_libraries(morph_client_only_guard_links PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_client_only_guard_links)
+add_test(NAME morph_client_only_guard_links COMMAND morph_client_only_guard_links)
+set_tests_properties(morph_client_only_guard_links PROPERTIES TIMEOUT 60)
+
+# The negative probe stays a configure-time try_compile(): the link failure is
+# the assertion. Its scratch project cannot link core-cpp either, so a failure
+# alone would prove nothing; the check is that the linker named
+# ClientOnlyModel -- the symbols the default registrars reference.
 unset(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE CACHE)
 try_compile(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE
     SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_no_model_link.cpp"
@@ -503,6 +471,11 @@ try_compile(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE
     CXX_STANDARD 23
     OUTPUT_VARIABLE MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT
 )
+# GNU ld: "undefined reference to `ClientOnlyModel::...", lld: "undefined
+# symbol: ClientOnlyModel::...", MSVC: "unresolved external symbol ...
+# ClientOnlyModel...", ld64: "ClientOnlyModel::..., referenced from".
+set(_morph_client_only_unresolved
+    "(undefined reference to|undefined symbol:|unresolved external symbol)[^\n]*ClientOnlyModel|ClientOnlyModel[^\n]*referenced from")
 if(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE)
     message(FATAL_ERROR
         "MORPH_CLIENT_ONLY guard check failed: "
@@ -513,54 +486,30 @@ if(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE)
         "probe is not actually proving anything about the guard).\n"
         "--- compiler/linker output ---\n"
         "${MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT}")
+elseif(NOT MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT MATCHES "${_morph_client_only_unresolved}")
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_no_model_link.cpp failed to link WITHOUT "
+        "MORPH_CLIENT_ONLY defined, as it must -- but the linker did not name "
+        "ClientOnlyModel, so it failed for some other reason and proves "
+        "nothing about the guard.\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT}")
 endif()
+unset(_morph_client_only_unresolved)
 
-# The two try_compile() checks above only prove the *registration-suppression*
-# half of the guard (static-init-time link resolution). The other half --
-# that Bridge::executeVia's localOp actually throws std::logic_error at
-# *runtime* under MORPH_CLIENT_ONLY, instead of silently calling
-# Model::execute -- needs the probe to actually run, not just link. try_run()
-# compiles AND executes compile_checks/client_only_runtime_throw.cpp,
-# capturing its exit code (0 = the expected std::logic_error was caught).
-unset(MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED CACHE)
-unset(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE CACHE)
-try_run(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED
-    "${CMAKE_CURRENT_BINARY_DIR}/client_only_runtime_throw_check"
-    "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_runtime_throw.cpp"
-    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
-    CXX_STANDARD 23
-    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
-    # CMAKE_THREAD_LIBS_INIT (a raw linker-flag string set by the outer
-    # project's find_package(Threads REQUIRED) at CMakeLists.txt:102, e.g.
-    # "-lpthread" on Linux, empty on platforms needing nothing extra) rather
-    # than the Threads::Threads *target*: unlike Qt6::Core/Network/WebSockets
-    # (an exported find_package(Qt6) target, used the same way by the
-    # MORPH_QT_NO_SSL_GUARD_COMPILES check above), the CMake-bundled
-    # FindThreads module's imported target does not reliably resolve inside
-    # try_run()'s isolated scratch project on every platform -- confirmed by
-    # a real CI failure on Windows/MSVC ("Target ... links to: Threads::Threads
-    # ... but the target was not found").
-    LINK_LIBRARIES "${CMAKE_THREAD_LIBS_INIT}"
-    COMPILE_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT
-    RUN_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT
-)
-if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED)
-    message(FATAL_ERROR
-        "MORPH_CLIENT_ONLY guard check failed: "
-        "compile_checks/client_only_runtime_throw.cpp failed to compile with "
-        "MORPH_CLIENT_ONLY defined.\n"
-        "--- compiler output ---\n"
-        "${MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT}")
-endif()
-if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE EQUAL 0)
-    message(FATAL_ERROR
-        "MORPH_CLIENT_ONLY guard check failed: "
-        "compile_checks/client_only_runtime_throw.cpp did not observe the "
-        "expected std::logic_error from Bridge::executeVia's localOp under "
-        "MORPH_CLIENT_ONLY (exit code ${MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE}).\n"
-        "--- program output ---\n"
-        "${MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT}")
-endif()
+# The link probe above only proves the *registration-suppression* half of the
+# guard (static-init-time link resolution). The other half -- that
+# Bridge::executeVia's localOp actually throws std::logic_error at *runtime*
+# under MORPH_CLIENT_ONLY, instead of silently calling Model::execute -- needs
+# the probe to run: compile_checks/client_only_runtime_throw.cpp exits 0 when
+# the expected std::logic_error was caught.
+add_executable(morph_client_only_runtime_throw compile_checks/client_only_runtime_throw.cpp)
+target_compile_definitions(morph_client_only_runtime_throw PRIVATE MORPH_CLIENT_ONLY)
+target_link_libraries(morph_client_only_runtime_throw PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_client_only_runtime_throw)
+add_test(NAME morph_client_only_runtime_throw COMMAND morph_client_only_runtime_throw)
+set_tests_properties(morph_client_only_runtime_throw PROPERTIES TIMEOUT 60)
 
 # BRIDGE_REGISTER_ACTION_FOR_CLIENT lets a MORPH_CLIENT_ONLY client
 # register an action's ActionTraits (JSON codecs + an explicitly-named Result
@@ -568,37 +517,65 @@ endif()
 # docs/spec/core/registry.md, "BRIDGE_REGISTER_ACTION_FOR_CLIENT".
 # compile_checks/client_only_facade_no_model_header.cpp forward-declares (never
 # defines) ClientOnlyFacadeModel and proves the resulting ActionTraits
-# specialisation still round-trips JSON correctly. try_run(), not try_compile():
-# this probe's main() actually exercises toJson/fromJson, not just links.
-unset(MORPH_CLIENT_ONLY_FACADE_COMPILED CACHE)
-unset(MORPH_CLIENT_ONLY_FACADE_EXITCODE CACHE)
-try_run(MORPH_CLIENT_ONLY_FACADE_EXITCODE MORPH_CLIENT_ONLY_FACADE_COMPILED
-    "${CMAKE_CURRENT_BINARY_DIR}/client_only_facade_check"
-    "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_facade_no_model_header.cpp"
-    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
-    CXX_STANDARD 23
-    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
-    LINK_LIBRARIES "${CMAKE_THREAD_LIBS_INIT}"
-    COMPILE_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_FACADE_COMPILE_OUTPUT
-    RUN_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_FACADE_RUN_OUTPUT
-)
-if(NOT MORPH_CLIENT_ONLY_FACADE_COMPILED)
-    message(FATAL_ERROR
-        "BRIDGE_REGISTER_ACTION_FOR_CLIENT guard check failed: "
-        "compile_checks/client_only_facade_no_model_header.cpp failed to "
-        "compile/link with MORPH_CLIENT_ONLY defined, even though "
-        "ClientOnlyFacadeModel is never a complete type anywhere in this "
-        "program (BRIDGE_REGISTER_ACTION_FOR_CLIENT must not require model "
-        "completeness).\n"
-        "--- compiler/linker output ---\n"
-        "${MORPH_CLIENT_ONLY_FACADE_COMPILE_OUTPUT}")
+# specialisation still round-trips JSON correctly: it builds, links and exits 0.
+add_executable(morph_client_only_facade compile_checks/client_only_facade_no_model_header.cpp)
+target_compile_definitions(morph_client_only_facade PRIVATE MORPH_CLIENT_ONLY)
+target_link_libraries(morph_client_only_facade PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_client_only_facade)
+add_test(NAME morph_client_only_facade COMMAND morph_client_only_facade)
+set_tests_properties(morph_client_only_facade PROPERTIES TIMEOUT 60)
+
+# Instrumented like every other executable here: on a sanitizer leg core-cpp's
+# modules are instrumented too (root CMakeLists.txt), and an uninstrumented
+# program linking them fails with the sanitizer runtime undefined.
+if(DEFINED AF_SANITIZER)
+    foreach(_morph_guard_probe IN ITEMS morph_client_only_guard_links morph_client_only_runtime_throw
+                                        morph_client_only_facade)
+        apply_sanitizers(${_morph_guard_probe} ${AF_SANITIZER})
+    endforeach()
+    unset(_morph_guard_probe)
 endif()
-if(NOT MORPH_CLIENT_ONLY_FACADE_EXITCODE EQUAL 0)
-    message(FATAL_ERROR
-        "BRIDGE_REGISTER_ACTION_FOR_CLIENT guard check failed: "
-        "compile_checks/client_only_facade_no_model_header.cpp did not "
-        "round-trip its action through toJson/fromJson correctly "
-        "(exit code ${MORPH_CLIENT_ONLY_FACADE_EXITCODE}).\n"
-        "--- program output ---\n"
-        "${MORPH_CLIENT_ONLY_FACADE_RUN_OUTPUT}")
+
+# ── Windows dialog canary ────────────────────────────────────────────────────
+# Proves that a morph test executable dies on a failed assert() or an abort()
+# instead of waiting on a dialog nobody will click, and that an invalid CRT
+# parameter is handled rather than raising one. Its main() asks for nothing:
+# linking core::testing_dialogs, as every test executable here does, is what
+# installs the suppression. Modelled on core-cpp's WindowsDialogCanary, and
+# judged the same way: by the marker each mode prints before it fails
+# (PASS_REGULAR_EXPRESSION, which also makes ctest ignore the exit status), not
+# by WILL_FAIL, which would score a run that never reached its assertion as a
+# pass. The TIMEOUT is what catches a dialog: a run still waiting when it
+# expires is waiting for a click.
+if(WIN32 AND TARGET core-cpp-testing_dialogs)
+    add_executable(morph_windows_dialog_canary windows_dialog_canary.cpp)
+    morph_suppress_test_dialogs(morph_windows_dialog_canary)
+    foreach(_mode IN ITEMS assert abort invalid-parameter)
+        add_test(NAME morph_windows_dialog_canary.${_mode} COMMAND morph_windows_dialog_canary ${_mode})
+        # `assert` and `abort` must kill the process; `invalid-parameter` must
+        # survive, because the suppression installs a no-op handler, so the one
+        # marker is the failure for two modes and the pass for the third.
+        set(_pass "failing by ${_mode}")
+        set(_fail "CONTINUED AFTER FAILURE")
+        if(_mode STREQUAL "invalid-parameter")
+            set(_pass "CONTINUED AFTER FAILURE")
+            set(_fail "")
+        endif()
+        # A Debug CRT writes abort()'s message to stderr, and the suppression
+        # keeps it there rather than dropping it: the abort run must show it. A
+        # Release UCRT writes none, and a multi-config generator does not say
+        # which it builds, so those keep the "failing by" marker.
+        if(_mode STREQUAL "abort" AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(_pass "abort\\(\\) has been called")
+        endif()
+        set_tests_properties(morph_windows_dialog_canary.${_mode} PROPERTIES
+            PASS_REGULAR_EXPRESSION "${_pass}"
+            FAIL_REGULAR_EXPRESSION "${_fail}"
+            TIMEOUT 60
+            SKIP_RETURN_CODE 77
+            LABELS "canary")
+    endforeach()
+    unset(_mode)
+    unset(_pass)
+    unset(_fail)
 endif()

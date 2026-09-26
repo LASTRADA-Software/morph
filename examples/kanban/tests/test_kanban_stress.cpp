@@ -12,10 +12,10 @@
 //
 //   1. The class the brief calls "StrandInterleaver" does not exist anywhere
 //      in the tree; strand_interleaver.hpp defines `DeterministicExecutor`,
-//      which sits *underneath* a `morph::exec::detail::StrandExecutor` as its
+//      which sits *underneath* a `morph::exec::detail::ModelStrands` as its
 //      `base` `IExecutor` and only runs posted tasks when explicitly
 //      `step()`/`runSchedule()`-d. It is exercised directly against
-//      `StrandExecutor` in test_strand_interleaver.cpp, naming the production
+//      `ModelStrands` in test_strand_interleaver.cpp, naming the production
 //      `detail::` types by hand.
 //   2. A `BackendRig{Mode::Local, ...}` builds its own `ThreadPoolExecutor`
 //      internally (backend_rig.hpp's Mode::Local branch) and hands it
@@ -23,7 +23,7 @@
 //      executor -- there is no seam for a test to substitute a
 //      `DeterministicExecutor` underneath that strand. `DeterministicExecutor`
 //      is therefore not wireable into a `BackendRig`-driven test at all: it is
-//      a lower-level harness for testing `StrandExecutor` in isolation, not a
+//      a lower-level harness for testing `ModelStrands` in isolation, not a
 //      knob `BackendRig`/`BoardModel` tests can reach.
 //
 // Given that, this test exercises the *real* concurrency guarantee design
@@ -79,7 +79,7 @@
 // shared-per-project instance semantics are a `Bridge`-level mechanism
 // (`registerModelShared`), unaffected by how `Bridge`/`LocalBackend` were
 // constructed. The result: every code path this test exercises is the real
-// morph core (Bridge, LocalBackend, StrandExecutor, ThreadPoolExecutor,
+// morph core (Bridge, LocalBackend, ModelStrands, ThreadPoolExecutor,
 // Completion) with zero Qt frames anywhere in the call graph, making this
 // CI job's own "no Qt/GUI involvement" premise genuinely true rather than
 // merely claimed.

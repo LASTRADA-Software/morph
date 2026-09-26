@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
@@ -62,18 +63,18 @@ TEST_CASE("Issue 2: attachThen on errored state does not call handler and does n
     REQUIRE_FALSE(thenFired);
 }
 
-// ── Issue 4: morph::exec::detail::StrandExecutor map cleaned up after queue drains ─────────────────
+// ── Issue 4: morph::exec::detail::ModelStrands map cleaned up after queue drains ─────────────────
 
-TEST_CASE("Issue 4: morph::exec::detail::StrandExecutor works correctly after strand entries are cleaned up",
+TEST_CASE("Issue 4: morph::exec::detail::ModelStrands works correctly after strand entries are cleaned up",
           "[strand][issue4]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::exec::detail::StrandExecutor strand{pool};
+    auto const strand = std::make_shared<morph::exec::detail::ModelStrands>(pool);
 
     constexpr int numKeys = 20;
     std::atomic<int> completed{0};
 
     for (int key = 1; key <= numKeys; ++key) {
-        strand.post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] { completed.fetch_add(1); });
+        strand->post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] { completed.fetch_add(1); });
     }
     REQUIRE(waitUntil([&] { return completed.load() == numKeys; }));
 
@@ -83,20 +84,20 @@ TEST_CASE("Issue 4: morph::exec::detail::StrandExecutor works correctly after st
     // Post again to confirm strand still works after cleanup
     std::atomic<int> completed2{0};
     for (int key = 1; key <= numKeys; ++key) {
-        strand.post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] { completed2.fetch_add(1); });
+        strand->post(morph::exec::detail::ModelId{static_cast<uint64_t>(key)}, [&] { completed2.fetch_add(1); });
     }
     REQUIRE(waitUntil([&] { return completed2.load() == numKeys; }));
 }
 
-TEST_CASE("Issue 4: morph::exec::detail::StrandExecutor per-key ordering preserved after re-use", "[strand][issue4]") {
+TEST_CASE("Issue 4: morph::exec::detail::ModelStrands per-key ordering preserved after re-use", "[strand][issue4]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::exec::detail::StrandExecutor strand{pool};
+    auto const strand = std::make_shared<morph::exec::detail::ModelStrands>(pool);
     morph::exec::detail::ModelId key{42};
 
     // First batch: drain and clean up
     std::atomic<int> batch1{0};
     for (int task = 0; task < 5; ++task) {
-        strand.post(key, [&] { batch1.fetch_add(1); });
+        strand->post(key, [&] { batch1.fetch_add(1); });
     }
     REQUIRE(waitUntil([&] { return batch1.load() == 5; }));
     std::this_thread::sleep_for(20ms);
@@ -106,7 +107,7 @@ TEST_CASE("Issue 4: morph::exec::detail::StrandExecutor per-key ordering preserv
     std::mutex orderMtx;
     std::atomic<int> batch2{0};
     for (int taskId = 0; taskId < 5; ++taskId) {
-        strand.post(key, [&, taskId] {
+        strand->post(key, [&, taskId] {
             std::scoped_lock lock{orderMtx};
             order.push_back(taskId);
             batch2.fetch_add(1);

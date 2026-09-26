@@ -89,6 +89,7 @@ behavioural differences between the two, collected in one table, are in
 [`core/backend.md`](core/backend.md) ·
 [`core/registry.md`](core/registry.md) ·
 [`core/completion.md`](core/completion.md) ·
+[`core/coroutines.md`](core/coroutines.md) ·
 [`core/wire.md`](core/wire.md) ·
 [`core/locality.md`](core/locality.md)
 

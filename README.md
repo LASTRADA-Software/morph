@@ -265,7 +265,7 @@ opt-in header you include only if you need it.
 
 | Namespace | Header(s) | What it gives you |
 |---|---|---|
-| `morph::exec` | `executor.hpp`, `strand.hpp` | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor`, per-model `StrandExecutor` |
+| `morph::exec` | `executor.hpp`, `strand.hpp` | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor`, per-model strands (`ModelStrands`, over core-cpp's `KeyedStrands`) |
 | `morph::async` | `completion.hpp` | `Completion<T>` — move-only result handle with `.then` / `.onError` |
 | `morph::model` | `registry.hpp`, `model.hpp`, `model_key.hpp` | Registration traits, validators, `ActionDispatcher`, type-erased holders, model primary keys |
 | `morph::backend` | `backend.hpp`, `remote.hpp` | `LocalBackend`, `RemoteServer`, `SimulatedRemoteBackend` |
@@ -415,9 +415,20 @@ validates) and enforce security-critical checks inside the model. See
 
 - **Compiler:** C++23 (developed against recent Clang; libstdc++/libc++). The
   default logger uses `std::println`, so a C++23 standard library is required.
-- **Dependencies:** [Glaze](https://github.com/stephenberry/glaze) (JSON
-  reflection), fetched via [vcpkg](https://vcpkg.io) (`vcpkg.json` manifest).
-  Optional: Qt 6 for the WebSocket transport and QML example.
+- **Dependencies:**
+  - [Glaze](https://github.com/stephenberry/glaze) (JSON reflection), from
+    [vcpkg](https://vcpkg.io) (`vcpkg.json` manifest) or fetched through CPM.
+  - [core-cpp](https://github.com/contour-terminal/core-cpp) v0.5.0, the
+    shared C++23 foundation of the Contour Terminal projects, fetched through
+    CPM: morph's timers run on its event loop, and `morph::net` takes base64
+    and its wakeup primitive from it. morph itself stays header-only, but
+    `core::base`, `core::net` and `core::platform` are static libraries, so
+    a project that links `morph::morph` also builds them. Under
+    single-threaded WebAssembly core-cpp builds its WebAssembly subset.
+  - Optional: Qt 6 for the WebSocket transport and QML example.
+  - Fetched dependencies are kept in CPM's source cache, `.cache/cpm` by
+    default (`CPM_SOURCE_CACHE` overrides it), so a second configure clones
+    nothing.
 - **Build system:** CMake (presets in `CMakePresets.json`) + Ninja.
 
 ```sh
@@ -437,6 +448,7 @@ Relevant CMake options: `MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
 
 ```sh
 cmake -S . -B build-min -DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF
+cmake --build build-min
 cmake --install build-min --prefix /your/prefix
 ```
 
@@ -450,7 +462,10 @@ compile definitions, so nothing else has to be restated. Point
 `CMAKE_PREFIX_PATH` at the prefix you installed into. Glaze is installed
 alongside morph when the build fetched it, and `morphConfig.cmake` resolves it
 for you via `find_dependency` — an installed morph whose Glaze cannot be found
-fails at `find_package` time rather than at compile time.
+fails at `find_package` time rather than at compile time. core-cpp, whose
+static modules morph links, is built and installed alongside morph the same
+way, and found through `find_dependency(core-cpp 0.5)`: that is why the
+install needs the build step before it.
 
 Optional components install only when their build option was on, and are
 requested by name:
@@ -495,7 +510,7 @@ what the interface target would have: Glaze at the pinned version (currently
 7.4), a C++23 standard library (the default logger uses `std::println`), the
 thread library, and each optional subsystem's own dependencies (Qt 6 for
 `morph::qt`, SQLite3 for `morph::offline_sqlite`). If the only Glaze around is
-the copy `FetchContent` dropped in a build directory, that recipe also points
+the copy CPM dropped in its source cache, that recipe also points
 your include path into someone's build tree. Prefer `find_package`.
 
 ## Examples
