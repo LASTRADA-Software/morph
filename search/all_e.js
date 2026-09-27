@@ -41,5 +41,7 @@ var searchData=
   ['outboxrelayresult_38',['OutboxRelayResult',['../d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html',1,'morph::journal']]],
   ['outcome_39',['outcome',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353',1,'morph::journal::LogEntry']]],
   ['overflow_40',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]],
-  ['overview_41',['Overview',['../index.html#overview',1,'']]]
+  ['overview_41',['Overview',['../index.html#overview',1,'']]],
+  ['owned_5flocal_5fbridge_2ehpp_42',['owned_local_bridge.hpp',['../dd/d81/owned__local__bridge_8hpp.html',1,'']]],
+  ['ownedlocalbridge_43',['OwnedLocalBridge',['../d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html',1,'morph::qt::bridge::detail']]]
 ];

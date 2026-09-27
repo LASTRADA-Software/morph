@@ -135,6 +135,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:aed0189c9132f90e94521769f026aab2e" id="r_aed0189c9132f90e94521769f026aab2e"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
 <tr class="memitem:aed0189c9132f90e94521769f026aab2e template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aed0189c9132f90e94521769f026aab2e">execute</a> (const std::string &amp;actionType, const std::string &amp;bodyJson, OnReply onReply, OnError onError)</td></tr>
 <tr class="memdesc:aed0189c9132f90e94521769f026aab2e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">bodyJson</code> as <code class="param">actionType's</code> body via the generic <span class="tt">executeJson</span> path, invoking <code class="param">onReply</code> / <code class="param">onError</code> on the GUI thread once the reply arrives.  <br /></td></tr>
+<tr class="memitem:a8055c595444d3e38459847d2a41fbf5d" id="r_a8055c595444d3e38459847d2a41fbf5d"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a8055c595444d3e38459847d2a41fbf5d">servesAction</a> (std::string_view actionId) const noexcept</td></tr>
+<tr class="memdesc:a8055c595444d3e38459847d2a41fbf5d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <span class="tt">Model</span> has an action registered under <code class="param">actionId</code>, without invoking it. Forwards to <span class="tt">BridgeHandler::servesAction</span>; see there for the full contract.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt;<br />
@@ -147,7 +149,7 @@ class morph::qt::bridge::GenericModelBridgeCore&lt; Model, Sharing &gt;</div><p>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a9ad1c3d17cec3821abf667147520c6b7" name="a9ad1c3d17cec3821abf667147520c6b7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a9ad1c3d17cec3821abf667147520c6b7">&#9670;&#160;</a></span>GenericModelBridgeCore() <span class="overload">[1/2]</span></h2>
@@ -177,7 +179,7 @@ template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt; </
 <p>Constructs the core with its own private, always-local <span class="tt">Bridge</span> (<span class="tt">ThreadPoolExecutor</span> + <span class="tt"><a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop.">QtExecutor</a></span> + <span class="tt">LocalBackend</span>). </p>
 <p>Use the <span class="tt">(Bridge&amp;, IExecutor*)</span> overload instead when the app already has a <span class="tt">Bridge</span> (remote/socket mode, or one shared across multiple presenters) that this core should compose over rather than duplicate. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -220,7 +222,7 @@ template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt; </
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -284,7 +286,45 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8055c595444d3e38459847d2a41fbf5d" name="a8055c595444d3e38459847d2a41fbf5d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8055c595444d3e38459847d2a41fbf5d">&#9670;&#160;</a></span>servesAction()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model, typename Sharing = ::morph::bridge::NoSharing&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool <a class="el" href="../../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html">morph::qt::bridge::GenericModelBridgeCore</a>&lt; Model, Sharing &gt;::servesAction </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>actionId</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether <span class="tt">Model</span> has an action registered under <code class="param">actionId</code>, without invoking it. Forwards to <span class="tt">BridgeHandler::servesAction</span>; see there for the full contract. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">actionId</td><td>Action type id to check. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <span class="tt">execute(actionId, ...)</span> would find a registered action. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d7/d52/generic__model__bridge__core_8hpp_source.html">generic_model_bridge_core.hpp</a>.</p>
 
 </div>
 </div>

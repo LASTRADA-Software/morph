@@ -164,10 +164,15 @@ var annotated_dup =
       ] ],
       [ "qt", null, [
         [ "bridge", null, [
-          [ "GenericModelBridgeCore", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore" ]
+          [ "detail", null, [
+            [ "OwnedLocalBridge", "d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html", "d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge" ]
+          ] ],
+          [ "GenericModelBridgeCore", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html", "dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore" ],
+          [ "MultiModelBridgeCore", "d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore.html", "d3/d2e/classmorph_1_1qt_1_1bridge_1_1MultiModelBridgeCore" ]
         ] ],
         [ "forms", null, [
-          [ "FormsControllerCore", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore" ]
+          [ "FormsControllerCore", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html", "d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore" ],
+          [ "MultiModelFormsControllerCore", "d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore.html", "d2/da2/classmorph_1_1qt_1_1forms_1_1MultiModelFormsControllerCore" ]
         ] ],
         [ "QtExecutor", "d4/d30/classmorph_1_1qt_1_1QtExecutor.html", "d4/d30/classmorph_1_1qt_1_1QtExecutor" ],
         [ "QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend" ],

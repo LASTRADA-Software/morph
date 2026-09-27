@@ -17,6 +17,7 @@ var searchData=
   ['groupkindname_14',['groupKindName',['../dd/d6c/layout_8hpp.html#a828cd5d50c7e0aee899144c6022ed8e8',1,'morph::forms']]],
   ['groupseparator_15',['groupSeparator',['../dc/ddc/structmorph_1_1render_1_1NumericLocale.html#a5f8ee5c699ec71919061d3041aa434a1',1,'morph::render::NumericLocale']]],
   ['guard_16',['guard',['../de/d0d/classmorph_1_1async_1_1CallbackToken.html#a4ac17ad8d956cc7df909f482f2c737da',1,'morph::async::CallbackToken::guard()'],['../d7/d9f/classmorph_1_1async_1_1CallbackScope.html#a5d4df9c68ae850b74193f9c4f060ae90',1,'morph::async::CallbackScope::guard()']]],
-  ['guiexecutor_17',['guiExecutor',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a7cf0765d2e6bdcc796695116019542f4',1,'morph::bridge::BridgeHandler']]],
-  ['guis_18',['GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs'],['../index.html#morphforms--schemas-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;morph::forms&lt;/span&gt; — schemas for auto-built GUIs']]]
+  ['gui_17',['gui',['../d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html#a832183563d63b62471c66ad54b07bd32',1,'morph::qt::bridge::detail::OwnedLocalBridge']]],
+  ['guiexecutor_18',['guiExecutor',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a7cf0765d2e6bdcc796695116019542f4',1,'morph::bridge::BridgeHandler']]],
+  ['guis_19',['GUIs',['../index.html#forms--json-schema-generation-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;forms/&lt;/span&gt; — JSON-Schema generation for auto-built GUIs'],['../index.html#morphforms--schemas-for-auto-built-guis',1,'&lt;span class=&quot;tt&quot;&gt;morph::forms&lt;/span&gt; — schemas for auto-built GUIs']]]
 ];

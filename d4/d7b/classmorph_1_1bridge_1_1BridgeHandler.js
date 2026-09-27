@@ -8,6 +8,7 @@ var classmorph_1_1bridge_1_1BridgeHandler =
     [ "primary", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a9b5b501777040b73d91d80815a824cd0", null ],
     [ "instances", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a30fc608c0c73cee91e8a1481cacd4b00", null ],
     [ "executeJson", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a71c17b7c7473dcbef2bc19cebd6ba337", null ],
+    [ "servesAction", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a192433dbc0713c2017bfca54e555fb1a", null ],
     [ "guiExecutor", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a7cf0765d2e6bdcc796695116019542f4", null ],
     [ "isBound", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a585623f5455bba799db2e7ca0c22a947", null ],
     [ "whenBound", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ad28c2d2bf1f14ac08f51340fb7f3f07c", null ],
