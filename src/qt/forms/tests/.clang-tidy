@@ -1,0 +1,58 @@
+# Checks suppressed inside this test directory only, on the same terms as the
+# framework's own tests/.clang-tidy: an entry here is a check whose finding is
+# *test idiom* -- a property of Catch2, or of the BRIDGE_REGISTER_MODEL/ACTION
+# macros' own requirements -- rather than a defect. One entry per check, with
+# the reason it cannot fire on anything worth fixing.
+
+# bugprone-chained-comparison: `CHECK(a == b)` expands to
+# `catchAssertionHandler.handleExpr(Catch::Decomposer() <= a == b)`, so the
+# check sees `v0 <= v1 == v2` and reports a chained comparison. Nothing in the
+# test source compares three things: the `<=` it objects to is Catch2's own
+# capture hook, and both fixes it suggests -- parenthesise, or split with a
+# logical operator -- would defeat the expression decomposition that makes a
+# failing assertion print its two operands. Catch2 says so itself; the macro
+# definition carries `/* NOLINT(bugprone-chained-comparison) */` on that very
+# line in 3.15.3. CI pins catch2 3.4.0 -- ubuntu-24.04's package, which
+# predates that comment -- which is why the finding reaches CI here and not on
+# a workstation with a current Catch2.
+
+# misc-use-internal-linkage: every hit is a Catch2 fixture -- a model or action
+# struct used only by the TEST_CASEs beside it -- and the fix-it it proposes
+# does not compile. BRIDGE_REGISTER_MODEL/ACTION expand to
+# `template <> struct morph::model::ModelTraits<M> {...}`, and an explicit
+# specialisation written with a qualified name must appear in a namespace
+# enclosing `morph::model`; from inside an anonymous namespace clang rejects it
+# with "class template specialization of 'ModelTraits' not in a namespace
+# enclosing 'model'". glaze's reflection-based get_name() likewise needs these
+# types to have external linkage -- same reasoning tests/.clang-tidy's own
+# entry for this check gives, and the same reason this directory's own
+# test_forms_controller_core.cpp already carries the idiom unflagged (its
+# lines simply hadn't been part of a diff before test_multi_model_bridge_core.cpp
+# introduced a second file with the same shape).
+
+# readability-convert-member-functions-to-static: fires on the `execute`
+# methods of fixture models. A stub action handler ignores its own state,
+# which is exactly what a production model never does -- the non-static
+# signature is the interface `BridgeHandler<Model>::execute` dispatches
+# through, not an oversight. Same reasoning, same precedent file, as the
+# `misc-use-internal-linkage` entry above.
+#
+# Directory-scoped, and no wider, for the same reason tests/.clang-tidy and
+# every examples/*/tests/.clang-tidy copy is: clang-tidy offers no finer
+# granularity than a directory, so this sits here rather than at `src/qt/`,
+# where it would also cover non-test sources. `InheritParentConfig` keeps
+# every other check the repository-root .clang-tidy enables; exactly these
+# entries are subtracted, and only here.
+#
+# This test directory predates the gate that used to keep the
+# bugprone-chained-comparison copy in step across every Catch2 test directory
+# (see tests/.clang-tidy's own note -- "the gate that checked this was
+# removed"); it never received its own copy, which is why test_forms_controller_core.cpp
+# carried these idioms unflagged for as long as it did.
+
+Checks: >
+  -bugprone-chained-comparison,
+  -misc-use-internal-linkage,
+  -readability-convert-member-functions-to-static
+
+InheritParentConfig: true

@@ -130,9 +130,9 @@ std::optional<LoginResult> decodeLoginResult(const std::string& resultJson) {
 // ── FormsBridge ─────────────────────────────────────────────────────────────
 
 FormsBridge::FormsBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : QObject{parent}, _bridge{bridge}, _controller{bridge, executor, bookmarkSchemasJson()} {}
+    : QObject{parent}, _bridge{bridge}, _core{bridge, executor, bookmarkSchemasJson()} {}
 
-QString FormsBridge::schemasJson() const { return QString::fromStdString(_controller.schemasJson()); }
+QString FormsBridge::schemasJson() const { return QString::fromStdString(_core.schemasJson()); }
 
 void FormsBridge::onLoginSucceeded(const LoginResult& result) {
     ::morph::session::Context session;
@@ -148,12 +148,13 @@ void FormsBridge::submitIfValid(const QString& actionType, const QString& bodyJs
     // doc comment for the full argument. `_callbacks.guard(...)` is the
     // general-purpose gate (`CallbackScope`'s `guard()`, not `Completion`'s
     // `then(scope, fn)` overload) because the `Completion` these end up on is
-    // created and attached *inside* `BookmarkFormsController::submitIfValid`,
-    // one frame further in; what this function hands over is a pair of plain
-    // callables. Wrapping them here keeps the controller a
-    // callback-shape-agnostic seam and puts the gate in the class that owns the
-    // captured `this`, which is where it belongs.
-    _controller.submitIfValid(
+    // created and attached *inside*
+    // `MultiModelFormsControllerCore::submitIfValid`, one frame further in;
+    // what this function hands over is a pair of plain callables. Wrapping
+    // them here keeps the controller a callback-shape-agnostic seam and puts
+    // the gate in the class that owns the captured `this`, which is where it
+    // belongs.
+    _core.submitIfValid(
         actionType.toStdString(), bodyJson.toStdString(), _callbacks.guard([this, actionType](std::string resultJson) {
             // A successful Login is the one reply this client reads rather
             // than merely displays: the token has to be installed before

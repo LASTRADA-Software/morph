@@ -2,9 +2,10 @@
 //
 // The QML-adapter layer's own suite: `FormsBridge`, `BookmarkBridge`,
 // `TagBridge` and `SharedFeedBridge` (`gui_lib/bookmark_qml_bridges.hpp`) plus
-// the action-type routing in `BookmarkFormsController::dispatch`
-// (`gui_lib/bookmark_forms_controller.cpp`) — everything that stands between
-// the Task 17 presenters and the QML shell.
+// the action-type routing `FormsBridge` gets from the composed
+// `morph::qt::forms::MultiModelFormsControllerCore`
+// (`include/morph/qt/forms/multi_model_forms_controller_core.hpp`) —
+// everything that stands between the Task 17 presenters and the QML shell.
 //
 // Why this file exists as a *separate* suite from test_bookmark_presenter.cpp:
 // those adapters are the only place in the rung where a `BookmarkView` becomes
@@ -681,14 +682,16 @@ TEST_CASE("BookmarkBridge::bulkArchive maps true to BulkArchiveOp::Archive and f
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// BookmarkFormsController::dispatch — the six-entry routing table
+// MultiModelFormsControllerCore's routing — every action reaches its model
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("BookmarkFormsController::dispatch routes every one of the six form actions to the model that serves it",
+TEST_CASE("FormsBridge routes every one of the six form actions to the model that serves it",
           "[bookmarks][gui][qml-bridges]") {
-    // `dispatch()` maps an action-type *string* to one of three
-    // `BridgeHandler`s. A typo, or a new action added to bookmark_schemas.hpp
-    // and forgotten here, is not a compile error: the form renders, the button
+    // The composed MultiModelFormsControllerCore<NoSharing, AuthModel,
+    // BookmarkModel, TagModel> routes an action-type *string* to whichever of
+    // the three models serves it. A typo, or a new action added to
+    // bookmark_schemas.hpp and forgotten in one of the three model
+    // registrations, is not a compile error: the form renders, the button
     // submits, and the reply is an error message. This case submits all six
     // ids exactly as the QML string literals spell them.
     DbFixture fixture;
@@ -760,12 +763,12 @@ TEST_CASE("BookmarkFormsController::dispatch routes every one of the six form ac
     CHECK(tagIdNamed(after, QStringLiteral("home")) == -1);
 }
 
-TEST_CASE("BookmarkFormsController::dispatch reports an unrouted action type instead of dropping it",
-          "[bookmarks][gui][qml-bridges]") {
-    // The exact failure mode the routing table risks: a QML string literal
-    // that no `if` in `dispatch()` matches. It must surface as a message in
-    // the status line (BookmarkListView.qml:193 renders `actionType + ": " +
-    // payload` on `!ok`), never as a submit that silently does nothing.
+TEST_CASE("FormsBridge reports an unrouted action type instead of dropping it", "[bookmarks][gui][qml-bridges]") {
+    // The exact failure mode routing risks: a QML string literal none of the
+    // three composed models' servesAction() recognises. It must surface as a
+    // message in the status line (BookmarkListView.qml:193 renders
+    // `actionType + ": " + payload` on `!ok`), never as a submit that
+    // silently does nothing.
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     bookmarks::gui::FormsBridge forms{rig->bridge(0), rig->executor()};
