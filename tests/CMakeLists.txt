@@ -510,6 +510,55 @@ target_link_libraries(morph_client_only_runtime_throw PRIVATE morph_guard_probe_
 morph_suppress_test_dialogs(morph_client_only_runtime_throw)
 add_test(NAME morph_client_only_runtime_throw COMMAND morph_client_only_runtime_throw)
 set_tests_properties(morph_client_only_runtime_throw PROPERTIES TIMEOUT 60)
+# ── BRIDGE_DECLARE_MODEL/BRIDGE_DECLARE_ACTION link-time canary ─────────────
+# Configure-time proof that a model/action declared via BRIDGE_DECLARE_MODEL/
+# BRIDGE_DECLARE_ACTION but never registered via BRIDGE_REGISTER_MODEL_SOURCE/
+# BRIDGE_REGISTER_ACTION_SOURCE anywhere in the link fails to LINK -- see
+# docs/spec/core/registry.md, "Moving a registrar out of the header".
+#
+# Two probes, in opposite directions, prove the canary does something real:
+#   - declare_only_no_source_link.cpp ALONE: must FAIL TO LINK. It declares a
+#     real, fully-defined model/action and never calls
+#     BRIDGE_REGISTER_MODEL_SOURCE/BRIDGE_REGISTER_ACTION_SOURCE for either,
+#     so nothing in it reaches Bridge's registration machinery -- it stays a
+#     configure-time try_compile() against MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS,
+#     same as the MORPH_CLIENT_ONLY guard's own negative probe above.
+#   - declare_only_no_source_link.cpp PLUS declare_only_source_provided.cpp
+#     (which does call both SOURCE macros for the same model/action): must
+#     LINK. This direction calls BRIDGE_REGISTER_ACTION_SOURCE, whose
+#     registrar needs registerActionExecutorOnce's definition in bridge.hpp
+#     and, through it, TimeoutScheduler's core-cpp compiled net module -- a
+#     try_compile() scratch project cannot link that (same reasoning as the
+#     MORPH_CLIENT_ONLY guard's positive probe above), so this direction is a
+#     real linked executable via morph_guard_probe_deps instead.
+unset(MORPH_DECLARE_SOURCE_CANARY_MISSING_FAILS CACHE)
+try_compile(MORPH_DECLARE_SOURCE_CANARY_MISSING_FAILS
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/declare_only_no_source_link.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    OUTPUT_VARIABLE MORPH_DECLARE_SOURCE_CANARY_MISSING_OUTPUT
+)
+if(MORPH_DECLARE_SOURCE_CANARY_MISSING_FAILS)
+    message(FATAL_ERROR
+        "BRIDGE_DECLARE_MODEL/BRIDGE_DECLARE_ACTION canary check failed: "
+        "compile_checks/declare_only_no_source_link.cpp LINKED successfully "
+        "even though it never calls BRIDGE_REGISTER_MODEL_SOURCE/"
+        "BRIDGE_REGISTER_ACTION_SOURCE. The whole point of BRIDGE_DECLARE_* "
+        "is that a forgotten .cpp-side registration call fails to link "
+        "instead of silently compiling into a runtime \"unknown model "
+        "type\"/\"unknown action\" -- see docs/spec/core/registry.md, "
+        "\"Moving a registrar out of the header\".\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_DECLARE_SOURCE_CANARY_MISSING_OUTPUT}")
+endif()
+
+add_executable(morph_declare_source_canary
+    compile_checks/declare_only_no_source_link.cpp
+    compile_checks/declare_only_source_provided.cpp)
+target_link_libraries(morph_declare_source_canary PRIVATE morph_guard_probe_deps)
+morph_suppress_test_dialogs(morph_declare_source_canary)
+add_test(NAME morph_declare_source_canary COMMAND morph_declare_source_canary)
+set_tests_properties(morph_declare_source_canary PROPERTIES TIMEOUT 60)
 
 # BRIDGE_REGISTER_ACTION_FOR_CLIENT lets a MORPH_CLIENT_ONLY client
 # register an action's ActionTraits (JSON codecs + an explicitly-named Result
@@ -530,7 +579,7 @@ set_tests_properties(morph_client_only_facade PROPERTIES TIMEOUT 60)
 # program linking them fails with the sanitizer runtime undefined.
 if(DEFINED AF_SANITIZER)
     foreach(_morph_guard_probe IN ITEMS morph_client_only_guard_links morph_client_only_runtime_throw
-                                        morph_client_only_facade)
+                                        morph_client_only_facade morph_declare_source_canary)
         apply_sanitizers(${_morph_guard_probe} ${AF_SANITIZER})
     endforeach()
     unset(_morph_guard_probe)

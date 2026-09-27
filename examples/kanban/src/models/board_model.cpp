@@ -1474,3 +1474,27 @@ GetActivityResult BoardModel::execute(const GetActivity& /*action*/) {
 }
 
 }  // namespace kanban
+
+// The actual registration board_model.hpp's BRIDGE_DECLARE_MODEL/
+// BRIDGE_DECLARE_ACTION calls defer to this one translation unit -- see the
+// comment above those calls, and docs/spec/core/registry.md, "Moving a
+// registrar out of the header". A model header reached by many translation
+// units (kanban's tests, the QML/GUI bridge, app.cpp) pays for this once,
+// here, instead of once per including TU.
+BRIDGE_REGISTER_MODEL_SOURCE(kanban::BoardModel)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::OpenBoard)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::GetBoardState)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::CreateColumn)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::CreateSwimlane)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::CreateTask)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::AddComment)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::MoveTaskPosition)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::GetEventsSince)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::GetActivity)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::CreateRule)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::GetRules)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::DeleteRule)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::ApplyTagMutation)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::AddAttachment)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::GetAttachments)
+BRIDGE_REGISTER_ACTION_SOURCE(kanban::BoardModel, kanban::RemoveAttachment)

@@ -543,23 +543,32 @@ private:
 
 }  // namespace kanban
 
-BRIDGE_REGISTER_MODEL(kanban::BoardModel, "BoardModel")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::OpenBoard, "OpenBoard", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetBoardState, "GetBoardState", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateColumn, "CreateColumn")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateSwimlane, "CreateSwimlane")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateTask, "CreateTask")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::AddComment, "AddComment")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::MoveTaskPosition, "MoveTaskPosition")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetEventsSince, "GetEventsSince", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetActivity, "GetActivity", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateRule, "CreateRule")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetRules, "GetRules", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::DeleteRule, "DeleteRule")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::ApplyTagMutation, "ApplyTagMutation")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::AddAttachment, "AddAttachment")
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetAttachments, "GetAttachments", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::RemoveAttachment, "RemoveAttachment")
+// Declared, not registered: this header is reached by ~20 translation units
+// (test files, the QML/GUI bridge, app.cpp), and BRIDGE_REGISTER_MODEL/
+// BRIDGE_REGISTER_ACTION's registrar initialiser would instantiate this
+// model's action codecs, buildActionDescription<A>, and forms::schemaJson<A>
+// again in every one of them -- a measured double-digit CPU-second cost per
+// TU, for codecs the overwhelming majority of those TUs never call (see
+// docs/spec/core/registry.md, "Moving a registrar out of the header"). The
+// actual registration happens once, in board_model.cpp, via
+// BRIDGE_REGISTER_MODEL_SOURCE/BRIDGE_REGISTER_ACTION_SOURCE.
+BRIDGE_DECLARE_MODEL(kanban::BoardModel, "BoardModel")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::OpenBoard, "OpenBoard", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::GetBoardState, "GetBoardState", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::CreateColumn, "CreateColumn")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::CreateSwimlane, "CreateSwimlane")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::CreateTask, "CreateTask")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::AddComment, "AddComment")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::MoveTaskPosition, "MoveTaskPosition")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::GetEventsSince, "GetEventsSince", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::GetActivity, "GetActivity", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::CreateRule, "CreateRule")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::GetRules, "GetRules", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::DeleteRule, "DeleteRule")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::ApplyTagMutation, "ApplyTagMutation")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::AddAttachment, "AddAttachment")
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::GetAttachments, "GetAttachments", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(kanban::BoardModel, kanban::RemoveAttachment, "RemoveAttachment")
 
 // `BoardModel` is keyed on the project the board belongs to, and `OpenBoard`
 // is the action that names it. `BRIDGE_MODEL_KEY` deduces the key *type* from

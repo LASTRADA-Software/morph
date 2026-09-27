@@ -1358,11 +1358,50 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
 template <typename Model, typename Action>
 bool registerActionExecutorOnce(std::string_view modelId, std::string_view actionId) noexcept;
 
+/// @brief Link-time canary for `BRIDGE_DECLARE_MODEL` / `BRIDGE_REGISTER_MODEL_SOURCE`.
+///
+/// `BRIDGE_DECLARE_MODEL(M, NAME)` calls this specialisation behind an
+/// `extern template` declaration, which suppresses implicit instantiation of
+/// this always-visible, trivial definition and instead demands an *explicit*
+/// instantiation elsewhere in the link. `BRIDGE_REGISTER_MODEL_SOURCE(M)` is
+/// the only macro that provides one. A model declared via
+/// `BRIDGE_DECLARE_MODEL` but never registered via
+/// `BRIDGE_REGISTER_MODEL_SOURCE` anywhere in the same binary therefore fails
+/// to *link* with an unresolved symbol naming this function, instead of
+/// compiling clean and surfacing only as `ModelRegistryFactory::create`'s
+/// runtime `"unknown model type"`, far from the cause. The body does nothing;
+/// only whether an explicit instantiation for `Model` exists anywhere the
+/// linker looks is being tested.
+/// @tparam Model Concrete model type a `BRIDGE_DECLARE_MODEL` call named.
+template <typename Model>
+void modelSourceRegistrationRequired() {}
+
+/// @brief Link-time canary for `BRIDGE_DECLARE_ACTION` / `BRIDGE_REGISTER_ACTION_SOURCE`.
+///
+/// Same mechanism as `modelSourceRegistrationRequired` above, keyed on the
+/// `(Model, Action)` pair `BRIDGE_DECLARE_ACTION` and
+/// `BRIDGE_REGISTER_ACTION_SOURCE` were each invoked with.
+/// @tparam Model  Model type the action belongs to.
+/// @tparam Action Concrete action type a `BRIDGE_DECLARE_ACTION` call named.
+template <typename Model, typename Action>
+void actionSourceRegistrationRequired() {}
+
 }  // namespace detail
 
 }  // namespace morph::model
 
 // NOLINTBEGIN(bugprone-macro-parentheses)
+// NOLINTBEGIN(cppcoreguidelines-macro-usage) — registration macros are the intended public API
+// The registrars below are namespace-scope `const bool`s whose initialisers run
+// before main, inside an unnamed namespace so each translation unit gets its own
+// copy — and `BRIDGE_DECLARE_*` places that in a header by design. clang-tidy
+// attributes these to every expansion site, so they are suppressed here, once:
+//   * bugprone-throwing-static-initialization / cert-err58-cpp -- registration
+//     cannot be wrapped in a try block; a throw aborts at start-up, which is the
+//     right outcome for a type that cannot be registered.
+//   * misc-anonymous-namespace-in-header / cert-dcl59-cpp -- the per-TU copy is
+//     the point: it is what ODR-uses the link canary in each including TU.
+// NOLINTBEGIN(bugprone-throwing-static-initialization,cert-err58-cpp,misc-anonymous-namespace-in-header,cert-dcl59-cpp)
 
 // Keying the generated registrar names on `__COUNTER__` (rather than on the type spelling)
 // keeps them valid identifiers regardless of how `M`/`A` are written. A namespace-qualified
@@ -1405,9 +1444,25 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// any `Bridge` running `LocalBackend`) — it silently registers nothing, and
 /// the model fails at runtime with "unknown model type" rather than at
 /// compile/link time.
+/// @brief Emits the `extern template` link requirement `BRIDGE_DECLARE_MODEL`/
+///        `BRIDGE_DECLARE_ACTION` place in the header (`MORPH_DETAIL_REQUIRE_SOURCE_LOCAL`),
+///        and the matching explicit-instantiation definition
+///        `BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` place
+///        in the `.cpp` (`MORPH_DETAIL_DEFINE_SOURCE_LOCAL`).
+///
+/// One pair of macros for both the model and action canaries: @p ...
+/// carries the whole call expression (`modelSourceRegistrationRequired<M>()`
+/// or `actionSourceRegistrationRequired<M, A>()`), passed through the
+/// variadic parameter rather than a fixed one so the template argument
+/// list's own comma isn't mistaken for a macro-argument separator. @p PREFIX
+/// (`MORPH_DETAIL_REQUIRE_SOURCE_LOCAL` only) names the generated variable,
+/// same role as the fixed prefixes `MORPH_DETAIL_REGISTER_MODEL_LOCAL`/
+/// `MORPH_DETAIL_REGISTER_ACTION_LOCAL` above use directly.
 #ifdef MORPH_CLIENT_ONLY
 #define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
 #define MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)
+#define MORPH_DETAIL_REQUIRE_SOURCE_LOCAL(PREFIX, ...)
+#define MORPH_DETAIL_DEFINE_SOURCE_LOCAL(...)
 #else
 // clang-format off
 // Hand-aligned: clang-format pulls the short registerModelOnce() call up onto the
@@ -1424,8 +1479,28 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __COUNTER__) =                     \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
     }
+#define MORPH_DETAIL_REQUIRE_SOURCE_LOCAL(PREFIX, ...)      \
+    extern template void __VA_ARGS__;                       \
+    namespace {                                             \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(PREFIX, __COUNTER__) = (__VA_ARGS__, true); \
+    }
+#define MORPH_DETAIL_DEFINE_SOURCE_LOCAL(...) template void __VA_ARGS__;
 // clang-format on
 #endif
+
+/// @brief `ModelTraits<M>`'s specialisation alone -- the type-only half
+///        `BRIDGE_REGISTER_MODEL` and `BRIDGE_DECLARE_MODEL` both build on, so
+///        the two cannot drift apart the way two independently hand-written
+///        copies could.
+/// @param M    Concrete model type.
+/// @param NAME String literal used as the type-id.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define BRIDGE_DETAIL_MODEL_TRAITS_ONLY_BODY(M, NAME)                        \
+    template <>                                                              \
+    struct morph::model::ModelTraits<M> {                                    \
+        static constexpr std::string_view typeId() noexcept { return NAME; } \
+    };
+// clang-format on
 
 /// @brief Registers model type @p M with the string id @p NAME.
 ///
@@ -1437,12 +1512,55 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param M    Concrete model type.
 /// @param NAME String literal used as the type-id.
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_REGISTER_MODEL(M, NAME)                                       \
-    template <>                                                              \
-    struct morph::model::ModelTraits<M> {                                    \
-        static constexpr std::string_view typeId() noexcept { return NAME; } \
-    };                                                                       \
+#define BRIDGE_REGISTER_MODEL(M, NAME)            \
+    BRIDGE_DETAIL_MODEL_TRAITS_ONLY_BODY(M, NAME) \
     MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
+// clang-format on
+
+/// @brief Declares model type @p M's `ModelTraits<M>` specialisation without
+///        registering it -- the header-safe half `BRIDGE_REGISTER_MODEL`
+///        decomposes into.
+///
+/// `BRIDGE_REGISTER_MODEL`'s registrar initialiser instantiates
+/// `registerModelOnce<M>` in every translation unit that includes the header
+/// it sits in; `BRIDGE_DECLARE_MODEL` emits only the trait specialisation
+/// (essentially free to repeat per TU) and defers the actual registration to
+/// `BRIDGE_REGISTER_MODEL_SOURCE(M)`, called once in the one `.cpp` that
+/// should own it. See docs/spec/core/registry.md, "Moving a registrar out of
+/// the header", for when this is worth doing and for the link-time canary
+/// this macro emits in @p M's place: a `BRIDGE_DECLARE_MODEL` with no
+/// matching `BRIDGE_REGISTER_MODEL_SOURCE` anywhere in the link fails to
+/// *link* with an unresolved symbol, rather than compiling clean and only
+/// surfacing as `ModelRegistryFactory::create`'s runtime
+/// `"unknown model type"`.
+///
+/// @param M    Concrete model type.
+/// @param NAME String literal used as the type-id.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define BRIDGE_DECLARE_MODEL(M, NAME)                        \
+    BRIDGE_DETAIL_MODEL_TRAITS_ONLY_BODY(M, NAME)            \
+    MORPH_DETAIL_REQUIRE_SOURCE_LOCAL(bridge_model_src_req_, \
+                                      morph::model::detail::modelSourceRegistrationRequired<M>())
+// clang-format on
+
+/// @brief Registers model type @p M -- previously declared via
+///        `BRIDGE_DECLARE_MODEL(M, NAME)` -- with the process-level
+///        `ModelRegistryFactory` at static-init time.
+///
+/// Call exactly once, in the one `.cpp` that owns @p M's registration --
+/// typically the translation unit that defines @p M's out-of-line members.
+/// Requires `morph::model::ModelTraits<M>` already visible (from
+/// `BRIDGE_DECLARE_MODEL` or `BRIDGE_REGISTER_MODEL` in an included header)
+/// and reads its `typeId()` rather than taking a `NAME` argument again, so the
+/// two cannot register under a different string than the one @p M's traits
+/// actually report. Suppressed under `MORPH_CLIENT_ONLY`, exactly like the
+/// registrar `BRIDGE_REGISTER_MODEL` emits directly.
+///
+/// @param M Concrete model type, already declared via `BRIDGE_DECLARE_MODEL`.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define BRIDGE_REGISTER_MODEL_SOURCE(M)                                                          \
+    MORPH_DETAIL_DEFINE_SOURCE_LOCAL(morph::model::detail::modelSourceRegistrationRequired<M>()) \
+    MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, morph::model::ModelTraits<M>::typeId())
 // clang-format on
 
 /// @brief Registers action type @p A (for model @p M) with the string id @p NAME.
@@ -1471,7 +1589,6 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param A    Concrete action type.
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
-// NOLINTBEGIN(cppcoreguidelines-macro-usage) — registration macros are the intended public API
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_ACTION(...)                                                              \
     BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3) \
@@ -1542,17 +1659,12 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, ::morph::model::Loggable::Yes)
 // clang-format on
 
-/// @brief Shared body for `ActionTraits<A>`'s specialisation, its local-execute
-///        registrar, and its dispatch-registry registrar — everything
-///        `BRIDGE_REGISTER_ACTION_4` and `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5`
-///        expand to alike, parameterised only on how `Result` is spelled.
-///
-/// `BRIDGE_REGISTER_ACTION_4` deduces `Result` from `M::execute(A)`, which
-/// requires `M` complete at the call site; `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5`
-/// takes `RESULT_ALIAS` as an explicit type instead, so `M` may stay
-/// declaration-only (see `BRIDGE_REGISTER_ACTION_FOR_CLIENT`'s doc comment).
-/// That one line is the only difference between the two public macros; every
-/// other member here is byte-identical between them.
+/// @brief `ActionTraits<A>`'s specialisation alone -- the type-only half
+///        `BRIDGE_DETAIL_ACTION_TRAITS_BODY` decomposes into, reused directly
+///        by `BRIDGE_DECLARE_ACTION` for the case that wants the trait
+///        specialisation in a header without registering anything there.
+///        Parameterised only on how `Result` is spelled, exactly like
+///        `BRIDGE_DETAIL_ACTION_TRAITS_BODY` below.
 /// @param M           Model type (see each public macro's own doc comment for
 ///                     the completeness requirement `RESULT_ALIAS` differs on).
 /// @param A            Concrete action type.
@@ -1562,7 +1674,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param NAME         String literal used as the action type-id.
 /// @param LOGGABLE     A `morph::model::Loggable` value.
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, RESULT_ALIAS, NAME, LOGGABLE)                                   \
+#define BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(M, A, RESULT_ALIAS, NAME, LOGGABLE)                              \
     template <>                                                                                                \
     struct morph::model::ActionTraits<A> {                                                                     \
         using Result = RESULT_ALIAS;                                                                           \
@@ -1625,13 +1737,60 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
             }                                                                                                  \
             return result;                                                                                     \
         }                                                                                                      \
-    };                                                                                                         \
-    MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)                                                             \
-    namespace {                                                                                                \
-    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                      \
-        morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
+    };
+// clang-format on
+
+/// @brief The two registrar blocks `BRIDGE_DETAIL_ACTION_TRAITS_BODY` appends
+///        after `BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY`'s trait
+///        specialisation, factored out so `BRIDGE_REGISTER_ACTION_SOURCE` can
+///        emit exactly the same two registrars from a `.cpp`, without
+///        repeating the trait specialisation `BRIDGE_DECLARE_ACTION` already
+///        placed in the header.
+///
+/// Reads `morph::model::ActionTraits<A>::typeId()` rather than taking a
+/// `NAME` parameter, so a `BRIDGE_DECLARE_ACTION`/`BRIDGE_REGISTER_ACTION_SOURCE`
+/// pair cannot register under a different string than the one @p A's traits
+/// specialisation actually reports -- there is only one place `NAME` is
+/// spelled, in whichever macro declared the traits.
+/// @param M Model type that handles the action.
+/// @param A Concrete action type; `morph::model::ActionTraits<A>` must already
+///          be visible.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define BRIDGE_DETAIL_ACTION_REGISTRARS(M, A)                                                            \
+    MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, morph::model::ActionTraits<A>::typeId())                    \
+    namespace {                                                                                          \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                \
+        morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(),   \
+                                                               morph::model::ActionTraits<A>::typeId()); \
     }
 // clang-format on
+
+/// @brief Shared body for `ActionTraits<A>`'s specialisation plus its two
+///        registrars -- everything `BRIDGE_REGISTER_ACTION_4` and
+///        `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5` expand to alike, parameterised
+///        only on how `Result` is spelled. Composes
+///        `BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY` (the type) with
+///        `BRIDGE_DETAIL_ACTION_REGISTRARS` (the two registrars) -- the same
+///        two pieces `BRIDGE_DECLARE_ACTION`/`BRIDGE_REGISTER_ACTION_SOURCE`
+///        emit separately, in a header and a `.cpp` respectively.
+///
+/// `BRIDGE_REGISTER_ACTION_4` deduces `Result` from `M::execute(A)`, which
+/// requires `M` complete at the call site; `BRIDGE_REGISTER_ACTION_FOR_CLIENT_5`
+/// takes `RESULT_ALIAS` as an explicit type instead, so `M` may stay
+/// declaration-only (see `BRIDGE_REGISTER_ACTION_FOR_CLIENT`'s doc comment).
+/// That one line is the only difference between the two public macros; every
+/// other member here is byte-identical between them.
+/// @param M           Model type (see each public macro's own doc comment for
+///                     the completeness requirement `RESULT_ALIAS` differs on).
+/// @param A            Concrete action type.
+/// @param RESULT_ALIAS Expression naming the action's result type -- either
+///                      `RESULT` (named explicitly) or the `decltype(...)`
+///                      deduction from `M::execute(A)`.
+/// @param NAME         String literal used as the action type-id.
+/// @param LOGGABLE     A `morph::model::Loggable` value.
+#define BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, RESULT_ALIAS, NAME, LOGGABLE)  \
+    BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(M, A, RESULT_ALIAS, NAME, LOGGABLE) \
+    BRIDGE_DETAIL_ACTION_REGISTRARS(M, A)
 
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
 #define BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, LOGGABLE) \
@@ -1644,13 +1803,88 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 
 #define BRIDGE_REGISTER_ACTION_3(M, A, NAME) BRIDGE_REGISTER_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
 
+/// `Result` deduction shared by `BRIDGE_REGISTER_ACTION_4` and
+/// `BRIDGE_DECLARE_ACTION_4` -- both need `M` complete with `execute(A)`
+/// declared for the same reason, spelled once so the two cannot drift.
+/// Wrapped in `HandlerResultT` so a `core::async::Task<R>`-returning handler
+/// resolves to `R` on both paths alike; without that, a declare-only header
+/// and its out-of-line registration would disagree on the action's result
+/// type for every coroutine handler.
+#define BRIDGE_DETAIL_DEDUCED_ACTION_RESULT(M, A) \
+    ::morph::model::HandlerResultT<decltype(std::declval<M&>().execute(std::declval<A>()))>
+
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                       \
-    BRIDGE_DETAIL_ACTION_TRAITS_BODY(                                                                        \
-        M, A, ::morph::model::HandlerResultT<decltype(std::declval<M&>().execute(std::declval<A>()))>, NAME, \
-        LOGGABLE)
+#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE) \
+    BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, A, BRIDGE_DETAIL_DEDUCED_ACTION_RESULT(M, A), NAME, LOGGABLE)
 // clang-format on
 /// @endcond
+
+/// @brief Declares action type @p A's `ActionTraits<A>` specialisation
+///        without registering it -- the header-safe half `BRIDGE_REGISTER_ACTION`
+///        decomposes into.
+///
+/// Same 3-or-4-argument shape as `BRIDGE_REGISTER_ACTION` (an optional
+/// trailing `Loggable`) and the same `Result`-deduction requirement -- `M`
+/// must be complete with `execute(A)` *declared* at this point, though (unlike
+/// `BRIDGE_REGISTER_ACTION_SOURCE` below) not necessarily *defined*, since
+/// nothing this macro emits calls it. Pair with
+/// `BRIDGE_REGISTER_ACTION_SOURCE(M, A)` in the one `.cpp` that should
+/// actually register @p A -- see `BRIDGE_DECLARE_MODEL`'s doc comment for why,
+/// and docs/spec/core/registry.md, "Moving a registrar out of the header", for
+/// the measured cost this exists to move out of the header.
+///
+/// @param M    Concrete model type that handles the action.
+/// @param A    Concrete action type.
+/// @param NAME String literal used as the action type-id.
+/// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define BRIDGE_DECLARE_ACTION(...)                                                            \
+    BRIDGE_DECLARE_ACTION_PICK(__VA_ARGS__, BRIDGE_DECLARE_ACTION_4, BRIDGE_DECLARE_ACTION_3) \
+    (__VA_ARGS__)
+// clang-format on
+
+/// @cond detail
+#define BRIDGE_DECLARE_ACTION_PICK(_1, _2, _3, _4, NAME, ...) NAME
+
+#define BRIDGE_DECLARE_ACTION_3(M, A, NAME) BRIDGE_DECLARE_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
+
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define BRIDGE_DECLARE_ACTION_4(M, A, NAME, LOGGABLE)                                                      \
+    BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(M, A, BRIDGE_DETAIL_DEDUCED_ACTION_RESULT(M, A), NAME, LOGGABLE) \
+    MORPH_DETAIL_REQUIRE_SOURCE_LOCAL(bridge_action_src_req_,                                              \
+                                      morph::model::detail::actionSourceRegistrationRequired<M, A>())
+// clang-format on
+/// @endcond
+
+/// @brief Registers action type @p A (for model @p M) -- previously declared
+///        via `BRIDGE_DECLARE_ACTION(M, A, ...)` -- with the process-level
+///        `ActionDispatcher` and `ActionExecuteRegistry` at static-init time.
+///
+/// Call exactly once, in the one `.cpp` that owns @p M's registration.
+/// Requires `morph::model::ActionTraits<A>` already visible (from
+/// `BRIDGE_DECLARE_ACTION` or `BRIDGE_REGISTER_ACTION` in an included header)
+/// and, unlike `BRIDGE_DECLARE_ACTION`, requires @p M complete with
+/// `execute(A)` *defined* -- the registered runner calls it. Reads
+/// `ActionTraits<A>::typeId()` rather than taking a `NAME` argument again, so
+/// the two cannot register under a different string than the one @p A's
+/// traits actually report. Suppressed under `MORPH_CLIENT_ONLY`, exactly like
+/// the two registrars `BRIDGE_REGISTER_ACTION` emits directly.
+///
+/// HARD REQUIREMENT: this macro's expansion unconditionally calls
+/// `morph::model::detail::registerActionExecutorOnce<M, A>`, exactly as
+/// `BRIDGE_REGISTER_ACTION` does -- the translation unit calling it MUST
+/// include `<morph/core/bridge.hpp>` (directly or transitively), or the build
+/// fails to link with an unresolved external symbol for
+/// `registerActionExecutorOnce<M, A>`.
+///
+/// @param M Concrete model type that handles the action, already declared via
+///          `BRIDGE_DECLARE_ACTION`.
+/// @param A Concrete action type, already declared via `BRIDGE_DECLARE_ACTION`.
+// clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
+#define BRIDGE_REGISTER_ACTION_SOURCE(M, A)                                                          \
+    MORPH_DETAIL_DEFINE_SOURCE_LOCAL(morph::model::detail::actionSourceRegistrationRequired<M, A>()) \
+    BRIDGE_DETAIL_ACTION_REGISTRARS(M, A)
+// clang-format on
 
 /// @brief Registers a readiness predicate for action @p A.
 ///
@@ -1667,5 +1901,6 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         static bool ready(const A& action) { return (FN)(action); } \
     };
 // clang-format on
+// NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-anonymous-namespace-in-header,cert-dcl59-cpp)
 // NOLINTEND(cppcoreguidelines-macro-usage)
 // NOLINTEND(bugprone-macro-parentheses)
