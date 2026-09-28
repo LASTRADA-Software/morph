@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <climits>
+#include <core/platform/Clock.hpp>
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
@@ -176,6 +177,8 @@ public:
     ///        wait happens under that mutex and blocks every other caller of
     ///        this instance, a Qt GUI thread included. Pass `0` to restore
     ///        fail-fast.
+    /// @param wallClock Clock the `enqueued_at` column is stamped from; the
+    ///        system clock by default. Borrowed, so it must outlive the queue.
     /// @throws SqliteOfflineQueueError if the database cannot be opened, the
     ///         schema cannot be created, or the containing directory cannot
     ///         be fsynced after `sqlite3_open()` creates a brand-new file. A
@@ -183,12 +186,14 @@ public:
     ///         not thrown** — see the constructor body.
     explicit SqliteOfflineQueue(std::filesystem::path path, std::optional<std::size_t> maxDepth = std::nullopt,
                                 ::morph::core::FileIoOps ioOps = {}, Synchronous synchronous = Synchronous::normal,
-                                std::chrono::milliseconds busyTimeout = std::chrono::milliseconds{kBusyTimeoutMillis})
+                                std::chrono::milliseconds busyTimeout = std::chrono::milliseconds{kBusyTimeoutMillis},
+                                ::core::platform::WallClockRef wallClock = ::core::platform::defaultSystemWallClock())
         : _path{std::move(path)},
           _maxDepth{maxDepth},
           _io{std::move(ioOps)},
           _synchronous{synchronous},
-          _busyTimeout{busyTimeout} {
+          _busyTimeout{busyTimeout},
+          _wallClock{wallClock} {
         if (sqlite3_open(_path.string().c_str(), &_db) != SQLITE_OK) {
             std::string msg = "SqliteOfflineQueue: failed to open " + _path.string() + ": " +
                               (_db != nullptr ? sqlite3_errmsg(_db) : "unknown error");
@@ -588,10 +593,8 @@ private:
                                : std::string{};
     }
 
-    static std::int64_t nowMillis() {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::system_clock::now().time_since_epoch())
-            .count();
+    [[nodiscard]] std::int64_t nowMillis() const noexcept {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(_wallClock.now().time_since_epoch()).count();
     }
 
     /// @brief Returns the current row count. Caller must hold `_mtx`.
@@ -623,6 +626,7 @@ private:
     ::morph::core::FileIoOps _io;
     Synchronous _synchronous{Synchronous::normal};
     std::chrono::milliseconds _busyTimeout{kBusyTimeoutMillis};
+    ::core::platform::WallClockRef _wallClock;
     // SQLite's numeric synchronous level, read back at construction.
     int _synchronousLevel{-1};
     // The mode the database actually ended up in, as read back at construction

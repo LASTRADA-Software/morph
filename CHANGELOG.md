@@ -11,6 +11,14 @@ API surface).
 
 ### Changed
 
+- **Action-log and offline-queue timestamps come from an injected wall clock.**
+  `IModelHolder::attachActionLog` takes an optional third parameter, a
+  `core::platform::WallClockRef`, and `LogEntry::timestampMs` is read from it.
+  `SqliteOfflineQueue`'s constructor takes one as its last parameter for the
+  `enqueued_at` column. Both default to the system clock, so existing callers
+  are unchanged; a test passes a `core::platform::ManualWallClock` to pin the
+  time.
+
 - **morph's per-model strands are core-cpp's `KeyedStrands`.**
   `morph::exec::detail::StrandExecutor` is gone: a backend's strands are
   `morph::exec::detail::ModelStrands`, over core-cpp 0.4.0's

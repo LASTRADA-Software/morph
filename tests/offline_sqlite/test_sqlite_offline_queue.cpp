@@ -7,6 +7,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cerrno>
 #include <chrono>
+#include <core/platform/Clock.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -223,6 +225,36 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: size() matches COUNT(*) against t
         sqlite3_close(raw);
 
         REQUIRE(rawCount == queue.size());
+    }
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: enqueued_at is stamped from the injected wall clock", "[sqlite]") {
+    using Queue = morph::offline::SqliteOfflineQueue;
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        core::platform::ManualWallClock clock{std::chrono::system_clock::time_point{std::chrono::milliseconds{7'000}}};
+        Queue queue{
+            dbPath, std::nullopt, {}, Queue::Synchronous::normal, std::chrono::milliseconds{Queue::kBusyTimeoutMillis},
+            clock};
+        (void)queue.enqueue("unkeyed");
+        clock.advance(std::chrono::milliseconds{5});
+        (void)queue.enqueue("keyed", "key-1");
+
+        sqlite3* raw = nullptr;
+        REQUIRE(sqlite3_open(dbPath.string().c_str(), &raw) == SQLITE_OK);
+        sqlite3_stmt* stmt = nullptr;
+        REQUIRE(sqlite3_prepare_v2(raw, "SELECT enqueued_at FROM morph_offline_queue ORDER BY id;", -1, &stmt,
+                                   nullptr) == SQLITE_OK);
+        std::vector<std::int64_t> stamps;
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            stamps.push_back(sqlite3_column_int64(stmt, 0));
+        }
+        sqlite3_finalize(stmt);
+        sqlite3_close(raw);
+
+        REQUIRE(stamps == std::vector<std::int64_t>{7'000, 7'005});
     }
     removeDbFiles(dbPath);
 }

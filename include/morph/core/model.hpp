@@ -3,6 +3,7 @@
 #pragma once
 #include <chrono>
 #include <concepts>
+#include <core/platform/Clock.hpp>
 #include <memory>
 #include <stdexcept>
 #include <typeindex>
@@ -169,13 +170,20 @@ struct IModelHolder {
     /// `ModelLevelActionLogAttachable` — see `onActionLogAttached`'s doc
     /// comment for why this second call exists alongside the holder's own
     /// `_actionLog`/`_contextKey` state below.
+    ///
+    /// @p wallClock is what `recordIfAttached` stamps `LogEntry::timestampMs`
+    /// from. It is borrowed, not owned, so it must outlive this holder; a test
+    /// passes a `core::platform::ManualWallClock` to pin the stamp.
     /// @param log        Sink entries are forwarded to. Pass a `SessionLog` to also
     ///                   get undo/checkpoint support.
     /// @param contextKey Stable identity of this model instance.
-    void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string contextKey) {
+    /// @param wallClock  Clock entries are timestamped from; the system clock by default.
+    void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string contextKey,
+                         ::core::platform::WallClockRef wallClock = ::core::platform::defaultSystemWallClock()) {
         onActionLogAttached(log, contextKey);
         _actionLog = std::move(log);
         _contextKey = std::move(contextKey);
+        _wallClock = wallClock;
     }
 
     /// @brief Tells this instance its own stable primary key, once, at
@@ -230,7 +238,8 @@ struct IModelHolder {
     /// Called automatically by the two places `Model::execute()` is actually
     /// invoked (`ActionDispatcher`'s runner and `Bridge::executeVia`'s local
     /// op) — model code and application code never call this directly.
-    /// Overwrites `entityKey`, `principal`, and `timestampMs` on @p entry;
+    /// Overwrites `entityKey`, `principal`, and `timestampMs` (from the clock
+    /// given to `attachActionLog`) on @p entry;
     /// callers only need to fill `modelType`, `actionType`, `payload`, `result`.
     /// A no-op if no log is attached, **or** if `setOutboxManaged(true)` was
     /// called on this instance (the model records its own entry elsewhere).
@@ -244,8 +253,7 @@ struct IModelHolder {
             entry.principal = ctx->principal;
         }
         entry.timestampMs =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-                .count();
+            std::chrono::duration_cast<std::chrono::milliseconds>(_wallClock.now().time_since_epoch()).count();
         _actionLog->append(std::move(entry));
     }
 
@@ -297,6 +305,7 @@ private:
     ActionGate _actionGate;
     std::shared_ptr<::morph::journal::IActionLog> _actionLog;
     std::string _contextKey;
+    ::core::platform::WallClockRef _wallClock{::core::platform::defaultSystemWallClock()};
     bool _outboxManaged{false};
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
