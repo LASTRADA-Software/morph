@@ -1,23 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Direct unit coverage for morph::async::detail::TimeoutScheduler, in the
-// build that owns a thread for its loop -- see timeout_scheduler.hpp's @file
-// comment for the single-threaded WebAssembly build, which this file's own
-// target never compiles. Bridge::executeVia and RemoteServer only ever call
+// build whose IoLoop owns a thread -- see io_loop.hpp's @file comment for the
+// single-threaded WebAssembly build, which this file's own target never
+// compiles. Bridge::executeVia and RemoteServer only ever call
 // schedule()/cancel() with callbacks that don't throw, so this file covers
 // the cases they don't: a callback that throws is logged and swallowed rather
 // than propagating out of the loop's thread, cancel() releases what a
-// callback captured before it returns, and the destructor drops what is still
-// pending instead of waiting for it.
+// callback captured on the loop, and the destructor drops what is still
+// pending instead of waiting for it. It also holds the owner rule: both verbs
+// called off the loop run their bodies on it.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
+#include <morph/core/executor.hpp>
+#include <morph/core/io_loop.hpp>
 #include <morph/core/timeout_scheduler.hpp>
 #include <stdexcept>
 #include <thread>
 
+#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 using morph::async::detail::TimeoutScheduler;
@@ -102,17 +106,81 @@ TEST_CASE("TimeoutScheduler: cancel() before the deadline prevents the callback 
     REQUIRE_FALSE(fired.load());
 }
 
-TEST_CASE("TimeoutScheduler: cancel() releases the callback's captures before it returns", "[timeout_scheduler]") {
-    TimeoutScheduler scheduler;
+TEST_CASE("TimeoutScheduler: cancel() releases the callback's captures on the loop", "[timeout_scheduler]") {
+    morph::exec::IoLoop loop;
+    TimeoutScheduler scheduler{loop};
     auto token = std::make_shared<int>(0);
     std::weak_ptr<int> const observer = token;
 
     // Far enough out that nothing but cancel() can release it within the case.
     auto const handle = scheduler.schedule(60s, [token = std::move(token)] { static_cast<void>(token); });
-    REQUIRE_FALSE(observer.expired());
-
     scheduler.cancel(handle);
-    REQUIRE(observer.expired());
+
+    // Released by the loop's task, after cancel() returned: a task posted
+    // after the cancel runs after it, so by then the capture is gone.
+    bool releasedBeforeNextTask = false;
+    loop.runAndWait([&] { releasedBeforeNextTask = observer.expired(); });
+    REQUIRE(releasedBeforeNextTask);
+}
+
+// ── The owner rule: the loop is the only thread that touches the state ──────
+//
+// Each verb is called from this test's own thread, which is not the loop's;
+// the body it posts reports, from inside, whether it runs as a task of the
+// loop. Run inline instead, the body reports `onOwner == false`.
+
+TEST_CASE("TimeoutScheduler: schedule() and cancel() called off the loop run their bodies on it",
+          "[timeout_scheduler][owner]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    TimeoutScheduler scheduler{loop};
+    REQUIRE_FALSE(morph::exec::runningOn(static_cast<core::async::IExecutor const&>(loop.loop())));
+
+    auto const handle = scheduler.schedule(60s, [] {});
+    scheduler.cancel(handle);
+    loop.runAndWait([] {});  // both posts have run once this has
+
+    CHECK(recorder.count("TimeoutScheduler::schedule") == 1U);
+    CHECK(recorder.allPosted("TimeoutScheduler::schedule"));
+    CHECK(recorder.count("TimeoutScheduler::cancel") == 1U);
+    CHECK(recorder.allPosted("TimeoutScheduler::cancel"));
+}
+
+TEST_CASE("TimeoutScheduler: two schedulers on one IoLoop fire on the same thread", "[timeout_scheduler][owner]") {
+    morph::exec::IoLoop loop;
+    TimeoutScheduler first{loop};
+    TimeoutScheduler second{loop};
+    std::atomic<bool> firstOnLoop{false};
+    std::atomic<bool> secondOnLoop{false};
+    std::atomic<int> fired{0};
+    auto const onLoop = [&loop] {
+        return morph::exec::runningOn(static_cast<core::async::IExecutor const&>(loop.loop()));
+    };
+
+    first.schedule(1ms, [&] {
+        firstOnLoop = onLoop();
+        ++fired;
+    });
+    second.schedule(1ms, [&] {
+        secondOnLoop = onLoop();
+        ++fired;
+    });
+    REQUIRE(waitFor([&] { return fired.load() == 2; }));
+    CHECK(firstOnLoop.load());
+    CHECK(secondOnLoop.load());
+}
+
+TEST_CASE("TimeoutScheduler: destroyed from inside its own callback, on the loop, it does not wait on itself",
+          "[timeout_scheduler][owner]") {
+    morph::exec::IoLoop loop;
+    auto scheduler = std::make_unique<TimeoutScheduler>(loop);
+    std::atomic<bool> destroyed{false};
+    auto* const raw = scheduler.get();
+    raw->schedule(1ms, [&scheduler, &destroyed] {
+        scheduler.reset();
+        destroyed = true;
+    });
+    REQUIRE(waitFor([&] { return destroyed.load(); }));
 }
 
 TEST_CASE("TimeoutScheduler: the destructor drops pending callbacks without firing them", "[timeout_scheduler]") {

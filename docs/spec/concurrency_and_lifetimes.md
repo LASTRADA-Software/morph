@@ -38,6 +38,7 @@ is the concrete executor's job:
 | `MainThreadExecutor` | The thread that calls `runFor()` | Stand-in "GUI" thread in non-Qt tests; pumped manually. |
 | `QtExecutor` | The Qt GUI thread | Real GUI executor; posts via `QMetaObject::invokeMethod(Qt::QueuedConnection)`. |
 | `ModelStrands` | *Borrows* a base `IExecutor` (usually the pool) | Serialises tasks per `ModelId` on top of the base executor: core-cpp's `KeyedStrands`, which reaches the base through the base's `coreExecutor()`. It owns no thread. |
+| `exec::IoLoop` | One thread natively; host-pumped under single-threaded WebAssembly | The I/O loop (`io_loop.hpp`): a core-cpp `PlatformLoop` that owns every `morph::net` socket, every `TimeoutScheduler` timer and `NetworkMonitor`'s probe. The application constructs one and injects it into each; `IoLoop::post` is the one way in from another thread. |
 
 A strand's own unit of work is a coroutine resumption, not a callable: it
 queues its pump on the base once per turn, through the adapter, and a posted
@@ -57,11 +58,24 @@ GUI, and the GUI thread never runs model work — the executors enforce the spli
 | Remote message decode / envelope handling | `RemoteServer`'s worker pool | `RemoteServer::handle` → `_pool.post` |
 | `Completion::then` / `onError` callbacks | The `cbExec` executor supplied at dispatch (the GUI executor for `BridgeHandler`) | `CompletionState::setValue`/`setException` → `cbExec->post` |
 | Subscription result / error sinks (`BridgeHandler::subscribe`) | The handler's `guiExec` | Same as `Completion` callbacks — they *are* completion callbacks |
-| Connectivity probe + `onOffline`/`onOnline` callbacks | `NetworkMonitor`'s dedicated **probe thread** | `NetworkMonitor::run` |
-| `ReconnectCoordinator::onOnline`/`onOffline` | The caller's thread (host posts it to a worker; **not** the probe thread) | Host wiring |
+| Connectivity probe + `onOffline`/`onOnline` callbacks | **The I/O loop** | A loop timer `NetworkMonitor` re-arms every `probeInterval` |
+| `morph::net` socket I/O: dial, handshake, reads, writes, accept, reply writes | **The I/O loop** | Flows the components spawn on it; verbs and `RemoteServer` replies post to it |
+| `TimeoutScheduler` callbacks (execute deadlines, `delay()`) | **The I/O loop** — the injected one, or the scheduler's own | A loop timer armed by a posted `schedule()` |
+| `ReconnectCoordinator::onOnline`/`onOffline` | The caller's thread (host posts it to a worker; **not** the I/O loop) | Host wiring |
 | `SyncWorker::run` (offline-queue replay) | The caller's thread; concurrent calls serialised | Host wiring / `ReconnectCoordinator::replay` |
-| Backend reconnect handler (re-register bindings) | The backend's transport thread | `IBackend::setReconnectHandler` callback |
+| Backend reconnect handler (re-register bindings) | The backend's own: the Qt thread for `QtWebSocketBackend`, a dedicated handler thread for `SocketBackend` (never its I/O loop, which must deliver the replies the handler waits for) | `IBackend::setReconnectHandler` callback |
 | Log sink invocation | Whatever thread called `log*()` | `morph::log::detail::log` |
+
+**One I/O loop, injected.** The application constructs one `exec::IoLoop` and
+passes it to every component that does I/O or keeps time, the way it passes its
+pool to `LocalBackend`; the framework keeps no process-wide loop of its own.
+The dependency is then visible in each constructor, a test builds and tears
+down its own loop with nothing global left behind, and one thread carries every
+socket, timer and probe of a process — the components' state is touched only in
+the loop's tasks, so it needs no lock. Each of those components still has a
+loop-less constructor that builds a private `IoLoop`: one loop, and one thread,
+for a caller with nothing to share it with (`Bridge` and `RemoteServer` build
+their `TimeoutScheduler` that way).
 
 Key consequences:
 
@@ -95,8 +109,9 @@ Key consequences:
 - **The GUI thread is never blocked by dispatch.** `executeVia` returns a
   `Completion` immediately; the actual work runs on the pool and the result is
   marshalled back to the GUI executor.
-- **Probe callbacks must not block** (see below) — they run on the single probe
-  thread, and a blocking callback stalls all future probes.
+- **Nothing on the I/O loop may block** (see below) — probe callbacks,
+  `TimeoutScheduler` callbacks and every socket share its one thread, and a
+  blocking callback stalls all of them.
 
 ## The strand model — one strand per `ModelId`
 
@@ -172,6 +187,7 @@ rules encode recent fixes to real deadlocks and use-after-frees.
 | `RemoteServer` (heap, `make_shared`) | every `SimulatedRemoteBackend`/transport holding `RemoteServer&` | Dangling `RemoteServer&` → use-after-free |
 | worker pool | the backend that posts to it (`LocalBackend`, `RemoteServer`) | Same deadlock/UAF family as the strand rule |
 | `session::Context` passed to `ScopedContext` | the scope in which the model runs | Dangling thread-local `Context*` |
+| `exec::IoLoop` | every component built on it: `SocketBackend`, `SocketServer`, `TimeoutScheduler`, `NetworkMonitor` | **Hang** in the component's destructor, which waits for a close the stopped loop never runs; the same rule as the pool and its backends |
 
 ### base `IExecutor` must outlive its strands — and keep running
 
@@ -544,10 +560,11 @@ what makes the model-side contract both true and safe:
 
 Lock ordering remains `Bridge::_mtx` before `LocalBackend::_regMtx`.
 
-### Reconnect handler — fires on the transport thread, guarded against a dead `Bridge`
+### Reconnect handler — fires on the backend's thread, guarded against a dead `Bridge`
 
 The reconnect handler a `Bridge` installs on its backend
-(`installReconnectHandler`) runs on the **backend's transport thread**, not the
+(`installReconnectHandler`) runs on **a thread the backend chooses** — the Qt
+thread for `QtWebSocketBackend`, `SocketBackend`'s handler thread — not the
 GUI or pool thread, and it captures the bare `Bridge* this` (it needs `_mtx`,
 `_handlers`, and `loadBackend()`). A backend can be co-owned or otherwise outlive
 its `Bridge`, so a reconnect firing after the `Bridge` is destroyed would
@@ -565,7 +582,7 @@ dereference freed memory. Two layers prevent this:
   `this`. If the token is inactive the `Bridge` is gone and the handler returns
   immediately.
   This covers the race the clear alone cannot: a reconnect already latched on the
-  transport thread at the moment `~Bridge` runs. After the liveness check it also
+  backend's thread at the moment `~Bridge` runs. After the liveness check it also
   re-checks `pinned == loadBackend()` to ignore a reconnect for a backend the
   bridge has since switched away from.
 
@@ -591,29 +608,24 @@ same thread. The rules that keep it from hanging:
   loop, but the guard throws on reentry rather than corrupting state if that
   assumption is ever violated.
 
-### `NetworkMonitor` — probe-thread callbacks must not block
+### `NetworkMonitor` — callbacks run on the I/O loop and must not block it
 
-`onOffline` / `onOnline` run **directly on the probe thread** (`NetworkMonitor::run`).
-Constraints:
+The probe, `onOffline` and `onOnline` run **on the I/O loop's thread**, from a
+loop timer the monitor re-arms every `probeInterval`. Constraints:
 
-- **Callbacks must not block.** A blocking callback stalls the probe loop and
-  delays or prevents all subsequent probes. The intended body is short — set an
-  atomic flag or `post()` to an executor and return.
+- **The probe and the callbacks must not block.** They share the loop with
+  every socket and timer built on it; a blocking one stalls all of them, and
+  delays the next probe. The intended body is short — set an atomic flag or
+  `post()` to an executor and return.
 - **Callbacks must not throw** through the monitor's expectations (the probe
   itself is wrapped in `safeProbe`, which swallows exceptions).
-- **`stop()` from within a callback self-detaches.** `stop()` normally joins the
-  probe thread, but joining from the probe thread itself would deadlock. It
-  detects `this_thread == probe thread` and **detaches** instead; the destructor
-  then spin-waits on `_runExited` until the thread exits. `stop()` is idempotent.
+- **`stop()` runs on the loop.** From another thread it posts and waits, so
+  once it returns no probe or callback is running or will run. From the probe
+  or a callback it runs inline and prevents the re-arm. `stop()` is idempotent.
+- **Destroying the monitor from its own probe or callback is supported.** The
+  timer that invoked it holds the loop-side state until it returns, so the
+  monitor's storage may go while the callback is still on the stack.
 - `isOnline()` reads an `std::atomic<bool>` — safe from any thread at any time.
-- **Destroying the monitor itself from within a callback is not supported** —
-  only calling `stop()` from the callback is. The destructor's spin-wait blocks
-  until `run()` stores `_runExited`, but `run()` cannot reach that store while
-  paused lower on the same thread's stack inside the callback (and the
-  destructor call within it); triggering `~NetworkMonitor()` synchronously from
-  a callback on the probe thread deadlocks there by construction. A callback
-  that wants to tear the monitor down should call `stop()` and let the actual
-  object destruction happen later, from a different thread.
 
 ### `ReconnectCoordinator` — mutex held across the whole retry loop
 
@@ -622,7 +634,8 @@ loop, including all retry sleeps; `onOffline()` takes the same mutex. So the two
 are mutually exclusive and a second concurrent caller blocks until the first
 finishes. The coordinator owns no thread and does no I/O — it runs synchronously
 on the caller's thread, and the host is expected to post it onto a worker
-executor, **not** call it on the probe thread. The strict step order
+executor, **not** call it on the I/O loop that runs `NetworkMonitor`'s
+callbacks. The strict step order
 (reconnect → activatePrimary → bindContext → replay) is an invariant: replay
 never runs before context is bound.
 
@@ -759,7 +772,9 @@ One-liners to remember:
 - `onBackendChanged()` runs posted on the model's strand (not inline under
   `_mtx`): `registerHandler`/`deregisterHandler`/`executeVia` are safe from it,
   but never call `switchBackend` there (it self-joins the strand it runs on).
-- Never block or re-enter from a `NetworkMonitor` callback (probe thread).
+- Never block from anything the I/O loop runs: a `NetworkMonitor` probe or
+  callback, a `TimeoutScheduler` callback.
+- Never destroy an `IoLoop` before the components built on it.
 - Never log from inside a log sink (non-recursive mutex).
 - Never read `session::current()` off the dispatch thread or after `execute()`
   returns.

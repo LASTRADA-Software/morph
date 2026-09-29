@@ -1835,9 +1835,9 @@ public:
     /// Disabled (`std::chrono::milliseconds{0}`, the default): a dropped
     /// frame or a hung server leaves the `Completion` pending forever.
     ///
-    /// The backing `TimeoutScheduler` (and its one background thread) is
-    /// created lazily on the first call that enables a deadline, so a `Bridge`
-    /// that never opts in spawns no extra thread. Once created it lives until
+    /// The backing `TimeoutScheduler` (and the `exec::IoLoop` it owns, with
+    /// that loop's one thread) is created lazily on the first call that enables
+    /// a deadline, so a `Bridge` that never opts in spawns no extra thread. Once created it lives until
     /// `~Bridge()`; setting the deadline back to `0` stops new calls from
     /// arming it but does not tear the thread down. Thread-safe.
     ///
@@ -2124,8 +2124,8 @@ public:
         // that: ~Bridge()'s own body never acquires it, so a plain
         // `!alive.active()` check followed by `_timeoutScheduler->cancel()`
         // a few instructions later is a check-then-use race against
-        // ~Bridge()'s implicit member destruction (which joins
-        // TimeoutScheduler's thread). Holding a shared_ptr for the
+        // ~Bridge()'s implicit member destruction (which waits for
+        // TimeoutScheduler's close on its loop). Holding a shared_ptr for the
         // callback's own lifetime turns that into a non-issue by
         // construction: while any copy of it is alive, ~TimeoutScheduler()
         // cannot run at all.
@@ -3105,7 +3105,7 @@ public:
     /// `shared_ptr<BridgeHandler>` alive inside the completions it dispatched,
     /// so the last reference is dropped wherever those completions are destroyed
     /// — a worker-pool thread for `LocalBackend`/`SimulatedRemoteBackend`, the
-    /// transport thread for `SocketBackend`. A bare "is the bridge alive?" check
+    /// I/O loop's thread for `SocketBackend`. A bare "is the bridge alive?" check
     /// answers for an instant that has already passed by the time the call is
     /// made, which is how an ordinary `~App` becomes a use-after-free on
     /// `Bridge::deregisterHandler`'s `_handlers`. Holding the

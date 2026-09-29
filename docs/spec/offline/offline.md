@@ -18,7 +18,7 @@ All types live in `morph::offline`.
 
 | Type | Header | Role |
 |---|---|---|
-| `NetworkMonitor` / `NetworkMonitorConfig` | `network_monitor.hpp` | Background probe thread + online/offline state machine. |
+| `NetworkMonitor` / `NetworkMonitorConfig` | `network_monitor.hpp` | Periodic probe on the I/O loop + online/offline state machine. |
 | `QueueItem`, `IOfflineQueue`, `InMemoryOfflineQueue` | `offline_queue.hpp` | Passive store of undelivered actions (opaque payloads); durable retry-attempt tracking. |
 | `FileOfflineQueue` | `file_offline_queue.hpp` | Reference NDJSON-file-backed durable queue; no extra dependency, ships by default. |
 | `SqliteOfflineQueue` | `sqlite_offline_queue.hpp` | Reference SQLite-backed durable queue; opt-in (`MORPH_BUILD_OFFLINE_SQLITE`). |
@@ -42,12 +42,18 @@ All types live in `morph::offline`.
 
 ## NetworkMonitor
 
-A background thread calls a user-supplied probe function at regular intervals.
-The monitor starts *online* and transitions to *offline* only after
-`failureThreshold` consecutive failures. It returns to *online* after
-`onlineThreshold` consecutive successes. Callbacks fire on the probe thread.
+A loop timer on an `exec::IoLoop` calls a user-supplied probe function at
+regular intervals. The monitor starts *online* and transitions to *offline*
+only after `failureThreshold` consecutive failures. It returns to *online*
+after `onlineThreshold` consecutive successes. The probe and the callbacks run
+on the loop's thread — the application's one I/O loop, shared with its
+sockets and timers, when it passes one in; a private one otherwise.
 
 The monitor is non-copyable and non-movable. Destroy it to stop monitoring.
+
+Cross-thread surface: `isOnline()` (an atomic read), and `stop()` and the
+destructor (which run on the loop and wait for it). Everything else — the
+counters, the timer, the callbacks — is touched only on the loop.
 
 ### `NetworkMonitorConfig`
 
@@ -68,43 +74,48 @@ type breaks constructor-default-argument lookup on clang/GCC.
 | `ProbeFunction` | `std::function<bool()>` | Returns `true` when the network is reachable. |
 | `Callback` | `std::function<void()>` | Called on state change. |
 | `Config` | `NetworkMonitorConfig` | Alias for the config struct. |
-| ctor | `NetworkMonitor(ProbeFunction, Callback onOffline, Callback onOnline, Config = {})` | Launches the probe thread immediately. |
-| dtor | `~NetworkMonitor()` | Calls `stop()` then spin-waits on `_runExited` to handle the case where `stop()` was called from within a probe callback (avoiding deadlock on `join()`). |
+| ctor | `NetworkMonitor(IoLoop& loop, ProbeFunction, Callback onOffline, Callback onOnline, Config = {})` | Posts the first probe timer to `loop`, which must outlive the monitor. |
+| ctor | `NetworkMonitor(ProbeFunction, Callback onOffline, Callback onOnline, Config = {})` | The same on a private `IoLoop` the monitor owns (natively, one thread). |
+| dtor | `~NetworkMonitor()` | Calls `stop()`. Safe from anywhere, including the monitor's own probe or callback. |
 | `isOnline()` | `bool isOnline() const noexcept` | Reads an atomic flag; safe from any thread. |
-| `stop()` | `void stop()` | Signals the thread to stop. Idempotent. If called from the probe thread itself, detaches instead of joining. |
+| `stop()` | `void stop()` | Retires the probe timer, on the loop: posted and waited for from another thread, so no probe or callback is running once it returns; inline from the probe or a callback, which then finish normally. Idempotent. |
 
 **Probe exceptions are swallowed** — a throwing probe is treated as a failed
 probe (`safeProbe` catches everything and returns `false`).
 
 ## NetworkMonitor callback constraint
 
-**`onOffline` and `onOnline` run on the probe thread, inline inside the probe
-loop.** Look at `run()`: it waits on the condition variable for `probeInterval`,
-calls `safeProbe`, then calls `handleProbeResult`, which invokes the callback
-*before* the loop can circle back to wait for the next interval. There is no
-executor, no second thread, and no queue between the probe result and the
-callback — whatever the callback does, the probe thread does.
+**The probe, `onOffline` and `onOnline` run on the I/O loop's thread, inline
+inside the probe timer's callback.** The timer fires, `safeProbe` runs, then
+`handleProbeResult` invokes the callback *before* the timer is re-armed. There
+is no executor, no second thread, and no queue between the probe result and
+the callback — whatever the callback does, the loop does.
 
 Consequences:
 
-- **A blocking callback stalls all probes.** While the callback runs, the next
-  `wait_for` has not started, so no further connectivity checks happen. A
-  callback that blocks for 30s means 30s of connectivity blindness.
+- **A blocking probe or callback stalls the whole loop.** While it runs no
+  other probe, no socket read or write and no timer on the same `IoLoop`
+  makes progress. A callback that blocks for 30s means 30s of connectivity
+  blindness and 30s of stalled connections. A probe that needs a slow check
+  (a TCP connect, an HTTP round trip) should start it elsewhere and report the
+  last result it has.
 - **Running the coordinator or `SyncWorker` inline is a mistake.** A
   `ReconnectCoordinator::onOnline()` can spin for up to
   `maxAttempts * retryDelay` (≈20s at defaults) of retry-and-sleep, and a
   `SyncWorker::run()` executes arbitrarily long replay work. Doing either
-  directly inside a callback runs *seconds of retry loop on the probe thread*,
-  which is exactly the thread that is supposed to be watching the network.
+  directly inside a callback runs *seconds of retry loop on the I/O loop*,
+  which is exactly the thread that is supposed to be watching the network and
+  carrying the connection being retried.
 - **The safe shape is: set an atomic, or post to an executor, and return.**
   The callback should do O(1) work — flip a flag, `post()` a lambda onto a
   worker executor — and let the heavy sequencing run elsewhere. This is why
   `ReconnectCoordinator::onOnline()`/`onOffline()` are documented as
-  "posted onto a worker executor by the host, not called on the probe thread."
+  "posted onto a worker executor by the host, not called on the I/O loop."
 
-Calling `stop()` from within a callback is supported (it detaches rather than
-joins to avoid a self-deadlock — see the dtor/`stop()` notes above), but it is
-still a callback running on the probe thread and must not block first.
+Calling `stop()`, or destroying the monitor, from within the probe or a
+callback is supported — the timer holds the monitor's loop-side state until the
+callback returns — but it is still code running on the loop and must not block
+first.
 
 See `concurrency_and_lifetimes.md` for the framework-wide rule that
 notification callbacks marshal work off the thread that raised them.
@@ -1032,7 +1043,7 @@ already local.
 
 `onOnline()` and `onOffline()` are mutually serialised by an internal mutex.
 They are intended to be posted onto a worker executor by the host, not called
-directly on the probe thread.
+directly on the I/O loop that runs `NetworkMonitor`'s callbacks.
 
 ## End-to-end integration
 
@@ -1061,10 +1072,12 @@ morph::offline::ReconnectCoordinator coordinator{{
     .sleep           = [](std::chrono::milliseconds d) { std::this_thread::sleep_for(d); },
 }};
 
-// Callbacks run on the probe thread, so they ONLY post — never run the
+// The probe and callbacks run on the I/O loop, so the probe only reads a
+// result it already has and the callbacks ONLY post — never run the
 // coordinator inline (see "NetworkMonitor callback constraint").
 morph::offline::NetworkMonitor monitor{
-    [] { return tcpProbe(); },                                   // ProbeFunction: bool()
+    ioLoop,                                                      // exec::IoLoop, shared with the app's sockets
+    [&] { return lastProbeResult.load(); },                      // ProbeFunction: bool(), non-blocking
     [&] { worker.post([&] { coordinator.onOffline(); }); },      // onOffline
     [&] { worker.post([&] { coordinator.onOnline();  }); },      // onOnline
 };
@@ -1072,7 +1085,7 @@ morph::offline::NetworkMonitor monitor{
 
 Flow: the `bool()` probe drives `NetworkMonitor`'s state machine → on a
 transition the callback *only* posts a lambda to `worker` (it must not run
-reconnect logic inline on the probe thread) → the worker runs
+reconnect logic inline on the I/O loop) → the worker runs
 `ReconnectCoordinator::onOffline()` / `onOnline()` → a successful `onOnline()`
 calls `activatePrimary` → `bindContext` → `replay`, and `replay` runs
 `SyncWorker::run()`, which drains and replays the `queue` the application filled
@@ -1095,14 +1108,14 @@ Both are legitimate; they are different points on a spectrum:
 
 - **Direct `switchBackend` — the minimal path.** No retry, no ordered
   replay, no abort-on-flap. `switchBackend` is a bounded mutex operation (it is
-  not a seconds-long retry loop), so calling it inline on the probe thread is
+  not a seconds-long retry loop), so calling it inline on the I/O loop is
   acceptable *as a minimal demo*. It does not replay a queue and has no
   `shouldContinue` guard.
 - **`ReconnectCoordinator` — the ordered, tested path.** Use it when reconnect
   can *fail and need retries*, when replay must run strictly *after* activate +
   bind, and when a mid-retry flap-back-offline must abort cleanly. This is the
   path with the ordering invariant and the guarantees this file documents. Its
-  own callbacks must be posted off the probe thread precisely because the retry
+  own callbacks must be posted off the I/O loop precisely because the retry
   loop can run for seconds.
 
 Rule of thumb: a demo or a backend switch with no pending writes can use direct
@@ -1260,7 +1273,7 @@ The callbacks are annotated too: `NetworkMonitor`'s `probe`/`onOffline`/`onOnlin
 and `SyncWorker`'s `replay`/`deadLetterSink`. Those are taken *by value*, so the
 `std::function` itself is owned rather than borrowed; what the annotation
 documents is that anything the stored callable refers to must outlive the object,
-which matters here precisely because the callable runs on the probe thread (or on
+which matters here precisely because the callable runs on the I/O loop (or on
 whatever thread calls `run()`) for that object's whole life. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
 
 ## Cross-references

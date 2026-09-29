@@ -20,6 +20,7 @@ add_executable(morph_tests
     test_oom_injector.cpp
     test_executor.cpp
     test_executor_scope.cpp
+    test_io_loop.cpp
     test_example.cpp
     test_executor_extra.cpp
     test_strand.cpp

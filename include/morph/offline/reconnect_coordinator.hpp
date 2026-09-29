@@ -81,7 +81,8 @@ struct ReconnectCoordinatorConfig {
 /// `onOnline()` and `onOffline()` are mutually serialised by an internal mutex,
 /// mirroring `SyncWorker::run()`. Calling them concurrently is safe; the second
 /// caller blocks. They are intended to be posted onto a worker executor by the
-/// host (see the wiring note in the design doc), not called on the probe thread.
+/// host (see the wiring note in the design doc), not called on the I/O loop that
+/// runs `NetworkMonitor`'s callbacks.
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class ReconnectCoordinator {
 public:

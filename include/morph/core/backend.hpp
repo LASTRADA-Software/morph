@@ -242,7 +242,7 @@ enum class BindWait : std::uint8_t {
     ///
     /// The default, and correct for every backend that has not overridden
     /// `bindModel` (the default settles before it returns) as well as for
-    /// `SocketBackend`, whose I/O thread settles the completion. A backend
+    /// `SocketBackend` off its I/O loop, which settles the completion. A backend
     /// that returns this **must** settle every `Completion` it hands out
     /// exactly once without further calls from the caller — including on
     /// transport failure and on `cancelPending`/destruction — or a caller that
@@ -410,7 +410,7 @@ struct IBackend {
     //      Whether the *calling thread* may wait for that continuation is a
     //      separate question, and the signature cannot answer it either: two
     //      shipped backends return an unsettled `Completion` and give opposite
-    //      answers (`SocketBackend`: yes, its I/O thread settles it;
+    //      answers (`SocketBackend`: yes, off its I/O loop, which settles it;
     //      `QtWebSocketBackend` under `asyncRegistrationEnabled`: no, waiting
     //      deadlocks the event loop the reply arrives on). `bindWaitPolicy()`
     //      below carries exactly that one bit and nothing else — it never

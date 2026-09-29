@@ -25,7 +25,7 @@ using morph::net::detail::TcpSocket;
 //
 // That is the opposite shape from the one site in these tests that does need a
 // bound (`FakeWsServer::acceptAndHandshake()`, a *main-thread* `accept()` waiting on
-// the io thread of the component under test), and it is the reason a deadline
+// the I/O loop of the component under test), and it is the reason a deadline
 // here would be a path nothing can take. An untakeable timeout path is worse
 // than none: it reads as a hazard that was found and handled.
 //

@@ -3,10 +3,14 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <memory>
+#include <morph/core/executor.hpp>
+#include <morph/core/io_loop.hpp>
 #include <morph/offline/network_monitor.hpp>
 #include <thread>
 #include <vector>
 
+#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 using namespace std::chrono_literals;
@@ -229,4 +233,65 @@ TEST_CASE("morph::offline::NetworkMonitor: null probe function is treated as off
     // Wait for the null-probe path to fire and trigger the offline transition.
     REQUIRE(waitUntil([&] { return offlineCount.load() == 1; }));
     REQUIRE_FALSE(mon.isOnline());
+}
+
+// ── The owner rule: the probe, the callbacks and stop() all run on the loop ──
+
+TEST_CASE("morph::offline::NetworkMonitor: stop() called off the loop runs its body on the loop", "[monitor][owner]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    std::atomic<int> probes{0};
+    morph::offline::NetworkMonitor mon{loop,
+                                       [&] {
+                                           ++probes;
+                                           return true;
+                                       },
+                                       [] {}, [] {}, morph::offline::NetworkMonitor::Config{.probeInterval = 5ms}};
+    REQUIRE(waitUntil([&] { return probes.load() >= 2; }));
+    REQUIRE_FALSE(morph::exec::runningOn(static_cast<core::async::IExecutor const&>(loop.loop())));
+
+    mon.stop();
+
+    CHECK(recorder.count("NetworkMonitor::stop") == 1U);
+    CHECK(recorder.allPosted("NetworkMonitor::stop"));
+    CHECK(recorder.allPosted("NetworkMonitor::probe"));
+    // Once stop() has returned no further probe runs.
+    int const afterStop = probes.load();
+    std::this_thread::sleep_for(30ms);
+    CHECK(probes.load() == afterStop);
+}
+
+TEST_CASE("morph::offline::NetworkMonitor: callbacks run on the IoLoop it was given", "[monitor][owner]") {
+    morph::exec::IoLoop loop;
+    std::atomic<bool> offlineOnLoop{false};
+    std::atomic<bool> fired{false};
+    morph::offline::NetworkMonitor mon{
+        loop, [] { return false; },
+        [&] {
+            offlineOnLoop = morph::exec::runningOn(static_cast<core::async::IExecutor const&>(loop.loop()));
+            fired = true;
+        },
+        [] {}, morph::offline::NetworkMonitor::Config{.probeInterval = 5ms, .failureThreshold = 1}};
+    REQUIRE(waitUntil([&] { return fired.load(); }));
+    CHECK(offlineOnLoop.load());
+}
+
+TEST_CASE("morph::offline::NetworkMonitor: destroyed from inside its own callback, it does not wait on itself",
+          "[monitor][owner]") {
+    morph::exec::IoLoop loop;
+    std::atomic<bool> destroyed{false};
+    std::unique_ptr<morph::offline::NetworkMonitor> mon;
+    std::atomic<morph::offline::NetworkMonitor*> ready{nullptr};
+    mon = std::make_unique<morph::offline::NetworkMonitor>(
+        loop,
+        [&] {
+            if (ready.load() != nullptr && !destroyed.load()) {
+                mon.reset();
+                destroyed = true;
+            }
+            return true;
+        },
+        [] {}, [] {}, morph::offline::NetworkMonitor::Config{.probeInterval = 5ms});
+    ready.store(mon.get());
+    REQUIRE(waitUntil([&] { return destroyed.load(); }));
 }

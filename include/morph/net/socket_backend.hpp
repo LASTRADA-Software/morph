@@ -2,23 +2,37 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <core/async/Task.hpp>
+#include <core/net/EventLoop.hpp>
+#include <core/net/IConnector.hpp>
+#include <core/net/Sockets.hpp>
+#include <core/net/ThreadedAddressResolver.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <future>
+#include <memory>
 #include <morph/core/backend.hpp>
+#include <morph/core/detail/owner_probe.hpp>
 #include <morph/core/detail/reply_router.hpp>
+#include <morph/core/io_loop.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
-#include <unordered_map>
+#include <utility>
+#include <vector>
 
-#include "detail/tcp_socket.hpp"
+#include "../attributes.hpp"
+#include "detail/ws_connection.hpp"
 #include "detail/ws_frame.hpp"
 #include "detail/ws_handshake.hpp"
 
@@ -34,37 +48,24 @@ struct SocketBackendConfig {
     std::chrono::milliseconds maxReconnectDelay{30000};
     /// @brief Multiplier applied to the delay after each failed attempt.
     double backoffMultiplier = 2.0;
-    /// @brief Maximum time to wait for the initial TCP connect to complete.
+    /// @brief Maximum time for the whole connect: name resolution and every
+    ///        resolved address.
     std::chrono::milliseconds connectTimeout{5000};
-    /// @brief Bound on a single `::send` that is making no progress.
+    /// @brief Bound on writing one chunk (up to 64 KiB) of an outgoing frame.
     ///
-    /// Applied as `SO_SNDTIMEO`. Without it, a peer that stops reading fills the
-    /// kernel send buffer and parks `sendFrame` inside `sendAll` **while holding
-    /// `_socketMtx`** -- which parks `~SocketBackend` behind the same lock, with
-    /// nothing able to release it. Generous on purpose: it bounds a
-    /// send making *no* progress, not a slow one. Zero disables it.
+    /// A loop timer armed around each chunk's write closes the connection when
+    /// it runs out, so a peer that stops reading ends in a disconnect (and the
+    /// usual reconnect) rather than in a queue of unsent frames that grows
+    /// forever. Generous on purpose: it bounds a write making no progress, not
+    /// a slow one. Zero disables it.
     std::chrono::milliseconds sendTimeout{30000};
-    /// @brief Bound on the handshake response read that follows a successful
-    /// TCP connect.
+    /// @brief Bound on the whole handshake response read that follows a
+    ///        successful TCP connect, from its first byte to the header's end.
     ///
-    /// Applied as `SO_RCVTIMEO` for the duration of the handshake read only
-    /// -- cleared once the handshake completes, since the normal read loop is
-    /// meant to block indefinitely waiting for the next frame. Without this,
-    /// a peer that accepts the TCP connection and then never writes (a
-    /// listener that never completes the WS upgrade -- a TCP load balancer
-    /// connecting lazily to its backend would do this) leaves the io thread
-    /// parked in a blocking `recv` with nothing to unblock it, which in turn
-    /// wedges `~SocketBackend` forever: the destructor's escape hatch only
-    /// reaches a socket already published to `_socket`, and that publish
-    /// happens only *after* the handshake. Zero disables it
-    /// (the kernel default, block forever).
-    ///
-    /// @warning `SO_RCVTIMEO` restarts on every `recv`, so this bounds each
-    /// individual read rather than the handshake as a whole. It closes the
-    /// "silent peer" hole it was added for; a peer that dribbles a byte just
-    /// inside each interval can still stretch the handshake to roughly this
-    /// value times `readHttpHeaderBlock`'s 64 KiB header cap before that cap
-    /// (not this timeout) ends it.
+    /// A peer that accepts the TCP connection and then never completes the
+    /// WebSocket upgrade — a TCP load balancer connecting lazily to its
+    /// backend would — is dropped after this long, and counts as a failed
+    /// connect. Zero disables it.
     std::chrono::milliseconds handshakeTimeout{10000};
 };
 
@@ -75,11 +76,18 @@ struct SocketBackendConfig {
 /// Mirrors `morph::qt::QtWebSocketBackend`'s observable behavior
 /// (`registerModel` synchronous, `deregisterModel` fire-and-forget, `execute`
 /// asynchronous and callId-multiplexed, `DisconnectedError`/reconnect
-/// semantics) but runs its own dedicated I/O thread and uses
-/// `std::condition_variable` instead of a nested Qt event loop. Unlike
-/// `QtWebSocketBackend`, `SocketBackend` may safely be driven from multiple
-/// threads concurrently (`registerModel`/`execute`/`deregisterModel` are all
-/// thread-safe) — there is no single "owning" event-loop thread.
+/// semantics). Its socket, its pending calls and its reconnect state machine
+/// live on an `exec::IoLoop`, which it shares with every other socket, timer
+/// and probe the application builds on that loop.
+///
+/// Cross-thread surface: `execute`, `bindModel`, `promoteModel`,
+/// `deregisterModel` and `cancelPending` post to the loop and return;
+/// `waitForConnected` posts a waiter and blocks the caller, never the loop;
+/// the synchronous control verbs (`registerModel` and its siblings,
+/// `assignPrimary`, `listInstances`) post their request and park the caller
+/// until the loop hands the reply over; `setSession` and
+/// `setReconnectHandler` store under their own locks. Every other field is
+/// touched only on the loop.
 ///
 /// @par TLS
 /// Not supported. `serverUrl` must be `ws://`; `wss://` throws from the
@@ -89,66 +97,52 @@ public:
     /// @brief Alias for the reconnect configuration struct.
     using Config = SocketBackendConfig;
 
-    /// @brief Parses @p serverUrl and starts the background I/O thread, which
-    ///        connects asynchronously.
+    /// @brief Parses @p serverUrl and starts connecting on @p loop.
+    /// @param loop      The application's I/O loop. Borrowed: it must outlive
+    ///                  this backend.
     /// @param serverUrl `ws://host:port[/path]` URL of the remote `RemoteServer`.
     /// @param cfg       Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff.
-    /// @throws std::runtime_error immediately (before starting the I/O thread)
-    ///         if @p serverUrl is not a well-formed `ws://` URL (see `parseWsUrl`).
-    // Copy/move are implicitly deleted by the non-copyable/non-movable
-    // std::mutex/std::condition_variable/std::thread members below — no
-    // explicit `= delete` needed (matches the rest of the codebase's
-    // convention, e.g. `LocalBackend`).
-    explicit SocketBackend(std::string serverUrl, Config cfg = {})
+    /// @throws std::runtime_error immediately if @p serverUrl is not a
+    ///         well-formed `ws://` URL (see `parseWsUrl`).
+    SocketBackend(::morph::exec::IoLoop& loop MORPH_LIFETIMEBOUND, std::string_view serverUrl, Config cfg = {})
         : _url{::morph::net::detail::parseWsUrl(serverUrl)},
-          _cfg{cfg},
-          _currentReconnectDelay{cfg.initialReconnectDelay} {
-        _ioThread = std::thread{[this] { ioThreadMain(); }};
-        _handlerThread = std::thread{[this] { handlerThreadMain(); }};
+          _loop{&loop},
+          _core{std::make_shared<Core>(loop, _url, cfg, *this)} {
+        start();
     }
 
-    /// @brief Shuts down the I/O thread and resolves any still-pending completions.
+    /// @brief Parses @p serverUrl and starts connecting on a loop of its own,
+    ///        for a caller with no `IoLoop` to share.
+    /// @param serverUrl `ws://host:port[/path]` URL of the remote `RemoteServer`.
+    /// @param cfg       Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff.
+    /// @throws std::runtime_error immediately, before any loop is started, if
+    ///         @p serverUrl is not a well-formed `ws://` URL (see `parseWsUrl`).
+    explicit SocketBackend(std::string_view serverUrl, Config cfg = {})
+        : _url{::morph::net::detail::parseWsUrl(serverUrl)},
+          _ownedLoop{std::make_unique<::morph::exec::IoLoop>()},
+          _loop{_ownedLoop.get()},
+          _core{std::make_shared<Core>(*_ownedLoop, _url, cfg, *this)} {
+        start();
+    }
+
+    SocketBackend(const SocketBackend&) = delete;
+    SocketBackend& operator=(const SocketBackend&) = delete;
+    SocketBackend(SocketBackend&&) = delete;
+    SocketBackend& operator=(SocketBackend&&) = delete;
+
+    /// @brief Closes the connection, rejects every pending call with
+    ///        `DisconnectedError`, and stops the handler thread.
     ///
-    /// @note May block if destruction races an in-flight (re)connect attempt:
-    /// the TCP connect phase is bounded by `Config::connectTimeout`, and the
-    /// handshake response read that follows it by `Config::handshakeTimeout`
-    /// — but the latter is `SO_RCVTIMEO`, which bounds each individual `recv`
-    /// rather than the handshake as a whole, so a peer that dribbles one
-    /// header byte per interval can stretch that phase to roughly
-    /// `handshakeTimeout` times the 64 KiB header cap. Against a peer that
-    /// simply stops writing, the bound is one
-    /// `handshakeTimeout`. See `docs/spec/core/backend.md`'s `morph::net`
-    /// section.
+    /// The close runs on the loop: inline when this runs on the loop's own
+    /// thread (from a callback), posted and waited for otherwise. It never
+    /// waits for a connect in progress: a dial that completes afterwards finds
+    /// the backend closed and drops its socket.
     ~SocketBackend() override {
         _shuttingDown.store(true);
-        // Under `_socketMtx`, and it has to be -- dropping the lock here is
-        // what ThreadSanitizer flags. `shutdownBoth()` is indeed safe to call
-        // from any thread, but that is not what the lock is protecting:
-        // `onDisconnected()` *reassigns* `_socket` (`_socket = TcpSocket{}`, a
-        // move-assign that closes the old fd), so an unlocked `_socket.valid()`
-        // here races the I/O thread replacing the object out from under it.
-        //
-        // The risk of parking behind this lock is closed from the other end:
-        // `sendAll` is not un-timed. `Config::sendTimeout` (SO_SNDTIMEO, 30s default)
-        // bounds any single send that makes no progress, so a peer that stops
-        // reading can hold `_socketMtx` for at most that long instead of
-        // forever, and this wait is bounded rather than open-ended. Fixing it
-        // that way rather than by reaching the fd without the mutex avoids the
-        // fd-reuse hazard an atomic shadow descriptor would carry.
-        {
-            std::scoped_lock const lock{_socketMtx};
-            if (_socket.valid()) {
-                _socket.shutdownBoth();
-            }
-        }
-        _reconnectCv.notify_all();
-        if (_ioThread.joinable()) {
-            _ioThread.join();
-        }
-        // Joined after _ioThread, not before: a reconnect handler parked in
-        // sendSync is released by onDisconnected()'s _syncCv notify, which only
-        // runs as ioThreadMain unwinds. Waking _handlerCv first would not free
-        // it -- that wait is on _syncCv.
+        _loop->runAndWait([core = _core] { core->close(); });
+        // After the close, not before: a reconnect handler parked in sendSync
+        // is released by the close's `_syncCv` notify. Waking `_handlerCv`
+        // first would not free it -- that wait is on `_syncCv`.
         {
             std::scoped_lock const lock{_handlerMtx};
             _handlerPending = false;
@@ -157,29 +151,36 @@ public:
         if (_handlerThread.joinable()) {
             _handlerThread.join();
         }
-        cancelPending(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
     }
 
     /// @brief Blocks the calling thread until connected or @p timeout elapses.
     ///
-    /// @warning The backend must outlive this call. Destroying a
-    /// `SocketBackend` while a thread is parked here is undefined — the
-    /// destructor does not release parked waiters, and destroying
-    /// `_connectCv` underneath one is a data race. See
+    /// Posts a waiter to the loop, which releases it when a connection
+    /// completes. On the loop's own thread it cannot wait for the loop, so it
+    /// answers at once.
+    ///
+    /// @warning The backend must outlive this call. See
     /// `docs/spec/core/backend.md`'s "Lifetime & ownership" section.
     /// @param timeout Maximum time to wait.
     /// @return `true` if connected before the timeout, `false` otherwise.
     bool waitForConnected(std::chrono::milliseconds timeout = std::chrono::milliseconds{5000}) {
-        std::unique_lock lock{_connectMtx};
-        _connectCv.wait_for(lock, timeout, [this] { return _connected.load(); });
-        return _connected.load();
+        if (_core->connected.load() || _loop->runningHere()) {
+            return _core->connected.load();
+        }
+        auto waiter = std::make_shared<std::promise<void>>();
+        std::future<void> const released = waiter->get_future();
+        _loop->post([core = _core, waiter] { core->addConnectWaiter(waiter); });
+        static_cast<void>(released.wait_for(timeout));
+        return _core->connected.load();
     }
 
     /// @brief Sends a `register` message and blocks until the reply arrives.
     ///
-    /// Thread-safe, but only one synchronous control call (`registerModel`) may
-    /// be in flight at a time across the whole backend; a second call while one
-    /// is outstanding throws immediately rather than queuing. The factory
+    /// Callable from any thread but the I/O loop's, which would be blocked on a
+    /// reply only it can deliver. Only one synchronous control call
+    /// (`registerModel`) may be in flight at a time across the whole backend; a
+    /// second call while one is outstanding throws immediately rather than
+    /// queuing. The factory
     /// argument is ignored — model construction is delegated to the server.
     /// @param typeId  String type-id of the model to register.
     /// @param factory Ignored — the server constructs via its own registry.
@@ -283,14 +284,12 @@ public:
     // `backend::SynchronousBackendAdapter`. The reasoning is recorded in
     // docs/spec/core/backend.md (`SocketBackend`'s section, "The structural
     // registration surface, natively"); the short form is that this transport
-    // already demultiplexes replies by `callId` on its I/O thread for
+    // already demultiplexes replies by `callId` on its I/O loop for
     // `execute`, and a control call is the same shape. Running the *blocking*
     // verb on a wrapper's strand would park a thread for a round trip this
     // transport need not park for, and would keep every bind inside
     // `sendSync`'s one-synchronous-call-at-a-time token — which a concurrent
-    // `listInstances` or legacy `registerModel` on another thread shares, and
-    // which this backend is otherwise documented as not having (it may be
-    // driven from several threads at once).
+    // `listInstances` or legacy `registerModel` on another thread shares.
     //
     // The synchronous verbs are unaffected: `registerModel`,
     // `registerModelShared`, `attachModel` and `assignPrimary` use `sendSync`
@@ -301,10 +300,10 @@ public:
     /// Sends the control envelope @p request's shape names (see
     /// `backend::detail::BindRequest`'s table) carrying a non-zero `callId`
     /// drawn from the same counter `execute` uses, and settles the returned
-    /// `Completion` from the I/O thread when the matching reply arrives. No
-    /// thread is parked anywhere: in particular this never enters `sendSync`,
-    /// so a bind neither waits on `_syncCv` nor takes the one-synchronous-call
-    /// token, and therefore cannot wait on the I/O thread that would satisfy it.
+    /// `Completion` on the I/O loop when the matching reply arrives. No thread
+    /// is parked anywhere: in particular this never enters `sendSync`, so a
+    /// bind neither waits on `_syncCv` nor takes the one-synchronous-call
+    /// token, and therefore cannot wait on the loop that would satisfy it.
     ///
     /// The two degradations the legacy verbs perform are preserved exactly: an
     /// empty `primary` with a live `current` gives that instance up first, and
@@ -389,33 +388,26 @@ public:
 
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
-    /// Carries a real, non-zero `callId` drawn from the same shared counter
-    /// (`_pending.nextCallId()`) `execute()` uses, exactly as `QtWebSocketBackend` does:
-    /// `callId == 0` is `dispatchIncomingEnvelope`'s discriminator for "hand
-    /// this payload to whichever `sendSync()` is parked", so a
-    /// fire-and-forget `deregister` sharing that sentinel would have its own stray
-    /// `ok` reply delivered to an unrelated `register`/`attach` waiting on
-    /// `_syncCv` whenever the two landed back to back on one connection.
+    /// Posted to the loop, which gives it a real, non-zero `callId` drawn from
+    /// the same counter `execute()` uses, exactly as `QtWebSocketBackend` does:
+    /// `callId == 0` is the discriminator for "hand this payload to whichever
+    /// `sendSync()` is parked", so a fire-and-forget `deregister` sharing that
+    /// sentinel would have its own stray `ok` reply delivered to an unrelated
+    /// `register`/`attach` waiting on `_syncCv` whenever the two landed back to
+    /// back on one connection.
     ///
     /// Unlike `QtWebSocketBackend` this needs no `_pendingDeregisters` set to
-    /// recognise the reply and drop it: the non-zero branch of
-    /// `dispatchIncomingEnvelope` already drops any `callId` that is not in
-    /// `_pending`, and a `deregister` never registers one.
+    /// recognise the reply and drop it: the reply router already drops any
+    /// non-zero `callId` that is not pending, and a `deregister` files none.
     ///
     /// @param mid Id of the model to remove on the server.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
-        if (_connected.load()) {
-            try {
-                auto env = ::morph::wire::makeDeregister(mid.v);
-                env.callId = _pending.nextCallId();
-                env.session = currentSession();
-                sendFrame(::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env));
-            } catch (const std::exception&) {
-                // Fire-and-forget: same documented trade-off as
-                // QtWebSocketBackend — a failed send just leaks the model on
-                // the server (see docs/spec/core/backend.md's Limitations).
-            }
+        if (!_core->connected.load()) {
+            return;
         }
+        auto env = ::morph::wire::makeDeregister(mid.v);
+        env.session = currentSession();
+        _loop->post([core = _core, env]() mutable { core->sendDeregister(std::move(env)); });
     }
 
     /// @brief Sends one synchronous control envelope and returns the replied `modelId`.
@@ -438,87 +430,78 @@ public:
     }
 
     /// @brief Sends an `execute` message and returns a `Completion` resolved on reply.
+    ///
+    /// The action is serialised here, on the calling thread; the loop then
+    /// assigns the call id, files the pending record and writes the frame.
     /// @param mid    Target model id on the server.
     /// @param call   Bundled action; `serializeAction` and `deserializeResult` are used.
     /// @param cbExec Executor for delivering the completion callbacks.
     /// @return Completion resolved asynchronously when the server's reply arrives,
-    ///         or immediately with `DisconnectedError` if not connected.
+    ///         or with `DisconnectedError` if the backend is not connected.
     ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
                                                               ::morph::backend::detail::ActionCall call,
                                                               ::morph::exec::IExecutor* cbExec) override {
         auto compState = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{compState, cbExec};
+        if (!_core->connected.load()) {
+            // Answered here rather than on the loop, which would answer the
+            // same: the loop re-checks, so a connection lost after this read
+            // is caught there.
+            compState->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+            return comp;
+        }
 
-        std::uint64_t const callId = _pending.nextCallId();
         ::morph::wire::Envelope env;
         env.kind = "execute";
-        env.callId = callId;
         env.modelId = mid.v;
         env.modelType = call.modelTypeId;
         env.actionType = call.actionTypeId;
         env.body = call.serializeBody();
         env.session = std::move(call.session);
 
-        // _connected is re-checked *inside* the table's lock, via insertIf's
-        // admit predicate, rather than only before this block: onDisconnected()
-        // stores _connected = false and then sweeps the table (cancelPending ->
-        // drain()) under the same mutex. Checking _connected before taking that
-        // lock (and nowhere else) leaves a window where a disconnect's sweep can
-        // run strictly between the check and the insert -- this entry would land
-        // in the table *after* the sweep already drained it, and nothing would
-        // ever resolve its Completion. See PendingCallTable::insertIf's own docs.
-        if (!_pending.insertIf(
-                callId,
-                PendingExecute{.state = compState, .deserialize = std::move(call.deserializeResult), .cbExec = cbExec},
-                [this] { return _connected.load(); })) {
-            compState->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
-            return comp;
-        }
-
-        try {
-            sendFrame(::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env));
-        } catch (const std::exception&) {
-            // Either the write raced an already-in-progress disconnect, or
-            // `sendFrame` itself just tore the connection down after a
-            // failed/partial send. Either way a disconnect is now
-            // underway, and the io thread's handler drains _pending
-            // (including this entry) via cancelPending.
-        }
+        _loop->post([core = _core, env,
+                     pending = PendingExecute{.state = compState, .deserialize = call.deserializeResult}]() mutable {
+            core->fileExecute(std::move(env), std::move(pending));
+        });
         return comp;
     }
 
     /// @brief No-op — this backend holds no local model objects.
     void notifyBackendChanged() override {}
 
+    /// @brief Whether a caller may wait for a bind to settle.
+    ///
+    /// The loop settles every bind, so a caller anywhere else may wait for
+    /// one. A caller on the loop's own thread — a timer or a monitor callback
+    /// sharing it — would be waiting on itself, and is told not to.
+    /// @return `kCallerMustNotBlock` on the loop's thread, `kCallerMayBlock`
+    ///         elsewhere.
+    [[nodiscard]] ::morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
+        return _loop->runningHere() ? ::morph::backend::detail::BindWait::kCallerMustNotBlock
+                                    : ::morph::backend::detail::BindWait::kCallerMayBlock;
+    }
+
     /// @brief Resolves every pending call's `Completion` with @p exc.
     ///
-    /// Covers both in-flight tables: the `execute` calls in `_pending` and the
-    /// `bindModel`/`promoteModel` control calls in `_pendingControl`. A bind
-    /// left out of this sweep would hang forever on a disconnect, since its
-    /// reply can now only arrive on a connection that is gone — the async
-    /// counterpart of `sendSync`'s `!_connected` wake-up.
+    /// Posted to the loop, so it covers every call issued before it — the loop
+    /// runs posts in order. Covers both in-flight tables: the `execute` calls
+    /// and the `bindModel`/`promoteModel` control calls. A bind left out of
+    /// this sweep would hang forever on a disconnect, since its reply can now
+    /// only arrive on a connection that is gone — the async counterpart of
+    /// `sendSync`'s disconnect wake-up.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
-        auto drained = _pending.drain();
-        for (auto& [callId, pending] : drained) {
-            (void)callId;
-            if (pending.state) {
-                pending.state->setException(exc);
-            }
-        }
-        auto drainedControl = _pendingControl.drain();
-        for (auto& [callId, pending] : drainedControl) {
-            (void)callId;
-            if (pending.state) {
-                pending.state->setException(exc);
-            }
-        }
+        _loop->post([core = _core, exc] {
+            ::morph::exec::detail::noteOwner("SocketBackend::cancelPending", core->loop.loop(),
+                                             core->loop.runningHere());
+            core->cancelAll(exc);
+        });
     }
 
     /// @brief Installs the handler invoked after each *subsequent* successful (re)connect.
     /// @param handler Callable invoked on this backend's dedicated handler
-    ///                thread — deliberately not the I/O thread, see
-    ///                `onConnected`. Pass `nullptr` to clear.
+    ///                thread — deliberately not the I/O loop, see
+    ///                `Core::onConnected`. Pass `nullptr` to clear.
     void setReconnectHandler(const std::function<void()>& handler) override {
         std::scoped_lock lock{_reconnectHandlerMtx};
         _reconnectHandler = handler;
@@ -542,16 +525,15 @@ private:
 
     struct PendingExecute {
         std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
-        std::function<std::shared_ptr<void>(std::string_view)> deserialize;
-        ::morph::exec::IExecutor* cbExec{nullptr};
+        std::shared_ptr<void> (*deserialize)(std::string_view json){nullptr};
     };
 
     /// @brief One in-flight control call issued through `bindModel`/`promoteModel`.
     ///
-    /// Kept in its own table rather than in `_pending`: an execute reply
+    /// Kept in its own table rather than beside the executes: an execute reply
     /// settles a `Completion<shared_ptr<void>>` through a deserializer, a
     /// control reply settles a `Completion<ModelId>` and has none. The two
-    /// tables share one `callId` counter (`_pending.nextCallId()`), so an id is
+    /// tables share one `callId` counter (the execute table's), so an id is
     /// never ambiguous between them.
     struct PendingControl {
         /// @brief State of the `Completion<ModelId>` this call settles.
@@ -564,9 +546,10 @@ private:
         std::optional<::morph::exec::detail::ModelId> echo;
     };
 
-    /// @brief Sends one control envelope on the callId-multiplexed path and
-    ///        returns the `Completion` its reply will settle.
-    /// @param env    Envelope to send; its `callId` and `session` are filled in here.
+    /// @brief Posts one control envelope to the loop's callId-multiplexed
+    ///        path and returns the `Completion` its reply will settle.
+    /// @param env    Envelope to send; its `callId` is assigned on the loop and
+    ///               its `session` filled in here.
     /// @param what   Verb name for the error message.
     /// @param echo   Id to resolve with, or `nullopt` to use the reply's `modelId`.
     /// @param cbExec Executor the continuation is delivered on.
@@ -576,46 +559,16 @@ private:
         ::morph::exec::IExecutor& cbExec) {
         auto state = std::make_shared<::morph::async::detail::CompletionState<::morph::exec::detail::ModelId>>();
         ::morph::async::Completion<::morph::exec::detail::ModelId> comp{state, &cbExec};
-
-        std::uint64_t const callId = _pending.nextCallId();
-        env.callId = callId;
         env.session = currentSession();
-        std::string payload;
-        try {
-            payload = ::morph::wire::encode(env);
-        } catch (const std::exception& exc) {
-            state->setException(
-                std::make_exception_ptr(std::runtime_error(std::string{what} + " failed: " + exc.what())));
-            return comp;
-        }
-
-        // Admitted under the table's own lock, for the reason `execute` spells
-        // out: a disconnect sweep (`cancelPending` -> `drain()`) running between
-        // a bare `_connected` check and the insert would file this entry after
-        // the sweep already emptied the table, and nothing would settle it.
-        if (!_pendingControl.insertIf(callId, PendingControl{.state = state, .what = std::string{what}, .echo = echo},
-                                      [this] { return _connected.load(); })) {
-            state->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
-            return comp;
-        }
-
-        try {
-            sendFrame(::morph::net::detail::WsOpcode::kText, payload);
-        } catch (const std::exception&) {
-            // The write either raced a disconnect already under way or (as
-            // `sendFrame` documents) tore the connection down itself. Reclaim
-            // the entry rather than leave it to the io thread's sweep: `take`
-            // is atomic, so if the sweep won the race it already settled this
-            // state and there is nothing here to settle.
-            if (auto reclaimed = _pendingControl.take(callId)) {
-                state->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
-            }
-        }
+        _loop->post([core = _core, env,
+                     pending = PendingControl{.state = state, .what = std::string{what}, .echo = echo}]() mutable {
+            core->fileControl(std::move(env), std::move(pending));
+        });
         return comp;
     }
 
     /// @brief Settles one control call from its matched reply envelope.
-    /// @param pending Entry taken out of `_pendingControl`.
+    /// @param pending Entry taken out of the control table.
     /// @param reply   Decoded reply carrying the same `callId`.
     static void settleControl(const PendingControl& pending, const ::morph::wire::Envelope& reply) {
         if (!pending.state) {
@@ -629,52 +582,33 @@ private:
             std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + reply.message)));
     }
 
-    void sendFrame(::morph::net::detail::WsOpcode opcode, std::string_view payload) {
-        std::scoped_lock lock{_socketMtx};
-        if (!_socket.valid()) {
-            throw std::runtime_error("SocketBackend::sendFrame: not connected");
-        }
-        std::string frame = ::morph::net::detail::encodeWsFrame(opcode, payload, /*mask=*/true);
-        try {
-            _socket.sendAll(frame.data(), frame.size());
-        } catch (...) {
-            // `sendAll` can throw having already written part of the frame
-            // (e.g. `SO_SNDTIMEO` firing mid-send) -- the peer's frame stream
-            // is now desynchronised, and a subsequent send here would append
-            // a fresh frame into the middle of the truncated one.
-            // Every caller of `sendFrame` reaches this one lock, so tearing
-            // the connection down *here* -- rather than in each of them --
-            // is enough to cover them all: `shutdownBoth()` unblocks the io
-            // thread's `recvSome`, which drives the normal disconnect path
-            // (`onDisconnected()` -> `cancelPending()`) instead of leaving
-            // the corrupted stream in apparent good standing.
-            _socket.shutdownBoth();
-            throw;
-        }
-    }
-
     std::string sendSync(const std::string& payload) {
+        if (_loop->runningHere()) {
+            // The reply can only be read by the loop this would block.
+            throw std::runtime_error("sendSync: a synchronous call cannot wait on the I/O loop's own thread");
+        }
         std::unique_lock lock{_syncMtx};
         if (_syncInFlight) {
             throw std::runtime_error("sendSync: a synchronous call is already in flight (reentrant use)");
         }
-        if (!_connected.load()) {
+        if (!_core->connected.load()) {
             throw std::runtime_error("disconnected");
         }
         _syncInFlight = true;
         _syncReply.reset();
         lock.unlock();
 
-        try {
-            sendFrame(::morph::net::detail::WsOpcode::kText, payload);
-        } catch (const std::exception&) {
-            std::scoped_lock relock{_syncMtx};
-            _syncInFlight = false;
-            throw std::runtime_error("disconnected");
-        }
+        _loop->post([core = _core, frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText,
+                                                                               payload, /*mask=*/true)]() mutable {
+            ::morph::exec::detail::noteOwner("SocketBackend::sendSync", core->loop.loop(), core->loop.runningHere());
+            // A refused frame needs no answer here: it is refused only because
+            // the connection is closing, and the disconnect that follows wakes
+            // this call with "disconnected".
+            static_cast<void>(core->send(std::move(frame)));
+        });
 
         std::unique_lock waitLock{_syncMtx};
-        _syncCv.wait(waitLock, [this] { return _syncReply.has_value() || !_connected.load(); });
+        _syncCv.wait(waitLock, [this] { return _syncReply.has_value() || !_core->connected.load(); });
         bool const gotReply = _syncReply.has_value();
         std::string result = gotReply ? std::move(*_syncReply) : std::string{};
         _syncReply.reset();
@@ -685,31 +619,7 @@ private:
         return result;
     }
 
-    void onConnected() {
-        bool const isReconnect = _everConnected.exchange(true);
-        _connected.store(true);
-        _currentReconnectDelay = _cfg.initialReconnectDelay;
-        _connectCv.notify_all();
-        if (isReconnect) {
-            // Hand the callback to _handlerThread rather than running it here.
-            // onConnected() is called from ioThreadMain() immediately *before*
-            // readLoop() starts, and a reconnect handler is expected to
-            // re-register its models (Bridge::installReconnectHandler does
-            // exactly that), which goes through sendSync -> wait on _syncCv for
-            // a reply that only readLoop can ever deliver. Run inline, that
-            // wait blocks the one thread responsible for satisfying it: the
-            // transport deadlocks permanently, with no timeout to break it.
-            // Off-thread, the handler's sendSync overlaps readLoop as intended
-            // -- its request may even reach the socket before readLoop starts,
-            // which is harmless, since the reply simply waits in the kernel
-            // buffer.
-            std::scoped_lock const lock{_handlerMtx};
-            _handlerPending = true;
-            _handlerCv.notify_all();
-        }
-    }
-
-    /// Serializes reconnect-handler invocations off the I/O thread. Coalescing
+    /// Serializes reconnect-handler invocations off the I/O loop. Coalescing
     /// via a flag (rather than queuing every request) is deliberate: if a second
     /// reconnect lands while a handler is still running, re-running it once
     /// afterwards is the correct catch-up, and it bounds concurrent handler runs
@@ -746,71 +656,279 @@ private:
         }
     }
 
-    void onDisconnected() {
-        _connected.store(false);
-        {
-            std::scoped_lock lock{_socketMtx};
-            _socket = ::morph::net::detail::TcpSocket{};
-        }
-        {
-            std::scoped_lock lock{_syncMtx};
-            _syncReply.reset();
-        }
-        _syncCv.notify_all();
-        _connectCv.notify_all();
-        cancelPending(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+    void start() {
+        _handlerThread = std::thread{[this] { handlerThreadMain(); }};
+        _loop->post([core = _core] { core->startAttempt(); });
     }
 
-    void dispatchIncomingEnvelope(const std::string& payload) {
-        ::morph::wire::Envelope env;
-        try {
-            env = ::morph::wire::decode(payload);
-        } catch (const std::exception&) {
-            {
-                std::scoped_lock const lock{_syncMtx};
-                if (_syncInFlight) {
-                    // Hand the raw text to the parked caller so it can report
-                    // something better than "disconnected".
-                    _syncReply = payload;
-                    _syncCv.notify_all();
-                    return;
+    /// @brief Everything the I/O loop owns, touched only in its tasks.
+    ///
+    /// Held by `shared_ptr` from the backend and from every flow and task on
+    /// the loop, so a flow that resumes after the backend is gone finds it
+    /// closed and ends. It reaches the backend itself — the synchronous-call and
+    /// handler-thread state — only through `owner`, which `close()` clears.
+    struct Core : std::enable_shared_from_this<Core> {
+        Core(::morph::exec::IoLoop& ioLoop, ::morph::net::detail::ParsedWsUrl target, Config config,
+             SocketBackend& backend)
+            : loop{ioLoop},
+              url{std::move(target)},
+              cfg{config},
+              owner{&backend},
+              reconnectDelay{config.initialReconnectDelay} {}
+
+        /// Owner check for every loop-side body.
+        void note(char const* site) const noexcept {
+            ::morph::exec::detail::noteOwner(site, loop.loop(), loop.runningHere());
+        }
+
+        void startAttempt() {
+            if (!closed) {
+                loop.loop().spawn(attemptFlow(shared_from_this()));
+            }
+        }
+
+        /// Queues @p frame on the live connection.
+        /// @return `false` when there is none, or it is closing.
+        bool send(std::string frame) {
+            note("SocketBackend::send");
+            if (!conn) {
+                return false;
+            }
+            return ::morph::net::detail::enqueueFrame(conn, std::move(frame));
+        }
+
+        /// Assigns @p env a call id, files @p pending under it and writes it.
+        void fileExecute(::morph::wire::Envelope env, PendingExecute pending) {
+            note("SocketBackend::execute");
+            if (!connected.load() || !conn) {
+                pending.state->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+                return;
+            }
+            std::uint64_t const callId = executes.nextCallId();
+            env.callId = callId;
+            std::string frame;
+            try {
+                frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText,
+                                                            ::morph::wire::encode(env), /*mask=*/true);
+            } catch (...) {
+                pending.state->setException(std::current_exception());
+                return;
+            }
+            executes.insert(callId, std::move(pending));
+            // A refused frame is left filed: the connection is closing, and
+            // the disconnect that follows sweeps it with `DisconnectedError`.
+            static_cast<void>(send(std::move(frame)));
+        }
+
+        /// The control-call counterpart of `fileExecute`.
+        void fileControl(::morph::wire::Envelope env, PendingControl pending) {
+            note("SocketBackend::bindModel");
+            if (!connected.load() || !conn) {
+                pending.state->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+                return;
+            }
+            std::uint64_t const callId = executes.nextCallId();
+            env.callId = callId;
+            std::string frame;
+            try {
+                frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText,
+                                                            ::morph::wire::encode(env), /*mask=*/true);
+            } catch (const std::exception& exc) {
+                pending.state->setException(
+                    std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + exc.what())));
+                return;
+            }
+            controls.insert(callId, std::move(pending));
+            static_cast<void>(send(std::move(frame)));
+        }
+
+        void sendDeregister(::morph::wire::Envelope env) {
+            note("SocketBackend::deregisterModel");
+            if (!connected.load()) {
+                return;
+            }
+            env.callId = executes.nextCallId();
+            try {
+                static_cast<void>(send(::morph::net::detail::encodeWsFrame(
+                    ::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env), /*mask=*/true)));
+            } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
+                // Fire-and-forget: same documented trade-off as
+                // QtWebSocketBackend — a failed send just leaks the model on
+                // the server (see docs/spec/core/backend.md's Limitations).
+            }
+        }
+
+        void addConnectWaiter(const std::shared_ptr<std::promise<void>>& waiter) {
+            note("SocketBackend::waitForConnected");
+            if (connected.load()) {
+                waiter->set_value();
+                return;
+            }
+            if (!closed) {
+                connectWaiters.push_back(waiter);
+            }
+        }
+
+        /// Settles every pending call, of both kinds, with @p exc. The tables
+        /// are emptied first, so a settle that re-enters the backend files
+        /// into empty tables.
+        void cancelAll(const std::exception_ptr& exc) {
+            auto drained = executes.drain();
+            auto drainedControl = controls.drain();
+            for (auto& entry : drained) {
+                if (entry.second.state) {
+                    entry.second.state->setException(exc);
                 }
             }
-            // No sync waiter, and the callId is unreadable, so this reply cannot
-            // be matched to the execute it belongs to. Dropping it silently left
-            // that execute's Completion unsettled forever. Every message here is
-            // required to be one envelope, so an undecodable one means the
-            // peer's framing is no longer trustworthy: fail the pending calls
-            // rather than wait on a stream that may never produce a matching
-            // reply. Mirrors QtWebSocketBackend::onTextMessage.
-            cancelPending(std::make_exception_ptr(
-                std::runtime_error("protocol error: server sent a message that is not a valid envelope")));
-            return;
+            for (auto& entry : drainedControl) {
+                if (entry.second.state) {
+                    entry.second.state->setException(exc);
+                }
+            }
         }
-        if (env.callId != 0U) {
-            auto pending = _pending.take(env.callId);
-            if (!pending) {
-                // Not an execute: it may be a control reply for a `bindModel`/
-                // `promoteModel` in flight, which shares this id space. Settling
-                // it here — on the io thread, before `readLoop` asks for the
-                // next frame — is what lets a control call be issued without
-                // parking any thread on `_syncCv`.
-                if (auto control = _pendingControl.take(env.callId)) {
-                    settleControl(*control, env);
+
+        /// Hands @p payload to a parked synchronous call, if there is one.
+        /// @return Whether one took it.
+        bool handToSyncCall(std::string const& payload) {
+            if (owner == nullptr) {
+                return false;
+            }
+            std::scoped_lock const lock{owner->_syncMtx};
+            if (!owner->_syncInFlight) {
+                return false;
+            }
+            owner->_syncReply = payload;
+            owner->_syncCv.notify_all();
+            return true;
+        }
+
+        /// Wakes a parked synchronous call to observe the disconnect.
+        void wakeSyncCall() {
+            if (owner == nullptr) {
+                return;
+            }
+            {
+                std::scoped_lock const lock{owner->_syncMtx};
+                owner->_syncReply.reset();
+            }
+            owner->_syncCv.notify_all();
+        }
+
+        void onConnected() {
+            bool const isReconnect = everConnected;
+            everConnected = true;
+            connected.store(true);
+            reconnectDelay = cfg.initialReconnectDelay;
+            for (auto const& waiter : std::exchange(connectWaiters, {})) {
+                waiter->set_value();
+            }
+            if (isReconnect && owner != nullptr) {
+                // Handed to the handler thread rather than run here. A
+                // reconnect handler is expected to re-register its models
+                // (Bridge::installReconnectHandler does exactly that), which
+                // goes through sendSync -> wait on _syncCv for a reply that only
+                // this loop can deliver. Run on the loop, that wait blocks the
+                // one thread responsible for satisfying it.
+                std::scoped_lock const lock{owner->_handlerMtx};
+                owner->_handlerPending = true;
+                owner->_handlerCv.notify_all();
+            }
+        }
+
+        void onDisconnected() {
+            connected.store(false);
+            if (conn) {
+                ::morph::net::detail::closeAfterFlush(conn);
+                conn.reset();
+            }
+            wakeSyncCall();
+            cancelAll(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+        }
+
+        /// Arms the backoff timer for the next attempt, and grows the delay.
+        void scheduleReconnect() {
+            note("SocketBackend::reconnect");
+            backoffTimer = loop.loop().addTimer(loop.loop().clock().now() + reconnectDelay, &Core::onBackoff, this);
+            auto const nextDelayMs = static_cast<std::chrono::milliseconds::rep>(
+                static_cast<double>(reconnectDelay.count()) * cfg.backoffMultiplier);
+            reconnectDelay = std::min(std::chrono::milliseconds{nextDelayMs}, cfg.maxReconnectDelay);
+        }
+
+        /// The backoff timer's callback. `close()` retires the timer, so the
+        /// core it points at is alive whenever it runs.
+        static void onBackoff(void* corePtr) {
+            auto& self = *static_cast<Core*>(corePtr);
+            self.backoffTimer = {};
+            self.startAttempt();
+        }
+
+        /// Ends everything: the connection, the backoff, the waiters, every
+        /// pending call. Idempotent. After it, no flow touches the backend.
+        void close() {
+            note("SocketBackend::close");
+            if (closed) {
+                return;
+            }
+            closed = true;
+            connected.store(false);
+            static_cast<void>(loop.loop().cancelTimer(backoffTimer));
+            if (conn) {
+                ::morph::net::detail::closeConnection(*conn);
+                conn.reset();
+            }
+            connectWaiters.clear();
+            wakeSyncCall();
+            owner = nullptr;
+            cancelAll(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+        }
+
+        void dispatchIncomingEnvelope(const std::string& payload) {
+            ::morph::wire::Envelope env;
+            try {
+                env = ::morph::wire::decode(payload);
+            } catch (const std::exception&) {
+                // Hand the raw text to a parked synchronous call so it can
+                // report something better than "disconnected".
+                if (handToSyncCall(payload)) {
                     return;
                 }
-                return;  // late/cancelled reply — dropped silently
+                // No sync waiter, and the callId is unreadable, so this reply
+                // cannot be matched to the execute it belongs to. Every message
+                // here is required to be one envelope, so an undecodable one
+                // means the peer's framing is no longer trustworthy: fail the
+                // pending calls rather than wait on a stream that may never
+                // produce a matching reply. Mirrors
+                // QtWebSocketBackend::onTextMessage.
+                cancelAll(std::make_exception_ptr(
+                    std::runtime_error("protocol error: server sent a message that is not a valid envelope")));
+                return;
+            }
+            if (env.callId == 0U) {
+                static_cast<void>(handToSyncCall(payload));
+                return;
+            }
+            note("SocketBackend::reply");
+            auto pending = executes.take(env.callId);
+            if (!pending) {
+                // Not an execute: it may be a control reply for a `bindModel`/
+                // `promoteModel` in flight, which shares this id space.
+                if (auto control = controls.take(env.callId)) {
+                    settleControl(*control, env);
+                }
+                return;  // otherwise a late/cancelled reply, dropped silently
             }
             // Triage shared with SimulatedRemoteBackend and QtWebSocketBackend
             // (core/detail/reply_router.hpp), so the three cannot drift. The
             // Timeout arm is the server's own `LimitPolicy::executeTimeout`
             // reply, not a generic application error -- surfaced as the same
             // TimeoutError type the other two backends give callers for this
-            // case, so callers can distinguish "server gave up on this
-            // specific call" from an arbitrary `err` message.
+            // case.
             switch (::morph::backend::detail::classifyExecuteReply(env)) {
                 case ::morph::backend::detail::ExecuteReplyKind::Value:
                     try {
+                        if (pending->deserialize == nullptr) {
+                            throw std::runtime_error{"ActionCall::deserializeResult is null"};
+                        }
                         pending->state->setValue(pending->deserialize(env.body));
                     } catch (...) {
                         pending->state->setException(std::current_exception());
@@ -823,177 +941,151 @@ private:
                 default:
                     // `default:` only because the project builds with
                     // -Wswitch-default; ExecuteReplyKind is a closed enum and
-                    // all three enumerators are handled explicitly. Sharing
-                    // the arm with Error also makes a value manufactured by an
-                    // out-of-range static_cast land somewhere safe. Mirrors
-                    // forms/layout.hpp's groupKindName.
+                    // all three enumerators are handled explicitly.
                     pending->state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
                     break;
             }
-            return;
         }
-        std::scoped_lock lock{_syncMtx};
-        if (_syncInFlight) {
-            _syncReply = payload;
-            _syncCv.notify_all();
-        }
-    }
 
-    // Returns false when the connection should stop reading (peer sent
-    // Close, or a protocol error was detected).
-    bool drainFrames(::morph::net::detail::WsFrameReader& reader) {
-        using ::morph::net::detail::WsOpcode;
-        for (;;) {
-            std::optional<::morph::net::detail::WsFrame> frame;
-            try {
-                frame = reader.tryExtractFrame();
-            } catch (const std::exception&) {
-                return false;
-            }
-            if (!frame) {
-                return true;
-            }
-            if (frame->opcode == WsOpcode::kClose) {
+        /// Handles every complete frame @p reader holds.
+        /// @return `false` when the connection should stop reading (peer sent
+        ///         Close, a protocol error, or this backend closed meanwhile).
+        bool drainFrames(const std::shared_ptr<::morph::net::detail::LoopConnection>& connection,
+                         ::morph::net::detail::WsFrameReader& reader) {
+            using ::morph::net::detail::WsOpcode;
+            for (;;) {
+                std::optional<::morph::net::detail::WsFrame> frame;
                 try {
-                    sendFrame(WsOpcode::kClose, frame->payload);
+                    frame = reader.tryExtractFrame();
                 } catch (const std::exception&) {
+                    return false;
                 }
-                return false;
-            }
-            if (frame->opcode == WsOpcode::kPing) {
-                try {
-                    sendFrame(WsOpcode::kPong, frame->payload);
-                } catch (const std::exception&) {
+                if (!frame) {
+                    return true;
                 }
-                continue;
-            }
-            if (frame->opcode == WsOpcode::kPong) {
-                continue;
-            }
-            if (frame->opcode == WsOpcode::kText) {
-                dispatchIncomingEnvelope(frame->payload);
+                if (frame->opcode == WsOpcode::kClose) {
+                    static_cast<void>(::morph::net::detail::enqueueFrame(
+                        connection, ::morph::net::detail::encodeWsFrame(WsOpcode::kClose, frame->payload, true)));
+                    return false;
+                }
+                if (frame->opcode == WsOpcode::kPing) {
+                    static_cast<void>(::morph::net::detail::enqueueFrame(
+                        connection, ::morph::net::detail::encodeWsFrame(WsOpcode::kPong, frame->payload, true)));
+                    continue;
+                }
+                if (frame->opcode == WsOpcode::kText) {
+                    dispatchIncomingEnvelope(frame->payload);
+                    // A settle may have run user code that destroyed the
+                    // backend, closing this core.
+                    if (closed) {
+                        return false;
+                    }
+                }
             }
         }
-    }
 
-    void readLoop(const std::string& leftover) {
-        // Client role: RFC 6455 §5.1 forbids a server from masking the
-        // frames it sends, so this reader must reject a masked one.
-        ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/false};
-        reader.feed(leftover);
-        char buf[4096];
-        for (;;) {
-            if (!drainFrames(reader)) {
-                return;
-            }
-            std::size_t got = 0;
-            try {
-                got = _socket.recvSome(buf, sizeof(buf));
-            } catch (const std::exception&) {
-                return;
-            }
-            if (got == 0) {
-                return;
-            }
-            reader.feed(std::string_view{buf, got});
-        }
-    }
-
-    void ioThreadMain() {
-        while (!_shuttingDown.load()) {
-            bool connectedOk = false;
-            try {
-                auto socket = ::morph::net::detail::TcpSocket::connect(_url.host, _url.port, _cfg.connectTimeout);
-                if (_cfg.sendTimeout.count() > 0) {
-                    // Before the handshake, so even that cannot park forever.
-                    // Bounds any single send that makes no progress, which is
-                    // what keeps ~SocketBackend from being parked behind
-                    // _socketMtx by a peer that stopped reading.
-                    (void)socket.setSendTimeout(_cfg.sendTimeout);
+        /// One connection attempt, start to end: dial, handshake, read until
+        /// the connection ends, then decide whether to try again.
+        static ::core::async::Task<void> attemptFlow(std::shared_ptr<Core> self) {
+            bool reachedServer = false;
+            {
+                ::core::net::DialOptions options;
+                options.connectTimeout = self->cfg.connectTimeout;
+                auto dialed = co_await ::core::net::connect(&self->loop.loop(), self->url.host, self->url.port,
+                                                            &::core::net::defaultAsyncResolver(), options);
+                if (self->closed) {
+                    co_return;
                 }
-                if (_cfg.handshakeTimeout.count() > 0) {
-                    // Bounds the handshake response read, which otherwise has
-                    // no timeout of its own and can park this thread forever
-                    // against a peer that accepts and then stays silent -- and
-                    // this fd is not yet published to `_socket`, so the
-                    // destructor cannot reach it either.
-                    (void)socket.setRecvTimeout(_cfg.handshakeTimeout);
+                if (dialed) {
+                    auto connection = std::make_shared<::morph::net::detail::LoopConnection>(
+                        self->loop.loop(), std::move(*dialed), self->cfg.sendTimeout);
+                    self->conn = connection;
+                    std::string const key = ::morph::net::detail::generateClientKey();
+                    static_cast<void>(::morph::net::detail::enqueueFrame(
+                        connection, ::morph::net::detail::buildClientHandshakeRequest(self->url, key)));
+                    auto header =
+                        co_await ::morph::net::detail::readHeaderBlockAsync(connection, self->cfg.handshakeTimeout);
+                    if (self->closed) {
+                        co_return;
+                    }
+                    bool verified = false;
+                    if (header) {
+                        try {
+                            ::morph::net::detail::verifyServerHandshakeResponse(header->header, key);
+                            verified = true;
+                        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
+                            // A failed connect, like any other: see below.
+                        }
+                    }
+                    if (verified) {
+                        reachedServer = true;
+                        self->onConnected();
+                        // Client role: RFC 6455 §5.1 forbids a server from
+                        // masking the frames it sends, so this reader must
+                        // reject a masked one.
+                        ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/false};
+                        reader.feed(header->leftover);
+                        std::array<std::byte, 4096> buf{};
+                        while (self->drainFrames(connection, reader) && !connection->closed) {
+                            auto const got = co_await connection->socket->read(buf);
+                            if (self->closed || !got || *got == 0) {
+                                break;
+                            }
+                            reader.feed(std::string_view{reinterpret_cast<char const*>(buf.data()), *got});
+                        }
+                    }
+                    if (self->closed) {
+                        co_return;
+                    }
                 }
-                std::string leftover = ::morph::net::detail::performClientHandshake(socket, _url);
-                if (_cfg.handshakeTimeout.count() > 0 && !socket.setRecvTimeout(std::chrono::milliseconds{0})) {
-                    // The normal read loop blocks indefinitely waiting for
-                    // the next frame by design; only the handshake read is
-                    // meant to be bounded. Unlike *setting* the timeout,
-                    // failing to clear it is not something to shrug off: the
-                    // read loop would inherit it and `recvSome` would throw
-                    // `EAGAIN` after every `handshakeTimeout` of idleness,
-                    // turning a healthy connection into a permanent
-                    // disconnect/reconnect churn. Abandon the attempt instead.
-                    // Note this throws *before* `connectedOk`/`onConnected()`,
-                    // so it counts as a failed connect: a backend that has been
-                    // connected before retries under the ordinary backoff, and
-                    // one that has not falls under the "never reached the
-                    // server even once" fail-fast rule below and gives up.
-                    throw std::runtime_error("SocketBackend: could not clear the handshake read timeout");
-                }
-                {
-                    std::scoped_lock lock{_socketMtx};
-                    _socket = std::move(socket);
-                }
-                connectedOk = true;
-                onConnected();
-                readLoop(leftover);
-            } catch (const std::exception&) {
-                // Falls through to the disconnect/reconnect handling below.
             }
-            onDisconnected();
-            if (_shuttingDown.load()) {
-                return;
-            }
-            bool const wasEverConnected = _everConnected.load();
-            if (!connectedOk && !wasEverConnected) {
+            self->onDisconnected();
+            if (!reachedServer && !self->everConnected) {
                 // Never reached the server even once — fail fast, no retry
                 // (mirrors QtWebSocketBackend's "no reconnect for
                 // never-connected sockets").
-                return;
+                co_return;
             }
-            if (!_cfg.reconnectEnabled) {
-                return;
+            if (self->cfg.reconnectEnabled) {
+                self->scheduleReconnect();
             }
-            std::unique_lock lock{_reconnectMtx};
-            _reconnectCv.wait_for(lock, _currentReconnectDelay, [this] { return _shuttingDown.load(); });
-            auto const nextDelayMs = static_cast<std::chrono::milliseconds::rep>(
-                static_cast<double>(_currentReconnectDelay.count()) * _cfg.backoffMultiplier);
-            _currentReconnectDelay = std::min(std::chrono::milliseconds{nextDelayMs}, _cfg.maxReconnectDelay);
         }
-    }
 
+        ::morph::exec::IoLoop& loop;
+        ::morph::net::detail::ParsedWsUrl url;
+        Config cfg;
+        /// The backend, until `close()`.
+        SocketBackend* owner;
+        /// The one field read off the loop: by `execute`'s fast path,
+        /// `waitForConnected` and `sendSync`.
+        std::atomic<bool> connected{false};
+        bool everConnected{false};
+        bool closed{false};
+        std::chrono::milliseconds reconnectDelay;
+        ::core::net::TimerId backoffTimer{};
+        std::shared_ptr<::morph::net::detail::LoopConnection> conn;
+        ::morph::backend::detail::PendingCallTable<PendingExecute> executes;
+        // Control calls issued through the structural surface. Draws its ids
+        // from `executes`' counter rather than owning a second one, so the two
+        // tables can never claim the same id.
+        ::morph::backend::detail::PendingCallTable<PendingControl> controls;
+        std::vector<std::shared_ptr<std::promise<void>>> connectWaiters;
+    };
+
+    /// Parsed before anything else is built, so a bad URL throws before a
+    /// loop of the backend's own is started.
     ::morph::net::detail::ParsedWsUrl _url;
-    Config _cfg;
+    /// Present only for the owning constructor; destroyed after everything
+    /// below, once the destructor has closed the core on it.
+    std::unique_ptr<::morph::exec::IoLoop> _ownedLoop;
+    ::morph::exec::IoLoop* _loop;
+    std::shared_ptr<Core> _core;
     std::atomic<bool> _shuttingDown{false};
-    std::atomic<bool> _connected{false};
-    std::atomic<bool> _everConnected{false};
-
-    std::mutex _socketMtx;
-    ::morph::net::detail::TcpSocket _socket;
-
-    std::mutex _connectMtx;
-    std::condition_variable _connectCv;
-
-    std::mutex _reconnectMtx;
-    std::condition_variable _reconnectCv;
-    std::chrono::milliseconds _currentReconnectDelay;
 
     std::mutex _syncMtx;
     std::condition_variable _syncCv;
     bool _syncInFlight{false};
     std::optional<std::string> _syncReply;
-
-    ::morph::backend::detail::PendingCallTable<PendingExecute> _pending;
-    // Control calls issued through the structural surface. Deliberately shares
-    // `_pending`'s callId counter (allocated via `_pending.nextCallId()`) rather
-    // than owning a second one, so the two tables can never claim the same id.
-    ::morph::backend::detail::PendingCallTable<PendingControl> _pendingControl;
 
     std::mutex _reconnectHandlerMtx;
     std::function<void()> _reconnectHandler;
@@ -1005,10 +1097,9 @@ private:
     std::condition_variable _handlerCv;
     bool _handlerPending{false};
 
-    // Declared last: the constructor starts these threads after every other
-    // member above is fully constructed, so the thread bodies never observe a
+    // Declared last: the constructor starts this thread after every other
+    // member above is fully constructed, so its body never observes a
     // partially-constructed `this`.
-    std::thread _ioThread;
     std::thread _handlerThread;
 };
 

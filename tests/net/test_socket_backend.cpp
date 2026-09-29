@@ -14,8 +14,10 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/io_loop.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
+#include <morph/core/timeout_scheduler.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/net/detail/tcp_socket.hpp>
@@ -32,6 +34,9 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include "../owner_probe_recorder.hpp"
+#include "../test_support.hpp"
 
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based
 // get_name() needs these types to have external linkage (see
@@ -106,7 +111,7 @@ void spinUntil(const std::function<bool()>& done, int maxIterations = 200) {
 // outer loop). waitForConnected()'s own wait_for predicate is already
 // satisfied while _connected is still true, so polling it with a zero timeout
 // alone would spin through every iteration in a few microseconds, never
-// giving the io thread a chance to notice the disconnect -- spinUntil's real
+// giving the I/O loop a chance to notice the disconnect -- spinUntil's real
 // wall-clock sleep between checks is what actually gives it that chance.
 bool waitForDisconnect(morph::net::SocketBackend& backend, int maxIterations = 200) {
     spinUntil([&] { return !backend.waitForConnected(std::chrono::milliseconds{0}); }, maxIterations);
@@ -166,7 +171,7 @@ public:
     // Accepts the pending connection and completes a real WS handshake.
     //
     // The client (a SocketBackend under test) is already connecting
-    // concurrently on its own io thread by the time this is called, so this
+    // concurrently on its I/O loop by the time this is called, so this
     // normally returns promptly -- but "normally" is not a bound. A blocking
     // `accept()` here parks the *main test thread* with nothing else in the
     // process able to satisfy it if the client never connects, which is how a
@@ -524,7 +529,7 @@ TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed b
 TEST_CASE("SocketBackend: registerModel on a never-connected socket throws, does not hang",
           "[net][socket_backend][disconnect]") {
     // Port 1 is reserved (root-only) on Linux/macOS and never listening — the
-    // socket never connects, so the io thread exits without retrying.
+    // socket never connects, so the I/O loop exits without retrying.
     morph::net::SocketBackend backend{"ws://127.0.0.1:1"};
     REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{200}));
 
@@ -827,7 +832,7 @@ TEST_CASE("SocketBackend: ~SocketBackend does not hang against a peer that stall
 
     auto backend = std::make_unique<morph::net::SocketBackend>(
         "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg);
-    std::this_thread::sleep_for(std::chrono::milliseconds{100});  // let the io thread's connect() land
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});  // let the I/O loop's connect() land
 
     // Both the backend and the promise are *owned* by the thread rather than
     // captured by reference. The backend, because if the destructor never
@@ -1142,17 +1147,17 @@ TEST_CASE("SocketBackend: a Ping frame from the server is answered with a matchi
     REQUIRE(pong2.payload == "ping-payload-2");
 }
 
-TEST_CASE("SocketBackend: a Ping frame followed by an abortive close does not hang the io thread",
+TEST_CASE("SocketBackend: a Ping frame followed by an abortive close does not hang the loop",
           "[net][socket_backend][disconnect]") {
     // Aims at drainFrames()'s own Ping-echo `sendFrame(kPong, ...)` catch
     // (distinct from -- and narrower than -- the general sendFrame-races-a-
-    // disconnect family closed above): here the *same* io thread reads the
+    // disconnect family closed above): here the *same* I/O loop reads the
     // Ping and then, moments later, tries to write the Pong back on a socket
     // an abortive RST may have already torn down. The RST and the read+echo
     // sequence race each other with no synchronization, so whether this
     // specific catch fires depends on exactly how fast the RST lands versus
-    // how fast the io thread turns the Ping around -- not reliably won on
-    // every run. What *is* guaranteed regardless of who wins: the io thread
+    // how fast the I/O loop turns the Ping around -- not reliably won on
+    // every run. What *is* guaranteed regardless of who wins: the I/O loop
     // does not hang, and the backend ends up disconnected either way.
     for (int iter = 0; iter < 40; ++iter) {
         FakeWsServer fake;
@@ -1167,7 +1172,7 @@ TEST_CASE("SocketBackend: a Ping frame followed by an abortive close does not ha
     }
 }
 
-TEST_CASE("SocketBackend: a Close frame followed by an abortive close does not hang the io thread",
+TEST_CASE("SocketBackend: a Close frame followed by an abortive close does not hang the loop",
           "[net][socket_backend][disconnect]") {
     // Same race as the Ping case above, aimed at drainFrames()'s Close-echo
     // `sendFrame(kClose, "")` catch instead of the Ping one.
@@ -1222,7 +1227,7 @@ TEST_CASE("SocketBackend: with reconnectEnabled=false, the backend does not retr
     REQUIRE(waitForDisconnect(backend));
 
     // A fresh listener on the same port must not bring the backend back --
-    // with reconnectEnabled=false, the io thread already returned for good.
+    // with reconnectEnabled=false, the I/O loop already returned for good.
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
     auto wsServer2 = std::make_unique<morph::net::SocketServer>(*server, port);
     REQUIRE(wsServer2->listen());
@@ -1519,7 +1524,7 @@ TEST_CASE("SocketBackend: reconnects to a fresh server on the same port", "[net]
     REQUIRE(wsServer2->listen());
 
     // _connected is a level-triggered flag, so polling waitForConnected
-    // repeatedly is correct: it returns true as soon as the io thread's
+    // repeatedly is correct: it returns true as soon as the I/O loop's
     // backoff loop reconnects (50ms initial delay, 200ms cap).
     bool reconnected = false;
     for (int i = 0; i < 100 && !reconnected; ++i) {
@@ -1576,7 +1581,7 @@ struct ReconnectFixture {
 
 TEST_CASE("SocketBackend: a reconnect handler that re-registers does not deadlock the transport",
           "[net][socket_backend][disconnect]") {
-    // The handler used to run inline on the I/O thread from onConnected(),
+    // The handler used to run inline on the I/O loop from onConnected(),
     // *before* readLoop() started. Any handler doing what a reconnect handler
     // exists to do -- re-registering its models, which Bridge does via sendSync
     // -- then blocked on _syncCv waiting for a reply only readLoop could
@@ -1777,7 +1782,7 @@ TEST_CASE(
     REQUIRE(wsServer.listen());
 
     // Declared before `backend`, so it is destroyed *after* it: `~SocketBackend`
-    // joins the I/O thread, which can call `post()` on this executor right up
+    // joins the I/O loop, which can call `post()` on this executor right up
     // until that join completes. With the reverse order, TSan caught the I/O
     // thread still running -- and still able to call `post()` -- while this
     // executor's own destructor was tearing down its condition variable on the
@@ -1893,7 +1898,7 @@ TEST_CASE("SocketBackend: a bindModel continuation does not run until the caller
         ran.store(true);
     });
 
-    // Give the round trip more than enough time to complete on the io thread.
+    // Give the round trip more than enough time to complete on the I/O loop.
     std::this_thread::sleep_for(std::chrono::milliseconds{200});
     CHECK_FALSE(ran.load());
 
@@ -1911,7 +1916,7 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
     // docs/spec/core/backend.md.
     //
     // The documented reconnect hazard is that a control call parks on `_syncCv`
-    // waiting for a reply only the I/O thread's read loop can deliver -- so
+    // waiting for a reply only the I/O loop's read loop can deliver -- so
     // running one on that thread wedges the transport. A control call that
     // never parks cannot have that hazard, whichever thread issues it. Two
     // observable consequences prove it does not park:
@@ -2279,4 +2284,214 @@ TEST_CASE("SocketBackend: a private registration carries contextKey to the serve
         std::scoped_lock const lock{providerMtx};
         CHECK(requestedFor.empty());
     }
+}
+
+// ── One I/O loop owns the transport ─────────────────────────────────────────
+//
+// Every piece of `SocketBackend` state lives on the `IoLoop` it was built on.
+// Each case below calls verbs from this test's own thread -- never the loop's
+// -- and reads, from inside the body each verb posts, whether that body runs
+// as a task of the loop (`OwnerProbeRecorder`). A body run inline on the
+// calling thread reports `onOwner == false`, and the case fails.
+
+namespace {
+
+bool onLoop(morph::exec::IoLoop& loop) {
+    return morph::exec::runningOn(static_cast<core::async::IExecutor const&>(loop.loop()));
+}
+
+/// A `RemoteServer` behind a `SocketServer`, and one backend connected to it,
+/// all on one `IoLoop`. Members in teardown order: backend, then server, then
+/// the loop last.
+struct SharedLoopStack {
+    morph::exec::IoLoop loop;
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{loop, *server, 0};
+    std::unique_ptr<morph::net::SocketBackend> backend;
+
+    explicit SharedLoopStack(morph::net::SocketBackend::Config cfg = {}) {
+        if (!wsServer.listen()) {
+            throw std::runtime_error("SharedLoopStack: listen failed");
+        }
+        backend = std::make_unique<morph::net::SocketBackend>(loop, url(), cfg);
+        if (!backend->waitForConnected()) {
+            throw std::runtime_error("SharedLoopStack: connect failed");
+        }
+    }
+
+    [[nodiscard]] std::string url() const {
+        return "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
+    }
+};
+
+/// An `SbEchoAction{7}` call, serialised by hand: these cases need a wire
+/// round trip, not a typed handler.
+morph::backend::detail::ActionCall echoCall() {
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "SbEchoModel";
+    call.actionTypeId = "SbEchoAction";
+    call.serializeAction = [](const void*) { return std::string{R"({"value":7})"}; };
+    call.deserializeResult = [](std::string_view json) -> std::shared_ptr<void> {
+        return std::make_shared<std::string>(json);
+    };
+    return call;
+}
+
+/// Waits for @p comp to settle, either way.
+template <class T>
+bool settles(morph::async::Completion<T>& comp) {
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    comp.then([done](const T&) { done->store(true); }).onError([done](const std::exception_ptr&) {
+        done->store(true);
+    });
+    return morph::testing::waitUntil([done] { return done->load(); });
+}
+
+}  // namespace
+
+TEST_CASE("SocketBackend: every socket write is made on the loop, whichever thread asked",
+          "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::testing::OwnerProbeRecorder const recorder{stack.loop.loop()};
+    REQUIRE_FALSE(onLoop(stack.loop));
+
+    // A synchronous control call, a fire-and-forget one and an execute, all
+    // from this thread.
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    REQUIRE(mid.v != 0U);
+    morph::exec::ThreadPoolExecutor cbPool{1};
+    auto comp = stack.backend->execute(mid, echoCall(), &cbPool);
+    REQUIRE(settles(comp));
+    stack.backend->deregisterModel(mid);
+    stack.loop.runAndWait([] {});
+
+    CHECK(recorder.allPosted("SocketBackend::sendSync"));
+    CHECK(recorder.allPosted("SocketBackend::execute"));
+    CHECK(recorder.allPosted("SocketBackend::deregisterModel"));
+    CHECK(recorder.count("SocketBackend::send") >= 3U);
+    CHECK(recorder.allPosted("SocketBackend::send"));
+}
+
+TEST_CASE("SocketBackend: pending calls are filed, matched and swept on the loop", "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::testing::OwnerProbeRecorder const recorder{stack.loop.loop()};
+    morph::exec::ThreadPoolExecutor cbPool{1};
+
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    auto comp = stack.backend->execute(mid, echoCall(), &cbPool);
+    REQUIRE(settles(comp));
+    auto bound = stack.backend->bindModel(privateBind("SbEchoModel"), cbPool);
+    REQUIRE(settles(bound));
+    stack.backend->cancelPending(std::make_exception_ptr(std::runtime_error{"swept"}));
+    stack.loop.runAndWait([] {});
+
+    CHECK(recorder.allPosted("SocketBackend::execute"));
+    CHECK(recorder.allPosted("SocketBackend::bindModel"));
+    CHECK(recorder.allPosted("SocketBackend::reply"));
+    CHECK(recorder.allPosted("SocketBackend::cancelPending"));
+}
+
+TEST_CASE("SocketBackend: waitForConnected registers its waiter on the loop", "[net][socket_backend][owner]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    FakeWsServer fake;
+    morph::net::SocketBackend backend{loop, "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port()))};
+
+    // Nothing has accepted yet, so this waits: its waiter is filed on the loop
+    // and released by the timeout.
+    CHECK_FALSE(backend.waitForConnected(std::chrono::milliseconds{50}));
+    fake.acceptAndHandshake();
+    CHECK(backend.waitForConnected());
+
+    CHECK(recorder.allPosted("SocketBackend::waitForConnected"));
+}
+
+TEST_CASE("SocketBackend: the reconnect backoff is armed on the loop", "[net][socket_backend][owner][disconnect]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketBackend::Config cfg;
+    cfg.initialReconnectDelay = std::chrono::milliseconds{20};
+    cfg.maxReconnectDelay = std::chrono::milliseconds{50};
+
+    auto wsServer = std::make_unique<morph::net::SocketServer>(loop, *server, 0);
+    REQUIRE(wsServer->listen());
+    auto const port = wsServer->port();
+    morph::net::SocketBackend backend{loop, "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg};
+    REQUIRE(backend.waitForConnected());
+
+    wsServer.reset();  // the backend sees the drop and backs off
+    REQUIRE(morph::testing::waitUntil([&] { return recorder.count("SocketBackend::reconnect") >= 1U; }));
+    wsServer = std::make_unique<morph::net::SocketServer>(loop, *server, port);
+    REQUIRE(wsServer->listen());
+    REQUIRE(morph::testing::waitUntil([&] { return backend.waitForConnected(std::chrono::milliseconds{50}); }));
+
+    CHECK(recorder.allPosted("SocketBackend::reconnect"));
+}
+
+TEST_CASE("SocketBackend: a timer and a connected socket share one loop, and the timer fires",
+          "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::async::detail::TimeoutScheduler scheduler{stack.loop};
+    std::atomic<bool> timerOnLoop{false};
+    std::atomic<bool> fired{false};
+    std::atomic<bool> connectedWhenFired{false};
+
+    scheduler.schedule(std::chrono::milliseconds{20}, [&] {
+        timerOnLoop = onLoop(stack.loop);
+        connectedWhenFired = stack.backend->waitForConnected(std::chrono::milliseconds{0});
+        fired = true;
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return fired.load(); }));
+    CHECK(timerOnLoop.load());
+    CHECK(connectedWhenFired.load());
+
+    // And the socket still carries a round trip on the same loop.
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    morph::exec::ThreadPoolExecutor cbPool{1};
+    std::atomic<bool> replied{false};
+    auto comp = stack.backend->execute(mid, echoCall(), &cbPool);
+    comp.then([&](const std::shared_ptr<void>&) { replied = true; }).onError([](const std::exception_ptr&) {});
+    CHECK(morph::testing::waitUntil([&] { return replied.load(); }));
+}
+
+TEST_CASE("SocketBackend: destroyed on the loop thread, from a timer callback, it does not deadlock",
+          "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::async::detail::TimeoutScheduler scheduler{stack.loop};
+    std::atomic<bool> destroyed{false};
+    std::atomic<bool> destroyedOnLoop{false};
+
+    scheduler.schedule(std::chrono::milliseconds{1}, [&] {
+        destroyedOnLoop = onLoop(stack.loop);
+        stack.backend.reset();
+        destroyed = true;
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return destroyed.load(); },
+                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+    CHECK(destroyedOnLoop.load());
+}
+
+TEST_CASE("SocketBackend: destroyed inside its own reply's continuation, on the loop, it does not deadlock",
+          "[net][socket_backend][owner]") {
+    // The continuation runs on the inline executor, so it runs inside the
+    // backend's own reply flow: the destructor closes the backend under the
+    // flow that is delivering to it, and the flow must notice and stop.
+    SharedLoopStack stack;
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    std::atomic<bool> destroyed{false};
+    std::atomic<bool> destroyedOnLoop{false};
+
+    auto comp = stack.backend->execute(mid, echoCall(), &morph::exec::detail::inlineExecutor());
+    comp.then([&](const std::shared_ptr<void>&) {
+            destroyedOnLoop = onLoop(stack.loop);
+            stack.backend.reset();
+            destroyed = true;
+        })
+        .onError([](const std::exception_ptr&) {});
+    REQUIRE(morph::testing::waitUntil([&] { return destroyed.load(); },
+                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+    CHECK(destroyedOnLoop.load());
 }

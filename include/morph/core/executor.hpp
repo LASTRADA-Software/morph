@@ -124,6 +124,20 @@ inline void detail::CoreExecutorOver::submit(::core::async::ParkedWork work) {
         [identity](::core::async::ExecutorScope const& scope) { return &scope.executor() == identity; });
 }
 
+/// @brief Whether the calling thread is inside a task of the core-cpp
+///        executor @p executor: a `core::net::EventLoop`'s turn, a core-cpp
+///        strand's batch, or anything else that states an `ExecutorScope`.
+///
+/// The same walk as the overload above, for an owner that is a core-cpp
+/// executor rather than a morph one — `IoLoop::loop()` is the one morph hands
+/// out.
+/// @param executor The executor asked about.
+/// @return True while a task of @p executor is running on the calling thread.
+[[nodiscard]] inline bool runningOn(::core::async::IExecutor const& executor) noexcept {
+    return ::core::async::ExecutorScope::anyInForce(
+        [&executor](::core::async::ExecutorScope const& scope) { return &scope.executor() == &executor; });
+}
+
 /// @brief Multi-threaded executor backed by a fixed-size thread pool.
 ///
 /// Tasks are placed in a FIFO queue and consumed by worker threads.

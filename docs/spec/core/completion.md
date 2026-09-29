@@ -396,13 +396,14 @@ pre-existing behavior exactly — a `Bridge` that never calls the setter behaves
 as it always did, and spawns no extra thread. The current value is readable via
 `Bridge::executeDeadline()`.
 
-**Single-threaded WebAssembly.** `TimeoutScheduler` keeps its deadlines in a
-core-cpp `core::net::PlatformLoop`. Natively a thread of its own runs that
-loop. Under `#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)`
-there is no thread: the loop is host-driven, pumped by the browser's own
-`setTimeout` (`emscripten_async_call`), and fires its callbacks on the main
-thread — the same thread the Qt event loop and every `QtExecutor`-posted
-completion callback already run on.
+**Single-threaded WebAssembly.** `TimeoutScheduler` keeps its deadlines as
+timers on an `exec::IoLoop` — a core-cpp `core::net::PlatformLoop`; `Bridge`'s
+scheduler owns a private one. Natively that loop's one thread runs them. Under
+`#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)` there is no
+thread: the loop is host-driven, pumped by the browser's own `setTimeout`
+(`emscripten_async_call`), and fires its callbacks on the main thread — the
+same thread the Qt event loop and every `QtExecutor`-posted completion
+callback already run on.
 This is not a degradation switch: deadlines still fire, with the same
 first-result-wins race and the same `ClientTimeoutError`. It exists because a
 `wasm_singlethread` Qt build (what `.github/workflows/wasm-ladder.yml` installs
@@ -411,12 +412,13 @@ Emscripten's non-pthread `pthread_create` stub, so constructing a `std::thread`
 throws `std::system_error` at runtime — which would have made
 `setExecuteDeadline` unusable from a browser tab, and with it
 `examples/common/gui/event_poller.hpp`, whose constructor calls it
-unconditionally. Two behavioural differences, both documented in
-`timeout_scheduler.hpp`'s own `@file` comment: callbacks are never concurrent
-with the caller; and `cancel()` there really does mean "no callback runs
-after this returns", whereas the threaded build's `cancel()` returns while an
-*already-started* callback goes on running on the scheduler thread. In both
-builds `cancel()` releases the callback and retires the loop's timer. A
+unconditionally. One behavioural difference: callbacks are never concurrent
+with the caller there, so `cancel()` really does mean "no callback runs after
+this returns" — its post runs at the start of the next pump, before any timer
+callback of that pump — whereas the threaded build's `cancel()` returns while
+an *already-started* callback goes on running on the loop's thread. In both
+builds `cancel()` posts to the loop, which retires the timer and releases the
+callback. A
 caller that must work in both builds gets the weaker of the two: every
 scheduled callback has to stay safe to run after its own `cancel()`, which the
 deadline callback here does by settling a write-once `CompletionState` it
@@ -425,9 +427,9 @@ and link this build; no test in this repository runs it.
 
 **Mechanics.** Every `executeVia()` call made while a non-zero deadline is
 installed arms a timer on a `Bridge`-owned
-`morph::async::detail::TimeoutScheduler` (a single background thread running an
-event loop — or, in a single-threaded WASM build, a loop the browser's timer
-pumps; see above — created lazily on the
+`morph::async::detail::TimeoutScheduler` (timers on a private `exec::IoLoop`:
+one thread natively, or, in a single-threaded WASM build, a loop the browser's
+timer pumps; see above — created lazily on the
 first call that enables a deadline and torn down with the `Bridge`; the same
 class `RemoteServer` uses for its server-side `LimitPolicy::executeTimeout`). The timer's callback captures only the typed
 `CompletionState` — never the `Bridge` — and resolves it with

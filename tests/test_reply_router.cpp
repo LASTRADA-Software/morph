@@ -10,9 +10,8 @@
 // has to stand up (~43 lines and, for the timeout case, ~350ms of wall clock)
 // before it can assert anything. These run in microseconds and can therefore
 // cover arms the transport-level tests never reach at all: an `ok` reply whose
-// message field happens to read "timeout", an err reply with an empty message,
-// and insertIf's admit-rejection path, which over a real socket needs a
-// disconnect raced against an execute to provoke.
+// message field happens to read "timeout", or an err reply with an empty
+// message.
 //
 // Deliberately in tests/ (the always-built core suite) rather than tests/net/,
 // even though the extraction came out of SocketBackend: reply_router.hpp lives
@@ -23,16 +22,13 @@
 // unbuilt in a default checkout while the code under test still shipped.
 
 #include <array>
-#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
 #include <morph/core/detail/reply_router.hpp>
 #include <morph/core/wire.hpp>
 #include <string>
-#include <thread>
 #include <utility>
-#include <vector>
 
 namespace {
 
@@ -149,55 +145,31 @@ TEST_CASE("PendingCallTable: call ids start at 1 and never repeat", "[backend][r
     CHECK(table.nextCallId() == 3U);
 }
 
-TEST_CASE("PendingCallTable: insertIf stores the entry when admit approves",
-          "[backend][reply_router][pending_table]") {
+TEST_CASE("PendingCallTable: insert stores the entry", "[backend][reply_router][pending_table]") {
     PendingCallTable<FakePending> table;
     auto const callId = table.nextCallId();
     CHECK(table.size() == 0U);
-    CHECK(table.insertIf(callId, FakePending{.tag = 11, .shared = nullptr}, [] { return true; }));
+    table.insert(callId, FakePending{.tag = 11, .shared = nullptr});
     CHECK(table.size() == 1U);
 }
 
-TEST_CASE("PendingCallTable: insertIf stores nothing when admit rejects", "[backend][reply_router][pending_table]") {
-    // The disconnected path: SocketBackend::execute resolves the Completion
-    // with DisconnectedError itself when this returns false, so an entry left
-    // behind here would be resolved twice.
+TEST_CASE("PendingCallTable: insert replaces the entry already filed under the same id",
+          "[backend][reply_router][pending_table]") {
     PendingCallTable<FakePending> table;
     auto const callId = table.nextCallId();
-    CHECK_FALSE(table.insertIf(callId, FakePending{.tag = 11, .shared = nullptr}, [] { return false; }));
-    CHECK(table.size() == 0U);
-    CHECK_FALSE(table.take(callId).has_value());
-}
-
-TEST_CASE("PendingCallTable: the admit predicate runs while the table's lock is held",
-          "[backend][reply_router][pending_table]") {
-    // The whole reason insertIf takes a predicate instead of the caller doing
-    // `if (connected) table.insert(...)`: the check has to be inside the same
-    // critical section as the insert, or a drain() can slip between them and
-    // leave the entry stranded with nothing to resolve it. Proven here by
-    // observing, from inside the predicate, that a drain() cannot have
-    // interleaved -- the table is still whatever it was when insertIf was
-    // called, and re-entering it from the predicate would deadlock (so this
-    // asserts on state captured before the call instead).
-    PendingCallTable<FakePending> table;
-    auto const first = table.nextCallId();
-    REQUIRE(table.insertIf(first, FakePending{.tag = 1, .shared = nullptr}, [] { return true; }));
-
-    bool predicateRan = false;
-    auto const second = table.nextCallId();
-    REQUIRE(table.insertIf(second, FakePending{.tag = 2, .shared = nullptr}, [&predicateRan] {
-        predicateRan = true;
-        return true;
-    }));
-    CHECK(predicateRan);
-    CHECK(table.size() == 2U);
+    table.insert(callId, FakePending{.tag = 1, .shared = nullptr});
+    table.insert(callId, FakePending{.tag = 2, .shared = nullptr});
+    CHECK(table.size() == 1U);
+    auto taken = table.take(callId);
+    REQUIRE(taken.has_value());
+    CHECK(taken->tag == 2);
 }
 
 TEST_CASE("PendingCallTable: take returns the stored entry and erases it", "[backend][reply_router][pending_table]") {
     PendingCallTable<FakePending> table;
     auto const callId = table.nextCallId();
     auto shared = std::make_shared<int>(99);
-    REQUIRE(table.insertIf(callId, FakePending{.tag = 42, .shared = shared}, [] { return true; }));
+    table.insert(callId, FakePending{.tag = 42, .shared = shared});
 
     auto taken = table.take(callId);
     REQUIRE(taken.has_value());
@@ -212,7 +184,7 @@ TEST_CASE("PendingCallTable: a second take of the same id yields nothing", "[bac
     // resolve the same Completion twice.
     PendingCallTable<FakePending> table;
     auto const callId = table.nextCallId();
-    REQUIRE(table.insertIf(callId, FakePending{.tag = 42, .shared = nullptr}, [] { return true; }));
+    table.insert(callId, FakePending{.tag = 42, .shared = nullptr});
     REQUIRE(table.take(callId).has_value());
     CHECK_FALSE(table.take(callId).has_value());
 }
@@ -221,7 +193,7 @@ TEST_CASE("PendingCallTable: take of an unknown id yields nothing and disturbs n
           "[backend][reply_router][pending_table]") {
     PendingCallTable<FakePending> table;
     auto const callId = table.nextCallId();
-    REQUIRE(table.insertIf(callId, FakePending{.tag = 42, .shared = nullptr}, [] { return true; }));
+    table.insert(callId, FakePending{.tag = 42, .shared = nullptr});
     CHECK_FALSE(table.take(callId + 1000U).has_value());
     CHECK(table.size() == 1U);
     CHECK(table.take(callId).has_value());
@@ -236,7 +208,7 @@ TEST_CASE("PendingCallTable: take matches by call id, not by insertion order",
     int tag = 100;
     for (auto& id : ids) {
         id = table.nextCallId();
-        REQUIRE(table.insertIf(id, FakePending{.tag = tag, .shared = nullptr}, [] { return true; }));
+        table.insert(id, FakePending{.tag = tag, .shared = nullptr});
         ++tag;
     }
     auto middle = table.take(ids[1]);
@@ -254,12 +226,12 @@ TEST_CASE("PendingCallTable: take matches by call id, not by insertion order",
 TEST_CASE("PendingCallTable: drain hands back every entry and empties the table",
           "[backend][reply_router][pending_table]") {
     // The disconnect sweep. Returning the entries rather than resolving them
-    // in place is deliberate: the caller settles them outside the lock,
-    // because a completion callback may re-enter the backend.
+    // in place is deliberate: the caller settles them with the table already
+    // empty, because a completion callback may re-enter the backend.
     PendingCallTable<FakePending> table;
     for (int i = 0; i < 5; ++i) {
         auto const callId = table.nextCallId();
-        REQUIRE(table.insertIf(callId, FakePending{.tag = i, .shared = nullptr}, [] { return true; }));
+        table.insert(callId, FakePending{.tag = i, .shared = nullptr});
     }
     REQUIRE(table.size() == 5U);
 
@@ -293,8 +265,8 @@ TEST_CASE("PendingCallTable: an entry taken before a drain is not handed out twi
     PendingCallTable<FakePending> table;
     auto const settled = table.nextCallId();
     auto const stillPending = table.nextCallId();
-    REQUIRE(table.insertIf(settled, FakePending{.tag = 1, .shared = nullptr}, [] { return true; }));
-    REQUIRE(table.insertIf(stillPending, FakePending{.tag = 2, .shared = nullptr}, [] { return true; }));
+    table.insert(settled, FakePending{.tag = 1, .shared = nullptr});
+    table.insert(stillPending, FakePending{.tag = 2, .shared = nullptr});
 
     REQUIRE(table.take(settled).has_value());
     auto drained = table.drain();
@@ -310,53 +282,10 @@ TEST_CASE("PendingCallTable: ids allocated after a drain still do not collide wi
     // post-reconnect one.
     PendingCallTable<FakePending> table;
     auto const before = table.nextCallId();
-    REQUIRE(table.insertIf(before, FakePending{.tag = 1, .shared = nullptr}, [] { return true; }));
+    table.insert(before, FakePending{.tag = 1, .shared = nullptr});
     auto drained = table.drain();
     CHECK(drained.size() == 1U);
 
     auto const after = table.nextCallId();
     CHECK(after > before);
-}
-
-TEST_CASE("PendingCallTable: concurrent inserts and takes settle every call exactly once",
-          "[backend][reply_router][pending_table]") {
-    // No socket and no server -- just the table under contention, which is the
-    // part of "many concurrent in-flight executes all resolve, matched by
-    // callId" that does not need a transport to exercise.
-    PendingCallTable<FakePending> table;
-    constexpr int kCalls = 500;
-    std::atomic<int> taken{0};
-
-    std::vector<std::uint64_t> ids;
-    ids.reserve(kCalls);
-    // Asserted once, after the loop, rather than once per iteration: 500
-    // identical REQUIREs would say nothing extra while inflating the suite's
-    // assertion count by 500.
-    bool allInserted = true;
-    for (int i = 0; i < kCalls; ++i) {
-        auto const callId = table.nextCallId();
-        ids.push_back(callId);
-        if (!table.insertIf(callId, FakePending{.tag = i, .shared = nullptr}, [] { return true; })) {
-            allInserted = false;
-        }
-    }
-    REQUIRE(allInserted);
-    REQUIRE(table.size() == static_cast<std::size_t>(kCalls));
-
-    // Two threads racing to take the same ids: each id must be handed to
-    // exactly one of them.
-    auto takeAll = [&] {
-        for (auto callId : ids) {
-            if (table.take(callId).has_value()) {
-                taken.fetch_add(1);
-            }
-        }
-    };
-    std::thread threadA{takeAll};
-    std::thread threadB{takeAll};
-    threadA.join();
-    threadB.join();
-
-    CHECK(taken.load() == kCalls);
-    CHECK(table.size() == 0U);
 }

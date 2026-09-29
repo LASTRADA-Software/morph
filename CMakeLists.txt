@@ -330,6 +330,7 @@ target_sources(morph
         include/morph/core/coroutine.hpp
         include/morph/core/callback_scope.hpp
         include/morph/core/async.hpp
+        include/morph/core/io_loop.hpp
         include/morph/core/timeout_scheduler.hpp
         include/morph/core/model.hpp
         include/morph/core/registry.hpp
@@ -408,6 +409,7 @@ target_sources(morph
         include/morph/core/detail/execute_order_gate.hpp
         include/morph/core/detail/task_handler.hpp
         include/morph/core/detail/instance_directory.hpp
+        include/morph/core/detail/owner_probe.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
         include/morph/forms/detail/session_common.hpp
@@ -911,6 +913,7 @@ if(MORPH_BUILD_NET)
                 include/morph/net/detail/sha1.hpp
                 include/morph/net/detail/ws_handshake.hpp
                 include/morph/net/detail/tcp_socket.hpp
+                include/morph/net/detail/ws_connection.hpp
                 include/morph/net/detail/ws_frame.hpp
                 include/morph/net/socket_server.hpp
                 include/morph/net/socket_backend.hpp

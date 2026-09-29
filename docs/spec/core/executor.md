@@ -17,6 +17,7 @@ threading, and serialisation semantics differ per implementation.
 - [Lifetime & ownership](#lifetime--ownership)
 - [Thread safety](#thread-safety)
 - [Current executor](#current-executor)
+- [The I/O loop — `IoLoop`](#the-io-loop--ioloop)
 - [Failure modes](#failure-modes)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -25,9 +26,9 @@ threading, and serialisation semantics differ per implementation.
 
 ## Type overview
 
-There are nine types and one free function, split across `morph::exec` and
-`morph::exec::detail` (in `executor.hpp` and `strand.hpp`), and `morph::qt` (in
-`qt/qt_executor.hpp`):
+There are ten types and one free function (with two overloads), split across
+`morph::exec` and `morph::exec::detail` (in `executor.hpp`, `strand.hpp` and
+`io_loop.hpp`), and `morph::qt` (in `qt/qt_executor.hpp`):
 
 | Type | Namespace | Purpose |
 |---|---|---|
@@ -40,6 +41,7 @@ There are nine types and one free function, split across `morph::exec` and
 | `ModelStrands` | `morph::exec::detail` | One strand per `ModelId` over an `IExecutor`: core-cpp's `core::async::KeyedStrands`, with what morph adds. Tasks with the same `ModelId` never overlap. |
 | `CoreExecutorOver` | `morph::exec::detail` (in `executor.hpp`) | A `core::async::IExecutor` over a morph `IExecutor`: how a core-cpp strand's pump reaches it, and what an `ExecutorScope` names. Every `IExecutor` owns one. |
 | `TaskResumer` | `morph::exec::detail` | A Task handler's resumer: the current executor while the handler runs, queuing its resumptions on its model's strand (see [`coroutines.md`](coroutines.md)). |
+| `IoLoop` | `morph::exec` (in `io_loop.hpp`) | The I/O loop: a core-cpp `PlatformLoop` and, natively, its one thread. Owns every `morph::net` socket, `TimeoutScheduler` timer and `NetworkMonitor` probe built on it; see [the I/O loop](#the-io-loop--ioloop). |
 
 `IExecutor` and the two thread-based concrete executors live in the public
 `morph::exec` namespace. `QtExecutor` lives in `morph::qt` (in the separate
@@ -390,6 +392,39 @@ spawn executor is true in it while `currentExecutor()` names the adapter.
 ```cpp
 assert(morph::exec::runningOn(_owner) && "touched off its owner");
 ```
+
+`runningOn` has a second overload for an owner that is a core-cpp executor
+rather than a morph one — `core::net::EventLoop` states an `ExecutorScope`
+naming itself for each turn, so `runningOn(ioLoop.loop())` is true in every
+task, timer callback and flow the loop runs. The components on an `IoLoop`
+make that check through `detail::noteOwner(site, owner, onOwner)`
+(`core/detail/owner_probe.hpp`): a debug-build assertion, which a test
+replaces with a probe that records the site and reads the scope itself. That
+probe is how the posted-call tests prove a verb called off the loop ran its
+body on it.
+
+## The I/O loop — `IoLoop`
+
+`IoLoop` owns a `core::net::PlatformLoop`. Natively it starts one thread that
+runs the loop, and its destructor stops the loop and joins that thread; under
+single-threaded WebAssembly it starts none, and the browser's timer pumps the
+loop. An application constructs one and passes it to every component that does
+I/O or keeps time — `morph::net::SocketBackend`, `morph::net::SocketServer`,
+`TimeoutScheduler`, `offline::NetworkMonitor` — each of which keeps its state
+on the loop and touches it only in the loop's tasks.
+
+| Member | Cross-thread? | What it does |
+|---|---|---|
+| `loop()` | returns a reference | The `core::net::EventLoop`, for timers, sockets and flows armed from inside a task of it. |
+| `post(task)` | yes | Queues `task` for a later turn. A throw out of it is logged and swallowed: one escaping a turn would end the loop's thread. |
+| `runAndWait(task)` | yes | Runs `task` on the loop and returns once it has run — inline when the caller is already on the loop, so a task never waits on itself. A task the loop drops unrun ends the wait. Components use it for teardown and for the verbs that must answer (`SocketServer::listen`). |
+| `runningHere()` | yes | Whether the caller is inside one of the loop's tasks; always true under single-threaded WebAssembly, where there is one thread. |
+| `weak()` | yes | A handle whose `post` is a no-op returning `false` once the loop is gone — for a callback another executor runs, such as a `RemoteServer` reply. |
+
+**It must outlive every component built on it.** Their destructors run their
+close on the loop and wait for it. Destroyed on its own thread (a task dropped
+the last owner), `~IoLoop` cannot join: it stops the loop and detaches, and the
+thread's own share of the loop keeps it alive until the turn it is in ends.
 
 ## Failure modes
 
