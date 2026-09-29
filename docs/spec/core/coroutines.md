@@ -45,13 +45,15 @@ three pieces: the awaiter hook in `completion.hpp`, the handler detection in
 executor. Where a coroutine resumes is core-cpp's current-executor context
 (`<core/async/ExecutorContext.hpp>`):
 
-- An executor that resumes coroutines states itself as the current executor
-  around each resumption, or each batch of them, with
-  `core::async::ExecutorScope`. morph's two do: the adapter `spawn` builds over
-  a `morph::exec::IExecutor`, and a Task handler's resumer (see
-  [The handler's resumer](#the-handlers-resumer)). So do core-cpp's: a strand
-  once per batch, `core::async::ThreadPoolExecutor` once per worker thread,
-  `core::net::EventLoop` once per turn.
+- An executor that runs tasks or resumes coroutines states itself as the
+  current executor around each one, or each batch of them, with
+  `core::async::ExecutorScope`. Every morph executor does except
+  `InlineExecutor`: `ThreadPoolExecutor`, `MainThreadExecutor` and `QtExecutor`
+  around each task (see [`executor.md`](executor.md#current-executor)), the
+  adapter `spawn` builds over a `morph::exec::IExecutor`, and a Task handler's
+  resumer (see [The handler's resumer](#the-handlers-resumer)). So do
+  core-cpp's: a strand once per batch, `core::async::ThreadPoolExecutor` once
+  per worker thread, `core::net::EventLoop` once per turn.
 - An awaitable reads it in `await_suspend`, on the thread that is suspending
   the coroutine, as a `core::async::ResumeTarget`, and hands the continuation
   back to it. Where the executor's lifetime is shared -- a model instance's
@@ -69,6 +71,13 @@ So a coroutine started with `spawn(exec, …)` resumes on `exec`, and a Task
 handler on its model's strand, after every `co_await` of an awaitable that
 follows the rule. This holds even when what it awaited completed on some other
 executor, such as another model's completion delivered on the worker pool.
+
+The same holds for a coroutine that nothing spawned but that is running inside a
+task of a `ThreadPoolExecutor`, `MainThreadExecutor` or `QtExecutor` -- one
+resumed by hand from a posted callable, say: it is inside that executor's scope,
+so an await comes back to that executor, not to the `Completion`'s. The
+completion's executor is used only when the coroutine suspended outside every
+executor's task, such as one resumed by hand from a test's own thread.
 
 morph's awaiters (`Completion<T>`, `delay`) and core-cpp's
 `core::async::AsyncQueue::pop` follow it, a stop included. `core::net`'s socket
@@ -112,7 +121,8 @@ core::async::Task<void> refresh(BridgeHandler<AccountModel>& accounts)
   `onError` fan-out, so handlers attached before or after it still run. The
   await is one more handler pair, not a replacement for them.
 - **Where it resumes.** See the rule above: on the executor the coroutine
-  suspended on, or on the completion's executor if there was none.
+  was running on when it suspended, or on the completion's executor if it was
+  inside no executor's task.
   With a `MainThreadExecutor` as the completion's executor, the coroutine
   resumes inside `runFor`.
 - **An already-settled completion.** The coroutine still suspends and resumes

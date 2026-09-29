@@ -258,6 +258,77 @@ TEST_CASE("a stop outside any resumption context resumes the await on the comple
 
 namespace {
 
+/// What a coroutine observed after its `co_await`.
+struct ResumeObserved {
+    std::optional<int> value;
+    bool ranOnOwner = false;
+    std::thread::id resumedOn;
+    std::atomic<bool> reachedAwait{false};
+    std::atomic<bool> finished{false};
+};
+
+/// Awaits @p completion, then records whether it is running inside a task of
+/// @p owner.
+core::async::Task<void> awaitThenObserve(Completion<int> completion, std::shared_ptr<ResumeObserved> seen,
+                                         morph::exec::IExecutor& owner) {
+    seen->reachedAwait = true;
+    seen->value = co_await std::move(completion);
+    seen->ranOnOwner = morph::exec::runningOn(owner);
+    seen->resumedOn = std::this_thread::get_id();
+    seen->finished = true;
+}
+
+}  // namespace
+
+TEST_CASE("a spawned coroutine that awaits a Completion of another executor resumes on its own executor",
+          "[coroutine][client][scope]") {
+    morph::exec::MainThreadExecutor owner;
+    morph::exec::ThreadPoolExecutor callbacks{1};
+    auto [completion, promise] = Completion<int>::makeSettleable(&callbacks);
+    auto seen = std::make_shared<ResumeObserved>();
+
+    morph::async::spawn(owner, awaitThenObserve(std::move(completion), seen, owner));
+    REQUIRE(pumpUntil(owner, [&] { return seen->reachedAwait.load(); }));
+    promise.resolve(11);
+
+    REQUIRE(pumpUntil(owner, [&] { return seen->finished.load(); }));
+    CHECK(seen->value == 11);
+    CHECK(seen->ranOnOwner);
+    CHECK(seen->resumedOn == std::this_thread::get_id());
+}
+
+TEST_CASE("a coroutine started inside an executor's task resumes there, not on the completion's executor",
+          "[coroutine][client][scope]") {
+    morph::exec::MainThreadExecutor owner;
+    morph::exec::ThreadPoolExecutor callbacks{1};
+    auto [completion, promise] = Completion<int>::makeSettleable(&callbacks);
+    auto seen = std::make_shared<ResumeObserved>();
+
+    // Started by hand, inside a task of `owner`, so the only thing that says
+    // where it runs is the scope `owner` states around that task.
+    std::optional<core::async::Task<void>> task;
+    owner.post([&] {
+        task.emplace(awaitThenObserve(std::move(completion), seen, owner));
+        task->handle().resume();
+    });
+    REQUIRE(owner.runOnce());
+    REQUIRE(seen->reachedAwait.load());
+    promise.resolve(12);
+
+    REQUIRE(pumpUntil(owner, [&] { return seen->finished.load(); }));
+    CHECK(seen->value == 12);
+    CHECK(seen->ranOnOwner);
+    CHECK(seen->resumedOn == std::this_thread::get_id());
+    // The completion's executor is the fallback only; drain it so nothing of
+    // the coroutine is still running there when `task` is destroyed.
+    std::atomic<bool> drained{false};
+    callbacks.post([&] { drained = true; });
+    REQUIRE(morph::testing::waitUntil([&] { return drained.load(); }));
+    task.reset();
+}
+
+namespace {
+
 /// An executor that refuses every task, as a full queue would.
 class RefusingExecutor : public morph::exec::IExecutor {
 public:
