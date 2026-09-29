@@ -461,10 +461,15 @@ Frame {
     //   2. The bare JSON Schema `enum` keyword, which glaze does not emit but
     //      a hand-written or evolved schema may: `{"enum": ["a", "b"]}`.
     //
+    // An optional member wraps a shape-1 set in a nullable `anyOf`, one level
+    // down: `{"anyOf": [{"$ref": <the set>}, {"type": "null"}]}`. That inner
+    // set is read as the property's own (constBranchRows).
+    //
     // This is distinguishable from the nullable-`$ref` shape resolveProp
-    // collapses, whose branches carry no `const` at all: **one**
-    // branch without a `const` and the property is not a closed set, so the
-    // whole thing falls back rather than offering a partial list.
+    // collapses, whose branches carry no `const` at all: **one** branch that
+    // neither pins a value nor is itself a set of pinned values, and the
+    // property is not a closed set, so the whole thing falls back rather than
+    // offering a partial list.
     //
     // `valueJson` is the JSON literal of the value (a string alternative
     // therefore arrives quoted), matching the convention a server-fetched
@@ -485,18 +490,38 @@ Frame {
             }
             return rows
         }
+        const rows = constBranchRows(p, true)
+        return rows === null ? [] : rows
+    }
+
+    // The `const` alternatives of `p`'s `oneOf`/`anyOf`, or null when `p` has
+    // no such list or any non-null branch pins no value.
+    //
+    // With `nested`, a branch that is itself such a list contributes its
+    // alternatives. That one level is how glaze spells `std::optional<E>` for
+    // an enumerated `E`: `{"anyOf": [{"$ref": "#/$defs/E"}, {"type": "null"}]}`,
+    // where `$defs.E` is the `oneOf` of `const`s. Deeper nesting is not a
+    // shape any generator produces, so it stays "not a closed set" rather than
+    // being guessed at.
+    function constBranchRows(p, nested) {
         const branches = Array.isArray(p.anyOf) ? p.anyOf : (Array.isArray(p.oneOf) ? p.oneOf : null)
         if (branches === null)
-            return []
+            return null
         const rows = []
         for (let i = 0; i < branches.length; ++i) {
             const branch = resolveRef(branches[i])
             if (branch.type === "null")
                 continue
-            if (branch["const"] === undefined)
-                return []
-            rows.push({ label: String(opt(branch.title, branch["const"])),
-                        valueJson: JSON.stringify(branch["const"]) })
+            if (branch["const"] !== undefined) {
+                rows.push({ label: String(opt(branch.title, branch["const"])),
+                            valueJson: JSON.stringify(branch["const"]) })
+                continue
+            }
+            const inner = nested ? constBranchRows(branch, false) : null
+            if (inner === null || inner.length === 0)
+                return null
+            for (let j = 0; j < inner.length; ++j)
+                rows.push(inner[j])
         }
         return rows
     }

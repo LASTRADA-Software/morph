@@ -1259,11 +1259,29 @@ such a member as a `oneOf` of `const` alternatives, each carrying its own
 This is standard JSON-Schema vocabulary, not an `x-*` extension: no morph key
 declares it and none is needed. A renderer recognises the shape by the property
 holding a `oneOf`/`anyOf` in which **every** branch bar `{"type": "null"}`
-carries a `const`. One branch without a `const` and it is not a closed set —
+carries a `const` (or is itself such a set, for an optional member — below).
+One branch that does neither and it is not a closed set —
 that is the nullability shape above, and a partial list would be worse than no
 list at all. The bare JSON-Schema `enum` keyword (`{"enum": ["a", "b"]}`), which
 glaze does not emit but a hand-written schema may, states the same thing and is
 read the same way.
+
+An **optional** enum member (`std::optional<E>`) reaches its set one level
+down. glaze emits it as a nullable `anyOf` whose non-null branch is a `$ref` to
+the enum's definition, and that definition is the `oneOf` of `const`s above:
+
+```json
+"grade": {"anyOf": [{"$ref": "#/$defs/Grade"}, {"type": "null"}]},
+"$defs": {"Grade": {"type": "string",
+                    "oneOf": [{"title": "Low",  "const": "Low"},
+                              {"title": "High", "const": "High"}]}}
+```
+
+A non-null branch that, after following its `$ref`, is itself a
+`oneOf`/`anyOf` of `const` alternatives therefore counts as those alternatives:
+the member is the same closed set, and it is optional. Exactly one level is
+read this way. A set nested deeper is not a shape any generator produces, and it
+stays "not a closed set" rather than being guessed at.
 
 Two obligations follow, and `DynamicForm.qml` meets both:
 
