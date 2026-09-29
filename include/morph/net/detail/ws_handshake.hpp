@@ -3,13 +3,10 @@
 #pragma once
 #include <poll.h>
 
-#include <algorithm>
 #include <array>
-#include <cerrno>
 #include <chrono>
 #include <core/Base64.hpp>
 #include <cstdint>
-#include <limits>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -270,36 +267,22 @@ struct HandshakeReadResult {
     std::string leftover;
 };
 
-/// Blocks until @p socket is readable or @p deadline passes, retrying across
-/// `EINTR` by recomputing what remains rather than re-arming the full wait --
-/// mirrors `TcpSocket::connect()`'s own remaining-budget poll loop. Split out
-/// of `readHttpHeaderBlock` so that function's own branching stays readable.
+/// Blocks until @p socket is readable or @p deadline passes, on the same
+/// single-budget wait `TcpSocket::connect()` uses (`pollUntil`). Split out of
+/// `readHttpHeaderBlock` so that function's own branching stays readable.
+/// @param socket   Socket to wait on.
+/// @param deadline Point after which the handshake counts as timed out.
 /// @throws std::runtime_error once @p deadline passes, or on a `poll()` error
 ///         other than `EINTR`.
 inline void waitReadableUntil(const TcpSocket& socket, std::chrono::steady_clock::time_point deadline) {
-    for (;;) {
-        auto const remaining =
-            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-        if (remaining.count() <= 0) {
-            throw std::runtime_error("readHttpHeaderBlock: handshake timed out");
-        }
-        auto const waitMs = static_cast<int>(
-            std::min<std::chrono::milliseconds::rep>(remaining.count(), std::numeric_limits<int>::max()));
-        pollfd pfd{};
-        pfd.fd = socket.nativeHandle();
-        pfd.events = POLLIN;
-        int const pollRc = ::poll(&pfd, 1, waitMs);
-        if (pollRc > 0) {
-            return;  // readable (or hung up) -- the caller's recvSome will not block
-        }
-        if (pollRc == 0) {
-            throw std::runtime_error("readHttpHeaderBlock: handshake timed out");
-        }
-        if (errno != EINTR) {
-            throw std::runtime_error("readHttpHeaderBlock: poll failed: " + std::system_category().message(errno));
-        }
-        // EINTR: loop back and recompute the remaining budget.
+    auto const result = pollUntil(socket.nativeHandle(), POLLIN, deadline);
+    if (result.outcome == PollOutcome::kTimedOut) {
+        throw std::runtime_error("readHttpHeaderBlock: handshake timed out");
     }
+    if (result.outcome == PollOutcome::kFailed) {
+        throw std::runtime_error("readHttpHeaderBlock: poll failed: " + std::system_category().message(result.error));
+    }
+    // kReady: readable (or hung up) -- the caller's recvSome will not block.
 }
 
 /// @brief Reads bytes from @p socket until the `\r\n\r\n` header terminator.

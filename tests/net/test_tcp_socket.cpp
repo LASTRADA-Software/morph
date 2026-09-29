@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -12,6 +13,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cerrno>
 #include <chrono>
+#include <csignal>
 #include <cstring>
 #include <morph/net/detail/tcp_socket.hpp>
 #include <optional>
@@ -676,4 +678,77 @@ TEST_CASE("TcpSocket: setSendTimeout bounds a send against a peer that never rea
     // Generous multiple of the timeout, since each successful send before the
     // buffers filled costs real time too.
     CHECK(elapsed < std::chrono::seconds{20});
+}
+
+// ── pollUntil: one budget for the whole wait ────────────────────────────────
+
+TEST_CASE("pollUntil: a deadline already passed reports kTimedOut without waiting", "[net][tcp][poll_until]") {
+    auto listener = TcpSocket::listen(0);
+    auto const started = std::chrono::steady_clock::now();
+    auto const result = morph::net::detail::pollUntil(listener.nativeHandle(), POLLIN, started);
+    CHECK(result.outcome == morph::net::detail::PollOutcome::kTimedOut);
+    CHECK(result.error == 0);
+    CHECK(std::chrono::steady_clock::now() - started < std::chrono::milliseconds{100});
+}
+
+TEST_CASE("pollUntil: an idle listener times out at the deadline", "[net][tcp][poll_until]") {
+    auto listener = TcpSocket::listen(0);
+    auto const started = std::chrono::steady_clock::now();
+    auto const result =
+        morph::net::detail::pollUntil(listener.nativeHandle(), POLLIN, started + std::chrono::milliseconds{100});
+    auto const elapsed = std::chrono::steady_clock::now() - started;
+    CHECK(result.outcome == morph::net::detail::PollOutcome::kTimedOut);
+    CHECK(elapsed >= std::chrono::milliseconds{100});
+    CHECK(elapsed < std::chrono::seconds{5});
+}
+
+TEST_CASE("pollUntil: a pending connection reports kReady", "[net][tcp][poll_until]") {
+    auto listener = TcpSocket::listen(0);
+    auto clientSide = TcpSocket::connect("127.0.0.1", listener.boundPort(), std::chrono::milliseconds{2000});
+    REQUIRE(clientSide.valid());
+    auto const result = morph::net::detail::pollUntil(listener.nativeHandle(), POLLIN,
+                                                      std::chrono::steady_clock::now() + std::chrono::seconds{5});
+    CHECK(result.outcome == morph::net::detail::PollOutcome::kReady);
+}
+
+namespace {
+void pollUntilTestNoopHandler(int /*signal*/) {}
+}  // namespace
+
+TEST_CASE("pollUntil: signals mid-wait neither end the wait nor re-arm the full budget", "[net][tcp][poll_until]") {
+    // SIGUSR1 aimed at this thread every 50 ms, with no SA_RESTART, interrupts
+    // poll() with EINTR over and over for 1.5 s. The wait must still end at its
+    // own 300 ms deadline: a loop that treated EINTR as failure would report
+    // kFailed, and one that re-armed the full budget after each signal would
+    // not finish until the signals stopped.
+    struct sigaction action{};
+    action.sa_handler = pollUntilTestNoopHandler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    struct sigaction previous{};
+    REQUIRE(::sigaction(SIGUSR1, &action, &previous) == 0);
+
+    auto listener = TcpSocket::listen(0);
+    pthread_t const waiter = ::pthread_self();
+    std::atomic<int> sent{0};
+    std::thread interrupter{[&] {
+        for (int i = 0; i < 30; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{50});
+            ::pthread_kill(waiter, SIGUSR1);
+            sent.fetch_add(1);
+        }
+    }};
+
+    auto const started = std::chrono::steady_clock::now();
+    auto const result =
+        morph::net::detail::pollUntil(listener.nativeHandle(), POLLIN, started + std::chrono::milliseconds{300});
+    auto const elapsed = std::chrono::steady_clock::now() - started;
+    int const sentDuringWait = sent.load();
+    interrupter.join();
+    ::sigaction(SIGUSR1, &previous, nullptr);
+
+    REQUIRE(sentDuringWait > 0);
+    CHECK(result.outcome == morph::net::detail::PollOutcome::kTimedOut);
+    CHECK(elapsed >= std::chrono::milliseconds{300});
+    CHECK(elapsed < std::chrono::milliseconds{1200});
 }
