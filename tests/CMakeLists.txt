@@ -371,11 +371,19 @@ endif()
 get_target_property(MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS morph INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(MORPH_VETTED_HMAC_GUARD_GLAZE_INCLUDE_DIRS glaze::glaze INTERFACE_INCLUDE_DIRECTORIES)
 list(APPEND MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS ${MORPH_VETTED_HMAC_GUARD_GLAZE_INCLUDE_DIRS})
-# core-cpp's headers, spelled out rather than read from core::base: its
-# include directories are $<BUILD_INTERFACE:...> generator expressions, which
-# a try_compile() here would receive unevaluated. `src/` holds the headers and
-# the binary directory's `include/` the generated <core/Config.hpp>.
-list(APPEND MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS "${core-cpp_SOURCE_DIR}/src" "${core-cpp_BINARY_DIR}/include")
+# core-cpp's headers. An in-tree core-cpp's are spelled out rather than read
+# from core::base: its include directories are $<BUILD_INTERFACE:...>
+# generator expressions, which a try_compile() here would receive unevaluated.
+# `src/` holds the headers and the binary directory's `include/` the generated
+# <core/Config.hpp>. An installed core-cpp's imported target carries plain
+# paths, which can be read directly.
+if(DEFINED core-cpp_SOURCE_DIR)
+    list(APPEND MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS "${core-cpp_SOURCE_DIR}/src" "${core-cpp_BINARY_DIR}/include")
+else()
+    get_target_property(_morph_core_cpp_include_dirs core::base INTERFACE_INCLUDE_DIRECTORIES)
+    list(APPEND MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS ${_morph_core_cpp_include_dirs})
+    unset(_morph_core_cpp_include_dirs)
+endif()
 string(REPLACE ";" "\\;" MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS "${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}")
 
 unset(MORPH_VETTED_HMAC_GUARD_BLOCKS_DEFAULT CACHE)

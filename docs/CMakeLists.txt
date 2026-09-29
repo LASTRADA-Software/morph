@@ -2,8 +2,9 @@ find_package(Doxygen REQUIRED)
 message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")
 
 # DOWNLOAD_ONLY: the repository is a stylesheet, and the one file used is
-# `doxygen-awesome.css`; there is nothing to configure. CPM is loaded by the
-# root CMakeLists.txt, and its source cache applies here as everywhere.
+# `doxygen-awesome.css`; there is nothing to configure. CPM is loaded on demand by
+# the root CMakeLists.txt's morph_use_cpm, and its source cache applies here as everywhere.
+morph_use_cpm(doxygen-awesome-css)
 CPMAddPackage(
     NAME doxygen-awesome-css
     GITHUB_REPOSITORY jothepro/doxygen-awesome-css

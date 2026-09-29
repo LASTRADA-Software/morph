@@ -146,7 +146,32 @@ if(NOT DEFINED CPM_SOURCE_CACHE AND NOT DEFINED ENV{CPM_SOURCE_CACHE})
     set(CPM_SOURCE_CACHE "${CMAKE_CURRENT_SOURCE_DIR}/.cache/cpm" CACHE PATH
         "Where CPM keeps the sources of every fetched dependency")
 endif()
-include(cmake/CPM.cmake)
+
+# CPM itself is loaded only when something has to be fetched: its bootstrap
+# downloads CPM.cmake, so loading it unconditionally would put the network on
+# the path of a configure whose every dependency is already installed -- the
+# shape a package-manager build (vcpkg, Conan, a distribution) has, where
+# reaching the network is not allowed. Each fetch site calls
+# morph_use_cpm(<what> [<why>]) before its CPMAddPackage; the first one to
+# load CPM names itself in a STATUS line, so a failed bootstrap download says
+# which dependency asked for it. A parent project that has loaded CPM already
+# is reused, not loaded again.
+#
+# A macro, not a function, so CPM's own non-cache variables land in the
+# caller's scope rather than vanishing with a function's.
+set(MORPH_CPM_BOOTSTRAP "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CPM.cmake")
+macro(morph_use_cpm _morph_cpm_for)
+    if(NOT COMMAND CPMAddPackage)
+        if(${ARGC} GREATER 1)
+            set(_morph_cpm_why "${ARGV1}")
+        else()
+            set(_morph_cpm_why "not found installed (install it and point CMAKE_PREFIX_PATH at it to configure without the network)")
+        endif()
+        message(STATUS "morph: loading CPM to fetch ${_morph_cpm_for}: ${_morph_cpm_why}")
+        unset(_morph_cpm_why)
+        include("${MORPH_CPM_BOOTSTRAP}")
+    endif()
+endmacro()
 
 # ── glaze ────────────────────────────────────────────────────────────────────
 # On Windows vcpkg provides glaze. Elsewhere CPM fetches it, so that CI does
@@ -165,6 +190,7 @@ include(cmake/CPM.cmake)
 set(MORPH_GLAZE_VERSION 7.4)
 find_package(glaze ${MORPH_GLAZE_VERSION} CONFIG QUIET)
 if(NOT glaze_FOUND)
+    morph_use_cpm(glaze)
     CPMAddPackage(
         NAME glaze
         GITHUB_REPOSITORY stephenberry/glaze
@@ -184,40 +210,71 @@ endif()
 #
 # morph stays a header-only INTERFACE target, but core::base, core::net and
 # core::platform are static libraries, so every consumer of morph now builds
-# them.
+# them -- or links an installed core-cpp's.
+#
+# Found first, as glaze is, and fetched only when no installed core-cpp
+# satisfies the bound. MORPH_CORE_CPP_VERSION is that bound, stated once
+# because morphConfig.cmake asks for the same one; core-cpp's package accepts
+# only its own minor version while it is 0.x.
+#
+# Except under a sanitizer: an installed core-cpp was compiled without morph's
+# instrumentation, and a ThreadSanitizer that cannot see core::net's side of
+# TimeoutScheduler's hand-off reports races that are not there and misses ones
+# that are. A sanitizer leg therefore always builds core-cpp in-tree, so the
+# block below can instrument it.
 #
 # morph's install exports morph::morph, which links core-cpp's modules, so an
-# install of morph has to install core-cpp too: CMake refuses an export that
-# names a target in no export set. CORE_CPP_INSTALL follows MORPH_INSTALL for
-# that, and morphConfig.cmake finds the installed core-cpp package in turn.
+# install of morph with a fetched core-cpp has to install core-cpp too: CMake
+# refuses an export that names a target in no export set. CORE_CPP_INSTALL
+# follows MORPH_INSTALL for that, and morphConfig.cmake finds the installed
+# core-cpp package in turn. A found core-cpp is already installed, its targets
+# are imported, and the export names them without installing anything again.
 # MORPH_INSTALL is described with the install rules below. EXCLUDE_FROM_ALL
 # is off while morph installs: CMake leaves an excluded subdirectory's install
 # rules out of the parent's install, so `cmake --install` would install
 # morph's package without the core-cpp package it depends on.
+set(MORPH_CORE_CPP_VERSION 0.5)
 option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
-if(MORPH_INSTALL)
-    set(_morph_core_cpp_exclude_from_all NO)
-else()
-    set(_morph_core_cpp_exclude_from_all YES)
+if(NOT DEFINED AF_SANITIZER)
+    find_package(core-cpp ${MORPH_CORE_CPP_VERSION} CONFIG QUIET)
 endif()
-CPMAddPackage(
-    NAME core-cpp
-    GITHUB_REPOSITORY contour-terminal/core-cpp
-    GIT_TAG v0.5.0
-    VERSION 0.5.0
-    SYSTEM YES
-    EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
-    OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF" "CORE_CPP_WITH_TUI OFF"
-            "CORE_CPP_WITH_TLS OFF" "CORE_CPP_FETCH_DEPS OFF" "CORE_CPP_INSTALL ${MORPH_INSTALL}")
-unset(_morph_core_cpp_exclude_from_all)
+if(NOT core-cpp_FOUND)
+    if(MORPH_INSTALL)
+        set(_morph_core_cpp_exclude_from_all NO)
+    else()
+        set(_morph_core_cpp_exclude_from_all YES)
+    endif()
+    if(DEFINED AF_SANITIZER)
+        morph_use_cpm(core-cpp "AF_SANITIZER builds it in-tree so that it can be instrumented")
+    else()
+        morph_use_cpm(core-cpp)
+    endif()
+    CPMAddPackage(
+        NAME core-cpp
+        GITHUB_REPOSITORY contour-terminal/core-cpp
+        GIT_TAG v0.5.0
+        VERSION 0.5.0
+        SYSTEM YES
+        EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
+        OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF" "CORE_CPP_WITH_TUI OFF"
+                "CORE_CPP_WITH_TLS OFF" "CORE_CPP_FETCH_DEPS OFF" "CORE_CPP_INSTALL ${MORPH_INSTALL}")
+    unset(_morph_core_cpp_exclude_from_all)
+endif()
 
 # A sanitizer leg instruments core-cpp's compiled modules with morph's own
-# targets: TimeoutScheduler's loop thread runs inside core::net, and a
-# ThreadSanitizer that cannot see one side of a hand-off reports races that
-# are not there and misses ones that are. core-cpp lists those targets in the
-# CORE_CPP_TARGETS global property for exactly this.
+# targets (see above for why). core-cpp lists those targets in the
+# CORE_CPP_TARGETS global property for exactly this. The property is set only
+# by an in-tree core-cpp; an empty one here means nothing would be
+# instrumented while the configure reported success, so it stops instead --
+# e.g. a parent project that brought core-cpp in some other way.
 if(DEFINED AF_SANITIZER)
     get_property(_morph_core_cpp_targets GLOBAL PROPERTY CORE_CPP_TARGETS)
+    if(NOT _morph_core_cpp_targets)
+        message(FATAL_ERROR
+            "AF_SANITIZER=${AF_SANITIZER} but core-cpp lists no targets to instrument "
+            "(the CORE_CPP_TARGETS global property is empty): core-cpp did not come from an "
+            "in-tree build, so its compiled modules would run uninstrumented.")
+    endif()
     foreach(_morph_core_cpp_target IN LISTS _morph_core_cpp_targets)
         apply_sanitizers(${_morph_core_cpp_target} ${AF_SANITIZER})
     endforeach()
@@ -651,6 +708,7 @@ endif()
 if(MORPH_BUILD_TESTS)
     find_package(Catch2 CONFIG QUIET)
     if(NOT Catch2_FOUND)
+        morph_use_cpm(Catch2)
         CPMAddPackage(
             NAME Catch2
             GITHUB_REPOSITORY catchorg/Catch2

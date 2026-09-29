@@ -147,6 +147,7 @@ set(LIGHTWEIGHT_BUILD_SHARED    OFF CACHE BOOL "" FORCE)
 # without touching Lightweight's vendored CMakeLists.txt.
 set(_morph_saved_skip_install_rules ${CMAKE_SKIP_INSTALL_RULES})
 set(CMAKE_SKIP_INSTALL_RULES ON)
+morph_use_cpm(Lightweight)
 CPMAddPackage(
     NAME Lightweight
     GITHUB_REPOSITORY LASTRADA-Software/Lightweight

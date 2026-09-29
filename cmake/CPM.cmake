@@ -11,6 +11,14 @@
 #
 # With CPM_SOURCE_CACHE set (CMakeLists.txt defaults it to .cache/cpm) the
 # bootstrap itself lives in the cache, so a warm cache downloads nothing.
+#
+# morph includes this only through morph_use_cpm() (CMakeLists.txt), when a
+# dependency was not found installed and has to be fetched; that call's STATUS
+# line, printed just before, names the dependency. The FATAL_ERROR below is
+# core-cpp's wording. At morph's top level, its "set CORE_CPP_FETCH_DEPS=OFF"
+# does not apply and cmake/FetchTransferBound.cmake does not exist: the way to
+# configure without this download is to install the dependency that line names
+# and point CMAKE_PREFIX_PATH at it.
 set(_coreCppCpmBound "")
 if(DEFINED FASTCACHED_FETCH_SILENCE_SECONDS)
     set(_coreCppCpmBound INACTIVITY_TIMEOUT "${FASTCACHED_FETCH_SILENCE_SECONDS}")
