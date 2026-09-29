@@ -545,6 +545,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem
     ON morph_offline_queue(idempotency_key) WHERE idempotency_key <> '';
 ```
 
+`enqueued_at` is milliseconds since the Unix epoch, read from the
+`core::platform::IWallClock` passed as the constructor's last parameter (the
+system clock by default; borrowed, so it must outlive the queue). Nothing in the
+queue reads it back; it is there for a human or a tool inspecting the database.
+
 Construction never leaks the SQLite connection: once `sqlite3_open()` has
 succeeded, a failure in one of the schema-setup statements above closes `_db`
 before rethrowing, rather than leaving a live handle behind with no

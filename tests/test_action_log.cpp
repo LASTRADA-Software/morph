@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <core/platform/Clock.hpp>
 #include <cstdint>
 #include <memory>
 #include <morph/core/backend.hpp>
@@ -361,6 +363,23 @@ TEST_CASE("IModelHolder: attachActionLog stamps entityKey and timestamp automati
     REQUIRE(entries[0].result == "5");
     REQUIRE(entries[0].principal.empty());
     REQUIRE(entries[0].timestampMs > 0);
+}
+
+TEST_CASE("IModelHolder: recordIfAttached stamps timestampMs from the clock given to attachActionLog",
+          "[action_log][holder]") {
+    auto holder = morph::model::detail::ModelFactory::create<ALModel>();
+    auto log = std::make_shared<InMemoryActionLog>();
+    core::platform::ManualWallClock clock{std::chrono::system_clock::time_point{std::chrono::milliseconds{1'000}}};
+    holder->attachActionLog(log, "acct-clock", clock);
+
+    holder->recordIfAttached(makeEntry("AL_Model", "", "AL_Deposit"));
+    clock.advance(std::chrono::milliseconds{250});
+    holder->recordIfAttached(makeEntry("AL_Model", "", "AL_Deposit"));
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 2);
+    REQUIRE(entries[0].timestampMs == 1'000);
+    REQUIRE(entries[1].timestampMs == 1'250);
 }
 
 // ── ModelHolder<Model>::onActionLogAttached forwarding ──────────────────────
