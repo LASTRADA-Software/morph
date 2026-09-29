@@ -393,7 +393,7 @@ private:
     ///        *replace* the failure being reported with the failure to
     ///        report it: a less diagnosable exception, and on a destructor
     ///        path a `std::terminate`. So it is contained here, the same way
-    ///        `runPostCommitTail` contains the mirror case, and
+    ///        `morph::model::runPostCommitTail` contains the mirror case, and
     ///        the exception the caller sees is always the original one.
     ///
     ///        **Precondition:** an exception is being handled. This is a

@@ -101,6 +101,7 @@ behavioural differences between the two, collected in one table, are in
 
 **When things go wrong**
 [`error_handling.md`](error_handling.md) ·
+[`core/post_commit_tail.md`](core/post_commit_tail.md) ·
 [`core/logger.md`](core/logger.md) ·
 [`core/observability.md`](core/observability.md)
 
