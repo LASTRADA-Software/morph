@@ -16,6 +16,7 @@ that only know action names at runtime.
   - [The bridge's own executor](#the-bridges-own-executor)
 - [`BridgeHandler<Model>`](#bridgehandlermodel)
 - [Registration readiness — `isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound)
+  - [`executeWhenBound()` — holding a dispatch until the bind lands](#executewhenbound--holding-a-dispatch-until-the-bind-lands)
 - [`ActionExecuteRegistry`](#actionexecuteregistry)
   - [Why the key carries the sharing policy](#why-the-key-carries-the-sharing-policy)
 - [`BRIDGE_REGISTER_ACTION` and `registerActionExecutorOnce`](#bridge_register_action-and-registeractionexecutoronce)
@@ -756,6 +757,53 @@ it answers and does not:
   this binding an id, not that the transport is still up; the socket can drop
   the moment after.
 
+### `executeWhenBound()` — holding a dispatch until the bind lands
+
+`execute()` never waits. A view model that constructs a handler and dispatches
+its first action in the same breath would otherwise wrap every handler it owns
+in the same gate — `whenBound()`, then the dispatch, plus a liveness guard in
+case the handler goes first. `BridgeHandler::executeWhenBound(action)` is that
+gate, built once:
+
+| Handler state when called | Result |
+|---|---|
+| Bound | Dispatches exactly as `execute()` does. |
+| Registration in flight, then succeeds | Dispatches on the GUI executor once `whenBound()` resolves `true`. |
+| Registration in flight, then fails | Rejects with the registration's error; nothing is dispatched. |
+| `whenBound()` resolves `false` | Rejects with `"handler not bound"`. |
+| Handler destroyed before the dispatch comes due | The held action is dropped: never dispatched, and the returned `Completion` never settles. |
+| Bridge retired before the dispatch comes due | Rejects with `"bridge destroyed"`. |
+
+Why each choice was made:
+
+- **A separate method, not a constructor policy.** With a policy, one
+  `execute()` call would wait or fail depending on how the handler had been
+  built somewhere else, and a reader of the call site could not tell which.
+  The name shows the wait where it happens.
+- **`NoSharing` only**, enforced with a `static_assert`. A shared handler's
+  initial binding goes through the attach path, which `whenBound()` does not
+  track (see the scope limits above), so on a shared handler it would resolve
+  `false` at once and the method would be fail-fast under another name. A
+  shared handler's keyed `execute()` already carries its attach.
+- **The held dispatch holds the binding weakly and does not capture the
+  handler.** The binding owns the `whenBound()` waiter, and the waiter owns the
+  held dispatch; a strong capture of the binding would close that loop and
+  keep the binding alive after its handler is gone — the dispatch would then
+  reach the backend on an instance nobody holds. With a weak capture, a
+  handler destroyed first takes the waiter (and the held action) with it.
+- **The bridge gate is read, then released, before the dispatch.** The
+  dispatch can settle inline, and `BridgeSink`'s settle path takes the same
+  gate; holding it across the call would lock it recursively. The check makes
+  the ordinary teardown order — bridge retired while the dispatch sat in the
+  GUI queue — a rejection instead of a call into a destroyed bridge. It is not
+  a licence to destroy the bridge concurrently with the dispatch: the bridge
+  must outlive the dispatch on the same terms as any other call made on the
+  handler.
+- **The result type must be copy-constructible** (a `static_assert`). The
+  deferred path forwards the value from `executeVia`'s `Completion` into the
+  one already handed to the caller, and a `Completion`'s value is observed,
+  never consumed ([completion.md](completion.md)).
+
 
 ## `ActionExecuteRegistry`
 
@@ -1142,6 +1190,7 @@ make teardown order-independent.)
 | ctor (custom binding) | `BridgeHandler(Bridge&, IExecutor*, shared_ptr<HandlerBinding>)` | Registers pre-built binding. |
 | dtor | `~BridgeHandler()` | Deregisters via `Bridge::deregisterHandler`, but only if the bridge's `CallbackToken` is still active; a no-op if the `Bridge` was already destroyed. |
 | `execute<Action>` | `Completion<R> execute(Action)` | Typed dispatch through the bridge. For a shared handler, a payload-/result-keyed action's attach or promote step never throws synchronously — a backend refusal (e.g. `LimitPolicy::maxLiveModels`) resolves the returned `Completion` via `.onError(...)`. |
+| `executeWhenBound<Action>` | `Completion<R> executeWhenBound(Action)` | `NoSharing` only. Dispatches like `execute()` when bound; otherwise holds the action until `whenBound()` settles, then dispatches it or rejects with the registration's error (or `"handler not bound"`). Dropped if the handler is destroyed first. See [`executeWhenBound()`](#executewhenbound--holding-a-dispatch-until-the-bind-lands). |
 | `executeJson` | `Completion<string> executeJson(string_view actionType, string_view bodyJson)` | Type-erased dispatch through `ActionExecuteRegistry`. |
 | `subscribe<R>(cb)` | `void subscribe(function<void(R)>)` | Fire `cb` whenever an `R` is produced on the attached instance. |
 | `subscribe<R>(scope, cb)` | `void subscribe(CallbackScope const&, function<void(R)>)` | As above, gated on the scope's liveness and stop state ([callback_scope.md](callback_scope.md)). Dead sinks are refused, not pruned. |

@@ -3232,6 +3232,89 @@ public:
         }
     }
 
+    /// @brief Dispatches @p action once this handler's in-flight registration
+    ///        settles, instead of failing fast with "handler not bound".
+    ///
+    /// The waiting counterpart of `execute()` for a handler built over a backend
+    /// that answers `BindWait::kCallerMustNotBlock`, where a handler is
+    /// constructed unbound and the first dispatch commonly follows on the next
+    /// line. `execute()` itself never waits; the wait is named at the call site.
+    ///
+    /// - Already bound: dispatches exactly as `execute()` does.
+    /// - A registration in flight: the action is held until `whenBound()`
+    ///   settles, then dispatched on this handler's GUI executor. A failed
+    ///   registration rejects the returned `Completion` with the registration's
+    ///   error; a registration that turns out to have nothing in flight rejects
+    ///   it with "handler not bound".
+    /// - Handler destroyed before the registration settles: the held action is
+    ///   dropped, never dispatched, and the returned `Completion` never settles.
+    ///   The deferred dispatch holds the binding weakly and does not capture
+    ///   the handler, so destroying the handler is always safe.
+    ///
+    /// The `Bridge` must outlive the deferred dispatch on the same terms as any
+    /// other call made on this handler. A bridge already retired when the
+    /// dispatch comes due rejects it with "bridge destroyed" rather than calling
+    /// into it.
+    ///
+    /// Only `NoSharing` handlers: a shared handler's initial binding goes
+    /// through the attach path, which `whenBound()` does not track, so a wait
+    /// there would resolve `false` at once. A shared handler waits through the
+    /// `Completion` its keyed `execute()` returns instead.
+    ///
+    /// @tparam Action Concrete action type registered with `BRIDGE_REGISTER_ACTION`.
+    ///                Its result type must be copy-constructible, because the
+    ///                deferred path forwards the value from one `Completion` to
+    ///                another.
+    /// @param action Action to execute (moved into the dispatch, or held until
+    ///               the registration settles).
+    /// @return Completion that resolves on the GUI executor with the action's
+    ///         result, or rejects with the dispatch's error, the registration's
+    ///         error, or "handler not bound" as described above.
+    template <typename Action>
+    ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> executeWhenBound(Action action) {
+        static_assert(!kShared,
+                      "executeWhenBound() is for NoSharing handlers; a shared handler's keyed execute() already "
+                      "carries its attach");
+        using R = ::morph::model::ActionTraits<Action>::Result;
+        static_assert(std::is_copy_constructible_v<R>,
+                      "executeWhenBound() forwards the result between completions, so it must be copyable");
+        if (isBound()) {
+            return _bridge.template executeVia<Model, Action>(_binding, std::move(action), _guiExec);
+        }
+        auto state = std::make_shared<::morph::async::detail::CompletionState<R>>();
+        ::morph::async::Completion<R> pending{state, _guiExec};
+        auto sharedAction = std::make_shared<Action>(std::move(action));
+        std::weak_ptr<detail::HandlerBinding> const weakBinding{_binding};
+        whenBound()
+            .then([weakBinding, bridgePtr = &_bridge, gate = _bridgeGate, guiExec = _guiExec, sharedAction,
+                   state](bool bound) {
+                auto binding = weakBinding.lock();
+                if (!binding) {
+                    return;  // The handler is gone; drop the held action.
+                }
+                if (!bound) {
+                    state->setException(std::make_exception_ptr(std::runtime_error("handler not bound")));
+                    return;
+                }
+                bool bridgeAlive = false;
+                {
+                    // Released before the dispatch: executeVia can settle
+                    // inline, and its settle path takes this same gate.
+                    std::shared_lock const lock{gate->mtx};
+                    bridgeAlive = gate->alive;
+                }
+                if (!bridgeAlive) {
+                    state->setException(std::make_exception_ptr(std::runtime_error("bridge destroyed")));
+                    return;
+                }
+                bridgePtr->template executeVia<Model, Action>(binding, std::move(*sharedAction), guiExec)
+                    .then([state](const R& value) { state->setValue(R{value}); })
+                    .onError([state](std::exception_ptr exc) { state->setException(exc); });
+            })
+            .onError([state](std::exception_ptr err) { state->setException(err); });
+        return pending;
+    }
+
     /// @brief Attaches (or re-points) this handler to the instance for @p key.
     ///
     /// Creates the instance if no live instance holds @p key, otherwise joins the

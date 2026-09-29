@@ -52,10 +52,11 @@ struct QtWebSocketBackendConfig {
     /// attempt aborts the page outright. `bindModel` then sends the request and
     /// returns an unsettled `Completion`, which the reply settles later. That is
     /// a deliberate trade, not a free improvement: the caller must wait for the
-    /// continuation (e.g. gate the UI on `BridgeHandler::whenBound()`) before
-    /// firing an action through that handler, since `executeVia` fails fast
-    /// with "handler not bound" for an unbound binding rather than queuing or
-    /// blocking.
+    /// continuation (gate the UI on `BridgeHandler::whenBound()`, or dispatch
+    /// through `BridgeHandler::executeWhenBound()`, which holds the action
+    /// until the bind settles) before firing an action through that handler,
+    /// since `execute()` fails fast with "handler not bound" for an unbound
+    /// binding rather than queuing or blocking.
     ///
     /// This flag chooses *whether the transport blocks*, nothing more: the
     /// continuation exists on both paths, because `bindModel` returns a
