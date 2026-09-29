@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -12,6 +14,7 @@
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
@@ -22,6 +25,7 @@
 #include <morph/net/socket_server.hpp>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -212,6 +216,62 @@ int highestOpenFd(int limit) {
         }
     }
     return highest;
+}
+
+// Waits until `fd` reports any of `events`, or `deadline` passes. Returns
+// whether it did.
+bool pollUntil(int fd, short events, std::chrono::steady_clock::time_point deadline) {
+    for (;;) {
+        auto const left =
+            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+        if (left.count() <= 0) {
+            return false;
+        }
+        pollfd pfd{fd, events, 0};
+        int const rc = ::poll(&pfd, 1, static_cast<int>(left.count()));
+        if (rc > 0) {
+            return true;
+        }
+        if (rc < 0 && errno != EINTR) {
+            return false;
+        }
+    }
+}
+
+// Sends a WebSocket Upgrade request on `fd`, a non-blocking socket already
+// connecting to 127.0.0.1:port, and reports whether the server answered it
+// with `101 Switching Protocols` before `budget` ran out. Never blocks past
+// the budget: a server whose accept loop has stopped leaves the connection
+// in the listen backlog, where nothing will ever answer it.
+bool upgradeAnsweredWithin(int fd, std::uint16_t port, std::chrono::milliseconds budget) {
+    auto const deadline = std::chrono::steady_clock::now() + budget;
+    if (!pollUntil(fd, POLLOUT, deadline)) {
+        return false;
+    }
+    int soError = 0;
+    socklen_t len = sizeof(soError);
+    if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &len) != 0 || soError != 0) {
+        return false;
+    }
+    morph::net::detail::ParsedWsUrl const url{"127.0.0.1", port, "/"};
+    std::string const request =
+        morph::net::detail::buildClientHandshakeRequest(url, morph::net::detail::generateClientKey());
+    if (::send(fd, request.data(), request.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(request.size())) {
+        return false;
+    }
+    std::string response;
+    while (response.size() < std::string_view{"HTTP/1.1 101"}.size()) {
+        if (!pollUntil(fd, POLLIN, deadline)) {
+            return false;
+        }
+        std::array<char, 256> buf{};
+        ssize_t const got = ::recv(fd, buf.data(), buf.size(), 0);
+        if (got <= 0) {
+            return false;
+        }
+        response.append(buf.data(), static_cast<std::size_t>(got));
+    }
+    return response.starts_with("HTTP/1.1 101");
 }
 
 }  // namespace
@@ -835,27 +895,34 @@ TEST_CASE("SocketServer: acceptLoop retries when a pending connection is aborted
     REQUIRE(reg.kind == "ok");
 }
 
-// ── Undocumented extra beyond the findings doc's 15 numbered gaps ──────────
-// acceptLoop()'s `catch` around `tryAccept()` itself (lines 182-186, "listener
-// is unusable (server closing)") is a *different* branch from finding #10's
-// nullopt case just above: tryAccept() only returns nullopt for
-// EAGAIN/EWOULDBLOCK/ECONNABORTED, but *throws* for any other accept(2)
-// failure. None of the findings doc's 15 write-ups mention this catch. Unlike
-// the OS-scheduling races above, EMFILE is deterministic: accept(2) checks
-// the process's fd-table limit inside the kernel before returning a new fd,
-// independent of any TCP-level timing -- exactly finding #1's fault-injection
-// technique (RLIMIT_NOFILE), reused here against accept() instead of pipe().
-TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when accept() runs out of fds",
-          "[net][socket_server]") {
+// Running out of descriptors is a condition of the moment, not of the
+// listener: `accept(2)` answers EMFILE while the process is at its limit and
+// succeeds again once a descriptor is free. So the accept loop backs off and
+// keeps accepting, and a connection that queued while the process was
+// exhausted is served once it is not. EMFILE is deterministic here, unlike
+// the scheduling races above: the kernel checks the fd-table limit inside
+// `accept(2)`, independent of any TCP timing, so RLIMIT_NOFILE produces it on
+// demand.
+TEST_CASE("SocketServer: an accept loop that ran out of fds serves again once it has them", "[net][socket_server]") {
+    // The loop says it is backing off, which is also what tells this test
+    // that it has met the exhaustion rather than merely not got there yet.
+    auto sawExhaustion = std::make_shared<std::atomic<bool>>(false);
+    morph::log::ScopedLoggerOverride const logGuard{
+        [sawExhaustion](morph::log::LogLevel level, std::string_view msg) {
+            if (level == morph::log::LogLevel::warn && msg.starts_with("[net::SocketServer] accept")) {
+                sawExhaustion->store(true);
+            }
+        },
+        morph::log::LogLevel::warn};
+
     morph::exec::ThreadPoolExecutor pool{1};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
     std::uint16_t const port = wsServer.port();
 
-    // Pre-create several plain (not-yet-connected) sockets *before* touching
-    // the limit -- ::socket() needs fd headroom, which the constrained limit
-    // below would refuse.
+    // Created before the limit is lowered: ::socket() needs a new fd, a
+    // later ::connect() on an existing one does not.
     constexpr int kPending = 5;
     std::vector<int> clientFds;
     clientFds.reserve(kPending);
@@ -883,42 +950,25 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
         rlimit saved;
     } const guard{original};
 
-    // Zero headroom for a *new* fd. Note the pre-created sockets above are
-    // *not* connected yet, so nothing is in the backlog for the accept loop
-    // to race us for -- unlike TcpSocket::connect(), a raw ::connect() on an
-    // already-open fd needs no new fd of its own, so it is safe to issue
-    // *after* the constraint is already active, closing the window that
-    // defeated the naive "connect first, then constrain" ordering (the
-    // accept loop, running continuously in the background, would otherwise
-    // almost always drain the backlog before this thread even finishes
-    // computing the rlimit to set).
+    // Zero headroom for a new fd. The connects are issued only now, so the
+    // loop cannot take any of them before the limit applies.
     rlimit constrained = original;
     constrained.rlim_cur = static_cast<rlim_t>(highest + 1);
     REQUIRE(::setrlimit(RLIMIT_NOFILE, &constrained) == 0);
-
     for (int const fd : clientFds) {
         beginConnect(fd, LoopbackPort{port});
     }
 
-    // Let the accept loop's *own* poll()/tryAccept() cycle discover and fail
-    // on the pending connections on its own -- deliberately not calling
-    // close() yet. close()'s _wakeup.signal() would otherwise race the
-    // still-pending connections' own readiness for which one poll() reports
-    // first (acceptLoop() checks the wake fd's revents before the
-    // listener's, so it wins whenever both are ready), and calling close() immediately
-    // after firing the connects lets it win essentially every time, returning
-    // via the ordinary "close() signalled" path before tryAccept() is ever
-    // attempted. There is no public signal to poll for "the accept thread
-    // gave up" instead, so this waits a fixed, generous duration -- EMFILE is
-    // a persistent *state* here (the limit stays constrained the whole time),
-    // not a narrow instant, so any reasonable wait reaches it.
-    std::this_thread::sleep_for(std::chrono::milliseconds{300});
+    // Phase 1: the loop meets EMFILE and reports it.
+    bool const reported = morph::testing::waitUntil([sawExhaustion] { return sawExhaustion->load(); },
+                                                    morph::testing::WaitBudget{std::chrono::seconds{5}});
 
-    // acceptLoop() should have observed EMFILE and returned on its own by
-    // now (see the comment in socket_server.hpp: "listener is unusable").
-    // Confirm the accept thread actually terminated, rather than assuming it:
-    // close() should complete promptly since nothing is left parked in
-    // poll().
+    // Phase 2: with descriptors available again, a connection that arrived
+    // during the exhaustion completes its handshake.
+    ::setrlimit(RLIMIT_NOFILE, &original);
+    bool const served = upgradeAnsweredWithin(clientFds.front(), port, std::chrono::milliseconds{5000});
+
+    // close() still ends a loop that has been backing off, promptly.
     auto closed = std::make_shared<std::atomic<bool>>(false);
     std::thread closer([&wsServer, closed] {
         wsServer.close();
@@ -926,17 +976,17 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
     });
     bool const finishedPromptly = morph::testing::waitUntil([closed] { return closed->load(); },
                                                             morph::testing::WaitBudget{std::chrono::seconds{5}});
-
-    ::setrlimit(RLIMIT_NOFILE, &original);  // restore before any further fd use, including cleanup below
     for (int const fd : clientFds) {
         ::close(fd);
     }
-
     if (!finishedPromptly) {
         closer.detach();
-        FAIL("close() did not complete within 5s after tryAccept() should have hit EMFILE and exited the loop");
+        FAIL("close() did not complete within 5s of a loop that had been backing off");
     }
     closer.join();
+
+    CHECK(reported);
+    CHECK(served);
 }
 
 TEST_CASE("SocketServer: sendText() catches a send failure when the peer resets mid-reply", "[net][socket_server]") {
