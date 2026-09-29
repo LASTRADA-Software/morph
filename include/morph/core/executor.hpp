@@ -3,6 +3,10 @@
 #pragma once
 #include <chrono>
 #include <condition_variable>
+#include <core/async/ExecutorContext.hpp>
+#include <core/async/IExecutor.hpp>
+#include <core/async/ParkedWork.hpp>
+#include <coroutine>
 #include <exception>
 #include <functional>
 #include <mutex>
@@ -11,16 +15,63 @@
 #include <thread>
 #include <vector>
 
+#include "../attributes.hpp"
 #include "logger.hpp"
 
 namespace morph::exec {
+
+struct IExecutor;
+
+namespace detail {
+
+/// @brief A `core::async::IExecutor` over a morph executor: how a core-cpp
+///        strand's pump, and an `ExecutorScope`, reach a thread pool, a
+///        main-thread pump or Qt.
+///
+/// Every `morph::exec::IExecutor` owns exactly one (`IExecutor::coreExecutor`),
+/// so an executor has one core-cpp identity for its whole life.
+///
+/// A strand hands its base one bare coroutine handle per turn, which this
+/// posts as a lambda holding nothing else: trivially copyable, so it fits a
+/// `std::function`'s small buffer and a turn costs no allocation. The lambda
+/// does not refer to this object, so it may be destroyed while a pump it
+/// posted is still queued: the pump finds its strand closed and ends.
+class CoreExecutorOver final : public ::core::async::IExecutor {
+public:
+    /// @param executor Where every resumption is posted. Borrowed: it must
+    ///        outlive every strand over this object and run what it queued.
+    explicit CoreExecutorOver(::morph::exec::IExecutor& executor MORPH_LIFETIMEBOUND) : _executor{&executor} {}
+
+    using ::core::async::IExecutor::submit;
+
+    /// @brief Posts @p handle's resumption.
+    /// @param handle The coroutine to resume; borrowed.
+    void submit(std::coroutine_handle<> handle) override;
+
+    /// @brief Posts @p work's resumption. An executor that drops the task
+    ///        unrun releases its claim, which frees a chain nobody owns.
+    /// @param work The coroutine to resume, and its claim.
+    void submit(::core::async::ParkedWork work) override;
+
+private:
+    ::morph::exec::IExecutor* _executor;
+};
+
+}  // namespace detail
 
 /// @brief Abstract executor interface.
 ///
 /// Concrete implementations decide *where* and *when* posted tasks run
 /// (thread pool, main thread, Qt event loop, …).
-// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
+///
+/// An executor is an identity, so it is neither copyable nor movable: it owns
+/// the core-cpp adapter (`coreExecutor()`) that holds a pointer back to it.
 struct IExecutor {
+    IExecutor() = default;
+    IExecutor(const IExecutor&) = delete;
+    IExecutor& operator=(const IExecutor&) = delete;
+    IExecutor(IExecutor&&) = delete;
+    IExecutor& operator=(IExecutor&&) = delete;
     virtual ~IExecutor() = default;
 
     /// @brief Schedules @p task for asynchronous execution.
@@ -30,8 +81,48 @@ struct IExecutor {
     /// implementation documents otherwise.
     /// @param task Callable to execute.
     virtual void post(std::function<void()> task) = 0;
+
+    /// @brief This executor as a core-cpp executor: the identity an
+    ///        `core::async::ExecutorScope` names.
+    /// @return The adapter that posts every resumption through `post()`. The
+    ///         same object for the executor's whole life.
+    [[nodiscard]] ::core::async::IExecutor& coreExecutor() noexcept { return _core; }
+
+private:
+    // Stores only a pointer to this object, so constructing it from `*this`
+    // before this object is complete is sound.
+    detail::CoreExecutorOver _core{*this};
 };
-// NOLINTEND(cppcoreguidelines-special-member-functions)
+
+inline void detail::CoreExecutorOver::submit(std::coroutine_handle<> handle) {
+    _executor->post([handle] { handle.resume(); });
+}
+
+inline void detail::CoreExecutorOver::submit(::core::async::ParkedWork work) {
+    _executor->post([work] {
+        work.abandon.disarm();
+        work.resume.resume();
+    });
+}
+
+/// @brief Whether the calling thread is inside a task of @p executor.
+///
+/// True inside a task that @p executor's own worker is running, and inside
+/// anything that task calls synchronously, including a task posted to
+/// `detail::inlineExecutor()`, which states no scope of its own. Every scope in
+/// force is consulted, not only the innermost: a strand's batch runs inside the
+/// scope of the pool worker that drives it, and a task on that strand is still
+/// a task of the pool.
+///
+/// Cheap enough for a debug-build assertion: a walk over the calling thread's
+/// scope chain, which is a few entries deep.
+/// @param executor The executor asked about.
+/// @return True while a task of @p executor is running on the calling thread.
+[[nodiscard]] inline bool runningOn(IExecutor& executor) noexcept {
+    ::core::async::IExecutor* const identity = &executor.coreExecutor();
+    return ::core::async::ExecutorScope::anyInForce(
+        [identity](::core::async::ExecutorScope const& scope) { return &scope.executor() == identity; });
+}
 
 /// @brief Multi-threaded executor backed by a fixed-size thread pool.
 ///
@@ -103,6 +194,10 @@ private:
                 _q.pop();
             }
             try {
+                // Stated per task, not once per worker: the scope ends with the
+                // task, on a throw too, so a thread never carries this pool's
+                // identity into anything it runs afterwards.
+                ::core::async::ExecutorScope const scope{coreExecutor()};
                 task();
             } catch (const std::exception& exc) {
                 // A task failure must not kill the worker or unrelated tasks, but
@@ -210,6 +305,10 @@ public:
 private:
     void runTask(std::function<void()> task) {
         try {
+            // The pumping thread is the caller's own, so the scope must end
+            // with the task: the caller runs other code on this thread between
+            // pumps.
+            ::core::async::ExecutorScope const scope{coreExecutor()};
             task();
         } catch (const std::exception& exc) {
             ::morph::log::logError("[main-thread] callback threw: " + std::string{exc.what()});
@@ -250,6 +349,12 @@ namespace detail {
 ///          `detail::AsyncDispatchHandoff` (see `Bridge::attachHandlerAsync`'s
 ///          `@par Locking`). Application code that wants "run it now" should
 ///          call the function instead of posting it.
+///
+/// States no `ExecutorScope`: the task runs on the caller's thread, so
+/// whatever scope is already in force is the right answer to "where am I
+/// running". A task posted here from inside a pool task is still on the pool
+/// (`runningOn(pool)` stays true); one posted from a thread inside no
+/// executor's task is on none.
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class InlineExecutor : public IExecutor {
 public:

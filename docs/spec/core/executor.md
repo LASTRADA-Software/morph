@@ -16,6 +16,7 @@ threading, and serialisation semantics differ per implementation.
 - [Strands: `ModelStrands` and `ModelId`](#strands-modelstrands-and-modelid)
 - [Lifetime & ownership](#lifetime--ownership)
 - [Thread safety](#thread-safety)
+- [Current executor](#current-executor)
 - [Failure modes](#failure-modes)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -24,20 +25,20 @@ threading, and serialisation semantics differ per implementation.
 
 ## Type overview
 
-There are nine types, split across `morph::exec` (in `executor.hpp`),
-`morph::exec::detail` (in `strand.hpp`), and `morph::qt` (in
+There are nine types and one free function, split across `morph::exec` and
+`morph::exec::detail` (in `executor.hpp` and `strand.hpp`), and `morph::qt` (in
 `qt/qt_executor.hpp`):
 
 | Type | Namespace | Purpose |
 |---|---|---|
-| `IExecutor` | `morph::exec` | Abstract base: a single pure-virtual `post(task)`. |
+| `IExecutor` | `morph::exec` | Abstract base: a single pure-virtual `post(task)`, and `coreExecutor()`, the executor's stable core-cpp identity. |
 | `ThreadPoolExecutor` | `morph::exec` | Fixed-size thread pool, FIFO queue, task exceptions logged (never propagate). |
 | `MainThreadExecutor` | `morph::exec` | Collects tasks from any thread, drains on `runFor()` from the owning thread. |
 | `QtExecutor` | `morph::qt` | Posts tasks to a Qt event loop; they run on the configured context object's thread (the `QCoreApplication`/GUI thread by default). |
 | `ModelId` | `morph::exec::detail` | Opaque 64-bit identifier for a model instance, used as a strand key. |
 | `ModelIdHash` | `morph::exec::detail` | Hash functor so `ModelId` can be an `unordered_map` key. |
 | `ModelStrands` | `morph::exec::detail` | One strand per `ModelId` over an `IExecutor`: core-cpp's `core::async::KeyedStrands`, with what morph adds. Tasks with the same `ModelId` never overlap. |
-| `CoreExecutorOver` | `morph::exec::detail` | A `core::async::IExecutor` over a morph `IExecutor`: how a core-cpp strand's pump reaches it. |
+| `CoreExecutorOver` | `morph::exec::detail` (in `executor.hpp`) | A `core::async::IExecutor` over a morph `IExecutor`: how a core-cpp strand's pump reaches it, and what an `ExecutorScope` names. Every `IExecutor` owns one. |
 | `TaskResumer` | `morph::exec::detail` | A Task handler's resumer: the current executor while the handler runs, queuing its resumptions on its model's strand (see [`coroutines.md`](coroutines.md)). |
 
 `IExecutor` and the two thread-based concrete executors live in the public
@@ -57,6 +58,10 @@ concrete executor here *does* document otherwise — the two thread-based ones
 catch and log, `QtExecutor` defers to Qt (see [Failure modes](#failure-modes)).
 No implementation lets a task exception escape `post()` (the task has not run
 yet when `post()` returns).
+
+An executor is an identity: it is neither copyable nor movable, because it owns
+the adapter (`coreExecutor()`) that points back at it. See
+[Current executor](#current-executor).
 
 ## `ThreadPoolExecutor`
 
@@ -224,11 +229,14 @@ specifies and tests:
 
 What `ModelStrands` adds:
 
-- **The base adapter.** `CoreExecutorOver` turns the morph `IExecutor` into a
-  `core::async::IExecutor`. A strand hands its base one bare coroutine handle
-  per turn, which the adapter posts as a lambda holding that handle alone:
-  trivially copyable, so it fits `std::function`'s small buffer and a turn costs
-  no allocation. The lambda does not refer to the adapter.
+- **The base adapter.** The strands run on the base's `coreExecutor()`, a
+  `core::async::IExecutor` over the morph `IExecutor`. A strand hands its base
+  one bare coroutine handle per turn, which the adapter posts as a lambda
+  holding that handle alone: trivially copyable, so it fits `std::function`'s
+  small buffer and a turn costs no allocation. The lambda does not refer to the
+  adapter. Using the executor's own adapter, rather than one per `ModelStrands`,
+  is what gives the base one identity: a strand's batch runs inside the base's
+  scope, and `runningOn(base)` is true inside it.
 - **A throw is logged, not propagated.** `post(key, fn)` wraps `fn` in
   `LoggedTask`, which catches what it throws and logs it: `std::exception` as
   `"[strand] task threw: " + what()`, any other type as `"[strand] task threw
@@ -286,8 +294,8 @@ as a plain `uint64_t` (`wire::Envelope::modelId`), so a test never needs the
 
 ## Lifetime & ownership
 
-`ModelStrands` holds its base `IExecutor` by reference (inside
-`CoreExecutorOver`) and does not own it. Two rules follow:
+`ModelStrands` holds its base `IExecutor` by reference (through the base's
+`coreExecutor()`) and does not own it. Two rules follow:
 
 1. **The base `IExecutor` must outlive the strands and keep running tasks until
    `drain()` has returned.** Every strand's turn is posted to it, and `drain()`
@@ -341,6 +349,48 @@ concurrently.
   dispatched serially by the event loop of whichever thread owns the context
   object (`QCoreApplication`'s thread by default).
 
+## Current executor
+
+Which executor a thread is running a task for is core-cpp's current-executor
+context (`core::async::ExecutorScope`, `<core/async/ExecutorContext.hpp>`). Two
+things make it usable for morph's executors.
+
+- **`IExecutor::coreExecutor()`** returns the executor as a
+  `core::async::IExecutor`: the object an `ExecutorScope` names. Each
+  `IExecutor` owns exactly one, built with it, so the identity is the same object
+  for the executor's whole life and the same everywhere it is read. This is why
+  an `IExecutor` cannot be copied or moved. `ModelStrands` runs its strands on
+  the base's `coreExecutor()` for the same reason.
+- **`runningOn(executor)`** answers whether the calling thread is inside a task
+  of `executor`. It consults every scope in force, innermost first, not only the
+  innermost: a strand's batch runs inside the scope of the pool worker that
+  drives it, so a task on that strand is still a task of the pool.
+
+Every executor here states a scope around each task it runs, except
+`InlineExecutor`:
+
+| Executor | Scope |
+|---|---|
+| `ThreadPoolExecutor` | Around each task, in the worker loop, inside the `try` so a throwing task ends it too. Per task rather than per worker thread: the scope ends with the task, so a thread never carries the pool's identity into anything it runs later. |
+| `MainThreadExecutor` | Around each task in `runTask`, for the same reason. The pumping thread is the caller's, and it runs other code between pumps. |
+| `QtExecutor` | Around each delivered task, after the lifetime check. The queued event holds `this` beside the lifetime token: the check is sufficient because the executor is destroyed on the thread that delivers the event. |
+| `InlineExecutor` | **None.** It runs the task on the posting thread, so whatever scope is in force there already says where the code is running. An inline task inside a pool task is still on the pool; one posted from a thread inside no task is on no executor. Stating a scope would make it claim an identity it does not have. |
+
+Two consequences follow for coroutines (see
+[`coroutines.md`](coroutines.md#where-a-coroutine-resumes)). A `co_await` reads
+`ResumeTarget::current()`, so a coroutine that is run by hand inside a task of
+one of these executors now resumes on that executor, where before it resumed on
+the awaited `Completion`'s executor. And a coroutine started with `spawn` runs
+inside the adapter's scope, nested inside the executor's, so `runningOn` of the
+spawn executor is true in it while `currentExecutor()` names the adapter.
+
+**The rule for components.** A component that owns state asserts
+`runningOn(owner)` in debug builds before touching it:
+
+```cpp
+assert(morph::exec::runningOn(_owner) && "touched off its owner");
+```
+
 ## Failure modes
 
 | Executor | What happens when a task throws |
@@ -365,7 +415,15 @@ rather than being hidden).
 | Member | Signature | Notes |
 |---|---|---|
 | `post` | `virtual void post(std::function<void()> task) = 0` | Thread-safe. Task runs after the call returns. Per-implementation exception handling (both concrete executors log; see Failure modes). |
+| `coreExecutor` | `[[nodiscard]] core::async::IExecutor& coreExecutor() noexcept` | This executor as a core-cpp executor: the identity an `ExecutorScope` names. The same object for the executor's whole life. |
+| copy, move | deleted | The core-cpp adapter it owns points back at it. |
 | dtor | `virtual ~IExecutor() = default` | |
+
+### `runningOn` (`morph::exec`)
+
+| Member | Signature | Notes |
+|---|---|---|
+| `runningOn` | `[[nodiscard]] bool runningOn(IExecutor& executor) noexcept` | Whether the calling thread is inside a task of `executor`, at any depth and through any number of nested scopes. True inside a task posted to `InlineExecutor` from a task of `executor`. |
 
 ### `ThreadPoolExecutor : IExecutor`
 
@@ -373,13 +431,13 @@ rather than being hidden).
 |---|---|---|
 | ctor | `explicit ThreadPoolExecutor(std::size_t n)` | Spawns `max(n, 1)` worker threads. `n == 0` is clamped to 1 (a zero-worker pool would hang every task). |
 | dtor | `~ThreadPoolExecutor() override` | Signals stop, then joins all workers, which drain the queue (run every already-queued task) before exiting. Tasks posted concurrently with or after destruction may be lost. |
-| `post` | `void post(std::function<void()> task) override` | Enqueues to FIFO; notifies one worker. Thread-safe. Task exceptions caught and logged in the worker loop. |
+| `post` | `void post(std::function<void()> task) override` | Enqueues to FIFO; notifies one worker. Thread-safe. Each task runs inside a scope naming this pool; exceptions are caught and logged in the worker loop. |
 
 ### `MainThreadExecutor : IExecutor`
 
 | Member | Signature | Notes |
 |---|---|---|
-| `post` | `void post(std::function<void()> task) override` | Enqueues; notifies waiters. Thread-safe. Not executed until `runFor()`/`runOnce()`/`drain()`. |
+| `post` | `void post(std::function<void()> task) override` | Enqueues; notifies waiters. Thread-safe. Not executed until `runFor()`/`runOnce()`/`drain()`, each of which runs a task inside a scope naming this executor. |
 | `runFor` | `void runFor(std::chrono::milliseconds timeout)` | Runs tasks until the `timeout` deadline (blocks for new tasks while time remains; does not return early on an empty queue). Must be called from the owning thread. `std::exception`s logged and skipped; other exception types propagate. |
 | `runOnce` | `bool runOnce()` | Dequeues and runs at most one pending task; returns immediately, never blocks. Returns `true` if a task ran, `false` if the queue was empty. Must be called from the owning thread. |
 | `drain` | `void drain()` | Runs tasks until the queue is empty; no wall-clock timeout, does not wait for externally posted tasks. Must be called from the owning thread. |
@@ -389,7 +447,7 @@ rather than being hidden).
 | Member | Signature | Notes |
 |---|---|---|
 | ctor | `explicit QtExecutor(QObject* context = QCoreApplication::instance())` | Stores `context` as the `invokeMethod` target. Defaults to the application instance (GUI thread). `nullptr` makes `post()` a no-op (matches `QMetaObject::invokeMethod`'s handling of a null target). |
-| `post` | `void post(std::function<void()> fn) override` | Posts `fn` to `context`'s event loop via `QMetaObject::invokeMethod(context, ..., Qt::QueuedConnection)`; runs on whichever thread owns `context` at dispatch time. Thread-safe; returns immediately. |
+| `post` | `void post(std::function<void()> fn) override` | Posts `fn` to `context`'s event loop via `QMetaObject::invokeMethod(context, ..., Qt::QueuedConnection)`; runs on whichever thread owns `context` at dispatch time, inside a scope naming this executor. Thread-safe; returns immediately. |
 
 ### `ModelId` (`morph::exec::detail`)
 

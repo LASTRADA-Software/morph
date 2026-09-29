@@ -3,6 +3,7 @@
 #pragma once
 #include <QCoreApplication>
 #include <QMetaObject>
+#include <core/async/ExecutorContext.hpp>
 #include <functional>
 #include <memory>
 #include <morph/attributes.hpp>
@@ -19,6 +20,9 @@ namespace morph::qt {
 ///
 /// Thread-safe: `post()` may be called from any thread. No `QObject` subclass is
 /// required by the caller.
+///
+/// Each delivered task runs inside a `core::async::ExecutorScope` naming this
+/// executor, so `morph::exec::runningOn(*this)` is true inside it.
 ///
 /// **A task still queued when this executor is destroyed is dropped, not run.**
 /// `post()` enqueues and returns; it does not run the callable, and the queued
@@ -82,10 +86,15 @@ public:
     void post(std::function<void()> fn) override {
         QMetaObject::invokeMethod(
             _context,
-            [alive = std::weak_ptr<const char>{_alive}, fn = std::move(fn)]() mutable {
+            [this, alive = std::weak_ptr<const char>{_alive}, fn = std::move(fn)]() mutable {
                 if (alive.expired()) {
                     return;
                 }
+                // `this` is safe to use here for the reason the alive check is
+                // sufficient: this executor is destroyed on the thread that
+                // delivers this event, so it cannot be destroyed between the
+                // check and the use.
+                ::core::async::ExecutorScope const scope{coreExecutor()};
                 fn();
             },
             Qt::QueuedConnection);

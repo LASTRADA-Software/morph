@@ -60,6 +60,19 @@ TEST_CASE("QtExecutor still runs a task posted and delivered while it is alive",
     CHECK(*ran == 1);
 }
 
+TEST_CASE("A QtExecutor task runs inside a scope naming that executor", "[qt][executor][scope]") {
+    morph::qt::QtExecutor executor;
+    auto const before = morph::exec::runningOn(executor);
+    auto during = std::make_shared<bool>(false);
+    executor.post([&executor, during] { *during = morph::exec::runningOn(executor); });
+
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+
+    CHECK_FALSE(before);
+    CHECK(*during);
+    CHECK_FALSE(morph::exec::runningOn(executor));
+}
+
 TEST_CASE("A nested Completion chain outliving its QtExecutor does not use it after free",
           "[qt][executor][teardown]") {
     // The real shape of the bug. Bridge::executeVia chains three Completions
