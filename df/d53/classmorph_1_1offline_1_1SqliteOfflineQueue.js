@@ -4,7 +4,7 @@ var classmorph_1_1offline_1_1SqliteOfflineQueue =
       [ "normal", "df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555", null ],
       [ "full", "df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0", null ]
     ] ],
-    [ "SqliteOfflineQueue", "df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7cacb4aae20ff8f48a80f6277d4d159e", null ],
+    [ "SqliteOfflineQueue", "df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a24c0200c1dba601e1f63f891d2313b44", null ],
     [ "~SqliteOfflineQueue", "df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b", null ],
     [ "synchronousLevel", "df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a567cf64f346792ca897d326b55b21685", null ],
     [ "journalMode", "df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#acf2c06305a38052b962b7fdd6d66b901", null ],

@@ -69,7 +69,7 @@ var searchData=
   ['socketserver_66',['SocketServer',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html',1,'morph::net::SocketServer'],['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a442da28eb4702d7da4490a1379c83ed3',1,'morph::net::SocketServer::SocketServer()']]],
   ['socketserverconfig_67',['SocketServerConfig',['../d4/db0/structmorph_1_1net_1_1SocketServerConfig.html',1,'morph::net']]],
   ['spawn_68',['spawn',['../de/de0/coroutine_8hpp.html#af6b5841e8c8bc8b2e06b896be4540fbb',1,'morph::async']]],
-  ['sqliteofflinequeue_69',['SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html',1,'morph::offline::SqliteOfflineQueue'],['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7cacb4aae20ff8f48a80f6277d4d159e',1,'morph::offline::SqliteOfflineQueue::SqliteOfflineQueue()']]],
+  ['sqliteofflinequeue_69',['SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html',1,'morph::offline::SqliteOfflineQueue'],['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a24c0200c1dba601e1f63f891d2313b44',1,'morph::offline::SqliteOfflineQueue::SqliteOfflineQueue()']]],
   ['sqliteofflinequeueerror_70',['SqliteOfflineQueueError',['../dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html',1,'morph::offline']]],
   ['state_71',['state',['../dd/de7/classmorph_1_1async_1_1Completion.html#a49bb64dd60ef3d17baf9a36e7b5f1481',1,'morph::async::Completion']]],
   ['status_72',['status',['../de/d0d/classmorph_1_1async_1_1CallbackToken.html#a44b61f0a77b70af44a8ee5d27b7722c8',1,'morph::async::CallbackToken']]],
