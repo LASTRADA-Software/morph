@@ -430,6 +430,18 @@ API surface).
 
 ### Fixed
 
+- **`net::SocketServer` goes on accepting after the process runs out of file
+  descriptors.** Any `accept(2)` failure but `EINTR` and `EAGAIN` ended the
+  accept thread, so a single `EMFILE` stopped the server accepting for good,
+  while the port stayed bound and clients hung in their Upgrade read. The loop
+  now backs off on exhaustion (`EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`), from
+  10 ms to at most 1 s, and serves again once descriptors are free; `close()`
+  still ends it at once. A connection that failed while pending — the network
+  errors Linux `accept(2)` reports for it, and a firewall's `EPERM` — is
+  skipped like `EAGAIN`. The loop ends only for a listener that cannot accept,
+  and now logs why. `TcpSocket::tryAccept()` throws `std::system_error`
+  carrying the `errno`, a `std::runtime_error` as before.
+
 - **An installed `qt_forms` component compiles.** `forms_controller_core.hpp`
   includes `morph/qt/qt_executor.hpp`, which was installed only by the `qt`
   component (`MORPH_BUILD_QT`, which needs Qt WebSockets), so an install built

@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <chrono>
 #include <cstddef>
@@ -30,6 +31,76 @@
 #endif
 
 namespace morph::net::detail {
+
+/// @brief What a failed `accept(2)` says, for a loop that keeps accepting.
+enum class AcceptFailure : std::uint8_t {
+    /// The connection that was pending failed before it was taken. Nothing is
+    /// wrong with the listener: wait for the next one, as after `EAGAIN`.
+    NoConnection,
+    /// The process or the system is out of something `accept(2)` needs. The
+    /// same call succeeds once it is released, so the loop waits and retries.
+    Exhausted,
+    /// The listener itself cannot accept, now or later.
+    ListenerUnusable,
+};
+
+/// @brief One `errno` that `accept(2)` can answer, and what it says.
+struct AcceptErrorRow {
+    int err;                ///< The `errno` value.
+    AcceptFailure failure;  ///< What an accept loop does about it.
+};
+
+/// @brief The `errno` values `TcpSocket::tryAccept()` and
+///        `SocketServer`'s accept loop tell apart.
+///
+/// `NoConnection` is Linux `accept(2)`'s own instruction: it hands back a
+/// network error already pending on the new connection from `accept()`
+/// itself, and says to treat the TCP/IP ones like `EAGAIN` by retrying.
+/// `EPERM` is Linux refusing that one connection by firewall rule.
+/// `EOPNOTSUPP` is on the pending-error list too; it would also be the answer
+/// for a listener that is not `SOCK_STREAM`, which `listen()` never creates.
+///
+/// `ECONNABORTED` has no row. A connection reset while pending is still
+/// accepted on Linux, and the reset surfaces on the first `recvSome()`, which
+/// reads it as an orderly close; the `accept()` comment carries the
+/// measurement.
+///
+/// An `errno` no row names is `ListenerUnusable` (see `acceptFailureOf`).
+inline constexpr std::array kAcceptErrors{
+    AcceptErrorRow{.err = ENETDOWN, .failure = AcceptFailure::NoConnection},
+    AcceptErrorRow{.err = EPROTO, .failure = AcceptFailure::NoConnection},
+    AcceptErrorRow{.err = ENOPROTOOPT, .failure = AcceptFailure::NoConnection},
+    AcceptErrorRow{.err = EHOSTDOWN, .failure = AcceptFailure::NoConnection},
+#ifdef ENONET
+    AcceptErrorRow{.err = ENONET, .failure = AcceptFailure::NoConnection},
+#endif
+    AcceptErrorRow{.err = EHOSTUNREACH, .failure = AcceptFailure::NoConnection},
+    AcceptErrorRow{.err = EOPNOTSUPP, .failure = AcceptFailure::NoConnection},
+    AcceptErrorRow{.err = ENETUNREACH, .failure = AcceptFailure::NoConnection},
+    AcceptErrorRow{.err = EPERM, .failure = AcceptFailure::NoConnection},
+    AcceptErrorRow{.err = EMFILE, .failure = AcceptFailure::Exhausted},
+    AcceptErrorRow{.err = ENFILE, .failure = AcceptFailure::Exhausted},
+    AcceptErrorRow{.err = ENOBUFS, .failure = AcceptFailure::Exhausted},
+    AcceptErrorRow{.err = ENOMEM, .failure = AcceptFailure::Exhausted},
+    AcceptErrorRow{.err = EBADF, .failure = AcceptFailure::ListenerUnusable},
+    AcceptErrorRow{.err = ENOTSOCK, .failure = AcceptFailure::ListenerUnusable},
+    AcceptErrorRow{.err = EINVAL, .failure = AcceptFailure::ListenerUnusable},
+    AcceptErrorRow{.err = EFAULT, .failure = AcceptFailure::ListenerUnusable},
+};
+
+/// @brief Looks up @p err in `kAcceptErrors`.
+/// @param err An `errno` value `accept(2)` answered.
+/// @return Its row's `AcceptFailure`; `ListenerUnusable` for a value no row
+///         names, so an answer nobody classified ends an accept loop rather
+///         than being retried as though it passed.
+[[nodiscard]] inline AcceptFailure acceptFailureOf(int err) noexcept {
+    for (auto const& row : kAcceptErrors) {
+        if (row.err == err) {
+            return row.failure;
+        }
+    }
+    return AcceptFailure::ListenerUnusable;
+}
 
 /// @brief RAII wrapper around a POSIX (BSD sockets) TCP file descriptor.
 ///
@@ -333,10 +404,13 @@ public:
     /// macOS/BSD's inheritance of the listener's flag reaching `recvSome()`
     /// Any rewrite of this function has to keep going through that
     /// constructor, or do the reset itself.
-    /// @return The accepted `TcpSocket`, or `std::nullopt` when no connection
-    ///         was pending — a readiness report that went stale before the
-    ///         `accept`, which the caller answers by waiting again.
-    /// @throws std::runtime_error if `::accept` fails for any other reason.
+    /// @return The accepted `TcpSocket`, or `std::nullopt` when there is no
+    ///         connection to take: none was pending — a readiness report that
+    ///         went stale before the `accept` — or the pending one failed
+    ///         first (`AcceptFailure::NoConnection` in `kAcceptErrors`). The
+    ///         caller answers both by waiting again.
+    /// @throws std::system_error carrying the `errno`, if `::accept` fails for
+    ///         any other reason; `acceptFailureOf()` says what it means.
     // Non-const to match accept(): taking a connection consumes it from the
     // listener's queue, which is state this object owns.
     // NOLINTNEXTLINE(readability-make-member-function-const)
@@ -350,10 +424,10 @@ public:
             if (err == EINTR) {  // retried for the same reason accept() retries it
                 continue;
             }
-            if (wouldBlock(err)) {
+            if (wouldBlock(err) || acceptFailureOf(err) == AcceptFailure::NoConnection) {
                 return std::nullopt;
             }
-            throw std::runtime_error("TcpSocket::tryAccept: " + errnoMessage(err));
+            throw std::system_error(err, std::system_category(), "TcpSocket::tryAccept");
         }
     }
 

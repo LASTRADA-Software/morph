@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "../test_support.hpp"
+#include "fd_limit_clamp.hpp"
 
 // ── Test model, registered process-wide (same pattern as tests/qt/test_qt_websocket.cpp) ──
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based
@@ -227,7 +228,7 @@ bool pollUntil(int fd, short events, std::chrono::steady_clock::time_point deadl
         if (left.count() <= 0) {
             return false;
         }
-        pollfd pfd{fd, events, 0};
+        pollfd pfd{.fd = fd, .events = events, .revents = 0};
         int const rc = ::poll(&pfd, 1, static_cast<int>(left.count()));
         if (rc > 0) {
             return true;
@@ -243,7 +244,7 @@ bool pollUntil(int fd, short events, std::chrono::steady_clock::time_point deadl
 // with `101 Switching Protocols` before `budget` ran out. Never blocks past
 // the budget: a server whose accept loop has stopped leaves the connection
 // in the listen backlog, where nothing will ever answer it.
-bool upgradeAnsweredWithin(int fd, std::uint16_t port, std::chrono::milliseconds budget) {
+bool upgradeAnsweredWithin(int fd, LoopbackPort port, std::chrono::milliseconds budget) {
     auto const deadline = std::chrono::steady_clock::now() + budget;
     if (!pollUntil(fd, POLLOUT, deadline)) {
         return false;
@@ -253,7 +254,7 @@ bool upgradeAnsweredWithin(int fd, std::uint16_t port, std::chrono::milliseconds
     if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &len) != 0 || soError != 0) {
         return false;
     }
-    morph::net::detail::ParsedWsUrl const url{"127.0.0.1", port, "/"};
+    morph::net::detail::ParsedWsUrl const url{.host = "127.0.0.1", .port = port.value, .path = "/"};
     std::string const request =
         morph::net::detail::buildClientHandshakeRequest(url, morph::net::detail::generateClientKey());
     if (::send(fd, request.data(), request.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(request.size())) {
@@ -853,11 +854,12 @@ TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close
 
 TEST_CASE("SocketServer: acceptLoop retries when a pending connection is aborted before accept() runs",
           "[net][socket_server]") {
-    // tryAccept() returning nullopt (EAGAIN/EWOULDBLOCK/ECONNABORTED) means
-    // "the pending connection went away before we took it" -- never exercised
-    // elsewhere. A single sequential connect-then-abort essentially always
-    // loses this race on this machine: the listener's own accept() is simpler
-    // and faster than our own connect()+setsockopt()+close() round trip
+    // tryAccept() returning nullopt (EAGAIN/EWOULDBLOCK, or a connection
+    // that failed while pending) means "the pending connection went away
+    // before we took it" -- never exercised elsewhere. A single sequential
+    // connect-then-abort essentially always loses this race on this machine:
+    // the listener's own accept() is simpler and faster than our own
+    // connect()+setsockopt()+close() round trip
     // (confirmed empirically -- 0/150 with one real, fully-established
     // TcpSocket::connect() per attempt, sequential or threaded). Firing many
     // *non-blocking* connects back-to-back on one thread (skipping both the
@@ -909,7 +911,8 @@ TEST_CASE("SocketServer: an accept loop that ran out of fds serves again once it
     auto sawExhaustion = std::make_shared<std::atomic<bool>>(false);
     morph::log::ScopedLoggerOverride const logGuard{
         [sawExhaustion](morph::log::LogLevel level, std::string_view msg) {
-            if (level == morph::log::LogLevel::warn && msg.starts_with("[net::SocketServer] accept")) {
+            if (level == morph::log::LogLevel::warn &&
+                msg.starts_with("[net::SocketServer] accept failed, backing off")) {
                 sawExhaustion->store(true);
             }
         },
@@ -921,8 +924,8 @@ TEST_CASE("SocketServer: an accept loop that ran out of fds serves again once it
     REQUIRE(wsServer.listen());
     std::uint16_t const port = wsServer.port();
 
-    // Created before the limit is lowered: ::socket() needs a new fd, a
-    // later ::connect() on an existing one does not.
+    // Created before the clamp: ::socket() needs a new fd, a later
+    // ::connect() on an existing one does not.
     constexpr int kPending = 5;
     std::vector<int> clientFds;
     clientFds.reserve(kPending);
@@ -932,41 +935,25 @@ TEST_CASE("SocketServer: an accept loop that ran out of fds serves again once it
         clientFds.push_back(fd);
     }
 
-    rlimit original{};
-    REQUIRE(::getrlimit(RLIMIT_NOFILE, &original) == 0);
-    rlim_t const scanLimit =
-        original.rlim_cur < static_cast<rlim_t>(65536) ? original.rlim_cur : static_cast<rlim_t>(65536);
-    int const highest = highestOpenFd(static_cast<int>(scanLimit));
-    REQUIRE(highest >= 0);
-
-    struct RlimitGuard {
-        explicit RlimitGuard(rlimit savedIn) : saved{savedIn} {}
-        RlimitGuard(const RlimitGuard&) = delete;
-        RlimitGuard& operator=(const RlimitGuard&) = delete;
-        RlimitGuard(RlimitGuard&&) = delete;
-        RlimitGuard& operator=(RlimitGuard&&) = delete;
-        ~RlimitGuard() { ::setrlimit(RLIMIT_NOFILE, &saved); }
-
-        rlimit saved;
-    } const guard{original};
-
-    // Zero headroom for a new fd. The connects are issued only now, so the
-    // loop cannot take any of them before the limit applies.
-    rlimit constrained = original;
-    constrained.rlim_cur = static_cast<rlim_t>(highest + 1);
-    REQUIRE(::setrlimit(RLIMIT_NOFILE, &constrained) == 0);
-    for (int const fd : clientFds) {
-        beginConnect(fd, LoopbackPort{port});
+    // Phase 1: the loop meets EMFILE and reports it. The clamp fills every
+    // free descriptor rather than only lowering the limit, so accept(2)
+    // cannot take a hole below the highest open fd; the connects are issued
+    // only once it holds, so the loop cannot take one before it does.
+    bool reported = false;
+    {
+        morph::testing::FdLimitClamp const clamp;
+        INFO(clamp.summary());
+        REQUIRE(clamp.exhausted());
+        for (int const fd : clientFds) {
+            beginConnect(fd, LoopbackPort{port});
+        }
+        reported = morph::testing::waitUntil([sawExhaustion] { return sawExhaustion->load(); },
+                                             morph::testing::WaitBudget{std::chrono::seconds{5}});
     }
-
-    // Phase 1: the loop meets EMFILE and reports it.
-    bool const reported = morph::testing::waitUntil([sawExhaustion] { return sawExhaustion->load(); },
-                                                    morph::testing::WaitBudget{std::chrono::seconds{5}});
 
     // Phase 2: with descriptors available again, a connection that arrived
     // during the exhaustion completes its handshake.
-    ::setrlimit(RLIMIT_NOFILE, &original);
-    bool const served = upgradeAnsweredWithin(clientFds.front(), port, std::chrono::milliseconds{5000});
+    bool const served = upgradeAnsweredWithin(clientFds.front(), LoopbackPort{port}, std::chrono::milliseconds{5000});
 
     // close() still ends a loop that has been backing off, promptly.
     auto closed = std::make_shared<std::atomic<bool>>(false);

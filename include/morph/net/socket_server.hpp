@@ -3,6 +3,7 @@
 #pragma once
 #include <poll.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
@@ -11,10 +12,12 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <morph/core/logger.hpp>
 #include <morph/core/remote.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -256,6 +259,61 @@ private:
         }
     };
 
+    /// First wait after the process runs out of something `accept(2)` needs;
+    /// each further failure in the same run doubles it.
+    static constexpr std::chrono::milliseconds kAcceptBackoffFirst{10};
+    /// The longest wait: how late a recovered process takes its next
+    /// connection. `close()` is not held by it -- the wait ends on the wakeup.
+    static constexpr std::chrono::milliseconds kAcceptBackoffMax{1000};
+
+    /// Waits out an accept backoff on the wakeup alone: the listener stays
+    /// readable while the connection that failed is still queued, so polling
+    /// it too would end the wait at once and spin.
+    /// @return `false` when the loop must end instead: `close()` signalled the
+    ///         wakeup, or `poll()` itself failed.
+    static bool waitOutBackoff(::core::platform::NativeHandle wakeupHandle, std::chrono::milliseconds backoff) {
+        pollfd wakeupOnly{};
+        wakeupOnly.fd = wakeupHandle;
+        wakeupOnly.events = POLLIN;
+        int const ready = ::poll(&wakeupOnly, 1, static_cast<int>(backoff.count()));
+        if (ready > 0) {
+            return false;  // close() signalled the wakeup
+        }
+        return ready == 0 || errno == EINTR;
+    }
+
+    /// Takes the pending connection, if there is one, into @p clientSocket,
+    /// and sorts a failure by `acceptFailureOf`: running out of something sets
+    /// @p backoff, anything else ends the loop.
+    /// @return `false` when the loop must end.
+    bool acceptOrBackOff(std::optional<::morph::net::detail::TcpSocket>& clientSocket,
+                         std::chrono::milliseconds& backoff) {
+        try {
+            clientSocket = _listenSocket.tryAccept();
+        } catch (const std::system_error& failure) {
+            if (::morph::net::detail::acceptFailureOf(failure.code().value()) ==
+                ::morph::net::detail::AcceptFailure::Exhausted) {
+                // Said once per run of failures, not once per doubling.
+                if (backoff.count() == 0) {
+                    ::morph::log::logWarn(std::string{"[net::SocketServer] accept failed, backing off: "} +
+                                          failure.what());
+                }
+                backoff = backoff.count() == 0 ? kAcceptBackoffFirst : std::min(backoff * 2, kAcceptBackoffMax);
+                return true;
+            }
+            // Not a condition of the moment: a loop still polling this
+            // listener would get the same answer forever. Said, because the
+            // port stays bound and a client would otherwise simply hang.
+            ::morph::log::logWarn(std::string{"[net::SocketServer] accept loop stopped: "} + failure.what());
+            return false;
+        } catch (const std::exception& failure) {
+            ::morph::log::logWarn(std::string{"[net::SocketServer] accept loop stopped: "} + failure.what());
+            return false;
+        }
+        backoff = {};
+        return true;
+    }
+
     void acceptLoop() {
         // listen() opens the wakeup before it starts this loop, and nothing
         // resets it while the loop runs.
@@ -263,7 +321,13 @@ private:
             return;
         }
         auto const wakeupHandle = _wakeup->nativeHandle();
+        // Zero, or how long to wait before the next accept after the process
+        // ran out of something accept(2) needs.
+        std::chrono::milliseconds backoff{};
         for (;;) {
+            if (backoff.count() > 0 && !waitOutBackoff(wakeupHandle, backoff)) {
+                return;
+            }
             std::array<pollfd, kPollFdCount> fds{};
             pollfd& listenPfd = fds.front();
             pollfd& wakeupPfd = fds.back();
@@ -286,13 +350,11 @@ private:
                 continue;
             }
             std::optional<::morph::net::detail::TcpSocket> clientSocket;
-            try {
-                clientSocket = _listenSocket.tryAccept();
-            } catch (const std::exception&) {
-                return;  // the listener is unusable (server closing)
+            if (!acceptOrBackOff(clientSocket, backoff)) {
+                return;
             }
             if (!clientSocket) {
-                continue;  // readiness went stale before the accept; wait again
+                continue;  // nothing to take this time, or backing off; wait again
             }
             if (_closing.load()) {
                 return;

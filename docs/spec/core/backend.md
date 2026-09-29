@@ -2012,6 +2012,37 @@ ready connection with `TcpSocket::tryAccept()`, which answers `std::nullopt`
 rather than parking when a readiness report has gone stale. `close()` signals
 the wakeup before `join()`, which is what ends the loop.
 
+**A failed accept ends the loop only when the listener cannot accept.**
+`accept(2)` answers for three different things, and `kAcceptErrors` in
+`detail/tcp_socket.hpp` sorts each `errno` into one of them:
+
+- **The pending connection failed** (`AcceptFailure::NoConnection`). Linux
+  `accept(2)` hands back a network error already pending on the new connection
+  — `ENETDOWN`, `EPROTO`, `ENOPROTOOPT`, `EHOSTDOWN`, `ENONET`, `EHOSTUNREACH`,
+  `EOPNOTSUPP`, `ENETUNREACH` — and says to treat them like `EAGAIN`; `EPERM` is
+  a firewall rule refusing that one connection. `tryAccept()` answers these
+  `std::nullopt`, exactly as for a stale readiness report, so the loop waits
+  for the next connection through the branch it already takes for `EAGAIN`.
+  `ECONNABORTED` is not among them: a connection reset while pending is still
+  accepted on Linux, and its reset reaches the first `recvSome()` as an
+  orderly close.
+- **The process or the system ran out of something** (`Exhausted`: `EMFILE`,
+  `ENFILE`, `ENOBUFS`, `ENOMEM`). The same `accept` succeeds once it is
+  released, so the loop waits and tries again: 10 ms after the first failure,
+  doubling to 1 s, and back to none once an accept stops failing. The wait is a
+  `poll()` on the wakeup alone — the listener stays readable while the
+  connection that failed is queued, so polling it too would spin — which is
+  also why `close()` still ends a loop that is waiting. The first failure of a
+  run is logged at warn.
+- **The listener cannot accept** (`ListenerUnusable`: `EBADF`, `ENOTSOCK`,
+  `EINVAL`, `EFAULT`, and any `errno` no row names). The loop ends and logs
+  why at warn, since the port stays bound until `close()` and a client would
+  otherwise only hang in its Upgrade read.
+
+`tests/net/test_socket_server.cpp` exhausts `RLIMIT_NOFILE` under a running
+server, restores it, and requires a connection that queued in between to
+complete its handshake.
+
 **The listener's non-blocking mode stops at the listener.**
 `TcpSocket`'s fd-adopting constructor clears `O_NONBLOCK` on every descriptor it
 takes ownership of, so a connection from `accept()` or `tryAccept()` is always
