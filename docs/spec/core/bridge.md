@@ -22,7 +22,7 @@ that only know action names at runtime.
 - [`BRIDGE_REGISTER_ACTION` and `registerActionExecutorOnce`](#bridge_register_action-and-registeractionexecutoronce)
 - [`MemberPointerTraits`](#memberpointertraits)
 - [Subscription semantics](#subscription-semantics)
-- [Thread safety](#thread-safety)
+- [Thread safety — one owner](#thread-safety--one-owner)
 - [Lifetime & ownership](#lifetime--ownership)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -992,99 +992,62 @@ existing subscriber.
   each other's work; two clients do not, and must re-read to notice a change.
 
 
-## Thread safety
+## Thread safety — one owner
 
-`Bridge` is fully thread-safe (see the `Bridge` section: separate
-`_backendMtx`, `_mtx`, `_sessionMtx`, and `_attachMtx`, with `executeVia`
-taking its backend snapshot under the short, dedicated `_backendMtx` rather
-than `_mtx`, and a shared handler's `attachHandler`/`ensureBound`/
-`assignHandlerPrimary` running under `_attachMtx` rather than `_mtx`, so a
-slow remote round-trip on one handler's attach never blocks another
-handler's construction, destruction, or a `switchBackend()` call on the same
-`Bridge`).
+`Bridge` and every `BridgeHandler` built on it belong to one executor, the
+**owner**, which the `Bridge` constructor takes and which is required:
 
-`attachHandlerAsync`/`ensureBoundAsync` — the non-blocking counterparts
-`BridgeHandler::execute()` routes its keyed dispatches through — take
-`_attachMtx` over the same scope their synchronous twins do, but **release it
-before invoking their `onDone` callback**, on every path including the
-synchronous fallback. That is a hard requirement, not a style choice:
-`onDone` is where the action itself is dispatched, and a result-keyed dispatch
-promotes its binding via `assignHandlerPrimary`, which re-takes `_attachMtx`.
-It is the same rule `registerHandlerImpl` already follows for `_mtx`. See
-[shared_instances.md](shared_instances.md), "Async register-or-attach and
-attach".
+```cpp
+morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), guiExecutor};
+```
 
-**`registerHandlerImpl` reads `contextKey` without `_attachMtx`, on purpose.**
-`HandlerBinding::primary`/`contextKey` are otherwise mutated and read only under
-`_attachMtx`. Registration is the one carve-out, and it is forced: acquiring
-`_attachMtx` there makes `registerHandler()` contend with a slow shared attach,
-which is exactly the regression *"Bridge: an in-flight shared attach does not
-block unrelated handler registration"* (`tests/test_shared_instances.cpp`)
-exists to catch — taking the lock there reproduces that failure.
+Both are created, called and destroyed there, and every field either keeps is
+touched only there, so neither holds a lock. The backend installed in the
+bridge is reached only from there as well, which is why `LocalBackend`,
+`SynchronousBackendAdapter` and `SimulatedRemoteBackend` keep their registries,
+pending lists and sessions without a lock too (see
+[backend.md](backend.md)).
 
-The read is made safe by ordering rather than locking: every writer
-(`attachHandler`, `ensureBound`, `assignHandlerPrimary`) operates on an
-already-registered binding, while this read happens *during* registration. The
-pre-built-binding `registerHandler(binding)` overload hands the caller the
-binding first, so the requirement falls on the caller: **set `contextKey` before
-calling `registerHandler()`, and do not mutate it concurrently with that call.**
-Afterwards the ordinary `_attachMtx` rule applies.
+"There" means `morph::exec::runningOn(owner)` is true on the calling thread:
+inside a task the owner runs, or inside an `exec::OwnerScope` naming it. The
+scope is how the owner's own thread says that its code *outside* the owner's
+tasks runs as the owner — a Qt application's slots and QML handlers, a test
+body, a `main()` before its event loop starts. A call from anywhere else is a
+contract violation. Debug builds assert it at every public entry point and at
+every site that touches owner state; a release build does not check.
 
-The guarantee is unconditional, including for a backend that completes its
-`bindModel` completion **inline** — from inside
-the dispatch call itself, while the dispatching frame still holds `_attachMtx`
-(`QtWebSocketBackend` does exactly this on its `!_connected` error branch).
-Such a callback does not act: it parks its outcome in a
-`detail::AsyncDispatchHandoff` and returns, and the dispatching frame applies
-the outcome once its own dispatch call has returned — publishing under the lock
-it already holds, then releasing it, then calling `onDone`. A tiny mutex inside
-the handoff makes the window race-free even against a backend that replies from
-another thread while its dispatch call is still on this stack, and keeps
-`onDone` invoked exactly once on every interleaving. Because the inline case can
-never reach the callback body, `attachHandlerAsync`'s out-of-frame success
-callback is free to re-acquire `_attachMtx` for the two `std::string` fields it
-publishes (`HandlerBinding::contextKey`/`primary`, which every other reader
-takes that lock for); `ensureBoundAsync`'s publishes only the atomic
-`currentId` and needs no lock to store it.
+Every public verb is owner-only: construction and destruction,
+`registerHandler`, `registerSharedHandler`, `deregisterHandler`, `executeVia`,
+`switchBackend`, `setDefaultSession`/`defaultSession`,
+`setPrincipal`/`currentPrincipal`, `setExecuteDeadline`/`executeDeadline`,
+the subscription verbs, and each `BridgeHandler` verb. Three answers are
+atomics and may be read from any thread: `pendingCalls()`, `isBound()` and
+`hasSubscribers()`.
 
-Both out-of-frame callbacks reach those publishes through one private helper,
-`publishLateBindReply`, which holds the four steps they share — the liveness
-check, the binding lock, the stale-backend comparison under `_attachMtx`, and
-the single `onDone` outside it — and takes what to publish as a callable. It is
-a template rather than a `std::function` parameter so the late path
-type-erases and allocates nothing. `assignHandlerPrimary`'s continuation
-deliberately does not use it: having no `onDone`, it drops a stale reply
-silently instead of reporting it, and that difference is intended rather than
-incidental.
+What does cross threads, and how it reaches the owner:
 
-`whenBound()` synchronises on the *binding's* `registrationMtx`, never on a
-`Bridge` mutex, and never holds it across a callback: the resolver swaps the
-waiter list out under the lock and invokes the callbacks after releasing it.
-That is what lets a waiter be queued from a GUI thread and settled from a
-backend's transport thread without either blocking on the bridge's own locks —
-see [Registration readiness](#registration-readiness--isbound--whenbound).
+| From | What | How it reaches the owner |
+|---|---|---|
+| A backend's thread (a pool strand, the I/O loop, the Qt thread) | A bind or promote reply | `IBackend::bindModel`/`promoteModel` are called with the owner as their executor, so the continuation is a task on the owner. A backend that settles before returning is applied at once, on the owner, by the call that issued it. |
+| A backend's thread | An action's result | The backend settles the call's `detail::BridgeSink` there; the caller's continuations run on the handler's `guiExec`. The bridge-side work a result triggers — subscription fan-out, a result-keyed action's promotion — is posted to the owner. |
+| A transport's thread | A reconnect | `IBackend::setReconnectHandler` takes the executor the handler runs on; the bridge installs its owner, so the re-registration is an ordinary task on the owner. |
+| A pool thread inside a running action | A `BridgeHandler` constructed there | The constructor posts its registration to the owner and returns. |
 
-`subscribe`/`unsubscribe` mutate `_subscriptions`, a
-`std::shared_ptr<morph::bridge::detail::SubscriptionRegistry<HandlerBinding>>`
-(the registry's own header, `core/detail/subscription_registry.hpp`), under
-that registry's own internal mutex. Callbacks never run under that mutex: `publishResult`
-snapshots the matching sinks under the lock and invokes them outside it,
-marshalled to the `guiExec` executor passed at construction, so a subscriber
-that re-enters the bridge cannot deadlock. A subscription holds a `weak_ptr` to
-its binding, so one belonging to a destroyed handler is skipped and pruned —
-on the next `publishResult` call, not the moment the handler dies — rather
-than dangling. The intended usage remains **single-GUI-thread affinity**: a
-handler and its subscriptions belong to one GUI thread.
+`BridgeHandler`'s `guiExec` must be the owner or an executor that runs its
+tasks on the owner's thread. The constructor checks it in a debug build by
+posting one task to `guiExec` that asserts `runningOn(owner)` where it runs.
 
-Heap-allocated behind a `shared_ptr` rather than a plain member for
-the same reason `_pendingCalls` is: `executeVia()`'s `.then` continuation calls
-`hasSubscribers()`/`publishResult()` from a context that can run after
-`~Bridge()`, and the registry's own "snapshot under lock, invoke outside it"
-discipline (above) means pinning the whole registry with a captured
-`shared_ptr` makes that call safe with no gate at all — unlike
-`onResult`'s call into `assignHandlerPrimary` in the same continuation, which
-genuinely needs the *current* bridge/backend and is gated on
-`detail::BridgeLifetime` instead (see "Destructor" above).
+**Teardown is on the owner, handlers before the bridge.** `~BridgeHandler`
+deregisters its binding; `~Bridge` rejects every call still waiting for a
+bind with `BridgeDestroyedError`, clears the reconnect handler and cancels the
+backend's pending calls. A handler whose bridge was destroyed first finds the
+bridge's `CallbackToken` expired and deregisters nothing: the check and the
+destructor are on one thread, so they cannot interleave.
+
+Subscriptions follow the same rule: `subscribe`/`unsubscribe` and the fan-out
+run on the owner, and `detail::SubscriptionRegistry` holds no lock.
+`publishResult` still snapshots the matching sinks before invoking them,
+because a subscriber may re-enter the registry.
 
 ## Lifetime & ownership
 
@@ -1095,57 +1058,24 @@ exactly as long as its handler. The bridge can enumerate live bindings (for
 `switchBackend` and reconnect re-registration) and skip dead ones via
 `weak.lock()`, but it never keeps a handler alive.
 
-**Bridge-vs-handler teardown order.** The bridge owns a
-`shared_ptr<detail::BridgeLifetime>` — a `shared_mutex` plus an `alive` flag —
-and every handler copies that `shared_ptr` (`_bridgeGate`) at construction. This
-makes *teardown* order-independent, **on any thread**:
+**Teardown order: handlers before the bridge, on the owner.** Both
+destructors run on the owner, so they never overlap and need no gate.
+`~BridgeHandler` deregisters its binding from the bridge and rejects every
+call of its own still waiting for a bind. `~Bridge` rejects the calls still
+waiting on any live binding with `BridgeDestroyedError`, clears the active
+backend's reconnect handler, and cancels its pending calls.
 
-- Handler destroyed first (the normal case): its destructor takes the gate
-  shared, sees `alive`, and deregisters the binding from the still-live bridge.
-- Bridge destroyed first: `~Bridge`'s **first** statement takes the gate
-  exclusively and clears `alive`, so the handler's destructor skips
-  deregistration — a safe no-op instead of a use-after-free.
-- The two racing on different threads: the `shared_mutex` orders them. Either
-  the handler is inside the gate and `~Bridge` waits for it to leave before
-  running a single statement of its own body, or `~Bridge` got there first and
-  the handler sees `alive == false`. There is no in-between.
+A handler that outlives its bridge — the reverse order, still on the owner —
+checks the bridge's `CallbackToken` (`liveness()`) in its destructor and
+deregisters nothing once it has expired. On one thread that check is exact:
+the destructor it guards against cannot run between the check and the call.
+From any other thread the destructor is a contract violation, asserted in a
+debug build.
 
-The gate is heap-allocated and outlives the `Bridge`, because a handler that
-outlives its bridge must still be able to *ask* the question.
-
-**Why the liveness token is not enough here.** `Bridge::liveness()` (the
-`CallbackScope _callbacks` half) still gates *delivery* of the bridge's own
-callbacks, and that is the job it is right for: a suppressed callback simply
-does not run, so a check that has gone stale costs nothing. It cannot gate a
-*member call on the `Bridge`*, because `CallbackToken::active()` is explicitly
-advisory across threads ([callback_scope.md](callback_scope.md), "Boundary of
-the guarantee") — the bridge can be destroyed between the check and the call.
-A bare `active()` check in `~BridgeHandler` admits exactly that: a
-`shared_ptr<BridgeHandler>` kept alive by its own completions is released on a
-worker-pool thread while the owning thread runs `~App`, the check passes, the
-`Bridge` finishes being destroyed, and `deregisterHandler` then walks the freed
-`_handlers`. The gate replaces the check with something that holds.
-
-**Blocking, and why it is safe.** `~Bridge` waits for an in-flight
-deregistration, so `~Bridge` can block. The wait is bounded and cannot cycle:
-the only guarded region is `deregisterHandler`, whose sole outward call is
-`IBackend::deregisterModel`, which never blocks on another thread on any shipped
-backend — `LocalBackend` erases map entries under its own mutex,
-`SimulatedRemoteBackend` runs the envelope inline (`RemoteServer::handleInline`),
-and `QtWebSocketBackend`/`SocketBackend` are documented fire-and-forget sends
-precisely so destruction never spins a nested event loop. A destructor blocking
-on a bounded predicate is the framework's existing idiom for this hazard —
-`~LocalBackend` blocks until its strands have drained
-([concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md)).
-
-**The lifetime rule.** The gate makes only *destruction* safe in
-either order. It does **not** make a `Bridge` optional for live handlers: any
-`execute()`, `executeJson()`, or `FlowSession::set<>`-triggered fire dereferences the
-`Bridge&` and must run while the bridge is alive. In other words, the bridge
-must still outlive all normal use of its handlers; only mis-ordered
-*destruction* is now defined behaviour. (This corrects an earlier claim that
-"weak references let `BridgeHandler` outlive `Bridge`" — they do not; they only
-make teardown order-independent.)
+**The lifetime rule.** The bridge must outlive every *use* of its handlers:
+any `execute()`, `executeJson()`, or `FlowSession::set<>`-triggered fire
+dereferences the `Bridge&`. Only the destruction of a handler after its bridge
+is tolerated, as above.
 
 ## API reference
 
@@ -1217,8 +1147,8 @@ make teardown order-independent.)
 
 | Decision | Choice | Why |
 |---|---|---|
-| Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. (Handler *teardown* after the bridge is made safe separately, by the `detail::BridgeLifetime` gate — not by this weak storage.) |
-| Teardown order | **`shared_ptr<detail::BridgeLifetime>` — a `shared_mutex` + `alive` flag, shared with every handler** | Makes bridge-vs-handler destruction order-independent on any thread: `~BridgeHandler` holds the gate shared across its whole deregistration, `~Bridge`'s first statement takes it exclusively and clears `alive`, so the two can never overlap. Normal `execute`/`subscribe` still require the bridge to outlive its handlers. A per-handler `CallbackToken` from `_callbacks` cannot do this job: its `active()` is advisory across threads, so the check-then-call it permits is a use-after-free. The `CallbackScope` stays for what it is right for: gating *delivery* of the bridge's own callbacks ([callback_scope.md](callback_scope.md)). |
+| Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. |
+| Threading | **One owner, given at construction; every verb owner-only, asserted in debug builds** | Every consumer already called its `Bridge` from one thread, and the free-threaded contract cost a lock per runtime-settable field, a lifetime gate for teardown on any thread, and a registration handoff for replies that settle on a thread the bridge does not own. Handing the owner to `bindModel`/`promoteModel` as the delivery executor, and having backends post reconnects to it, makes every one of those a task on the owner instead. Teardown follows: handlers before the bridge, on the owner. |
 | Backend pointer | **Short snapshot under the dedicated `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under `_backendMtx` (never `_mtx`), so it never blocks on `switchBackend()`'s `_mtx`. |
 | Session storage | **Separate `_sessionMtx` from `_mtx`** | Session access is a hot path (every `executeVia` reads it). A separate mutex avoids contention with handler registration/switchBackend. |
 | Attach-path locking | **Separate `_attachMtx` from `_mtx`** | `attachHandler`/`ensureBound`/`assignHandlerPrimary` can block on a full network round-trip for a remote backend. A dedicated mutex means that round-trip never blocks unrelated `registerHandler`/`deregisterHandler`/`switchBackend` calls on the same `Bridge`, closing a deadlock hazard if the thread expected to deliver the pending reply itself needs `_mtx`. `HandlerBinding::primary`/`contextKey` are mutated only under `_attachMtx`; `switchBackend()` and the reconnect handler, which also touch them, take both mutexes together. |
