@@ -2,6 +2,7 @@
 #include <QTcpServer>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
@@ -15,7 +16,7 @@
 // which a TEST_CASE-local QCoreApplication would be.
 TEST_CASE("OfflineRig closes and reopens the server on the same port", "[testkit][offline_rig]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::backend::RemoteServer server{pool};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool);
 
     // QtWebSocketServer::listen() takes no arguments -- the port it binds is
     // fixed once, at construction, and never updated to reflect an
@@ -31,7 +32,7 @@ TEST_CASE("OfflineRig closes and reopens the server on the same port", "[testkit
         port = reservation.serverPort();
     }
 
-    morph::qt::QtWebSocketServer wsServer{server, port};
+    morph::qt::QtWebSocketServer wsServer{*server, port};
     REQUIRE(wsServer.listen());
     REQUIRE(wsServer.port() == port);
 

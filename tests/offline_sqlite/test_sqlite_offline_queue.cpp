@@ -138,10 +138,10 @@ TEST_CASE("morph::offline::SqliteOfflineQueue + SyncWorker: poison item dead-let
     // 3 pre-restart run() calls persist attempts == 3 in the database.
     {
         morph::offline::SqliteOfflineQueue queue{dbPath};
-        morph::offline::SyncWorker worker{queue, alwaysFail};
-        worker.run();
-        worker.run();
-        worker.run();
+        morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, alwaysFail};
+        morph::testing::awaitValue(worker.run());
+        morph::testing::awaitValue(worker.run());
+        morph::testing::awaitValue(worker.run());
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
         REQUIRE(items[0].attempts == 3);
@@ -154,11 +154,12 @@ TEST_CASE("morph::offline::SqliteOfflineQueue + SyncWorker: poison item dead-let
         morph::offline::SqliteOfflineQueue queue{dbPath};
         std::vector<morph::offline::QueueItem> deadLettered;
         morph::offline::SyncWorker worker{
-            queue, alwaysFail, [&](const morph::offline::QueueItem& item) { deadLettered.push_back(item); }};
+            morph::testing::inlineOwner(), queue, alwaysFail,
+            [&](const morph::offline::QueueItem& item) { deadLettered.push_back(item); }};
 
-        auto result1 = worker.run();  // 4th cumulative attempt
+        auto result1 = morph::testing::awaitValue(worker.run());  // 4th cumulative attempt
         REQUIRE(result1.failed == 1);
-        auto result2 = worker.run();  // 5th cumulative attempt -> dead-letters
+        auto result2 = morph::testing::awaitValue(worker.run());  // 5th cumulative attempt -> dead-letters
         REQUIRE(result2.deadLettered == 1);
         REQUIRE(deadLettered.size() == 1);
         REQUIRE(deadLettered[0].id == enqueuedId);

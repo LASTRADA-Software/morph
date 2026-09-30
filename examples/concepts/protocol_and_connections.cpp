@@ -86,8 +86,10 @@ TEST_CASE("protocol negotiation: hello returns the server's supported version ra
 
 TEST_CASE("protocol negotiation: a hello outside the server's configured range is rejected", "[concepts][protocol]") {
     InlineExecutor pool;
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setSupportedVersionRange(2, 3);  // this deployment dropped support for version 1
+    morph::backend::ServerConfig config;
+    config.minProtocolVersion = 2;  // this deployment dropped support for version 1
+    config.maxProtocolVersion = 3;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, config);
 
     CapturedReply reply;
     server->handle(morph::wire::encode(morph::wire::makeHello(1)), std::ref(reply));

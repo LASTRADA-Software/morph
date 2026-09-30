@@ -151,7 +151,7 @@ struct CsEnv {
 // A model whose registered factory sleeps once (exchange-guarded, same idiom
 // as test_remote_execute_ordering.cpp's SlowFirstAuthorizer) before returning
 // a plain ModelHolder. Used to force the exact interleaving
-// acquireSharedInstance's second attachExistingLocked check (remote.hpp) is
+// acquireSharedInstance's second attachExisting check (remote.hpp) is
 // for: two attaches to the same not-yet-existing key racing each other,
 // where only one of the two _registry.create() calls can win the insert.
 struct CsRaceModel {
@@ -168,14 +168,14 @@ struct morph::model::ModelTraits<CsRaceModel> {
 // A model whose registered factory, on its *first* invocation, synchronously
 // re-enters the server (via handleInline, on the calling thread, before
 // returning) with a plain attach for this exact same key. This reproduces
-// acquireSharedInstance's "concurrent attach won the insert race while our
-// own holder was still under construction outside _regMtx" interleaving --
-// the one CsRaceModel above forces with real thread scheduling and a sleep
-// -- deterministically, on a single thread: the reentrant attach's own
+// acquireSharedInstance's "the key was filed while our own holder was under
+// construction" interleaving -- which, with every request on the server
+// strand, only host code run during that construction can produce --
+// deterministically, on a single thread: the reentrant attach's own
 // _registry.create() call reaches this factory a second time (exchange
 // already claimed, so no further reentry), constructs and inserts normally,
 // and returns before the *outer* call's factory invocation does -- so the
-// outer call's second attachExistingLocked check (remote.hpp:816) is
+// outer call's second attachExisting check (remote.hpp:816) is
 // guaranteed to find the key already present, taking the `releaseCurrent`
 // branch at lines 817-819 every time, not just probabilistically.
 //
@@ -405,15 +405,15 @@ TEST_CASE(
     "morph::backend::RemoteServer: attach on an already-closed connection scope replies "
     "\"connection closed\" instead of recording a bogus attachment",
     "[remote][connection-scope]") {
-    // Race window remote.hpp's attachExistingLocked() exists to handle: a
+    // The window remote.hpp's attachExisting() exists to handle: a
     // client sends attach, but its connection is gone by the time the server
-    // gets to noteScopeAttachLocked() -- e.g. the socket dropped between the
+    // gets to noteScopeAttach() -- e.g. the socket dropped between the
     // client sending the request and the server processing it. There is
     // nothing timing-dependent to reproduce here: closeConnection() and
-    // handle() are both synchronous under _regMtx, so calling closeConnection
+    // handle() both post to the server strand in call order, so calling closeConnection
     // on a cid and then handle()-ing an attach carrying that same (now-closed)
     // cid deterministically presents the exact precondition
-    // noteScopeAttachLocked() checks for, on every run.
+    // noteScopeAttach() checks for, on every run.
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
@@ -615,11 +615,11 @@ TEST_CASE("morph::backend::RemoteServer: a register arriving after closeConnecti
     // The decisive assertion: no instance was retained. A resurrected scope
     // would leave liveModels at 1 with no way to ever reclaim it, which is what
     // exhausts LimitPolicy::maxLiveModels and wedges the server.
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 
     // And closing again stays a no-op rather than finding a recreated scope.
     server->closeConnection(cid);
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 }
 
 TEST_CASE("morph::backend::RemoteServer: repeated registers on a closed scope never accumulate models",
@@ -639,7 +639,7 @@ TEST_CASE("morph::backend::RemoteServer: repeated registers on a closed scope ne
         REQUIRE(reg.await());
         REQUIRE(reg.env.kind == "err");
     }
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 }
 
 // ── Shared instance directory: the server side of keyed instances ────────────
@@ -670,12 +670,12 @@ TEST_CASE("morph::backend::RemoteServer: two connections sharing a key reach one
 
     // One instance, not two: the second register attached to the first's.
     REQUIRE(regB.env.modelId == regA.env.modelId);
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     // Closing one connection releases only *its* reference — the instance must
     // survive for the connection still attached. This is the A7 change.
     server->closeConnection(cidA);
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     morph::wire::Envelope execReq;
     execReq.kind = "execute";
@@ -691,7 +691,7 @@ TEST_CASE("morph::backend::RemoteServer: two connections sharing a key reach one
 
     // The last reference goes, and so does the instance.
     server->closeConnection(cidB);
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 }
 
 TEST_CASE("morph::backend::RemoteServer: instances lists live shared keys",
@@ -775,7 +775,7 @@ TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old i
     server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "1")), std::ref(first), cid);
     REQUIRE(first.await());
     REQUIRE(first.env.kind == "ok");
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     WaitReply moved;
     server->handle(morph::wire::encode(morph::wire::makeAttach("CS_SquareModel", "2", first.env.modelId)),
@@ -784,17 +784,17 @@ TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old i
     REQUIRE(moved.env.kind == "ok");
     REQUIRE(moved.env.modelId != first.env.modelId);
     // Nobody else held key 1, so re-pointing destroyed it rather than leaking.
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 }
 
 TEST_CASE(
     "morph::backend::RemoteServer: one connection attached twice to the same shared instance survives its first "
     "deregister",
     "[remote][connection-scope][shared-instances]") {
-    // RM2: releaseScopedLocked's per-connection decrement
+    // RM2: releaseScoped's per-connection decrement
     // (`refIter->second -= 1; if (refIter->second == 0) { ... erase ... }`)
     // only ever saw a connection holding exactly one reference to a given
-    // `mid` -- the decrement always lands on zero. `noteScopeAttachLocked`
+    // `mid` -- the decrement always lands on zero. `noteScopeAttach`
     // increments unconditionally (`scopeIter->second[mid] += 1`) on every
     // attach, with no guard against re-attaching a key the same connection
     // already holds, so two `attach`/`register-shared` calls from the same
@@ -820,7 +820,7 @@ TEST_CASE(
     REQUIRE(second.await());
     REQUIRE(second.env.kind == "ok");
     REQUIRE(second.env.modelId == first.env.modelId);
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     // First deregister drops one of the two references -- the instance must
     // still be alive, since the connection's own scoped count is still 1.
@@ -828,7 +828,7 @@ TEST_CASE(
     server->handle(morph::wire::encode(morph::wire::makeDeregister(first.env.modelId)), std::ref(firstDereg), cid);
     REQUIRE(firstDereg.await());
     REQUIRE(firstDereg.env.kind == "ok");
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     morph::wire::Envelope stillLiveExec;
     stillLiveExec.kind = "execute";
@@ -847,7 +847,7 @@ TEST_CASE(
     server->handle(morph::wire::encode(morph::wire::makeDeregister(first.env.modelId)), std::ref(secondDereg), cid);
     REQUIRE(secondDereg.await());
     REQUIRE(secondDereg.env.kind == "ok");
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 }
 
 TEST_CASE(
@@ -855,7 +855,7 @@ TEST_CASE(
     "old instance survives",
     "[remote][connection-scope][shared-instances]") {
     // Sibling of "attach re-points and releases the old instance" above, but
-    // for the *other* branch of releaseScopedLocked's refcount-hits-zero
+    // for the *other* branch of releaseScoped's refcount-hits-zero
     // check (docs/spec/core/shared_instances.md, "Re-pointing, not
     // re-keying": "The instance for 42 is untouched ... and survives if any
     // other handler is still attached"). That test's sole connection is the
@@ -879,7 +879,7 @@ TEST_CASE(
     REQUIRE(regB.await());
     REQUIRE(regB.env.kind == "ok");
     REQUIRE(regB.env.modelId == regA.env.modelId);  // both connections share the one instance for key 1
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     // cidA re-points from key 1 to key 2. cidB still holds key 1, so the old
     // instance's refcount drops from 2 to 1 -- not to 0 -- and must survive.
@@ -891,7 +891,7 @@ TEST_CASE(
     REQUIRE(moved.env.modelId != regA.env.modelId);
     // Two live instances now: the new one for key 2, and the old one for key
     // 1 -- still alive because cidB is still attached to it.
-    REQUIRE(server->health().liveModels == 2U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 2U);
 
     // Key 1 is still reachable and still the same instance cidB originally
     // attached to -- proving it was kept alive, not silently recreated.
@@ -901,12 +901,12 @@ TEST_CASE(
     REQUIRE(reattachB.await());
     REQUIRE(reattachB.env.kind == "ok");
     REQUIRE(reattachB.env.modelId == regA.env.modelId);
-    REQUIRE(server->health().liveModels == 2U);  // no new instance was created
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 2U);  // no new instance was created
 
     // Finally, cidB releases its own reference to key 1 -- now the refcount
     // does hit zero, and the old instance is reclaimed.
     server->closeConnection(cidB);
-    REQUIRE(server->health().liveModels == 1U);  // only key 2's instance remains
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);  // only key 2's instance remains
 }
 
 TEST_CASE("morph::backend::RemoteServer: assign files a live instance under a key",
@@ -971,11 +971,11 @@ TEST_CASE(
     "morph::backend::RemoteServer: assign with an empty primary or an unregistered modelId is a silent "
     "no-op, still reporting \"ok\"",
     "[remote][connection-scope][shared-instances]") {
-    // applyAssignLocked's own early-return guard (env.primary.empty() ||
+    // applyAssign's own early-return guard (env.primary.empty() ||
     // !_models.contains(mid)) never actually fires in any of this file's
     // other assign tests -- every one of them assigns a real, just-created
     // mid onto a non-empty primary. The wire handler replies "ok"
-    // unconditionally after applyAssignLocked() returns, whether it filed
+    // unconditionally after applyAssign() returns, whether it filed
     // anything or silently declined to, so this is the one place that
     // distinction is externally observable: check what a subsequent
     // register-shared onto the same key actually reaches.
@@ -1095,7 +1095,7 @@ TEST_CASE("morph::backend::RemoteServer: a shared register on a closed scope is 
     REQUIRE(reg.await());
     REQUIRE(reg.env.kind == "err");
     REQUIRE(reg.env.message == "connection closed");
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 }
 
 // ── Connection-scoped SimulatedRemoteBackend ────────────────────────────────
@@ -1122,7 +1122,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: the unscoped constructor stil
     // never-opened cid must not affect it (mirrors the existing "unscoped
     // handle() never populates any connection scope" regression test above).
     server->closeConnection(999999);
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 }
 
 TEST_CASE(
@@ -1138,10 +1138,10 @@ TEST_CASE(
 
     auto mid = backend.registerModelWithContext("CS_SquareModel", {}, {});
     REQUIRE(mid.v != 0U);
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     server->closeConnection(cid);
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 }
 
 TEST_CASE(
@@ -1160,16 +1160,16 @@ TEST_CASE(
     auto midA = backendA.registerModelShared("CS_SquareModel", {}, {.contextKey = "42", .primary = "42"});
     auto midB = backendB.registerModelShared("CS_SquareModel", {}, {.contextKey = "42", .primary = "42"});
     REQUIRE(midA.v == midB.v);  // one instance, not two
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     // Closing A's connection releases only A's reference -- B still holds
     // the instance, exactly the cross-connection accounting a real
     // QtWebSocketServer/SocketServer gives, now reachable without a socket.
     server->closeConnection(cidA);
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     server->closeConnection(cidB);
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 }
 
 TEST_CASE(
@@ -1192,29 +1192,23 @@ TEST_CASE(
     // A releases its own reference explicitly; the instance must survive
     // because B's reference is still live.
     backendA.deregisterModel(midA);
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     // Closing B's connection (which never explicitly deregistered) is what
     // finally releases the last reference.
     server->closeConnection(cidB);
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
 }
 
 TEST_CASE(
     "morph::backend::RemoteServer: two attaches racing the creation of the same not-yet-existing "
     "shared key still resolve to one instance",
     "[remote][connection-scope][shared-instances]") {
-    // acquireSharedInstance's create path (remote.hpp) builds a holder
-    // *outside* _regMtx, then re-checks the directory under the lock before
-    // inserting -- because a concurrent request for the same key may have
-    // already won that insert while this one's holder was under
-    // construction. CsRaceModel's factory sleeps once (exchange-guarded), so
-    // of two attaches fired back-to-back for the same brand-new key, the
-    // first one dispatched is reliably the one still sleeping in
-    // _registry.create() when the second (unslowed) one's own create/insert
-    // completes -- forcing the first to find the directory already
-    // populated on its own re-check, rather than hoping real thread
-    // scheduling happens to interleave that way.
+    // Two attaches for the same brand-new key, back-to-back. CsRaceModel's
+    // factory sleeps once (exchange-guarded), so the first is still
+    // constructing while the second arrives; the second is admitted after
+    // the first on the server strand, finds the key the first filed, and
+    // both resolve to one instance.
     CsRaceModel::slowFactoryTaken.store(false);
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
@@ -1234,7 +1228,7 @@ TEST_CASE(
     // One instance, not two, regardless of which call's create() actually won
     // the race -- the load-bearing assertion this test exists for.
     REQUIRE(first.env.modelId == second.env.modelId);
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 }
 
 TEST_CASE(
@@ -1258,10 +1252,11 @@ TEST_CASE(
     CsRaceModel::slowFactoryTaken.store(false);
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     morph::backend::LimitPolicy policy;
     policy.maxLiveModels = 1;
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, env.dispatcher, env.registry);
 
     WaitReply first;
     server->handle(morph::wire::encode(morph::wire::makeRegister("CS_RaceModel")), std::ref(first));
@@ -1281,7 +1276,7 @@ TEST_CASE(
     const auto& loser = firstOk ? second : first;
     REQUIRE(loser.env.kind == "err");
     REQUIRE(loser.env.message == "too many models");
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 }
 
 TEST_CASE(
@@ -1302,10 +1297,11 @@ TEST_CASE(
     // to reach this specific arm.
     auto& env = csEnv();
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     morph::backend::LimitPolicy policy;
     policy.maxLiveModels = 1;
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, env.dispatcher, env.registry);
 
     WaitReply first;
     server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(first));
@@ -1324,7 +1320,7 @@ TEST_CASE(
     REQUIRE(second.await());
     REQUIRE(second.env.kind == "err");
     REQUIRE(second.env.message == "too many models");
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 }
 
 namespace {
@@ -1353,25 +1349,25 @@ private:
 }  // namespace
 
 TEST_CASE(
-    "morph::backend::RemoteServer: maxInFlightExecutes' compare-exchange loop rejects an execute that "
-    "loses the race for the last slot",
+    "morph::backend::RemoteServer: maxInFlightExecutes rejects an execute sent right behind the one holding "
+    "the last slot",
     "[remote][connection-scope][limits]") {
     // Distinct from test_limit_policy.cpp's "rejects a second execute while
-    // the first is in flight" case: that test deliberately waits for the
-    // first execute to have already started (and therefore already
-    // incremented _inFlightExecutes) before sending the second, so the
-    // second is rejected by the plain load further up dispatchExecute, never
-    // reaching the compare-exchange loop's own reject branch at all. This
-    // test forces the two executes to race the increment itself.
+    // the first is in flight" case, which waits for the first execute to
+    // have started before sending the second: here the two are sent back to
+    // back, and the second is admitted on the server strand right after the
+    // first took the slot.
     CsSlowModel::started.store(false);
     CsSlowModel::proceed.store(false);
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
     auto authorizer = std::make_shared<CsSlowFirstAuthorizer>();
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, env.dispatcher, env.registry);
     morph::backend::LimitPolicy policy;
     policy.maxInFlightExecutes = 1;
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server =
+        std::make_shared<morph::backend::RemoteServer>(pool, authorizer, serverConfig, env.dispatcher, env.registry);
 
     WaitReply reg;
     server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SlowModel")), std::ref(reg));
@@ -1398,15 +1394,13 @@ TEST_CASE(
     WaitReply replyB;
     server->handle(morph::wire::encode(reqB), std::ref(replyB));
 
-    // Whichever call wins the slot is now blocked inside CS_SlowModel::execute
-    // until proceed is set, holding the slot open long enough for the loser's
-    // CAS loop to observe it -- unlike the plain-CS_SquareModel version of
-    // this test, which raced the decrement itself and was flaky (~40%
-    // failure across repeated local runs) for exactly that reason.
+    // The call holding the slot is now blocked inside CS_SlowModel::execute
+    // until proceed is set, so the slot is still held when the other is
+    // admitted.
     REQUIRE(morph::testing::waitUntil([] { return CsSlowModel::started.load(); }));
 
-    // Exactly one of the two already has its reply: the CAS loop rejects
-    // synchronously, before ever reaching the strand, so the loser's
+    // Exactly one of the two already has its reply: admission rejects it on
+    // the server strand, before it reaches its model's strand, so the loser's
     // WaitReply settles immediately -- well before the winner's, which is
     // still blocked in execute() until released below. Poll `.ready`, not
     // `.env` directly: `.env` is written by the reply callback on a pool
@@ -1445,10 +1439,11 @@ TEST_CASE(
     // well inside any reasonable timeout.
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     morph::backend::LimitPolicy policy;
     policy.executeTimeout = std::chrono::milliseconds{500};
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, env.dispatcher, env.registry);
 
     WaitReply reg;
     server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(reg));
@@ -1490,22 +1485,11 @@ TEST_CASE(
     "morph::backend::RemoteServer: an attach that loses the create race still releases the caller's old "
     "instance on the race re-check's hit, not just the pre-construct hit",
     "[remote][connection-scope][shared-instances]") {
-    // acquireSharedInstance's `releaseCurrent` release (remote.hpp) is
-    // duplicated at both attachExistingLocked call sites: the first, taken
-    // before _registry.create() ever runs (an immediate directory hit -- the
-    // one every other "re-point releases the old instance" test in this file
-    // exercises), and the second, taken only when a concurrent attach won the
-    // insert race while this call's own holder was still under construction
-    // outside _regMtx. The two releaseCurrent.v != 0U checks are separate
-    // statements guarding the same call, so a test that only ever drives the
-    // first hit leaves the second's own branch (taken/not-taken) unexercised.
-    //
-    // Reuses the "two attaches racing the same not-yet-existing key" idiom
-    // right above (CsRaceModel's exchange-guarded slow factory), but this
-    // time the *first* attach (the one that ends up finding the race already
-    // lost) also carries a `releaseCurrent` -- a private CS_SquareModel
-    // instance it was previously attached to -- so its second
-    // attachExistingLocked hit is the one that must release it.
+    // An attach that re-points from a private instance (`releaseCurrent`)
+    // to a brand-new shared key, followed at once by a second attach for the
+    // same key. The first creates the key and releases the old instance; the
+    // second, admitted after it on the server strand, attaches to it. The
+    // old instance must be gone and the two must agree on the new one.
     CsRaceModel::slowFactoryTaken.store(false);
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
@@ -1516,11 +1500,11 @@ TEST_CASE(
     REQUIRE(oldReg.await());
     REQUIRE(oldReg.env.kind == "ok");
     auto const oldMid = oldReg.env.modelId;
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     // First attach: re-points from `oldMid` to a brand-new key, on
     // CsRaceModel (whose factory sleeps on the first call reaching it) --
-    // this is the call whose own second attachExistingLocked check must find
+    // this is the call whose own second attachExisting check must find
     // the race already lost.
     WaitReply first;
     server->handle(morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key-release", oldMid)),
@@ -1539,11 +1523,11 @@ TEST_CASE(
     REQUIRE(first.env.modelId == second.env.modelId);
 
     // The load-bearing assertion: the old CS_SquareModel instance must be
-    // gone -- released via the *second* attachExistingLocked hit's
+    // gone -- released via the *second* attachExisting hit's
     // releaseCurrent branch, since the first attach never reached its own
     // pre-construct check's hit (the key did not exist yet when it started).
     // Only the new CsRaceModel instance remains live.
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     morph::wire::Envelope oldExec;
     oldExec.kind = "execute";
@@ -1563,24 +1547,20 @@ TEST_CASE(
     "the race re-check's hit, deterministically, via a reentrant factory",
     "[remote][connection-scope][shared-instances]") {
     // Same target as the "an attach that loses the create race..." test
-    // right above -- acquireSharedInstance's *second* attachExistingLocked
-    // hit releasing `releaseCurrent` (remote.hpp:817-819) -- but forced
-    // deterministically instead of relying on real thread scheduling.
+    // right above -- acquireSharedInstance's *second* attachExisting hit
+    // releasing `releaseCurrent`.
     //
     // CsReentrantAttachModel's factory is the mechanism: on its first
     // invocation it synchronously calls back into the server (via
-    // `handleInline`, safe here because `_registry.create()` runs outside
-    // `_regMtx`) with a plain attach for the exact same `(typeId, primary)`
-    // key this outer call is also targeting. That reentrant attach's own
-    // `_registry.create()` reaches the factory a second time (the
-    // exchange-guard is already claimed, so it does not recurse again),
-    // builds a holder normally, and inserts it into the directory -- all
-    // before the *outer* call's factory invocation returns. So by the time
-    // the outer call re-locks `_regMtx` and runs its own second
-    // `attachExistingLocked` check, the key is unconditionally already
-    // present: this is the same interleaving a genuine concurrent
-    // register/attach race produces, reproduced on one thread, with no
-    // sleeps and no dependence on scheduling.
+    // `handleInline`, which runs inline because the construction is already
+    // on the server strand) with a plain attach for the exact same
+    // `(typeId, primary)` key this outer call is also targeting. That
+    // reentrant attach's own `_registry.create()` reaches the factory a
+    // second time (the exchange-guard is already claimed, so it does not
+    // recurse again), builds a holder normally, and inserts it into the
+    // directory -- all before the *outer* call's factory invocation returns.
+    // So when the outer call runs its own second `attachExisting` check, the
+    // key is unconditionally already present.
     CsReentrantAttachModel::reentered.store(false);
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = csEnv();
@@ -1592,11 +1572,11 @@ TEST_CASE(
     REQUIRE(oldReg.await());
     REQUIRE(oldReg.env.kind == "ok");
     auto const oldMid = oldReg.env.modelId;
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     // Re-points from `oldMid` to a brand-new key on CS_ReentrantAttachModel.
     // The reentrant factory guarantees this call's own second
-    // attachExistingLocked check is the one that finds the hit, taking the
+    // attachExisting check is the one that finds the hit, taking the
     // `releaseCurrent` branch at remote.hpp:817-819.
     WaitReply attach;
     server->handle(morph::wire::encode(morph::wire::makeAttach("CS_ReentrantAttachModel", "reentrant-key", oldMid)),
@@ -1605,10 +1585,10 @@ TEST_CASE(
     REQUIRE(attach.env.kind == "ok");
 
     // The load-bearing assertion: the old CS_SquareModel instance must be
-    // gone -- released via the second attachExistingLocked hit's
+    // gone -- released via the second attachExisting hit's
     // releaseCurrent branch. Only the new CsReentrantAttachModel instance
     // (inserted by the reentrant attach) remains live.
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
     morph::wire::Envelope oldExec;
     oldExec.kind = "execute";

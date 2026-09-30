@@ -3,13 +3,22 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <memory>
+#include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/observability.hpp>
+#include <morph/offline/offline_queue.hpp>
 #include <morph/offline/reconnect_coordinator.hpp>
+#include <morph/offline/sync_worker.hpp>
+#include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "owner_probe_recorder.hpp"
+#include "test_support.hpp"
 
 using morph::offline::ReconnectCoordinator;
 using morph::offline::ReconnectOutcome;
@@ -121,9 +130,9 @@ private:
 TEST_CASE("ReconnectCoordinator: happy path reconnects on first attempt", "[reconnect]") {
     Fakes f;
     f.reconnectResults = {true};
-    ReconnectCoordinator coord{f.deps()};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor()};
 
-    auto outcome = coord.onOnline();
+    auto outcome = morph::testing::awaitValue(coord.onOnline());
 
     REQUIRE(outcome == ReconnectOutcome::Reconnected);
     // Exact call order per spec §6 case 1.
@@ -136,9 +145,9 @@ TEST_CASE("ReconnectCoordinator: retries then succeeds", "[reconnect]") {
     f.reconnectResults = {false, false, true};
     ReconnectCoordinator::Config cfg;
     cfg.retryDelay = std::chrono::milliseconds{50};
-    ReconnectCoordinator coord{f.deps(), cfg};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor(), cfg};
 
-    auto outcome = coord.onOnline();
+    auto outcome = morph::testing::awaitValue(coord.onOnline());
 
     REQUIRE(outcome == ReconnectOutcome::Reconnected);
     REQUIRE(f.tryReconnectCalls == 3);
@@ -153,12 +162,12 @@ TEST_CASE("ReconnectCoordinator: gives up after maxAttempts without sleeping aft
     f.reconnectDefault = false;  // always fails
     ReconnectCoordinator::Config cfg;
     cfg.maxAttempts = 3;
-    ReconnectCoordinator coord{f.deps(), cfg};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor(), cfg};
 
     // Silence the expected give-up warning.
     morph::log::ScopedLoggerOverride guard{[](morph::log::LogLevel, std::string_view) {}};
 
-    auto outcome = coord.onOnline();
+    auto outcome = morph::testing::awaitValue(coord.onOnline());
 
     REQUIRE(outcome == ReconnectOutcome::GaveUp);
     REQUIRE(f.tryReconnectCalls == 3);
@@ -170,9 +179,9 @@ TEST_CASE("ReconnectCoordinator: gives up after maxAttempts without sleeping aft
 TEST_CASE("ReconnectCoordinator: ordering invariant activate < bind < replay", "[reconnect]") {
     Fakes f;
     f.reconnectResults = {true};
-    ReconnectCoordinator coord{f.deps()};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor()};
 
-    coord.onOnline();
+    morph::testing::awaitValue(coord.onOnline());
 
     REQUIRE(f.indexOf("activatePrimary") >= 0);
     REQUIRE(f.indexOf("bindContext") > f.indexOf("activatePrimary"));
@@ -182,9 +191,9 @@ TEST_CASE("ReconnectCoordinator: ordering invariant activate < bind < replay", "
 TEST_CASE("ReconnectCoordinator: aborts before reconnect when shouldContinue is false on entry", "[reconnect]") {
     Fakes f;
     f.continueResults = {false};
-    ReconnectCoordinator coord{f.deps()};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor()};
 
-    auto outcome = coord.onOnline();
+    auto outcome = morph::testing::awaitValue(coord.onOnline());
 
     REQUIRE(outcome == ReconnectOutcome::Aborted);
     REQUIRE(f.tryReconnectCalls == 0);
@@ -198,9 +207,9 @@ TEST_CASE("ReconnectCoordinator: aborts replay but stays reconnected when backen
     f.reconnectResults = {true};
     // 1st shouldContinue (attempt check) = true, 2nd (pre-replay check) = false.
     f.continueResults = {true, false};
-    ReconnectCoordinator coord{f.deps()};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor()};
 
-    auto outcome = coord.onOnline();
+    auto outcome = morph::testing::awaitValue(coord.onOnline());
 
     REQUIRE(outcome == ReconnectOutcome::Reconnected);
     REQUIRE(f.activatePrimaryCalls == 1);
@@ -213,13 +222,13 @@ TEST_CASE("ReconnectCoordinator: tryReconnect throwing is treated as a failed at
     f.reconnectThrows = true;
     ReconnectCoordinator::Config cfg;
     cfg.maxAttempts = 2;
-    ReconnectCoordinator coord{f.deps(), cfg};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor(), cfg};
 
     morph::log::ScopedLoggerOverride guard{[](morph::log::LogLevel, std::string_view) {}};
 
     // Must not propagate the exception to the caller.
     REQUIRE_NOTHROW([&] {
-        auto outcome = coord.onOnline();
+        auto outcome = morph::testing::awaitValue(coord.onOnline());
         REQUIRE(outcome == ReconnectOutcome::GaveUp);
     }());
     REQUIRE(f.tryReconnectCalls == 2);
@@ -228,7 +237,7 @@ TEST_CASE("ReconnectCoordinator: tryReconnect throwing is treated as a failed at
 
 TEST_CASE("ReconnectCoordinator: onOffline activates local then binds context", "[reconnect]") {
     Fakes f;
-    ReconnectCoordinator coord{f.deps()};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor()};
 
     coord.onOffline();
 
@@ -238,7 +247,7 @@ TEST_CASE("ReconnectCoordinator: onOffline activates local then binds context", 
 TEST_CASE("ReconnectCoordinator: concurrent calls are serialised", "[reconnect][threading]") {
     Fakes f;
     f.reconnectDefault = true;  // every onOnline reconnects immediately
-    ReconnectCoordinator coord{f.deps()};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor()};
 
     // Run several onOnline/onOffline calls from two threads. The mutex must keep
     // each call's event sub-sequence contiguous — no interleaving. We assert the
@@ -249,7 +258,7 @@ TEST_CASE("ReconnectCoordinator: concurrent calls are serialised", "[reconnect][
     constexpr int kPerThread = 50;
     auto worker = [&] {
         for (int i = 0; i < kPerThread; ++i) {
-            coord.onOnline();
+            morph::testing::awaitValue(coord.onOnline());
         }
     };
     std::thread t1{worker};
@@ -271,7 +280,7 @@ TEST_CASE("ReconnectCoordinator: onOnline emits reconnectAttempts per attempt an
     f.reconnectResults = {false, false, true};
     ReconnectCoordinator::Config cfg;
     cfg.retryDelay = std::chrono::milliseconds{1};
-    ReconnectCoordinator coord{f.deps(), cfg};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor(), cfg};
 
     std::atomic<int> attemptEvents{0};
     std::vector<std::string> outcomeTags;
@@ -287,7 +296,7 @@ TEST_CASE("ReconnectCoordinator: onOnline emits reconnectAttempts per attempt an
         }
     });
 
-    auto outcome = coord.onOnline();
+    auto outcome = morph::testing::awaitValue(coord.onOnline());
 
     REQUIRE(outcome == ReconnectOutcome::Reconnected);
     REQUIRE(attemptEvents.load() == 3);
@@ -301,7 +310,7 @@ TEST_CASE("ReconnectCoordinator: giving up tags reconnectOutcome as GaveUp", "[r
     ReconnectCoordinator::Config cfg;
     cfg.maxAttempts = 2;
     cfg.retryDelay = std::chrono::milliseconds{1};
-    ReconnectCoordinator coord{f.deps(), cfg};
+    ReconnectCoordinator coord{f.deps(), morph::exec::detail::inlineExecutor(), cfg};
 
     std::vector<std::string> outcomeTags;
     morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
@@ -315,8 +324,138 @@ TEST_CASE("ReconnectCoordinator: giving up tags reconnectOutcome as GaveUp", "[r
     });
 
     morph::log::ScopedLoggerOverride logGuard{[](morph::log::LogLevel, std::string_view) {}};
-    auto outcome = coord.onOnline();
+    auto outcome = morph::testing::awaitValue(coord.onOnline());
 
     REQUIRE(outcome == ReconnectOutcome::GaveUp);
     REQUIRE(outcomeTags == std::vector<std::string>{"GaveUp"});
+}
+
+// ── The owner rule: onOnline()/onOffline() run on the offline strand ─────────
+
+namespace {
+
+/// Deps whose every step records its name, from whichever thread runs it, and
+/// whose tryReconnect stays inside for a while so an overlap would show.
+struct StrandFakes {
+    std::mutex mtx;
+    std::vector<std::string> events;
+    std::atomic<int> active{0};
+    std::atomic<int> maxActive{0};
+
+    void record(std::string event) {
+        std::scoped_lock const lock{mtx};
+        events.push_back(std::move(event));
+    }
+
+    ReconnectCoordinator::Deps deps() {
+        return ReconnectCoordinator::Deps{
+            .tryReconnect =
+                [this] {
+                    int const now = active.fetch_add(1) + 1;
+                    int seen = maxActive.load();
+                    while (now > seen && !maxActive.compare_exchange_weak(seen, now)) {
+                    }
+                    record("try");
+                    std::this_thread::sleep_for(std::chrono::milliseconds{30});
+                    active.fetch_sub(1);
+                    return true;
+                },
+            .activatePrimary = [this] { record("activatePrimary"); },
+            .activateLocal = [this] { record("activateLocal"); },
+            .bindContext = [this] { record("bind"); },
+            .replay = [this] { record("replay"); },
+            .shouldContinue = [] { return true; },
+            .sleep = [](std::chrono::milliseconds) {},
+        };
+    }
+};
+
+}  // namespace
+
+TEST_CASE("ReconnectCoordinator: onOnline and onOffline called off the offline strand run their bodies on it",
+          "[reconnect][owner]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    StrandFakes fakes;
+    ReconnectCoordinator coord{fakes.deps(), pool};
+    morph::testing::OwnerProbeRecorder const recorder{coord.strand().coreExecutor()};
+    REQUIRE_FALSE(morph::exec::runningOn(coord.strand()));
+
+    std::optional<ReconnectOutcome> outcome;
+    std::thread caller{[&] {
+        coord.onOffline();
+        outcome = morph::testing::awaitValue(coord.onOnline());
+    }};
+    caller.join();
+
+    REQUIRE(outcome == ReconnectOutcome::Reconnected);
+    std::scoped_lock const lock{fakes.mtx};
+    CHECK(fakes.events ==
+          std::vector<std::string>{"activateLocal", "bind", "try", "activatePrimary", "bind", "replay"});
+    CHECK(recorder.count("ReconnectCoordinator::onOffline") == 1U);
+    CHECK(recorder.allPosted("ReconnectCoordinator::onOffline"));
+    CHECK(recorder.count("ReconnectCoordinator::onOnline") == 1U);
+    CHECK(recorder.allPosted("ReconnectCoordinator::onOnline"));
+}
+
+TEST_CASE("ReconnectCoordinator: two onOnline calls from two threads run one after the other on the offline strand",
+          "[reconnect][owner]") {
+    // A pool of two, so the two sequences could run side by side if anything
+    // but the offline strand kept them apart.
+    morph::exec::ThreadPoolExecutor pool{2};
+    StrandFakes fakes;
+    ReconnectCoordinator coord{fakes.deps(), pool};
+    morph::testing::OwnerProbeRecorder const recorder{coord.strand().coreExecutor()};
+
+    std::optional<ReconnectOutcome> first;
+    std::optional<ReconnectOutcome> second;
+    std::thread callerA{[&] { first = morph::testing::awaitValue(coord.onOnline()); }};
+    std::thread callerB{[&] { second = morph::testing::awaitValue(coord.onOnline()); }};
+    callerA.join();
+    callerB.join();
+
+    CHECK(first == ReconnectOutcome::Reconnected);
+    CHECK(second == ReconnectOutcome::Reconnected);
+    CHECK(fakes.maxActive.load() == 1);
+    // Each sequence is contiguous: nothing of one lands inside the other.
+    std::scoped_lock const lock{fakes.mtx};
+    std::vector<std::string> const one{"try", "activatePrimary", "bind", "replay"};
+    std::vector<std::string> both = one;
+    both.insert(both.end(), one.begin(), one.end());
+    CHECK(fakes.events == both);
+    CHECK(recorder.count("ReconnectCoordinator::onOnline") == 2U);
+    CHECK(recorder.allPosted("ReconnectCoordinator::onOnline"));
+}
+
+TEST_CASE("ReconnectCoordinator: a SyncWorker on the offline strand drains inside the replay step",
+          "[reconnect][owner][sync]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::offline::InMemoryOfflineQueue queue;
+    (void)queue.enqueue("a");
+    (void)queue.enqueue("b");
+    std::unique_ptr<morph::offline::SyncWorker> worker;
+    std::atomic<int> replayed{0};
+    std::atomic<bool> drainedInsideReplay{false};
+    ReconnectCoordinator coord{ReconnectCoordinator::Deps{
+                                   .tryReconnect = [] { return true; },
+                                   .activatePrimary = [] {},
+                                   .activateLocal = [] {},
+                                   .bindContext = [] {},
+                                   .replay =
+                                       [&] {
+                                           (void)worker->run();
+                                           // run() on its owner drains before it returns.
+                                           drainedInsideReplay.store(replayed.load() == 2);
+                                       },
+                                   .shouldContinue = [] { return true; },
+                                   .sleep = [](std::chrono::milliseconds) {},
+                               },
+                               pool};
+    worker = std::make_unique<morph::offline::SyncWorker>(coord.strand(), queue, [&](const std::string&) {
+        ++replayed;
+        return true;
+    });
+
+    CHECK(morph::testing::awaitValue(coord.onOnline()) == ReconnectOutcome::Reconnected);
+    CHECK(drainedInsideReplay.load());
+    CHECK(queue.drain().empty());
 }

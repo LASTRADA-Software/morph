@@ -726,8 +726,9 @@ TEST_CASE("a shared handler survives switchBackend", "[shared-instances]") {
 
 TEST_CASE("a shared register is refused once the server is at its model cap", "[shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setLimitPolicy({.maxLiveModels = 1});
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = morph::backend::LimitPolicy{.maxLiveModels = 1};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::wire::Envelope const first = morph::wire::makeRegisterShared("SHI_CounterModel", "1");
     auto firstReply = morph::wire::decode(server->handleInline(morph::wire::encode(first)));
@@ -749,8 +750,9 @@ TEST_CASE("a shared register is refused once the server is at its model cap", "[
 TEST_CASE("a shared handler re-pointing to a new key does not lose its slot to maxLiveModels", "[shared-instances]") {
     morph::testing::InlineExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setLimitPolicy({.maxLiveModels = 1});
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = morph::backend::LimitPolicy{.maxLiveModels = 1};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
     BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
@@ -968,13 +970,14 @@ TEST_CASE("the server refuses to re-file an already-keyed instance onto a differ
 
 TEST_CASE("an attach that creates the instance carries contextKey to a configured LogProvider", "[shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
     std::vector<std::string> requestedFor;
-    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.logProvider = [&](std::string_view modelType, std::string_view contextKey) {
         requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
         return nullptr;
-    });
+    };
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     // The first touch of key "77" goes through `attach` (not a shared
     // `register`) -- exercised directly at the wire level since
@@ -1052,14 +1055,15 @@ TEST_CASE("an empty primary with no instance currently held registers privately 
         {.contextKey = {}, .primary = {}}, morph::exec::detail::ModelId{0});
     REQUIRE(fresh.v != 0U);
     REQUIRE(backend.listInstances("SHI_CounterModel").empty());
-    REQUIRE(server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 }
 
 TEST_CASE("execute() reports an attach failure through onError instead of throwing", "[shared-instances]") {
     morph::testing::InlineExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setLimitPolicy({.maxLiveModels = 1});
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = morph::backend::LimitPolicy{.maxLiveModels = 1};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
 

@@ -458,7 +458,7 @@ TEST_CASE("morph::offline::ReconnectCoordinator: null Deps member is logged at c
     deps.replay = [] {};
     deps.shouldContinue = [] { return true; };
     // deps.sleep intentionally left null → assertDepsNonNull logs it (162 true arm).
-    ::morph::offline::ReconnectCoordinator coordinator{std::move(deps)};
+    ::morph::offline::ReconnectCoordinator coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
     (void)coordinator;
 
     REQUIRE(sawNull.load());
@@ -479,8 +479,8 @@ TEST_CASE("morph::offline::ReconnectCoordinator: onOnline reconnects and shouldC
         deps.replay = [&] { replayed.fetch_add(1); };
         deps.shouldContinue = [] { return true; };
         deps.sleep = [](std::chrono::milliseconds) {};
-        ::morph::offline::ReconnectCoordinator coordinator{std::move(deps)};
-        REQUIRE(coordinator.onOnline() == ::morph::offline::ReconnectOutcome::Reconnected);
+        ::morph::offline::ReconnectCoordinator coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
+        REQUIRE(morph::testing::awaitValue(coordinator.onOnline()) == ::morph::offline::ReconnectOutcome::Reconnected);
         REQUIRE(replayed.load() == 1);
     }
 
@@ -494,8 +494,8 @@ TEST_CASE("morph::offline::ReconnectCoordinator: onOnline reconnects and shouldC
         deps.replay = [] {};
         deps.shouldContinue = []() -> bool { throw std::runtime_error("boom"); };
         deps.sleep = [](std::chrono::milliseconds) {};
-        ::morph::offline::ReconnectCoordinator coordinator{std::move(deps)};
-        REQUIRE(coordinator.onOnline() == ::morph::offline::ReconnectOutcome::Aborted);
+        ::morph::offline::ReconnectCoordinator coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
+        REQUIRE(morph::testing::awaitValue(coordinator.onOnline()) == ::morph::offline::ReconnectOutcome::Aborted);
     }
 }
 
@@ -507,18 +507,19 @@ TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAtte
 
     ::morph::offline::InMemoryOfflineQueue queue;
     (void)queue.enqueue("always-fails");
-    ::morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
+    ::morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue,
+                                        [](const std::string&) { return false; }};
 
     // kMaxAttempts is 5. Attempts 1-4 keep the item (failed); the 5th trips the
     // `counter >= kMaxAttempts` branch (132 true arm, no DeadLetterSink set) and
     // dead-letters it via the default log-and-drop path.
     ::morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = worker.run();
+        result = morph::testing::awaitValue(worker.run());
     }
     REQUIRE(result.deadLettered == 1);
     // Item is gone now, so a further run does nothing.
-    auto after = worker.run();
+    auto after = morph::testing::awaitValue(worker.run());
     REQUIRE(after.failed == 0);
     REQUIRE(after.deadLettered == 0);
 }

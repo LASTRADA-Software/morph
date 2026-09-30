@@ -1066,11 +1066,8 @@ see [Registration readiness](#registration-readiness--isbound--whenbound).
 
 `subscribe`/`unsubscribe` mutate `_subscriptions`, a
 `std::shared_ptr<morph::bridge::detail::SubscriptionRegistry<HandlerBinding>>`
-(the registry's own header, `core/detail/subscription_registry.hpp`, extracted
-out of `Bridge` the way `morph::backend::detail::ExecuteOrderGate` was
-extracted out of `RemoteServer` — see [backend.md](backend.md)'s "Per-model
-execute ordering" section for the sibling extraction), under that registry's
-own internal mutex. Callbacks never run under that mutex: `publishResult`
+(the registry's own header, `core/detail/subscription_registry.hpp`), under
+that registry's own internal mutex. Callbacks never run under that mutex: `publishResult`
 snapshots the matching sinks under the lock and invokes them outside it,
 marshalled to the `guiExec` executor passed at construction, so a subscriber
 that re-enters the bridge cannot deadlock. A subscription holds a `weak_ptr` to

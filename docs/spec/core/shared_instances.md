@@ -267,10 +267,11 @@ over the very record that owns the instance rather than a map beside it: one
 `detail::Instance` per live model carries its holder, its recorded owner
 principal, its attach count, its directory key and its hydration state together,
 so directory membership cannot desync from instance existence. The whole
-structure is guarded by `_regMtx` — `InstanceDirectory` is deliberately
-caller-locked, because the `maxLiveModels` admission check and the
-connection-scope update in the same critical section must not be able to
-straddle a directory change ([backend.md](backend.md), "Connection scopes").
+structure belongs to its backend's owner — `LocalBackend`'s `_regMtx`,
+`RemoteServer`'s server strand — and `InstanceDirectory` has no
+synchronisation of its own, because the `maxLiveModels` admission check and the
+connection-scope update beside it must not be able to straddle a directory
+change ([backend.md](backend.md), "Connection scopes").
 
 `listInstances` is served from a per-type index inside the directory rather than
 by scanning it, so enumerating one model type does not cost the size of every
@@ -495,7 +496,7 @@ attached to, so a scope entry is a **reference**, not ownership:
 - The instance is destroyed when the count reaches zero, at which point it
   leaves the directory.
 - `closeConnection` remains idempotent and still bypasses `IAuthorizer`; it
-  decrements once per attach a connection made (`noteScopeAttachLocked`
+  decrements once per attach a connection made (`noteScopeAttach`
   tracks a per-`(connection, instance)` count, so a connection that attached
   the same instance from two handlers releases two references, not one) —
   a duplicate attach never leaks, it always unwinds fully at connection close.

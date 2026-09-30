@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <exception>
+#include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/offline/network_monitor.hpp>
 #include <morph/offline/offline_queue.hpp>
@@ -61,7 +62,8 @@ TEST_CASE("soak: NetworkMonitor/ReconnectCoordinator/SyncWorker offline-online f
     std::atomic<int> activateLocalCalls{0};
     std::atomic<bool> netOnline{true};
 
-    morph::offline::SyncWorker sync{queue, [](const std::string&) { return true; }};
+    // Drains on the coordinator's strand, so it is built once the coordinator is.
+    std::unique_ptr<morph::offline::SyncWorker> sync;
 
     morph::offline::ReconnectCoordinator coordinator{
         {.tryReconnect =
@@ -75,17 +77,19 @@ TEST_CASE("soak: NetworkMonitor/ReconnectCoordinator/SyncWorker offline-online f
          .replay =
              [&] {
                  replayCalls.fetch_add(1, std::memory_order_relaxed);
-                 sync.run();
+                 (void)sync->run();
              },
          .shouldContinue = [&] { return netOnline.load(); },
-         .sleep = [](std::chrono::milliseconds) {}}};
+         .sleep = [](std::chrono::milliseconds) {}},
+        worker};
+    sync = std::make_unique<morph::offline::SyncWorker>(coordinator.strand(), queue,
+                                                        [](const std::string&) { return true; });
 
     // Fast flaps: 1ms probes, single-sample thresholds, so each online/offline
     // transition is observed on the very next probe tick instead of waiting
     // out the (much larger) production defaults.
     morph::offline::NetworkMonitor monitor{
-        [&] { return netOnline.load(); }, [&] { worker.post([&] { coordinator.onOffline(); }); },
-        [&] { worker.post([&] { (void)coordinator.onOnline(); }); },
+        [&] { return netOnline.load(); }, [&] { coordinator.onOffline(); }, [&] { (void)coordinator.onOnline(); },
         morph::offline::NetworkMonitorConfig{.probeInterval = 1ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
     for (int cycle = 0; cycle < flapCycles; ++cycle) {

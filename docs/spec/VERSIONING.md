@@ -126,7 +126,7 @@ The C++ API version (this document) and the **wire protocol version**
   throughout its whole 1.x line; a wire-breaking change bumps
   `kProtocolVersion` on its own schedule, unrelated to the library's
   major/minor/patch. [wire.md](core/wire.md)'s `"hello"` handshake
-  (`RemoteServer::setSupportedVersionRange`) lets a server widen its accepted
+  (`ServerConfig::minProtocolVersion`/`maxProtocolVersion`) lets a server widen its accepted
   range to keep serving pre-bump clients through their own deprecation
   window, entirely independent of what the C++ library's own version is
   doing.

@@ -303,9 +303,9 @@ TEST_CASE("wire::makeRegister: contextKey defaults to empty", "[action_log][phas
     REQUIRE(env.contextKey.empty());
 }
 
-// ── RemoteServer::setLogProvider — closes phase 1's remote-identity gap ─────
+// ── ServerConfig::logProvider — closes phase 1's remote-identity gap ────────
 
-TEST_CASE("RemoteServer::setLogProvider: attaches a log to the server-created holder",
+TEST_CASE("RemoteServer ServerConfig::logProvider: attaches a log to the server-created holder",
           "[action_log][phase2][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
@@ -313,14 +313,14 @@ TEST_CASE("RemoteServer::setLogProvider: attaches a log to the server-created ho
     registry.registerModel<P2Model>("P2_Model");
     dispatcher.registerAction<P2Model, P2Deposit>("P2_Model", "P2_Deposit");
 
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
-
     std::vector<std::string> requestedFor;
     auto log = std::make_shared<InMemoryActionLog>();
-    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.logProvider = [&](std::string_view modelType, std::string_view contextKey) {
         requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
         return log;
-    });
+    };
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
 
     auto regReply = morph::wire::decode(
         server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-9"))));
@@ -344,25 +344,27 @@ TEST_CASE("RemoteServer::setLogProvider: attaches a log to the server-created ho
     REQUIRE(entries[0].actionType == "P2_Deposit");
 }
 
-TEST_CASE("RemoteServer::setLogProvider: not consulted when contextKey is empty", "[action_log][phase2][remote]") {
+TEST_CASE("RemoteServer ServerConfig::logProvider: not consulted when contextKey is empty",
+          "[action_log][phase2][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
     registry.registerModel<P2Model>("P2_Model");
 
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
     bool providerCalled = false;
-    server->setLogProvider([&](std::string_view, std::string_view) {
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.logProvider = [&](std::string_view, std::string_view) {
         providerCalled = true;
         return std::make_shared<InMemoryActionLog>();
-    });
+    };
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
 
     auto reply = morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model"))));
     REQUIRE(reply.kind == "ok");
     REQUIRE_FALSE(providerCalled);
 }
 
-TEST_CASE("RemoteServer::setLogProvider: a provider returning nullptr attaches no log",
+TEST_CASE("RemoteServer ServerConfig::logProvider: a provider returning nullptr attaches no log",
           "[action_log][phase2][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
@@ -370,8 +372,9 @@ TEST_CASE("RemoteServer::setLogProvider: a provider returning nullptr attaches n
     registry.registerModel<P2Model>("P2_Model");
     dispatcher.registerAction<P2Model, P2Deposit>("P2_Model", "P2_Deposit");
 
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
-    server->setLogProvider([](std::string_view, std::string_view) { return nullptr; });
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.logProvider = [](std::string_view, std::string_view) { return nullptr; };
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
 
     auto regReply = morph::wire::decode(
         server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-x"))));
@@ -387,27 +390,6 @@ TEST_CASE("RemoteServer::setLogProvider: a provider returning nullptr attaches n
     server->handle(morph::wire::encode(exec), std::ref(waiter));
     REQUIRE(waiter.await());
     REQUIRE(waiter.env.kind == "ok");  // executes fine even though no log got attached
-}
-
-TEST_CASE("RemoteServer::setLogProvider: nullptr provider removes a previously installed one",
-          "[action_log][phase2][remote]") {
-    morph::exec::ThreadPoolExecutor pool{2};
-    morph::model::detail::ModelRegistryFactory registry;
-    morph::model::detail::ActionDispatcher dispatcher;
-    registry.registerModel<P2Model>("P2_Model");
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
-
-    bool called = false;
-    server->setLogProvider([&](std::string_view, std::string_view) {
-        called = true;
-        return nullptr;
-    });
-    server->setLogProvider(nullptr);
-
-    auto reply = morph::wire::decode(
-        server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-y"))));
-    REQUIRE(reply.kind == "ok");
-    REQUIRE_FALSE(called);
 }
 
 // ── End-to-end: Bridge + SimulatedRemoteBackend + contextKey + LogProvider ──
@@ -427,9 +409,10 @@ TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvid
     registry.registerModel<P2Model>("P2_Model");
     dispatcher.registerAction<P2Model, P2Deposit>("P2_Model", "P2_Deposit");
 
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
     auto log = std::make_shared<InMemoryActionLog>();
-    server->setLogProvider([&](std::string_view, std::string_view) { return log; });
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.logProvider = [&](std::string_view, std::string_view) { return log; };
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
 
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
 

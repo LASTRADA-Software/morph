@@ -1921,10 +1921,11 @@ TEST_CASE(
     "[qt][ws][limits]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::backend::LimitPolicy policy;
     policy.executeTimeout = std::chrono::milliseconds{80};
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, serverConfig);
 
     morph::qt::QtWebSocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
@@ -2473,19 +2474,19 @@ TEST_CASE("morph::qt::QtWebSocketBackend: a private registration carries context
           "[qt][ws][action_log]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-
     // The provider runs on the server's own strand and the assertions on this
     // thread; the mutex is what makes that handoff an ordinary handoff rather
     // than a data race TSan will flag.
     std::mutex providerMtx;
     std::vector<std::string> requestedFor;
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
-    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.logProvider = [&](std::string_view modelType, std::string_view contextKey) {
         std::scoped_lock const lock{providerMtx};
         requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
         return log;
-    });
+    };
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, serverConfig);
 
     morph::qt::QtWebSocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());

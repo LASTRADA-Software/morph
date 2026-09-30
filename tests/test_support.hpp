@@ -12,10 +12,15 @@
 #include <chrono>
 #include <cstddef>
 #include <deque>
+#include <exception>
 #include <functional>
+#include <memory>
+#include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/wire.hpp>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -445,5 +450,56 @@ struct WaitReply {
         return waitUntil([this] { return ready.load(); }, WaitBudget{budget});
     }
 };
+
+/// @brief A strand over the inline executor: the owner a test with no pool
+///        gives a component that needs one (`SyncWorker`).
+///
+/// A task runs on the thread that posts it; one posted while another is
+/// running queues behind it and runs on the running task's thread. So a
+/// component's verb completes before it returns, and two threads calling it at
+/// once are still served one at a time.
+/// @return The process-wide instance.
+inline ::morph::exec::OwnerStrand& inlineOwner() {
+    static ::morph::exec::OwnerStrand strand{::morph::exec::detail::inlineExecutor()};
+    return strand;
+}
+
+/// @brief Waits for @p completion to settle and returns its value.
+///
+/// For a verb that answers through a `Completion` settled on its owner
+/// (`RemoteServer::health()`, `drainedWithin()`, `SyncWorker::run()`, …) when
+/// the test itself is not on that owner. The callbacks run wherever the
+/// completion delivers them; this thread polls, as `waitUntil` does.
+///
+/// @param completion The completion to wait on.
+/// @param budget     Longest wait: a hang guard, not a timing assertion, so
+///                   generous by default.
+/// @return The settled value.
+/// @throws std::runtime_error if nothing settles within @p budget; the
+///         completion's own exception if it settles with one.
+template <typename T>
+T awaitValue(::morph::async::Completion<T> completion, std::chrono::milliseconds budget = std::chrono::seconds{30}) {
+    struct Outcome {
+        std::atomic<bool> done{false};
+        std::optional<T> value;
+        std::exception_ptr error;
+    };
+    auto outcome = std::make_shared<Outcome>();
+    completion.then([outcome](const T& value) {
+        outcome->value.emplace(value);
+        outcome->done.store(true);
+    });
+    completion.onError([outcome](std::exception_ptr error) {
+        outcome->error = std::move(error);
+        outcome->done.store(true);
+    });
+    if (!waitUntil([&outcome] { return outcome->done.load(); }, WaitBudget{budget})) {
+        throw std::runtime_error("awaitValue: the completion did not settle within the budget");
+    }
+    if (outcome->error) {
+        std::rethrow_exception(outcome->error);
+    }
+    return std::move(*outcome->value);
+}
 
 }  // namespace morph::testing

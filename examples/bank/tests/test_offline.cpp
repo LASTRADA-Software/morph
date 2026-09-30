@@ -6,7 +6,10 @@
 // queue and replays each action through the live bridge handler.
 
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
 #include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
@@ -41,7 +44,14 @@ TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") 
     REQUIRE(await(accounts.execute(bank::dto::GetAccount{.id = acct}), app.guiLoop()).balanceMinor == 0);
 
     // --- On "reconnect": drain the queue, replaying each action via the bridge.
-    morph::offline::SyncWorker worker{queue, [&](const std::string& payload) -> bool {
+    // SyncWorker drains on the executor it is given, which must run one task
+    // at a time: a strand. Over an executor that runs a task on the posting
+    // thread, run() has drained before it returns.
+    struct RunHere final : morph::exec::IExecutor {
+        void post(std::function<void()> task) override { task(); }
+    } here;
+    morph::exec::OwnerStrand owner{here};
+    morph::offline::SyncWorker worker{owner, queue, [&](const std::string& payload) -> bool {
                                           try {
                                               await(txns.execute(Codec::fromJson(payload)), app.guiLoop());
                                               return true;
@@ -49,7 +59,8 @@ TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") 
                                               return false;
                                           }
                                       }};
-    auto result = worker.run();
+    morph::offline::SyncResult result;
+    worker.run().then([&result](const morph::offline::SyncResult& drained) { result = drained; });
 
     REQUIRE(result.successful == 2);
     REQUIRE(result.failed == 0);

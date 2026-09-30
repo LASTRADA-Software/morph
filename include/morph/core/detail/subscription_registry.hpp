@@ -35,8 +35,8 @@
 /// extraction is that this class is templated on the binding type
 /// (`Bridge` instantiates it with `morph::bridge::detail::HandlerBinding`,
 /// which is itself defined inside `bridge.hpp`) rather than naming
-/// `HandlerBinding` directly -- unlike `ExecuteOrderGate`'s `ModelId`, which
-/// already lived in its own header, `HandlerBinding` is defined inline in
+/// `HandlerBinding` directly -- unlike a key type such as `ModelId`, which
+/// lives in its own header, `HandlerBinding` is defined inline in
 /// `bridge.hpp` with no header of its own, and a non-template class here
 /// would have to either forward-declare it (making this header silently
 /// depend on include order to compile) or pull in a `HandlerBinding` header
@@ -161,8 +161,7 @@ public:
     /// @brief Number of subscription entries currently stored, including any
     ///        not yet pruned.
     ///
-    /// Test-only observability, mirroring `ExecuteOrderGate::gateCount()` --
-    /// stale the moment the lock is released, so it must not drive a
+    /// Test-only observability -- stale the moment the lock is released, so it must not drive a
     /// check-then-act decision. In particular, an entry whose binding has
     /// already been destroyed still counts here until the next
     /// `publishResult` prunes it: this is what lets a test observe the prune

@@ -12,7 +12,10 @@
 #include <Lightweight/Lightweight.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <morph/core/executor.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
 #include <optional>
@@ -147,13 +150,21 @@ TEST_CASE("SyncWorker drains a Lightweight-backed queue", "[offline][lightweight
     (void)queue.enqueue("two");
     REQUIRE(queue.size() == 2);
 
+    // SyncWorker drains on the executor it is given, which must run one task
+    // at a time: a strand. Over an executor that runs a task on the posting
+    // thread, run() has drained before it returns.
+    struct RunHere final : morph::exec::IExecutor {
+        void post(std::function<void()> task) override { task(); }
+    } here;
+    morph::exec::OwnerStrand owner{here};
     std::string replayed;
-    morph::offline::SyncWorker worker{queue, [&](const std::string& payload) -> bool {
+    morph::offline::SyncWorker worker{owner, queue, [&](const std::string& payload) -> bool {
                                           replayed += payload;
                                           replayed += ';';
                                           return true;
                                       }};
-    const auto result = worker.run();
+    morph::offline::SyncResult result;
+    worker.run().then([&result](const morph::offline::SyncResult& drained) { result = drained; });
     CHECK(result.successful == 2);
     CHECK(result.failed == 0);
     CHECK(replayed == "one;two;");

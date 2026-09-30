@@ -1066,12 +1066,13 @@ declared in `remote.hpp`, not the journal headers, but it is the fourth way a
 completeness.
 
 ```cpp
-// RemoteServer::LogProvider
+// morph::backend::LogProvider (also RemoteServer::LogProvider)
 using LogProvider = std::function<
     std::shared_ptr<morph::journal::IActionLog>(
         std::string_view modelType, std::string_view contextKey)>;
 
-void RemoteServer::setLogProvider(LogProvider provider);   // thread-safe
+ServerConfig config;
+config.logProvider = provider;          // given to the RemoteServer constructor
 ```
 
 - **Where `contextKey` comes from.** The client sets
@@ -1080,8 +1081,8 @@ void RemoteServer::setLogProvider(LogProvider provider);   // thread-safe
   wire envelope as `wire::Envelope::contextKey` (`wire::makeRegister(typeId,
   contextKey)`), defaulting to empty.
 - **When the provider is consulted.** On each `register` envelope whose
-  `contextKey` is **non-empty**, `RemoteServer` invokes the provider
-  synchronously with `(typeId, contextKey)`. An empty `contextKey` skips the
+  `contextKey` is **non-empty**, `RemoteServer` invokes the provider on its
+  server strand with `(typeId, contextKey)`. An empty `contextKey` skips the
   provider entirely — the instance is registered with no log. A provider that
   returns `nullptr` also attaches no log; otherwise the returned sink is attached
   via `holder->attachActionLog(log, contextKey)`, so `contextKey` becomes the
@@ -1102,11 +1103,10 @@ void RemoteServer::setLogProvider(LogProvider provider);   // thread-safe
   touched. A model with no `attachActionLog` of its own is unaffected — the
   hook resolves to a no-op for it, exactly as before this existed. First
   exercised by `kanban::BoardModel` (rung 4).
-- **Installing / removing.** `setLogProvider(nullptr)` removes a previously
-  installed provider (subsequent registrations get no log). The provider slot is
-  guarded by its own mutex, and the provider is copied out under that lock before
-  being called, so `setLogProvider` is safe to call concurrently with request
-  handling.
+- **Configuring.** The provider is a `ServerConfig` field, fixed at
+  construction; a server with none attaches no log. It is called only on the
+  server strand, one call at a time, so it needs no synchronisation of its own
+  beyond what the log it returns shares with other threads.
 
 This is the only recording path for a genuinely remote topology: recording is
 server-side, keyed by the per-instance identity the client chose. See
@@ -1291,7 +1291,7 @@ All symbols live in `namespace morph::journal`.
 
 The remote attachment path lives outside this namespace: `morph::backend::RemoteServer::LogProvider`
 (a `std::function<std::shared_ptr<IActionLog>(std::string_view modelType, std::string_view contextKey)>`)
-and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
+and `ServerConfig::logProvider`, declared in `remote.hpp`. See
 [Attaching a log to remote instances](#attaching-a-log-to-remote-instances).
 
 ### State reconstruction
@@ -1525,7 +1525,7 @@ See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetim
   opt-out this outbox section's suppression relies on.
 - **`bridge.md`** — the two (mutually exclusive) recording call sites
   (`Bridge::executeVia`'s `localOp` for local mode; the `RemoteServer` dispatch
-  path for remote/Qt), and `HandlerBinding::contextKey`/`RemoteServer::setLogProvider`
+  path for remote/Qt), and `HandlerBinding::contextKey`/`ServerConfig::logProvider`
   for per-instance identity.
 - **`backend.md`** — how local vs. remote topology decides which recording site
   is live, and why recording is automatically server-side wherever a client/server

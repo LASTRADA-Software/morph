@@ -619,6 +619,11 @@ private:
     /// `unique_ptr` that had already been reset to null -- `_callbacks`'s own
     /// guard does not catch this, since `_callbacks` itself is destroyed even
     /// later still and would not yet report the token inactive.
+    ///
+    /// `_syncWorker` drains on `_reconnectCoordinator`'s strand, inside the
+    /// coordinator's `replay` step, so it is declared before the coordinator
+    /// and destroyed after it: the coordinator's destructor closes the strand,
+    /// waiting for a sequence still running, before the worker goes.
     std::unique_ptr<::morph::offline::SqliteOfflineQueue> _offlineQueue;
     std::unique_ptr<::morph::offline::SyncWorker> _syncWorker;
     std::unique_ptr<::morph::offline::ReconnectCoordinator> _reconnectCoordinator;

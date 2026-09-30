@@ -163,8 +163,9 @@ TEST_CASE("RemoteServer: a refused register answers err unauthorized, correlated
 
 TEST_CASE("RemoteServer: a register over the live-model cap answers err too many models", "[remote][reply]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setLimitPolicy({.maxLiveModels = 1});
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = morph::backend::LimitPolicy{.maxLiveModels = 1};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     auto const first = ask(*server, morph::wire::makeRegister("RRE_CounterModel"), 20);
     REQUIRE(first.kind == "ok");
@@ -242,8 +243,9 @@ TEST_CASE("RemoteServer: a refused attach answers err unauthorized, correlated",
 
 TEST_CASE("RemoteServer: a first attach over the cap answers err too many models", "[remote][reply]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setLimitPolicy({.maxLiveModels = 1});
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = morph::backend::LimitPolicy{.maxLiveModels = 1};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     REQUIRE(ask(*server, morph::wire::makeAttach("RRE_CounterModel", "A"), 33).kind == "ok");
 
@@ -419,8 +421,10 @@ TEST_CASE("RemoteServer: a deregister the owner gate refuses answers err unautho
 
 TEST_CASE("RemoteServer: hello answers ok whose body is the supported version range", "[remote][reply]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setSupportedVersionRange(2, 5);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.minProtocolVersion = 2;
+    serverConfig.maxProtocolVersion = 5;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     auto const reply = ask(*server, morph::wire::makeHello(3), 80);
 
@@ -436,8 +440,10 @@ TEST_CASE("RemoteServer: hello answers ok whose body is the supported version ra
 
 TEST_CASE("RemoteServer: hello outside the range answers err protocol version unsupported", "[remote][reply]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setSupportedVersionRange(2, 5);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.minProtocolVersion = 2;
+    serverConfig.maxProtocolVersion = 5;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     auto const tooOld = ask(*server, morph::wire::makeHello(1), 81);
     CHECK(tooOld.kind == "err");

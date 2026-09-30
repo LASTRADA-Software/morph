@@ -32,7 +32,7 @@ Two targets:
 | Target | Exercises | Invariant |
 |---|---|---|
 | `fuzz_wire_decode` | `morph::wire::decode` (the outer envelope parse) and, for a decoded `"execute"` envelope with a non-empty `body`, `ActionTraits<FuzzInnerAction>::fromJson(body)` (the inner re-parse — see [wire.md](core/wire.md)'s "the body double-parse hazard") | Every input either parses (at each stage) or throws `std::runtime_error`. Never crashes, trips a sanitizer, or hangs. |
-| `fuzz_dispatch_execute` | `morph::backend::RemoteServer::handle`/`dispatchMessage` end to end, against a live server with one pre-registered `Fuzz_DispatchModel` instance | Every input yields a reply that itself decodes as a wire `Envelope` with `kind` `"ok"` or `"err"`. Never crashes; never hangs (bounded by libFuzzer's own `-timeout`, not by anything in the harness). |
+| `fuzz_dispatch_execute` | `morph::backend::RemoteServer::handle` end to end, against a live server with one pre-registered `Fuzz_DispatchModel` instance | Every input yields a reply that itself decodes as a wire `Envelope` with `kind` `"ok"` or `"err"`. Never crashes; never hangs (bounded by libFuzzer's own `-timeout`, not by anything in the harness). |
 
 Both binaries link `-fsanitize=fuzzer,address` (via the `apply_fuzzer()` CMake
 function in `cmake/compiler_options.cmake`), so a crash found while fuzzing is
@@ -629,7 +629,7 @@ are scope decisions about what this library is, and they do not.
 | Spec | Relationship |
 |---|---|
 | [wire.md](core/wire.md) | `decode`, `kMaxEnvelopeBytes`, and the `body` double-parse / duplicate-key caveats `fuzz_wire_decode` and the adversarial run target. |
-| [backend.md](core/backend.md) | `RemoteServer::handle`/`dispatchMessage` (`fuzz_dispatch_execute`'s target), `switchBackend`/`cancelPending` (the switch-backend soak test), the transports the load benchmark drives, and `LimitPolicy`/`QtWebSocketServerConfig` (the resource limits the adversarial run's default-config scenarios exercise). |
+| [backend.md](core/backend.md) | `RemoteServer::handle` (`fuzz_dispatch_execute`'s target), `switchBackend`/`cancelPending` (the switch-backend soak test), the transports the load benchmark drives, and `LimitPolicy`/`QtWebSocketServerConfig` (the resource limits the adversarial run's default-config scenarios exercise). |
 | [offline/offline.md](offline/offline.md) | `NetworkMonitor`/`ReconnectCoordinator`/`SyncWorker`, the pipeline `test_soak_reconnect_churn.cpp` drives through thousands of flaps. |
 | [security.md](security.md) | The hardening tests (`test_wire_hardening.cpp`, `test_server_limits.cpp`, `test_qt_websocket.cpp`) these suites generalise from single-shot examples to distributions/time/a real adversary. |
 | [core/observability.md](core/observability.md) | The `morph::observe` metrics/trace seam already instruments the same dispatch paths these suites exercise; the soak tests deliberately instrument themselves directly rather than depend on a `MetricSink` being installed in the test process — see "Soak tests" above. |

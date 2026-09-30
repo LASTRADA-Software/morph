@@ -39,7 +39,7 @@ BRIDGE_REGISTER_ACTION(LPEchoModel, LPEchoAction, "LP_EchoAction")
 TEST_CASE("LimitPolicy: default policy imposes no cap on registers (regression)", "[limits][limit-policy]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    // No setLimitPolicy() call at all: an unconfigured server must behave
+    // No LimitPolicy in the ServerConfig at all: an unconfigured server must behave
     // exactly as it did before this feature existed.
     for (int i = 0; i < 50; ++i) {
         morph::testing::WaitReply waiter;
@@ -51,10 +51,11 @@ TEST_CASE("LimitPolicy: default policy imposes no cap on registers (regression)"
 
 TEST_CASE("LimitPolicy: maxLiveModels rejects register beyond the cap", "[limits][limit-policy]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::backend::LimitPolicy policy;
     policy.maxLiveModels = 2;
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::testing::WaitReply first;
     server->handle(morph::wire::encode(morph::wire::makeRegister("LP_EchoModel")), std::ref(first));
@@ -108,10 +109,11 @@ TEST_CASE("LimitPolicy: maxInFlightExecutes rejects a second execute while the f
           "[limits][limit-policy]") {
     gLPSlowStarted.store(0, std::memory_order_relaxed);
     morph::exec::ThreadPoolExecutor pool{4};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::backend::LimitPolicy policy;
     policy.maxInFlightExecutes = 1;
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::testing::WaitReply regReply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("LP_SlowModel")), std::ref(regReply));
@@ -168,10 +170,11 @@ TEST_CASE("LimitPolicy: executeTimeout replies err \"timeout\" and the late stra
           "[limits][limit-policy]") {
     gLPSlowStarted.store(0, std::memory_order_relaxed);
     morph::exec::ThreadPoolExecutor pool{4};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::backend::LimitPolicy policy;
     policy.executeTimeout = 50ms;
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::testing::WaitReply regReply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("LP_SlowModel")), std::ref(regReply));
@@ -220,30 +223,13 @@ TEST_CASE("LimitPolicy: executeTimeout replies err \"timeout\" and the late stra
     }
 }
 
-TEST_CASE("LimitPolicy: setLimitPolicy called twice with a positive executeTimeout reuses the scheduler",
+TEST_CASE("LimitPolicy: an executeTimeout longer than the action lets the action answer ok",
           "[limits][limit-policy]") {
-    // RM9 (remote.hpp, same shape as bridge.hpp B7): setLimitPolicy's
-    // `_limits.executeTimeout.count() > 0 && !_timeoutScheduler` guard had
-    // only ever seen the scheduler being created for the first time --
-    // every existing test calls setLimitPolicy once per server. A second
-    // call with another positive executeTimeout must not replace (or
-    // double-construct) the scheduler; this exercises the `!_timeoutScheduler`
-    // idempotent-skip arm. `snapshotLimits()`/`_timeoutScheduler` are private,
-    // so this is observed behaviorally: the second call's (much longer)
-    // executeTimeout must actually take effect on the reused scheduler --
-    // if the second setLimitPolicy call somehow left the *first* policy's
-    // short deadline armed, this would time out and fail.
     gLPSlowStarted.store(0, std::memory_order_relaxed);
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-
-    morph::backend::LimitPolicy first;
-    first.executeTimeout = 50ms;
-    server->setLimitPolicy(first);
-
-    morph::backend::LimitPolicy second;
-    second.executeTimeout = 5000ms;  // reused scheduler must honor *this* deadline, not the first
-    server->setLimitPolicy(second);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits.executeTimeout = 5000ms;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::testing::WaitReply regReply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("LP_SlowModel")), std::ref(regReply));
@@ -256,7 +242,7 @@ TEST_CASE("LimitPolicy: setLimitPolicy called twice with a positive executeTimeo
     req.modelId = mid;
     req.modelType = "LP_SlowModel";
     req.actionType = "LP_SlowAction";
-    req.body = R"({"ms":300})";  // well past the *first* policy's 50ms, well under the second's 5000ms
+    req.body = R"({"ms":300})";  // well under the 5000ms deadline
 
     morph::testing::WaitReply execReply;
     server->handle(morph::wire::encode(req), std::ref(execReply));
@@ -269,7 +255,7 @@ TEST_CASE("LimitPolicy: default executeTimeout (0) never times out a slow action
     gLPSlowStarted.store(0, std::memory_order_relaxed);
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    // No setLimitPolicy() call: executeTimeout defaults to 0 (disabled).
+    // No LimitPolicy in the ServerConfig: executeTimeout defaults to 0 (disabled).
 
     morph::testing::WaitReply regReply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("LP_SlowModel")), std::ref(regReply));
@@ -293,10 +279,11 @@ TEST_CASE("LimitPolicy: executeTimeout surfaces as backend::TimeoutError through
           "[limits][limit-policy]") {
     gLPSlowStarted.store(0, std::memory_order_relaxed);
     morph::exec::ThreadPoolExecutor pool{4};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::backend::LimitPolicy policy;
     policy.executeTimeout = 50ms;
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::backend::SimulatedRemoteBackend backend{*server};
     auto mid = backend.registerModelWithContext("LP_SlowModel", nullptr, {});

@@ -1316,16 +1316,11 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
     // would also produce.
     //
     // Deliberately NOT a heavier stress shape (many threads x many calls).
-    // That shape belongs to the stranded-execute-ticket case -- a connection
-    // with several executes in flight dropping -- whose own
-    // hang would masquerade as a failure of *this* fix instead of the
-    // ticket-ordering problem it actually is. That case is covered (see
-    // `ExecuteOrderGate::release` in core/detail/execute_order_gate.hpp,
-    // extracted out of remote.hpp's own `releaseExecuteTicket` after this
-    // fix landed), and its own stress-shaped regression test is "many
-    // concurrent executes racing a disconnect leave no stranded execute
-    // ticket" below; the two are kept separate so a regression in either one
-    // fails where it is diagnosed.
+    // That shape belongs to "many concurrent executes racing a disconnect
+    // leave the server able to drain" below -- a connection with several
+    // executes in flight dropping -- whose own hang would masquerade as a
+    // failure of *this* fix; the two are kept separate so a regression in
+    // either one fails where it is diagnosed.
     for (int iter = 0; iter < 3; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{2};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1458,10 +1453,11 @@ TEST_CASE("SocketBackend: executeTimeout surfaces as backend::TimeoutError, not 
     // tests/test_limit_policy.cpp's SimulatedRemoteBackend analog of this same
     // scenario, over the real WebSocket transport instead.
     morph::exec::ThreadPoolExecutor serverPool{4};
-    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::backend::LimitPolicy policy;
     policy.executeTimeout = std::chrono::milliseconds{50};
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, serverConfig);
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
@@ -1647,46 +1643,25 @@ TEST_CASE("SocketBackend: a reconnect handler throwing a non-std::exception leav
 // The Catch2 assertion macros, not branching logic, are what push this over the
 // cognitive-complexity threshold -- as in the sibling disconnect cases above.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no stranded execute ticket",
+TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave the server able to drain",
           "[net][socket_backend][disconnect]") {
-    // Regression coverage for a stranded execute ticket at the transport
-    // level; the mechanism
-    // itself is pinned deterministically by
-    // tests/test_remote_execute_ordering.cpp's "an execute rejected out of
-    // ticket order..." case. This is the shape that actually found it, kept
-    // because it is the one that exercises the real teardown ordering:
-    // dropping the connection reclaims that connection's models, so the
-    // executes still in flight for one model split into some that find the
-    // model and some that reject with "model not found" -- and a rejection
-    // releases its execute-ordering ticket immediately, without waiting for
-    // its turn. `ExecuteOrderGate::release` (formerly `RemoteServer`'s own
-    // `releaseExecuteTicket`, before it was extracted into
-    // core/detail/execute_order_gate.hpp) used to advance `nextToRun` past
-    // any earlier ticket when that happened, leaving that ticket's waiter
-    // parked in `awaitTurn` (formerly `awaitExecuteTurn`) on a predicate that
-    // could never come true again.
+    // The real disconnect teardown at the transport level: dropping the
+    // connection reclaims that connection's models, so the executes still in
+    // flight for one model split into some that find the model and some that
+    // reject with "model not found". Every one must be answered and the
+    // server must drain; per-model order across such a split is pinned
+    // deterministically by tests/test_remote_execute_ordering.cpp.
     //
     // The visible failure is not this test's assertions: it is the teardown
-    // below it. A stranded ticket holds a `serverPool` worker forever, so
-    // `~ThreadPoolExecutor` hangs in join() at end of scope and the whole
-    // binary stops -- turned into a failure by ctest's per-test TIMEOUT.
+    // below it. An execute that is never answered leaves the in-flight count
+    // above zero, and a pool worker that never returns hangs
+    // `~ThreadPoolExecutor` in join() -- turned into a failure by ctest's
+    // per-test TIMEOUT.
     //
-    // Honest about what this test is and is not. It is a *probabilistic*
-    // shape, and a shallow one: measured on Linux/clang 22 against the
-    // pre-fix code it hung 4 times in 145 runs at these thread and call
-    // counts (and 0 times in 20 at the lighter 3x15 shape the issue reports,
-    // which is why the counts here are higher than the issue's). It is
-    // therefore not the control for the fix -- the deterministic case named
-    // above is, and it fails 100% of runs without it. This one is kept
-    // because it is the only test that drives the real disconnect teardown
-    // that produces the out-of-order release in the first place, and because
-    // it costs ~0.2s.
-    //
-    // It is deliberately the "heavier stress shape" the sibling
-    // "execute() racing a disconnect never leaves a Completion unresolved"
-    // case above avoids: kept separate so a ticket-ordering regression fails
-    // here, where it is diagnosed, rather than masquerading as a failure of that
-    // test's own TOCTOU fix.
+    // A *probabilistic* shape, kept because it is the only test that drives
+    // the real disconnect teardown, and because it costs ~0.2s. It is
+    // deliberately the "heavier stress shape" the sibling "execute() racing a
+    // disconnect never leaves a Completion unresolved" case above avoids.
     for (int iter = 0; iter < 3; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{4};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1732,10 +1707,9 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
         spinUntil([&] { return settled.load() == totalCalls; }, 300);
         REQUIRE(settled.load() == totalCalls);
 
-        // The server must be able to drain: a stranded ticket also pins
-        // `_inFlightExecutes` above zero for good, so this is the same
-        // regression seen from the graceful-shutdown side.
-        REQUIRE(server->drainedWithin(std::chrono::milliseconds{5000}));
+        // The server must be able to drain: an execute never answered pins
+        // the in-flight count above zero for good.
+        REQUIRE(morph::testing::awaitValue(server->drainedWithin(std::chrono::milliseconds{5000})));
 
         // Same port-reuse pause as the sibling disconnect tests.
         std::this_thread::sleep_for(std::chrono::milliseconds{50});
@@ -2198,19 +2172,19 @@ TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural
 TEST_CASE("SocketBackend: a private registration carries contextKey to the server's log provider",
           "[net][socket_backend][registration-surface][action_log]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-
     // The provider runs on the server's own strand, the assertions on this
     // thread; the mutex is what makes that handoff a data race TSan will not
     // flag rather than one it will.
     std::mutex providerMtx;
     std::vector<std::string> requestedFor;
     auto log = std::make_shared<morph::journal::InMemoryActionLog>();
-    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.logProvider = [&](std::string_view modelType, std::string_view contextKey) {
         std::scoped_lock const lock{providerMtx};
         requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
         return log;
-    });
+    };
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, serverConfig);
 
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());

@@ -385,8 +385,9 @@ TEST_CASE("REGRESSION GUARD: leniently, a renamed field is accepted and applies 
 
 TEST_CASE("RequireDeclaredFields rejects a renamed field by name", "[remote][completeness][issue207]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     auto reply = runExecute(*server, modelId, R"({"amount":500})");
@@ -398,8 +399,9 @@ TEST_CASE("RequireDeclaredFields rejects an empty payload", "[remote][completene
     // The case `error_on_unknown_keys = true` cannot catch at all: `{}` has no
     // unknown key to trip over, only an absent required one.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     auto reply = runExecute(*server, modelId, "{}");
@@ -409,8 +411,9 @@ TEST_CASE("RequireDeclaredFields rejects an empty payload", "[remote][completene
 
 TEST_CASE("RequireDeclaredFields dispatches a complete payload unchanged", "[remote][completeness][issue207]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     auto reply = runExecute(*server, modelId, R"({"amountCents":500,"memo":"rent"})");
@@ -426,8 +429,9 @@ TEST_CASE("POLICY: RequireDeclaredFields still accepts a newer client's additive
     // `error_on_unknown_keys = true` turns this legal payload into a parse
     // error, which is why it is not the answer.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     auto reply = runExecute(*server, modelId, R"({"amountCents":500,"memoId":7})");
@@ -441,8 +445,9 @@ TEST_CASE("POLICY: RequireDeclaredFields does not require a declared-optional fi
     // The gate enforces the served `required` array and nothing else, so a
     // field the author put in `optionalFields` stays omissible.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     auto reply = runExecute(*server, modelId, R"({"amountCents":500})");
@@ -454,8 +459,9 @@ TEST_CASE("RequireDeclaredFields leaves a non-object body to the action codec", 
     // missing field there would replace `fromJson`'s precise parse diagnostic
     // with a misleading one.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     auto reply = runExecute(*server, modelId, "\"not-an-object\"");
@@ -472,8 +478,9 @@ TEST_CASE("RequireDeclaredFields treats an action with no declared required fiel
     // taken; the gate must not manufacture a false-positive rejection for an
     // action that has nothing to check.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     Envelope pingEnv;
@@ -497,8 +504,9 @@ TEST_CASE("RequireDeclaredFields treats an unregistered action pair as nothing t
     // positive "missing field" rejection), leaving the dispatcher's own
     // "unknown action" diagnostic as the actual, more specific failure.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     Envelope unknownEnv;
@@ -525,8 +533,9 @@ TEST_CASE("RequireDeclaredFields degrades safely on a genuinely malformed JSON b
     // The gate must degrade to "nothing missing" here too, leaving the
     // action's own fromJson to raise the actual, more specific parse error.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     auto reply = runExecute(*server, modelId, R"({"amountCents":500,)");  // truncated -- not valid JSON
@@ -542,8 +551,9 @@ TEST_CASE("RequireDeclaredFields comma-joins two or more missing fields in its d
     // WireSchemas_Transfer declares two required fields (neither optional),
     // so omitting both trips it.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<RemoteServer>(pool);
-    server->setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.payloadCompleteness = PayloadCompleteness::RequireDeclaredFields;
+    auto server = std::make_shared<RemoteServer>(pool, serverConfig);
     const auto modelId = registerLedger(*server);
 
     Envelope transferEnv;

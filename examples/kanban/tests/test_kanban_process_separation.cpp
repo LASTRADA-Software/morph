@@ -28,13 +28,18 @@
 #include <QStringList>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
+#include <future>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/remote.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
+#include <stdexcept>
 #include <string>
 
 #include "kanban/app/app.hpp"
@@ -122,6 +127,19 @@ struct Fixture {
     }
 };
 
+/// The server's live model count. `health()` answers on the server's strand,
+/// which runs on its pool, not on this (Qt) thread, so waiting here blocks
+/// nothing the answer needs.
+std::size_t liveModels(morph::backend::RemoteServer& server) {
+    auto answer = std::make_shared<std::promise<morph::backend::HealthStatus>>();
+    auto future = answer->get_future();
+    server.health().then([answer](const morph::backend::HealthStatus& status) { answer->set_value(status); });
+    if (future.wait_for(std::chrono::seconds{10}) != std::future_status::ready) {
+        throw std::runtime_error("RemoteServer::health() did not answer");
+    }
+    return future.get().liveModels;
+}
+
 }  // namespace
 
 TEST_CASE("Process separation: real client processes drive one shared board", "[kanban][process]") {
@@ -168,7 +186,7 @@ TEST_CASE("Process separation: a killed client's models are reclaimed", "[kanban
     REQUIRE(fixture.transport.listen());
     fixture.seed();
 
-    const auto baseline = fixture.app.server()->health().liveModels;
+    const auto baseline = liveModels(*fixture.app.server());
 
     ProcessPool pool{QStringLiteral(MORPH_LADDER_HEADLESS_BIN)};
     auto args = fixture.clientArgs();
@@ -182,11 +200,11 @@ TEST_CASE("Process separation: a killed client's models are reclaimed", "[kanban
     REQUIRE(pumpUntil(
         [&] {
             return client->process().readAllStandardOutput().contains("ATTACHED") ||
-                   fixture.app.server()->health().liveModels > baseline;
+                   liveModels(*fixture.app.server()) > baseline;
         },
         std::chrono::seconds{20}));
-    REQUIRE(pumpUntil([&] { return fixture.app.server()->health().liveModels > baseline; }, std::chrono::seconds{10}));
-    const auto attached = fixture.app.server()->health().liveModels;
+    REQUIRE(pumpUntil([&] { return liveModels(*fixture.app.server()) > baseline; }, std::chrono::seconds{10}));
+    const auto attached = liveModels(*fixture.app.server());
     INFO("liveModels baseline=" << baseline << " attached=" << attached);
 
     // SIGKILL: no destructor runs, no deregister is sent, the socket simply
@@ -200,8 +218,8 @@ TEST_CASE("Process separation: a killed client's models are reclaimed", "[kanban
     // Without that reclamation a crashed client leaks its board registration
     // for the server's lifetime.
     const bool reclaimed =
-        pumpUntil([&] { return fixture.app.server()->health().liveModels <= baseline; }, std::chrono::seconds{20});
-    INFO("liveModels after kill=" << fixture.app.server()->health().liveModels);
+        pumpUntil([&] { return liveModels(*fixture.app.server()) <= baseline; }, std::chrono::seconds{20});
+    INFO("liveModels after kill=" << liveModels(*fixture.app.server()));
     CHECK(reclaimed);
 
     // And the board itself survived the crash: a fresh client still opens it.

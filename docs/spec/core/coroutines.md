@@ -303,11 +303,10 @@ owned by its `IModelHolder`):
   and its handler does not run for a caller that has already been answered.
 
 The next action for a model therefore starts only after the current handler's
-Task has completed. The order is still arrival order. `ExecuteOrderGate`,
-which orders the *posting* of remote executes to the strand, is unchanged; it
-releases its ticket once the post has happened, as before, and does not wait
-for the action to run. The gate is touched only on the model's strand, so it
-needs no lock.
+Task has completed. The order is still arrival order: on `RemoteServer` the
+server strand posts executes to the model's strand in the order they arrived
+and does not wait for the action to run. The gate is touched only on the
+model's strand, so it needs no lock.
 
 A Task handler that awaits a second action *on its own model* waits forever:
 that action is queued behind the gate the awaiting handler holds. This is the
@@ -388,7 +387,7 @@ refused and unwinds inline, and closing them drops only what was queued before
 | The coroutine type | `core::async::Task<T>` | One coroutine type across the Contour Terminal projects, with a stop token that propagates down a chain of awaits. morph adds awaiters and executors, not a second task type. |
 | Where resumption happens | core-cpp's current-executor context, stated by every executor that resumes coroutines and read by every awaitable that follows it | `Task`'s promise carries no executor, and a handler that awaits another model's completion must come back to its own strand, not to wherever that completion was delivered. One context shared with core-cpp brings a handler back from `AsyncQueue::pop` too, which morph's own context could not. |
 | The session across a suspension | The strands' keyed around-task hook, for the instance's one running Task handler | A context carried by `Task` itself would cost every `co_await` of every consumer; the gate makes one handler per instance the only coroutine the hook has to find. |
-| Non-reentrancy | A per-instance action gate on the strand | Holding `ExecuteOrderGate`'s ticket until the Task completes would block a pool thread in `awaitTurn` for the whole suspension. With enough suspended handlers that exhausts the pool that their own awaits need. It would also leave `LocalBackend`, which has no ticket, unordered. |
+| Non-reentrancy | A per-instance action gate on the strand | Holding anything off the strand until the Task completes — a pool thread, or `RemoteServer`'s server strand — would block it for the whole suspension. With enough suspended handlers that exhausts the pool that their own awaits need. The gate works the same on `LocalBackend` and `RemoteServer`. |
 | Lvalue `co_await` | Refused at compile time | Awaiting consumes the completion's one await slot and moves the handle; an lvalue await would hide that. |
 
 ## Limitations
@@ -471,8 +470,8 @@ refused and unwinds inline, and closing them drops only what was queued before
   client-side execute deadline.
 - [`bridge.md`](bridge.md) — `executeVia` and `localOp`, where Task handlers
   are driven for `LocalBackend`.
-- [`backend.md`](backend.md) — `RemoteServer`'s dispatch and
-  `ExecuteOrderGate`.
+- [`backend.md`](backend.md) — `RemoteServer`'s dispatch and per-model
+  execute ordering.
 - [`executor.md`](executor.md) — the strand and the executors a coroutine
   resumes on.
 - [`concurrency_and_lifetimes.md`](../concurrency_and_lifetimes.md) — the

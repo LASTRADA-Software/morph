@@ -81,7 +81,7 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     std::vector<std::string> replayed;
     std::mutex replayMtx;
 
-    morph::offline::SyncWorker syncWorker{queue, [&](const std::string& payload) {
+    morph::offline::SyncWorker syncWorker{morph::testing::inlineOwner(), queue, [&](const std::string& payload) {
                                               std::scoped_lock lock{replayMtx};
                                               replayed.push_back(payload);
                                               return true;
@@ -101,7 +101,7 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
             // 150ms sleep that preceded this test's waitUntil migration to have
             // given switchBackend() enough slack to finish too, which held in
             // practice but was never actually waited for.
-            syncWorker.run();
+            morph::testing::awaitValue(syncWorker.run());
             bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
             backendSwitched.store(true);
         },

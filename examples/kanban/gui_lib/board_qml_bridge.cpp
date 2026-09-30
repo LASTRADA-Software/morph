@@ -595,19 +595,6 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
                                      ::morph::offline::NetworkMonitor::Config monitorConfig) {
     _offlineQueue = std::make_unique<::morph::offline::SqliteOfflineQueue>(queuePath.toStdString());
 
-    _syncWorker = std::make_unique<::morph::offline::SyncWorker>(
-        *_offlineQueue, [this](const std::string& payload) { return replayMoveTaskPosition(payload); },
-        [this](const ::morph::offline::QueueItem&) {
-            // DeadLetterSink: one more item exhausted SyncWorker's 5-attempt
-            // cap and was just dropped from the queue. The running total
-            // (not SyncWorker's own per-run count, which resets every
-            // run()) is what syncStatusChanged reports, so a GUI's "N
-            // dropped" indicator (Task 6) never regresses between polls.
-            ++_deadLetteredCount;
-            _queueDepth = static_cast<int>(_offlineQueue->size());
-            emit syncStatusChanged(_queueDepth, _deadLetteredCount);
-        });
-
     // ReconnectCoordinator::Deps: this bridge has no separate "primary vs.
     // local backend" to switch between (unlike docs/spec/offline/offline.md's
     // End-to-end integration example, which assumes a Bridge that owns both)
@@ -617,8 +604,8 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
     // only the queue to replay. shouldContinue reads the monitor's own
     // current state (not a captured snapshot), matching the "went offline
     // again mid-retry" abort case the coordinator's doc comment describes.
-    _reconnectCoordinator =
-        std::make_unique<::morph::offline::ReconnectCoordinator>(::morph::offline::ReconnectCoordinator::Deps{
+    _reconnectCoordinator = std::make_unique<::morph::offline::ReconnectCoordinator>(
+        ::morph::offline::ReconnectCoordinator::Deps{
             .tryReconnect = [] { return true; },
             .activatePrimary = [] {},
             .activateLocal = [] {},
@@ -630,23 +617,41 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
                     // happens) -- this handler only reports the queue's
                     // post-run depth, since a successful or merely-retried
                     // (still-queued) item never touches that counter.
-                    const ::morph::offline::SyncResult result = _syncWorker->run();
-                    _queueDepth = static_cast<int>(_offlineQueue->size());
-                    emit syncStatusChanged(_queueDepth, _deadLetteredCount);
-                    // A successful replay applied a move server-side that
-                    // this bridge's cached `board`/`activity` do not yet
-                    // reflect (moveTaskForReplay() deliberately never
-                    // touches `_board` itself -- see that method's own doc
-                    // comment on why it bypasses every shared signal). Only
-                    // refresh if something actually landed: an all-offline
-                    // run (every item re-queued, nothing succeeded) has
-                    // nothing new to fetch.
-                    if (result.successful > 0) {
-                        refresh();
-                    }
+                    _syncWorker->run().then([this](const ::morph::offline::SyncResult& result) {
+                        _queueDepth = static_cast<int>(_offlineQueue->size());
+                        emit syncStatusChanged(_queueDepth, _deadLetteredCount);
+                        // A successful replay applied a move server-side that
+                        // this bridge's cached `board`/`activity` do not yet
+                        // reflect (moveTaskForReplay() deliberately never
+                        // touches `_board` itself -- see that method's own
+                        // doc comment on why it bypasses every shared
+                        // signal). Only refresh if something actually
+                        // landed: an all-offline run (every item re-queued,
+                        // nothing succeeded) has nothing new to fetch.
+                        if (result.successful > 0) {
+                            refresh();
+                        }
+                    });
                 },
             .shouldContinue = [this] { return _networkMonitor && _networkMonitor->isOnline(); },
             .sleep = [](std::chrono::milliseconds duration) { std::this_thread::sleep_for(duration); },
+        },
+        *_executor);
+
+    // The worker drains on the coordinator's strand, so the replay step's
+    // run() drains inside the reconnect sequence.
+    _syncWorker = std::make_unique<::morph::offline::SyncWorker>(
+        _reconnectCoordinator->strand(), *_offlineQueue,
+        [this](const std::string& payload) { return replayMoveTaskPosition(payload); },
+        [this](const ::morph::offline::QueueItem&) {
+            // DeadLetterSink: one more item exhausted SyncWorker's 5-attempt
+            // cap and was just dropped from the queue. The running total
+            // (not SyncWorker's own per-run count, which resets every
+            // run()) is what syncStatusChanged reports, so a GUI's "N
+            // dropped" indicator (Task 6) never regresses between polls.
+            ++_deadLetteredCount;
+            _queueDepth = static_cast<int>(_offlineQueue->size());
+            emit syncStatusChanged(_queueDepth, _deadLetteredCount);
         });
 
     // NetworkMonitor's own callbacks run on its dedicated probe thread

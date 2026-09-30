@@ -326,6 +326,7 @@ target_sources(morph
         include/morph/core/observability.hpp
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
+        include/morph/core/owner_strand.hpp
         include/morph/core/completion.hpp
         include/morph/core/coroutine.hpp
         include/morph/core/callback_scope.hpp
@@ -406,7 +407,6 @@ target_sources(morph
         include/morph/detail/fixed_string.hpp
         include/morph/detail/quantity_equation.hpp
         include/morph/core/detail/completion_awaiter.hpp
-        include/morph/core/detail/execute_order_gate.hpp
         include/morph/core/detail/task_handler.hpp
         include/morph/core/detail/instance_directory.hpp
         include/morph/core/detail/owner_probe.hpp

@@ -848,26 +848,60 @@ transport and executes the corresponding model operations via an
 `ActionDispatcher`. Authorization is delegated to an `IAuthorizer` that defaults
 to allow-all. It derives from `std::enable_shared_from_this<RemoteServer>`.
 
-**Must be heap-allocated via `std::make_shared`.** `handle()` captures
-`shared_from_this()` to prevent use-after-free when the worker pool outlives the
-server.
+**One owner: the server strand.** The server owns one strand over its worker
+pool (`exec::OwnerStrand`, reachable as `strand()`). Its state — the instance
+registry and shared-instance directory, the connection scopes, the in-flight
+count, the drain waiters, `ready` and the shutdown flag — is touched only in
+tasks on that strand, so none of it has a lock. Configuration is a
+`ServerConfig`, fixed at construction and read without a lock because nothing
+writes it afterwards. The model instances themselves run on their own strands
+(`ModelStrands`, one per `ModelId`), as on `LocalBackend`.
+
+**Cross-thread surface.** Every public member is callable from any thread:
+
+| Member | What crosses | Answered |
+|---|---|---|
+| `handle(msg, reply[, cid])` | Decodes on the calling thread, posts one task to the server strand | `reply`, once, from a pool thread |
+| `handleInline(msg[, cid])` | Posts a control envelope to the server strand and waits (inline when already on it) | Its return value |
+| `openConnection()` | Draws the id from an atomic, posts the scope's creation | The id, at once |
+| `closeConnection(cid)` | Posts | — |
+| `health()` | Posts | A `Completion<HealthStatus>` settled on the strand |
+| `beginShutdown()` | Posts | — |
+| `drainedWithin(deadline)` | Posts | A `Completion<bool>` settled on the strand |
+| `payloadCompleteness()`, `strand()` | Read immutable members | At once |
+
+A task posted to the server strand by one thread runs after every task that
+thread posted before it, so a verb called after another on one thread sees its
+effect: an envelope handed to `handle()` after `beginShutdown()` returned is
+refused; a `health()` asked after `closeConnection()` counts the reclaimed
+models as gone.
+
+**Must be heap-allocated via `std::make_shared`.** Every task the server posts
+— to its own strand, to a model's strand, to its timers — captures
+`shared_from_this()`, so the server outlives its queued work however the last
+external reference is dropped.
 
 **Wire format.** All requests and replies are JSON `morph::wire::Envelope`. The
-`kind` field discriminates three message types:
+`kind` field discriminates the message types:
 
 | `kind` | Request fields | Reply | Notes |
 |---|---|---|---|
-| `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Authenticates the caller (`_authorizer->authenticate(env.session)`), stamping the verified principal onto `env.session.principal` (clearing it when unauthenticated) exactly as `execute` does, then consults `_authorizer->authorizeRegister(env.session, typeId)` — a `false` reply is `err "unauthorized"` and **no instance is created**. Only then creates the model via the `ModelRegistryFactory` and records the (already-verified) principal as its owner. Empty `typeId` → `err "register requires a typeId"` (checked before authorization). If `contextKey` is non-empty, consults the `LogProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. The assigned `modelId` is an **opaque** (non-sequential) value — see below. |
+| `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Authenticates the caller (`_authorizer->authenticate(env.session)`), stamping the verified principal onto `env.session.principal` (clearing it when unauthenticated) exactly as `execute` does, then consults `_authorizer->authorizeRegister(env.session, typeId)` — a `false` reply is `err "unauthorized"` and **no instance is created**. Only then creates the model via the `ModelRegistryFactory` and records the (already-verified) principal as its owner. Empty `typeId` → `err "register requires a typeId"` (checked before authorization). If `contextKey` is non-empty, consults `ServerConfig::logProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. The assigned `modelId` is an **opaque** (non-sequential) value — see below. |
 | `deregister` | `modelId` | `ok` or `err` | Consults `authorizeInstance` against the recorded owner (denied → `err "unauthorized"`); otherwise erases the model and its owner entry from the registry. |
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
 | `hello` | `protocolVersion` | `ok` with `body` = `ProtocolRange`, or `err "protocol version unsupported"` | Protocol-version negotiation, exchanged once per connection before any `register`/`execute`. Carries no `session` and is not authorized — orthogonal to `IAuthorizer`. See [wire.md](wire.md#protocol-version-negotiation). |
 | `schemas` | `typeId`, `session` | `ok` with `body` = `{actionType: schema}`, or `err` | Empty `typeId` → `err "schemas requires a typeId"` (checked before authorization). Authenticates, then consults `_authorizer->authorize(env.session, typeId, {})` — the same type-level read hook `instances` uses; denied → `err "unauthorized"`. Answers from `ActionDispatcher::schemasJson(typeId)`; a type with no registered actions yields `{}`, not an error. See [Serving action schemas](#serving-action-schemas). |
 
-**Execute flow (`dispatchExecute`).** In order:
+**Execute flow.** Admission runs on the server strand (`dispatchExecute`), the
+action on the model's strand. Admission, in order:
 
-1. **Authorize.** `_authorizer->authorize(env.session, env.modelType, env.actionType)`.
+1. **In-flight cap.** With `LimitPolicy::maxInFlightExecutes` set and the
+   in-flight count at it → `err "server busy"`. The count is server-strand
+   state, so the check and the increment in step 7 cannot be separated by
+   another admission: the cap is exact.
+2. **Authorize.** `_authorizer->authorize(env.session, env.modelType, env.actionType)`.
    Denied → `err "unauthorized"` (with the request's `callId`), no dispatch.
-2. **Authenticate / make the principal authoritative.** After `authorize`
+3. **Authenticate / make the principal authoritative.** After `authorize`
    succeeds, the server calls `_authorizer->authenticate(env.session)`. If it
    returns a value, the server **overwrites** `env.session.principal` with that
    verified principal *before* building the `ScopedContext`. So model code that
@@ -879,53 +913,47 @@ server.
    window before `authenticate` — the server **clears** `env.session.principal`
    to the empty string. The client's unverified claim is therefore never
    presented to the model as authoritative: the worst case is an empty
-   principal, never an attacker-chosen one (this closes the TOCTOU divergence
-   and the authorize-only passthrough — see security.md). This is the only place
-   the principal is made authoritative; the verifying implementation lives in
-   `SigningAuthorizer` (`session_auth.hpp`, cross-ref security.md). The rewrite
-   happens on the calling/pool thread, before the strand task is posted.
-3. **Look up the model.** Under `_regMtx`, find `env.modelId` and read its
-   recorded owner. Missing → `err "model not found"` (with `callId`), no dispatch.
-   (Note: the remote message is the bare string `"model not found"`, without the
-   id — unlike the `LocalBackend` path, which resolves the completion with
-   `std::runtime_error("model not found: id=<n>")`.)
-4. **Per-instance authorize.** `authorize` above saw only the model *type*; this
+   principal, never an attacker-chosen one (see security.md). This is the only
+   place the principal is made authoritative; the verifying implementation
+   lives in `SigningAuthorizer` (`session_auth.hpp`, cross-ref security.md).
+4. **Look up the model** in the registry, with its recorded owner and
+   hydration state. Missing → `err "model not found"` (with `callId`), no
+   dispatch. (The remote message is the bare string `"model not found"`,
+   without the id — unlike the `LocalBackend` path, which resolves the
+   completion with `std::runtime_error("model not found: id=<n>")`.)
+5. **Per-instance authorize.** `authorize` above saw only the model *type*; this
    step consults `_authorizer->authorizeInstance(env.session, env.modelType,
    env.actionType, modelId, owner)` with the target instance id and its recorded
    owner. Denied → `err "unauthorized"` (with `callId`), no dispatch. The default
-   hook allows all, so behaviour is unchanged unless an ownership-enforcing
-   authorizer overrides it; `env.session` already carries the verified principal
-   stamped in step 2, so the hook compares the recorded owner against it.
-5. **Await this model's execute turn.** If this request took an execute-ordering
-   ticket (see [Per-model execute ordering](#per-model-execute-ordering) below),
-   block — on this pool thread, never on a strand — until every `execute` for
-   the same `modelId` that the transport handed in earlier has already made its
-   own strand post. Every rejection above this point released its ticket
-   without ever waiting here, so a "model not found"/"unauthorized"/"server
-   busy" reply for one request can never be what a later one is stuck behind.
-6. **Dispatch on the strand.** Posts to the model's strand a task that installs a
-   `ScopedContext` from the (now possibly rewritten) `env.session`, calls
-   `dispatch(modelType, actionType, *holder, body)` on the server's dispatcher,
-   and replies `ok` with the serialised result. Any `std::exception` thrown by
-   the dispatch is caught on the strand and returned as `err exc.what()` with the
-   `callId`. The strand task **captures `shared_from_this()`** so the server
-   (and therefore its `_dispatcher` reference member) stays alive until the task
-   runs and its reply is delivered. `handle()`'s pool task only holds the server
-   alive until it enqueues onto the strand; without the self-capture the last
-   external `shared_ptr` could drop first, leaving the dispatcher dangling (a
-   use-after-free) or the reply lost so a client `Completion` hangs forever. The
-   task reads the dispatcher via `self->_dispatcher`, never a bare reference
-   capture. See concurrency_and_lifetimes.md. The ticket is released as soon as
-   this post has been made, not when the strand task finishes.
+   hook allows all; `env.session` already carries the verified principal
+   stamped in step 3, so the hook compares the recorded owner against it.
+6. **Payload completeness** (opt-in; see
+   [`PayloadCompleteness`](#payloadcompleteness--enforcing-the-action-evolution-policy)).
+7. **Reserve the in-flight slot**, arm `LimitPolicy::executeTimeout` if one is
+   configured, and **post to the model's strand** a task that enters the
+   instance's action gate, installs a `ScopedContext` from the (now possibly
+   rewritten) `env.session`, calls `dispatch(modelType, actionType, *holder,
+   body)` on the server's dispatcher, and replies `ok` with the serialised
+   result. Any `std::exception` thrown by the dispatch is caught on the strand
+   and returned as `err exc.what()` with the `callId`. The task holds the
+   server (`shared_from_this()`) and the model's holder, so neither can go
+   before the reply is delivered; it reads the dispatcher via
+   `self->_dispatcher`, never a bare reference capture.
+
+The reply is sent exactly once, by whichever of the model strand's finish and
+the `executeTimeout` gets there first. Before sending it, that path posts the
+in-flight decrement back to the server strand, so a `health()` or
+`drainedWithin()` asked by someone who has seen the reply already counts it as
+finished.
 
 Any envelope that fails to decode produces `err` carrying the decode
-exception's message. An unrecognised `kind` produces `err "unknown envelope
-kind: <kind>"`. Any `std::exception` thrown while handling a decoded envelope is
-caught and returned as an `err` reply carrying `exc.what()` and the request's
-`callId` — and, for an `execute`, the ordering ticket it took is released as
-that throw unwinds (see [Per-model execute
-ordering](#per-model-execute-ordering)), not only on the explicit rejection
-branches.
+exception's message, and a log line (see [Server-side
+observability](#server-side-observability)). An unrecognised `kind` produces
+`err "unknown envelope kind: <kind>"`. Any `std::exception` thrown while
+handling a decoded envelope — including one out of an `IAuthorizer` hook during
+admission — is caught and returned as an `err` reply carrying `exc.what()` and
+the request's `callId`. Nothing is held across it: the next envelope is simply
+the next task on the server strand.
 
 **Opaque model ids.** `RemoteServer` assigns each new instance's id by running
 an internal monotonic counter through `detail::OpaqueIdGenerator` — a keyed,
@@ -940,298 +968,146 @@ one. `ModelId`'s reserved sentinel `0` ("unbound", see `strand.hpp`) is
 actively skipped: `RemoteServer` draws a fresh counter value and re-permutes
 if the result is ever `0` (a 1-in-2^64 event for a random key). Ids remain
 plain `std::uint64_t` on the wire — the `Envelope` and its `modelId` field are
-unchanged; only the assigned *values* are no longer sequential. This is
+unchanged; only the assigned *values* are not sequential. This is
 defence-in-depth, not a substitute for `authorizeInstance`: a caller who
 independently learns a valid id (from its own register, or a leak) can still
 target it, so per-instance ownership remains the actual authorization
 boundary — see [security.md](../security.md).
 
-**`handle(msg, reply)`** — asynchronous entry point. Posts to the worker pool,
-calls `dispatchMessage` which decodes, dispatches by `kind`, and calls `reply`
-exactly once. A three-argument overload, `handle(msg, reply, cid)`, additionally
-attributes any `register` in `msg` to a connection scope — see "Connection
-scopes" below.
+**`handle(msg, reply)`** — asynchronous entry point. Decodes the envelope once,
+on the calling thread, and posts it to the server strand, which dispatches by
+`kind` and calls `reply` exactly once. A three-argument overload,
+`handle(msg, reply, cid)`, additionally attributes any `register` in `msg` to a
+connection scope — see "Connection scopes" below.
 
-**`handleInline(msg)`** — synchronous entry point intended for control messages
-(`register`, `deregister`) only. It runs `dispatchMessage` directly on the
-calling thread instead of posting the message to the worker pool, so it is safe
-to call from a thread that *is* the worker pool. It **rejects `execute`** up
-front: an `execute` reply is produced asynchronously on the model's strand,
-*after* the synchronous call has returned and destroyed the local reply buffer
-the deferred callback would write into, so `handleInline` decodes the envelope
-first and, if its `kind` is `execute`, returns an `err` reply
+**`handleInline(msg)`** — synchronous entry point for control envelopes
+(`register`, `deregister`, `attach`, `assign`, `instances`, `schemas`,
+`hello`), the path `SimulatedRemoteBackend` uses. It posts the envelope to the
+server strand and blocks until the reply is written; when the caller is
+already on the server strand — host code the strand itself is running, such as
+a model constructor or a `LogProvider` that registers another model — it runs
+inline instead, since waiting there would wait on itself. It **rejects
+`execute`** up front: an `execute` reply is produced later, on the model's
+strand, after `handleInline` would have returned, so `handleInline` decodes
+the envelope first and, if its `kind` is `execute`, returns an `err` reply
 (`"handleInline does not support execute (reply is asynchronous)"`) without
-dispatching. A malformed envelope falls through to `dispatchMessage`, which
-emits the canonical decode-error reply.
+dispatching. A malformed envelope is dispatched like any other and gets the
+canonical decode-error reply.
 
-**`setLogProvider(provider)`** — installs a `LogProvider` callable consulted on
-every `register` envelope whose `contextKey` is non-empty. This is how
-`RemoteServer` attaches action logs to model instances created on behalf of
-remote clients — the factory closure (which lives on the client side) cannot
-capture the server-side log. Thread-safe.
+*Why it waits rather than running inline.* Running a control envelope inline
+on the caller's thread would touch the registry off its owner. The wait is
+safe where the caller is not the thread the server strand needs: the strand
+runs on the pool, so a pool thread inside a running action (a handler
+constructed from an action handler — the "synchronous re-entry" case in
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#synchronous-re-entry-into-a-backend-from-a-pool-thread))
+waits while another pool thread runs the strand's task. It cannot be satisfied
+when no other pool thread is free: a one-thread pool calling `handleInline`
+from inside its own task, or every pool thread blocked in `handleInline` at
+once. That is the price of one owner on a verb that must answer synchronously;
+registration becoming asynchronous removes it.
+
+**`ServerConfig`** — everything configured rather than learned, given to the
+constructor (`RemoteServer(pool[, authorizer], config[, dispatcher,
+registry])`) and fixed for the server's life. No member of `RemoteServer`
+changes it.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `limits` | all `0` | `LimitPolicy`, below. |
+| `logProvider` | null | `LogProvider` consulted, on the server strand, whenever an instance is constructed with a non-empty `contextKey` (every `register`, and every `attach` that creates). How `RemoteServer` attaches action logs to instances it creates on behalf of remote clients — the factory closure, on the client side, cannot capture a server-side log. |
+| `healthHandler` | null | Called with the server's `HealthStatus` once from the constructor (ready, nothing live, nothing in flight), and again on the server strand when readiness changes (`beginShutdown()`). |
+| `minProtocolVersion`, `maxProtocolVersion` | `kProtocolVersion` both | The inclusive range answered to `hello`. `min > max` makes the constructor throw `std::invalid_argument`. |
+| `payloadCompleteness` | `Lenient` | See [`PayloadCompleteness`](#payloadcompleteness--enforcing-the-action-evolution-policy). |
 
 ```cpp
 using LogProvider = std::function<std::shared_ptr<morph::journal::IActionLog>(
     std::string_view modelType, std::string_view contextKey)>;
 ```
 
-**`health()` / `setHealthHandler(handler)`** — a readiness snapshot and an
-optional state-change callback, detailed in [observability.md](observability.md).
-`health()` returns `HealthStatus{ready, liveModels, inFlight}`: `liveModels`
-from the registry (same mutex as `register`/`deregister`/`execute`), `inFlight`
-from `_inFlightExecutes` — the same atomic counter `LimitPolicy::maxInFlightExecutes`
-enforces, `drainedWithin()` (below) waits on, and the `executeInFlight` metric
-reports. `ready` starts `true` and is flipped to `false`, once and for good, by
-`beginShutdown()` (below) — there is no un-shutdown. `setHealthHandler` fires
-immediately with the current snapshot, and again with the post-shutdown
-snapshot when `beginShutdown()` runs.
+A deployment that wants a different configuration constructs a different
+server; nothing in the server needs to reason about a limit or a range changing
+under an admission it is making.
 
-**Metrics and tracing.** `dispatchMessage`'s `register`/`deregister` branches
-emit `registerCount`/`deregisterCount`; `dispatchExecute`'s admit/complete
-points emit `executeInFlight`, and its strand task emits
-`executeLatencyMs`/`executeErrors` and calls `beginSpan`/`endSpan` around the
-`ActionDispatcher::dispatch` call. All are no-ops unless a sink is installed
+**`health()`** — a readiness snapshot, detailed in
+[observability.md](observability.md). Returns a `Completion<HealthStatus>`
+settled on the server strand, `HealthStatus{ready, liveModels, inFlight}`:
+`liveModels` from the registry, `inFlight` from the in-flight count — the same
+count `LimitPolicy::maxInFlightExecutes` gates, `drainedWithin()` waits on and
+the `executeInFlight` metric reports. `ready` starts `true` and is flipped to
+`false`, once and for good, by `beginShutdown()` — there is no un-shutdown.
+The completion's callbacks run on the worker pool.
+
+**Metrics and tracing.** The `register`/`deregister` branches emit
+`registerCount`/`deregisterCount`; admission and the in-flight decrement emit
+`executeInFlight` (both on the server strand), and the model strand's task
+emits `executeLatencyMs`/`executeErrors` and calls `beginSpan`/`endSpan` around
+the `ActionDispatcher::dispatch` call. All are no-ops unless a sink is installed
 via `morph::observe::setMetricSink`/`setTraceSink` — see
 [observability.md](observability.md).
 
 ### Per-model execute ordering
 
-`handle()` posts every envelope to a shared worker pool, so two `execute`
-envelopes for the *same* model, sent back-to-back on one connection, are raced
-by two pool threads through identical pre-strand work
-(decode/authorize/authenticate/registry lookup). Whichever finishes that work
-first reaches `_strands->post(mid, ...)` first. The strand serialises what
-it is given, but it can only serialise it in the order it is given — so with
-more than one pool worker free, the model could observe two actions in the
-opposite order from the one they were sent in. That is a correctness problem
-for any model whose actions are not commutative, and it is invisible in a quiet
-run: it needs two workers genuinely concurrent to appear at all.
+The guarantee:
 
-`RemoteServer` closes it with a per-model ticket gate
-(`morph::backend::detail::ExecuteOrderGate`'s `take`/`awaitTurn`/`release`,
-`include/morph/core/detail/execute_order_gate.hpp` — extracted from `remote.hpp`
-so the gate's own logic has direct unit coverage independent of the server;
-`RemoteServer` holds one as a private `_executeGate` member). The guarantee
-is:
+> For one `modelId`, the order in which `handle()` was called for its
+> `execute` envelopes is the order the model runs them.
 
-> For one `modelId`, the order in which `_strand.post` is called equals the
-> order in which `handle()` was called for those requests.
+It is two strands' order, composed. `handle()` posts each envelope to the
+server strand in the order it is called; the server strand admits them in that
+order and posts each admitted one to its model's strand in that order; the
+model's strand runs its tasks in the order they were posted. Nothing between
+the transport and the model runs concurrently with another request for the
+same model, so there is no window in which two of them could swap.
 
-**Where the order is captured.** A ticket is taken *synchronously inside
-`handle()`*, on whatever thread the transport calls it from, before anything is
-posted to the pool. That thread is where true arrival order still exists;
-everything after the pool post is concurrent by construction, so an ordering
-decided any later would be deciding it from an order that had already been
-lost. To know whether a ticket is needed, `handle()` cheaply peeks at the
-envelope's `kind` and `modelId` and throws the decode away. The peek is
-best-effort and changes nothing else: a message that fails to decode, or is not
-an `execute`, or names no `modelId`, simply takes no ticket, and
-`dispatchMessage` still performs the real decode on the pool thread and
-produces the canonical error reply for malformed input exactly as it would
-otherwise.
+**Why admission is on the server strand, not on the model's strand.** A
+single hop — the transport posting an `execute` straight to its model's strand
+and admitting it there — is shorter, but admission reads the registry, which
+belongs to the server strand. It would also queue a lookup behind the model's
+running action: an `execute` for a model whose connection just closed would not
+learn "model not found" until the action in front of it finished
+(`tests/test_remote_connection_scope.cpp`, "an in-flight execute completes
+safely across a disconnect", holds that it answers at once). The server strand
+never runs a handler, only admissions and control envelopes, so a rejection is
+answered in its own turn and never waits on a busy model.
 
-**Where the order is enforced.** The ticket is waited on at one point only —
-immediately before `_strands->post` — and released immediately after that call
-returns. It deliberately does **not** span the strand task: once the post has
-happened in the right order, the strand owns the sequencing from there,
-and holding the ticket any longer would stall a different request's pre-strand
-work for no ordering benefit. The wait itself happens on a pool thread and
-blocks nothing else; a strand is never blocked by this gate.
-
-**Why the fast-reject path stays fast.** The obvious fix — move the whole
-pre-strand pipeline onto the model's strand — was tried and reverted, per
-`remote.hpp`'s own design notes: it collapses the fast-reject path into the
-same queue as the slow model's in-flight work, breaking the guarantee that a
-lookup against a since-reclaimed `modelId` resolves without waiting on some
-other, still-busy model (`tests/test_remote_connection_scope.cpp`, "an
-in-flight execute completes safely across a disconnect"). Gating only the
-moment of the post leaves a rejection returning at full speed.
-
-That is also why the release discipline matters: **every path that took a
-ticket must release it**, including the ones that never reach the strand (model
-not found, unauthorized, over limit, a validation throw). A ticket taken and
-never released would stall every later ticket for that model permanently,
-because `awaitTurn` waits with no deadline.
-
-**The rule is structural, not a convention.** A ticket is owned by an
-`ExecuteTicketGuard` (`morph::backend::detail`, alongside `ExecuteOrderGate` in
-`execute_order_gate.hpp`; `remote.hpp` keeps a `using` alias so call sites read
-unqualified) from the moment a ticket is issued: `dispatchMessage` adopts the
-ticket into one for the whole of its own frame, `dispatchExecute` included.
-`handleImpl` holds no separate guard across the pool post: the take and the post
-are one `takeAndPost` call, so there is no window between them for a guard to
-cover. The guard releases on destruction, so *every* exit
-path is covered — each explicit `return`, every exception, and any branch a
-later change adds. Two members opt out deliberately:
-
-- `release()`, called by `dispatchExecute`'s `rejectAndRelease` helper, by the
-  shutdown gate, and immediately after the successful `_strand.post`, so those
-  paths free the gate *before* writing their reply instead of at end of scope;
-  and
-- `disarm()`, which hands ownership on rather than releasing. It has **no
-  production caller** — `handleImpl` uses `takeAndPost` — and is retained as
-  part of the guard's API, exercised only by tests. Calling it without taking
-  ownership elsewhere discards the only handle to an outstanding ticket, which
-  can then never be released.
-
-A per-call-site convention is not enough here, because it is missable in two
-places that do not look like exits: the shutdown gate, and every exception
-unwinding out of `dispatchExecute` (below). Both are pinned by regression
-tests, and neither can recur through a hand-written release being forgotten.
-
-**Bookkeeping.** A gate is
-`{nextTicket, nextToRun, releasedOutOfOrder, condition_variable}`, held in a
-map keyed by `ModelId` under a dedicated mutex. The entry is created on demand
-by the first ticket and **erased** once `nextToRun` catches up with
-`nextTicket` — a model with no in-flight `execute` leaves no trace, so the map
-does not grow across the server's lifetime.
-
-A `Ticket` carries the `shared_ptr` to the exact gate it was issued from, so a
-drain-and-recreate of the map entry between issuing a ticket and awaiting its
-turn cannot redirect the wait onto a *different* gate's counters. The
-`ModelId`-keyed `awaitTurn` overload returns immediately when the entry is
-already gone; the `Ticket` overload cannot, since it holds its gate alive by
-construction — it instead returns as soon as `nextToRun` has reached **or
-passed** its number, which is what keeps a ticket released by its other owner
-from parking a worker forever.
-
-**One enqueue mutex, gate-wide.** `takeAndPost` holds an enqueue mutex from
-before it mints a ticket until after `postFn` returns, which is what makes the
-take and the enqueue atomic. That mutex is **one per gate, not one
-per model**, and is acquired *before* the bookkeeping mutex, never the reverse.
-
-`postFn` is opaque: on a `ThreadPoolExecutor` it only enqueues, but on a
-synchronous executor it runs the whole dispatch chain inline, including any
-re-entrant `takeAndPost` that chain triggers. A per-model mutex therefore gave
-two threads two locks to take in opposite orders — one inside model 1's
-callback reaching for model 2, the other the mirror — and they deadlocked.
-One mutex cannot form a cycle with itself. It is recursive because the same
-thread can legitimately re-enter through a synchronous executor.
-
-The cost is stated rather than hidden: `takeAndPost` serialises across every
-model, and on a synchronous executor that serialises the dispatch those
-callbacks perform. It also means a caller that blocks *inside* `postFn` blocks
-every other `takeAndPost`, for every model — which is why a re-entrant
-same-model `awaitTurn` (a ticket waiting on one its own caller has not released
-yet) is a documented misuse rather than a supported pattern.
-
-**Releases are not ordered, and `nextToRun` must survive that.** `nextToRun`
-means *the lowest ticket that has not released yet* — which is exactly what
-`awaitTurn`'s `nextToRun == ticket` predicate needs it to mean. It is
-not "one past the ticket that released last", and the difference is not
-cosmetic: the fast-reject paths above release *without ever waiting for their
-turn*, by design, so a later ticket routinely releases before an earlier one.
-`ExecuteOrderGate::release` therefore records an out-of-order release in
-`releasedOutOfOrder` and advances `nextToRun` only across a contiguous run of
-released tickets, consuming that set as it goes.
-
-Assigning `nextToRun = ticket + 1` unconditionally instead — which is what the
-gate did originally — pushed it straight *past* an earlier ticket's number
-whenever a rejection got there first. That earlier ticket's waiter then held a
-predicate that could never become true again, with the same three costs listed
-for the shutdown gate below: a caller that never receives a reply, a pool
-worker blocked for the process's remaining lifetime, and `drainedWithin()`
-unable to succeed. It is the third distinct way into this same failure, and it
-reproduces under `morph::net` in particular — dropping a connection reclaims that connection's models, so the
-executes still in flight for one model split into some that find it and some
-that reject with `"model not found"`, which manufactures precisely this
-interleaving. Making the *release* unmissable (below) was necessary and not
-sufficient; the release also has to be order-tolerant.
+The cost is that admissions for every model are serial: the authorizer's hooks,
+the registry lookup and (when enabled) the payload-completeness parse run one
+at a time on the server strand. The handlers themselves still run in parallel,
+one strand per model.
 
 **What is not ordered.** Only same-model requests, and only relative to
 `handle()` call order:
 
-- **Across models, nothing is ordered** — that is the point of per-model
-  strands, and the gate is per-`modelId` for the same reason.
+- **Across models, execution is not ordered** — each model's strand runs
+  independently; only their admissions share the server strand.
 - **Across threads, "send order" means "`handle()` call order"**. A single
   transport connection delivers messages on one thread, so for one client the
   two coincide. Two connections calling `handle()` concurrently for the same
-  model have no send order between them to preserve, and get whichever
-  interleaving the gate mutex hands out.
-- **Completion order is not constrained.** The gate orders the *posts*; how
-  long each action then takes on the strand is the strand's business.
-**The release rule binds the shutdown gate too.** An `execute` refused by the
-shutdown gate in `dispatchMessage` (`err "server shutting down"`, see
-[Graceful shutdown](#graceful-shutdown-beginshutdown--drainedwithin)) returns
-before `dispatchExecute` is reached, and so before any `rejectAndRelease`. That
-branch therefore releases the ticket itself, on the way out.
+  model have no send order between them to preserve, and get whichever order
+  their posts reach the server strand in.
+- **Completion order is not constrained** beyond what the model's action gate
+  gives: how long each action takes is the model's business.
 
-This was previously read as a benign exception to the rule — the argument being
-that `beginShutdown()` is irreversible, so every later `execute` is refused at
-the same gate and none of them ever reaches `awaitTurn`. The argument is
-wrong, and the difference is a permanently stranded caller rather than a leaked
-map entry. Tickets are taken in send order *on the transport thread*, but the
-pool is free to run the two posted tasks in either order. So a later ticket can
-pass the gate while the earlier one is still upstream of it, and be parked in
-`awaitTurn` — a `cv.wait` with no deadline — by the time the earlier one
-is refused. Dropping the earlier ticket then costs three things at once:
-
-- the later caller never receives a reply at all (with no `executeTimeout`
-  configured), or a spurious `err "timeout"` for a call that never ran (with
-  one);
-- a pool worker is blocked for the process's remaining lifetime; and
-- `drainedWithin()` can never succeed, because `_inFlightExecutes` is
-  incremented immediately *before* that wait — so the defect breaks the very
-  graceful-shutdown sequence during which it fires.
-
-**The release rule binds every throw, too.** `dispatchExecute` has no
-`try`/`catch` of its own, and `rejectAndRelease` covers only its *explicit*
-early returns. An exception unwinds past all of them, out of `dispatchExecute`
-entirely, into `dispatchMessage`'s outer catch — which replies `err
-exc.what()` and, before the guard existed, released nothing. That is ordinary
-reachability rather than a hypothetical: `IAuthorizer::authorize`,
-`authenticate` and `authorizeInstance` are non-`noexcept` virtuals on a public
-extension point that a host implements, nothing in their contract forbids
-throwing, and `missingRequiredFields` parses the payload under
-`PayloadCompleteness::RequireDeclaredFields`. All four sit between the
-ticket-taking site and the release. The cost was identical to the shutdown
-gate's, item for item — stranded caller, blocked pool worker, `drainedWithin()`
-unable to succeed — and it is why the release is now owned by
-`ExecuteTicketGuard` rather than written out at each exit.
-
-The release rule stated above therefore holds without exception, which is what
-makes the rest of this section true.
-
-`tests/test_execute_order_gate.cpp` pins `ExecuteOrderGate`'s own logic
-directly and synchronously — normal take/await/release ordering, the
-already-drained defensive branches, and the out-of-order-release mechanism
-below, including a threadless case that fails immediately if the gate reverts
-to the pre-#449 `nextToRun = ticket + 1` — with no `RemoteServer`, executor, or
-transport involved. `tests/test_remote_execute_ordering.cpp` pins the
-guarantee at the `RemoteServer` level: that the real dispatch path (`handleImpl`/
-`dispatchMessage`/`dispatchExecute`) actually calls the gate at the right two
-points and in the right order, which no unit test of the gate alone can prove.
-It forces the interleaving deterministically (a two-thread pool plus an
-authorizer that sleeps for one call only) rather than waiting for a loaded
-machine to produce it by chance. Its shutdown-gate case forces the interleaving above the same
-way, holding back one request's pool task through a wrapping executor so the
-"later ticket passed the gate, earlier ticket did not" ordering is decided
-rather than raced; its throwing-hook case reuses that same wrapping executor
-and arms an authorizer only *after* the later request has parked in
-`awaitTurn`, so exactly one request — the held, earlier one — throws,
-from `authorize`, `authenticate` or `authorizeInstance` in turn. Its
-out-of-order-release case extends the same wrapping executor to
-hold three posts at once, so all three tickets exist before any of them runs,
-and then releases the *middle* one first: a rejection skipping over ticket 0
-while ticket 2 is still outstanding, which is the interleaving the two-ticket
-version cannot produce because the gate is erased instead.
-`tests/net/test_socket_backend.cpp` carries the transport-level shape that
-found it (concurrent executes against one shared model, connection dropped
-mid-stream), whose failure mode is the teardown hanging rather than an
-assertion.
+`tests/test_remote_execute_ordering.cpp` pins the guarantee: a first request
+whose admission is held for 200ms on a two-thread pool still runs before the
+request sent after it; a request refused at shutdown or by a throwing
+authorizer hook, or rejected between two others, holds nothing for the ones
+around it; and two threads calling `handle()` for one model against a
+one-thread pool, with one of them stalled inside the pool's `post`, neither
+deadlock nor swap.
 
 ### Protocol-version negotiation
 
-`RemoteServer::setSupportedVersionRange(min, max)` sets the inclusive
-`{min, max}` protocol-version range this server advertises in reply to
-`"hello"` (thread-safe, same pattern as `setLogProvider`/`setLimitPolicy`).
-Defaults to `{kProtocolVersion, kProtocolVersion}` — this build's single
-supported version — so an unconfigured server's behavior only changes for
-clients that opt into sending `"hello"` in the first place. Throws
-`std::invalid_argument` if `min > max`. See [wire.md](wire.md#protocol-version-negotiation)
-for the full negotiation story, including how `SimulatedRemoteBackend` and
-`QtWebSocketBackend` each expose an opt-in `negotiateProtocolVersion()` built
-on their existing synchronous control path.
+`ServerConfig::minProtocolVersion`/`maxProtocolVersion` set the inclusive
+range this server advertises in reply to `"hello"`. Both default to
+`kProtocolVersion` — this build's single supported version — so an
+unconfigured server's behavior only changes for clients that opt into sending
+`"hello"` in the first place. An empty range (`min > max`) makes the
+constructor throw `std::invalid_argument`. See
+[wire.md](wire.md#protocol-version-negotiation) for the full negotiation story,
+including how `SimulatedRemoteBackend` and `QtWebSocketBackend` each expose an
+opt-in `negotiateProtocolVersion()` built on their existing synchronous
+control path.
 
 ### Serving action schemas
 
@@ -1254,13 +1130,13 @@ accessor, built on the same synchronous `handleInline` path as
 
 ### `PayloadCompleteness` — enforcing the action-evolution policy
 
-`RemoteServer::setPayloadCompleteness(PayloadCompleteness)` chooses whether an
-`execute` body must carry every field the action's served schema marks
-`required`:
+`ServerConfig::payloadCompleteness` chooses whether an `execute` body must
+carry every field the action's served schema marks `required`
+(`payloadCompleteness()` reads it back):
 
 | Value | Behaviour |
 |---|---|
-| `Lenient` (default) | Today's behaviour exactly: the action codec's lenient decode is the only gate, and a missing field is a default-constructed one. |
+| `Lenient` (default) | The action codec's lenient decode is the only gate, and a missing field is a default-constructed one. |
 | `RequireDeclaredFields` | An `execute` whose `body` carries no key for a `required` field is refused with `err "payload missing required field(s): <names>"`, before the in-flight slot is reserved and before `Model::execute` runs. |
 
 The check runs **after** authorization (its diagnostic names the action's own
@@ -1275,30 +1151,30 @@ what is *not* mechanically checkable — in
 
 ### `LimitPolicy` — opt-in resource limits
 
-`RemoteServer::setLimitPolicy(LimitPolicy)` installs an optional, connection-agnostic
-resource policy (thread-safe, same pattern as `setLogProvider`). Every field
-defaults to `0` ("unbounded"), so an unconfigured server's behavior is unchanged:
+`ServerConfig::limits` is an optional, connection-agnostic resource policy.
+Every field defaults to `0` ("unbounded"), so an unconfigured server applies no
+limit:
 
 | Field | Default | Enforcement |
 |---|---|---|
-| `executeTimeout` | `0` (disabled) | A timer arms when `execute` dispatches to the model's strand. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
-| `maxLiveModels` | `0` (unbounded) | Checked under `_regMtx` before `register` constructs a new instance; over the cap → `err "too many models"`. The check and the eventual insert are two separate critical sections (to avoid constructing an instance that will be rejected), so a burst of concurrent registers can overshoot the cap by a small, bounded amount — a soft, defense-in-depth limit, not a hard invariant. |
-| `maxInFlightExecutes` | `0` (unbounded) | An atomic counter, incremented when `execute` is admitted for dispatch (before the strand task is posted) and decremented when its reply is sent (success, exception, or timeout — whichever resolves the call first); over the cap → `err "server busy"`, no dispatch. |
+| `executeTimeout` | `0` (disabled) | A timer arms when an `execute` is admitted. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
+| `maxLiveModels` | `0` (unbounded) | Checked on the server strand before `register` constructs a new instance, and again after the construction and before the insert (the construction is host code that may itself register through `handleInline`); over the cap → `err "too many models"`. Exact: nothing else inserts between the check and the insert. A shared `register`/`attach` that finds its key already live takes a reference and is not counted against the cap. |
+| `maxInFlightExecutes` | `0` (unbounded) | The in-flight count, server-strand state, incremented when an `execute` is admitted and decremented (posted back to the strand) when its reply is sent — success, exception, or timeout, whichever resolves the call first; at the cap → `err "server busy"`, no dispatch. Exact, for the same reason. |
 
 A server-side execute timeout surfaces to a caller as `morph::backend::TimeoutError`
 (alongside `BackendChangedError`/`BridgeDestroyedError`/`DisconnectedError`) rather
 than a generic `std::runtime_error`, on both `SimulatedRemoteBackend` and
 `QtWebSocketBackend`.
 
-The background timer that enforces `executeTimeout` is
-`morph::async::detail::TimeoutScheduler` (`include/morph/core/timeout_scheduler.hpp`)
-— one per `RemoteServer`, each a thread running a core-cpp
-`core::net::PlatformLoop` whose timers hold the deadlines, lazily created by
-`setLimitPolicy` the first time `executeTimeout` is configured, so a server
-that never uses the feature pays no extra thread. The class lives in `morph::async::detail` rather than
-`morph::backend::detail` because `Bridge` uses the same primitive for the
-*client*-side `setExecuteDeadline` — see [`completion.md`](completion.md),
-"Client-side execute deadline".
+The timer that enforces `executeTimeout` is
+`morph::async::detail::TimeoutScheduler` (`include/morph/core/timeout_scheduler.hpp`),
+one per `RemoteServer`, created by the constructor when `executeTimeout` is
+positive — so a server that does not use the feature pays nothing — on a
+private `exec::IoLoop`. Created once and never replaced, it is cancelled from
+the model strand's finish without a lock. The class lives in
+`morph::async::detail` rather than `morph::backend::detail` because `Bridge`
+uses the same primitive for the *client*-side `setExecuteDeadline` — see
+[`completion.md`](completion.md), "Client-side execute deadline".
 
 ### Connection scopes
 
@@ -1310,16 +1186,17 @@ and means *unscoped* — the meaning the two-argument `handle()` and
 `handleInline()` always have. Scoping is strictly opt-in; enabling it changes
 nothing for a caller that never uses it.
 
-- `openConnection()` returns a fresh non-zero `ConnectionId` and opens an empty
-  scope for it. Call once per accepted transport connection.
+- `openConnection()` returns a fresh non-zero `ConnectionId` at once and posts
+  the creation of its empty scope to the server strand, ahead of any `handle()`
+  the same thread makes next. Call once per accepted transport connection.
 - The scoped `handle(msg, reply, cid)` overload attributes any `register` (or
   register-or-attach `attach`) decoded from `msg` to `cid`'s scope: the
-  `ModelId` is recorded in a `cid → (ModelId → count)` map, next to the
-  instance directory under the same `_regMtx`, so scope membership can never
-  desync from instance existence. The count
-  lets one connection hold more than one reference to the same shared
-  instance (e.g. two handlers on one connection attaching the same key)
-  without either reference leaking the other's release.
+  `ModelId` is recorded in a `cid → (ModelId → count)` map, server-strand state
+  next to the instance directory, so scope membership can never desync from
+  instance existence. The count lets one connection hold more than one
+  reference to the same shared instance (e.g. two handlers on one connection
+  attaching the same key) without either reference leaking the other's
+  release.
 - A `deregister` releases exactly the reference **the requesting connection**
   holds — decrementing `cid`'s own scope entry for that `ModelId`, using the
   `cid` the deregister call itself carries, never whichever connection
@@ -1327,11 +1204,11 @@ nothing for a caller that never uses it.
   owning connections at once; crediting the release to the wrong one would
   either strand a reference no one will ever decrement, or let one
   connection's deregister silently consume another's hold.
-- `closeConnection(cid)` erases every model still recorded in `cid`'s scope
-  (its directory record and the per-instance connection entry) exactly as the
-  `deregister` path does, then drops the scope itself. Passing `0`, an
-  unknown `cid`, or a `cid` already closed is a no-op — idempotent by
-  construction.
+- `closeConnection(cid)` posts, to the server strand, the erasure of every model
+  still recorded in `cid`'s scope (its directory record and the per-instance
+  connection entry) exactly as the `deregister` path does, then drops the scope
+  itself. Passing `0`, an unknown `cid`, or a `cid` already closed is a no-op —
+  idempotent by construction.
 - **`closeConnection` does not consult `IAuthorizer`.** It is server-side
   housekeeping triggered by the transport observing its own connection close,
   not a caller-attributed action — synthesising a `deregister` envelope
@@ -1340,50 +1217,47 @@ nothing for a caller that never uses it.
   transport to parse every `register` reply to learn which ids it owns. Only
   in-process transport code can reach `closeConnection`, and the transport is
   already inside the server's trust boundary (see security.md).
-- Cleanup never races a running `execute`: `dispatchExecute` copies the
-  instance's `shared_ptr<IModelHolder>` into the strand task before dispatch,
-  so an in-flight action keeps the holder alive until its task completes;
-  `closeConnection` only removes the registry's reference, preventing *new*
-  lookups (see concurrency_and_lifetimes.md).
-- A `register` that arrives *after* its scope was closed is refused with
-  `err "connection closed"` and no instance is retained. `handle()` posts to
-  the worker pool while `closeConnection` runs synchronously on the transport's
-  disconnect callback, so a client that registers and immediately drops its
-  socket genuinely interleaves the two. The scope is looked up, never
-  default-created: recreating it would strand that model (and every later one
-  on the dead id) in a scope nothing closes a second time — an unbounded leak
-  that, with `LimitPolicy::maxLiveModels` set, wedges the server permanently at
-  `err "too many models"`.
+- Cleanup never races a running `execute`: admission copies the instance's
+  `shared_ptr<IModelHolder>` into the model strand's task, so an in-flight
+  action keeps the holder alive until its task completes; `closeConnection`
+  only removes the registry's reference, preventing *new* lookups (see
+  concurrency_and_lifetimes.md).
+- A `register` that reaches the server strand *after* its scope was closed is
+  refused with `err "connection closed"` and no instance is retained. The
+  transport's disconnect callback can post `closeConnection` while a
+  `register` the client sent just before dropping is still queued behind it.
+  The scope is looked up, never default-created: recreating it would strand
+  that model (and every later one on the dead id) in a scope nothing closes a
+  second time — an unbounded leak that, with `LimitPolicy::maxLiveModels` set,
+  wedges the server permanently at `err "too many models"`.
 - `SimulatedRemoteBackend` keeps using the unscoped path (its "connection" is
   the process itself) — it is unaffected by connection scopes.
 
 ### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
 
 `beginShutdown()` enters shutdown: every subsequent `register`, `attach` and
-`execute` envelope is rejected with `err "server shutting down"` (checked once, at the
-top of `dispatchMessage`, before any other validation — including the
-shutdown check happening before authorization or registry lookups run);
-`deregister` (and any other envelope kind) is still served so clients can
-tear down cleanly during the drain window. A refused `execute` releases any
-execute-ordering ticket it took on the way out; see
-[Per-model execute ordering](#per-model-execute-ordering) for why that
-matters more than it looks. Idempotent, and irreversible —
-there is no un-shutdown; a restarted service constructs a fresh
-`RemoteServer`. `beginShutdown()` also flips `health()`'s `ready` to `false`
-and, if a handler is installed via `setHealthHandler()`, re-invokes it with
-the post-shutdown snapshot — the mechanism that lets an orchestrator stop
-routing to a server that is draining.
+`execute` envelope is rejected with `err "server shutting down"` (checked once,
+first, on the server strand — before authorization or registry lookups run);
+`deregister` (and any other envelope kind) is still served so clients can tear
+down cleanly during the drain window. It is posted, so an envelope handed to
+`handle()` after it returned is refused, and one admitted before it — even one
+the same client sent a moment earlier — runs to its reply. Idempotent, and
+irreversible — there is no un-shutdown; a restarted service constructs a fresh
+`RemoteServer`. It also flips `health()`'s `ready` to `false` and, if
+`ServerConfig::healthHandler` is set, calls it with the post-shutdown snapshot,
+on the server strand — the mechanism that lets an orchestrator stop routing to
+a server that is draining.
 
-`drainedWithin(deadline)` blocks the calling thread (via a condition
-variable, not a busy poll) until every in-flight `execute` has delivered its
-reply, or `deadline` elapses, returning `true`/`false` accordingly.
-"In-flight" is the same `_inFlightExecutes` counter `LimitPolicy::maxInFlightExecutes`
-gates and `health()`'s `inFlight` field reads (one counter, never
-double-counted): incremented when `dispatchExecute` admits a call for
-dispatch (before posting to the model's strand) and decremented — waking any
-`drainedWithin()` waiter once it reaches zero — right before its reply is
-sent, on every resolving path (`ok`, `err`, or a `LimitPolicy::executeTimeout`
-firing first).
+`drainedWithin(deadline)` returns a `Completion<bool>` settled on the server
+strand: `true` once the in-flight count is zero — at once if it already is —
+or `false` when `deadline` elapses first (a `deadline` of `0` answers from the
+count as it stands). A waiter is server-strand state; its deadline is a timer
+on a `TimeoutScheduler` the strand creates on first use, whose expiry is posted
+back to the strand. Nothing blocks: a caller that wants to wait attaches to the
+completion. "In-flight" is the count `LimitPolicy::maxInFlightExecutes` gates
+and `health()`'s `inFlight` field reads: incremented when an `execute` is
+admitted and decremented, on the strand, as its reply is sent on every
+resolving path (`ok`, `err`, or a `LimitPolicy::executeTimeout` firing first).
 
 The standard sequence an operator (or `QtWebSocketServer::closeGracefully`,
 below) follows is `beginShutdown()` then `drainedWithin(deadline)`: new work
@@ -1402,19 +1276,20 @@ other used to produce no server-side record at all — the operator questions
 why did that one drop?" had no server-side answer. Four points now log, each
 a one-line call at a point the code already reaches:
 
-- **`RemoteServer::dispatchMessage` — undecodable envelope (`logError`).** A
-  client that swallows its own error (or is malformed precisely because it
-  is confused) previously left no trace of a request that never dispatched
-  at all. Logs the connection id, the exception text, the byte count, and a
+- **`RemoteServer::replyUndecodable` — undecodable envelope (`logError`,
+  prefixed `[dispatchMessage]`).** Without it, a client that swallows its own
+  error (or is malformed precisely because it is confused) leaves no trace of
+  a request that never dispatched at all. Logs the connection id, the exception text, the byte count, and a
   **truncated** (256-byte) prefix of the raw payload. The payload is the
   most useful field for diagnosing *why* a client sent something malformed —
   and the most likely to contain application data, hence truncated rather
   than logged in full; server logs should already be treated as
   operationally sensitive (they also carry exception text and, on other
   lines, connection ids), and this is not a general redaction mechanism.
-- **`RemoteServer::dispatchMessage` — one line per successfully-decoded
-  request (`logDebug`).** `dispatchMessage` is the one place every kind
-  funnels through, so it is the natural spot: connection id, `kind`,
+- **`RemoteServer::dispatchEnvelope` — one line per successfully-decoded
+  request (`logDebug`, prefixed `[dispatchMessage]`).** `dispatchEnvelope` is
+  the one place every kind funnels through, on the server strand, so it is the
+  natural spot: connection id, `kind`,
   `callId`, `typeId`/`modelId`/`modelType`/`actionType` (whichever the kind
   populates), and the body's byte count. Deliberately omits the session
   principal (personal data in many deployments; attribution is still
@@ -1777,10 +1652,10 @@ pool threads and are each marshalled back to their originating socket.
 counterpart to `RemoteServer::beginShutdown()`/`drainedWithin()`: it calls
 `QWebSocketServer::pauseAccepting()` (no new connections), then
 `beginShutdown()` on the `RemoteServer` (new `register`/`execute` now fail
-fast on every existing connection), then waits up to `deadline` for
-`drainedWithin()` — pumping the Qt event loop while it waits so the reply
-callbacks `onTextMessage` already queued via `QMetaObject::invokeMethod`
-actually run. Because `drainedWithin()`'s in-flight count can reach zero a
+fast on every existing connection), then asks `drainedWithin(deadline)` and
+pumps the Qt event loop until it answers — so the reply callbacks
+`onTextMessage` already queued via `QMetaObject::invokeMethod` actually run
+while it waits. Because `drainedWithin()`'s in-flight count can reach zero a
 moment before that queued reply callback has actually flushed the bytes over
 the socket, `closeGracefully` pumps a short additional settle window (bounded
 by whatever is left of `deadline`) before proceeding, so a reply that just
@@ -2060,10 +1935,15 @@ are:
   `Bridge` that owns the backend. Destroying the pool first leaves the strand
   pointing at freed storage.
 - **`RemoteServer` must be created via `std::make_shared`.** It derives from
-  `std::enable_shared_from_this<RemoteServer>`; `handle()` captures
-  `shared_from_this()` into the pool task. Constructing it on the stack and
-  calling `handle()` throws `std::bad_weak_ptr` (see ARCHITECTURE.md
-  "RemoteServer must be heap-allocated").
+  `std::enable_shared_from_this<RemoteServer>`; every public verb but
+  `openConnection`'s id and the two accessors captures `shared_from_this()`
+  into the task it posts. Constructing it on the stack and calling one throws
+  `std::bad_weak_ptr` (see ARCHITECTURE.md "RemoteServer must be
+  heap-allocated").
+- **`~RemoteServer` closes the server strand first.** Every task on it holds
+  the server, so when the destructor runs none is queued; closing waits for a
+  task still running on another thread (and returns at once from inside the
+  server's own last task), before any member the strand's tasks touch goes.
 - **The `RemoteServer` shared_ptr must outlive every referencing
   `SimulatedRemoteBackend` and every transport front (`QtWebSocketServer`,
   `morph::net::SocketServer`).**
@@ -2089,7 +1969,7 @@ are:
   callback and the moved `Envelope`). A `deregisterModel` that erases the map
   entry while a task is queued or running only drops the *map's* reference; the
   in-flight task holds its own, so the holder stays alive until the task
-  completes. `RemoteServer`'s pool tasks additionally keep the server itself
+  completes. `RemoteServer`'s tasks additionally keep the server itself
   alive via `shared_from_this()`. `closeConnection` erases the same map entries
   as an explicit `deregister`, so the same guarantee covers it: it never races a
   running `execute` into use-after-free, only prevents *new* lookups.
@@ -2111,7 +1991,7 @@ are:
 
 | Situation | Local (`LocalBackend`) | Remote (`RemoteServer` / `SimulatedRemoteBackend`) |
 |---|---|---|
-| `register` with an unregistered `typeId` | N/A — the local factory closure constructs the instance directly; there is no registry lookup and no type-id failure. | `ModelRegistryFactory::create(typeId)` fails → the catch in `dispatchMessage` replies `err "unknown model type: <typeId>"`. Remote registration therefore requires the model to have been macro-registered with `BRIDGE_REGISTER_MODEL`. `SimulatedRemoteBackend::registerModelWithContext` turns that `err` into a thrown `std::runtime_error("register failed: unknown model type: <typeId>")`. |
+| `register` with an unregistered `typeId` | N/A — the local factory closure constructs the instance directly; there is no registry lookup and no type-id failure. | `ModelRegistryFactory::create(typeId)` fails → the catch in `dispatchEnvelope` replies `err "unknown model type: <typeId>"`. Remote registration therefore requires the model to have been macro-registered with `BRIDGE_REGISTER_MODEL`. `SimulatedRemoteBackend::registerModelWithContext` turns that `err` into a thrown `std::runtime_error("register failed: unknown model type: <typeId>")`. |
 | `register` with an empty `typeId` | N/A | `err "register requires a typeId"`. |
 | `execute` against an unknown model id | Completion resolves with an **untyped** `std::runtime_error("model not found: id=<n>")`. | `err "model not found"` (bare, no id); `SimulatedRemoteBackend` surfaces it as a thrown/`onError` `std::runtime_error("model not found")`. |
 | Action handler throws | Caught on the strand; completion resolves with the thrown exception. | Caught on the strand; `err exc.what()` reply, which the client re-throws into the completion. |
@@ -2159,14 +2039,11 @@ round-trip; model and GUI authors must not assume any two share a thread:
 | `deserializeResult` | The **reply / pool thread** — invoked inside the `handle()` reply callback when the server's `ok` arrives (for `SimulatedRemoteBackend`, that is a `RemoteServer` worker-pool thread). |
 | `localOp` | The **model strand** (`LocalBackend` only) — posted on the per-`ModelId` strand, serialised against other actions for the same model. Never invoked on the remote path. |
 
-On the server side, `RemoteServer` runs authorize/authenticate and the model
-lookup on the pool thread that `dispatchMessage` runs on, then runs
-`ActionDispatcher::dispatch` (and the `ScopedContext`) on the model strand. A
-third thread is involved before either: `handle()`'s own calling thread — the
-transport's — is where an `execute`'s ordering ticket is taken, and the pool
-thread may then block briefly on that ticket before posting to the strand (see
-[Per-model execute ordering](#per-model-execute-ordering)). The strand itself
-is never blocked by that wait.
+On the server side, `handle()`'s calling thread — the transport's — decodes
+the envelope; `RemoteServer` then runs authorize/authenticate and the model
+lookup on the server strand, and `ActionDispatcher::dispatch` (and the
+`ScopedContext`) on the model's strand. Both strands run on the server's pool
+(see [Per-model execute ordering](#per-model-execute-ordering)).
 Completion *callbacks* (`.then`/`.onError`) are delivered via the `cbExec`
 executor passed to `execute`, independent of all of the above.
 
@@ -2180,7 +2057,7 @@ Over the WebSocket transport the split is different again:
 
 `QtWebSocketBackend` is single-threaded (Qt event loop). `QtWebSocketServer`
 receives frames on the Qt thread, hands them to `RemoteServer::handle` (which
-runs on the server pool / model strand as above), and marshals the reply *back*
+runs on the server strand / model strand as above), and marshals the reply *back*
 onto the Qt thread before `sendTextMessage`.
 
 `morph::net::SocketBackend` splits the same callables between the caller and
@@ -2199,7 +2076,7 @@ thread, where they throw). `bindModel`/`promoteModel` are callable from any
 thread, the loop's included: they park on nothing, and their continuations run
 on the caller's `cbExec` rather than on the loop that settles them.
 `morph::net::SocketServer` receives frames on the loop, hands them to
-`RemoteServer::handle` (server pool / model strand, as above), and the reply,
+`RemoteServer::handle` (server strand / model strand, as above), and the reply,
 produced on whichever thread finishes the work, is posted back to the loop,
 which queues it on the connection's writer. `SocketServer::close()` is callable
 from any thread, including concurrently with another `close()` on the same live
@@ -2297,20 +2174,30 @@ server: each call is a loop task, so the loop serialises them.
 
 | Method | Notes |
 |---|---|
-| `RemoteServer(workerPool, dispatcher, registry)` | Allow-all authorizer. |
-| `RemoteServer(workerPool, authorizer, dispatcher, registry)` | Custom authorizer; null → allow-all. |
-| `handle(msg, reply)` | Async: posts to pool, decodes, dispatches, calls `reply` once. Unscoped (`cid == 0`). Thread-safe. For an `execute` naming a `modelId`, takes that model's ordering ticket on the calling thread before posting — see [Per-model execute ordering](#per-model-execute-ordering). |
-| `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. Thread-safe. |
-| `handleInline(msg)` | Sync: runs `dispatchMessage` on the calling thread and returns the reply JSON; intended for `register`/`deregister` only. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Unscoped. |
-| `openConnection()` | Returns a fresh non-zero `ConnectionId` and opens an empty scope for it. Thread-safe. |
-| `closeConnection(cid)` | Erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. Thread-safe. |
-| `setLogProvider(provider)` | Installs a `LogProvider`; `nullptr` clears. Thread-safe. |
-| `setLimitPolicy(policy)` | Installs a `LimitPolicy`; thread-safe. All-zero (default) reproduces pre-existing behavior. |
-| `setSupportedVersionRange(min, max)` | Sets the inclusive protocol-version range advertised on `hello`. Defaults to `{kProtocolVersion, kProtocolVersion}`. Throws `std::invalid_argument` if `min > max`. Thread-safe. |
-| `health()` | `[[nodiscard]] HealthStatus health() const` — snapshot of readiness/liveModels/inFlight. Cheap; safe from any thread. See [observability.md](observability.md). |
-| `setHealthHandler(handler)` | `void setHealthHandler(std::function<void(const HealthStatus&)>)` — fires immediately with the current status, and again whenever readiness changes (currently only `beginShutdown()` triggers a change); `nullptr` clears without firing. |
-| `beginShutdown()` | Enters shutdown: subsequent `register`/`attach`/`execute` envelopes get `err "server shutting down"`; `deregister` still served. A client therefore cannot re-attach to a shared instance during the drain window. Idempotent, irreversible. Flips `health().ready` to `false` and re-invokes any installed health handler. |
-| `drainedWithin(deadline)` | `[[nodiscard]] bool drainedWithin(std::chrono::milliseconds deadline)` — blocks (condition-variable wait, not a poll) until every in-flight `execute` has replied or `deadline` elapses. Returns `true`/`false` accordingly. |
+| `RemoteServer(workerPool, dispatcher, registry)` | Allow-all authorizer, default `ServerConfig`. |
+| `RemoteServer(workerPool, authorizer, dispatcher, registry)` | Custom authorizer; null → allow-all. Default `ServerConfig`. |
+| `RemoteServer(workerPool, config, dispatcher, registry)` | Allow-all authorizer, `config` fixed for the server's life. Throws `std::invalid_argument` if `config.minProtocolVersion > config.maxProtocolVersion`. Calls `config.healthHandler` once before returning. |
+| `RemoteServer(workerPool, authorizer, config, dispatcher, registry)` | Both. |
+| `handle(msg, reply)` | Async: decodes on the calling thread, posts to the server strand, calls `reply` once from a pool thread. Unscoped (`cid == 0`). Callable from any thread; calls from one thread are handled in call order — see [Per-model execute ordering](#per-model-execute-ordering). |
+| `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. |
+| `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
+| `openConnection()` | Returns a fresh non-zero `ConnectionId` at once; its empty scope is opened on the server strand, before the caller's next `handle()`. |
+| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
+| `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
+| `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |
+| `health()` | `[[nodiscard]] Completion<HealthStatus> health()` — readiness/liveModels/inFlight, answered on the server strand; callbacks on the pool. See [observability.md](observability.md). |
+| `beginShutdown()` | Posts: subsequent `register`/`attach`/`execute` envelopes get `err "server shutting down"`; `deregister` still served. A client therefore cannot re-attach to a shared instance during the drain window. Idempotent, irreversible. Flips `ready` to `false` and calls `ServerConfig::healthHandler`, on the server strand. |
+| `drainedWithin(deadline)` | `[[nodiscard]] Completion<bool> drainedWithin(std::chrono::milliseconds deadline)` — settled on the server strand: `true` once no `execute` is in flight, `false` if `deadline` elapses first. Blocks nothing. |
+
+### `ServerConfig`
+
+| Field | Notes |
+|---|---|
+| `limits` | `LimitPolicy`; all-zero (default) applies no limit. |
+| `logProvider` | `LogProvider`, consulted on the server strand for an instance created with a non-empty `contextKey`; null attaches no log. |
+| `healthHandler` | `std::function<void(const HealthStatus&)>`: called from the constructor, then on the server strand when readiness changes. |
+| `minProtocolVersion`, `maxProtocolVersion` | Inclusive `hello` range; default `{kProtocolVersion, kProtocolVersion}`. |
+| `payloadCompleteness` | `PayloadCompleteness`; default `Lenient`. |
 
 ### `SimulatedRemoteBackend`
 
@@ -2496,7 +2383,9 @@ implementation to absorb — see
 | Callables are function pointers, not `std::function`s | `std::string (*)(const void*)` etc., with the action in `ActionCall::action` | Every call builds all three, whichever path it takes, so a stateful callable charges an allocation to calls that never invoke it. The behaviour is a constant of `(Model, Action)`; only the action is per-call. Measured at 3 allocations per local round trip. The cost is an explicit borrow: see [Lifetime contract](#lifetime-contract). |
 | Type ids are `string_view`s, not `std::string`s | `modelTypeId`, `actionTypeId` | They are always views of `constexpr` string literals from the registration macros, so copying them into a `std::string` bought nothing and allocated whenever an id exceeded the SSO threshold (`"CreateSwimlane"` is 14 characters; the margin is one character wide). |
 | `registerModelWithContext` | Virtual with a default that drops `contextKey` | `LocalBackend`'s factory closure already captures identity, so there is nothing to forward — which is why the default drops the key rather than being pure virtual. A backend whose instances are constructed on the far side of a wire protocol has no such closure, so the envelope is the only channel the identity has: `SimulatedRemoteBackend` and `SocketBackend` both override it so the server's `LogProvider` can attach an action log. The default being *permissive* is what lets a wire backend ship without an override and silently stop journalling private registrations; the price of that permissiveness is that "is this a wire backend?" has to be answered by hand for each new transport. |
-| `RemoteServer` heap requirement | `std::enable_shared_from_this` | `handle()` posts to the worker pool capturing `shared_from_this()` — the server must outlive any in-flight message. |
+| `RemoteServer` heap requirement | `std::enable_shared_from_this` | Every task the server posts captures `shared_from_this()` — the server must outlive any in-flight message. |
+| `RemoteServer` state on one strand | `exec::OwnerStrand` over the pool; `execute` admitted there, run on the model's strand | The registry, scopes, in-flight count and readiness need no lock, and per-model order is two strands' FIFO rather than a ticket gate. Admission is not on the model's strand, so a rejection never waits on a busy model — see [Per-model execute ordering](#per-model-execute-ordering). |
+| `RemoteServer` configuration | `ServerConfig` at construction, no setters | Read on the strands without a lock because nothing writes it afterwards. |
 | `handleInline` | Synchronous; caller-restricted to control messages | Safe to call from a worker-pool thread (e.g. from a `BridgeHandler` constructor). It is meant for `register`/`deregister` only; an `execute` envelope is rejected with an `err` reply, because `dispatchExecute` posts to the strand and would reply after `handleInline` returns (writing into an already-destroyed reply buffer). The rejection is now enforced by the code, matching the documented intent. |
 | `SimulatedRemoteBackend` factory ignored | Model construction delegated to `RemoteServer`'s `ModelRegistryFactory` | The factory closure lives on the client side; the server owns the actual instances. |
 | `cancelPending` snapshots | Weak-ptr snapshot under lock, then resolves outside | Avoids holding the lock while delivering exceptions to each state, preventing deadlock if a callback re-enters the backend. |
@@ -2513,7 +2402,7 @@ implementation to absorb — see
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
 | No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
-| `executeTimeout` implementation | A lazily-started `morph::async::detail::TimeoutScheduler` per `RemoteServer`, on a private `exec::IoLoop` (one thread running core-cpp's `PlatformLoop`), not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. The deadlines are the loop's own timers, so nothing polls: an armed timer is what bounds the loop's next wait. |
+| `executeTimeout` implementation | A `morph::async::detail::TimeoutScheduler` per `RemoteServer`, created by the constructor when `ServerConfig::limits.executeTimeout` is positive, on a private `exec::IoLoop` (one thread running core-cpp's `PlatformLoop`), not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call, and a server configured without the feature pays no cost. The deadlines are the loop's own timers, so nothing polls: an armed timer is what bounds the loop's next wait. |
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill; on empty the frame is refused with an `err` reply, and the connection is left open | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Refusing rather than closing keeps a transient burst from taking down the connection. The frame is *answered* rather than discarded because a reply costs nothing at the protocol level and is the difference between a caller's `Completion` failing and it hanging: the id is recovered by the same bounded prefix scan (`peekCallId`) the `maxMessageBytes` branch uses, so no decode of a frame that will not run is needed. |
 | Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
 | Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models) under `_regMtx`. No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
@@ -2548,8 +2437,8 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
 | completion.md | `Completion<shared_ptr<void>>` returned by `execute`, the `CompletionState` the backends track for `cancelPending`, and `cbExec` callback delivery. |
 | offline.md | `NetworkMonitorConfig` (the sibling struct whose declaration-order rationale `QtWebSocketBackendConfig` mirrors) and the disconnect/reconnect story the `QtWebSocketBackend` transport participates in. |
 | executor.md | `IExecutor` / `ThreadPoolExecutor` (the server worker pool); `qt/qt_executor.hpp`'s `QtExecutor` is the `cbExec` a Qt host uses to deliver completion callbacks onto the Qt thread, while a `morph::net::SocketBackend` host uses a plain `ThreadPoolExecutor`/`MainThreadExecutor` instead — no Qt event loop required. |
-| observability.md | The `morph::observe` metrics/trace seam wrapping `RemoteServer`/`LocalBackend` dispatch, and `RemoteServer::health()`/`setHealthHandler()`. |
-| testing_strategy.md | `fuzz_dispatch_execute` fuzzes `RemoteServer::handle`/`dispatchMessage` directly; the soak test (`test_soak_switch_backend.cpp`) cycles `switchBackend` between `LocalBackend` and `SimulatedRemoteBackend` under load; the load benchmark (`bench_dispatch_latency.cpp`) baselines dispatch throughput/latency; the adversarial run (`test_qt_websocket_adversarial.cpp`) drives a hostile client against `QtWebSocketServer` and exercises the default (unconfigured) `LimitPolicy`/`QtWebSocketServerConfig`. |
+| observability.md | The `morph::observe` metrics/trace seam wrapping `RemoteServer`/`LocalBackend` dispatch, and `RemoteServer::health()`/`ServerConfig::healthHandler`. |
+| testing_strategy.md | `fuzz_dispatch_execute` fuzzes `RemoteServer::handle` directly; the soak test (`test_soak_switch_backend.cpp`) cycles `switchBackend` between `LocalBackend` and `SimulatedRemoteBackend` under load; the load benchmark (`bench_dispatch_latency.cpp`) baselines dispatch throughput/latency; the adversarial run (`test_qt_websocket_adversarial.cpp`) drives a hostile client against `QtWebSocketServer` and exercises the default (unconfigured) `LimitPolicy`/`QtWebSocketServerConfig`. |
 
 ## Limitations
 
@@ -2655,11 +2544,19 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   flow holds the loop-side state, finds it closed when the dial completes, and
   drops the socket. Until then it holds a descriptor and, for a hostname, a
   resolver-pool slot.
+- **`RemoteServer::handleInline` needs a free pool thread.** It waits for the
+  server strand, which runs on the pool; a one-thread pool calling it from
+  inside its own task, or every pool thread blocked in it at once, never gets
+  its reply. See [`handleInline(msg)`](#remoteserver--server-side-message-handler).
+- **`RemoteServer` admits every `execute` on one strand.** The authorizer's
+  hooks, the registry lookup and the optional payload parse run one at a time
+  across all models; a slow authorizer slows admission for every model, though
+  never the handlers, which run on their own strands.
 - **Graceful shutdown never preempts a running action.** `beginShutdown()`,
   `drainedWithin()`, and `closeGracefully()` only stop new work from arriving
   and wait for old work to finish; a model whose action runs longer than the
   caller's `deadline` still finishes on its strand after `drainedWithin`
-  returns `false` (and after `closeGracefully`'s hard stop reclaims the
+  answers `false` (and after `closeGracefully`'s hard stop reclaims the
   connection). This is intentional — morph never interrupts a strand task —
   but it does mean a model with no self-imposed bound can make
   `closeGracefully` always hit its hard stop.

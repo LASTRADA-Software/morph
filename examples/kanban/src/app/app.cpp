@@ -35,6 +35,19 @@ namespace {
 /// bound unauthenticated registration churn, not to constrain legitimate use.
 constexpr std::size_t kMaxLiveModels = 256;
 
+/// @brief The server's configuration: the live-model cap above, and a log
+///        provider that hands every keyed instance @p log.
+/// @param log The one action log `BoardModel` instances write and read back.
+/// @return The `ServerConfig` this App constructs its server with.
+::morph::backend::ServerConfig serverConfig(std::shared_ptr<::morph::journal::IActionLog> log) {
+    ::morph::backend::ServerConfig config;
+    config.limits.maxLiveModels = kMaxLiveModels;
+    // See the constructor's comment for why every model type gets this one log.
+    config.logProvider = [log = std::move(log)](std::string_view /*modelType*/, std::string_view /*contextKey*/)
+        -> std::shared_ptr<::morph::journal::IActionLog> { return log; };
+    return config;
+}
+
 }  // namespace
 
 App::App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size_t workers)
@@ -47,7 +60,8 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size
       // site must keep compiling under that build option with the identical
       // MAC it always used.
       _server{std::make_shared<::morph::backend::RemoteServer>(
-          _pool, std::make_shared<auth::KanbanAuthorizer>(tokenSecret, ::morph::session::hmacSha256))} {
+          _pool, std::make_shared<auth::KanbanAuthorizer>(tokenSecret, ::morph::session::hmacSha256),
+          serverConfig(_actionLog))} {
     // Installed process-wide so any *default-constructed* (non-keyed,
     // unshared) model -- ProjectAdminModel, AuthModel, and a BoardModel
     // registered via the plain (non-shared) path -- auto-attaches via
@@ -82,7 +96,7 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size
     // `morph/core/bridge.hpp`) is only known at that later point, not at
     // holder-construction time, so the process-wide default log
     // `ModelFactory::create` reads is not the mechanism that reaches this
-    // path at all. `setLogProvider` is what lets this App supply *this
+    // path at all. `ServerConfig::logProvider` is what lets this App supply *this
     // exact* `_actionLog` instance for that later attach. Once supplied,
     // `IModelHolder::attachActionLog` (called from `attachLogIfConfigured`)
     // forwards to `ModelHolder<BoardModel>::onActionLogAttached`, which
@@ -100,12 +114,6 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size
     // registered plain (no `contextKey`), so `attachLogIfConfigured` never
     // calls this provider for them (see that method's own early-return on
     // an empty `contextKey`, morph/core/remote.hpp).
-    _server->setLogProvider([log = _actionLog](std::string_view /*modelType*/, std::string_view /*contextKey*/)
-                                -> std::shared_ptr<::morph::journal::IActionLog> { return log; });
-
-    ::morph::backend::LimitPolicy limits;
-    limits.maxLiveModels = kMaxLiveModels;
-    _server->setLimitPolicy(limits);
 }
 
 App::~App() {

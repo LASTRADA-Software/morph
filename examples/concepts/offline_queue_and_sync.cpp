@@ -19,6 +19,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <morph/core/executor.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/offline/file_offline_queue.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
@@ -69,8 +72,16 @@ TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to r
     InMemoryOfflineQueue queue;
     (void)queue.enqueue("poison-payload", "op-1");  // "op-1" is this item's idempotencyKey
 
+    // SyncWorker drains on the executor it is given, which must run one task
+    // at a time: a strand. Over an executor that runs a task on the posting
+    // thread, run() has drained before it returns.
+    struct RunHere final : morph::exec::IExecutor {
+        void post(std::function<void()> task) override { task(); }
+    } here;
+    morph::exec::OwnerStrand owner{here};
     std::vector<QueueItem> deadLettered;
     SyncWorker worker{
+        owner,
         queue,
         [](const std::string&) { return false; },  // a replay function that always fails
         [&](const QueueItem& item) { deadLettered.push_back(item); },
@@ -80,7 +91,7 @@ TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to r
     // 5 cumulative attempts, so 5 calls are needed to exhaust the budget.
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = worker.run();
+        worker.run().then([&result](const morph::offline::SyncResult& drained) { result = drained; });
     }
 
     REQUIRE(result.deadLettered == 1);

@@ -1052,10 +1052,11 @@ TEST_CASE("RemoteServer's executeTimeout stops a suspended Task handler and rele
     registry.registerModel<CoroModel>("Coro_Model");
     dispatcher.registerAction<CoroModel, CoroHold>("Coro_Model", "Coro_Hold");
     dispatcher.registerAction<CoroModel, CoroLog>("Coro_Model", "Coro_Log");
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
     morph::backend::LimitPolicy policy;
     policy.executeTimeout = 50ms;
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);

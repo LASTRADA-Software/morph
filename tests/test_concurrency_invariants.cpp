@@ -404,7 +404,7 @@ TEST_CASE("morph::offline::SyncWorker: stop() called mid-replay aborts before pr
 
     morph::offline::SyncWorker* workerPtr = nullptr;
     std::atomic<int> processed{0};
-    morph::offline::SyncWorker worker{queue, [&](const std::string&) {
+    morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [&](const std::string&) {
                                           int now = processed.fetch_add(1) + 1;
                                           if (now == 3) {
                                               workerPtr->stop();
@@ -413,7 +413,7 @@ TEST_CASE("morph::offline::SyncWorker: stop() called mid-replay aborts before pr
                                       }};
     workerPtr = &worker;
 
-    auto result = worker.run();
+    auto result = morph::testing::awaitValue(worker.run());
     // First three items processed and removed; on the fourth iteration the
     // loop sees _stopped == true and breaks before invoking the replay fn.
     REQUIRE(result.successful == 3);

@@ -34,7 +34,7 @@
 /// model instance, and nothing else: every action it could dispatch on that
 /// instance is rejected by `authorize()` before a model ever sees it. The
 /// resulting unauthenticated-instance-churn surface is bounded by
-/// `RemoteServer::setLimitPolicy`'s `maxLiveModels`, which
+/// `ServerConfig::limits`' `maxLiveModels`, which
 /// `bookmarks::app::App` sets for exactly this reason.
 
 namespace bookmarks::auth {

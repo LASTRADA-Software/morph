@@ -139,24 +139,29 @@ TEST_CASE("RemoteServer::beginShutdown is idempotent", "[shutdown][graceful]") {
 TEST_CASE("RemoteServer::beginShutdown flips health().ready to false", "[shutdown][graceful][health]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    REQUIRE(server->health().ready);
+    REQUIRE(morph::testing::awaitValue(server->health()).ready);
 
     server->beginShutdown();
 
-    REQUIRE_FALSE(server->health().ready);
+    REQUIRE_FALSE(morph::testing::awaitValue(server->health()).ready);
 }
 
 TEST_CASE("RemoteServer::beginShutdown re-invokes the installed health handler with ready == false",
           "[shutdown][graceful][health]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
     std::vector<bool> observedReady;
-    server->setHealthHandler(
-        [&](const morph::backend::HealthStatus& status) { observedReady.push_back(status.ready); });
-    REQUIRE(observedReady == std::vector<bool>{true});  // fired immediately on install
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.healthHandler = [&](const morph::backend::HealthStatus& status) {
+        observedReady.push_back(status.ready);
+    };
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
+    REQUIRE(observedReady == std::vector<bool>{true});  // called from the constructor
 
     server->beginShutdown();
+    // The handler runs on the server strand; a health() answer, posted after
+    // beginShutdown(), is answered after it.
+    (void)morph::testing::awaitValue(server->health());
 
     REQUIRE(observedReady == (std::vector<bool>{true, false}));
 }
@@ -167,7 +172,7 @@ TEST_CASE("RemoteServer::drainedWithin returns true immediately when nothing is 
           "[shutdown][graceful][drain]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    REQUIRE(server->drainedWithin(0ms));
+    REQUIRE(morph::testing::awaitValue(server->drainedWithin(0ms)));
 }
 
 TEST_CASE("RemoteServer::drainedWithin blocks until a slow in-flight execute delivers its reply",
@@ -199,10 +204,10 @@ TEST_CASE("RemoteServer::drainedWithin blocks until a slow in-flight execute del
     REQUIRE(morph::testing::waitUntil([] { return gGSSlowStarted.load(std::memory_order_relaxed) >= 1; }));
 
     // Not drained yet — the slow action is still running.
-    REQUIRE_FALSE(server->drainedWithin(10ms));
+    REQUIRE_FALSE(morph::testing::awaitValue(server->drainedWithin(10ms)));
 
     // It does complete within a generous deadline, and the reply is delivered.
-    REQUIRE(server->drainedWithin(2s));
+    REQUIRE(morph::testing::awaitValue(server->drainedWithin(2s)));
     REQUIRE(execReply.await());
     REQUIRE(execReply.env.kind == "ok");
 }
@@ -230,7 +235,7 @@ TEST_CASE("RemoteServer::drainedWithin times out while a slower-than-deadline ex
     server->handle(morph::wire::encode(req), std::ref(execReply));
     REQUIRE(morph::testing::waitUntil([] { return gGSSlowStarted.load(std::memory_order_relaxed) >= 1; }));
 
-    REQUIRE_FALSE(server->drainedWithin(50ms));
+    REQUIRE_FALSE(morph::testing::awaitValue(server->drainedWithin(50ms)));
 
     // Let the slow action actually finish so the pool/strand can tear down
     // cleanly at end of scope instead of racing the test fixture teardown.
@@ -269,7 +274,7 @@ TEST_CASE("RemoteServer: beginShutdown then drainedWithin is the standard stop s
     REQUIRE(rejectedReg.env.kind == "err");
     REQUIRE(rejectedReg.env.message == "server shutting down");
 
-    REQUIRE(server->drainedWithin(2s));
+    REQUIRE(morph::testing::awaitValue(server->drainedWithin(2s)));
     REQUIRE(execReply.await());
     REQUIRE(execReply.env.kind == "ok");
 }

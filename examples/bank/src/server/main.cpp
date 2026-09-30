@@ -204,11 +204,10 @@ int main(int argc, char** argv) {
     int exitCode = 0;
     {
         ::morph::exec::ThreadPoolExecutor pool{4};
-        auto server = std::make_shared<::morph::backend::RemoteServer>(pool, std::make_shared<BankDemoAuthorizer>());
-
-        ::morph::backend::LimitPolicy limits;
-        limits.maxLiveModels = kMaxLiveModels;
-        server->setLimitPolicy(limits);
+        ::morph::backend::ServerConfig serverConfig;
+        serverConfig.limits.maxLiveModels = kMaxLiveModels;
+        auto server = std::make_shared<::morph::backend::RemoteServer>(pool, std::make_shared<BankDemoAuthorizer>(),
+                                                                       std::move(serverConfig));
 
         ::morph::qt::QtWebSocketServer wsServer{*server, portFromEnvironment("BANK_PORT")};
         if (!wsServer.listen()) {

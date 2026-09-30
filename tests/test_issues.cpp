@@ -419,7 +419,7 @@ TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run do
 
     std::atomic<bool> replayStarted{false};
 
-    morph::offline::SyncWorker worker{queue, [&](const std::string&) {
+    morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [&](const std::string&) {
                                           replayStarted.store(true);
                                           std::this_thread::sleep_for(30ms);
                                           return true;
@@ -430,7 +430,7 @@ TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run do
         (void)queue.enqueue("concurrent");
     }};
 
-    auto result = worker.run();
+    auto result = morph::testing::awaitValue(worker.run());
     enqueuer.join();
 
     REQUIRE(result.successful == 2);

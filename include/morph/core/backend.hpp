@@ -289,7 +289,7 @@ struct IBackend {
     /// `IModelHolder::attachActionLog`), so there is nothing for the backend to
     /// forward. Backends whose model instances live behind a wire protocol
     /// (`SimulatedRemoteBackend`) override this to carry @p contextKey across —
-    /// see `wire::Envelope::contextKey` and `RemoteServer::setLogProvider`.
+    /// see `wire::Envelope::contextKey` and `ServerConfig::logProvider`.
     /// @param typeId     String type-id of the model to instantiate.
     /// @param factory    Callable that constructs the `IModelHolder` (local path only).
     /// @param contextKey Stable identity of the new instance; empty if none.

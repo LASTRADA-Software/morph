@@ -21,11 +21,13 @@
 #include <functional>
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -42,6 +44,17 @@ struct CapturedReply {
     morph::wire::Envelope env;
     void operator()(const std::string& raw) { env = morph::wire::decode(raw); }
 };
+
+/// A `RemoteServer` answers `health()` and `drainedWithin()` on its own strand,
+/// through a `Completion`. Over an `InlineExecutor` that strand runs on the
+/// calling thread, so the answer is already there once `then` returns.
+template <typename T>
+T answeredNow(morph::async::Completion<T> completion) {
+    std::optional<T> answer;
+    completion.then([&answer](const T& value) { answer = value; });
+    REQUIRE(answer.has_value());
+    return *answer;
+}
 
 }  // namespace
 
@@ -103,11 +116,11 @@ TEST_CASE("graceful shutdown: beginShutdown rejects new registers and flips heal
           "[concepts][shutdown]") {
     InlineExecutor pool;
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    REQUIRE(server->health().ready);
+    REQUIRE(answeredNow(server->health()).ready);
 
     server->beginShutdown();
 
-    REQUIRE_FALSE(server->health().ready);
+    REQUIRE_FALSE(answeredNow(server->health()).ready);
 
     CapturedReply reply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("ObsDemo_Model")), std::ref(reply));
@@ -124,5 +137,5 @@ TEST_CASE("graceful shutdown: drainedWithin returns true immediately once nothin
 
     // With an InlineExecutor every call already ran to completion by the time
     // handle() returns, so there is nothing left in flight to wait for.
-    REQUIRE(server->drainedWithin(std::chrono::milliseconds{0}));
+    REQUIRE(answeredNow(server->drainedWithin(std::chrono::milliseconds{0})));
 }

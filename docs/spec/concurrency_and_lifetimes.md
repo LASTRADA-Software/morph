@@ -38,6 +38,7 @@ is the concrete executor's job:
 | `MainThreadExecutor` | The thread that calls `runFor()` | Stand-in "GUI" thread in non-Qt tests; pumped manually. |
 | `QtExecutor` | The Qt GUI thread | Real GUI executor; posts via `QMetaObject::invokeMethod(Qt::QueuedConnection)`. |
 | `ModelStrands` | *Borrows* a base `IExecutor` (usually the pool) | Serialises tasks per `ModelId` on top of the base executor: core-cpp's `KeyedStrands`, which reaches the base through the base's `coreExecutor()`. It owns no thread. |
+| `OwnerStrand` | *Borrows* a base `IExecutor` | One core-cpp `Strand` over the base that is itself a morph executor: the owner of one component's state. `RemoteServer` owns one over its pool (the server strand), `ReconnectCoordinator` one over the executor it is given (the offline strand). It owns no thread. |
 | `exec::IoLoop` | One thread natively; host-pumped under single-threaded WebAssembly | The I/O loop (`io_loop.hpp`): a core-cpp `PlatformLoop` that owns every `morph::net` socket, every `TimeoutScheduler` timer and `NetworkMonitor`'s probe. The application constructs one and injects it into each; `IoLoop::post` is the one way in from another thread. |
 
 A strand's own unit of work is a coroutine resumption, not a callable: it
@@ -54,15 +55,16 @@ GUI, and the GUI thread never runs model work — the executors enforce the spli
 |---|---|---|
 | `Model::execute(action)` (local mode) | Worker pool, inside a per-`ModelId` strand | `LocalBackend::execute` → `ModelStrands::post` |
 | `Model::onBackendChanged()` (local mode) | Worker pool, inside the model's per-`ModelId` strand (serialised with its `execute`) | `LocalBackend::notifyBackendChanged` → `ModelStrands::post` |
-| `ActionDispatcher::dispatch` → `Model::execute` (remote mode) | `RemoteServer`'s worker pool, inside a per-`ModelId` strand | `RemoteServer::dispatchExecute` → `ModelStrands::post` |
-| Remote message decode / envelope handling | `RemoteServer`'s worker pool | `RemoteServer::handle` → `_pool.post` |
+| `ActionDispatcher::dispatch` → `Model::execute` (remote mode) | `RemoteServer`'s worker pool, inside a per-`ModelId` strand | `RemoteServer::dispatchExecute`, on the server strand → `ModelStrands::post` |
+| Remote message decode | The transport's thread (`handle()`'s caller) | — |
+| Envelope handling, `execute` admission, the registry, connection scopes, `health()`/`drainedWithin()`/`beginShutdown()` | `RemoteServer`'s server strand, on its worker pool | `RemoteServer::handle` and every public verb → `OwnerStrand::postTask` |
 | `Completion::then` / `onError` callbacks | The `cbExec` executor supplied at dispatch (the GUI executor for `BridgeHandler`) | `CompletionState::setValue`/`setException` → `cbExec->post` |
 | Subscription result / error sinks (`BridgeHandler::subscribe`) | The handler's `guiExec` | Same as `Completion` callbacks — they *are* completion callbacks |
 | Connectivity probe + `onOffline`/`onOnline` callbacks | **The I/O loop** | A loop timer `NetworkMonitor` re-arms every `probeInterval` |
 | `morph::net` socket I/O: dial, handshake, reads, writes, accept, reply writes | **The I/O loop** | Flows the components spawn on it; verbs and `RemoteServer` replies post to it |
 | `TimeoutScheduler` callbacks (execute deadlines, `delay()`) | **The I/O loop** — the injected one, or the scheduler's own | A loop timer armed by a posted `schedule()` |
-| `ReconnectCoordinator::onOnline`/`onOffline` | The caller's thread (host posts it to a worker; **not** the I/O loop) | Host wiring |
-| `SyncWorker::run` (offline-queue replay) | The caller's thread; concurrent calls serialised | Host wiring / `ReconnectCoordinator::replay` |
+| `ReconnectCoordinator::onOnline`/`onOffline` bodies (reconnect → activate → bind → replay, retry sleeps included) | The offline strand, over the executor the coordinator was given (a worker pool; **not** the I/O loop) | `onOnline()`/`onOffline()` post, from any thread |
+| `SyncWorker::run`'s drain (offline-queue replay) | The worker's owner — the offline strand when given `ReconnectCoordinator::strand()`; inline when `run()` is already on it | `run()` posts, from any other thread; the coordinator's `replay` step runs it inline |
 | Backend reconnect handler (re-register bindings) | The backend's own: the Qt thread for `QtWebSocketBackend`, a dedicated handler thread for `SocketBackend` (never its I/O loop, which must deliver the replies the handler waits for) | `IBackend::setReconnectHandler` callback |
 | Log sink invocation | Whatever thread called `log*()` | `morph::log::detail::log` |
 
@@ -152,7 +154,8 @@ itself; [`core/executor.md`](core/executor.md), "Strands", says what morph adds.
   each stopped handler unwinds inline.
 
 `LocalBackend` owns one `ModelStrands` over the worker pool; `RemoteServer`
-owns another over its worker pool. Both post model work keyed by `ModelId`.
+owns another over its worker pool, beside its server strand. Both post model
+work keyed by `ModelId`.
 Each shares its strands with the resumers of the Task handlers it started (see
 [`core/coroutines.md`](core/coroutines.md)).
 
@@ -185,6 +188,9 @@ rules encode recent fixes to real deadlocks and use-after-frees.
 | base `IExecutor` (e.g. `ThreadPoolExecutor`) | the strands built on it, and the backend that owns them | **Hang** in the backend's drain (see below) |
 | `Bridge` | its `BridgeHandler`s (for normal `execute`/`set` calls) | Fine at teardown (order-independent, see below); a *call* on a handler whose bridge is gone is still UB |
 | `RemoteServer` (heap, `make_shared`) | every `SimulatedRemoteBackend`/transport holding `RemoteServer&` | Dangling `RemoteServer&` → use-after-free |
+| `RemoteServer`'s server strand | closed first, in `~RemoteServer`'s body, before any member its tasks touch | Every task on it holds the server, so none is queued by then; the close waits for one still running on another thread |
+| worker pool | a `ReconnectCoordinator` and its offline strand; a `SyncWorker`'s owner | The offline strand's tasks never run, and a coordinator's `onOnline()` completion never settles |
+| a `SyncWorker` given a coordinator's `strand()` | the `ReconnectCoordinator`: destroy the coordinator first, and call no `run()` after it | A sequence still running on the strand calls `run()` on a destroyed worker (use-after-free); the coordinator's destructor closes the strand, waiting for that sequence and dropping queued ones, so after it nothing reaches the worker. A `run()` after the coordinator is gone posts to a destroyed strand |
 | worker pool | the backend that posts to it (`LocalBackend`, `RemoteServer`) | Same deadlock/UAF family as the strand rule |
 | `session::Context` passed to `ScopedContext` | the scope in which the model runs | Dangling thread-local `Context*` |
 | `exec::IoLoop` | every component built on it: `SocketBackend`, `SocketServer`, `TimeoutScheduler`, `NetworkMonitor` | **Hang** in the component's destructor, which waits for a close the stopped loop never runs; the same rule as the pool and its backends |
@@ -257,9 +263,11 @@ indivisible step.
 **`~Bridge` therefore blocks**, like a backend's drain above and for the same
 reason. The wait is bounded and cannot cycle: the only guarded region is
 `deregisterHandler`, whose sole outward call is `IBackend::deregisterModel`, and
-no shipped backend blocks on another thread there — `LocalBackend` erases map
-entries under its own mutex, `SimulatedRemoteBackend` runs the envelope inline
-via `RemoteServer::handleInline`, and `QtWebSocketBackend`/`SocketBackend` are
+no shipped backend blocks there on a thread that can reach back into a
+`Bridge` — `LocalBackend` erases map entries under its own mutex,
+`SimulatedRemoteBackend` waits in `RemoteServer::handleInline` for a server
+strand task that touches only the server's own state, and
+`QtWebSocketBackend`/`SocketBackend` are
 fire-and-forget sends, documented as such precisely so that destruction never
 spins a nested event loop.
 
@@ -400,25 +408,31 @@ never `this`.
 ### `RemoteServer` must be `make_shared` and outlive its transports
 
 `RemoteServer` derives from `enable_shared_from_this` and **must** be created via
-`std::make_shared`. `handle()` captures `shared_from_this()` into the pool task,
-so the server object survives until that task completes.
+`std::make_shared`. Every task it posts — to the server strand from `handle()`
+and every public verb, to a model's strand from `execute` admission, back to
+the server strand from an execute's reply, to its timers — captures
+`shared_from_this()`, so the server object survives until that task completes.
 
-**The self-capture must be re-established for the execute strand hop.** An
-`execute` envelope does not finish inside the pool task: `dispatchExecute` posts
-a *second* task onto the model's strand and returns, at which point `handle()`'s
-pool task completes and releases its `shared_from_this()`. If the strand task
-did not itself co-own the server, the last external `shared_ptr` dropping right
-after `handle()` returned would free the server — and with it the
-`_dispatcher`/`_registry` *reference members* the strand task reads — before the
-task runs (a use-after-free), or the reply callback would be destroyed with the
-server and the client's `Completion` would hang forever. So the `dispatchExecute`
-strand task **also** captures `shared_from_this()` (`self = shared_from_this()`)
-and reaches the dispatcher through `self->_dispatcher`, never a bare reference
-capture. The server is thus kept alive across the pool→strand hop until the
-reply fires; only then does the strand task release its self-reference and the
-server may be destroyed. This holds even when the owning `shared_ptr` is dropped
-while work is in flight — which is why the worker pool can safely outlive the
-server *reference*.
+**The self-capture is re-established at every hop.** An `execute` does not
+finish inside the server strand's task: admission posts a *second* task onto
+the model's strand and returns. If that task did not itself co-own the server,
+the last external `shared_ptr` dropping right after admission would free the
+server — and with it the `_dispatcher`/`_registry` *reference members* the
+model strand's task reads — before the task runs (a use-after-free), or the
+reply callback would be destroyed with the server and the client's
+`Completion` would hang forever. So the model strand's task **also** captures
+`shared_from_this()` (`run.self`) and reaches the dispatcher through
+`self->_dispatcher`, never a bare reference capture. The server is thus kept
+alive across both hops until the reply fires. This holds even when the owning
+`shared_ptr` is dropped while work is in flight — which is why the worker pool
+can safely outlive the server *reference*.
+
+**Teardown.** Because every task on the server strand holds the server,
+`~RemoteServer` runs only once none is queued there. Its body seals and closes
+the strand first — the close waits for a task still running on another thread,
+and returns at once when the destructor runs inside the server's own last task
+— and only then do the members go. The pool, borrowed, must outlive the server
+and keep running until then, as for any strand.
 
 `SimulatedRemoteBackend` (and any real transport) stores a bare `RemoteServer&`.
 That reference must remain valid for the backend's whole life: the
@@ -437,13 +451,23 @@ A `BridgeHandler` can be constructed *from inside* a running action (e.g. a
 model that registers a sub-model), which means the constructor's
 `registerModelWithContext` call may run on the very worker-pool thread that is
 executing the action. On the remote path this reaches `RemoteServer` on a pool
-thread. That is why control messages (`register` / `deregister`) go through the
-**synchronous** `handleInline`, which runs `dispatchMessage` inline instead of
-posting to the pool — posting would deadlock if the pool were saturated by the
-in-flight action. `handleInline` **rejects `execute`**: an `execute` reply is
-produced asynchronously on the model strand, *after* `handleInline` has returned
-and destroyed the local reply buffer the deferred callback would write into — a
-dangling-write hazard. See [backend.md](core/backend.md) for the exact wiring.
+thread, through the **synchronous** `handleInline`. `handleInline` posts the
+control envelope to the server strand and waits for its reply: the registry is
+the server strand's, so the envelope cannot run on the caller's thread. The
+waiting pool thread holds a model's strand, never the server strand, and the
+server strand's tasks never wait on a model — so another pool thread runs the
+envelope and the wait ends. When the caller *is* on the server strand (host
+code the strand is running — a model constructor, a `LogProvider` — calling
+back in), `handleInline` runs the envelope inline, since waiting would wait on
+itself.
+
+What it needs is a pool thread other than the caller's: a pool of one thread
+calling `handleInline` from inside its own task, or every pool thread blocked in
+`handleInline` at the same moment, never gets its reply. `handleInline`
+**rejects `execute`**: an `execute` reply is produced asynchronously on the
+model strand, *after* `handleInline` has returned and destroyed the local reply
+buffer the deferred callback would write into — a dangling-write hazard. See
+[backend.md](core/backend.md) for the exact wiring.
 
 ### `cancelPending` — snapshot-then-deliver, weak-ptr tracked
 
@@ -627,17 +651,20 @@ loop timer the monitor re-arms every `probeInterval`. Constraints:
   monitor's storage may go while the callback is still on the stack.
 - `isOnline()` reads an `std::atomic<bool>` — safe from any thread at any time.
 
-### `ReconnectCoordinator` — mutex held across the whole retry loop
+### `ReconnectCoordinator` — one strand runs the whole retry loop
 
-`onOnline()` holds `_mtx` for the **entire** reconnect → activate → bind → replay
-loop, including all retry sleeps; `onOffline()` takes the same mutex. So the two
-are mutually exclusive and a second concurrent caller blocks until the first
-finishes. The coordinator owns no thread and does no I/O — it runs synchronously
-on the caller's thread, and the host is expected to post it onto a worker
-executor, **not** call it on the I/O loop that runs `NetworkMonitor`'s
-callbacks. The strict step order
-(reconnect → activatePrimary → bindContext → replay) is an invariant: replay
-never runs before context is bound.
+`onOnline()` posts the **entire** reconnect → activate → bind → replay loop,
+retry sleeps included, as one task on the coordinator's offline strand;
+`onOffline()` posts its activate → bind as another. A strand runs one task at a
+time in post order, so the two never overlap, and an `onOffline()` posted while
+a reconnect is sleeping between attempts runs after it. The coordinator owns no
+thread and does no I/O: the strand runs on the executor it was given, which
+should be a worker pool, **not** the I/O loop that runs `NetworkMonitor`'s
+callbacks — the retry sleeps block the thread the task is on. The strict step
+order (reconnect → activatePrimary → bindContext → replay) is an invariant:
+replay never runs before context is bound. A `SyncWorker` given the
+coordinator's `strand()` as its owner drains inline inside the `replay` step,
+so nothing posted in the meantime can run between bind and replay.
 
 ### Registries — populated at static-init, then read-only
 
@@ -762,6 +789,7 @@ BridgeHandler(s)          ← first to go (or any order vs. Bridge, on any threa
   Bridge
     backend               ← LocalBackend / SimulatedRemoteBackend
       RemoteServer         ← only in remote mode; keep its shared_ptr alive this long
+                             (its server strand is closed first, by its own destructor)
         ThreadPoolExecutor ← LAST: it must outlive every strand it backs
 ```
 

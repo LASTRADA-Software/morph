@@ -298,17 +298,11 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "morph::backend::RemoteServer::handleImpl: a well-formed execute naming modelId 0 takes no ordering "
-    "ticket and still reports \"model not found\"",
+    "morph::backend::RemoteServer::handleImpl: a well-formed execute naming modelId 0 reports \"model not found\"",
     "[remote][handleImpl]") {
-    // RM15: handleImpl's ticket-peek `peek.kind == "execute" && peek.modelId
-    // != 0` -- the `peek.modelId != 0` arm was always true in every existing
-    // test (every execute names a real, previously-registered instance).
     // `ModelId{0}` is the documented "unbound" sentinel and nextOpaqueId()
-    // never hands it to a real instance, so the real lookup in
-    // dispatchExecute must still, correctly, report "model not found" --
-    // exactly as it would for any other unknown id -- whether or not this
-    // peek took an ordering ticket for it.
+    // never hands it to a real instance, so the lookup in dispatchExecute
+    // reports "model not found", exactly as for any other unknown id.
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
@@ -601,7 +595,7 @@ TEST_CASE("morph::backend::RemoteServer: health() reports liveModels and inFligh
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    auto initial = server->health();
+    auto initial = morph::testing::awaitValue(server->health());
     REQUIRE(initial.ready);
     REQUIRE(initial.liveModels == 0);
     REQUIRE(initial.inFlight == 0);
@@ -609,43 +603,32 @@ TEST_CASE("morph::backend::RemoteServer: health() reports liveModels and inFligh
     WaitReply reg;
     server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
     reg.await();
-    REQUIRE(server->health().liveModels == 1);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1);
 
     WaitReply dereg;
     server->handle(morph::wire::encode(morph::wire::makeDeregister(reg.env.modelId)), std::ref(dereg));
     dereg.await();
-    REQUIRE(server->health().liveModels == 0);
+    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0);
 }
 
-TEST_CASE("morph::backend::RemoteServer: setHealthHandler fires immediately with the current status",
-          "[remote][observability]") {
+TEST_CASE(
+    "morph::backend::RemoteServer: ServerConfig::healthHandler is called from the constructor with the initial status",
+    "[remote][observability]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = sharedEnv();
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
     int calls = 0;
     morph::backend::HealthStatus last{};
-    server->setHealthHandler([&](const morph::backend::HealthStatus& status) {
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.healthHandler = [&](const morph::backend::HealthStatus& status) {
         ++calls;
         last = status;
-    });
+    };
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, env.dispatcher, env.registry);
 
     REQUIRE(calls == 1);
     REQUIRE(last.ready);
     REQUIRE(last.liveModels == 0);
-}
-
-TEST_CASE("morph::backend::RemoteServer: setHealthHandler(nullptr) clears the handler without invoking it",
-          "[remote][observability]") {
-    morph::exec::ThreadPoolExecutor pool{2};
-    auto& env = sharedEnv();
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
-
-    int calls = 0;
-    server->setHealthHandler([&](const morph::backend::HealthStatus&) { ++calls; });
-    REQUIRE(calls == 1);
-    server->setHealthHandler(nullptr);
-    REQUIRE(calls == 1);
 }
 
 // ── morph::backend::RemoteServer: identity injection at construction ────────────────────────

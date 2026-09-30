@@ -17,6 +17,7 @@ threading, and serialisation semantics differ per implementation.
 - [Lifetime & ownership](#lifetime--ownership)
 - [Thread safety](#thread-safety)
 - [Current executor](#current-executor)
+- [Owner strands — `OwnerStrand`](#owner-strands--ownerstrand)
 - [The I/O loop — `IoLoop`](#the-io-loop--ioloop)
 - [Failure modes](#failure-modes)
 - [API reference](#api-reference)
@@ -26,9 +27,9 @@ threading, and serialisation semantics differ per implementation.
 
 ## Type overview
 
-There are ten types and one free function (with two overloads), split across
-`morph::exec` and `morph::exec::detail` (in `executor.hpp`, `strand.hpp` and
-`io_loop.hpp`), and `morph::qt` (in `qt/qt_executor.hpp`):
+There are eleven types and one free function (with two overloads), split across
+`morph::exec` and `morph::exec::detail` (in `executor.hpp`, `strand.hpp`,
+`owner_strand.hpp` and `io_loop.hpp`), and `morph::qt` (in `qt/qt_executor.hpp`):
 
 | Type | Namespace | Purpose |
 |---|---|---|
@@ -41,6 +42,7 @@ There are ten types and one free function (with two overloads), split across
 | `ModelStrands` | `morph::exec::detail` | One strand per `ModelId` over an `IExecutor`: core-cpp's `core::async::KeyedStrands`, with what morph adds. Tasks with the same `ModelId` never overlap. |
 | `CoreExecutorOver` | `morph::exec::detail` (in `executor.hpp`) | A `core::async::IExecutor` over a morph `IExecutor`: how a core-cpp strand's pump reaches it, and what an `ExecutorScope` names. Every `IExecutor` owns one. |
 | `TaskResumer` | `morph::exec::detail` | A Task handler's resumer: the current executor while the handler runs, queuing its resumptions on its model's strand (see [`coroutines.md`](coroutines.md)). |
+| `OwnerStrand` | `morph::exec` (in `owner_strand.hpp`) | One strand over a morph executor that is itself a morph executor: the owner a framework component's state belongs to. See [owner strands](#owner-strands--ownerstrand). |
 | `IoLoop` | `morph::exec` (in `io_loop.hpp`) | The I/O loop: a core-cpp `PlatformLoop` and, natively, its one thread. Owns every `morph::net` socket, `TimeoutScheduler` timer and `NetworkMonitor` probe built on it; see [the I/O loop](#the-io-loop--ioloop). |
 
 `IExecutor` and the two thread-based concrete executors live in the public
@@ -403,6 +405,40 @@ replaces with a probe that records the site and reads the scope itself. That
 probe is how the posted-call tests prove a verb called off the loop ran its
 body on it.
 
+## Owner strands — `OwnerStrand`
+
+A framework component that keeps state — `RemoteServer`'s registry,
+`ReconnectCoordinator`'s reconnect sequence — owns one `OwnerStrand` and
+touches that state only in its tasks, the way a model's state is touched only
+on its `ModelStrands` key. It is one core-cpp `core::async::Strand`
+(`StrandReclaim::Never`) over the base executor's `coreExecutor()`, and a
+`morph::exec::IExecutor` itself, so a component can hand it out: as a
+`Completion`'s callback executor, or to a collaborator that must run on the
+same owner (`SyncWorker`, given `ReconnectCoordinator::strand()`).
+
+- **Order.** Tasks run one at a time, in the order they were posted, on the
+  base's threads. A task posted by one thread runs after every task that thread
+  posted before it.
+- **Identity.** Every task runs inside an `ExecutorScope` naming the strand's
+  own `coreExecutor()`, stated by the strand's around-task hook. So inside a
+  task `runningOn(strand)` is true — and `runningOn(base)` too, since the
+  strand's batch runs within the base's scope — and outside every task both are
+  false. A coroutine that suspends in a task and resumes on the current
+  executor comes back to the strand.
+- **Posting.** `post(std::function)` (the `IExecutor` verb) and
+  `postTask(callable)`, which holds the callable by value in the strand's one
+  allocation for it, with no `std::function` in between. A throw out of a task
+  is logged, as on `ModelStrands`.
+- **Teardown.** The destructor closes the strand: what is still queued is
+  dropped, and a task running on another thread is waited for (from inside one
+  of its own tasks the close returns at once and the task finishes). A
+  component whose tasks all hold the component (`RemoteServer`) finds nothing
+  queued when it closes; one whose tasks do not (`ReconnectCoordinator`) drops
+  what it has not started. The base must outlive the strand and keep running
+  its tasks until then.
+
+It owns no thread and adds no lock of its own; the queue's lock is core-cpp's.
+
 ## The I/O loop — `IoLoop`
 
 `IoLoop` owns a `core::net::PlatformLoop`. Natively it starts one thread that
@@ -459,6 +495,18 @@ rather than being hidden).
 | Member | Signature | Notes |
 |---|---|---|
 | `runningOn` | `[[nodiscard]] bool runningOn(IExecutor& executor) noexcept` | Whether the calling thread is inside a task of `executor`, at any depth and through any number of nested scopes. True inside a task posted to `InlineExecutor` from a task of `executor`. |
+
+### `OwnerStrand : IExecutor` (`morph::exec`)
+
+| Member | Signature | Notes |
+|---|---|---|
+| ctor | `explicit OwnerStrand(IExecutor& base)` | A strand over `base`, which must outlive it and keep running tasks. Non-copyable, non-movable. |
+| dtor | `~OwnerStrand() override` | Closes: queued tasks dropped, a task running elsewhere waited for. |
+| `post` | `void post(std::function<void()> task) override` | Queues `task` after everything posted before it. Callable from any thread. |
+| `postTask` | `template <typename F> void postTask(F&& task)` | The same, holding `task` by value; move-only callables are fine. |
+| `runningHere` | `[[nodiscard]] bool runningHere() const noexcept` | Whether the caller is inside one of its tasks. |
+| `idle` | `[[nodiscard]] bool idle() const` | Nothing queued or running; racy where other threads post. |
+| `seal`, `close` | `void seal()`, `void close()` | core-cpp's teardown steps: `seal` refuses the try-forms and keeps running what is queued; `close` drops what is queued. Idempotent. |
 
 ### `ThreadPoolExecutor : IExecutor`
 

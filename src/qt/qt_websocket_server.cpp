@@ -6,7 +6,9 @@
 #include <QPointer>
 #include <QString>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <memory>
 #include <morph/core/logger.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <string_view>
@@ -93,20 +95,31 @@ bool QtWebSocketServer::closeGracefully(std::chrono::milliseconds deadline) {
     _server.beginShutdown();
 
     // Step 3: wait for in-flight replies without blocking the event loop.
-    // drainedWithin(0) is a non-blocking poll of the current state; pumping
-    // processEvents between polls lets the reply callbacks RemoteServer
+    // drainedWithin answers on the server's strand, off this thread; pumping
+    // processEvents until it does lets the reply callbacks RemoteServer
     // already queued via QMetaObject::invokeMethod (see onTextMessage) run,
     // which is what actually delivers those replies over the still-open
     // sockets.
-    bool drained = _server.drainedWithin(std::chrono::milliseconds{0});
-    while (!drained && std::chrono::steady_clock::now() < absoluteDeadline) {
+    struct DrainAnswer {
+        std::atomic<bool> settled{false};
+        std::atomic<bool> drained{false};
+    };
+    auto const answer = std::make_shared<DrainAnswer>();
+    auto const budget = std::max(
+        std::chrono::milliseconds{0},
+        std::chrono::duration_cast<std::chrono::milliseconds>(absoluteDeadline - std::chrono::steady_clock::now()));
+    _server.drainedWithin(budget).then([answer](bool drainedNow) {
+        answer->drained.store(drainedNow);
+        answer->settled.store(true);
+    });
+    while (!answer->settled.load() && std::chrono::steady_clock::now() < absoluteDeadline) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-        drained = _server.drainedWithin(std::chrono::milliseconds{0});
     }
+    bool const drained = answer->drained.load();
 
-    // The in-flight counter can reach zero a hair before the strand task's
-    // reply callback actually reaches the Qt event queue (dispatchExecute's
-    // `complete` decrements the counter, then invokes `reply`), and actually
+    // The in-flight count reaches zero a hair before the model strand's reply
+    // callback actually reaches the Qt event queue (the execute's `complete`
+    // posts the decrement, then invokes `reply`), and actually
     // delivering that reply over the socket needs a couple more event-loop
     // round trips beyond that (this side's write, then the peer's read). Give
     // a reply that just landed a short, bounded window to flush before this

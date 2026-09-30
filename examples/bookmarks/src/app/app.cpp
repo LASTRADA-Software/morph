@@ -63,6 +63,14 @@ constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;  // 2100-01-01T
 /// this is ~42 concurrent clients, not a limit a real session will meet.
 constexpr std::size_t kMaxLiveModels = 256;
 
+/// @brief The server's configuration: the live-model cap above.
+/// @return A `ServerConfig` whose `limits.maxLiveModels` is `kMaxLiveModels`.
+::morph::backend::ServerConfig serverConfig() {
+    ::morph::backend::ServerConfig config;
+    config.limits.maxLiveModels = kMaxLiveModels;
+    return config;
+}
+
 }  // namespace
 
 App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
@@ -78,7 +86,8 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
       // constructor, whose MacFunction default is dropped entirely under
       // MORPH_REQUIRE_VETTED_HMAC.
       _server{std::make_shared<::morph::backend::RemoteServer>(
-          _pool, std::make_shared<auth::BookmarksAuthorizer>(tokenSecret, ::morph::session::hmacSha256))},
+          _pool, std::make_shared<auth::BookmarksAuthorizer>(tokenSecret, ::morph::session::hmacSha256),
+          serverConfig())},
       _fetchBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server)},
       _fetcher{std::move(fetcher)} {
     ::morph::journal::setActionLog(_actionLog);
@@ -93,10 +102,6 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
     // by design (see TokenIssuer's own doc comment) -- this call site must
     // still compile with the identical MAC it always used.
     auth::setTokenIssuer(std::make_shared<::morph::session::TokenIssuer>(tokenSecret, ::morph::session::hmacSha256));
-
-    ::morph::backend::LimitPolicy limits;
-    limits.maxLiveModels = kMaxLiveModels;
-    _server->setLimitPolicy(limits);
 
     // The worker's own service-principal session. Minted here rather than
     // through AuthModel deliberately: AuthModel *refuses* to mint a token in

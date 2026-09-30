@@ -295,7 +295,7 @@ void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> l
     // shared-instance directory key *is* the project id
     // (BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)), so a
     // second attach naming a *different* project can never even reach an
-    // already-live instance: attachExistingLocked's re-attach-by-key path
+    // already-live instance: attachExisting's re-attach-by-key path
     // only bumps a refcount and never calls attachActionLog again, and a
     // genuinely different key routes to a different, freshly-constructed
     // instance via the registry instead. _projectIdStr therefore has no

@@ -140,8 +140,10 @@ TEST_CASE("RemoteServer: hello echoes callId in its reply", "[remote][protocol]"
 
 TEST_CASE("RemoteServer: hello outside the supported range is rejected", "[remote][protocol]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setSupportedVersionRange(2, 3);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.minProtocolVersion = 2;
+    serverConfig.maxProtocolVersion = 3;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::testing::WaitReply waiter;
     server->handle(encode(makeHello(1)), std::ref(waiter));
@@ -156,8 +158,10 @@ TEST_CASE("RemoteServer: hello above the supported range's max is rejected", "[r
     // short-circuits the `||` before `> maxV` is ever evaluated. A version
     // above max is the only way to reach that second operand.
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setSupportedVersionRange(1, 2);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.minProtocolVersion = 1;
+    serverConfig.maxProtocolVersion = 2;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::testing::WaitReply waiter;
     server->handle(encode(makeHello(3)), std::ref(waiter));
@@ -168,8 +172,10 @@ TEST_CASE("RemoteServer: hello above the supported range's max is rejected", "[r
 
 TEST_CASE("RemoteServer: hello inside a widened supported range succeeds", "[remote][protocol]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setSupportedVersionRange(1, 2);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.minProtocolVersion = 1;
+    serverConfig.maxProtocolVersion = 2;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
 
     morph::testing::WaitReply waiter;
     server->handle(encode(makeHello(2)), std::ref(waiter));
@@ -177,10 +183,13 @@ TEST_CASE("RemoteServer: hello inside a widened supported range succeeds", "[rem
     REQUIRE(waiter.env.kind == "ok");
 }
 
-TEST_CASE("RemoteServer::setSupportedVersionRange rejects min > max", "[remote][protocol]") {
+TEST_CASE("RemoteServer: a ServerConfig whose protocol range is empty is rejected at construction",
+          "[remote][protocol]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    REQUIRE_THROWS_AS(server->setSupportedVersionRange(5, 1), std::invalid_argument);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.minProtocolVersion = 5;
+    serverConfig.maxProtocolVersion = 1;
+    REQUIRE_THROWS_AS(std::make_shared<morph::backend::RemoteServer>(pool, serverConfig), std::invalid_argument);
 }
 
 TEST_CASE("RemoteServer: hello is also handled via handleInline", "[remote][protocol][handleInline]") {
@@ -205,8 +214,10 @@ TEST_CASE("SimulatedRemoteBackend::negotiateProtocolVersion: Negotiated against 
 TEST_CASE("SimulatedRemoteBackend::negotiateProtocolVersion: throws when the server's range excludes us",
           "[remote][protocol]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    server->setSupportedVersionRange(2, 3);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.minProtocolVersion = 2;
+    serverConfig.maxProtocolVersion = 3;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
     morph::backend::SimulatedRemoteBackend backend{*server};
 
     REQUIRE_THROWS_AS(backend.negotiateProtocolVersion(), std::runtime_error);
