@@ -570,13 +570,17 @@ T awaitValueOn(::morph::exec::MainThreadExecutor& owner, ::morph::async::Complet
     std::optional<T> value;
     std::exception_ptr error;
     bool done = false;
-    completion.then([&value, &done](const T& settled) {
-        value.emplace(settled);
-        done = true;
-    });
-    completion.onError([&error, &done](std::exception_ptr settled) {
-        error = std::move(settled);
-        done = true;
+    // Attached in one of the owner's tasks, so the attach is on the owner even
+    // when this thread is running another executor's task (a strand's).
+    owner.post([&completion, &value, &error, &done] {
+        completion.then([&value, &done](const T& settled) {
+            value.emplace(settled);
+            done = true;
+        });
+        completion.onError([&error, &done](std::exception_ptr settled) {
+            error = std::move(settled);
+            done = true;
+        });
     });
     if (!pumpOwnerUntil(owner, [&done] { return done; }, WaitBudget{budget})) {
         throw std::runtime_error("awaitValueOn: the completion did not settle within the budget");

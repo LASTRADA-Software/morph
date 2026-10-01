@@ -82,6 +82,16 @@ struct IExecutor {
     /// @param task Callable to execute.
     virtual void post(std::function<void()> task) = 0;
 
+    /// @brief Whether this executor runs one task at a time, each after the
+    ///        tasks posted before it: a strand, a GUI loop, a pumped
+    ///        `MainThreadExecutor`.
+    ///
+    /// What an owner must be: a component whose state is touched only in its
+    /// owner's tasks needs those tasks never to overlap. A pool runs several
+    /// at once, and the inline executor runs each wherever it is posted from.
+    /// @return `true` unless an override says otherwise.
+    [[nodiscard]] virtual bool isSerial() const noexcept { return true; }
+
     /// @brief This executor as a core-cpp executor: the identity an
     ///        `core::async::ExecutorScope` names.
     /// @return The adapter that posts every resumption through `post()`. The
@@ -193,6 +203,10 @@ public:
         _q.push(std::move(task));
         _cv.notify_one();
     }
+
+    /// @brief Not serial: the workers run tasks at once.
+    /// @return `false`.
+    [[nodiscard]] bool isSerial() const noexcept override { return false; }
 
 private:
     void loop() {
@@ -345,12 +359,11 @@ namespace detail {
 
 /// @brief Executor that runs each posted task on the posting thread, at once.
 ///
-/// "Deliver wherever the producer settled", expressed as an executor rather
-/// than as a rule nobody can check. A caller that is itself where the reply
-/// settles names it: `SynchronousBackendAdapter` calls its wrapped backend's
-/// `bindModel`/`promoteModel` with it on the control strand, and a synchronous
-/// `SocketBackend` verb waits on a reply delivered with it. `Bridge` never
-/// does: it names its owner (see `docs/spec/core/backend.md`).
+/// The base of an `OwnerStrand` that should run each task on the thread that
+/// posts it (a test's owner with no pool). It is not serial
+/// (`isSerial()` is `false`), so it cannot be a `Completion`'s owner: a
+/// completion delivered "wherever the producer settled" has no one place its
+/// callbacks are attached and run.
 ///
 /// @warning Not a general-purpose executor. Posting to it re-enters the caller,
 ///          so a handler that takes a lock the posting frame already holds
@@ -375,14 +388,17 @@ public:
             task();
         }
     }
+
+    /// @brief Not serial: a task runs on whichever thread posts it, beside
+    ///        any other running elsewhere.
+    /// @return `false`.
+    [[nodiscard]] bool isSerial() const noexcept override { return false; }
 };
 
 /// @brief The process-wide `InlineExecutor`.
 ///
-/// A function-local static, so it is constructed on first use and outlives every
-/// `Completion` built against it — which is exactly what `Completion`'s "the
-/// executor must outlive the completion" requirement asks of a caller that has
-/// no executor of its own to name.
+/// A function-local static, so it is constructed on first use and outlives
+/// everything built over it.
 /// @return Reference to the shared inline executor.
 inline IExecutor& inlineExecutor() {
     static InlineExecutor executor;

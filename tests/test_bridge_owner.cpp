@@ -129,7 +129,7 @@ public:
     morph::async::Completion<ModelId> bindModel(BindRequest request, morph::exec::IExecutor& cbExec) override {
         auto [completion, promise] = morph::async::Completion<ModelId>::makeSettleable(&cbExec);
         // The instance is created now, on the owner; only the reply is held.
-        auto local = LocalBackend::bindModel(std::move(request), morph::exec::detail::inlineExecutor());
+        auto local = LocalBackend::bindModel(std::move(request), cbExec);
         _held.push_back(Held{.id = morph::bridge::detail::takeSettled(local)->id, .promise = std::move(promise)});
         ++binds;
         return std::move(completion);

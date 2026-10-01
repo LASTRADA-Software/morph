@@ -70,6 +70,14 @@ An executor is an identity: it is neither copyable nor movable, because it owns
 the adapter (`coreExecutor()`) that points back at it. See
 [Current executor](#current-executor).
 
+`isSerial()` says whether the executor runs one task at a time, each after the
+tasks posted before it. Every executor is serial by default — a strand
+(`OwnerStrand`, a `ModelStrands` key), `MainThreadExecutor`, `QtExecutor` —
+except `ThreadPoolExecutor`, whose workers run tasks at once, and
+`InlineExecutor`, which runs each task on whichever thread posts it. An owner
+must be serial: a `Completion` refuses any other (see
+[completion.md](completion.md#thread-safety)).
+
 ## `ThreadPoolExecutor`
 
 A fixed-size thread pool. The constructor spawns `n` worker threads; each worker
@@ -543,6 +551,7 @@ rather than being hidden).
 | Member | Signature | Notes |
 |---|---|---|
 | `post` | `virtual void post(std::function<void()> task) = 0` | Thread-safe. Task runs after the call returns. Per-implementation exception handling (both concrete executors log; see Failure modes). |
+| `isSerial` | `[[nodiscard]] virtual bool isSerial() const noexcept` | Whether tasks run one at a time, in post order. Default `true`; `ThreadPoolExecutor` and `InlineExecutor` return `false`. What a `Completion`'s owner must be. |
 | `coreExecutor` | `[[nodiscard]] core::async::IExecutor& coreExecutor() noexcept` | This executor as a core-cpp executor: the identity an `ExecutorScope` names. The same object for the executor's whole life. |
 | copy, move | deleted | The core-cpp adapter it owns points back at it. |
 | dtor | `virtual ~IExecutor() = default` | |
@@ -572,6 +581,7 @@ rather than being hidden).
 | ctor | `explicit ThreadPoolExecutor(std::size_t n)` | Spawns `max(n, 1)` worker threads. `n == 0` is clamped to 1 (a zero-worker pool would hang every task). |
 | dtor | `~ThreadPoolExecutor() override` | Signals stop, then joins all workers, which drain the queue (run every already-queued task) before exiting. Tasks posted concurrently with or after destruction may be lost. |
 | `post` | `void post(std::function<void()> task) override` | Enqueues to FIFO; notifies one worker. Thread-safe. Each task runs inside a scope naming this pool; exceptions are caught and logged in the worker loop. |
+| `isSerial` | `bool isSerial() const noexcept override` | `false`: the workers run tasks at once. |
 
 ### `MainThreadExecutor : IExecutor`
 

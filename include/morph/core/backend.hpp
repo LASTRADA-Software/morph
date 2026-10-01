@@ -715,8 +715,9 @@ public:
     ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(detail::BindRequest request,
                                                                          ::morph::exec::IExecutor& cbExec) override {
         note("SynchronousBackendAdapter::bindModel");
-        return dispatch(cbExec, [request = std::move(request)](detail::IBackend& inner) mutable {
-            return inner.bindModel(std::move(request), ::morph::exec::detail::inlineExecutor());
+        return dispatch(cbExec, [request = std::move(request)](detail::IBackend& inner,
+                                                               ::morph::exec::IExecutor& replyExec) mutable {
+            return inner.bindModel(std::move(request), replyExec);
         });
     }
 
@@ -731,8 +732,9 @@ public:
     ::morph::async::Completion<::morph::exec::detail::ModelId> promoteModel(
         detail::PromoteRequest request, ::morph::exec::IExecutor& cbExec) override {
         note("SynchronousBackendAdapter::promoteModel");
-        return dispatch(cbExec, [request = std::move(request)](detail::IBackend& inner) mutable {
-            return inner.promoteModel(std::move(request), ::morph::exec::detail::inlineExecutor());
+        return dispatch(cbExec, [request = std::move(request)](detail::IBackend& inner,
+                                                               ::morph::exec::IExecutor& replyExec) mutable {
+            return inner.promoteModel(std::move(request), replyExec);
         });
     }
 
@@ -948,7 +950,13 @@ private:
 
     /// @brief Queues @p op on the strand and settles a `Completion` with the
     ///        outcome of the `Completion` it returns.
-    /// @tparam Op    Callable taking `detail::IBackend&` and returning a `Completion<ModelId>`.
+    ///
+    /// The wrapped backend's answer is delivered on @p cbExec too, and is
+    /// attached to there, by a task posted from the strand: its owner is the
+    /// caller's, which runs one task at a time, while the strand is not an
+    /// executor that answer could be delivered on.
+    /// @tparam Op    Callable taking `detail::IBackend&` and the executor its
+    ///               `Completion<ModelId>` is to be delivered on, and returning it.
     /// @param cbExec Executor the continuation is delivered on.
     /// @param op     The call to run on the strand.
     /// @return A `Completion` settled by @p op's outcome.
@@ -958,14 +966,16 @@ private:
         auto [completion, promise] = Settled::makeSettleable(&cbExec);
         auto pending = std::make_shared<PendingControl>(std::move(promise));
         trackPending(pending);
-        post([pending, op = std::move(op)](detail::IBackend& inner) mutable {
+        post([pending, op = std::move(op), replyExec = &cbExec](detail::IBackend& inner) mutable {
             if (pending->cancelled.load(std::memory_order_acquire)) {
                 return;
             }
             try {
-                op(inner)
-                    .then([pending](::morph::exec::detail::ModelId mid) { pending->promise.resolve(mid); })
-                    .onError([pending](const std::exception_ptr& failure) { pending->promise.reject(failure); });
+                auto answer = std::make_shared<Settled>(op(inner, *replyExec));
+                replyExec->post([pending, answer] {
+                    answer->then([pending](::morph::exec::detail::ModelId mid) { pending->promise.resolve(mid); })
+                        .onError([pending](const std::exception_ptr& failure) { pending->promise.reject(failure); });
+                });
             } catch (...) {
                 pending->promise.reject(std::current_exception());
             }

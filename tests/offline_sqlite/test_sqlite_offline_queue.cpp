@@ -16,6 +16,7 @@
 #include <morph/core/file_io_ops.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/observability.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/offline/sqlite_offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
 #include <optional>
@@ -669,7 +670,8 @@ TEST_CASE(
     // is built there too: built here, this thread would count as its owner
     // and the enqueue would run here, blocking the very thread that commits.
     morph::exec::ThreadPoolExecutor ownerThread{1};
-    morph::exec::ThreadPoolExecutor replies{1};
+    morph::exec::ThreadPoolExecutor repliesPool{1};
+    morph::exec::OwnerStrand replies{repliesPool};  // serial: a completion's owner
     std::unique_ptr<morph::offline::SqliteOfflineQueue> built;
     std::atomic<bool> seeded{false};
     ownerThread.post([&] {

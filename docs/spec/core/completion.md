@@ -277,6 +277,16 @@ namespace ever appearing in their code.
 A `Completion<T>` belongs to the executor it was constructed with, `cbExec`.
 There is no lock; every touch of the handler side happens on `cbExec`.
 
+**A completion's owner is one place.** `cbExec` must be serial
+(`IExecutor::isSerial()`): it runs one task at a time, each after the tasks
+posted before it — a strand, a GUI loop, a pumped `MainThreadExecutor`. A
+`ThreadPoolExecutor` runs two of its tasks at once and `inlineExecutor()` runs
+each wherever it is posted from, so neither can keep the handler side in one
+place. The constructor reports a non-serial owner through
+`exec::detail::noteOwner` (site `"Completion: an owner that is not serial"`) —
+a debug-build assertion, or the owner probe a test installs — at the point the
+owner is named, where the attach-on-owner check below could not see the race.
+
 - **Settling — any thread.** `setValue` / `setException` (and `Promise`'s
   `resolve` / `reject`) claim the state with an atomic exchange, store the
   outcome, publish it with a release store of `ready`, and post `deliver()` to
@@ -295,11 +305,9 @@ There is no lock; every touch of the handler side happens on `cbExec`.
   thread attaching to a completion whose executor is a pool is reported at
   delivery. This is a debug check, not a guarantee; the ThreadSanitizer leg is
   the backstop.
-- **`inlineExecutor()` completions.** Delivery runs wherever the settle happens,
-  so the owner is the settler. Their consumer attaches before handing the
-  state to the producer, after it settled, or on the settler's own executor
-  (`SocketBackend`'s synchronous verbs attach on the I/O loop that settles
-  them). This cannot be checked and is not.
+- **A caller that waits.** A caller with no serial executor of its own names a
+  `MainThreadExecutor` local to the wait and pumps it on the waiting thread:
+  `SocketBackend`'s synchronous verbs do, attaching in one of its tasks.
 - **Synchronous readers — any thread.** Anything that acquire-loads `ready ==
   true` may read `value` / `error`: `bridge::detail::takeSettled` reads a bind
   a backend settled before returning, without a hop to the owner.
@@ -528,7 +536,7 @@ that will never signal.
 | Member | Signature | Notes |
 |---|---|---|
 | default ctor | `Completion() = default` | Empty, no-op completion (null state). |
-| value ctor | `Completion(shared_ptr<CompletionState<T>>, IExecutor*)` | Backed by user-supplied state; executor may be `nullptr`. |
+| value ctor | `Completion(shared_ptr<CompletionState<T>>, IExecutor*)` | Backed by user-supplied state; executor may be `nullptr`, and is otherwise serial (a non-serial one is reported, asserted in a debug build). |
 | move ctor | `Completion(Completion&&) noexcept = default` | Transfers state ownership. |
 | move assign | `Completion& operator=(Completion&&) noexcept = default` | Transfers state ownership. |
 | copy ctor | `Completion(Completion const&) = delete` | Move-only handle. |

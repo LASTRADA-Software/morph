@@ -21,7 +21,9 @@ namespace morph::testing {
 /// @return The bound id; the bind's failure is rethrown.
 inline ::morph::exec::detail::ModelId bindNow(::morph::backend::detail::IBackend& backend,
                                               ::morph::backend::detail::BindRequest request) {
-    return awaitValue(backend.bindModel(std::move(request), ::morph::exec::detail::inlineExecutor()));
+    return awaitAnswer([&backend, &request](::morph::exec::IExecutor& reply) {
+        return backend.bindModel(std::move(request), reply);
+    });
 }
 
 /// @brief Register-or-attach the shared instance for (@p typeId, @p primary).

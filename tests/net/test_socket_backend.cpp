@@ -16,6 +16,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/io_loop.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/timeout_scheduler.hpp>
@@ -1507,7 +1508,10 @@ struct ReconnectFixture {
     std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     // Where the reconnect handler is posted: a thread of its own, never the
     // backend's I/O loop.
-    morph::exec::ThreadPoolExecutor handlerExec{1};
+    // Serial, so it can own the completions the handler issues: a strand
+    // over a one-thread pool.
+    morph::exec::ThreadPoolExecutor handlerPool{1};
+    morph::exec::OwnerStrand handlerExec{handlerPool};
     std::unique_ptr<morph::net::SocketBackend> backend;
     std::unique_ptr<morph::net::SocketServer> restarted;
     std::uint16_t port = 0;
@@ -2353,21 +2357,35 @@ TEST_CASE("SocketBackend: destroyed on the loop thread, from a timer callback, i
 
 TEST_CASE("SocketBackend: destroyed inside its own reply's continuation, on the loop, it does not deadlock",
           "[net][socket_backend][owner]") {
-    // The continuation runs on the inline executor, so it runs inside the
-    // backend's own reply flow: the destructor closes the backend under the
-    // flow that is delivering to it, and the flow must notice and stop.
+    // The continuation is delivered on an executor whose tasks run on the
+    // loop, so the destructor closes the backend from a loop task, after the
+    // reply flow that settled it.
     SharedLoopStack stack;
     auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
     std::atomic<bool> destroyed{false};
     std::atomic<bool> destroyedOnLoop{false};
 
-    auto comp = stack.backend->execute(mid, echoCall(), &morph::exec::detail::inlineExecutor());
-    comp.then([&](const std::shared_ptr<void>&) {
-            destroyedOnLoop = onLoop(stack.loop);
-            stack.backend.reset();
-            destroyed = true;
-        })
-        .onError([](const std::exception_ptr&) {});
+    struct OnLoop final : morph::exec::IExecutor {
+        explicit OnLoop(morph::exec::IoLoop& ioLoop) : loop{&ioLoop} {}
+        void post(std::function<void()> task) override {
+            loop->post([this, task = std::move(task)] {
+                core::async::ExecutorScope const scope{coreExecutor()};
+                task();
+            });
+        }
+        morph::exec::IoLoop* loop;
+    } onLoopExec{stack.loop};
+
+    auto comp = std::make_shared<morph::async::Completion<std::shared_ptr<void>>>(
+        stack.backend->execute(mid, echoCall(), &onLoopExec));
+    onLoopExec.post([&, comp] {
+        comp->then([&](const std::shared_ptr<void>&) {
+                destroyedOnLoop = onLoop(stack.loop);
+                stack.backend.reset();
+                destroyed = true;
+            })
+            .onError([](const std::exception_ptr&) {});
+    });
     REQUIRE(morph::testing::waitUntil([&] { return destroyed.load(); },
                                       morph::testing::WaitBudget{std::chrono::seconds{5}}));
     CHECK(destroyedOnLoop.load());

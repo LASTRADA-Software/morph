@@ -898,7 +898,7 @@ public:
         // delivered from another thread.
         std::vector<std::pair<std::shared_ptr<Promise>, morph::bridge::detail::BindOutcome>> replies;
         for (auto& [promise, request] : std::exchange(_pending, {})) {
-            auto local = LocalBackend::bindModel(std::move(request), morph::exec::detail::inlineExecutor());
+            auto local = LocalBackend::bindModel(std::move(request), _settledOn);
             replies.emplace_back(promise, *morph::bridge::detail::takeSettled(local));
         }
         std::thread settler{[&replies] {
@@ -917,6 +917,9 @@ private:
     using Promise = morph::async::Completion<morph::exec::detail::ModelId>::Promise;
 
     std::vector<std::pair<std::shared_ptr<Promise>, morph::backend::detail::BindRequest>> _pending;
+    // The owner of the local binds' completions, which are read through
+    // takeSettled and never delivered.
+    morph::exec::MainThreadExecutor _settledOn;
     std::function<void()> _handler;
     morph::exec::IExecutor* _handlerExec = nullptr;
 };

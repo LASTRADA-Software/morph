@@ -6,6 +6,7 @@
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/observability.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <optional>
 #include <string>
@@ -80,7 +81,8 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueues from many threads all 
 
     // Off the owner, a thread enqueues through the completion form: the
     // insert runs on the owner, and the id comes back on `replies`.
-    morph::exec::ThreadPoolExecutor replies{1};
+    morph::exec::ThreadPoolExecutor repliesPool{1};
+    morph::exec::OwnerStrand replies{repliesPool};
     std::atomic<int> answered{0};
     std::vector<std::thread> threads;
     threads.reserve(nThreads);

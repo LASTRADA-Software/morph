@@ -17,6 +17,7 @@
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/strand.hpp>
 #include <morph/offline/network_monitor.hpp>
@@ -146,7 +147,9 @@ TEST_CASE("morph::exec::detail::ModelStrands: churn across thousands of distinct
 
 TEST_CASE("morph::async::Completion: callback runs on cbExec thread, not the setValue thread",
           "[completion][concurrency][quantum-parity]") {
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    // The owner is serial: a strand over a one-thread pool.
+    morph::exec::ThreadPoolExecutor cbThreadPool{1};
+    morph::exec::OwnerStrand cbPool{cbThreadPool};
     auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
     morph::async::Completion<int> comp{state, &cbPool};
 

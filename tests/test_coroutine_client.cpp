@@ -14,6 +14,7 @@
 #include <morph/core/completion.hpp>
 #include <morph/core/coroutine.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -212,7 +213,10 @@ TEST_CASE("a rejection after a stop withdrew the await reaches nothing", "[corou
 }
 
 TEST_CASE("co_await outside any resumption context resumes on the completion's executor", "[coroutine][client]") {
-    morph::exec::ThreadPoolExecutor callbacks{1};
+    // A completion's owner is serial: a strand over a one-thread pool, so it
+    // still delivers off this thread.
+    morph::exec::ThreadPoolExecutor callbacksPool{1};
+    morph::exec::OwnerStrand callbacks{callbacksPool};
     auto [completion, promise] = Completion<int>::makeSettleable(&callbacks);
     auto seen = std::make_shared<Observed>();
 
@@ -234,7 +238,10 @@ TEST_CASE("co_await outside any resumption context resumes on the completion's e
 
 TEST_CASE("a stop outside any resumption context resumes the await on the completion's executor",
           "[coroutine][client]") {
-    morph::exec::ThreadPoolExecutor callbacks{1};
+    // A completion's owner is serial: a strand over a one-thread pool, so it
+    // still delivers off this thread.
+    morph::exec::ThreadPoolExecutor callbacksPool{1};
+    morph::exec::OwnerStrand callbacks{callbacksPool};
     auto [completion, promise] = Completion<int>::makeSettleable(&callbacks);
     auto seen = std::make_shared<Observed>();
 
@@ -283,7 +290,10 @@ core::async::Task<void> awaitThenObserve(Completion<int> completion, std::shared
 TEST_CASE("a spawned coroutine that awaits a Completion of another executor resumes on its own executor",
           "[coroutine][client][scope]") {
     morph::exec::MainThreadExecutor owner;
-    morph::exec::ThreadPoolExecutor callbacks{1};
+    // A completion's owner is serial: a strand over a one-thread pool, so it
+    // still delivers off this thread.
+    morph::exec::ThreadPoolExecutor callbacksPool{1};
+    morph::exec::OwnerStrand callbacks{callbacksPool};
     auto [completion, promise] = Completion<int>::makeSettleable(&callbacks);
     auto seen = std::make_shared<ResumeObserved>();
 
@@ -300,7 +310,10 @@ TEST_CASE("a spawned coroutine that awaits a Completion of another executor resu
 TEST_CASE("a coroutine started inside an executor's task resumes there, not on the completion's executor",
           "[coroutine][client][scope]") {
     morph::exec::MainThreadExecutor owner;
-    morph::exec::ThreadPoolExecutor callbacks{1};
+    // A completion's owner is serial: a strand over a one-thread pool, so it
+    // still delivers off this thread.
+    morph::exec::ThreadPoolExecutor callbacksPool{1};
+    morph::exec::OwnerStrand callbacks{callbacksPool};
     auto [completion, promise] = Completion<int>::makeSettleable(&callbacks);
     auto seen = std::make_shared<ResumeObserved>();
 

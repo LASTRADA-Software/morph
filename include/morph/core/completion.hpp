@@ -115,11 +115,8 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
     /// every executor's task is presumed to be the owner's own thread running
     /// code outside its tasks -- a Qt slot, a test body -- and recorded, so
     /// `deliver()` can check the presumption against where it actually runs.
-    /// `inlineExecutor()` delivers wherever the settle happens: its consumer
-    /// attaches before handing the state to the producer, or after it settled,
-    /// and nothing here can tell those apart from a race.
     void checkOwner(char const* site) noexcept {
-        if (::morph::exec::runningOn(*cbExec) || cbExec == &::morph::exec::detail::inlineExecutor()) {
+        if (::morph::exec::runningOn(*cbExec)) {
             return;
         }
         if (::core::async::ExecutorScope::innermost() != nullptr) {
@@ -432,10 +429,20 @@ public:
     /// @brief Constructs a completion backed by @p statePtr, delivering callbacks via @p execPtr.
     /// @param statePtr Shared state produced by the backend.
     /// @param execPtr  The completion's owner: settling posts the delivery there, and
-    ///                 callbacks are attached and run there. If `nullptr`, callbacks are
-    ///                 never delivered — attaching one is a no-op.
+    ///                 callbacks are attached and run there. It must be serial
+    ///                 (`IExecutor::isSerial`): a pool or the inline executor is
+    ///                 refused, asserted in a debug build. If `nullptr`, callbacks
+    ///                 are never delivered — attaching one is a no-op.
     Completion(std::shared_ptr<detail::CompletionState<T>> statePtr, ::morph::exec::IExecutor* execPtr)
         : _state{std::move(statePtr)} {
+        if (execPtr != nullptr && !execPtr->isSerial()) {
+            // The owner touches the handler list in its tasks; a pool runs two
+            // of them at once, and the inline executor runs one wherever the
+            // settle happened. A debug build stops here, where the owner is
+            // named, rather than at a race nothing can see.
+            ::morph::exec::detail::noteOwner("Completion: an owner that is not serial", execPtr->coreExecutor(),
+                                             false);
+        }
         if (_state != nullptr) {
             _state->cbExec = execPtr;
         }

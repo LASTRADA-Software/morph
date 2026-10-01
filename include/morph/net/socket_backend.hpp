@@ -191,13 +191,14 @@ public:
     ::morph::exec::detail::ModelId registerModelWithContext(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
         std::string_view contextKey) override {
-        return awaitReply(bindModel(::morph::backend::detail::BindRequest{.typeId = typeId,
-                                                                          .factory = std::move(factory),
-                                                                          .contextKey = std::string{contextKey},
-                                                                          .primary = {},
-                                                                          .current = {}},
-                                    ::morph::exec::detail::inlineExecutor()),
-                          "register");
+        return awaitReply<::morph::exec::detail::ModelId>("register", [&](::morph::exec::IExecutor& waiter) {
+            return bindModel(::morph::backend::detail::BindRequest{.typeId = typeId,
+                                                                   .factory = std::move(factory),
+                                                                   .contextKey = std::string{contextKey},
+                                                                   .primary = {},
+                                                                   .current = {}},
+                             waiter);
+        });
     }
 
     /// @brief Files a live server-side instance under @p primary and waits for the reply.
@@ -209,11 +210,12 @@ public:
         if (primary.empty() || mid.v == 0U) {
             return;
         }
-        static_cast<void>(awaitReply(promoteModel(
-                                         ::morph::backend::detail::PromoteRequest{
-                                             .mid = mid, .typeId = typeId, .primary = std::string{primary}},
-                                         ::morph::exec::detail::inlineExecutor()),
-                                     "assign"));
+        static_cast<void>(awaitReply<::morph::exec::detail::ModelId>("assign", [&](::morph::exec::IExecutor& waiter) {
+            return promoteModel(
+                ::morph::backend::detail::PromoteRequest{
+                    .mid = mid, .typeId = typeId, .primary = std::string{primary}},
+                waiter);
+        }));
     }
 
     // ── The structural registration surface ──────────────────────────────
@@ -295,14 +297,16 @@ public:
     /// @throws std::runtime_error if the server replies with an error, the
     ///         socket is down, or this is the loop's own thread.
     std::vector<std::string> listInstances(const std::string& typeId) override {
-        auto state = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
-        ::morph::async::Completion<std::string> comp{state, &::morph::exec::detail::inlineExecutor()};
-        _loop->post([core = _core, env = ::morph::wire::makeInstances(typeId),
-                     pending = PendingControl{
-                         .state = nullptr, .what = "instances", .echo = std::nullopt, .body = state}]() mutable {
-            core->fileControl(std::move(env), std::move(pending));
+        auto body = awaitReply<std::string>("instances", [&](::morph::exec::IExecutor& waiter) {
+            auto state = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
+            ::morph::async::Completion<std::string> comp{state, &waiter};
+            _loop->post([core = _core, env = ::morph::wire::makeInstances(typeId),
+                         pending = PendingControl{
+                             .state = nullptr, .what = "instances", .echo = std::nullopt, .body = state}]() mutable {
+                core->fileControl(std::move(env), std::move(pending));
+            });
+            return comp;
         });
-        auto body = awaitReply(std::move(comp), "instances");
         std::vector<std::string> keys;
         if (auto errCode = glz::read_json(keys, body)) {
             throw std::runtime_error("instances decode failed: " + glz::format_error(errCode, body));
@@ -418,38 +422,65 @@ public:
     }
 
 private:
-    /// @brief Waits on the calling thread for @p completion, settled on the loop.
-    /// @tparam T The completion's value type.
-    /// @param completion A completion delivered on `inlineExecutor()`.
-    /// @param what       Verb name for the error message.
+    /// @brief Waits on the calling thread for the reply to the request @p ask
+    ///        sends, settled on the loop.
+    ///
+    /// The answer's owner is an executor local to this call, which the
+    /// calling thread pumps while it waits: the attach and the delivery are
+    /// both tasks of it, so the waiting thread is the one place they run.
+    /// @tparam T   The answer's type.
+    /// @tparam Ask Callable taking the waiter (`morph::exec::IExecutor&`) and
+    ///         returning a `Completion<T>` delivered on it.
+    /// @param what Verb name for the error message.
+    /// @param ask  Sends the request, naming the waiter as the answer's owner.
     /// @return The settled value.
-    /// @throws std::runtime_error on the loop's own thread, on a disconnect,
-    ///         or with the server's refusal.
-    template <typename T>
-    T awaitReply(::morph::async::Completion<T> completion, std::string_view what) {
+    /// @throws std::runtime_error on the loop's own thread, when the loop has
+    ///         stopped, on a disconnect, or with the server's refusal.
+    template <typename T, typename Ask>
+    T awaitReply(std::string_view what, Ask ask) {
         if (_loop->runningHere()) {
             throw std::runtime_error(std::string{what} +
                                      " failed: a synchronous call cannot wait on the I/O loop's own thread");
         }
-        auto done = std::make_shared<std::promise<T>>();
-        auto result = done->get_future();
-        // The completion is delivered on `inlineExecutor()`, so wherever the
-        // loop settles it: the loop is its owner, and the attach runs there,
-        // ordered after the request it waits for was filed.
-        bool attached = false;
-        _loop->runAndWait([&completion, &attached, done] {
-            completion.then([done](const T& value) { done->set_value(value); })
-                .onError([done](const std::exception_ptr& failure) { done->set_exception(failure); });
-            attached = true;
+        ::morph::exec::MainThreadExecutor waiter;
+        auto completion = ask(static_cast<::morph::exec::IExecutor&>(waiter));
+        std::optional<T> value;
+        std::exception_ptr error;
+        bool done = false;
+        waiter.post([&completion, &value, &error, &done] {
+            completion
+                .then([&value, &done](const T& settled) {
+                    value.emplace(settled);
+                    done = true;
+                })
+                .onError([&error, &done](const std::exception_ptr& failure) {
+                    error = failure;
+                    done = true;
+                });
         });
-        if (!attached) {
+        // The request was posted to the loop before this round trip, so a
+        // loop that runs it has filed the request too, and will answer it or
+        // reject it when it closes. A stopped loop drops both unrun.
+        bool alive = false;
+        _loop->runAndWait([&alive] { alive = true; });
+        if (!alive) {
             throw std::runtime_error(std::string{what} + " failed: the I/O loop has stopped");
         }
-        try {
-            return result.get();
-        } catch (const ::morph::backend::DisconnectedError&) {
-            throw std::runtime_error(std::string{what} + " failed: disconnected");
+        // runFor pumps until its deadline even once `done` is set, so it is
+        // only the wait between replies, kept short.
+        while (!done) {
+            if (!waiter.runOnce()) {
+                waiter.runFor(std::chrono::milliseconds{1});
+            }
         }
+        if (error) {
+            try {
+                std::rethrow_exception(error);
+            } catch (const ::morph::backend::DisconnectedError&) {
+                throw std::runtime_error(std::string{what} + " failed: disconnected");
+            }
+        }
+        return std::move(*value);
     }
 
     struct PendingExecute {

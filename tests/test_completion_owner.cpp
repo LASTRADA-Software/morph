@@ -13,6 +13,7 @@
 #include <morph/core/coroutine.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -128,9 +129,13 @@ TEST_CASE("Completion: an attach on a thread outside every task is checked again
         CHECK(recorder.count("Completion::attach") == 0);
     }
     SECTION("a pool's completion: delivery on a pool thread refutes it, and is reported") {
+        // A pool is refused as an owner when it is named; with the probe
+        // installed the refusal is recorded instead, and the attach check
+        // behind it still sees the presumption fail.
         morph::exec::ThreadPoolExecutor pool{1};
-        auto [completion, promise] = Completion<int>::makeSettleable(&pool);
         morph::testing::OwnerProbeRecorder const recorder{pool.coreExecutor()};
+        auto [completion, promise] = Completion<int>::makeSettleable(&pool);
+        CHECK(recorder.count("Completion: an owner that is not serial") == 1);
 
         std::atomic<bool> fired{false};
         completion.then([&](int) { fired = true; });
@@ -249,4 +254,35 @@ TEST_CASE("Completion: co_await from a coroutine on another executor posts its a
     CHECK(seen->resumedOnAwaiter);
     // The attach was not made from the awaiter's task.
     CHECK(recorder.count("Completion::attach") == 0);
+}
+
+TEST_CASE("Completion: an owner that does not run one task at a time is refused when it is named",
+          "[completion][owner][serial]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::exec::MainThreadExecutor mainThread;
+    morph::exec::OwnerStrand strand{pool};
+    auto& inlineExec = morph::exec::detail::inlineExecutor();
+
+    CHECK_FALSE(pool.isSerial());
+    CHECK_FALSE(inlineExec.isSerial());
+    CHECK(mainThread.isSerial());
+    CHECK(strand.isSerial());
+
+    SECTION("a pool") {
+        morph::testing::OwnerProbeRecorder const recorder{pool.coreExecutor()};
+        auto const settleable = morph::async::Completion<int>::makeSettleable(&pool);
+        CHECK(recorder.count("Completion: an owner that is not serial") == 1U);
+    }
+    SECTION("the inline executor") {
+        morph::testing::OwnerProbeRecorder const recorder{inlineExec.coreExecutor()};
+        auto const settleable = morph::async::Completion<int>::makeSettleable(&inlineExec);
+        CHECK(recorder.count("Completion: an owner that is not serial") == 1U);
+    }
+    SECTION("a serial owner, or none, is accepted") {
+        morph::testing::OwnerProbeRecorder const recorder{mainThread.coreExecutor()};
+        auto const onMain = morph::async::Completion<int>::makeSettleable(&mainThread);
+        auto const onStrand = morph::async::Completion<int>::makeSettleable(&strand);
+        auto const nowhere = morph::async::Completion<int>::makeSettleable(nullptr);
+        CHECK(recorder.count("Completion: an owner that is not serial") == 0U);
+    }
 }
