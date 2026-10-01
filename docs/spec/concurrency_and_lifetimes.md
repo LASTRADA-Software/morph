@@ -64,6 +64,7 @@ GUI, and the GUI thread never runs model work — the executors enforce the spli
 | `morph::net` socket I/O: dial, handshake, reads, writes, accept, reply writes | **The I/O loop** | Flows the components spawn on it; verbs and `RemoteServer` replies post to it |
 | `TimeoutScheduler` callbacks (execute deadlines, `delay()`) | **The I/O loop** — the injected one, or the scheduler's own | A loop timer armed by a posted `schedule()` |
 | `ReconnectCoordinator::onOnline`/`onOffline` bodies (reconnect → activate → bind → replay, retry sleeps included) | The offline strand, over the executor the coordinator was given (a worker pool; **not** the I/O loop) | `onOnline()`/`onOffline()` post, from any thread |
+| Storage — an action log's (`InMemoryActionLog`, `FileActionLog`, `SessionLog`) appends, reads, flush, rotation, undo and checkpoint; an offline queue's every verb; `InMemoryReplayLedger`'s lookup and record | **The storage's owner**, the executor given at its construction (one task at a time: the app's GUI executor, a strand over a pool). On the owner a verb runs inline; elsewhere a write is posted there and a read is asked through its completion overload | A model's `recordIfAttached` on its strand posts its append; `SyncWorker` on the queue's owner calls the queue directly; the app asks `entries(replyExec)`/`drain(replyExec)` and the answer is delivered on its executor |
 | `SyncWorker::run`'s drain (offline-queue replay) | The worker's owner — the offline strand when given `ReconnectCoordinator::strand()`; inline when `run()` is already on it | `run()` posts, from any other thread; the coordinator's `replay` step runs it inline |
 | Backend reconnect handler (re-bind the bridge's handlers) | The executor it was installed with — the bridge's owner. Never the backend's own thread | The backend posts it after a reconnect (`IBackend::setReconnectHandler(handler, exec)`) |
 | Bind and promote replies (`IBackend::bindModel`/`promoteModel`) | The executor the call named — the bridge's owner | The backend settles the `Completion` on its own thread; `Completion` posts the continuation |
@@ -194,6 +195,7 @@ rules encode recent fixes to real deadlocks and use-after-frees.
 | a `SyncWorker` given a coordinator's `strand()` | the `ReconnectCoordinator`: destroy the coordinator first, and call no `run()` after it | A sequence still running on the strand calls `run()` on a destroyed worker (use-after-free); the coordinator's destructor closes the strand, waiting for that sequence and dropping queued ones, so after it nothing reaches the worker. A `run()` after the coordinator is gone posts to a destroyed strand |
 | worker pool | the backend that posts to it (`LocalBackend`, `RemoteServer`) | Same deadlock/UAF family as the strand rule |
 | `session::Context` passed to `ScopedContext` | the scope in which the model runs | Dangling thread-local `Context*` |
+| a storage object's owner executor (an action log's, an offline queue's, a replay ledger's) | the storage object, and running what it posted | Every verb may post to the owner, so a post after it is gone is a use-after-free. A write posted but never run — the owner closed or dropped its queue first — is lost; posted tasks hold the storage's state, not the object, so the object itself may be destroyed on any thread, before them |
 | `exec::IoLoop` | every component built on it: `SocketBackend`, `SocketServer`, `TimeoutScheduler`, `NetworkMonitor` | **Hang** in the component's destructor, which waits for a close the stopped loop never runs; the same rule as the pool and its backends |
 
 ### base `IExecutor` must outlive its strands — and keep running
@@ -667,6 +669,9 @@ One-liners to remember:
   there (it is owner-only, and self-joins the strand it runs on).
 - Call a `Bridge`, its handlers and its backend only on the bridge's owner;
   destroy handlers before the bridge, there.
+- Give an action log, an offline queue or a replay ledger an owner that runs
+  one task at a time and outlives it; off that owner, read it through its
+  completion overloads (`entries(replyExec)`, `drain(replyExec)`).
 - Never block from anything the I/O loop runs: a `NetworkMonitor` probe or
   callback, a `TimeoutScheduler` callback.
 - Never destroy an `IoLoop` before the components built on it.

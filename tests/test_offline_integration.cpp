@@ -64,7 +64,8 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     morph::exec::ThreadPoolExecutor localPool{2};
     morph::exec::ThreadPoolExecutor remotePool{2};
     morph::exec::MainThreadExecutor owner;
-    morph::offline::InMemoryOfflineQueue queue;
+    // The queue belongs to the strand the SyncWorker below drains on.
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::inlineOwner()};
 
     // Start in local (offline) mode.
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool), owner};
@@ -120,7 +121,7 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
         const std::scoped_lock lock{replayMtx};
         REQUIRE(replayed.size() == 3);
     }
-    REQUIRE(queue.drain().empty());
+    REQUIRE(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return queue.drain(reply); }).empty());
 
     // Wait for the backend switch itself, which runs on the owner this test pumps.
     REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return backendSwitched.load(); }));

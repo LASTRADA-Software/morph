@@ -20,6 +20,7 @@
 #include "kanban/models/project_admin_model.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/storage_owner.hpp"
 
 using kanban::BoardModel;
 using kanban::ProjectAdminModel;
@@ -186,7 +187,7 @@ TEST_CASE(
         // App's FileActionLog was constructed over shows the identical
         // entry, keyed by the project id, exactly as attachLogIfConfigured's
         // contextKey plumbing promises.
-        const morph::journal::FileActionLog reopened{logPath};
+        const morph::journal::FileActionLog reopened{morph::ladder::testkit::storageOwner(), logPath};
         const auto entries = reopened.entries(std::to_string(*created.id));
         REQUIRE(entries.size() == 1);
         CHECK(entries.front().actionType == "CreateColumn");

@@ -15,6 +15,7 @@
 #include "ledger/models/ledger_model.hpp"
 #include "ledger/models/rule_model.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 namespace {
 
@@ -323,7 +324,7 @@ TEST_CASE("OpenAccount records a LogEntry once a log is attached, and is a no-op
                                       .currency = ledger::Currency::USD});
 
     // Attach a log, then repeat -- this call must be recorded.
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*ledgerId));
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
                                       .name = "Savings",
@@ -414,7 +415,7 @@ TEST_CASE("A matching rule cascades SetCategory with a causalParentId, not LogEn
                                             .currency = ledger::Currency::USD});
     auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ledgerModel.attachActionLog(log, std::to_string(*ledgerId));
 
     using morph::math::DecimalPlaces;
@@ -475,7 +476,7 @@ TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 o
     auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
     const auto expenseAccountId = ledgerState.accounts[1].id;
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ledgerModel.attachActionLog(log, std::to_string(*ledgerId));
 
     using morph::math::DecimalPlaces;

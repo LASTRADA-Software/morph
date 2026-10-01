@@ -51,8 +51,8 @@ constexpr std::size_t kMaxLiveModels = 256;
 }  // namespace
 
 App::App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size_t workers)
-    : _actionLog{std::make_shared<::morph::journal::FileActionLog>(std::move(actionLogPath))},
-      _pool{workers},
+    : _pool{workers},
+      _actionLog{std::make_shared<::morph::journal::FileActionLog>(_journalOwner, std::move(actionLogPath))},
       // hmacSha256 named explicitly -- same reason as bookmarks::App's own
       // two TokenIssuer/authorizer call sites: SigningAuthorizer/TokenIssuer
       // both inherit a MacFunction default that MORPH_REQUIRE_VETTED_HMAC

@@ -17,6 +17,7 @@
 #include "crm/models/quote_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -305,7 +306,7 @@ TEST_CASE("QuoteModel journals its edits against the attached identity", "[crm][
     const ScopedPrincipal alice{"alice"};
     crm::AccountModel accounts;
     crm::OpportunityModel opportunities;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::QuoteModel quotes;
     quotes.attachActionLog(log, std::string{"quotes"});
 

@@ -513,7 +513,7 @@ TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAtte
     // Silence the "dropping payload" error log.
     LogGuard const guard{[](::morph::log::LogLevel, std::string_view) {}};
 
-    ::morph::offline::InMemoryOfflineQueue queue;
+    ::morph::offline::InMemoryOfflineQueue queue{morph::testing::inlineOwner()};  // the worker below drains it there
     (void)queue.enqueue("always-fails");
     ::morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue,
                                         [](const std::string&) { return false; }};

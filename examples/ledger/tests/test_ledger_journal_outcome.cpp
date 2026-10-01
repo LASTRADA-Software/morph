@@ -32,6 +32,7 @@
 #include "ledger/models/ledger_model.hpp"
 #include "ledger/models/rule_model.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 namespace {
 
@@ -60,7 +61,7 @@ TEST_CASE("CreateLedger journals both the book it creates and the one it refuses
 
     ledger::LedgerModel model;
     const ScopedPrincipal principal{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     // No ledger exists yet, so there is no ledger id to key the log by. That
     // is inherent to the action: `CreateLedger` is the one action on this
     // model that runs *before* the entity its `entityKey` would name, so its
@@ -102,7 +103,7 @@ TEST_CASE("A ZeroSumViolation leaves a Failed journal entry, not no entry at all
                                       .currency = ledger::Currency::USD});
     auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*ledgerId));
 
     using morph::math::DecimalPlaces;
@@ -174,7 +175,7 @@ TEST_CASE("An AlreadyReversed refusal leaves a Failed journal entry", "[ledger][
     const auto journalId = ledger::JournalId{static_cast<std::int64_t>(journalRows.front().id.Value())};
 
     // Attach the log only now, so it holds nothing from the setup above.
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*ledgerId));
 
     model.execute(ledger::UndoTransaction{.ledgerId = ledgerId, .journalId = journalId});
@@ -207,7 +208,7 @@ TEST_CASE("A VersionConflict on UpdateRule leaves a Failed journal entry (RuleMo
                                                          .action = ledger::RuleAction::SetCategory,
                                                          .actionValue = "Dining"});
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*ledgerId));
 
     // expectedVersion 99 never matches the freshly created rule's version (1).
@@ -232,7 +233,7 @@ TEST_CASE("A NotFound refusal on CreateCategory leaves a Failed journal entry (B
 
     ledger::BudgetModel model;
     const ScopedPrincipal principal{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*ledgerId));
 
     // A ledgerId that names no row.

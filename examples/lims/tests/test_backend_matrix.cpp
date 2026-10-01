@@ -20,6 +20,7 @@
 // LimsAuthorizer` is that authorizer, so the matrix runs it end-to-end
 // against a real server rather than only unit-testing its policy.
 
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <memory>
@@ -42,6 +43,7 @@
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/storage_owner.hpp"
 
 using morph::bridge::AllowShared;
 using morph::bridge::BridgeHandler;
@@ -224,7 +226,7 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
 
     // Out in the field: two edits queued against the version the client last
     // saw, chained so the second builds on the first.
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox outbox{queue, "fiona"};
     outbox.observe(atWork);
     outbox.enqueue(atWork.id, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
@@ -271,7 +273,7 @@ TEST_CASE("A queued capture replayed as the wrong operator is refused over the w
     awaitQt(handler.execute(lims::ReceiveSample{}));
     const auto atWork = awaitQt(handler.execute(lims::StartWork{}));
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox outbox{queue, "fiona"};
     outbox.observe(atWork);
     const auto queued =
@@ -304,7 +306,10 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
     // is why §7's supported path is the re-dispatch above.
     DbFixture fixture;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    // The model drains the queue on its strand, synchronously, so the queue
+    // belongs to the one thread the new backend runs its models on.
+    morph::exec::ThreadPoolExecutor after{1};
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(after);
     lims::SampleId sampleId;
     lims::AnalysisVersionId versionId;
     {
@@ -340,7 +345,6 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
     };
 
     morph::exec::ThreadPoolExecutor before{1};
-    morph::exec::ThreadPoolExecutor after{1};
     morph::ladder::testkit::detail::QtDrivenMainThreadExecutor callbackExecutor;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(before), callbackExecutor};
     morph::bridge::BridgeHandler<lims::SampleModel> handler{bridge, &callbackExecutor, binding};
@@ -348,7 +352,25 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(after));
 
     // The drain is posted, so wait for it rather than assuming it finished.
-    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return queue->size() == 0; }));
+    // Asked on the queue's owner, between the model's tasks there.
+    std::atomic<std::size_t> pending{1};
+    std::atomic<bool> asking{false};
+    auto askPending = [&] {
+        if (asking.exchange(true)) {
+            return;  // one question at a time
+        }
+        auto answer = std::make_shared<morph::async::Completion<std::size_t>>(queue->size(callbackExecutor));
+        callbackExecutor.post([answer, &pending, &asking] {
+            answer->then([&pending, &asking](std::size_t n) {
+                pending = n;
+                asking = false;
+            });
+        });
+    };
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] {
+        askPending();
+        return pending.load() == 0;
+    }));
 
     // Every item was `markDone`d — the queue does not block — but nothing was
     // applied, because nothing could say who was applying it.

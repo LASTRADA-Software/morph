@@ -34,7 +34,8 @@ TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") 
     const auto acct = await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
 
     // --- While "offline": park deposits in the durable queue instead of sending.
-    morph::offline::InMemoryOfflineQueue queue;
+    // The queue belongs to the GUI loop, where the SyncWorker below drains it.
+    morph::offline::InMemoryOfflineQueue queue{app.guiLoop()};
     using Codec = morph::model::ActionTraits<bank::dto::Deposit>;
     (void)queue.enqueue(Codec::toJson(bank::dto::Deposit{.accountId = acct, .amountMinor = 1500}));
     (void)queue.enqueue(Codec::toJson(bank::dto::Deposit{.accountId = acct, .amountMinor = 2500}));

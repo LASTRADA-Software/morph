@@ -300,7 +300,7 @@ morph::offline::NetworkMonitor monitor{
 
 `drain()` returning items without removing them is deliberate — items survive a crash between `drain()` and `markDone()`. A SQL-backed implementation can persist items across process restarts by storing them in a table with a UNIQUE constraint on the payload.
 
-`InMemoryOfflineQueue` implements the interface with a `std::deque` protected by a mutex. It does not deduplicate.
+`InMemoryOfflineQueue` implements the interface with a `std::deque` that belongs to the executor the queue is given at construction: its verbs run there, and a caller elsewhere posts its writes and asks its reads through completion overloads (see `docs/spec/offline/offline.md`, "One owner"). It does not deduplicate.
 
 ### Action log — ordered, coalescing, identity-aware execution history
 

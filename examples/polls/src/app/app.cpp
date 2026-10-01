@@ -59,8 +59,8 @@ constexpr std::size_t kMaxLiveModels = 256;
 }  // namespace
 
 App::App(std::filesystem::path actionLogPath, std::size_t workers)
-    : _actionLog{std::make_shared<::morph::journal::FileActionLog>(std::move(actionLogPath))},
-      _pool{workers},
+    : _pool{workers},
+      _actionLog{std::make_shared<::morph::journal::FileActionLog>(_journalOwner, std::move(actionLogPath))},
       _server{std::make_shared<::morph::backend::RemoteServer>(_pool, std::make_shared<auth::PollsAuthorizer>(),
                                                                serverConfig())} {
     ::morph::journal::setActionLog(_actionLog);

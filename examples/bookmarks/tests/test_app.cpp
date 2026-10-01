@@ -16,6 +16,7 @@
 #include "bookmarks/models/bookmark_model.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/storage_owner.hpp"
 
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::pumpUntil;
@@ -240,7 +241,7 @@ TEST_CASE("App::relayOutboxOnce drains a BulkEdit outbox row into the durable ac
     // has open.
     std::vector<morph::journal::LogEntry> entries;
     {
-        const morph::journal::FileActionLog reopened{logPath};
+        const morph::journal::FileActionLog reopened{morph::ladder::testkit::storageOwner(), logPath};
         entries = reopened.entries();
     }
     REQUIRE(entries.size() == 1);

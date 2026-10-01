@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "replay_ledger_conformance.hpp"
+#include "test_support.hpp"
 
 namespace {
 
@@ -31,8 +32,9 @@ protected:
 }  // namespace
 
 TEST_CASE("morph::offline::InMemoryReplayLedger: IReplayLedger conformance", "[replay_ledger]") {
-    morph::test::checkReplayLedgerContract("InMemoryReplayLedger",
-                                           [] { return std::make_unique<morph::offline::InMemoryReplayLedger>(); });
+    morph::test::checkReplayLedgerContract("InMemoryReplayLedger", [] {
+        return std::make_unique<morph::offline::InMemoryReplayLedger>(morph::testing::storageOwner());
+    });
 }
 
 // Invariant 7's negative control: a ledger whose lookup always reports
@@ -46,15 +48,15 @@ TEST_CASE("morph::test::checkReplayLedgerContract rejects a no-op ledger", "[rep
 }
 
 TEST_CASE("InMemoryReplayLedger: two independent instances do not share state", "[replay_ledger]") {
-    morph::offline::InMemoryReplayLedger first;
-    const morph::offline::InMemoryReplayLedger second;
+    morph::offline::InMemoryReplayLedger first{morph::testing::storageOwner()};
+    const morph::offline::InMemoryReplayLedger second{morph::testing::storageOwner()};
     first.record("scope", "k", "payload");
     CHECK(first.lookup("scope", "k").has_value());
     CHECK_FALSE(second.lookup("scope", "k").has_value());
 }
 
 TEST_CASE("InMemoryReplayLedger: distinct opIds under the same scope do not collide", "[replay_ledger]") {
-    morph::offline::InMemoryReplayLedger ledger;
+    morph::offline::InMemoryReplayLedger ledger{morph::testing::storageOwner()};
     ledger.record("scope", "a", "payload-a");
     ledger.record("scope", "b", "payload-b");
     REQUIRE(ledger.lookup("scope", "a").has_value());

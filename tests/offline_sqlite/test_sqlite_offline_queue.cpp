@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <morph/core/executor.hpp>
 #include <morph/core/file_io_ops.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/observability.hpp>
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "../offline_queue_conformance.hpp"
+#include "../owner_probe_recorder.hpp"
 #include "../test_support.hpp"
 
 namespace {
@@ -50,13 +52,13 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: items survive destroying and reop
     uint64_t id1 = 0;
     uint64_t id2 = 0;
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         id1 = queue.enqueue("payload-1", "key-1");
         id2 = queue.enqueue("payload-2");
         queue.setAttempts(id2, 2);
     }
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         auto items = queue.drain();
         REQUIRE(items.size() == 2);
         REQUIRE(items[0].id == id1);
@@ -76,7 +78,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: item survives a crash between dra
 
     uint64_t enqueuedId = 0;
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         enqueuedId = queue.enqueue("payload");
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
@@ -84,7 +86,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: item survives a crash between dra
         // process dies before markDone() -- the queue is destroyed without it.
     }
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
         REQUIRE(items[0].id == enqueuedId);
@@ -97,7 +99,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: item survives a crash between dra
 TEST_CASE("morph::offline::SqliteOfflineQueue: re-enqueue with the same idempotencyKey is deduplicated", "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
-    morph::offline::SqliteOfflineQueue queue{dbPath};
+    morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
 
     auto id1 = queue.enqueue("first-payload", "op-123");
     auto id2 = queue.enqueue("second-payload", "op-123");
@@ -113,7 +115,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: re-enqueue with the same idempote
 TEST_CASE("morph::offline::SqliteOfflineQueue: empty idempotencyKey items are never deduplicated", "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
-    morph::offline::SqliteOfflineQueue queue{dbPath};
+    morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
 
     (void)queue.enqueue("a");
     (void)queue.enqueue("b");
@@ -129,7 +131,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue + SyncWorker: poison item dead-let
 
     uint64_t enqueuedId = 0;
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         enqueuedId = queue.enqueue("poison-payload");
     }
 
@@ -137,7 +139,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue + SyncWorker: poison item dead-let
 
     // 3 pre-restart run() calls persist attempts == 3 in the database.
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, alwaysFail};
         morph::testing::awaitValue(worker.run());
         morph::testing::awaitValue(worker.run());
@@ -151,7 +153,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue + SyncWorker: poison item dead-let
     // same file -- the in-memory _attempts map is gone; only the persisted
     // `attempts` column survives.
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         std::vector<morph::offline::QueueItem> deadLettered;
         morph::offline::SyncWorker worker{
             morph::testing::inlineOwner(), queue, alwaysFail,
@@ -176,7 +178,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth throws Offlin
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath, 2};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath, 2};
         (void)queue.enqueue("a");
         (void)queue.enqueue("b");
         REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
@@ -190,14 +192,14 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth survives destroying and 
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath, 1};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath, 1};
         (void)queue.enqueue("a");
         REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
     }
     {
         // Reopened with the same maxDepth argument -- still enforced. maxDepth
         // is a per-construction parameter, not persisted in the database itself.
-        morph::offline::SqliteOfflineQueue queue{dbPath, 1};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath, 1};
         REQUIRE(queue.drain().size() == 1);
         REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
     }
@@ -208,7 +210,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: size() matches COUNT(*) against t
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         REQUIRE(queue.size() == 0);
         (void)queue.enqueue("a");
         (void)queue.enqueue("b");
@@ -236,9 +238,13 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: enqueued_at is stamped from the i
     removeDbFiles(dbPath);
     {
         core::platform::ManualWallClock clock{std::chrono::system_clock::time_point{std::chrono::milliseconds{7'000}}};
-        Queue queue{
-            dbPath, std::nullopt, {}, Queue::Synchronous::normal, std::chrono::milliseconds{Queue::kBusyTimeoutMillis},
-            clock};
+        Queue queue{morph::testing::storageOwner(),
+                    dbPath,
+                    std::nullopt,
+                    {},
+                    Queue::Synchronous::normal,
+                    std::chrono::milliseconds{Queue::kBusyTimeoutMillis},
+                    clock};
         (void)queue.enqueue("unkeyed");
         clock.advance(std::chrono::milliseconds{5});
         (void)queue.enqueue("keyed", "key-1");
@@ -265,7 +271,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a dedup hit at capacity is reject
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath, 1};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath, 1};
         (void)queue.enqueue("first-payload", "op-1");
         // The keyed path checks capacity BEFORE attempting the insert, so a
         // call that would otherwise resolve to a dedup hit (inserting
@@ -283,7 +289,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth emits queueOv
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath, 1};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath, 1};
         (void)queue.enqueue("a");
 
         std::vector<double> samples;
@@ -313,7 +319,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: IOfflineQueue idempotency-key con
         auto dbPath = tempDbPath();
         removeDbFiles(dbPath);
         created.push_back(dbPath);
-        return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath);
+        return std::make_unique<morph::offline::SqliteOfflineQueue>(morph::testing::storageOwner(), dbPath);
     });
     for (auto const& dbPath : created) {
         removeDbFiles(dbPath);
@@ -324,15 +330,18 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: the idempotency-key contract surv
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     morph::test::checkIdempotencyKeyContractAcrossReopen(
-        "SqliteOfflineQueue", morph::test::KeyDedup::onPendingItems,
-        [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); });
+        "SqliteOfflineQueue", morph::test::KeyDedup::onPendingItems, [&dbPath] {
+            return std::make_unique<morph::offline::SqliteOfflineQueue>(morph::testing::storageOwner(), dbPath);
+        });
     removeDbFiles(dbPath);
 }
 
 TEST_CASE("morph::offline::SqliteOfflineQueue: a NUL-bearing payload and key round-trip intact", "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
-    auto const open = [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); };
+    auto const open = [&dbPath] {
+        return std::make_unique<morph::offline::SqliteOfflineQueue>(morph::testing::storageOwner(), dbPath);
+    };
     morph::test::checkNulPayloadRoundTrip("SqliteOfflineQueue", open, open);
     removeDbFiles(dbPath);
 }
@@ -355,7 +364,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a conflicting setIdempotencyKey d
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         auto const first = queue.enqueue("payload-A", "K1");
 
         // Base-qualified: insert, then stamp a key "K1" already holds.
@@ -389,7 +398,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a non-conflicting setIdempotencyK
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         (void)queue.enqueue("payload-A", "K1");
         // Control: without it, the case above would pass against a hook that
         // silently stamped nothing at all.
@@ -411,7 +420,8 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: construction throws if sqlite3_op
     // fault injection seam needed, exact mirror of FileOfflineQueue's own
     // nonexistent-directory technique for its own throw-on-open-failure test.
     auto const path = std::filesystem::path{"/no/such/directory/at/all/q.db"};
-    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(path), morph::offline::SqliteOfflineQueueError);
+    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(morph::testing::storageOwner(), path),
+                      morph::offline::SqliteOfflineQueueError);
 }
 
 TEST_CASE("morph::offline::SqliteOfflineQueue: construction throws if the schema-setup PRAGMA fails", "[sqlite]") {
@@ -429,7 +439,8 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: construction throws if the schema
         std::ofstream notADatabase{dbPath};
         notADatabase << "not a database";
     }
-    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(dbPath), morph::offline::SqliteOfflineQueueError);
+    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(morph::testing::storageOwner(), dbPath),
+                      morph::offline::SqliteOfflineQueueError);
     removeDbFiles(dbPath);
 }
 
@@ -439,7 +450,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth() reports the configured
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue const queue{dbPath, 5};
+        morph::offline::SqliteOfflineQueue const queue{morph::testing::storageOwner(), dbPath, 5};
         REQUIRE(queue.maxDepth() == 5);
     }
     removeDbFiles(dbPath);
@@ -449,7 +460,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth() reports nullopt when u
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue const queue{dbPath};
+        morph::offline::SqliteOfflineQueue const queue{morph::testing::storageOwner(), dbPath};
         REQUIRE_FALSE(queue.maxDepth().has_value());
     }
     removeDbFiles(dbPath);
@@ -482,7 +493,8 @@ TEST_CASE(
     // default 5s timeout would make it surface five seconds later while still
     // passing, turning a sub-millisecond assertion into a stall that says
     // nothing more than this one does.
-    morph::offline::SqliteOfflineQueue queue{dbPath,
+    morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(),
+                                             dbPath,
                                              std::nullopt,
                                              {},
                                              morph::offline::SqliteOfflineQueue::Synchronous::normal,
@@ -516,7 +528,7 @@ TEST_CASE(
     // "no such table" (finding #6).
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
-    morph::offline::SqliteOfflineQueue queue{dbPath};
+    morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
     (void)queue.enqueue("seed");
 
     {
@@ -569,7 +581,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: journal_mode=WAL persists and is 
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
         (void)queue.enqueue("payload");
     }  // closed -- journal_mode lives in the file's own header, not the connection
 
@@ -609,7 +621,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a journal_mode that is not WAL wa
     }};
 
     std::optional<morph::offline::SqliteOfflineQueue> queue;
-    REQUIRE_NOTHROW(queue.emplace(std::filesystem::path{":memory:"}));
+    REQUIRE_NOTHROW(queue.emplace(morph::testing::storageOwner(), std::filesystem::path{":memory:"}));
 
     CHECK(queue->journalMode() == "memory");
     REQUIRE(warnings.size() == 1);
@@ -636,7 +648,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: a WAL database reports journalMod
                 warnings.emplace_back(msg);
             }
         }};
-        morph::offline::SqliteOfflineQueue const queue{dbPath};
+        morph::offline::SqliteOfflineQueue const queue{morph::testing::storageOwner(), dbPath};
         CHECK(queue.journalMode() == "wal");
     }
     CHECK(warnings.empty());
@@ -649,13 +661,26 @@ TEST_CASE(
     "[sqlite]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
-    morph::offline::SqliteOfflineQueue queue{dbPath};
-    (void)queue.enqueue("seed");  // ensure the WAL files exist before a second connection opens
+    // The queue's owner is a thread of its own, so the enqueue below can block
+    // in SQLite's busy handler there while this thread releases the lock. It
+    // is built there too: built here, this thread would count as its owner
+    // and the enqueue would run here, blocking the very thread that commits.
+    morph::exec::ThreadPoolExecutor ownerThread{1};
+    morph::exec::ThreadPoolExecutor replies{1};
+    std::unique_ptr<morph::offline::SqliteOfflineQueue> built;
+    std::atomic<bool> seeded{false};
+    ownerThread.post([&] {
+        built = std::make_unique<morph::offline::SqliteOfflineQueue>(ownerThread, dbPath);
+        (void)built->enqueue("seed");  // ensure the WAL files exist before a second connection opens
+        seeded = true;
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return seeded.load(); }));
+    auto& queue = *built;
 
     // A second, independent connection holding the write lock is the only
     // way SQLITE_BUSY becomes reachable from `queue`'s own connection at
-    // all -- this class's internal mutex already serialises every call
-    // *within* this process, so nothing short of another connection
+    // all -- the queue's one owner already runs every statement *within*
+    // this process one at a time, so nothing short of another connection
     // entirely can contend with it.
     //
     // Closed through a guard rather than a bare call at the end: every
@@ -671,21 +696,16 @@ TEST_CASE(
     std::atomic<bool> enqueueSucceeded{false};
     std::atomic<bool> enqueueThrew{false};
     std::atomic<bool> writerEntered{false};
-    // jthread, not thread: a REQUIRE below throws on failure, and unwinding
-    // past a still-joinable std::thread calls std::terminate -- which would
-    // abort the whole binary and lose every later test case rather than report
-    // the assertion that failed. catch(...) for the same reason: anything
-    // escaping a thread function terminates, and this one is not limited to
-    // throwing SqliteOfflineQueueError.
-    std::jthread writer{[&] {
-        writerEntered = true;
-        try {
-            (void)queue.enqueue("blocked-until-lock-released");
-            enqueueSucceeded = true;
-        } catch (...) {
-            enqueueThrew = true;  // what a zero/absent busy_timeout would produce instead
-        }
-    }};
+    // Asked from this thread, answered on the queue's owner, where it blocks
+    // on the lock `second` holds.
+    auto answer =
+        std::make_shared<morph::async::Completion<uint64_t>>(queue.enqueue(replies, "blocked-until-lock-released"));
+    replies.post([answer, &enqueueSucceeded, &enqueueThrew] {
+        answer->then([&enqueueSucceeded](uint64_t) { enqueueSucceeded = true; });
+        // What a zero/absent busy_timeout would produce instead.
+        answer->onError([&enqueueThrew](const std::exception_ptr&) { enqueueThrew = true; });
+    });
+    writerEntered = true;
 
     // Wait for the writer to be inside enqueue() and blocked on the lock,
     // rather than sleeping a fixed 200ms and hoping. On a loaded runner the
@@ -693,9 +713,9 @@ TEST_CASE(
     // COMMIT released a lock nobody was waiting on and the test passed without
     // ever proving the busy handler ran.
     REQUIRE(morph::testing::waitUntil([&] { return writerEntered.load(); }));
-    // `writerEntered` is published *before* the enqueue() call, so on its own it
-    // proves only that the thread started -- not that it reached sqlite3_step
-    // and found the lock held. Checking the two result flags right here would
+    // `writerEntered` is published once the enqueue is asked for, so on its
+    // own it proves only that -- not that the owner reached sqlite3_step and
+    // found the lock held. Checking the two result flags right here would
     // therefore pass trivially, and keep passing with the busy_timeout PRAGMA
     // removed, which is the whole thing this test exists to pin.
     //
@@ -709,7 +729,7 @@ TEST_CASE(
                                           morph::testing::WaitBudget{std::chrono::milliseconds{500}}));
 
     REQUIRE(sqlite3_exec(second, "COMMIT;", nullptr, nullptr, &err) == SQLITE_OK);
-    writer.join();
+    REQUIRE(morph::testing::waitUntil([&] { return enqueueSucceeded.load() || enqueueThrew.load(); }));
 
     CHECK(enqueueSucceeded.load());
     CHECK_FALSE(enqueueThrew.load());
@@ -744,7 +764,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: construction syncs the containing
     // suite is Linux-only today, where the unlink would succeed regardless;
     // scoped anyway so it does not become a Windows failure the day it is not.
     {
-        morph::offline::SqliteOfflineQueue const queue{dbPath, std::nullopt, ioOps};
+        morph::offline::SqliteOfflineQueue const queue{morph::testing::storageOwner(), dbPath, std::nullopt, ioOps};
     }
 
     REQUIRE(syncedPaths.size() == 1);
@@ -772,7 +792,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: an unsupported directory fsync wa
     ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
 
     {
-        morph::offline::SqliteOfflineQueue queue{dbPath, std::nullopt, ioOps};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath, std::nullopt, ioOps};
         auto const id = queue.enqueue("payload");
         CHECK(queue.drain().size() == 1);
         queue.markDone(id);
@@ -795,8 +815,11 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: Synchronous selects the level SQL
     removeDbFiles(dbPath);
 
     {
-        morph::offline::SqliteOfflineQueue queue{
-            dbPath, std::nullopt, {}, morph::offline::SqliteOfflineQueue::Synchronous::full};
+        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(),
+                                                 dbPath,
+                                                 std::nullopt,
+                                                 {},
+                                                 morph::offline::SqliteOfflineQueue::Synchronous::full};
         CHECK(queue.synchronousLevel() == 2);
         // A working queue, not merely a constructible one.
         auto const id = queue.enqueue("durable-payload");
@@ -808,7 +831,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: Synchronous selects the level SQL
     // The default, and the other side of the assertion: without it, a
     // read-back that always reported FULL would pass the check above.
     {
-        morph::offline::SqliteOfflineQueue const queue{dbPath};
+        morph::offline::SqliteOfflineQueue const queue{morph::testing::storageOwner(), dbPath};
         CHECK(queue.synchronousLevel() == 1);
     }
 
@@ -824,13 +847,91 @@ TEST_CASE(
     morph::core::FileIoOps ioOps;
     ioOps.syncPath = [](const std::filesystem::path&) { return -1; };
 
-    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(dbPath, std::nullopt, ioOps),
+    REQUIRE_THROWS_AS(morph::offline::SqliteOfflineQueue(morph::testing::storageOwner(), dbPath, std::nullopt, ioOps),
                       morph::offline::SqliteOfflineQueueError);
 
     // The failed construction must not have left the connection open -- a
     // fresh, real-I/O open of the same path must succeed cleanly.
-    morph::offline::SqliteOfflineQueue reopened{dbPath};
+    morph::offline::SqliteOfflineQueue reopened{morph::testing::storageOwner(), dbPath};
     (void)reopened.enqueue("payload");
     REQUIRE(reopened.size() == 1);
+    removeDbFiles(dbPath);
+}
+
+// ── One owner ────────────────────────────────────────────────────────────────
+//
+// The connection belongs to the executor the queue was given: a write from a
+// pool thread is posted there, and a read from another executor is answered
+// there and delivered on the reader's. The owner probe reads the executor scope
+// itself, so a statement run inline on the calling thread is recorded as off
+// the owner.
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: writes from a pool thread and reads from the app run on the owner",
+          "[sqlite][storage][owner]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::exec::MainThreadExecutor owner;
+        morph::exec::MainThreadExecutor app;
+        morph::exec::ThreadPoolExecutor pool{1};
+        // Built inside an owner task, so this thread is not the owner.
+        std::unique_ptr<morph::offline::SqliteOfflineQueue> queue;
+        owner.post([&] { queue = std::make_unique<morph::offline::SqliteOfflineQueue>(owner, dbPath); });
+        owner.drain();
+        REQUIRE(queue != nullptr);
+
+        auto onPool = [&pool](auto work) {
+            std::atomic<bool> done{false};
+            pool.post([&] {
+                work();
+                done = true;
+            });
+            REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+        };
+        // Attaches on `app`, runs the owner, then delivers on `app`.
+        auto answerOn = [&owner, &app](auto completion, auto& value, bool& onApp) {
+            app.post([&] {
+                completion.then([&](const auto& settled) {
+                    value = settled;
+                    onApp = morph::exec::runningOn(app);
+                });
+            });
+            owner.drain();
+            app.drain();
+        };
+
+        morph::testing::OwnerProbeRecorder const recorder{owner.coreExecutor()};
+
+        std::optional<uint64_t> itemId;
+        bool enqueuedOnApp = false;
+        answerOn(queue->enqueue(app, "payload", "key-1"), itemId, enqueuedOnApp);
+        CHECK(recorder.allPosted("SqliteOfflineQueue::enqueue"));
+        REQUIRE(itemId.has_value());
+        CHECK(enqueuedOnApp);
+
+        onPool([&] { queue->setAttempts(*itemId, 3); });
+        owner.drain();
+        CHECK(recorder.allPosted("SqliteOfflineQueue::setAttempts"));
+
+        std::optional<std::vector<morph::offline::QueueItem>> drained;
+        bool drainedOnApp = false;
+        answerOn(queue->drain(app), drained, drainedOnApp);
+        CHECK(recorder.allPosted("SqliteOfflineQueue::drain"));
+        REQUIRE(drained.has_value());
+        REQUIRE(drained->size() == 1U);
+        CHECK(drained->front().attempts == 3U);
+        CHECK(drainedOnApp);
+
+        onPool([&] { queue->markDone(*itemId); });
+        owner.drain();
+        CHECK(recorder.allPosted("SqliteOfflineQueue::markDone"));
+
+        std::optional<std::size_t> counted;
+        bool countedOnApp = false;
+        answerOn(queue->size(app), counted, countedOnApp);
+        CHECK(recorder.allPosted("SqliteOfflineQueue::size"));
+        CHECK(counted == std::size_t{0});
+        CHECK(countedOnApp);
+    }
     removeDbFiles(dbPath);
 }

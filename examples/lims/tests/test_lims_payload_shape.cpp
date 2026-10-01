@@ -46,6 +46,7 @@
 #include "lims/models/sample_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -161,7 +162,7 @@ TEST_CASE("replay() refuses a RegisterSample entry stamped by a build whose clie
     // SelfJournal stamps the fingerprint this build computes.
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
     lims::SampleModel model;
     model.attachActionLog(log, std::string{});

@@ -413,7 +413,7 @@ TEST_CASE("Issue 10: in-flight execute after deregisterModel completes without c
 
 TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run does not corrupt queue",
           "[sync][issue12]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::inlineOwner()};  // the worker below drains it there
     (void)queue.enqueue("pre1");
     (void)queue.enqueue("pre2");
 
@@ -425,9 +425,12 @@ TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run do
                                           return true;
                                       }};
 
+    // Off the queue's owner, so the enqueue is asked of it: it runs on the
+    // owner once the drain in progress there has finished.
     std::thread enqueuer{[&] {
         waitUntil([&] { return replayStarted.load(); });
-        (void)queue.enqueue("concurrent");
+        (void)morph::testing::awaitAnswer(
+            [&](morph::exec::IExecutor& reply) { return queue.enqueue(reply, "concurrent"); });
     }};
 
     auto result = morph::testing::awaitValue(worker.run());

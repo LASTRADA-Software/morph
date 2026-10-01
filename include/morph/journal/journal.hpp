@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -15,6 +14,8 @@
 #include <vector>
 
 #include "../attributes.hpp"
+#include "../core/detail/owned_state.hpp"
+#include "../core/executor.hpp"
 #include "../core/model.hpp"
 #include "../core/registry.hpp"
 #include "action_log.hpp"
@@ -325,47 +326,57 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
 /// where the action's policy says `coalesce == true`, keeping every occurrence
 /// otherwise — and only that reduced set reaches the durable sink.
 ///
-/// @par Thread safety
-/// All public methods are thread-safe. A history mutex guards `_all` and the
-/// watermark; a separate forwarding mutex serializes `checkpoint()` bodies end
-/// to end so concurrent checkpoints forward to the durable sink in append order
-/// without blocking ordinary `append()` calls during the sink's I/O.
+/// @par One owner
+/// The history and the checkpoint watermark belong to the executor given at
+/// construction, which must run one task at a time. `append()` runs there —
+/// at once when called on it, posted from a model's strand. `entries()`,
+/// `undoLast()` and `checkpoint()` run only there; a caller elsewhere reads
+/// through `entries(replyExec, entityKey)`. Because a checkpoint and every
+/// append are tasks of the one owner, a checkpoint's slice-and-forward is
+/// never interleaved with an append or with another checkpoint. See
+/// `docs/spec/journal/journal.md`, "One owner".
 class SessionLog : public IActionLog {
 public:
-    /// @brief Appends @p entry, assigning a monotonically increasing `seq`.
+    using IActionLog::entries;
+    using IActionLog::flush;
+
+    /// @brief Constructs an empty session log belonging to @p owner.
+    /// @param owner The executor every access runs on; must run one task at a
+    ///        time. Borrowed: it must outlive this log and run what it posts.
+    explicit SessionLog(::morph::exec::IExecutor& owner MORPH_LIFETIMEBOUND)
+        : _owned{owner, std::make_shared<State>()} {}
+
+    /// @brief Appends @p entry, assigning a monotonically increasing `seq`, on
+    ///        the owner.
     ///
     /// Always full fidelity: this is what `undoLast()` walks back through, so
     /// nothing is coalesced or dropped here.
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
-        std::scoped_lock const lock{_mtx};
-        entry.seq = ++_nextSeq;
-        _all.push_back(std::move(entry));
+        _owned.apply("SessionLog::append", [entry = std::move(entry)](State& state) mutable {
+            entry.seq = ++state.nextSeq;
+            state.all.push_back(std::move(entry));
+        });
     }
 
-    /// @brief No-op — `checkpoint()` is this class's real commit point.
+    /// @brief No-op — `checkpoint()` is this class's real commit point. Callable anywhere.
     void flush() override {}
 
-    /// @brief Returns the full history (or one entity's slice of it) in append order.
+    /// @brief Returns the full history (or one entity's slice of it) in append
+    ///        order. On the owner.
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
     /// @return Matching entries, in append order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
-        std::scoped_lock const lock{_mtx};
-        if (entityKey.empty()) {
-            return _all;
-        }
-        std::vector<LogEntry> out;
-        for (const auto& entry : _all) {
-            if (entry.entityKey == entityKey) {
-                out.push_back(entry);
-            }
-        }
-        return out;
+        return detail::entriesFor(_owned.read("SessionLog::entries").all, entityKey);
     }
+
+    /// @brief The executor given at construction.
+    /// @return The owner.
+    [[nodiscard]] ::morph::exec::IExecutor* owner() const noexcept override { return &_owned.owner(); }
 
     /// @brief Drops the most recently appended entry and replays everything that
     ///        remains against a fresh model instance, reconstructing the state
-    ///        the model was in immediately before that entry executed.
+    ///        the model was in immediately before that entry executed. On the owner.
     ///
     /// No inverse/undo operations are needed on the action types themselves —
     /// this reuses `replay()` over a shorter prefix of the same log. A no-op
@@ -385,6 +396,9 @@ public:
     /// appended by this same process, so their fingerprints are this build's by
     /// construction. Undo is not a cross-version path.
     ///
+    /// Synchronous: it returns the reconstructed holder, and its caller — the
+    /// application — is the owner.
+    ///
     /// @param modelTypeId String type-id of the model to reconstruct.
     /// @param registry    Model factory registry; defaults to the process-level singleton.
     /// @param dispatcher  Action dispatcher; defaults to the process-level singleton.
@@ -393,31 +407,20 @@ public:
         std::string_view modelTypeId,
         ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),
         ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher()) {
-        std::vector<LogEntry> remaining;
-        {
-            std::scoped_lock const lock{_mtx};
-            if (!_all.empty()) {
-                // The checkpoint watermark is a *seq* threshold, not a raw index
-                // into `_all`, so simply dropping the tail entry is all that is
-                // needed: `_committedUpToSeq` already names exactly the set of
-                // entries a prior `checkpoint()` forwarded, and popping a
-                // never-committed tail entry (the only kind whose loss is
-                // recoverable) cannot lower it. The watermark is therefore
-                // monotonic — undo never rewinds it, and a later `checkpoint()`
-                // never re-forwards a coalesced-away, already-committed entry.
-                // Undoing an entry that a prior checkpoint already forwarded does
-                // not un-forward it from the durable sink (see the class docs and
-                // journal.md): the sink is append-only, so that entry stays
-                // durable and the reconstructed history simply diverges from it.
-                _all.pop_back();
-            }
-            remaining = _all;
+        State& state = _owned.read("SessionLog::undoLast");
+        if (!state.all.empty()) {
+            // The checkpoint watermark is a *seq* threshold, not an index into
+            // `all`, so dropping the tail entry cannot lower it: undo never
+            // rewinds the watermark, and a later checkpoint never re-forwards
+            // a coalesced-away, already-committed entry.
+            state.all.pop_back();
         }
-        return replay(modelTypeId, remaining, registry, dispatcher);
+        return replay(modelTypeId, state.all, registry, dispatcher);
     }
 
     /// @brief Coalesces entries appended since the last checkpoint and forwards
-    ///        the reduced set, in order, to @p durableSink; then flushes it.
+    ///        the reduced set, in order, to @p durableSink; then flushes it. On
+    ///        the owner.
     ///
     /// Advances the checkpoint watermark (the `seq` of the last committed entry)
     /// *before* forwarding, so the batch is consumed even if @p durableSink's
@@ -425,57 +428,53 @@ public:
     /// point (at-most-once), not a transaction to retry. A no-op if nothing has
     /// been appended since the last checkpoint.
     ///
-    /// @par Concurrency and ordering
-    /// The whole checkpoint body runs under a dedicated forwarding mutex, so
-    /// concurrent checkpoints are fully serialized: the batch whose watermark is
-    /// taken first is also forwarded to @p durableSink first, and no two
-    /// checkpoints ever interleave their `append()` calls. This preserves the
-    /// append-order identity the sink relies on. The forwarding mutex is *not*
-    /// the mutex that guards `append()`, which is held only briefly to select the
-    /// pending entries and advance the watermark — never across the sink's I/O —
-    /// so ordinary `append()` calls keep making progress during a checkpoint.
+    /// @par Ordering
+    /// The whole body is one task of the owner, where every `append()` runs
+    /// too, so no append lands between taking the slice and forwarding it, and
+    /// two checkpoints forward their batches in the order they ran. That is
+    /// the append-order identity the sink relies on.
     ///
-    /// @param durableSink Receives only the coalesced entries — never the raw stream.
+    /// @param durableSink Receives only the coalesced entries — never the raw
+    ///        stream. Driven from this log's owner, so it must share it: its
+    ///        `flush()` answers only on its own owner.
     /// @param dispatcher  Supplies each action's `coalesce` policy; defaults to
     ///                    the process-level singleton (the same one actions were
     ///                    registered against via `BRIDGE_REGISTER_ACTION`).
     void checkpoint(IActionLog& durableSink, ::morph::model::detail::ActionDispatcher& dispatcher =
                                                  ::morph::model::detail::defaultDispatcher()) {
-        // `_checkpointMtx` serializes the *entire* checkpoint body across
-        // concurrent callers, so {take the pending slice + advance the
-        // watermark} and {forward that slice to the sink} happen atomically with
-        // respect to any other checkpoint. Without it, two concurrent
-        // checkpoints could each grab a disjoint pending slice under `_mtx`,
-        // release `_mtx`, then race on the unlocked forward phase — letting
-        // batches reach the durable sink out of append order and breaking the
-        // append-order identity the sink relies on. It is deliberately *not*
-        // `_mtx`: `_mtx` is held only briefly (slice + watermark), never across
-        // the sink's `append()`/`flush()` I/O, so regular `append()` calls keep
-        // making progress while a checkpoint is forwarding.
-        std::scoped_lock const checkpointLock{_checkpointMtx};
+        State& state = _owned.read("SessionLog::checkpoint");
+        // Forward every entry whose seq is strictly past the last committed
+        // seq. `seq` is assigned once at append and never reused, so this is
+        // stable under coalescing and under `undoLast()` removing tail
+        // entries — unlike a raw index into `all`, which those mutate.
         std::vector<LogEntry> pending;
-        uint64_t highestSeq = _committedUpToSeq;
-        {
-            std::scoped_lock const lock{_mtx};
-            // Forward every entry whose seq is strictly past the last committed
-            // seq. `seq` is assigned once at append and never reused, so this is
-            // stable under coalescing and under `undoLast()` removing tail
-            // entries — unlike a raw index into `_all`, which those mutate.
-            for (const auto& entry : _all) {
-                if (entry.seq > _committedUpToSeq) {
-                    pending.push_back(entry);
-                    highestSeq = std::max(highestSeq, entry.seq);
-                }
+        uint64_t highestSeq = state.committedUpToSeq;
+        for (const auto& entry : state.all) {
+            if (entry.seq > state.committedUpToSeq) {
+                pending.push_back(entry);
+                highestSeq = std::max(highestSeq, entry.seq);
             }
-            if (pending.empty()) {
-                return;
-            }
-            _committedUpToSeq = highestSeq;
         }
+        if (pending.empty()) {
+            return;
+        }
+        state.committedUpToSeq = highestSeq;
         for (auto& entry : coalesced(pending, dispatcher)) {
             durableSink.append(std::move(entry));
         }
         durableSink.flush();
+    }
+
+protected:
+    /// @brief Reads the history on the owner, delivered on @p replyExec.
+    /// @param replyExec Where the answer is delivered.
+    /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    /// @return The matching entries.
+    [[nodiscard]] ::morph::async::Completion<std::vector<LogEntry>> askEntries(::morph::exec::IExecutor& replyExec,
+                                                                               std::string entityKey) const override {
+        return _owned.ask<std::vector<LogEntry>>(
+            "SessionLog::entries", replyExec,
+            [entityKey = std::move(entityKey)](State& state) { return detail::entriesFor(state.all, entityKey); });
     }
 
 private:
@@ -505,11 +504,14 @@ private:
         return out;
     }
 
-    mutable std::mutex _mtx;
-    std::mutex _checkpointMtx;
-    std::vector<LogEntry> _all;
-    uint64_t _committedUpToSeq{0};
-    uint64_t _nextSeq{0};
+    /// Everything the log holds; touched only on the owner.
+    struct State {
+        std::vector<LogEntry> all;
+        uint64_t committedUpToSeq{0};
+        uint64_t nextSeq{0};
+    };
+
+    ::morph::exec::detail::OwnedState<State> _owned;
 };
 
 }  // namespace morph::journal

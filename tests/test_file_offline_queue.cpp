@@ -20,6 +20,7 @@
 #include <unistd.h>  // geteuid, for the permission-based fault-injection case below
 #endif
 #include "offline_queue_conformance.hpp"
+#include "test_support.hpp"
 
 namespace {
 
@@ -36,7 +37,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: enqueue/drain/markDone round-trip w
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto id1 = queue.enqueue("a");
         auto id2 = queue.enqueue("b");
         auto items = queue.drain();
@@ -57,13 +58,13 @@ TEST_CASE("morph::offline::FileOfflineQueue: items and attempts survive destroyi
     uint64_t id1 = 0;
     uint64_t id2 = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         id1 = queue.enqueue("payload-1", "key-1");
         id2 = queue.enqueue("payload-2");
         queue.setAttempts(id2, 3);
     }
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto items = queue.drain();
         REQUIRE(items.size() == 2);
         REQUIRE(items[0].id == id1);
@@ -80,13 +81,13 @@ TEST_CASE("morph::offline::FileOfflineQueue: markDone persists across a reopen",
     std::filesystem::remove(path);
 
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto id1 = queue.enqueue("gone");
         (void)queue.enqueue("stays");
         queue.markDone(id1);
     }
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
         REQUIRE(items[0].payload == "stays");
@@ -103,12 +104,12 @@ TEST_CASE(
 
     uint64_t id1 = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         id1 = queue.enqueue("first");
         queue.markDone(id1);  // tombstoned -- id1 must never be reused
     }
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto id2 = queue.enqueue("second");
         REQUIRE(id2 > id1);
     }
@@ -120,7 +121,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: re-enqueue with the same idempotenc
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
 
         auto id1 = queue.enqueue("first-payload", "op-1");
         auto id2 = queue.enqueue("second-payload", "op-1");
@@ -135,7 +136,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: empty idempotencyKey items are neve
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
 
         (void)queue.enqueue("a");
         (void)queue.enqueue("b");
@@ -150,7 +151,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: tolerates a torn trailing line on o
     std::filesystem::remove(path);
     uint64_t id1 = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         id1 = queue.enqueue("intact");
     }
     // Manually append a torn (truncated, non-JSON) trailing line, simulating a
@@ -160,7 +161,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: tolerates a torn trailing line on o
         out << R"({"op":"put","id":2,"payload":"cut-o)";  // no closing brace/newline
     }
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
         REQUIRE(items[0].id == id1);
@@ -174,14 +175,14 @@ TEST_CASE("morph::offline::FileOfflineQueue: item survives a crash between drain
     std::filesystem::remove(path);
     uint64_t id1 = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         id1 = queue.enqueue("payload");
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
         // Simulate a crash: no markDone() call before the queue is destroyed.
     }
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         REQUIRE(queue.drain().size() == 1);
         queue.markDone(id1);
         REQUIRE(queue.drain().empty());
@@ -199,7 +200,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: ids are never reissued across repea
     std::uint64_t firstId = 0;
     std::uint64_t doneId = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         firstId = queue.enqueue("one");
         doneId = queue.enqueue("two");
         queue.markDone(doneId);
@@ -207,13 +208,15 @@ TEST_CASE("morph::offline::FileOfflineQueue: ids are never reissued across repea
     REQUIRE(firstId != doneId);
 
     {
-        morph::offline::FileOfflineQueue queue{path};  // first restart: compacts away the tombstone
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(),
+                                               path};  // first restart: compacts away the tombstone
         REQUIRE(queue.drain().size() == 1);
     }
 
     std::uint64_t reissued = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};  // second restart: the mark must have survived
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(),
+                                               path};  // second restart: the mark must have survived
         reissued = queue.enqueue("three");
     }
     CHECK(reissued != doneId);
@@ -229,15 +232,15 @@ TEST_CASE("morph::offline::FileOfflineQueue: the id high-water mark survives an 
     auto const path = tempQueuePath();
     std::uint64_t lastId = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         lastId = queue.enqueue("only");
         queue.markDone(lastId);
     }
     {
-        morph::offline::FileOfflineQueue const queue{path};
+        morph::offline::FileOfflineQueue const queue{morph::testing::storageOwner(), path};
     }  // restart 1: compacts to empty
     {
-        morph::offline::FileOfflineQueue queue{path};  // restart 2
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};  // restart 2
         REQUIRE(queue.drain().empty());
         CHECK(queue.enqueue("next") > lastId);
     }
@@ -249,14 +252,14 @@ TEST_CASE("morph::offline::FileOfflineQueue: surviving items are intact after re
     // collide with a surviving id and delete it on the next load.
     auto const path = tempQueuePath();
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         (void)queue.enqueue("keep-a");
         auto const gone = queue.enqueue("drop");
         (void)queue.enqueue("keep-b");
         queue.markDone(gone);
     }
     for (int restart = 0; restart < 3; ++restart) {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto const pending = queue.drain();
         REQUIRE(pending.size() == 2);
         CHECK(pending.at(0).payload == "keep-a");
@@ -274,7 +277,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a non-matching idempotencyKey enque
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto id1 = queue.enqueue("first-payload", "key-a");
         auto id2 = queue.enqueue("second-payload", "key-b");
 
@@ -288,7 +291,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: markDone on an unknown id is a no-o
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto id1 = queue.enqueue("payload");
         REQUIRE_NOTHROW(queue.markDone(id1 + 1000));  // never issued -- erase() finds nothing
         REQUIRE(queue.drain().size() == 1);
@@ -300,7 +303,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: setAttempts on an unknown id is a n
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto id1 = queue.enqueue("payload");
         REQUIRE_NOTHROW(queue.setAttempts(id1 + 1000, 7));  // never issued -- find() misses
         auto items = queue.drain();
@@ -327,7 +330,7 @@ TEST_CASE(
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         morph::offline::IOfflineQueue& base = queue;
         auto id = base.IOfflineQueue::enqueue("payload", "stamped-key");
 
@@ -382,7 +385,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: setIdempotencyKey via the base defa
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        SelfRetiringQueue queue{path};
+        SelfRetiringQueue queue{morph::testing::storageOwner(), path};
         auto id1 = queue.enqueue("payload");  // retired immediately by the override above
         REQUIRE(queue.drain().empty());
 
@@ -404,7 +407,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: load() skips a blank line in the ND
     std::filesystem::remove(path);
     uint64_t id1 = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         id1 = queue.enqueue("first");
     }
     // A blank line can't be produced by FileOfflineQueue itself (every write
@@ -416,7 +419,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: load() skips a blank line in the ND
         out << "\n";
     }
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
         REQUIRE(items[0].id == id1);
@@ -435,7 +438,7 @@ TEST_CASE(
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         (void)queue.enqueue("first");
     }
     {
@@ -446,7 +449,8 @@ TEST_CASE(
         out << "not json at all\n";
         out << R"({"op":"put","id":99,"payload":"after-corruption","idempotencyKey":"","attempts":0})" << "\n";
     }
-    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path), morph::offline::FileOfflineQueueError);
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(morph::testing::storageOwner(), path),
+                      morph::offline::FileOfflineQueueError);
     std::filesystem::remove(path);
 }
 
@@ -457,7 +461,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: construction throws if the compacti
     // when the parent directory does not exist, throwing before the
     // append-mode _file handle is ever opened.
     auto const path = std::filesystem::path{"/no/such/directory/at/all/queue.ndjson"};
-    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path), std::runtime_error);
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(morph::testing::storageOwner(), path), std::runtime_error);
 }
 
 // ── FileIoOps fault injection ─────────────────────────────────────────────
@@ -484,7 +488,8 @@ TEST_CASE("morph::offline::FileOfflineQueue: the constructor's own append-mode f
     ioOps.fopen = [](const std::string& p, const char* mode) -> std::FILE* {
         return std::string{mode} == "a" ? nullptr : std::fopen(p.c_str(), mode);
     };
-    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(morph::testing::storageOwner(), path, ioOps),
+                      std::runtime_error);
     std::filesystem::remove(path);
 }
 
@@ -499,7 +504,7 @@ TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a short fwrite() to the ap
     };
 
     {
-        morph::offline::FileOfflineQueue queue{path, ioOps};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, ioOps};
         *shouldFail = true;
         REQUIRE_THROWS_AS(queue.enqueue("payload"), std::runtime_error);
     }  // queue's own file handle must close before remove() -- Windows cannot delete an open file
@@ -534,7 +539,7 @@ TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a short write does not bri
     };
 
     {
-        morph::offline::FileOfflineQueue queue{path, ioOps};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, ioOps};
         auto const first = queue.enqueue("first");
         *shouldFail = true;
         REQUIRE_THROWS_AS(queue.enqueue("second"), std::runtime_error);
@@ -554,7 +559,7 @@ TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a short write does not bri
     // Windows.
     std::vector<morph::offline::QueueItem> pending;
     {
-        morph::offline::FileOfflineQueue const reopened{path, ioOps};
+        morph::offline::FileOfflineQueue const reopened{morph::testing::storageOwner(), path, ioOps};
         pending = reopened.drain();
     }
     std::vector<std::string> payloads;
@@ -578,7 +583,7 @@ TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a failing fflush() on the 
     ioOps.fflush = [shouldFail](std::FILE* file) { return *shouldFail ? -1 : std::fflush(file); };
 
     {
-        morph::offline::FileOfflineQueue queue{path, ioOps};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, ioOps};
         *shouldFail = true;
         REQUIRE_THROWS_AS(queue.enqueue("payload"), std::runtime_error);
     }
@@ -595,7 +600,7 @@ TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a failing fsync() on the a
     ioOps.fsync = [shouldFail, realOps](std::FILE* file) { return *shouldFail ? -1 : realOps.fsync(file); };
 
     {
-        morph::offline::FileOfflineQueue queue{path, ioOps};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, ioOps};
         *shouldFail = true;
         REQUIRE_THROWS_AS(queue.enqueue("payload"), std::runtime_error);
     }
@@ -616,7 +621,8 @@ TEST_CASE(
     }
     morph::core::FileIoOps ioOps;
     ioOps.fwrite = [](const void*, std::size_t size, std::FILE*) { return size - 1; };
-    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(morph::testing::storageOwner(), path, ioOps),
+                      std::runtime_error);
     std::filesystem::remove(path);
 }
 
@@ -645,7 +651,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: construction syncs the containing d
     // and clangcl-debug legs. POSIX allows the unlink either way, so this only
     // ever failed on Windows.
     {
-        morph::offline::FileOfflineQueue const queue{path, ioOps};
+        morph::offline::FileOfflineQueue const queue{morph::testing::storageOwner(), path, ioOps};
     }
 
     REQUIRE(syncedPaths.size() == 1);
@@ -659,7 +665,8 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing directory fsync during co
     morph::core::FileIoOps ioOps;
     ioOps.syncPath = [](const std::filesystem::path&) { return -1; };
 
-    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(morph::testing::storageOwner(), path, ioOps),
+                      std::runtime_error);
 
     // The failed construction must not leave the queue unusable -- a fresh,
     // real-I/O open of the same path must succeed cleanly. Scoped so the handle
@@ -667,7 +674,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing directory fsync during co
     // handle still has open.
     {
         morph::core::FileIoOps const realOps;
-        morph::offline::FileOfflineQueue reopened{path, realOps};
+        morph::offline::FileOfflineQueue reopened{morph::testing::storageOwner(), path, realOps};
         (void)reopened.enqueue("payload");
         REQUIRE(reopened.size() == 1);
     }
@@ -683,7 +690,8 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush() during construct
     }
     morph::core::FileIoOps ioOps;
     ioOps.fflush = [](std::FILE*) { return -1; };
-    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(morph::testing::storageOwner(), path, ioOps),
+                      std::runtime_error);
     std::filesystem::remove(path);
 }
 
@@ -694,7 +702,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth throws OfflineQ
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 2};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, morph::core::FileIoOps{}, 2};
         REQUIRE(queue.maxDepth() == std::optional<std::size_t>{2});
         (void)queue.enqueue("a");
         (void)queue.enqueue("b");
@@ -708,7 +716,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: maxDepth() is std::nullopt when unb
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         REQUIRE(queue.maxDepth() == std::nullopt);
     }
     std::filesystem::remove(path);
@@ -719,14 +727,14 @@ TEST_CASE("morph::offline::FileOfflineQueue: maxDepth survives destroying and re
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, morph::core::FileIoOps{}, 1};
         (void)queue.enqueue("a");
         REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
     }
     {
         // Reopened with the same maxDepth argument -- still enforced. maxDepth
         // is a per-construction parameter, not persisted in the file itself.
-        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, morph::core::FileIoOps{}, 1};
         REQUIRE(queue.drain().size() == 1);
         REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
     }
@@ -737,7 +745,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a dedup hit on a full queue does no
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, morph::core::FileIoOps{}, 1};
         auto id1 = queue.enqueue("first-payload", "op-1");
         // The dedup scan runs before the capacity check, so a repeat of the
         // same idempotencyKey on a full queue returns the existing id instead
@@ -753,7 +761,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: size() reflects live pending count"
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         REQUIRE(queue.size() == 0);
         auto id1 = queue.enqueue("a");
         (void)queue.enqueue("b");
@@ -770,7 +778,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth emits queueOver
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, morph::core::FileIoOps{}, 1};
         (void)queue.enqueue("a");
 
         std::vector<double> samples;
@@ -800,7 +808,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: IOfflineQueue idempotency-key confo
         auto path = tempQueuePath();
         std::filesystem::remove(path);
         created.push_back(path);
-        return std::make_unique<morph::offline::FileOfflineQueue>(path);
+        return std::make_unique<morph::offline::FileOfflineQueue>(morph::testing::storageOwner(), path);
     });
     for (auto const& path : created) {
         std::filesystem::remove(path);
@@ -812,14 +820,16 @@ TEST_CASE("morph::offline::FileOfflineQueue: the idempotency-key contract surviv
     std::filesystem::remove(path);
     morph::test::checkIdempotencyKeyContractAcrossReopen(
         "FileOfflineQueue", morph::test::KeyDedup::onPendingItems,
-        [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(path); });
+        [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(morph::testing::storageOwner(), path); });
     std::filesystem::remove(path);
 }
 
 TEST_CASE("morph::offline::FileOfflineQueue: a NUL-bearing payload and key round-trip intact", "[file_queue]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
-    auto const open = [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(path); };
+    auto const open = [&path] {
+        return std::make_unique<morph::offline::FileOfflineQueue>(morph::testing::storageOwner(), path);
+    };
     morph::test::checkNulPayloadRoundTrip("FileOfflineQueue", open, open);
     std::filesystem::remove(path);
 }
@@ -845,7 +855,7 @@ TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted 
     std::filesystem::remove(path);
     std::uintmax_t sizeBefore = 0;
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         (void)queue.enqueue(R"({"op":"transfer","amount":100})");
         (void)queue.enqueue(R"({"op":"transfer","amount":250})");
         (void)queue.enqueue(R"({"op":"transfer","amount":375})");
@@ -856,11 +866,11 @@ TEST_CASE("FileOfflineQueue: an unreadable queue file is not silently compacted 
 
     std::filesystem::permissions(path, std::filesystem::perms::owner_write);
     // Must throw rather than hand back a queue that reports no pending work.
-    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue{path}, std::runtime_error);
+    REQUIRE_THROWS_AS((morph::offline::FileOfflineQueue{morph::testing::storageOwner(), path}), std::runtime_error);
 
     std::filesystem::permissions(path, std::filesystem::perms::owner_all);
     REQUIRE(std::filesystem::file_size(path) == sizeBefore);
-    morph::offline::FileOfflineQueue const reopened{path};
+    morph::offline::FileOfflineQueue const reopened{morph::testing::storageOwner(), path};
     REQUIRE(reopened.drain().size() == 3);
     std::filesystem::remove(path);
 }
@@ -894,7 +904,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush rolls the partial 
     };
 
     {
-        morph::offline::FileOfflineQueue queue{path, ioOps};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, ioOps};
         (void)queue.enqueue("first");
         *failuresLeft = 1;
         REQUIRE_THROWS_AS(queue.enqueue("second"), std::runtime_error);
@@ -909,7 +919,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush rolls the partial 
     // cannot unlink a file another handle still has open.
     std::vector<morph::offline::QueueItem> pending;
     {
-        morph::offline::FileOfflineQueue const reopened{path};
+        morph::offline::FileOfflineQueue const reopened{morph::testing::storageOwner(), path};
         pending = reopened.drain();
     }
     std::vector<std::string> payloads;
@@ -949,7 +959,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: an unsupported directory fsync warn
     {
         // Constructs, warns, and works -- a mode-0300 spool directory is an
         // ordinary hardened layout, not a broken one.
-        morph::offline::FileOfflineQueue queue{path, ioOps};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, ioOps};
         auto const id = queue.enqueue("payload");
         CHECK(queue.size() == 1);
         queue.markDone(id);
@@ -970,7 +980,8 @@ TEST_CASE("morph::offline::FileOfflineQueue: a genuine directory-fsync failure s
     morph::core::FileIoOps ioOps;
     ioOps.syncPath = [](const std::filesystem::path&) { return EIO; };
 
-    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(morph::testing::storageOwner(), path, ioOps),
+                      std::runtime_error);
     std::filesystem::remove(path);
 }
 
@@ -995,7 +1006,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fsync rolls the record ba
     };
 
     {
-        morph::offline::FileOfflineQueue queue{path, ioOps};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, ioOps};
         (void)queue.enqueue("first");
         *failuresLeft = 1;
         REQUIRE_THROWS_AS(queue.enqueue("second"), std::runtime_error);
@@ -1007,7 +1018,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a failing fsync rolls the record ba
     // cannot unlink a file another handle still has open.
     std::vector<std::string> payloads;
     {
-        morph::offline::FileOfflineQueue const reopened{path};
+        morph::offline::FileOfflineQueue const reopened{morph::testing::storageOwner(), path};
         for (const auto& item : reopened.drain()) {
             payloads.push_back(item.payload);
         }
@@ -1034,7 +1045,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a mid-read I/O error throws rather 
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir / "child");
 
-    REQUIRE_THROWS(morph::offline::FileOfflineQueue{dir});
+    REQUIRE_THROWS((morph::offline::FileOfflineQueue{morph::testing::storageOwner(), dir}));
 
     INFO("the directory must still be there: a failed load must not have rewritten anything");
     CHECK(std::filesystem::exists(dir / "child"));
@@ -1069,7 +1080,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a rollback that cannot truncate ref
     ioOps.fflush = [failFlush](std::FILE* file) { return *failFlush ? -1 : std::fflush(file); };
 
     {
-        morph::offline::FileOfflineQueue queue{path, ioOps};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path, ioOps};
         (void)queue.enqueue("first");
 
         *shortWrite = true;
@@ -1087,7 +1098,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: a rollback that cannot truncate ref
     // the failure is intact. Pre-fix, this construction threw a parse error.
     std::vector<std::string> payloads;
     {
-        morph::offline::FileOfflineQueue const reopened{path};
+        morph::offline::FileOfflineQueue const reopened{morph::testing::storageOwner(), path};
         for (const auto& item : reopened.drain()) {
             payloads.push_back(item.payload);
         }

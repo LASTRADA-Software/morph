@@ -129,6 +129,10 @@ struct SyncResult {
 /// only in that owner's tasks. `run()` is callable from any thread: on the
 /// owner it drains at once; elsewhere it posts the drain to the owner, so two
 /// runs never overlap. `stop()` is the one cross-thread signal, an atomic.
+///
+/// The drain calls the queue's synchronous verbs, which answer only on the
+/// queue's own owner (see `IOfflineQueue`, "One owner"): give the queue the
+/// worker's owner, or the executor that strand runs over.
 class SyncWorker {
 public:
     /// @brief Callable that attempts to replay a single queued item, reporting
@@ -163,8 +167,9 @@ public:
     /// @param owner          The executor every drain runs on; must run one task
     ///                       at a time (a strand). Borrowed: it must outlive this
     ///                       worker and keep running tasks until it is destroyed.
-    /// @param queue          Queue to drain on each `run()` call. Borrowed, not
-    ///                       owned: it must outlive this worker.
+    /// @param queue          Queue to drain on each `run()` call, belonging to
+    ///                       @p owner (or to the executor it runs over).
+    ///                       Borrowed, not owned: it must outlive this worker.
     /// @param replay         Function called for each pending item. Stored and
     ///                       invoked for this worker's whole lifetime, so
     ///                       anything the callable refers to must outlive it.
@@ -194,8 +199,9 @@ public:
     /// @param owner          The executor every drain runs on; must run one task
     ///                       at a time (a strand). Borrowed: it must outlive this
     ///                       worker and keep running tasks until it is destroyed.
-    /// @param queue          Queue to drain on each `run()` call. Borrowed, not
-    ///                       owned: it must outlive this worker.
+    /// @param queue          Queue to drain on each `run()` call, belonging to
+    ///                       @p owner (or to the executor it runs over).
+    ///                       Borrowed, not owned: it must outlive this worker.
     /// @param replay         Function called for each pending item. Stored and
     ///                       invoked for this worker's whole lifetime, so
     ///                       anything the callable refers to must outlive it.

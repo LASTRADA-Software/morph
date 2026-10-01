@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <exception>
 #include <map>
-#include <mutex>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+
+#include "../attributes.hpp"
+#include "../core/completion.hpp"
+#include "../core/detail/owned_state.hpp"
+#include "../core/executor.hpp"
 
 namespace morph::offline {
 
@@ -124,7 +130,51 @@ struct IReplayLedger {
         doRecord(scope, opId, std::move(payload));
     }
 
+    /// @brief Reports whether @p opId within @p scope has already been
+    ///        decided, looked up on the ledger's owner and delivered on
+    ///        @p replyExec.
+    ///
+    /// The form of `lookup()` for a caller that is not on the ledger's owner.
+    /// A lookup answered elsewhere cannot be atomic with the `record()` that
+    /// follows it; a caller that needs check-then-set atomicity runs both on
+    /// the owner.
+    /// @param replyExec Where the answer is delivered, and where the caller
+    ///        attaches to it. Borrowed: it must outlive the completion.
+    /// @param scope Caller-chosen partition; empty is a valid, distinct scope.
+    /// @param opId  The operation id to look up. Empty always answers
+    ///              `std::nullopt`.
+    /// @return What `lookup(scope, opId)` would have returned.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    [[nodiscard]] ::morph::async::Completion<std::optional<std::string>> lookup(
+        ::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND, std::string_view scope, std::string_view opId) const {
+        if (opId.empty()) {
+            auto settleable = ::morph::async::Completion<std::optional<std::string>>::makeSettleable(&replyExec);
+            settleable.second.resolve(std::nullopt);
+            return std::move(settleable.first);
+        }
+        return askLookup(replyExec, std::string{scope}, std::string{opId});
+    }
+
 protected:
+    /// @brief What `lookup(replyExec, scope, opId)` asks. The default looks
+    ///        up where it is called, for an implementation with no owner; one
+    ///        with an owner looks up there.
+    /// @param replyExec Where the answer is delivered.
+    /// @param scope     Caller-chosen partition.
+    /// @param opId      The operation id to look up; never empty here.
+    /// @return The payload recorded with @p opId, or `std::nullopt`.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    [[nodiscard]] virtual ::morph::async::Completion<std::optional<std::string>> askLookup(
+        ::morph::exec::IExecutor& replyExec, std::string scope, std::string opId) const {
+        auto settleable = ::morph::async::Completion<std::optional<std::string>>::makeSettleable(&replyExec);
+        try {
+            settleable.second.resolve(doLookup(scope, opId));
+        } catch (...) {
+            settleable.second.reject(std::current_exception());
+        }
+        return std::move(settleable.first);
+    }
+
     /// @brief Storage hook for `lookup()`.
     /// @param scope Caller-chosen partition, forwarded verbatim from `lookup()`.
     /// @param opId  The operation id to look up; never empty here -- the
@@ -146,7 +196,7 @@ protected:
 
 // ── In-memory implementation ──────────────────────────────────────────────────
 
-/// @brief Thread-safe in-memory implementation of `IReplayLedger`.
+/// @brief In-memory implementation of `IReplayLedger`, owned by one executor.
 ///
 /// Suitable for testing and for a host with no durability requirement.
 /// Mirrors `morph::offline::InMemoryOfflineQueue`'s shape. Not durable across
@@ -154,15 +204,29 @@ protected:
 /// not a stand-in for `record()`'s atomicity requirement: a real
 /// implementation must be backed by the same store and transaction as the
 /// write it guards.
+///
+/// @par One owner
+/// The entries belong to the executor given at construction, which must run
+/// one task at a time — the executor the guarded writes run on, so a
+/// `lookup()` and the `record()` after it are one check-then-set. `lookup()`
+/// answers only there; `record()` runs there, posted from anywhere else; a
+/// caller elsewhere looks up through `lookup(replyExec, scope, opId)`.
 class InMemoryReplayLedger : public IReplayLedger {
+public:
+    /// @brief Constructs an empty ledger belonging to @p owner.
+    /// @param owner The executor every access runs on; must run one task at a
+    ///        time. Borrowed: it must outlive this ledger and run what it posts.
+    explicit InMemoryReplayLedger(::morph::exec::IExecutor& owner MORPH_LIFETIMEBOUND)
+        : _owned{owner, std::make_shared<State>()} {}
+
 protected:
-    /// @brief Looks up @p opId within @p scope in the in-memory map.
+    /// @brief Looks up @p opId within @p scope in the in-memory map. On the owner.
     ///
     /// @par The two `std::string` constructions below are deliberate
-    /// They materialise the key inside the lock purely to probe an ordered map
-    /// that could take a transparent comparator instead. That was profiled
-    /// rather than fixed. Measured with clang 22 `-O2`, a counting
-    /// `operator new`, 2e6 iterations per row:
+    /// They materialise the key purely to probe an ordered map that could
+    /// take a transparent comparator instead. That was profiled rather than
+    /// fixed. Measured with clang 22 `-O2`, a counting `operator new`, 2e6
+    /// iterations per row:
     ///
     /// @verbatim
     /// -- allocations per lookup() --
@@ -173,25 +237,19 @@ protected:
     /// -- ns per lookup(), single thread --
     /// both inside libstdc++'s 15-char SSO buffer : 28.2 ns
     /// both past it                               : 31.6 ns
-    ///
-    /// -- ns per lookup(), 8 threads on the one mutex --
-    /// both inside SSO : 685.7 ns
-    /// both past SSO   : 740.3 ns
     /// @endverbatim
     ///
-    /// So the cost is real and id-length-dependent, and the widened critical
-    /// section costs ~55 ns of a ~740 ns contended lookup. What parks it is
-    /// the call census, not the size:
-    /// `InMemoryReplayLedger` is constructed in **one** file in this tree,
-    /// `tests/test_replay_ledger.cpp`, and in no shipping code at all. The
-    /// only production `IReplayLedger::lookup()` call
+    /// So the cost is real and id-length-dependent. What parks it is the call
+    /// census, not the size: `InMemoryReplayLedger` is constructed in **one**
+    /// file in this tree, `tests/test_replay_ledger.cpp`, and in no shipping
+    /// code at all. The only production `IReplayLedger::lookup()` call
     /// (`examples/bookmarks/src/models/bookmark_model.cpp:737`, once per
     /// `ImportBookmarks`) runs against `BookmarksReplayLedger`, whose own
     /// `doLookup` is an ODBC round-trip -- next to which 3 ns is not
     /// measurable.
     ///
     /// It becomes worth fixing the moment a per-request caller of *this* class
-    /// appears; the fix is then a transparent comparator on `_entries`,
+    /// appears; the fix is then a transparent comparator on the map,
     /// `std::map`'s `is_transparent` flavour rather than `core/registry.hpp`'s
     /// hash-and-equality pair (which serves an `unordered_map` and does not
     /// apply here).
@@ -201,33 +259,59 @@ protected:
     /// @return The payload recorded with @p opId, or `std::nullopt` if none.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
     [[nodiscard]] std::optional<std::string> doLookup(std::string_view scope, std::string_view opId) const override {
-        std::scoped_lock const lock{_mtx};
-        auto const iter = _entries.find(Key{std::string{scope}, std::string{opId}});
-        if (iter == _entries.end()) {
-            return std::nullopt;
-        }
-        return iter->second;
+        return find(_owned.read("InMemoryReplayLedger::lookup"), scope, opId);
     }
 
     /// @brief Records @p opId within @p scope in the in-memory map, unless
-    ///        already present (first-write-wins).
+    ///        already present (first-write-wins). On the owner; posted there
+    ///        from anywhere else.
     /// @param scope   Caller-chosen partition.
     /// @param opId    The operation id being recorded; never empty here.
     /// @param payload Opaque payload to associate with @p opId.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
     void doRecord(std::string_view scope, std::string_view opId, std::string payload) override {
-        std::scoped_lock const lock{_mtx};
-        // emplace (not insert_or_assign): first-write-wins, per record()'s
-        // own doc comment -- a second record() for the same (scope, opId)
-        // must not overwrite a payload a caller may already have replayed.
-        _entries.emplace(Key{std::string{scope}, std::string{opId}}, std::move(payload));
+        _owned.apply("InMemoryReplayLedger::record", [key = Key{std::string{scope}, std::string{opId}},
+                                                      payload = std::move(payload)](State& state) mutable {
+            // emplace (not insert_or_assign): first-write-wins, per record()'s
+            // own doc comment -- a second record() for the same (scope, opId)
+            // must not overwrite a payload a caller may already have replayed.
+            state.entries.emplace(std::move(key), std::move(payload));
+        });
+    }
+
+    /// @brief Looks up on the owner, answered on @p replyExec.
+    /// @param replyExec Where the answer is delivered.
+    /// @param scope     Caller-chosen partition.
+    /// @param opId      The operation id to look up; never empty here.
+    /// @return The payload recorded with @p opId, or `std::nullopt`.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    [[nodiscard]] ::morph::async::Completion<std::optional<std::string>> askLookup(::morph::exec::IExecutor& replyExec,
+                                                                                   std::string scope,
+                                                                                   std::string opId) const override {
+        return _owned.ask<std::optional<std::string>>(
+            "InMemoryReplayLedger::lookup", replyExec,
+            [scope = std::move(scope), opId = std::move(opId)](State& state) { return find(state, scope, opId); });
     }
 
 private:
     using Key = std::pair<std::string, std::string>;  // (scope, opId)
 
-    mutable std::mutex _mtx;
-    std::map<Key, std::string> _entries;
+    /// Everything the ledger holds; touched only on the owner.
+    struct State {
+        std::map<Key, std::string> entries;
+    };
+
+    /// The payload recorded under (@p scope, @p opId) in @p state, if any.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    static std::optional<std::string> find(const State& state, std::string_view scope, std::string_view opId) {
+        auto const iter = state.entries.find(Key{std::string{scope}, std::string{opId}});
+        if (iter == state.entries.end()) {
+            return std::nullopt;
+        }
+        return iter->second;
+    }
+
+    ::morph::exec::detail::OwnedState<State> _owned;
 };
 
 }  // namespace morph::offline

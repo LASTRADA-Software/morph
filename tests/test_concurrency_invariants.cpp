@@ -390,7 +390,7 @@ TEST_CASE("morph::offline::NetworkMonitor: probe that calls isOnline() does not 
 
 TEST_CASE("morph::offline::SyncWorker: stop() called mid-replay aborts before processing next item",
           "[sync][stop][quantum-parity]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::inlineOwner()};  // the worker below drains it there
     constexpr int total = 10;
     for (int idx = 0; idx < total; ++idx) {
         (void)queue.enqueue("item" + std::to_string(idx));

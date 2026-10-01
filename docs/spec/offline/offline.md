@@ -30,6 +30,7 @@ All types live in `morph::offline`.
 - [NetworkMonitor](#networkmonitor)
 - [NetworkMonitor callback constraint](#networkmonitor-callback-constraint)
 - [Offline queue](#offline-queue)
+  - [One owner](#one-owner)
 - [Ownership: who enqueues](#ownership-who-enqueues)
 - [SyncWorker](#syncworker)
 - [Conflict resolution on replay](#conflict-resolution-on-replay)
@@ -257,10 +258,9 @@ exact contract for its own idempotency-key dedup (opaque key, non-empty keys
 only, a repeat is a silent no-op) — this is that decision made once, not
 re-litigated per rung.
 
-**`InMemoryReplayLedger` materialises its key inside its lock, on purpose.**
-Its `doLookup` builds two `std::string`s from its `string_view` parameters,
-under `_mtx`, only to probe a `std::map<std::pair<std::string, std::string>,
-std::string>`. A transparent comparator would remove both. It is left in place
+**`InMemoryReplayLedger` materialises its key on every lookup, on purpose.**
+Its `doLookup` builds two `std::string`s from its `string_view` parameters only
+to probe a `std::map<std::pair<std::string, std::string>, std::string>`. A transparent comparator would remove both. It is left in place
 because the class has no shipping caller: `InMemoryReplayLedger` is
 constructed in exactly one file in this tree
 (`tests/test_replay_ledger.cpp`), and the one production
@@ -270,8 +270,7 @@ constructed in exactly one file in this tree
 SQL round-trip. Measured with clang 22 `-O2`, counting `operator new`, 2e6
 iterations: 2.00 allocations per lookup with both key halves past libstdc++'s
 15-character SSO buffer, 1.00 with one past it, 0.00 with both inside — costing
-3.4 ns of a 31.6 ns uncontended lookup, and 55 ns of a 740 ns lookup with eight
-threads on the mutex. It is parked on that census rather than on the size of
+3.4 ns of a 31.6 ns lookup. It is parked on that census rather than on the size of
 the number, and becomes worth doing the moment a per-request caller of this
 class exists; the header's own `doLookup` comment carries the full table and
 the shape of the fix.
@@ -295,6 +294,64 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 `drain()` is `const` — it takes a snapshot and mutates nothing, so `size()`'s
 default can call it (and so can an application) without needing a non-`const`
 reference to the queue.
+
+Three completion overloads serve a caller that is not on the queue's owner
+(see [One owner](#one-owner)):
+
+| Member | Signature | Notes |
+|---|---|---|
+| `enqueue` | `Completion<uint64_t> enqueue(IExecutor& replyExec, std::string payload, std::string idempotencyKey = {})` | Enqueues on the owner; the id is delivered on `replyExec`. A full queue rejects it with `OfflineQueueFullError`. |
+| `drain` | `Completion<std::vector<QueueItem>> drain(IExecutor& replyExec) const` | Snapshots on the owner; delivered on `replyExec`. |
+| `size` | `Completion<std::size_t> size(IExecutor& replyExec) const` | Counts on the owner; delivered on `replyExec`. |
+
+They are non-virtual, each over a protected virtual hook (`askEnqueue`,
+`askDrain`, `askSize`) whose default answers synchronously where it is asked —
+right for an implementation with no owner, such as bank's
+`LightweightOfflineQueue`. A virtual overload would be hidden by every
+implementation that overrides only the synchronous verb, which
+`-Woverloaded-virtual` rejects.
+
+### One owner
+
+Every queue morph ships — `InMemoryOfflineQueue`, `FileOfflineQueue`,
+`SqliteOfflineQueue` — takes its **owner** executor as the first constructor
+argument and touches its items, its file or its SQLite connection only there.
+The owner must run one task at a time.
+
+| Verb | On the owner | Elsewhere |
+|---|---|---|
+| `markDone`, `setAttempts`, `setIdempotencyKey` | Run at once | Posted to the owner; return at once. A failure there is logged and the item stays queued |
+| `enqueue`, `drain`, `size` | Run at once | Not allowed: reported by the owner check (a debug assertion, or a test's probe) |
+| `enqueue(replyExec, …)`, `drain(replyExec)`, `size(replyExec)` | Run at once; answer delivered on `replyExec` | Posted to the owner; answer delivered on `replyExec` |
+| `maxDepth` (and `SqliteOfflineQueue::synchronousLevel`/`journalMode`) | Anywhere: fixed at construction | Anywhere |
+
+"On the owner" is `exec::detail::OwnerAffinity`'s answer: inside a task of the
+owner, or on the constructing thread when it was outside every executor's
+task — the GUI thread that built the queue.
+
+`enqueue` stays synchronous on the owner because it answers with the item's id
+and throws `OfflineQueueFullError`, which a posted call could not return.
+
+**The queue's owner is its `SyncWorker`'s.** The drain calls `drain()`,
+`markDone()` and `setAttempts()` synchronously, so the queue belongs to the
+worker's owner or to the executor that strand runs over: kanban's
+`BoardBridge` gives its `SqliteOfflineQueue` the bridge's executor, and its
+worker the coordinator's strand over that same executor. The application's
+`enqueue` on the GUI thread and the worker's drain are then tasks of one
+thread, and the queue needs no lock.
+
+**The fsync and the SQLite statements are where they were.** Each
+`FileOfflineQueue` mutation still appends its line and fsyncs before
+returning on the owner, and each `SqliteOfflineQueue` write is still its own
+committed statement; the owner runs them one at a time.
+The constructors — the file replay and compaction, the SQLite schema and
+pragmas, the containing directory's fsync — run on the constructing thread
+before the queue is shared, unchanged.
+
+**Teardown.** A queue keeps its state in a `std::shared_ptr` every posted task
+holds, so it can be destroyed on any thread; a `markDone` posted before then
+still runs on the owner, and the file or connection closes with the last task
+that holds it. The owner must outlive the queue and run what it posted.
 
 ### `Attempts`: why the count has its own type
 
@@ -390,8 +447,8 @@ the `queueOverflow` counter metric with the rejection-time size as its value
 
 Per-implementation notes:
 
-- **`InMemoryOfflineQueue`** checks capacity under its existing lock, before
-  the deque `push_back`. It has no idempotency-key dedup at all, so there is
+- **`InMemoryOfflineQueue`** checks capacity on its owner, before the deque
+  `push_back`. It has no idempotency-key dedup at all, so there is
   no dedup-hit-vs-capacity ordering question here.
 - **`FileOfflineQueue`** runs its existing keyed-dedup scan *first*; the
   capacity check sits after it, before `appendPut`. A dedup hit (a re-enqueue
@@ -416,8 +473,9 @@ cap enforced; nothing on disk remembers it.
 
 ### `InMemoryOfflineQueue`
 
-Thread-safe in-memory implementation of `IOfflineQueue`. Items live in a
-`std::deque<QueueItem>` protected by a `std::mutex`. Ids are monotonically
+In-memory implementation of `IOfflineQueue`,
+`InMemoryOfflineQueue(IExecutor& owner, std::optional<std::size_t> maxDepth = std::nullopt)`.
+Items live in a `std::deque<QueueItem>` that belongs to the owner. Ids are monotonically
 increasing. Overrides `setAttempts` to update the in-deque item, so the
 attempt count is current for as long as the queue object lives — but it has
 no persistence, so a process restart still resets it to `0`. Suitable for
@@ -529,8 +587,9 @@ queue depths; `SqliteOfflineQueue` is the index-backed alternative for
 high-volume keyed enqueues. Not safe for multiple processes to open the same
 path concurrently.
 
-The constructor takes an optional second `morph::core::FileIoOps` parameter
-(`FileOfflineQueue(std::filesystem::path, morph::core::FileIoOps = {})`) — the
+The constructor takes the queue's owner first ([One owner](#one-owner)) and an
+optional `morph::core::FileIoOps` parameter after the path
+(`FileOfflineQueue(IExecutor& owner, std::filesystem::path, morph::core::FileIoOps = {}, std::optional<std::size_t> maxDepth = std::nullopt)`) — the
 same test-only fault-injection seam `FileActionLog` uses (see
 `docs/spec/journal/journal.md`): the raw `fwrite`/`fflush`/`fsync`/`fopen`
 calls this class makes, as an injectable strategy defaulting to the real
@@ -577,8 +636,9 @@ contract above; cross-restart identity is carried by `idempotencyKey`, not
 existing row's id; empty keys are exempt and are never deduplicated, matching
 `InMemoryOfflineQueue`. `drain()` never deletes, so a crash between `drain()`
 and `markDone()` loses nothing; every write is its own committed statement
-under `PRAGMA journal_mode=WAL`. All operations serialise on an internal
-mutex, so the queue is safe to share between the write and drain/replay paths.
+under `PRAGMA journal_mode=WAL`. Every statement runs on the queue's owner,
+which is how the write path and the drain/replay path share it
+([One owner](#one-owner)).
 
 **Durability settings, set once at construction**, in this order — the order is
 load-bearing:
@@ -596,7 +656,7 @@ available (`Synchronous::full`) and costs roughly **18x per mutation**
 (measured: ~0.08 ms to ~1.44 ms, NVMe/btrfs, SQLite 3.53.4). Every mutation here
 is its own commit and `SyncWorker::relay()` calls `markDone`/`setAttempts` once
 per drained item, so a 200-item drain goes from ~16 ms to ~290 ms — all of it
-under this class's mutex, where it also blocks the producer's `enqueue()`.
+on the queue's owner, where it also holds up the producer's `enqueue()`.
 
 The `journal_mode` read-back exists because `sqlite3_exec` discards the row a
 `PRAGMA` returns, so a **silent fallback** would otherwise go unnoticed: WAL
@@ -611,10 +671,10 @@ once `synchronous` is set above — and an earlier revision that did throw made
 the queue unconstructible on an NFS home directory, which `examples/kanban`'s
 `enableOfflineQueue()` reaches with a user-supplied path.
 
-`busy_timeout` buys a wait, not a guarantee: this class's own mutex makes
-`SQLITE_BUSY` unreachable for a single instance, so the timeout matters only
-when something else has the database open — and the wait then happens *under
-that mutex*, blocking every other caller of the instance, a Qt GUI thread
+`busy_timeout` buys a wait, not a guarantee: one owner running every statement
+makes `SQLITE_BUSY` unreachable for a single instance, so the timeout matters
+only when something else has the database open — and the wait then happens *on
+the owner*, holding up every other caller of the instance, a Qt GUI thread
 included. Pass `std::chrono::milliseconds{0}` to restore fail-fast.
 
 Construction also **fsyncs the containing directory** once, after
@@ -816,7 +876,7 @@ once when already there), and `stop()`, an atomic flag.
   server never saw is then reported as work that could not be applied, and the
   payload is gone unless the host's sink persisted it. Two shipped conditions
   make that reachable rather than theoretical: `ReconnectCoordinator::onOnline()`
-  holds its mutex for the whole retry loop, so a flap back offline cannot
+  holds the offline strand for the whole retry loop, so a flap back offline cannot
   preempt an in-progress replay; and nothing in the framework wires a
   `NetworkMonitor` transition to `SyncWorker::stop()`.
 
@@ -952,7 +1012,19 @@ thread — `LocalBackend::notifyBackendChanged` **posts** it onto the model's ow
 strand (the same per-`ModelId` serial queue `execute` uses). It therefore runs
 single-threaded per model, never overlapping an `execute()` on that model, so a
 model draining the queue and mutating its own counters there needs **no locking**
-of its own state. Because the drain is posted (asynchronous), it completes some
+of its own state.
+
+**The queue's owner is the executor the model runs on.** The drain and each
+`markDone()` are synchronous calls made on the model's strand, and a queue
+answers synchronously only on its owner ([One owner](#one-owner)). So a queue
+drained on this path belongs to the executor the backend runs its models on,
+and that executor runs one task at a time — a one-thread pool, as
+`tests/test_conflict_resolution.cpp` uses, every backend the bridge switches
+between sharing it. Over a multi-threaded pool there is no executor that is
+both the queue's owner and where the model's strand runs: framework code has no
+way to name one model's strand as an `IExecutor`, and `onBackendChanged()`
+cannot await the completion overloads. A host on a pool replays through
+`SyncWorker` instead. Because the drain is posted (asynchronous), it completes some
 time *after* `switchBackend` returns; a test or host that must observe the
 drained result waits for it (the conflict-resolution tests poll a model counter)
 rather than assuming it finished synchronously. See
@@ -1070,10 +1142,10 @@ only posts to its offline strand over a worker executor, and the coordinator's
 over the same queue the application enqueues into.**
 
 ```cpp
-morph::offline::InMemoryOfflineQueue queue;   // shared by both halves
 morph::exec::ThreadPoolExecutor worker{2};    // host's worker executor
 
-std::unique_ptr<morph::offline::SyncWorker> sync;   // built on the coordinator's strand, below
+std::unique_ptr<morph::offline::InMemoryOfflineQueue> queue;  // owned by the coordinator's strand, below
+std::unique_ptr<morph::offline::SyncWorker> sync;             // built on the coordinator's strand, below
 
 morph::offline::ReconnectCoordinator coordinator{{
     .tryReconnect    = [&] { return backend.reopen(); },
@@ -1085,8 +1157,12 @@ morph::offline::ReconnectCoordinator coordinator{{
     .sleep           = [](std::chrono::milliseconds d) { std::this_thread::sleep_for(d); },
 }, worker};
 
+// The queue belongs to the strand the worker drains on. The application,
+// on its own thread, enqueues through the completion form:
+// `queue->enqueue(guiExec, payload).then(...)`.
+queue = std::make_unique<morph::offline::InMemoryOfflineQueue>(coordinator.strand());
 sync = std::make_unique<morph::offline::SyncWorker>(
-    coordinator.strand(), queue,
+    coordinator.strand(), *queue,
     [&](const std::string& payload) { return deliver(payload); });  // ReplayFunction
 
 // The probe and callbacks run on the I/O loop, so the probe only reads a

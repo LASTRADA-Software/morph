@@ -601,6 +601,9 @@ void localTaskOp(::morph::model::detail::IModelHolder& holder, std::shared_ptr<v
         executor, std::move(task), std::move(token),
         [&holder, actionOwner = std::move(actionOwner), done = std::move(done)](std::optional<R> result,
                                                                                 const std::exception_ptr& error) {
+            // Read only to journal the outcome, which a Loggable::No action
+            // compiles out.
+            static_cast<void>(holder);
             const Action& action = *static_cast<const Action*>(actionOwner.get());
             if (error) {
                 // The handler failed, so the action was rejected: recorded

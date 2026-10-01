@@ -131,7 +131,7 @@ TEST_CASE("journal::fromJson: throws SerializationError on malformed input", "[a
 TEST_CASE("FileActionLog: append+flush persists entries, entries() reads them back", "[action_log][phase2][file]") {
     TempFile tmp{"file_basic"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
         log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20"));
         log.flush();
@@ -149,19 +149,20 @@ TEST_CASE("FileActionLog: append+flush persists entries, entries() reads them ba
 
     // Survives the FileActionLog object being destroyed and a fresh one opened
     // over the same path — this is what makes it "durable" rather than in-memory.
-    FileActionLog reopened{tmp.path};
+    FileActionLog reopened{morph::testing::storageOwner(), tmp.path};
     REQUIRE(reopened.entries().size() == 2);
 }
 
 TEST_CASE("FileActionLog: throws if the path cannot be opened", "[action_log][phase2][file]") {
-    REQUIRE_THROWS_AS(FileActionLog(std::filesystem::path{"/no/such/directory/at/all/log.ndjson"}),
-                      std::runtime_error);
+    REQUIRE_THROWS_AS(
+        FileActionLog(morph::testing::storageOwner(), std::filesystem::path{"/no/such/directory/at/all/log.ndjson"}),
+        std::runtime_error);
 }
 
 TEST_CASE("FileActionLog: entries() skips blank lines", "[action_log][phase2][file]") {
     TempFile tmp{"file_blank_line"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "1"));
         log.flush();
     }
@@ -173,7 +174,7 @@ TEST_CASE("FileActionLog: entries() skips blank lines", "[action_log][phase2][fi
         raw << "\n";
     }
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "2"));
         log.flush();
 
@@ -188,7 +189,7 @@ TEST_CASE("FileActionLog: entries() tolerates a malformed trailing line (crash-t
           "[action_log][phase2][file]") {
     TempFile tmp{"file_truncated_tail"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "1"));
         log.flush();
     }
@@ -199,7 +200,7 @@ TEST_CASE("FileActionLog: entries() tolerates a malformed trailing line (crash-t
         raw << R"({"seq":2,"entityKey":"acct-2","actionType":"P2_Deposit)";
     }
 
-    FileActionLog log{tmp.path};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path};
     auto all = log.entries();
     REQUIRE(all.size() == 1);
     REQUIRE(all[0].entityKey == "acct-1");
@@ -209,7 +210,7 @@ TEST_CASE("FileActionLog: entries() rethrows on a malformed line that is NOT the
           "[action_log][phase2][file]") {
     TempFile tmp{"file_corrupt_mid"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "1"));
         log.flush();
     }
@@ -223,7 +224,7 @@ TEST_CASE("FileActionLog: entries() rethrows on a malformed line that is NOT the
     // scanning entries() at open time (Task 3, transactional-outbox plan), so a
     // pre-existing interior corruption throws from construction itself, not just
     // from a later explicit entries() call.
-    REQUIRE_THROWS_AS(FileActionLog(tmp.path), morph::journal::SerializationError);
+    REQUIRE_THROWS_AS(FileActionLog(morph::testing::storageOwner(), tmp.path), morph::journal::SerializationError);
 }
 
 // ── Save action end-to-end: SessionLog + FileActionLog, the pattern the design
@@ -239,8 +240,8 @@ TEST_CASE(
     morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
-    auto sessionLog = std::make_shared<morph::journal::SessionLog>();
-    auto fileLog = std::make_shared<FileActionLog>(tmp.path);
+    auto sessionLog = std::make_shared<morph::journal::SessionLog>(cbExec);
+    auto fileLog = std::make_shared<FileActionLog>(cbExec, tmp.path);
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "P2_Model";
@@ -314,7 +315,7 @@ TEST_CASE("RemoteServer ServerConfig::logProvider: attaches a log to the server-
     dispatcher.registerAction<P2Model, P2Deposit>("P2_Model", "P2_Deposit");
 
     std::vector<std::string> requestedFor;
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     morph::backend::ServerConfig serverConfig;
     serverConfig.logProvider = [&](std::string_view modelType, std::string_view contextKey) {
         requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
@@ -338,6 +339,9 @@ TEST_CASE("RemoteServer ServerConfig::logProvider: attaches a log to the server-
     REQUIRE(waiter.await());
     REQUIRE(waiter.env.kind == "ok");
 
+    // The model appended on its strand, before replying; the append was posted
+    // to the log's owner, which is this thread.
+    morph::testing::storageOwner().drain();
     auto entries = log->entries();
     REQUIRE(entries.size() == 1);
     REQUIRE(entries[0].entityKey == "acct-9");
@@ -355,7 +359,7 @@ TEST_CASE("RemoteServer ServerConfig::logProvider: not consulted when contextKey
     morph::backend::ServerConfig serverConfig;
     serverConfig.logProvider = [&](std::string_view, std::string_view) {
         providerCalled = true;
-        return std::make_shared<InMemoryActionLog>();
+        return std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     };
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
 
@@ -409,7 +413,7 @@ TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvid
     registry.registerModel<P2Model>("P2_Model");
     dispatcher.registerAction<P2Model, P2Deposit>("P2_Model", "P2_Deposit");
 
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(cbExec);
     morph::backend::ServerConfig serverConfig;
     serverConfig.logProvider = [&](std::string_view, std::string_view) { return log; };
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
@@ -446,7 +450,7 @@ TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvid
 TEST_CASE("FileActionLog: a torn trailing record is truncated on open", "[action_log][phase2][file]") {
     TempFile const tmp{"file_torn_repair"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
         log.flush();
     }
@@ -458,7 +462,7 @@ TEST_CASE("FileActionLog: a torn trailing record is truncated on open", "[action
     }
 
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         REQUIRE(log.entries().size() == 1);
         log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20"));
         log.flush();
@@ -473,7 +477,7 @@ TEST_CASE("FileActionLog: a torn trailing record is truncated on open", "[action
 TEST_CASE("FileActionLog: a torn trailing record does not make the log unopenable", "[action_log][phase2][file]") {
     TempFile const tmp{"file_torn_unopenable"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
         log.flush();
     }
@@ -486,11 +490,11 @@ TEST_CASE("FileActionLog: a torn trailing record does not make the log unopenabl
     // into interior position. Reopen between appends, as a restarting process
     // would, and keep going well past that point.
     for (int restart = 0; restart < 3; ++restart) {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         REQUIRE_NOTHROW(log.append(makeEntry("P2_Model", "acct-n", "P2_Deposit", "{}", "1")));
         REQUIRE_NOTHROW(log.flush());
     }
-    FileActionLog reopened{tmp.path};
+    FileActionLog reopened{morph::testing::storageOwner(), tmp.path};
     REQUIRE(reopened.entries().size() == 4);
 }
 
@@ -500,7 +504,7 @@ TEST_CASE("FileActionLog: interior corruption is still reported, not silently tr
     // record. Genuine mid-file corruption must keep throwing.
     TempFile const tmp{"file_interior_corrupt"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
         log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20"));
         log.flush();
@@ -518,7 +522,7 @@ TEST_CASE("FileActionLog: interior corruption is still reported, not silently tr
         std::ofstream out{tmp.path, std::ios::trunc};
         out << lines.at(0) << "\n" << R"({"seq":9,"broken)" << "\n" << lines.at(1) << "\n";
     }
-    REQUIRE_THROWS(FileActionLog{tmp.path});
+    REQUIRE_THROWS((FileActionLog{morph::testing::storageOwner(), tmp.path}));
 }
 
 TEST_CASE("FileActionLog: append and flush on a log whose rotate() left it closed throw clearly",
@@ -526,7 +530,7 @@ TEST_CASE("FileActionLog: append and flush on a log whose rotate() left it close
     // rotate() deliberately leaves the handle null rather than dangling when the
     // reopen fails; every entry point must say so instead of dereferencing it.
     TempFile const tmp{"file_rotate_closed"};
-    FileActionLog log{tmp.path};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path};
     log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
     // Rotating into a directory that does not exist fails the rename, but the
     // active path is still reopenable, so the log stays usable.
@@ -554,7 +558,7 @@ TEST_CASE("FileActionLog: opening a pre-existing, zero-byte file is a no-op repa
     REQUIRE(std::filesystem::exists(tmp.path));
     REQUIRE(std::filesystem::file_size(tmp.path) == 0);
 
-    FileActionLog log{tmp.path};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path};
     REQUIRE(log.entries().empty());
 
     // The log stays fully usable afterward.
@@ -581,7 +585,7 @@ TEST_CASE("FileActionLog::rotate: promotes unflushed idempotencyKeys into durabl
     auto rowEntry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
     rowEntry.idempotencyKey = "row-1";
 
-    FileActionLog log{active.path};
+    FileActionLog log{morph::testing::storageOwner(), active.path};
     log.append(rowEntry);
     // Not flushed yet: the key lives only in _unflushedIdempotencyKeys going
     // into rotate(), so rotate() -- not flush() -- is what must promote it.
@@ -593,7 +597,7 @@ TEST_CASE("FileActionLog::rotate: promotes unflushed idempotencyKeys into durabl
     log.flush();
     REQUIRE(log.entries().empty());  // the duplicate never reached the active file
 
-    FileActionLog sealedReader{sealed.path};
+    FileActionLog sealedReader{morph::testing::storageOwner(), sealed.path};
     auto sealedEntries = sealedReader.entries();
     REQUIRE(sealedEntries.size() == 1);
     REQUIRE(sealedEntries[0].idempotencyKey == "row-1");
@@ -615,7 +619,7 @@ TEST_CASE("FileActionLog::append: a short fwrite() throws and does not record th
     morph::core::FileIoOps ioOps;
     ioOps.fwrite = [](const void*, std::size_t size, std::FILE*) { return size - 1; };  // always short by one byte
 
-    FileActionLog log{tmp.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path, ioOps};
     auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
     entry.idempotencyKey = "row-1";
     REQUIRE_THROWS_AS(log.append(entry), std::runtime_error);
@@ -623,7 +627,7 @@ TEST_CASE("FileActionLog::append: a short fwrite() throws and does not record th
     // The failed write must not have left the key recorded as unflushed --
     // a retry of the same row must not be silently deduplicated away.
     morph::core::FileIoOps realOps;  // the retry itself must actually succeed
-    FileActionLog log2{tmp.path, realOps};
+    FileActionLog log2{morph::testing::storageOwner(), tmp.path, realOps};
     log2.append(entry);
     log2.flush();
     REQUIRE(log2.entries().size() == 1);
@@ -656,7 +660,7 @@ TEST_CASE("FileActionLog::append: a short write does not merge with the next suc
     };
 
     {
-        FileActionLog log{tmp.path, ioOps};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path, ioOps};
         auto first = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
         first.idempotencyKey = "row-1";
         log.append(first);
@@ -674,7 +678,7 @@ TEST_CASE("FileActionLog::append: a short write does not merge with the next suc
         log.flush();
     }  // Close before reopening.
 
-    FileActionLog reopened{tmp.path, ioOps};
+    FileActionLog reopened{morph::testing::storageOwner(), tmp.path, ioOps};
     auto entries = reopened.entries();
     REQUIRE(entries.size() == 2);
     CHECK(entries[0].idempotencyKey == "row-1");
@@ -693,7 +697,7 @@ TEST_CASE("FileActionLog::flush: a failing fflush() throws and forgets the unflu
     morph::core::FileIoOps ioOps;
     ioOps.fflush = [shouldFail](std::FILE* file) { return *shouldFail ? -1 : std::fflush(file); };
 
-    FileActionLog log{tmp.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path, ioOps};
     auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
     entry.idempotencyKey = "row-1";
     log.append(entry);
@@ -714,7 +718,7 @@ TEST_CASE("FileActionLog::flush: a failing fsync() throws and forgets the unflus
     morph::core::FileIoOps const realOps;  // captures the real default fsync callback to fall back to
     ioOps.fsync = [shouldFail, realOps](std::FILE* file) { return *shouldFail ? -1 : realOps.fsync(file); };
 
-    FileActionLog log{tmp.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path, ioOps};
     auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
     entry.idempotencyKey = "row-1";
     log.append(entry);
@@ -734,7 +738,7 @@ TEST_CASE("FileActionLog::rotate: a failing pre-rotation fflush() throws before 
     morph::core::FileIoOps ioOps;
     ioOps.fflush = [shouldFail](std::FILE* file) { return *shouldFail ? -1 : std::fflush(file); };
 
-    FileActionLog log{active.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), active.path, ioOps};
     log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
     REQUIRE_THROWS_AS(log.rotate(sealed.path), std::runtime_error);
 
@@ -755,7 +759,7 @@ TEST_CASE("FileActionLog::rotate: a failing pre-rotation fsync() throws before a
     morph::core::FileIoOps const realOps;
     ioOps.fsync = [shouldFail, realOps](std::FILE* file) { return *shouldFail ? -1 : realOps.fsync(file); };
 
-    FileActionLog log{active.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), active.path, ioOps};
     log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
     REQUIRE_THROWS_AS(log.rotate(sealed.path), std::runtime_error);
 
@@ -784,7 +788,7 @@ TEST_CASE("FileActionLog: construction syncs the containing directory after crea
         return 0;
     };
 
-    FileActionLog log{tmp.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path, ioOps};
 
     REQUIRE(syncedPaths.size() == 1);
     CHECK(syncedPaths[0] == tmp.path.parent_path());
@@ -814,7 +818,7 @@ TEST_CASE("FileActionLog: an unsupported directory fsync warns instead of throwi
     // Constructs, warns, and works -- the entries still round-trip, which is
     // the half that would actually be lost if this threw.
     {
-        FileActionLog log{tmp.path, ioOps};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path, ioOps};
         log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
         log.flush();
         CHECK(log.entries().size() == 1);
@@ -830,12 +834,12 @@ TEST_CASE("FileActionLog: a failing directory fsync during construction throws a
     morph::core::FileIoOps ioOps;
     ioOps.syncPath = [](const std::filesystem::path&) { return -1; };
 
-    REQUIRE_THROWS_AS(FileActionLog(tmp.path, ioOps), std::runtime_error);
+    REQUIRE_THROWS_AS(FileActionLog(morph::testing::storageOwner(), tmp.path, ioOps), std::runtime_error);
 
     // The failed construction must not have left the file handle open --
     // a fresh, real-I/O open of the same path must succeed cleanly.
     morph::core::FileIoOps const realOps;
-    FileActionLog reopened{tmp.path, realOps};
+    FileActionLog reopened{morph::testing::storageOwner(), tmp.path, realOps};
     reopened.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
     reopened.flush();
     REQUIRE(reopened.entries().size() == 1);
@@ -852,7 +856,7 @@ TEST_CASE("FileActionLog::rotate: syncs both the seal rename's and the reopen's 
         return 0;
     };
 
-    FileActionLog log{active.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), active.path, ioOps};
     syncedPaths.clear();  // drop the construction-time sync; this test is about rotate()'s own
     log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
     log.rotate(sealed.path);
@@ -872,7 +876,7 @@ TEST_CASE("FileActionLog::rotate: a failing directory fsync throws after the ren
     morph::core::FileIoOps ioOps;
     ioOps.syncPath = [shouldFail](const std::filesystem::path&) { return *shouldFail ? -1 : 0; };
 
-    FileActionLog log{active.path, ioOps};  // construction's own sync must succeed
+    FileActionLog log{morph::testing::storageOwner(), active.path, ioOps};  // construction's own sync must succeed
     *shouldFail = true;
     log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
     REQUIRE_THROWS_AS(log.rotate(sealed.path), std::runtime_error);
@@ -908,7 +912,7 @@ TEST_CASE(
     ioOps.fopen = [callCount, realOps](const std::string& path, const char* mode) -> std::FILE* {
         return (*callCount)++ == 0 ? realOps.fopen(path, mode) : nullptr;
     };
-    FileActionLog rotator{active.path, ioOps};
+    FileActionLog rotator{morph::testing::storageOwner(), active.path, ioOps};
     rotator.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
     rotator.flush();
 
@@ -950,7 +954,7 @@ TEST_CASE("FileActionLog::rotate: a failing reopen after a failed rename reports
         // (the reopen inside rotate()) fails.
         return (*callCount)++ == 0 ? realOps.fopen(path, mode) : nullptr;
     };
-    FileActionLog rotator{active.path, ioOps};
+    FileActionLog rotator{morph::testing::storageOwner(), active.path, ioOps};
     rotator.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
     rotator.flush();
 
@@ -975,7 +979,7 @@ TEST_CASE("FileActionLog: a torn trailing record whose path becomes unreadable i
 
     morph::core::FileIoOps ioOps;
     ioOps.canOpenForRead = [](const std::filesystem::path&) { return false; };
-    FileActionLog log{tmp.path, ioOps};  // repairTornTail() must skip the truncation
+    FileActionLog log{morph::testing::storageOwner(), tmp.path, ioOps};  // repairTornTail() must skip the truncation
 
     REQUIRE(std::filesystem::file_size(tmp.path) == sizeBefore);
 }
@@ -995,7 +999,8 @@ TEST_CASE("FileActionLog: a torn trailing record whose resize_file() fails is lo
     ioOps.resizeFile = [](const std::filesystem::path&, std::uintmax_t, std::error_code& errorCode) {
         errorCode = std::make_error_code(std::errc::permission_denied);
     };
-    FileActionLog log{tmp.path, ioOps};  // repairTornTail() logs a warning and returns, does not throw
+    FileActionLog log{morph::testing::storageOwner(), tmp.path,
+                      ioOps};  // repairTornTail() logs a warning and returns, does not throw
 
     // The failed truncation left the file exactly as it was -- not repaired,
     // but not corrupted further either.
@@ -1024,7 +1029,7 @@ TEST_CASE("FileActionLog: an unreadable journal is left intact, not truncated as
     TempFile const tmp{"file_unreadable_not_torn"};
     std::uintmax_t sizeBefore = 0;
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         for (int i = 1; i <= 3; ++i) {
             auto entry = makeEntry("P2_Model", "acct-" + std::to_string(i), "P2_Deposit", "{}", "10");
             log.append(entry);
@@ -1043,12 +1048,12 @@ TEST_CASE("FileActionLog: an unreadable journal is left intact, not truncated as
 
     // The constructor must fail loudly rather than hand back a log whose dedup
     // set is silently empty.
-    REQUIRE_THROWS_AS((FileActionLog{tmp.path, ioOps}), std::runtime_error);
+    REQUIRE_THROWS_AS((FileActionLog{morph::testing::storageOwner(), tmp.path, ioOps}), std::runtime_error);
 
     std::filesystem::permissions(tmp.path, std::filesystem::perms::owner_all);
     // The whole point: every byte still there.
     REQUIRE(std::filesystem::file_size(tmp.path) == sizeBefore);
-    FileActionLog reopened{tmp.path};
+    FileActionLog reopened{morph::testing::storageOwner(), tmp.path};
     REQUIRE(reopened.entries().size() == 3);
 }
 #endif  // _WIN32
@@ -1074,7 +1079,7 @@ TEST_CASE("FileActionLog::append: a rollback that cannot truncate refuses every 
     };
     ioOps.fflush = [failFlush](std::FILE* file) { return *failFlush ? -1 : std::fflush(file); };
 
-    FileActionLog log{tmp.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path, ioOps};
     auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
 
     *shortWrite = true;
@@ -1112,7 +1117,7 @@ TEST_CASE("FileActionLog::rotate: an unsupported directory fsync warns for each 
     morph::core::FileIoOps ioOps;
     ioOps.syncPath = [](const std::filesystem::path&) { return EACCES; };
 
-    FileActionLog log{active.path, ioOps};
+    FileActionLog log{morph::testing::storageOwner(), active.path, ioOps};
     auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
     log.append(entry);
     log.flush();

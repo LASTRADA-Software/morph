@@ -593,7 +593,9 @@ bool BoardBridge::replayMoveTaskPosition(const std::string& payload) {
 
 void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline::NetworkMonitor::ProbeFunction probe,
                                      ::morph::offline::NetworkMonitor::Config monitorConfig) {
-    _offlineQueue = std::make_unique<::morph::offline::SqliteOfflineQueue>(queuePath.toStdString());
+    // The queue belongs to this bridge's executor: moveTask() enqueues on it,
+    // and the SyncWorker below drains on the coordinator's strand over it.
+    _offlineQueue = std::make_unique<::morph::offline::SqliteOfflineQueue>(*_executor, queuePath.toStdString());
 
     // ReconnectCoordinator::Deps: this bridge has no separate "primary vs.
     // local backend" to switch between (unlike docs/spec/offline/offline.md's

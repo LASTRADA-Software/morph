@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <core/async/Task.hpp>
 #include <cstdint>
 #include <memory>
 #include <morph/core/bridge.hpp>
@@ -133,13 +134,16 @@ public:
     /// @brief Design spec §4's activity stream -- derived from `IActionLog::
     ///        entries(entityKey)`, not a parallel table.
     /// @param action Unused -- carries no fields.
+    ///
+    /// A Task handler: the log belongs to its own owner, shared by every
+    /// board, so the read is awaited there rather than made on this strand.
     /// @return Every activity entry for this handler's attached board,
     ///         oldest first. Empty (not an error) if this handler has no log
     ///         attached.
     /// @throws NotFound if this handler was never attached via `OpenBoard`.
     /// @throws Forbidden if the caller's role on the attached project is
     ///         below `Role::Viewer` (i.e. the caller has no role at all).
-    GetActivityResult execute(const GetActivity& action);
+    core::async::Task<GetActivityResult> execute(GetActivity action);
 
     /// @brief Creates a new automation rule on this handler's attached board
     ///        (design spec §9, README build-order step 6): "when a task
@@ -326,13 +330,8 @@ private:
     ///        of `IModelHolder::recordIfAttached` for a plain, non-holder-
     ///        wrapped `BoardModel` instance (see `attachActionLog`'s doc
     ///        comment for why this instance cannot rely on the framework's
-    ///        own auto-append instead). Flushes `_log` after appending, so a
-    ///        `GetActivity` call immediately afterward (the common case: a
-    ///        client polls right after its own mutating call) reliably sees
-    ///        the entry even when `_log` is a `FileActionLog` -- `append()`
-    ///        writes through buffered C stdio with no implicit flush, and
-    ///        `entries()` reads through a separate `ifstream` that cannot
-    ///        see unflushed bytes still sitting in that buffer.
+    ///        own auto-append instead). Flushes `_log` after appending (see
+    ///        `flushLog`), so each entry is durable as its action completes.
     /// @tparam Action Concrete action type; used to look up
     ///         `morph::model::ActionTraits<Action>::typeId()`/`toJson()`.
     /// @tparam Result Concrete result type; used to look up
@@ -365,6 +364,10 @@ private:
     /// @param error The rejecting exception's `what()`.
     template <typename Action>
     void logFailure(const Action& action, const std::string& error) const;
+
+    /// @brief Flushes `_log` on its owner, behind every append this instance
+    ///        has made, without waiting for the answer.
+    void flushLog() const;
 
     /// @brief Journals the exception **currently being handled** as an
     ///        `Outcome::Failed` entry for @p action, whatever its type, and

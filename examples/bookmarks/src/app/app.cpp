@@ -79,7 +79,10 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
     // Initialiser order follows the declaration order in app.hpp, which is
     // itself chosen for teardown safety — see that header's comment.
     : QObject{parent},
-      _actionLog{std::make_shared<::morph::journal::FileActionLog>(std::move(actionLogPath))},
+      // The log belongs to this App's thread, where `relayOutboxOnce()` runs:
+      // models append from their strands on `_pool`, and every append runs
+      // here, one at a time.
+      _actionLog{std::make_shared<::morph::journal::FileActionLog>(_fetchExecutor, std::move(actionLogPath))},
       _pool{workers},
       // hmacSha256 named explicitly -- same reason as the two TokenIssuer
       // call sites below: BookmarksAuthorizer inherits SigningAuthorizer's

@@ -19,6 +19,7 @@ threading, and serialisation semantics differ per implementation.
 - [Current executor](#current-executor)
 - [Owner affinity](#owner-affinity)
 - [Owner strands — `OwnerStrand`](#owner-strands--ownerstrand)
+- [Owned state — `OwnedState`](#owned-state--ownedstate)
 - [The I/O loop — `IoLoop`](#the-io-loop--ioloop)
 - [Failure modes](#failure-modes)
 - [API reference](#api-reference)
@@ -44,6 +45,7 @@ There are eleven types and one free function (with two overloads), split across
 | `CoreExecutorOver` | `morph::exec::detail` (in `executor.hpp`) | A `core::async::IExecutor` over a morph `IExecutor`: how a core-cpp strand's pump reaches it, and what an `ExecutorScope` names. Every `IExecutor` owns one. |
 | `TaskResumer` | `morph::exec::detail` | A Task handler's resumer: the current executor while the handler runs, queuing its resumptions on its model's strand (see [`coroutines.md`](coroutines.md)). |
 | `OwnerStrand` | `morph::exec` (in `owner_strand.hpp`) | One strand over a morph executor that is itself a morph executor: the owner a framework component's state belongs to. See [owner strands](#owner-strands--ownerstrand). |
+| `OwnedState<State>` | `morph::exec::detail` (in `core/detail/owned_state.hpp`) | A component's state behind a `shared_ptr`, and the owner executor every access to it runs on: write inline-or-posted, owner-only read, or a read answered with a `Completion`. What the storage types are built on. See [owned state](#owned-state--ownedstate). |
 | `IoLoop` | `morph::exec` (in `io_loop.hpp`) | The I/O loop: a core-cpp `PlatformLoop` and, natively, its one thread. Owns every `morph::net` socket, `TimeoutScheduler` timer and `NetworkMonitor` probe built on it; see [the I/O loop](#the-io-loop--ioloop). |
 
 `IExecutor` and the two thread-based concrete executors live in the public
@@ -467,6 +469,32 @@ same owner (`SyncWorker`, given `ReconnectCoordinator::strand()`).
   its tasks until then.
 
 It owns no thread and adds no lock of its own; the queue's lock is core-cpp's.
+
+## Owned state — `OwnedState`
+
+The storage types — `journal::InMemoryActionLog`, `FileActionLog`,
+`SessionLog`, the three `offline` queues and `offline::InMemoryReplayLedger`
+— are each given an owner executor at construction and keep their state in an
+`exec::detail::OwnedState<State>` (`core/detail/owned_state.hpp`): the state
+behind a `std::shared_ptr`, and an `OwnerAffinity` for that owner. Three ways in:
+
+| Member | What it does |
+|---|---|
+| `apply(site, body)` | A write. On the owner (`here()`), runs `body(state)` now. Elsewhere, posts it to the owner and returns; a throw out of the posted body is logged with `site`. |
+| `read(site)` | Owner-only access: `note(site)` — asserted in a debug build, or handed to a test's probe — then the state. For a verb that returns data or throws a failure its caller must see. |
+| `ask<T>(site, replyExec, body)` | The same verb for a caller off the owner: runs `body(state)` on the owner (now when already there, posted otherwise) and resolves or rejects a `Completion<T>` delivered on `replyExec`. |
+
+The owner is the executor the component is given, not a strand the component
+builds over it. A model's posted append and the reply to that action are then
+both tasks of the one owner, ordered by its one queue, and the callers already
+serial with it — the GUI thread, a `SyncWorker` on a strand over it — use the
+synchronous verbs. The owner must run one task at a time; a host whose only
+executor is a pool passes an `OwnerStrand` over it.
+
+A posted task holds the state, never the component, so the component may be
+destroyed on any thread: what it posted still runs on the owner, and the state
+— a file handle, a SQLite connection — is freed with the last task holding it.
+The owner must outlive the component and keep running what it posted.
 
 ## The I/O loop — `IoLoop`
 

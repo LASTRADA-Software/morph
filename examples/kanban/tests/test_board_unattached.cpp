@@ -29,6 +29,7 @@
 // `scripts/scenario/scenarios/kanban/a-board-must-be-opened-before-it-answers.scenario`.
 
 #include <catch2/catch_test_macros.hpp>
+#include <core/async/SyncRun.hpp>
 #include <exception>
 #include <memory>
 #include <morph/journal/action_log.hpp>
@@ -36,10 +37,12 @@
 #include <string>
 #include <utility>
 
+#include "activity_of.hpp"
 #include "kanban/core/errors.hpp"
 #include "kanban/models/board_model.hpp"
 #include "kanban/models/project_admin_model.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using morph::ladder::testkit::DbFixture;
 
@@ -82,7 +85,7 @@ private:
 template <typename Fn>
 [[nodiscard]] std::string errorTextOf(Fn&& call) {
     try {
-        std::forward<Fn>(call)();
+        static_cast<void>(std::forward<Fn>(call)());
     } catch (const std::exception& error) {
         return std::string{error.what()};
     }
@@ -94,7 +97,10 @@ template <typename Fn>
 ///        log with an empty `entityKey`, the way `ModelFactory::create` does.
 class UnattachedBoard {
 public:
-    UnattachedBoard() { _model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(), {}); }
+    UnattachedBoard() {
+        _model.attachActionLog(
+            std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner()), {});
+    }
 
     [[nodiscard]] kanban::BoardModel& get() { return _model; }
 
@@ -116,8 +122,9 @@ TEST_CASE("GetActivity on an unattached handler names the action and OpenBoard",
     // Both halves matter and they are separate claims: the *type* is what a
     // caller's `.onError(...)` branches on, and with the guard fallen through it
     // is `std::invalid_argument` -- outside kanban's hierarchy altogether.
-    CHECK_THROWS_AS(board.get().execute(kanban::GetActivity{}), kanban::NotFound);
-    CHECK(errorTextOf([&] { return board.get().execute(kanban::GetActivity{}); }) ==
+    // GetActivity is a Task handler; its guards throw before it first suspends.
+    CHECK_THROWS_AS(core::async::syncRun(board.get().execute(kanban::GetActivity{})), kanban::NotFound);
+    CHECK(errorTextOf([&] { return core::async::syncRun(board.get().execute(kanban::GetActivity{})); }) ==
           "GetActivity: handler was never attached via OpenBoard");
 }
 
@@ -171,7 +178,7 @@ TEST_CASE("Every action on an unattached handler is refused by name, never with 
           }) == "AddComment: handler was never attached via OpenBoard");
     CHECK(errorTextOf([&] { return model.execute(kanban::GetEventsSince{.lastEventId = {}}); }) ==
           "GetEventsSince: handler was never attached via OpenBoard");
-    CHECK(errorTextOf([&] { return model.execute(kanban::GetActivity{}); }) ==
+    CHECK(errorTextOf([&] { return kanban::testing::activityOf(model); }) ==
           "GetActivity: handler was never attached via OpenBoard");
     CHECK(errorTextOf([&] { return model.execute(kanban::GetRules{.projectId = projectId}); }) ==
           "GetRules: handler was never attached via OpenBoard");
@@ -233,7 +240,8 @@ TEST_CASE("A non-empty entityKey still attaches the handler to that board", "[ka
     kanban::BoardModel model;
     const ScopedPrincipal alice{"alice"};
 
-    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(), std::to_string(*projectId));
+    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner()),
+                          std::to_string(*projectId));
 
     const auto state = model.execute(kanban::GetBoardState{});
     CHECK(state.projectId == projectId);
@@ -252,7 +260,8 @@ TEST_CASE("A contextKey that is not a project id does not attach the handler", "
     kanban::BoardModel model;
     const ScopedPrincipal alice{"alice"};
 
-    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(), "foo");
+    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner()),
+                          "foo");
 
     CHECK_THROWS_AS(model.execute(kanban::GetBoardState{}), kanban::NotFound);
     CHECK(errorTextOf([&] { return model.execute(kanban::GetBoardState{}); }) ==
@@ -273,7 +282,8 @@ TEST_CASE("A partly-numeric contextKey does not attach to the board its prefix n
 
     // `<real project id>x` -- `stoull` would have parsed the prefix and
     // attached to exactly this project.
-    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(), std::to_string(*projectId) + "x");
+    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner()),
+                          std::to_string(*projectId) + "x");
 
     CHECK(errorTextOf([&] { return model.execute(kanban::GetBoardState{}); }) ==
           "GetBoardState: handler was never attached via OpenBoard");
@@ -293,7 +303,8 @@ TEST_CASE("A zero-padded contextKey does not attach the handler", "[kanban][mode
     kanban::BoardModel model;
     const ScopedPrincipal alice{"alice"};
 
-    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(), "00" + std::to_string(*projectId));
+    model.attachActionLog(std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner()),
+                          "00" + std::to_string(*projectId));
 
     CHECK(errorTextOf([&] { return model.execute(kanban::GetBoardState{}); }) ==
           "GetBoardState: handler was never attached via OpenBoard");
@@ -309,7 +320,7 @@ TEST_CASE("Attaching a log with an empty entityKey does not un-attach an open bo
     const ScopedPrincipal alice{"alice"};
     model.execute(kanban::OpenBoard{.projectId = projectId});
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, {});
 
     const auto state = model.execute(kanban::GetBoardState{});
@@ -323,7 +334,7 @@ TEST_CASE("Attaching a log with an empty entityKey does not un-attach an open bo
     // answering as attached. Proven by round-tripping through GetActivity
     // itself, not by reading the member directly.
     model.execute(kanban::CreateColumn{.name = "Doing", .wipLimit = 0});
-    const auto activity = model.execute(kanban::GetActivity{});
+    const auto activity = kanban::testing::activityOf(model);
     REQUIRE(activity.events.size() == 1);
     CHECK(activity.events.front().actionType == "CreateColumn");
 }
@@ -341,7 +352,7 @@ TEST_CASE("A rejected contextKey still produces the raw key as the journal entit
     DbFixture fixture;
     kanban::BoardModel model;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
     model.attachActionLog(log, "foo");
 

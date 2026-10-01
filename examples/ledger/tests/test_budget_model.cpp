@@ -9,6 +9,7 @@
 #include "ledger/models/budget_model.hpp"
 #include "ledger/models/ledger_model.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 namespace {
 
@@ -188,7 +189,7 @@ TEST_CASE("CreateCategory records a LogEntry once a log is attached, and is a no
     model.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Food"});
 
     // Attach a log, then repeat -- this call must be recorded.
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*ledgerId));
     model.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Rent"});
 

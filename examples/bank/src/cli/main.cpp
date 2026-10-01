@@ -193,11 +193,13 @@ int main() {
     // records to it. No per-handler wiring needed; see morph::journal::setActionLog.
     const auto auditPath = std::filesystem::temp_directory_path() / "morph_bank_cli_audit.ndjson";
     std::filesystem::remove(auditPath, ec);
-    auto auditLog = std::make_shared<morph::journal::FileActionLog>(auditPath);
+    // The log belongs to `gui`, which this thread pumps: models append from
+    // their strands on the pools below, and every append runs here.
+    morph::exec::MainThreadExecutor gui;
+    auto auditLog = std::make_shared<morph::journal::FileActionLog>(gui, auditPath);
     morph::journal::setActionLog(auditLog);
 
     morph::exec::ThreadPoolExecutor workerPool{4};
-    morph::exec::MainThreadExecutor gui;
 
     // 1) Local backend: models run in this process on the worker pool.
     {
@@ -216,6 +218,7 @@ int main() {
         runScenario(bridge, gui, "SimulatedRemoteBackend", "demo-remote");
     }
 
+    gui.drain();  // run any append still queued behind the last reply
     auditLog->flush();
     std::println("\n========== Audit trail ({}) ==========", auditPath.string());
     for (const auto& entry : auditLog->entries()) {

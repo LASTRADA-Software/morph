@@ -489,6 +489,20 @@ inline ::morph::exec::OwnerStrand& inlineOwner() {
     return strand;
 }
 
+/// @brief The owner a test gives the storage it builds on its own thread:
+///        an action log, an offline queue, a replay ledger.
+///
+/// One `MainThreadExecutor` per thread. A storage object constructed on the
+/// test's thread counts that thread as its owner, so the test body calls its
+/// verbs directly and they run at once. A write made from another thread (a
+/// model's strand on a pool) is posted here and runs when the test pumps it
+/// (`storageOwner().drain()`).
+/// @return This thread's storage owner.
+inline ::morph::exec::MainThreadExecutor& storageOwner() {
+    thread_local ::morph::exec::MainThreadExecutor owner;
+    return owner;
+}
+
 /// @brief Waits for @p completion to settle and returns its value.
 ///
 /// For a verb that answers through a `Completion` delivered on the verb's own

@@ -29,6 +29,7 @@
 #include "lims/offline/field_outbox.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 #ifdef MORPH_LADDER_HAVE_OFFLINE_SQLITE
 #include <filesystem>
@@ -146,7 +147,7 @@ TEST_CASE("A field outbox stamps each update with the version it was prepared ag
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox outbox{queue, "fiona"};
     outbox.observe(lab.sample);
 
@@ -174,7 +175,7 @@ TEST_CASE("A client's second offline edit chains onto its own first, not onto se
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox outbox{queue, "fiona"};
     outbox.observe(lab.sample);
 
@@ -206,7 +207,7 @@ TEST_CASE("A client that does not chain flags its own second edit as a conflict"
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
 
     // The bug ODK hit, reproduced deliberately: stamp both edits with the
     // version the server last reported, because the client did not model its
@@ -245,8 +246,8 @@ TEST_CASE("Two field clients, one sample: reconnect flags exactly the stale-base
     Lab lab;
 
     // Two devices, two operators, two queues — both last saw the same version.
-    auto fionaQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
-    auto gerardQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto fionaQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
+    auto gerardQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox fiona{fionaQueue, "fiona"};
     lims::offline::FieldOutbox gerard{gerardQueue, "gerard"};
     fiona.observe(lab.sample);
@@ -292,7 +293,7 @@ TEST_CASE("Discarding a conflict closes it and leaves the server's value standin
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox gerard{queue, "gerard"};
     gerard.observe(lab.sample);
     (void)gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
@@ -333,7 +334,7 @@ TEST_CASE("Applying a conflict anyway rebases it onto the current version", "[li
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox gerard{queue, "gerard"};
     gerard.observe(lab.sample);
     (void)gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
@@ -385,7 +386,7 @@ TEST_CASE("A queued update may only be replayed by the operator who captured it"
     DbFixture fixture;
     lims::SampleId sampleId;
     lims::QueuedCapture queued;
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     {
         // Scoped so the session ends with it: the "no principal at all" case
         // below is only meaningful once alice's context is gone.
@@ -424,7 +425,7 @@ TEST_CASE("Redelivering an operation is skipped, not applied twice", "[lims][off
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(lab.sample);
     const auto queued = fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
@@ -454,7 +455,7 @@ TEST_CASE("A capture whose op-key record is lost is rolled back, not left half-a
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(lab.sample);
     const auto queued = fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
@@ -492,7 +493,7 @@ TEST_CASE("A conflict is decided once: redelivering it does not raise a second f
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox gerard{queue, "gerard"};
     gerard.observe(lab.sample);
     const auto queued = gerard.enqueue(lab.sample.id, reading(lab.versionId, 9900));
@@ -517,7 +518,7 @@ TEST_CASE("An update for a sample that left the bench is flagged, with the speci
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(lab.sample);
     (void)fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));
@@ -545,8 +546,8 @@ TEST_CASE("An undecodable queued payload is journaled and dropped, never left to
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     (void)queue->enqueue("{ this is not json");
 
     lims::offline::FieldOutbox fiona{queue, "fiona"};
@@ -617,9 +618,9 @@ TEST_CASE("Replay is journaled: applied and flagged updates both name their oper
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
-    auto fionaQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
-    auto gerardQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    auto fionaQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
+    auto gerardQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox fiona{fionaQueue, "fiona"};
     lims::offline::FieldOutbox gerard{gerardQueue, "gerard"};
     fiona.observe(lab.sample);
@@ -681,8 +682,10 @@ TEST_CASE("The definition-of-done flow holds on the durable queue, across a rest
     {
         // Out in the field: two devices queue against the same version, then
         // both are switched off (the queue objects go out of scope).
-        auto fionaQueue = std::make_shared<morph::offline::SqliteOfflineQueue>(fionaPath);
-        auto gerardQueue = std::make_shared<morph::offline::SqliteOfflineQueue>(gerardPath);
+        auto fionaQueue =
+            std::make_shared<morph::offline::SqliteOfflineQueue>(morph::ladder::testkit::storageOwner(), fionaPath);
+        auto gerardQueue =
+            std::make_shared<morph::offline::SqliteOfflineQueue>(morph::ladder::testkit::storageOwner(), gerardPath);
         lims::offline::FieldOutbox fiona{fionaQueue, "fiona"};
         lims::offline::FieldOutbox gerard{gerardQueue, "gerard"};
         fiona.observe(lab.sample);
@@ -694,8 +697,10 @@ TEST_CASE("The definition-of-done flow holds on the durable queue, across a rest
     }
 
     // Back at the lab, fresh queue objects over the same files.
-    auto fionaQueue = std::make_shared<morph::offline::SqliteOfflineQueue>(fionaPath);
-    auto gerardQueue = std::make_shared<morph::offline::SqliteOfflineQueue>(gerardPath);
+    auto fionaQueue =
+        std::make_shared<morph::offline::SqliteOfflineQueue>(morph::ladder::testkit::storageOwner(), fionaPath);
+    auto gerardQueue =
+        std::make_shared<morph::offline::SqliteOfflineQueue>(morph::ladder::testkit::storageOwner(), gerardPath);
     REQUIRE(fionaQueue->size() == 1);
     REQUIRE(gerardQueue->size() == 1);
 
@@ -733,8 +738,8 @@ TEST_CASE("The durable queue dedups a re-enqueued operation where the in-memory 
     // pins the divergence so a future change to either one is noticed here
     // rather than in a lab.
     const auto path = freshQueuePath("dedup");
-    morph::offline::SqliteOfflineQueue durable{path};
-    morph::offline::InMemoryOfflineQueue volatileQueue;
+    morph::offline::SqliteOfflineQueue durable{morph::ladder::testkit::storageOwner(), path};
+    morph::offline::InMemoryOfflineQueue volatileQueue{morph::ladder::testkit::storageOwner()};
     CHECK(durable.enqueue("{}", "op-1") == durable.enqueue("{}", "op-1"));
     CHECK(durable.size() == 1);
     CHECK(volatileQueue.enqueue("{}", "op-1") != volatileQueue.enqueue("{}", "op-1"));
@@ -743,7 +748,7 @@ TEST_CASE("The durable queue dedups a re-enqueued operation where the in-memory 
     // Which is exactly why replay enforces at-most-once itself. The same
     // logical update delivered twice through the queue that does *not* dedup
     // still lands once.
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     lims::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(lab.sample);
     const auto queued = fiona.enqueue(lab.sample.id, reading(lab.versionId, 2400));

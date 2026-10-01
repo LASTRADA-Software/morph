@@ -288,7 +288,7 @@ struct morph::model::ModelTraits<RMModel> {
 // ── InMemoryActionLog ────────────────────────────────────────────────────────
 
 TEST_CASE("morph::journal::InMemoryActionLog: append assigns increasing seq, preserves order", "[action_log]") {
-    InMemoryActionLog log;
+    InMemoryActionLog log{morph::testing::storageOwner()};
     log.append(makeEntry("M", "", "A1"));
     log.append(makeEntry("M", "", "A2"));
     auto all = log.entries();
@@ -300,7 +300,7 @@ TEST_CASE("morph::journal::InMemoryActionLog: append assigns increasing seq, pre
 }
 
 TEST_CASE("morph::journal::InMemoryActionLog: entries(entityKey) filters, empty key returns all", "[action_log]") {
-    InMemoryActionLog log;
+    InMemoryActionLog log{morph::testing::storageOwner()};
     log.append(makeEntry("M", "acct-1", "A"));
     log.append(makeEntry("M", "acct-2", "A"));
     log.append(makeEntry("M", "acct-1", "B"));
@@ -314,7 +314,7 @@ TEST_CASE("morph::journal::InMemoryActionLog: entries(entityKey) filters, empty 
 }
 
 TEST_CASE("morph::journal::InMemoryActionLog: flush is a callable no-op", "[action_log]") {
-    InMemoryActionLog log;
+    InMemoryActionLog log{morph::testing::storageOwner()};
     log.append(makeEntry("M", "", "A"));
     log.flush();
     REQUIRE(log.entries().size() == 1);
@@ -350,7 +350,7 @@ TEST_CASE("IModelHolder: recordIfAttached is a no-op with no log attached", "[ac
 
 TEST_CASE("IModelHolder: attachActionLog stamps entityKey and timestamp automatically", "[action_log][holder]") {
     auto holder = morph::model::detail::ModelFactory::create<ALModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "acct-42");
     REQUIRE(holder->hasActionLog());
 
@@ -368,7 +368,7 @@ TEST_CASE("IModelHolder: attachActionLog stamps entityKey and timestamp automati
 TEST_CASE("IModelHolder: recordIfAttached stamps timestampMs from the clock given to attachActionLog",
           "[action_log][holder]") {
     auto holder = morph::model::detail::ModelFactory::create<ALModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     core::platform::ManualWallClock clock{std::chrono::system_clock::time_point{std::chrono::milliseconds{1'000}}};
     holder->attachActionLog(log, "acct-clock", clock);
 
@@ -423,7 +423,7 @@ TEST_CASE(
     static_assert(!morph::model::detail::ModelLevelActionLogAttachable<ALModel>);
 
     auto holder = morph::model::detail::ModelFactory::create<ALLoggingModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "board-7");
 
     // The holder's own auto-append state (recordIfAttached/hasActionLog)
@@ -446,14 +446,14 @@ TEST_CASE(
     // into the model -- attachActionLog must still succeed and populate the
     // holder's own state exactly as it did before this hook existed.
     auto holder = morph::model::detail::ModelFactory::create<ALModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     REQUIRE_NOTHROW(holder->attachActionLog(log, "acct-noop"));
     REQUIRE(holder->hasActionLog());
 }
 
 TEST_CASE("IModelHolder: recordIfAttached captures the active session principal", "[action_log][holder]") {
     auto holder = morph::model::detail::ModelFactory::create<ALModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "acct-7");
 
     ::morph::session::Context ctx;
@@ -490,7 +490,7 @@ TEST_CASE("ActionDispatcher: records loggable actions, skips opted-out ones, tra
     REQUIRE_FALSE(dispatcher.coalesce("AL_Model", "no-such-action"));
 
     auto holder = registry.create("AL_Model");
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "acct-1");
 
     auto depositJson = morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10});
@@ -529,7 +529,7 @@ TEST_CASE("ActionDispatcher: records outcome=Failed with error text when Model::
     dispatcher.registerAction<ALModel, ALWithdraw>("AL_Model", "AL_Withdraw");
 
     auto holder = registry.create("AL_Model");
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "acct-fail");
 
     auto withdrawJson = morph::model::ActionTraits<ALWithdraw>::toJson(ALWithdraw{.amount = 50});
@@ -554,7 +554,7 @@ TEST_CASE("ActionDispatcher: runner records for hand-written ActionTraits with n
     dispatcher.registerAction<ALLegacyModel, ALLegacyAction>("AL_LegacyModel", "AL_LegacyAction");
 
     auto holder = registry.create("AL_LegacyModel");
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "legacy-1");
 
     REQUIRE(dispatcher.dispatch("AL_LegacyModel", "AL_LegacyAction", *holder, R"({"x":9})") == "9");
@@ -569,7 +569,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records loggable actions, s
     morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(cbExec);
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "AL_Model";
     binding->modelFactory = [log] {
@@ -604,7 +604,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when
     morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(cbExec);
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "AL_Model";
     binding->modelFactory = [log] {
@@ -705,7 +705,7 @@ TEST_CASE("ActionDispatcher: a result that will not serialise is not recorded as
                                                                              "AL_Unserialisable");
 
     auto holder = registry.create("AL_UnserialisableModel");
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "acct-unserialisable");
 
     auto seen = reportedFromCall(
@@ -844,7 +844,7 @@ TEST_CASE("SimulatedRemoteBackend: client-side factory (and its attached log) is
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
 
     std::atomic<bool> factoryCalled{false};
-    auto clientLog = std::make_shared<InMemoryActionLog>();
+    auto clientLog = std::make_shared<InMemoryActionLog>(cbExec);
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "AL_Model";
     binding->modelFactory = [&factoryCalled, clientLog] {
@@ -917,7 +917,7 @@ TEST_CASE("journal::replay: propagates the registry's unknown-model error", "[ac
 // ── journal::SessionLog ──────────────────────────────────────────────────────
 
 TEST_CASE("SessionLog: append/entries/flush behave like InMemoryActionLog", "[action_log][journal]") {
-    SessionLog log;
+    SessionLog log{morph::testing::storageOwner()};
     log.append(makeEntry("M", "e1", "A"));
     log.append(makeEntry("M", "e2", "A"));
     log.flush();
@@ -934,13 +934,13 @@ TEST_CASE("SessionLog::checkpoint: coalesces by (modelType, entityKey, actionTyp
     dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
     dispatcher.registerAction<ALModel, ALSetNickname>("AL_Model", "AL_SetNickname");
 
-    SessionLog session;
+    SessionLog session{morph::testing::storageOwner()};
     session.append(makeEntry("AL_Model", "acct-1", "AL_Deposit", "", "10"));
     session.append(makeEntry("AL_Model", "acct-1", "AL_SetNickname", "", "bob"));
     session.append(makeEntry("AL_Model", "acct-1", "AL_Deposit", "", "15"));
     session.append(makeEntry("AL_Model", "acct-1", "AL_SetNickname", "", "bobby"));
 
-    InMemoryActionLog durable;
+    InMemoryActionLog durable{morph::testing::storageOwner()};
     session.checkpoint(durable, dispatcher);
 
     auto out = durable.entries();
@@ -955,10 +955,10 @@ TEST_CASE("SessionLog::checkpoint: coalesces by (modelType, entityKey, actionTyp
 
 TEST_CASE("SessionLog::checkpoint: no-op when nothing new since the last checkpoint", "[action_log][journal]") {
     morph::model::detail::ActionDispatcher dispatcher;
-    SessionLog session;
+    SessionLog session{morph::testing::storageOwner()};
     session.append(makeEntry("M", "e", "A"));
 
-    InMemoryActionLog durable;
+    InMemoryActionLog durable{morph::testing::storageOwner()};
     session.checkpoint(durable, dispatcher);
     REQUIRE(durable.entries().size() == 1);
 
@@ -972,7 +972,7 @@ TEST_CASE("SessionLog::undoLast: replays the prefix, reconstructing pre-undo sta
     registry.registerModel<ALModel>("AL_Model");
     dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
 
-    auto session = std::make_shared<SessionLog>();
+    auto session = std::make_shared<SessionLog>(morph::testing::storageOwner());
     auto holder = registry.create("AL_Model");
     holder->attachActionLog(session, "acct-undo");
 
@@ -1002,7 +1002,7 @@ TEST_CASE("SessionLog::undoLast: clamps the checkpoint position when undoing pas
     registry.registerModel<ALModel>("AL_Model");
     dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
 
-    auto session = std::make_shared<SessionLog>();
+    auto session = std::make_shared<SessionLog>(morph::testing::storageOwner());
     auto holder = registry.create("AL_Model");
     holder->attachActionLog(session, "acct-clamp");
 
@@ -1010,7 +1010,7 @@ TEST_CASE("SessionLog::undoLast: clamps the checkpoint position when undoing pas
     dispatcher.dispatch("AL_Model", "AL_Deposit", *holder, deposit1);
     dispatcher.dispatch("AL_Model", "AL_Deposit", *holder, deposit1);
 
-    InMemoryActionLog durable;
+    InMemoryActionLog durable{morph::testing::storageOwner()};
     session->checkpoint(durable, dispatcher);  // committedUpTo == 2
     REQUIRE(durable.entries().size() == 2);
 
@@ -1040,11 +1040,11 @@ TEST_CASE("SessionLog::undoLast: a coalescing checkpoint never re-forwards an un
     auto nickA = morph::model::ActionTraits<ALSetNickname>::toJson(ALSetNickname{.name = "a"});
     auto nickB = morph::model::ActionTraits<ALSetNickname>::toJson(ALSetNickname{.name = "b"});
 
-    auto session = std::make_shared<SessionLog>();
+    auto session = std::make_shared<SessionLog>(morph::testing::storageOwner());
     session->append(makeEntry("AL_Model", "acct-b", "AL_SetNickname", nickA, "a"));
     session->append(makeEntry("AL_Model", "acct-b", "AL_SetNickname", nickB, "b"));
 
-    InMemoryActionLog durable;
+    InMemoryActionLog durable{morph::testing::storageOwner()};
     session->checkpoint(durable, dispatcher);  // coalesces [a,b] -> forwards one entry (b)
     REQUIRE(durable.entries().size() == 1);
     REQUIRE(durable.entries()[0].result == "b");
@@ -1075,12 +1075,12 @@ TEST_CASE("SessionLog::undoLast: a coalescing checkpoint never re-forwards an un
     REQUIRE(out[1].result == "c");  // the new entry, forwarded exactly once
 }
 
-// ── Bug A: concurrent checkpoint() must forward in append order ──────────────
+// ── Checkpoints asked for from two threads forward in append order ──────────
 //
-// Two threads checkpoint the same SessionLog concurrently. Each grabs a
-// disjoint pending slice under the lock; the forward phase must be serialized
-// so entries reach the durable sink in strictly nondecreasing append order —
-// the slice taken first is forwarded first, with no interleaving.
+// Two threads ask for a checkpoint of the same SessionLog, interleaved with
+// appends from a third. Every one of those runs on the log's owner, one task at
+// a time, so entries reach the durable sink in strictly nondecreasing append
+// order: each checkpoint's slice is forwarded before the next one starts.
 
 namespace {
 /// Durable sink that records the (original, pre-restamp) `seq` of every entry it
@@ -1105,28 +1105,41 @@ private:
 };
 }  // namespace
 
-TEST_CASE("SessionLog::checkpoint: concurrent checkpoints forward in strictly nondecreasing append order",
-          "[action_log][journal]") {
+TEST_CASE(
+    "SessionLog::checkpoint: checkpoints asked for from two threads forward in strictly nondecreasing append order",
+    "[action_log][journal]") {
     morph::model::detail::ActionDispatcher dispatcher;  // no actions registered -> nothing coalesces
-    auto session = std::make_shared<SessionLog>();
+    morph::exec::MainThreadExecutor owner;
+    auto session = std::make_shared<SessionLog>(owner);
 
     constexpr int kEntries = 2000;
-    for (int i = 0; i < kEntries; ++i) {
-        session->append(makeEntry("M", "e", "A"));  // seq runs 1..kEntries in append order
-    }
-
     OrderRecordingSink sink;
     std::atomic<bool> go{false};
-    auto worker = [&] {
-        while (!go.load()) { /* spin until both threads are ready */
+    std::atomic<int> appended{0};
+    std::thread appender{[&] {
+        while (!go.load()) { /* spin until every thread is ready */
         }
-        session->checkpoint(sink, dispatcher);
+        for (int i = 0; i < kEntries; ++i) {
+            session->append(makeEntry("M", "e", "A"));  // posted: seq runs 1..kEntries in append order
+            ++appended;
+        }
+    }};
+    auto checkpointer = [&] {
+        while (!go.load()) { /* spin until every thread is ready */
+        }
+        for (int i = 0; i < 20; ++i) {
+            owner.post([&] { session->checkpoint(sink, dispatcher); });
+        }
     };
-    std::thread t1{worker};
-    std::thread t2{worker};
+    std::thread t1{checkpointer};
+    std::thread t2{checkpointer};
     go.store(true);
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return appended.load() == kEntries; }));
     t1.join();
     t2.join();
+    appender.join();
+    owner.drain();
+    session->checkpoint(sink, dispatcher);  // whatever the last posted checkpoint left behind
 
     auto got = sink.received();
     REQUIRE(got.size() == static_cast<std::size_t>(kEntries));  // every entry forwarded exactly once
@@ -1141,7 +1154,7 @@ TEST_CASE("SessionLog::checkpoint: concurrent checkpoints forward in strictly no
 
 TEST_CASE("ScopedActionLog: installs and restores the default action log", "[action_log][default]") {
     REQUIRE(morph::journal::defaultActionLog() == nullptr);
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     {
         morph::journal::ScopedActionLog guard{log};
         REQUIRE(morph::journal::defaultActionLog() == log);
@@ -1150,8 +1163,8 @@ TEST_CASE("ScopedActionLog: installs and restores the default action log", "[act
 }
 
 TEST_CASE("ScopedActionLog: nested scopes restore in the correct order", "[action_log][default]") {
-    auto outer = std::make_shared<InMemoryActionLog>();
-    auto inner = std::make_shared<InMemoryActionLog>();
+    auto outer = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
+    auto inner = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     morph::journal::ScopedActionLog outerGuard{outer};
     REQUIRE(morph::journal::defaultActionLog() == outer);
     {
@@ -1163,7 +1176,7 @@ TEST_CASE("ScopedActionLog: nested scopes restore in the correct order", "[actio
 
 TEST_CASE("ModelFactory::create: auto-attaches the default action log when one is installed",
           "[action_log][default]") {
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     morph::journal::ScopedActionLog guard{log};
 
     auto holder = morph::model::detail::ModelFactory::create<ALModel>();
@@ -1188,11 +1201,11 @@ TEST_CASE("ModelFactory::create: does not attach a log when no default is instal
 
 TEST_CASE("IModelHolder::attachActionLog: an explicit call overrides the auto-attached default",
           "[action_log][default]") {
-    auto defaultLog = std::make_shared<InMemoryActionLog>();
+    auto defaultLog = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     morph::journal::ScopedActionLog guard{defaultLog};
 
     auto holder = morph::model::detail::ModelFactory::create<ALModel>();  // auto-attaches defaultLog
-    auto specificLog = std::make_shared<InMemoryActionLog>();
+    auto specificLog = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(specificLog, "acct-override");  // explicit call wins
 
     morph::model::detail::ActionDispatcher dispatcher;
@@ -1208,7 +1221,7 @@ TEST_CASE("IModelHolder::attachActionLog: an explicit call overrides the auto-at
 
 TEST_CASE("ModelFactory::create: auto-attach also reaches server-created holders (ModelRegistryFactory)",
           "[action_log][default]") {
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     morph::journal::ScopedActionLog guard{log};
 
     // ModelRegistryFactory::registerModel<Model> is exactly what RemoteServer

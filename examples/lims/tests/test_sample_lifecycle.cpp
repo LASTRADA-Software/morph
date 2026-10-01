@@ -21,6 +21,7 @@
 #include "lims/models/sample_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -222,7 +223,7 @@ TEST_CASE("Returning a sample for rework needs a stated reason", "[lims][sample]
 TEST_CASE("A mutating transition with no principal is refused and journals nothing", "[lims][sample][audit]") {
     DbFixture fixture;
     lims::SampleModel model;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
     lims::SampleId sampleId;
     {
@@ -245,7 +246,7 @@ TEST_CASE("A mutating transition with no principal is refused and journals nothi
 TEST_CASE("A successful transition is journaled against the sample, naming its author", "[lims][sample][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
     lims::SampleModel model;
     model.attachActionLog(log, std::string{});
@@ -273,7 +274,7 @@ TEST_CASE("A successful transition is journaled against the sample, naming its a
 TEST_CASE("A refused transition is journaled as a failure, naming who tried", "[lims][sample][audit]") {
     DbFixture fixture;
     const ScopedPrincipal mallory{"mallory"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
     lims::SampleModel model;
     model.attachActionLog(log, std::string{});

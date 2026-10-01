@@ -2,6 +2,7 @@
 
 #pragma once
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -10,6 +11,11 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "../attributes.hpp"
+#include "../core/completion.hpp"
+#include "../core/detail/owned_state.hpp"
+#include "../core/executor.hpp"
 
 namespace morph::journal {
 
@@ -195,56 +201,181 @@ struct IActionLog {
     virtual void flush() = 0;
 
     /// @brief Returns recorded entries in append order.
+    ///
+    /// An implementation with an owner answers only there (see `owner()`); a
+    /// caller elsewhere asks through `entries(replyExec, entityKey)`.
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
     /// @return Matching entries, in append order.
     [[nodiscard]] virtual std::vector<LogEntry> entries(std::string_view entityKey = {}) const = 0;
+
+    /// @brief The executor this log's state belongs to, or null for an
+    ///        implementation that has none.
+    ///
+    /// Every log morph ships has one: its `append()` runs there (posted from
+    /// anywhere else), and its `entries()`/`flush()` answer only there. What a
+    /// caller on a model's strand names as the reply executor of
+    /// `entries(replyExec, …)` or `flush(replyExec)`.
+    /// @return The owner, or `nullptr`.
+    [[nodiscard]] virtual ::morph::exec::IExecutor* owner() const noexcept { return nullptr; }
+
+    /// @brief Returns recorded entries in append order, read on the log's
+    ///        owner and delivered on @p replyExec.
+    ///
+    /// The form for a caller that is not on the owner: a model's strand, an
+    /// application thread the log does not belong to. The read is ordered
+    /// after every `append()` posted to the owner before it.
+    /// @param replyExec Where the answer is delivered, and where the caller
+    ///        attaches to it. Borrowed: it must outlive the completion.
+    /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    /// @return The matching entries, in append order.
+    [[nodiscard]] ::morph::async::Completion<std::vector<LogEntry>> entries(
+        ::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND, std::string entityKey = {}) const {
+        return askEntries(replyExec, std::move(entityKey));
+    }
+
+    /// @brief Pushes buffered entries to the durable backend on the log's
+    ///        owner; the answer is delivered on @p replyExec.
+    ///
+    /// The form of `flush()` for a caller that is not on the owner. It is
+    /// ordered after every `append()` posted to the owner before it.
+    /// @param replyExec Where the answer is delivered. Borrowed: it must
+    ///        outlive the completion.
+    /// @return `true` once the entries are durable; rejected with the error
+    ///         `flush()` would have thrown.
+    [[nodiscard]] ::morph::async::Completion<bool> flush(::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND) {
+        return askFlush(replyExec);
+    }
+
+protected:
+    /// @brief What `entries(replyExec, entityKey)` asks. The default reads
+    ///        `entries(entityKey)` where it is called, for an implementation
+    ///        with no owner; one with an owner reads there.
+    /// @param replyExec Where the answer is delivered.
+    /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    /// @return The matching entries.
+    [[nodiscard]] virtual ::morph::async::Completion<std::vector<LogEntry>> askEntries(
+        ::morph::exec::IExecutor& replyExec, std::string entityKey) const {
+        auto settleable = ::morph::async::Completion<std::vector<LogEntry>>::makeSettleable(&replyExec);
+        try {
+            settleable.second.resolve(entries(entityKey));
+        } catch (...) {
+            settleable.second.reject(std::current_exception());
+        }
+        return std::move(settleable.first);
+    }
+
+    /// @brief What `flush(replyExec)` asks. The default flushes where it is
+    ///        called, for an implementation with no owner; one with an owner
+    ///        flushes there.
+    /// @param replyExec Where the answer is delivered.
+    /// @return `true` once durable, or the flush's error.
+    [[nodiscard]] virtual ::morph::async::Completion<bool> askFlush(::morph::exec::IExecutor& replyExec) {
+        auto settleable = ::morph::async::Completion<bool>::makeSettleable(&replyExec);
+        try {
+            flush();
+            settleable.second.resolve(true);
+        } catch (...) {
+            settleable.second.reject(std::current_exception());
+        }
+        return std::move(settleable.first);
+    }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
-/// @brief Thread-safe in-memory implementation of `IActionLog`.
+namespace detail {
+
+/// @brief The entries of @p all that belong to @p entityKey, or all of them
+///        when it is empty.
+/// @param all       Entries in append order.
+/// @param entityKey Entity to keep, or empty for every entity.
+/// @return The matching entries, in append order.
+[[nodiscard]] inline std::vector<LogEntry> entriesFor(const std::vector<LogEntry>& all, std::string_view entityKey) {
+    if (entityKey.empty()) {
+        return all;
+    }
+    std::vector<LogEntry> out;
+    for (const auto& entry : all) {
+        if (entry.entityKey == entityKey) {
+            out.push_back(entry);
+        }
+    }
+    return out;
+}
+
+}  // namespace detail
+
+/// @brief In-memory implementation of `IActionLog`, owned by one executor.
 ///
 /// Suitable for testing and for applications that do not need cross-process
 /// durability. Mirrors `morph::offline::InMemoryOfflineQueue`'s shape. Dedups
 /// `append()` on a non-empty `LogEntry::idempotencyKey` — see `IActionLog`'s
 /// class docs.
+///
+/// @par One owner
+/// The entries belong to the executor given at construction, which must run
+/// one task at a time. `append()` runs there: at once when called on it,
+/// posted from anywhere else (a model's strand). `entries()` answers only on
+/// it; a caller elsewhere uses `entries(replyExec, entityKey)`. See
+/// `docs/spec/journal/journal.md`, "One owner".
 class InMemoryActionLog : public IActionLog {
 public:
-    /// @brief Appends @p entry, assigning a monotonically increasing `seq`. Thread-safe.
+    using IActionLog::entries;
+    using IActionLog::flush;
+
+    /// @brief Constructs an empty log belonging to @p owner.
+    /// @param owner The executor every access runs on; must run one task at a
+    ///        time. Borrowed: it must outlive this log and run what it posts.
+    explicit InMemoryActionLog(::morph::exec::IExecutor& owner MORPH_LIFETIMEBOUND)
+        : _owned{owner, std::make_shared<State>()} {}
+
+    /// @brief Appends @p entry, assigning a monotonically increasing `seq`, on
+    ///        the owner.
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
-        std::scoped_lock const lock{_mtx};
-        if (!entry.idempotencyKey.empty() && !_seenIdempotencyKeys.insert(entry.idempotencyKey).second) {
-            return;  // already recorded once; a re-relayed duplicate is a safe no-op
-        }
-        entry.seq = ++_nextSeq;
-        _entries.push_back(std::move(entry));
+        _owned.apply("InMemoryActionLog::append", [entry = std::move(entry)](State& state) mutable {
+            if (!entry.idempotencyKey.empty() && !state.seenIdempotencyKeys.insert(entry.idempotencyKey).second) {
+                return;  // already recorded once; a re-relayed duplicate is a safe no-op
+            }
+            entry.seq = ++state.nextSeq;
+            state.entries.push_back(std::move(entry));
+        });
     }
 
-    /// @brief No-op — there is no external backend to flush to.
+    /// @brief No-op — there is no external backend to flush to. Callable anywhere.
     void flush() override {}
 
-    /// @brief Returns a snapshot of matching entries in append order. Thread-safe.
+    /// @brief Returns a snapshot of matching entries in append order. On the owner.
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
     /// @return Matching entries, in append order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
-        std::scoped_lock const lock{_mtx};
-        if (entityKey.empty()) {
-            return _entries;
-        }
-        std::vector<LogEntry> out;
-        for (const auto& entry : _entries) {
-            if (entry.entityKey == entityKey) {
-                out.push_back(entry);
-            }
-        }
-        return out;
+        return detail::entriesFor(_owned.read("InMemoryActionLog::entries").entries, entityKey);
+    }
+
+    /// @brief The executor given at construction.
+    /// @return The owner.
+    [[nodiscard]] ::morph::exec::IExecutor* owner() const noexcept override { return &_owned.owner(); }
+
+protected:
+    /// @brief Reads the entries on the owner, delivered on @p replyExec.
+    /// @param replyExec Where the answer is delivered.
+    /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    /// @return The matching entries.
+    [[nodiscard]] ::morph::async::Completion<std::vector<LogEntry>> askEntries(::morph::exec::IExecutor& replyExec,
+                                                                               std::string entityKey) const override {
+        return _owned.ask<std::vector<LogEntry>>(
+            "InMemoryActionLog::entries", replyExec,
+            [entityKey = std::move(entityKey)](State& state) { return detail::entriesFor(state.entries, entityKey); });
     }
 
 private:
-    mutable std::mutex _mtx;
-    std::vector<LogEntry> _entries;
-    uint64_t _nextSeq{0};
-    std::unordered_set<std::string> _seenIdempotencyKeys;
+    /// Everything the log holds; touched only on the owner.
+    struct State {
+        std::vector<LogEntry> entries;
+        uint64_t nextSeq{0};
+        std::unordered_set<std::string> seenIdempotencyKeys;
+    };
+
+    ::morph::exec::detail::OwnedState<State> _owned;
 };
 
 namespace detail {
@@ -297,7 +428,7 @@ inline void setActionLog(std::shared_ptr<IActionLog> log) {
 ///
 /// @code
 /// {
-///     morph::journal::ScopedActionLog guard{std::make_shared<morph::journal::InMemoryActionLog>()};
+///     morph::journal::ScopedActionLog guard{std::make_shared<morph::journal::InMemoryActionLog>(owner)};
 ///     // ... models created in this scope auto-attach guard's log ...
 /// }  // previous default restored here
 /// @endcode

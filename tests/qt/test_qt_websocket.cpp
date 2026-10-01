@@ -36,6 +36,8 @@
 #include <utility>
 #include <vector>
 
+#include "../test_support.hpp"
+
 // ── Shared QCoreApplication ──────────────────────────────────────────────────
 // QCoreApplication is owned by main() (below) and torn down before any global
 // or static-local destructor runs, so Qt's QObject cleanup happens while the
@@ -2486,7 +2488,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: a private registration carries context
     // than a data race TSan will flag.
     std::mutex providerMtx;
     std::vector<std::string> requestedFor;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::testing::storageOwner());
     morph::backend::ServerConfig serverConfig;
     serverConfig.logProvider = [&](std::string_view modelType, std::string_view contextKey) {
         std::scoped_lock const lock{providerMtx};

@@ -429,9 +429,9 @@ TEST_CASE("ReconnectCoordinator: two onOnline calls from two threads run one aft
 TEST_CASE("ReconnectCoordinator: a SyncWorker on the offline strand drains inside the replay step",
           "[reconnect][owner][sync]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::offline::InMemoryOfflineQueue queue;
-    (void)queue.enqueue("a");
-    (void)queue.enqueue("b");
+    // Built on the coordinator's strand once the coordinator exists: the
+    // worker drains it there.
+    std::unique_ptr<morph::offline::InMemoryOfflineQueue> queue;
     std::unique_ptr<morph::offline::SyncWorker> worker;
     std::atomic<int> replayed{0};
     std::atomic<bool> drainedInsideReplay{false};
@@ -450,12 +450,15 @@ TEST_CASE("ReconnectCoordinator: a SyncWorker on the offline strand drains insid
                                    .sleep = [](std::chrono::milliseconds) {},
                                },
                                pool};
-    worker = std::make_unique<morph::offline::SyncWorker>(coord.strand(), queue, [&](const std::string&) {
+    queue = std::make_unique<morph::offline::InMemoryOfflineQueue>(coord.strand());
+    (void)queue->enqueue("a");
+    (void)queue->enqueue("b");
+    worker = std::make_unique<morph::offline::SyncWorker>(coord.strand(), *queue, [&](const std::string&) {
         ++replayed;
         return true;
     });
 
     CHECK(morph::testing::awaitValue(coord.onOnline()) == ReconnectOutcome::Reconnected);
     CHECK(drainedInsideReplay.load());
-    CHECK(queue.drain().empty());
+    CHECK(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return queue->drain(reply); }).empty());
 }

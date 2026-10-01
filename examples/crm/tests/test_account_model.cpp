@@ -13,6 +13,7 @@
 #include "crm/models/account_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -136,7 +137,7 @@ TEST_CASE("ListAccountOptions serves {id, name} rows for the Choice combo", "[cr
 TEST_CASE("AccountModel journals its edits against the attached identity", "[crm][account][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{"accounts"});
 

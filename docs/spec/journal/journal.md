@@ -34,6 +34,7 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 - [Payload schema fingerprint](#payload-schema-fingerprint)
 - [Data-at-rest contract](#data-at-rest-contract)
 - [IActionLog — the storage interface](#iactionlog--the-storage-interface)
+  - [One owner](#one-owner)
 - [InMemoryActionLog](#inmemoryactionlog)
 - [FileActionLog](#fileactionlog)
 - [Rotation and retention](#rotation-and-retention)
@@ -574,17 +575,79 @@ owes neither.
 | `append` | `virtual void append(LogEntry)` | Appends an entry. Implementations assign `entry.seq`. |
 | `flush` | `virtual void flush()` | Pushes buffered entries to the durable backend. No-op for sinks with nothing to buffer. |
 | `entries` | `[[nodiscard]] virtual std::vector<LogEntry> entries(std::string_view entityKey = {}) const` | Returns recorded entries in append order, optionally filtered by `entityKey`. |
+| `owner` | `[[nodiscard]] virtual IExecutor* owner() const noexcept` | The executor the log's state belongs to; `nullptr` (the default) for an implementation that has none. |
+| `entries` | `[[nodiscard]] Completion<std::vector<LogEntry>> entries(IExecutor& replyExec, std::string entityKey = {}) const` | `entries()` for a caller off the owner: read on the owner, delivered on `replyExec`. |
+| `flush` | `[[nodiscard]] Completion<bool> flush(IExecutor& replyExec)` | `flush()` for a caller off the owner: `true` once durable, or rejected with the error `flush()` would have thrown. |
+
+The two completion overloads are non-virtual. Each calls a protected virtual
+hook (`askEntries`, `askFlush`) whose default answers synchronously where it is
+asked, for an implementation with no owner; every log morph ships overrides
+both to answer on its owner. They are not virtual overloads themselves because
+an implementation that overrides only the synchronous `entries()` would then
+hide them, which `-Woverloaded-virtual` rejects.
+
+### One owner
+
+Every log morph ships — `InMemoryActionLog`, `FileActionLog`, `SessionLog` —
+belongs to the executor it is given at construction, its **owner**, and its
+state is touched only there. The owner must run one task at a time: a strand,
+a GUI executor, a pumped `MainThreadExecutor`, an `OwnerStrand` over a pool.
+
+| Verb | On the owner | Elsewhere |
+|---|---|---|
+| `append` | Runs at once | Posted to the owner; returns at once (one hop per append) |
+| `entries()`, `flush()` (`FileActionLog`), `rotate()`, `undoLast()`, `checkpoint()` | Runs at once | Not allowed: reported by the owner check (a debug assertion, or a test's probe) |
+| `entries(replyExec, …)`, `flush(replyExec)` | Runs at once; answer delivered on `replyExec` | Posted to the owner; answer delivered on `replyExec` |
+
+"On the owner" is `exec::detail::OwnerAffinity`'s answer: inside a task of the
+owner, or on the thread that constructed the log when that thread was outside
+every executor's task (a GUI thread, a test body). That second half is sound
+only when the owner's tasks run on that same thread; an application whose log
+is owned by a strand over a pool constructs it on its main thread and calls its
+synchronous verbs only from the owner's tasks (kanban's `GetActivity` awaits
+`entries(owner, key)`).
+
+**Why one shape for all three.** A log written from many models' strands and
+read by the application is an aggregate, and an aggregate needs a lock or an
+owner. None of the three is per-model by type: the `InMemoryActionLog` a test
+attaches to one model is, elsewhere, the process default every model's strand
+appends to while the test thread reads it, and an application's
+`FileActionLog` is handed to every instance by `setActionLog` and
+`ServerConfig::logProvider`. The holder cannot name an owner for its log
+either: `IModelHolder::attachActionLog` has no executor, and `RemoteServer`
+attaches on its server strand, not on the model's. On its owner a log costs
+nothing extra (its verbs run inline); elsewhere an append is one post.
+
+**Why the given executor and not a private strand.** A write posted from a
+model's strand and that action's reply, delivered on the same owner, are
+ordered by the owner's one queue, so a reader who has its reply sees the entry.
+A private strand inside the log would be a second queue whose pump hands the
+base back after a batch, which can let a queued append land behind the reply.
+And the callers that are already serial with the owner — the GUI thread,
+`SyncWorker` on a strand over it — could not use the synchronous verbs at all.
+
+**What a posted append's failure does.** It is logged, naming the verb.
+`FileActionLog` also keeps the first such failure and throws it from the next
+`flush()` on the owner — `IActionLog::flush`'s contract is that a flush throws
+when data did not reach the backend.
+
+**Teardown.** A log keeps its state in a `std::shared_ptr` that every posted
+task holds. The log object may be destroyed on any thread; an append posted
+before then still runs on the owner, and the state (a `FileActionLog`'s file
+handle included) goes with the last task that holds it. The owner must outlive
+the log and run what it posted, or those appends are lost.
 
 ## InMemoryActionLog
 
-Thread-safe in-memory implementation of `IActionLog`. Suitable for testing and
-applications that do not need cross-process durability. Mirrors
-`morph::offline::InMemoryOfflineQueue`'s shape.
+In-memory implementation of `IActionLog`, owned by one executor
+(`InMemoryActionLog(IExecutor& owner)`; see [One owner](#one-owner)). Suitable
+for testing and applications that do not need cross-process durability.
+Mirrors `morph::offline::InMemoryOfflineQueue`'s shape.
 
-- `append`: assigns a monotonically increasing `seq`, pushes to an internal
-  vector under a mutex.
-- `flush`: no-op.
-- `entries`: returns a snapshot under a mutex; filters by `entityKey` if
+- `append`: on the owner, assigns a monotonically increasing `seq` and pushes
+  to an internal vector.
+- `flush`: no-op, callable anywhere.
+- `entries`: returns a snapshot, on the owner; filters by `entityKey` if
   non-empty.
 
 ## FileActionLog
@@ -594,8 +657,10 @@ entry is one `toJson`-encoded line. `flush()` flushes the C stdio buffer and
 then issues a real `fsync` (POSIX `fsync` / Windows `_commit`), so a crash
 immediately after `flush()` returns cannot lose data.
 
-Open (creating if necessary) via `FileActionLog(std::filesystem::path, morph::core::FileIoOps = {})`.
-The second parameter is a test-only fault-injection seam (`morph/core/
+Open (creating if necessary) via `FileActionLog(IExecutor& owner, std::filesystem::path, morph::core::FileIoOps = {})`.
+`owner` is the executor the file handle belongs to (see [One owner](#one-owner));
+the constructor itself runs on the calling thread, before anything else can
+reach the log. The last parameter is a test-only fault-injection seam (`morph/core/
 file_io_ops.hpp`) — the raw `fwrite`/`fflush`/`fsync`/`fopen`/file-open/
 `resize_file`/`syncPath` calls this class makes, as an injectable strategy
 defaulting to the real syscalls, letting a test force the failure branches that
@@ -612,9 +677,9 @@ not resume from the highest `seq` already on disk. Entries remain correctly
 ordered on disk (append-only), but `seq` alone is not a cross-restart unique
 key; use `entries()`' natural file order for that.
 
-**Thread safety.** All public methods are thread-safe (guarded by an internal
-mutex). Safe from multiple threads within one process; not safe for multiple
-processes to append to the same path concurrently.
+**One owner.** Every append's `fwrite`, every `fflush`/`fsync` and every read
+runs on the owner, one at a time ([One owner](#one-owner)). Not safe for
+multiple processes to append to the same path concurrently.
 
 `entries()` re-reads the file from disk and decodes every line. Reads whatever
 is currently on disk, including anything written but not yet `flush()`ed if the
@@ -732,9 +797,9 @@ the seam, not the policy).
 
 - **What it does.** Flushes (`fflush` + `fsync`/`_commit`) and closes the
   current active file, renames it to `sealedPath`, then reopens a fresh, empty
-  active file at the original path. Thread-safe — guarded by the same mutex as
-  `append()`/`flush()`/`entries()`, so no in-flight `append()` call is ever
-  split across the sealed and the new active file.
+  active file at the original path. On the owner, where every `append()`
+  runs too, so no append is ever split across the sealed and the new active
+  file.
 - **`entries()` is unchanged.** It keeps reading only the (now-empty, then
   regrowing) active file. Sealed segments are immutable history the host reads
   directly — e.g. by opening its own `FileActionLog` on the sealed path, or
@@ -775,7 +840,10 @@ checkpoint are reduced by `(modelType, entityKey, actionType)` — keeping only
 the latest occurrence where the action's policy says `coalesce == true`, keeping
 every occurrence otherwise — and only that reduced set reaches the durable sink.
 
-All public methods are thread-safe (guarded by an internal mutex).
+Owned by one executor (`SessionLog(IExecutor& owner)`; see
+[One owner](#one-owner)): appends from models' strands are posted there, and
+`entries()`, `undoLast()` and `checkpoint()` run there — the application's
+thread, typically, which constructed it.
 
 | Method | Signature | Purpose |
 |---|---|---|
@@ -783,7 +851,7 @@ All public methods are thread-safe (guarded by an internal mutex).
 | `flush` | `void flush()` | No-op — `checkpoint()` is the real commit point. |
 | `entries` | `std::vector<LogEntry> entries(std::string_view entityKey = {})` | Full history (or one entity's slice) in append order. |
 | `undoLast` | `std::unique_ptr<IModelHolder> undoLast(modelTypeId, registry, dispatcher)` | Drops the most recent entry and replays the remainder against a **fresh, detached** model instance, reconstructing pre-undo state. Returns that new holder — the caller must install/use it (it does not mutate any live instance). No-op (returns a freshly created, un-replayed holder) if the log is empty. |
-| `checkpoint` | `void checkpoint(IActionLog& durableSink, ActionDispatcher& dispatcher = defaultDispatcher())` | Coalesces entries since the last checkpoint and forwards the reduced set to `durableSink`; then flushes it. Advances the internal checkpoint watermark (the highest committed entry `seq`) *before* forwarding anything, so it stays advanced regardless of whether the subsequent `durableSink.append()`/`durableSink.flush()` throws — this makes the batch **at-most-once / forward-only** (a throwing sink drops it permanently), NOT the at-least-once its `IOfflineQueue` shape might suggest. The whole body is serialized against other checkpoints (see [Concurrency and ordering](#concurrency-and-ordering)). See [Failure modes / durability](#failure-modes--durability). No-op if nothing has been appended since the last checkpoint. |
+| `checkpoint` | `void checkpoint(IActionLog& durableSink, ActionDispatcher& dispatcher = defaultDispatcher())` | Coalesces entries since the last checkpoint and forwards the reduced set to `durableSink`; then flushes it. Advances the internal checkpoint watermark (the highest committed entry `seq`) *before* forwarding anything, so it stays advanced regardless of whether the subsequent `durableSink.append()`/`durableSink.flush()` throws — this makes the batch **at-most-once / forward-only** (a throwing sink drops it permanently), NOT the at-least-once its `IOfflineQueue` shape might suggest. The whole body is one task of the owner (see [Ordering](#ordering)). See [Failure modes / durability](#failure-modes--durability). No-op if nothing has been appended since the last checkpoint. |
 
 ### `undoLast()`
 
@@ -830,26 +898,23 @@ not a transaction that will be retried. If a durable sink can fail transiently,
 the caller must treat a throwing `checkpoint()` as data loss for that batch, not
 as a retryable no-op. See [Failure modes / durability](#failure-modes--durability).
 
-#### Concurrency and ordering
+#### Ordering
 
-`checkpoint()` runs its entire body under a dedicated forwarding mutex, distinct
-from the mutex that guards `append()`/`entries()`/the history. Two effects:
+`checkpoint()` runs on the owner, where every `append()` runs too, and its
+whole body — selecting the pending batch, advancing the watermark, forwarding
+it to `durableSink` — is one task. So no append lands between the slice and the
+forward, and two checkpoints forward their batches in the order they ran:
+entries reach the durable sink in strictly nondecreasing append order, the
+append-order identity the sink relies on.
 
-- **Serialized forwarding.** Concurrent checkpoints never interleave. The
-  checkpoint that selects its pending batch and advances the watermark first is
-  also the one that forwards to `durableSink` first, and its `durableSink.append()`
-  calls all complete before the next checkpoint's begin. Entries therefore reach
-  the durable sink in strictly nondecreasing append order — the append-order
-  identity the sink relies on holds even under concurrent checkpointing. Without
-  this, two checkpoints could each grab a disjoint pending slice under the
-  history mutex, release it, then race on the unlocked forward phase, letting
-  batches land at the sink out of order.
-- **Appends still progress during I/O.** The history mutex is held only briefly —
-  to select the pending entries and advance the watermark — and is released
-  *before* the sink's `append()`/`flush()` runs. A slow durable sink does not
-  block ordinary `append()` calls. The lock order is always forwarding-mutex
-  then history-mutex, and no path holds the history mutex while acquiring the
-  forwarding mutex, so there is no deadlock.
+The cost is that a slow durable sink holds up appends: they queue on the owner
+behind the checkpoint's I/O. That is the trade the owner makes for needing no
+lock; an application whose sink is slow checkpoints from an owner that is not
+its GUI thread.
+
+The durable sink is driven from the session log's owner: its `append()`
+dispatches on its own owner, and its `flush()` answers only there, so the sink
+shares the session log's owner.
 
 #### undo / checkpoint / coalescing interaction
 
@@ -1105,8 +1170,10 @@ config.logProvider = provider;          // given to the RemoteServer constructor
   exercised by `kanban::BoardModel` (rung 4).
 - **Configuring.** The provider is a `ServerConfig` field, fixed at
   construction; a server with none attaches no log. It is called only on the
-  server strand, one call at a time, so it needs no synchronisation of its own
-  beyond what the log it returns shares with other threads.
+  server strand, one call at a time, so it needs no synchronisation of its own.
+  The log it returns is appended to from each instance's own strand, so it is
+  an aggregate with an owner of its own ([One owner](#one-owner)): kanban's
+  App owns its log with a strand over its worker pool.
 
 This is the only recording path for a genuinely remote topology: recording is
 server-side, keyed by the per-instance identity the client chose. See
@@ -1120,7 +1187,7 @@ for tests and for temporarily redirecting auto-attached logging.
 
 ```cpp
 {
-    morph::journal::ScopedActionLog guard{std::make_shared<morph::journal::InMemoryActionLog>()};
+    morph::journal::ScopedActionLog guard{std::make_shared<morph::journal::InMemoryActionLog>(owner)};
     // models created here auto-attach guard's log
 }   // previous default restored
 ```
@@ -1218,6 +1285,10 @@ morph never touches the model's database.
 no-op (`{.relayed = 0}`, `sink`/`markRelayed` untouched) if `drainOutbox()`
 returns nothing.
 
+`relay()` runs on `sink`'s owner ([One owner](#one-owner)): its synchronous
+`flush()` answers only there, and that throw is what keeps a failed batch
+unmarked. bookmarks' `App` runs it on the thread that owns its log.
+
 **Crash safety.** Because `markRelayed` runs only after `sink`'s append *and*
 flush complete, a crash between them leaves the row still "unrelayed" in the
 model's store; the next `relay()` call re-drains and re-appends it, and the
@@ -1276,10 +1347,10 @@ All symbols live in `namespace morph::journal`.
 
 | Symbol | Kind | Notes |
 |---|---|---|
-| `IActionLog` | abstract struct | `virtual ~IActionLog() = default`; `append(LogEntry)`, `flush()`, `entries(entityKey)`. |
-| `InMemoryActionLog` | class | `: IActionLog`. Thread-safe `std::vector`-backed. `flush()` no-op. |
-| `FileActionLog` | class | `: IActionLog`. Newline-delimited JSON, fsync on `flush()`. `explicit FileActionLog(std::filesystem::path, morph::core::FileIoOps = {})` — the `FileIoOps` is a test-only fault-injection seam, see above. `void rotate(const std::filesystem::path& sealedPath)` seals the active file and reopens a fresh one — see [Rotation and retention](#rotation-and-retention). Copy/move deleted. |
-| `SessionLog` | class | `: IActionLog`. Full-fidelity in-memory log + `undoLast()` + `checkpoint()`. |
+| `IActionLog` | abstract struct | `virtual ~IActionLog() = default`; `append(LogEntry)`, `flush()`, `entries(entityKey)`, `owner()`; the completion overloads `entries(replyExec, entityKey)` and `flush(replyExec)` over the protected hooks `askEntries`/`askFlush`. |
+| `InMemoryActionLog` | class | `: IActionLog`. `explicit InMemoryActionLog(IExecutor& owner)`. `std::vector`-backed, on its owner. `flush()` no-op. |
+| `FileActionLog` | class | `: IActionLog`. Newline-delimited JSON, fsync on `flush()`. `FileActionLog(IExecutor& owner, std::filesystem::path, morph::core::FileIoOps = {})` — the `FileIoOps` is a test-only fault-injection seam, see above. `void rotate(const std::filesystem::path& sealedPath)` seals the active file and reopens a fresh one, on the owner — see [Rotation and retention](#rotation-and-retention). Copy/move deleted. |
+| `SessionLog` | class | `: IActionLog`. `explicit SessionLog(IExecutor& owner)`. Full-fidelity in-memory log + `undoLast()` + `checkpoint()`, on its owner. |
 
 ### Process-wide default
 
@@ -1313,7 +1384,8 @@ and `ServerConfig::logProvider`, declared in `remote.hpp`. See
 | Default log is a function-local static | **`detail::defaultActionLogState()` returns a `pair<mutex, shared_ptr>`** | Safe regardless of translation-unit init order, unlike a namespace-scope global. |
 | `SessionLog::checkpoint` advances the watermark *before* forwarding | **At-most-once / forward-only** | A checkpoint is a forward-only commit point, not a transaction to retry: the watermark advances first, so a throwing durable sink drops that batch permanently. (`IOfflineQueue`'s retry semantics do *not* carry over — the shared shape is superficial.) |
 | Checkpoint watermark is a committed-`seq` threshold, not an `_all` index | **Track committed state by entry identity** | `seq` is assigned once and never reused, so it stays a valid commit marker even as coalescing forwards fewer entries than it consumes and as `undoLast()` pops tail entries. A raw index into the mutable `_all` vector cannot: it silently shifts meaning when entries are removed, which is the root of the undo/coalescing incoherence this replaces. |
-| `checkpoint()` forwarding is serialized by a dedicated mutex | **Ordered, non-blocking forwarding** | Holding a forwarding mutex across the whole body keeps concurrent checkpoints from racing on the unlocked forward phase and landing batches at the sink out of append order. It is a *separate* mutex from the history lock (held only briefly for slice + watermark), so a slow sink never blocks `append()`. |
+| A log's state belongs to one owner executor | **No lock; one post per append off the owner** | A log written from many models' strands and read by the application is an aggregate: it needs a lock or an owner. With an owner, every append, read and checkpoint is a task of one executor, so a checkpoint's slice and forward are one step and two checkpoints never interleave. On the owner a verb runs inline; elsewhere an append is posted, which is the accepted cost. See [One owner](#one-owner). |
+| The owner is the executor the caller gives, not a strand the log builds | **One queue between a writer and a reader on the same owner** | An append posted from a model's strand and that action's reply, both on the application's executor, are ordered by its one queue; a private strand would add a second queue that can reorder them, and would leave no caller able to use the synchronous verbs. |
 | `SessionLog::undoLast` uses `replay()` | **No inverse operations on actions** | Replays the shorter prefix against a fresh model — no per-action undo logic needed. Undo rewinds only in-memory history and never moves the watermark; reversing a checkpointed action durably needs a compensating action. |
 | `FileActionLog::seq` is process-local | **Fresh per process, not resumed from disk** | `seq` is a monotonic order key within one process instance, not a cross-restart durable identifier. On-disk order is append order; `entries()` returns in that order regardless of `seq` gaps. |
 | `FileActionLog` uses C stdio + `fsync` | **`fopen`/`fwrite`/`fflush`/`fsync`** | `fwrite` is buffered; `flush()` calls `fflush` then `fsync` (or `_commit` on Windows) for real durability. POSIX `write`/`fsync` would bypass stdio buffering entirely; C stdio gives buffering by default with explicit flush control. |
@@ -1396,10 +1468,11 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   then raises it; `undoLast()` never lowers it. Consequently a coalesced-away,
   already-committed entry is never re-forwarded, and durable state advances
   forward-only regardless of interleaved undos and checkpoints.
-- **Concurrent checkpoints forward in append order.** `checkpoint()` serializes
-  its whole body under a dedicated forwarding mutex, so no two checkpoints
-  interleave their `append()` calls at the durable sink; entries reach the sink
-  in strictly nondecreasing append order even under concurrent checkpointing.
+- **Checkpoints forward in append order.** `checkpoint()` runs on the owner as
+  one task, as every `append()` does, so no two checkpoints interleave their
+  `append()` calls at the durable sink and no append lands between a
+  checkpoint's slice and its forward; entries reach the sink in strictly
+  nondecreasing append order.
 - **A stamped entry never reconstructs under a shape other than the one that
   wrote it.** If `LogEntry::schema` is non-empty and disagrees with this
   build's fingerprint for that action, `replay()` either applies a registered
@@ -1440,9 +1513,15 @@ alone implies. Understand these before relying on the log for recovery:
   malformed *interior* line makes `entries()` throw. So the file self-heals from
   the one crash shape it is designed for, and refuses to silently drop data for
   any other.
-- **Single-writer file assumption.** `FileActionLog` is thread-safe within one
-  process but not safe for concurrent appenders across processes on the same
-  path; interleaved writes from two processes can corrupt lines.
+- **Single-writer file assumption.** `FileActionLog` serialises every write on
+  its owner within one process, but is not safe for concurrent appenders across
+  processes on the same path; interleaved writes from two processes can corrupt
+  lines.
+- **A posted append's failure surfaces at the next flush.** An append made off
+  the owner returns before the write runs. If the write then fails, the failure
+  is logged and the next `flush()` on the owner throws for it, so
+  `OutboxRelay` (which marks rows relayed only after a clean flush) leaves them
+  to be retried.
 
 ## Limitations
 

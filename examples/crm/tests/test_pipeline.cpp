@@ -65,6 +65,7 @@
 #include "crm/models/opportunity_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 #if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 16
 #pragma GCC diagnostic pop
@@ -201,7 +202,7 @@ TEST_CASE("MoveOpportunityStage journals its moves against the attached identity
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     crm::AccountModel accounts;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::OpportunityModel opportunities;
     opportunities.attachActionLog(log, std::string{"opportunities"});
 

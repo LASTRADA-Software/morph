@@ -335,7 +335,7 @@ TEST_CASE("without an ownership authorizer the default allows any principal (bac
 // ── Item 5: offline-queue idempotency key ────────────────────────────────────
 
 TEST_CASE("offline queue stores an idempotency key when enqueued with one", "[policy][queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     const auto id1 = queue.enqueue("payload-1", "op-key-1");
     const auto id2 = queue.enqueue("payload-2");  // no key
     REQUIRE(id1 != id2);
@@ -349,7 +349,7 @@ TEST_CASE("offline queue stores an idempotency key when enqueued with one", "[po
 }
 
 TEST_CASE("an idempotency key survives drain and can dedup a replay", "[policy][queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     (void)queue.enqueue("a", "k1");
     (void)queue.enqueue("b", "k1");  // same logical op re-enqueued (same key)
     (void)queue.enqueue("c", "k2");

@@ -43,7 +43,12 @@ using morph::offline::SyncWorker;
 // standing alone as it does in this example.
 
 TEST_CASE("offline queue: enqueue -> drain -> markDone", "[concepts][offline]") {
-    InMemoryOfflineQueue queue;
+    // A queue belongs to one executor, its owner, and is used there. This
+    // thread built the queue outside any executor's task, so this thread
+    // counts as the owner and calls it directly; a caller on another thread
+    // would use the completion overloads (`enqueue(replyExec, …)`).
+    morph::exec::MainThreadExecutor owner;
+    InMemoryOfflineQueue queue{owner};
 
     auto id = queue.enqueue(R"({"action":"Deposit","amount":10})");
 
@@ -69,16 +74,17 @@ TEST_CASE("offline queue: enqueue -> drain -> markDone", "[concepts][offline]") 
 // can look at it later.
 
 TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to replay", "[concepts][offline][sync]") {
-    InMemoryOfflineQueue queue;
-    (void)queue.enqueue("poison-payload", "op-1");  // "op-1" is this item's idempotencyKey
-
     // SyncWorker drains on the executor it is given, which must run one task
     // at a time: a strand. Over an executor that runs a task on the posting
-    // thread, run() has drained before it returns.
+    // thread, run() has drained before it returns. The queue belongs to the
+    // same strand, since the drain calls it there.
     struct RunHere final : morph::exec::IExecutor {
         void post(std::function<void()> task) override { task(); }
     } here;
     morph::exec::OwnerStrand owner{here};
+    InMemoryOfflineQueue queue{owner};
+    (void)queue.enqueue("poison-payload", "op-1");  // "op-1" is this item's idempotencyKey
+
     std::vector<QueueItem> deadLettered;
     SyncWorker worker{
         owner,
@@ -118,9 +124,10 @@ TEST_CASE("offline queue: FileOfflineQueue survives destroying and reopening the
         ("morph_concepts_offline_queue_" + std::to_string(reinterpret_cast<std::uintptr_t>(&uniqueTag)) + ".ndjson");
     std::filesystem::remove(path);  // start from a clean slate even if a previous run left this behind
 
+    morph::exec::MainThreadExecutor owner;  // this thread uses both queue objects below
     QueueItem survivor;
     {
-        FileOfflineQueue queue{path};
+        FileOfflineQueue queue{owner, path};
         auto id = queue.enqueue("payload-that-must-survive-a-restart");
         survivor = queue.drain().at(0);
         REQUIRE(survivor.id == id);
@@ -129,7 +136,7 @@ TEST_CASE("offline queue: FileOfflineQueue survives destroying and reopening the
     {
         // "process restarts": a fresh FileOfflineQueue over the same path
         // replays what's on disk instead of starting empty.
-        FileOfflineQueue reopened{path};
+        FileOfflineQueue reopened{owner, path};
         auto pending = reopened.drain();
         REQUIRE(pending.size() == 1);
         REQUIRE(pending[0].id == survivor.id);

@@ -37,6 +37,8 @@
 #include <string_view>
 #include <vector>
 
+#include "test_support.hpp"
+
 using morph::journal::InMemoryActionLog;
 using morph::journal::LogEntry;
 using morph::journal::PayloadMigrationRegistry;
@@ -299,7 +301,7 @@ TEST_CASE("payloadFingerprint: renders nested shape and carries the scheme prefi
 TEST_CASE("ActionDispatcher: a journaled execution stamps LogEntry::schema",
           "[journal][payload_evolution][issue174]") {
     PEFixture fixture;
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     auto holder = fixture.registry.create("PE_Model");
     holder->attachActionLog(log, "e1");
 
@@ -377,7 +379,7 @@ TEST_CASE("journal::replay: the mismatch names the action and both fingerprints"
 TEST_CASE("journal::replay: an entry stamped with this build's fingerprint replays normally",
           "[journal][payload_evolution][issue174]") {
     PEFixture fixture;
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     auto recorder = fixture.registry.create("PE_Model");
     recorder->attachActionLog(log, "e1");
     fixture.dispatcher.dispatch("PE_Model", "PE_SetState", *recorder, R"({"stateCode":"released"})");
@@ -420,7 +422,7 @@ TEST_CASE("journal::replay: Refuse rejects an unstamped entry rather than replay
 TEST_CASE("journal::replay: Refuse still accepts a correctly stamped entry",
           "[journal][payload_evolution][issue174]") {
     PEFixture fixture;
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     auto recorder = fixture.registry.create("PE_Model");
     recorder->attachActionLog(log, "e1");
     fixture.dispatcher.dispatch("PE_Model", "PE_SetState", *recorder, R"({"stateCode":"released"})");

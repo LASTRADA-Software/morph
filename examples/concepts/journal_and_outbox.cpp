@@ -20,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
@@ -62,7 +63,11 @@ BRIDGE_REGISTER_ACTION(JournalDemoModel, JournalDemoDeposit, "JournalDemo_Deposi
 
 TEST_CASE("journal: attaching an InMemoryActionLog records a successful execute", "[concepts][journal]") {
     auto holder = morph::model::detail::ModelFactory::create<JournalDemoModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    // A log belongs to one executor, its owner: appends made anywhere else
+    // are posted there. This thread built the log outside any executor's
+    // task, so it is the owner, and the dispatch below appends at once.
+    morph::exec::MainThreadExecutor owner;
+    auto log = std::make_shared<InMemoryActionLog>(owner);
 
     // "acct-1" becomes LogEntry::entityKey on every entry recorded for this
     // instance — the stable identity you'd filter entries()/replay() by.
@@ -90,7 +95,8 @@ TEST_CASE("journal: attaching an InMemoryActionLog records a successful execute"
 // duplicates for you instead of hand-rolling a dedup table.
 
 TEST_CASE("journal: appending the same idempotencyKey twice stores only one entry", "[concepts][journal]") {
-    InMemoryActionLog log;
+    morph::exec::MainThreadExecutor owner;
+    InMemoryActionLog log{owner};
 
     LogEntry entry;
     entry.modelType = "JournalDemo_Model";
@@ -118,7 +124,8 @@ TEST_CASE("journal: appending the same idempotencyKey twice stores only one entr
 TEST_CASE("journal: setOutboxManaged suppresses auto-append; OutboxRelay delivers the row instead",
           "[concepts][journal][outbox]") {
     auto holder = morph::model::detail::ModelFactory::create<JournalDemoModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    morph::exec::MainThreadExecutor owner;  // this thread is the log's owner, and runs the relay
+    auto log = std::make_shared<InMemoryActionLog>(owner);
     holder->attachActionLog(log, "acct-1");
     holder->setOutboxManaged(true);  // this instance logs itself; the framework must not double-log it
 

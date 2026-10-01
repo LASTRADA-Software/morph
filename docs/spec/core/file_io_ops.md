@@ -164,7 +164,7 @@ morph::core::FileIoOps ioOps;
 ioOps.fwrite = [](const void* buffer, std::size_t size, std::FILE* file) {
     return size - 1;  // always one byte short
 };
-FileActionLog log{path, ioOps};
+FileActionLog log{owner, path, ioOps};  // owner: the executor this thread pumps
 REQUIRE_THROWS_AS(log.append(entry), std::runtime_error);
 ```
 

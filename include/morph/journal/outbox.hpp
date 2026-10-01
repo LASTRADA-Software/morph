@@ -92,6 +92,9 @@ struct OutboxRelay {
     /// the failure swallowed, the rows would be recorded as relayed while
     /// nothing reached the sink, and nothing would ever surface the loss.
     ///
+    /// Runs on `sink`'s owner (see `IActionLog::owner()`): `sink->flush()`
+    /// answers only there, which is what lets its failure reach this call.
+    ///
     /// @return The number of rows relayed in this call.
     /// @throws NullSinkError if `sink` is null and `drainOutbox()` reports at
     ///         least one row — thrown before `sink` is ever dereferenced, so

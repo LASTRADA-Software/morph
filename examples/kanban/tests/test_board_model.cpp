@@ -11,9 +11,11 @@
 #include <stdexcept>
 #include <string>
 
+#include "activity_of.hpp"
 #include "kanban/models/board_model.hpp"
 #include "kanban/models/project_admin_model.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using morph::ladder::testkit::DbFixture;
 
@@ -339,7 +341,7 @@ TEST_CASE("GetEventsSince returns every event after the cursor, oldest first", "
 
 TEST_CASE("GetActivity lists journal entries for this board", "[kanban][model]") {
     DbFixture fixture;
-    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     const auto projectId = createProjectAs("alice", "Sprint Board");
     kanban::BoardModel model;
     const ScopedPrincipal alice{"alice"};
@@ -347,7 +349,7 @@ TEST_CASE("GetActivity lists journal entries for this board", "[kanban][model]")
     model.execute(kanban::OpenBoard{.projectId = projectId});
     model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0});
 
-    const auto activity = model.execute(kanban::GetActivity{});
+    const auto activity = kanban::testing::activityOf(model);
     // At least one entry for the CreateColumn call -- OpenBoard/GetBoardState
     // are Loggable::No, so they never appear.
     REQUIRE(activity.events.size() >= 1);
@@ -362,14 +364,14 @@ TEST_CASE("GetActivity without an attached log returns an empty stream, not an e
     model.execute(kanban::OpenBoard{.projectId = projectId});
     model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0});
 
-    const auto activity = model.execute(kanban::GetActivity{});
+    const auto activity = kanban::testing::activityOf(model);
     CHECK(activity.events.empty());
 }
 
 TEST_CASE("GetActivity shows a single entry for a repeated-opId MoveTaskPosition -- the replay journals nothing",
           "[kanban][model]") {
     DbFixture fixture;
-    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     const auto projectId = createProjectAs("alice", "Sprint Board");
     kanban::BoardModel model;
     const ScopedPrincipal alice{"alice"};
@@ -393,7 +395,7 @@ TEST_CASE("GetActivity shows a single entry for a repeated-opId MoveTaskPosition
     model.execute(kanban::MoveTaskPosition{
         .taskId = taskId, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = "op-1"});
 
-    const auto activity = model.execute(kanban::GetActivity{});
+    const auto activity = kanban::testing::activityOf(model);
     const auto moveCount = std::ranges::count_if(
         activity.events, [](const auto& event) { return event.actionType == "MoveTaskPosition"; });
     CHECK(moveCount == 1);
@@ -597,7 +599,7 @@ TEST_CASE("MoveTaskPosition into a swimlane deleted mid-drag throws NotFound, no
 // does.
 TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[kanban][journal]") {
     DbFixture fixture;
-    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     const auto projectId = createProjectAs("alice", "Sprint Board");
     const auto projectIdStr = std::to_string(*projectId);
 
@@ -714,7 +716,7 @@ TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[k
 // causalParentId linking the cascade entry to the triggering move entry.
 TEST_CASE("A rule firing on move-to-column adds a tag, journaled with a causal parent", "[kanban][rules]") {
     DbFixture fixture;
-    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     const auto projectId = createProjectAs("alice", "Sprint Board");
     const auto projectIdStr = std::to_string(*projectId);
 
@@ -769,7 +771,7 @@ TEST_CASE("A rule firing on move-to-column adds a tag, journaled with a causal p
 // rule firing through MoveTaskPosition, not just Task 12's hand-simulation.
 TEST_CASE("Replaying a move-to-Done journal entry does not re-fire its rule", "[kanban][rules]") {
     DbFixture fixture;
-    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     const auto projectId = createProjectAs("alice", "Sprint Board");
     const auto projectIdStr = std::to_string(*projectId);
 

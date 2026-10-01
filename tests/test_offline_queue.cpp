@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/executor.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <optional>
@@ -10,16 +13,17 @@
 #include <vector>
 
 #include "offline_queue_conformance.hpp"
+#include "test_support.hpp"
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue returns a unique id per item", "[queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     auto id1 = queue.enqueue("first");
     auto id2 = queue.enqueue("second");
     REQUIRE(id1 != id2);
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: drain returns items in enqueue order", "[queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     (void)queue.enqueue("a");
     (void)queue.enqueue("b");
     (void)queue.enqueue("c");
@@ -32,12 +36,12 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: drain returns items in enqueue 
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: drain on empty queue returns empty vector", "[queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     REQUIRE(queue.drain().empty());
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone removes item from future drains", "[queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     auto itemId = queue.enqueue("x");
     auto items = queue.drain();
     REQUIRE(items.size() == 1);
@@ -48,7 +52,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone removes item from futu
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone on unknown id is a no-op", "[queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     (void)queue.enqueue("y");
     REQUIRE_NOTHROW(queue.markDone(9999));
     REQUIRE(queue.drain().size() == 1);
@@ -56,7 +60,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone on unknown id is a no-
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: drain does not remove items (items survive until markDone)",
           "[queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     (void)queue.enqueue("z");
 
     auto first = queue.drain();
@@ -67,26 +71,40 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: drain does not remove items (it
     REQUIRE(first[0].payload == second[0].payload);
 }
 
-TEST_CASE("morph::offline::InMemoryOfflineQueue: concurrent enqueue from multiple threads is safe",
+TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueues from many threads all land, one at a time on the owner",
           "[queue][threading]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::exec::MainThreadExecutor owner;
+    morph::offline::InMemoryOfflineQueue queue{owner};
     constexpr int nThreads = 8;
     constexpr int nPerThread = 100;
 
+    // Off the owner, a thread enqueues through the completion form: the
+    // insert runs on the owner, and the id comes back on `replies`.
+    morph::exec::ThreadPoolExecutor replies{1};
+    std::atomic<int> answered{0};
     std::vector<std::thread> threads;
     threads.reserve(nThreads);
     for (int i = 0; i < nThreads; ++i) {
         threads.emplace_back([&, i] {
             for (int j = 0; j < nPerThread; ++j) {
-                (void)queue.enqueue("t" + std::to_string(i) + "_" + std::to_string(j));
+                auto completion = queue.enqueue(replies, "t" + std::to_string(i) + "_" + std::to_string(j));
+                auto held = std::make_shared<morph::async::Completion<uint64_t>>(std::move(completion));
+                replies.post([held, &answered] { held->then([&answered](uint64_t) { ++answered; }); });
             }
         });
     }
     for (auto& thr : threads) {
         thr.join();
     }
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return answered.load() == nThreads * nPerThread; }));
 
-    REQUIRE(queue.drain().size() == static_cast<std::size_t>(nThreads * nPerThread));
+    std::vector<uint64_t> ids;
+    for (auto const& item : queue.drain()) {
+        ids.push_back(item.id);
+    }
+    REQUIRE(ids.size() == static_cast<std::size_t>(nThreads * nPerThread));
+    std::ranges::sort(ids);
+    CHECK(std::ranges::adjacent_find(ids) == ids.end());  // every id distinct
 }
 
 // ── Coverage: IOfflineQueue default two-arg enqueue + no-op setIdempotencyKey ──
@@ -139,7 +157,7 @@ TEST_CASE("morph::offline::IOfflineQueue: default setIdempotencyKey is a no-op (
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: two-arg enqueue stores the idempotency key", "[queue]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     auto id = queue.enqueue("payload", "stable-key-123");
     auto items = queue.drain();
     REQUIRE(items.size() == 1);
@@ -156,7 +174,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: two-arg enqueue stores the idem
 
 TEST_CASE("morph::offline::QueueItem: attempts defaults to 0 and round-trips through enqueue/drain",
           "[queue][attempts]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     (void)queue.enqueue("payload");
 
     auto items = queue.drain();
@@ -166,7 +184,7 @@ TEST_CASE("morph::offline::QueueItem: attempts defaults to 0 and round-trips thr
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: setAttempts updates the in-deque item, visible on next drain",
           "[queue][attempts]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     auto id = queue.enqueue("payload");
 
     queue.setAttempts(id, 3);
@@ -177,7 +195,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: setAttempts updates the in-dequ
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: setAttempts on an unknown id is a no-op", "[queue][attempts]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     (void)queue.enqueue("payload");
 
     REQUIRE_NOTHROW(queue.setAttempts(9999, 5));
@@ -201,7 +219,7 @@ TEST_CASE("morph::offline::IOfflineQueue: default setAttempts is a no-op", "[que
 // ── Coverage: maxDepth / overflow policy ───────────────────────
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue below maxDepth succeeds", "[queue][overflow]") {
-    morph::offline::InMemoryOfflineQueue queue{3};
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner(), 3};
     REQUIRE_NOTHROW(queue.enqueue("a"));
     REQUIRE_NOTHROW(queue.enqueue("b"));
     REQUIRE(queue.size() == 2);
@@ -210,7 +228,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue below maxDepth succeeds
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError",
           "[queue][overflow]") {
-    morph::offline::InMemoryOfflineQueue queue{2};
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner(), 2};
     (void)queue.enqueue("a");
     (void)queue.enqueue("b");
     REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
@@ -219,7 +237,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth throws Offl
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone frees capacity for a subsequent enqueue",
           "[queue][overflow]") {
-    morph::offline::InMemoryOfflineQueue queue{1};
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner(), 1};
     auto id = queue.enqueue("a");
     REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
 
@@ -230,7 +248,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone frees capacity for a s
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: default constructor is unbounded", "[queue][overflow]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
     REQUIRE(queue.maxDepth() == std::nullopt);
     for (int i = 0; i < 10000; ++i) {
         REQUIRE_NOTHROW(queue.enqueue("item" + std::to_string(i)));
@@ -261,7 +279,7 @@ TEST_CASE("morph::offline::OfflineQueueFullError: carries maxDepth and currentSi
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth emits queueOverflow metric",
           "[queue][overflow][observability]") {
     morph::observe::ScopedObserveOverride guard;
-    morph::offline::InMemoryOfflineQueue queue{1};
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner(), 1};
     (void)queue.enqueue("a");
 
     std::vector<double> samples;
@@ -285,11 +303,13 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth emits queue
 // and asserts it, rather than accepting either.
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: IOfflineQueue idempotency-key conformance", "[offline_queue]") {
-    morph::test::checkIdempotencyKeyContract("InMemoryOfflineQueue", morph::test::KeyDedup::never,
-                                             [] { return std::make_unique<morph::offline::InMemoryOfflineQueue>(); });
+    morph::test::checkIdempotencyKeyContract("InMemoryOfflineQueue", morph::test::KeyDedup::never, [] {
+        return std::make_unique<morph::offline::InMemoryOfflineQueue>(morph::testing::storageOwner());
+    });
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: a NUL-bearing payload and key round-trip intact", "[offline_queue]") {
-    morph::test::checkNulPayloadRoundTrip("InMemoryOfflineQueue",
-                                          [] { return std::make_unique<morph::offline::InMemoryOfflineQueue>(); });
+    morph::test::checkNulPayloadRoundTrip("InMemoryOfflineQueue", [] {
+        return std::make_unique<morph::offline::InMemoryOfflineQueue>(morph::testing::storageOwner());
+    });
 }

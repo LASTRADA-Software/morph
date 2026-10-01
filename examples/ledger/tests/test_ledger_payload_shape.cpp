@@ -45,6 +45,7 @@
 #include "ledger/dto/transaction_dto.hpp"
 #include "ledger/models/ledger_model.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using morph::model::payloadFingerprint;
 using morph::model::payloadShapeString;
@@ -201,7 +202,7 @@ TEST_CASE("replay() refuses an UndoTransaction entry stamped by a build whose id
 
     // Attach the log only now, so it holds the UndoTransaction entry and
     // nothing that had to happen first.
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*ledgerId));
     model.execute(ledger::UndoTransaction{.ledgerId = ledgerId, .journalId = journalId});
 

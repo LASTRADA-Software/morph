@@ -32,6 +32,7 @@
 #include "crm/models/custom_field_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -84,7 +85,7 @@ TEST_CASE("AddCustomField with no principal is refused", "[crm][custom_fields][a
 TEST_CASE("AddCustomField journals as a normal action", "[crm][custom_fields][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::CustomFieldModel model;
     model.attachActionLog(log, std::string{"custom-fields"});
 
@@ -280,7 +281,7 @@ TEST_CASE("A recorded CreateAccount entry carries the custom value verbatim", "[
     crm::CustomFieldModel customFields;
     customFields.execute(crm::AddCustomField{.name = "leadSource", .type = crm::CustomFieldType::Text});
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel accounts;
     accounts.attachActionLog(log, std::string{"accounts"});
 

@@ -2077,7 +2077,7 @@ TEST_CASE("SocketBackend: a private registration carries contextKey to the serve
     // flag rather than one it will.
     std::mutex providerMtx;
     std::vector<std::string> requestedFor;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::testing::storageOwner());
     morph::backend::ServerConfig serverConfig;
     serverConfig.logProvider = [&](std::string_view modelType, std::string_view contextKey) {
         std::scoped_lock const lock{providerMtx};
@@ -2139,6 +2139,9 @@ TEST_CASE("SocketBackend: a private registration carries contextKey to the serve
         spinUntil(cbOwner, [&] { return settled.load(); });
         REQUIRE(settled.load());
 
+        // The append was posted from the model's strand to the log's owner,
+        // this thread, before the reply went out.
+        morph::testing::storageOwner().drain();
         auto entries = log->entries();
         REQUIRE(entries.size() == 1);
         CHECK(entries[0].entityKey == "acct-587");

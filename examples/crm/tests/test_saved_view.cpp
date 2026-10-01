@@ -16,6 +16,7 @@
 #include "crm/models/saved_view_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -248,7 +249,7 @@ TEST_CASE("DeleteSavedView naming a nonexistent view is NotFound", "[crm][saved_
 TEST_CASE("SavedViewModel journals its edits against the attached identity", "[crm][saved_view][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::SavedViewModel model;
     model.attachActionLog(log, std::string{"saved-views"});
 
@@ -278,7 +279,7 @@ TEST_CASE("SavedViewModel journals its edits against the attached identity", "[c
 TEST_CASE("SavedViewModel's reads journal nothing", "[crm][saved_view][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::SavedViewModel model;
     model.attachActionLog(log, std::string{"saved-views"});
 
