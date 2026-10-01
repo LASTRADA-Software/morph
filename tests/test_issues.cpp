@@ -433,7 +433,7 @@ TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run do
             [&](morph::exec::IExecutor& reply) { return queue.enqueue(reply, "concurrent"); });
     }};
 
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     enqueuer.join();
 
     REQUIRE(result.successful == 2);

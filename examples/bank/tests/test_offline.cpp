@@ -56,7 +56,7 @@ TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") 
                                               return false;
                                           }
                                       }};
-    auto const result = await(worker.run(), app.guiLoop());
+    auto const result = await(worker.run(app.guiLoop()), app.guiLoop());
 
     REQUIRE(result.successful == 2);
     REQUIRE(result.failed == 0);

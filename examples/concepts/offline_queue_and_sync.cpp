@@ -21,7 +21,6 @@
 #include <filesystem>
 #include <functional>
 #include <morph/core/executor.hpp>
-#include <morph/core/owner_strand.hpp>
 #include <morph/offline/file_offline_queue.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
@@ -75,19 +74,15 @@ TEST_CASE("offline queue: enqueue -> drain -> markDone", "[concepts][offline]") 
 
 TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to replay", "[concepts][offline][sync]") {
     // SyncWorker drains on the executor it is given, which must run one task
-    // at a time: a strand. Over an executor that runs a task on the posting
-    // thread, run() has drained before it returns. The queue belongs to the
-    // same strand, since the drain calls it there.
-    struct RunHere final : morph::exec::IExecutor {
-        void post(std::function<void()> task) override { task(); }
-    } here;
-    morph::exec::OwnerStrand owner{here};
-    InMemoryOfflineQueue queue{owner};
+    // at a time. This thread is the app: its executor owns the queue and the
+    // drain, and receives each run's result, each when the test pumps it.
+    morph::exec::MainThreadExecutor app;
+    InMemoryOfflineQueue queue{app};
     (void)queue.enqueue("poison-payload", "op-1");  // "op-1" is this item's idempotencyKey
 
     std::vector<QueueItem> deadLettered;
     SyncWorker worker{
-        owner,
+        app,
         queue,
         [](const std::string&) { return false; },  // a replay function that always fails
         [&](const QueueItem& item) { deadLettered.push_back(item); },
@@ -97,8 +92,9 @@ TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to r
     // 5 cumulative attempts, so 5 calls are needed to exhaust the budget.
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        worker.run().then([&result](const morph::offline::SyncResult& drained) { result = drained; });
+        worker.run(app).then([&result](const morph::offline::SyncResult& drained) { result = drained; });
     }
+    app.drain();
 
     REQUIRE(result.deadLettered == 1);
     REQUIRE(deadLettered.size() == 1);

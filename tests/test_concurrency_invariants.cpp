@@ -407,7 +407,7 @@ TEST_CASE("morph::offline::SyncWorker: stop() called mid-replay aborts before pr
                                       }};
     workerPtr = &worker;
 
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     // First three items processed and removed; on the fourth iteration the
     // loop sees _stopped == true and breaks before invoking the replay fn.
     REQUIRE(result.successful == 3);

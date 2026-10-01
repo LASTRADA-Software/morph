@@ -97,8 +97,9 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
         [&] {
             // onOnline fires on the I/O loop: replay there, then ask the
             // bridge's owner to switch. `backendSwitched` is set only after
-            // switchBackend returns.
-            morph::testing::awaitValue(syncWorker.run());
+            // switchBackend returns. The worker's owner runs on the calling
+            // thread, so the drain has run when run() returns.
+            (void)syncWorker.run(morph::testing::inlineOwner());
             owner.post([&] {
                 bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
                 backendSwitched.store(true);

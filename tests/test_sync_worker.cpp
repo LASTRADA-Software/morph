@@ -20,7 +20,7 @@
 TEST_CASE("morph::offline::SyncWorker: run on empty queue returns zero successful and zero failed", "[sync]") {
     morph::offline::InMemoryOfflineQueue queue{morph::testing::inlineOwner()};
     morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [](const std::string&) { return true; }};
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     REQUIRE(result.successful == 0);
     REQUIRE(result.failed == 0);
 }
@@ -31,7 +31,7 @@ TEST_CASE("morph::offline::SyncWorker: successful replay removes items from queu
     (void)queue.enqueue("item2");
 
     morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [](const std::string&) { return true; }};
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     REQUIRE(result.successful == 2);
     REQUIRE(result.failed == 0);
@@ -44,7 +44,7 @@ TEST_CASE("morph::offline::SyncWorker: failed replay leaves items in queue", "[s
     (void)queue.enqueue("item2");
 
     morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [](const std::string&) { return false; }};
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     REQUIRE(result.successful == 0);
     REQUIRE(result.failed == 2);
@@ -60,7 +60,7 @@ TEST_CASE("morph::offline::SyncWorker: partial replay  -  first succeeds, second
     morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [&](const std::string&) {
                                           return ++call == 1;  // first call succeeds, second fails
                                       }};
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     REQUIRE(result.successful == 1);
     REQUIRE(result.failed == 1);
@@ -79,7 +79,7 @@ TEST_CASE("morph::offline::SyncWorker: replay function receives the correct payl
                                           received.push_back(payload);
                                           return true;
                                       }};
-    morph::testing::awaitValue(worker.run());
+    morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     REQUIRE(received.size() == 2);
     REQUIRE(received[0] == "hello");
@@ -96,7 +96,7 @@ TEST_CASE("morph::offline::SyncWorker: stop() aborts run() before processing ite
 
     // Signal stop before calling run().
     worker.stop();
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     // stop was set, so run() sees _stopped immediately and processes zero items.
     REQUIRE(result.successful == 0);
@@ -115,7 +115,7 @@ TEST_CASE("morph::offline::SyncWorker: replay exception is caught  -  item stays
                                           }
                                           return true;
                                       }};
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     REQUIRE(result.successful == 1);
     REQUIRE(result.failed == 1);
@@ -141,8 +141,12 @@ TEST_CASE("morph::offline::SyncWorker: concurrent run() calls are serialised  - 
 
     morph::offline::SyncResult result1;
     morph::offline::SyncResult result2;
-    std::thread thr1{[&] { result1 = morph::testing::awaitValue(worker.run()); }};
-    std::thread thr2{[&] { result2 = morph::testing::awaitValue(worker.run()); }};
+    std::thread thr1{[&] {
+        result1 = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
+    }};
+    std::thread thr2{[&] {
+        result2 = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
+    }};
     thr1.join();
     thr2.join();
 
@@ -160,7 +164,7 @@ TEST_CASE("morph::offline::SyncWorker: stop resets after run  -  next run procee
 
     // First run is aborted immediately (stop before run).
     worker.stop();
-    morph::testing::awaitValue(worker.run());
+    morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     // Items remain because run() was aborted.
     // (If by chance 0 items were enqueued, re-enqueue to guarantee the next run has work.)
@@ -169,7 +173,7 @@ TEST_CASE("morph::offline::SyncWorker: stop resets after run  -  next run procee
     }
 
     // Second run must not inherit the stop flag  -  processes all remaining items.
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     REQUIRE(result.successful > 0);
     REQUIRE(queue.drain().empty());
 }
@@ -190,7 +194,7 @@ TEST_CASE("morph::offline::SyncWorker: no DeadLetterSink set  -  default log-and
 
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = morph::testing::awaitValue(worker.run());
+        result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     }
     REQUIRE(result.deadLettered == 1);
 
@@ -229,7 +233,7 @@ TEST_CASE(
 
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = morph::testing::awaitValue(worker.run());
+        result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     }
 
     REQUIRE(result.deadLettered == 1);
@@ -261,7 +265,7 @@ TEST_CASE("morph::offline::SyncWorker: a throwing DeadLetterSink is caught  -  i
 
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = morph::testing::awaitValue(worker.run());
+        result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     }
 
     REQUIRE(result.deadLettered == 1);
@@ -294,7 +298,7 @@ TEST_CASE(
         // persisted on the queue's QueueItem::attempts carries over.
         morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue,
                                           [](const std::string&) { return false; }};
-        result = morph::testing::awaitValue(worker.run());
+        result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     }
 
     REQUIRE(result.deadLettered == 1);
@@ -334,7 +338,8 @@ TEST_CASE(
                                           [](const std::string&) { return false; }};
         // 4 failures with the SAME worker instance: not exhausted yet (cap is 5).
         for (int i = 0; i < 4; ++i) {
-            auto result = morph::testing::awaitValue(worker.run());
+            auto result =
+                morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
             REQUIRE(result.failed == 1);
         }
     }
@@ -344,7 +349,7 @@ TEST_CASE(
     // back (setAttempts is the inherited no-op), so this failure is attempt
     // #1, not #5 -- today's in-memory-only behavior, unchanged.
     morph::offline::SyncWorker worker2{morph::testing::inlineOwner(), queue, [](const std::string&) { return false; }};
-    auto result = morph::testing::awaitValue(worker2.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker2.run(reply); });
     REQUIRE(result.failed == 1);
     REQUIRE(result.deadLettered == 0);
     REQUIRE(queue.drain().size() == 1);
@@ -366,7 +371,7 @@ TEST_CASE("morph::offline::SyncWorker: run() emits queueDepth with the pending c
     });
 
     morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [](const std::string&) { return true; }};
-    morph::testing::awaitValue(worker.run());
+    morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     REQUIRE(samples.size() == 1);
     REQUIRE(samples[0] == 3.0);
@@ -384,7 +389,7 @@ TEST_CASE("morph::offline::SyncWorker: run() over a queue at maxDepth still drai
     REQUIRE_THROWS_AS(queue.enqueue("d"), morph::offline::OfflineQueueFullError);
 
     morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [](const std::string&) { return true; }};
-    auto result = morph::testing::awaitValue(worker.run());
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
 
     REQUIRE(result.successful == 3);
     REQUIRE(result.failed == 0);
@@ -434,7 +439,7 @@ TEST_CASE("morph::offline::SyncWorker: an Undelivered replay never exhausts the 
                                       [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
 
     for (int flap = 0; flap < 5; ++flap) {
-        auto result = morph::testing::awaitValue(worker.run());
+        auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
         CHECK(result.successful == 0);
         CHECK(result.failed == 0);
         CHECK(result.undelivered == 3);
@@ -447,7 +452,7 @@ TEST_CASE("morph::offline::SyncWorker: an Undelivered replay never exhausts the 
     // ...and the work is still replayable once the connection is genuinely back.
     morph::offline::SyncWorker good{morph::testing::inlineOwner(), queue,
                                     [](const std::string&) { return morph::offline::ReplayOutcome::Succeeded; }};
-    auto const final = morph::testing::awaitValue(good.run());
+    auto const final = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return good.run(reply); });
     CHECK(final.successful == 3);
     REQUIRE(queue.drain().empty());
 }
@@ -462,7 +467,7 @@ TEST_CASE("morph::offline::SyncWorker: an Undelivered replay does not advance th
     morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue,
                                       [](const std::string&) { return morph::offline::ReplayOutcome::Undelivered; }};
     for (int i = 0; i < 5; ++i) {
-        (void)morph::testing::awaitValue(worker.run());
+        (void)morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     }
 
     CHECK(queue.writes.empty());
@@ -482,12 +487,13 @@ TEST_CASE("morph::offline::SyncWorker: a Rejected replay spends the budget exact
                                       [&dead](const morph::offline::QueueItem& item) { dead.push_back(item); }};
 
     for (int i = 0; i < 4; ++i) {
-        auto const result = morph::testing::awaitValue(worker.run());
+        auto const result =
+            morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
         CHECK(result.failed == 1);
         CHECK(result.undelivered == 0);
         CHECK(result.deadLettered == 0);
     }
-    auto const fifth = morph::testing::awaitValue(worker.run());
+    auto const fifth = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     CHECK(fifth.deadLettered == 1);
     REQUIRE(dead.size() == 1);
     CHECK(dead.front().attempts == 5);
@@ -514,15 +520,19 @@ TEST_CASE("morph::offline::SyncWorker: undelivered flaps between rejections do n
     for (int rejection = 0; rejection < 4; ++rejection) {
         deliver = false;
         for (int flap = 0; flap < 3; ++flap) {
-            CHECK(morph::testing::awaitValue(worker.run()).undelivered == 1);
+            CHECK(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) {
+                      return worker.run(reply);
+                  }).undelivered == 1);
         }
         deliver = true;
-        CHECK(morph::testing::awaitValue(worker.run()).failed == 1);
+        CHECK(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); }).failed ==
+              1);
     }
     CHECK(dead.empty());
 
     deliver = true;
-    CHECK(morph::testing::awaitValue(worker.run()).deadLettered == 1);
+    CHECK(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); }).deadLettered ==
+          1);
     REQUIRE(dead.size() == 1);
     CHECK(dead.front().attempts == 5);
 }
@@ -539,7 +549,7 @@ TEST_CASE("morph::offline::SyncWorker: the bool ReplayFunction keeps its exact p
     morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [](const std::string&) { return false; }};
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = morph::testing::awaitValue(worker.run());
+        result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
         CHECK(result.undelivered == 0);
     }
     CHECK(result.deadLettered == 1);
@@ -560,7 +570,7 @@ TEST_CASE("morph::offline::SyncWorker: a throwing detailed replay still charges 
         [](const std::string&) -> morph::offline::ReplayOutcome { throw std::runtime_error{"replay blew up"}; }};
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = morph::testing::awaitValue(worker.run());
+        result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     }
     CHECK(result.deadLettered == 1);
     REQUIRE(queue.drain().empty());
@@ -587,8 +597,12 @@ TEST_CASE("morph::offline::SyncWorker: run() called off its owner drains on the 
     // Two callers at once, from threads that are not the owner.
     morph::offline::SyncResult first;
     morph::offline::SyncResult second;
-    std::thread callerA{[&] { first = morph::testing::awaitValue(worker.run()); }};
-    std::thread callerB{[&] { second = morph::testing::awaitValue(worker.run()); }};
+    std::thread callerA{[&] {
+        first = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
+    }};
+    std::thread callerB{[&] {
+        second = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
+    }};
     callerA.join();
     callerB.join();
 
@@ -597,4 +611,31 @@ TEST_CASE("morph::offline::SyncWorker: run() called off its owner drains on the 
     CHECK(queue.drain().empty());
     CHECK(recorder.count("SyncWorker::run") == 2U);
     CHECK(recorder.allPosted("SyncWorker::run"));
+}
+
+TEST_CASE("morph::offline::SyncWorker: run() called from the app delivers its result on the app's executor",
+          "[sync][owner][reply]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::OwnerStrand owner{pool};
+    morph::offline::InMemoryOfflineQueue queue{owner};
+    (void)queue.enqueue("one");
+    morph::offline::SyncWorker worker{owner, queue, [](const std::string&) { return true; }};
+
+    // The app's own executor: not the worker's owner, pumped by this thread.
+    morph::exec::MainThreadExecutor app;
+    std::atomic<bool> delivered{false};
+    std::atomic<bool> deliveredOnApp{false};
+    std::atomic<bool> deliveredOnOwner{true};
+    morph::offline::SyncResult result;
+    worker.run(app).then([&](const morph::offline::SyncResult& drained) {
+        deliveredOnApp.store(morph::exec::runningOn(app));
+        deliveredOnOwner.store(morph::exec::runningOn(owner));
+        result = drained;
+        delivered.store(true);
+    });
+
+    REQUIRE(morph::testing::pumpOwnerUntil(app, [&] { return delivered.load(); }));
+    CHECK(deliveredOnApp.load());
+    CHECK_FALSE(deliveredOnOwner.load());
+    CHECK(result.successful == 1);
 }

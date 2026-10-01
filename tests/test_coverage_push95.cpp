@@ -488,7 +488,9 @@ TEST_CASE("morph::offline::ReconnectCoordinator: onOnline reconnects and shouldC
         deps.shouldContinue = [] { return true; };
         deps.sleep = [](std::chrono::milliseconds) {};
         ::morph::offline::ReconnectCoordinator coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
-        REQUIRE(morph::testing::awaitValue(coordinator.onOnline()) == ::morph::offline::ReconnectOutcome::Reconnected);
+        REQUIRE(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) {
+                    return coordinator.onOnline(reply);
+                }) == ::morph::offline::ReconnectOutcome::Reconnected);
         REQUIRE(replayed.load() == 1);
     }
 
@@ -503,7 +505,9 @@ TEST_CASE("morph::offline::ReconnectCoordinator: onOnline reconnects and shouldC
         deps.shouldContinue = []() -> bool { throw std::runtime_error("boom"); };
         deps.sleep = [](std::chrono::milliseconds) {};
         ::morph::offline::ReconnectCoordinator coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
-        REQUIRE(morph::testing::awaitValue(coordinator.onOnline()) == ::morph::offline::ReconnectOutcome::Aborted);
+        REQUIRE(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) {
+                    return coordinator.onOnline(reply);
+                }) == ::morph::offline::ReconnectOutcome::Aborted);
     }
 }
 
@@ -523,11 +527,11 @@ TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAtte
     // dead-letters it via the default log-and-drop path.
     ::morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = morph::testing::awaitValue(worker.run());
+        result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     }
     REQUIRE(result.deadLettered == 1);
     // Item is gone now, so a further run does nothing.
-    auto after = morph::testing::awaitValue(worker.run());
+    auto after = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     REQUIRE(after.failed == 0);
     REQUIRE(after.deadLettered == 0);
 }

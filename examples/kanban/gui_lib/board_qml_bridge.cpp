@@ -616,7 +616,7 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
                     // happens) -- this handler only reports the queue's
                     // post-run depth, since a successful or merely-retried
                     // (still-queued) item never touches that counter.
-                    _syncWorker->run().then([this](const ::morph::offline::SyncResult& result) {
+                    _syncWorker->run(*_executor).then([this](const ::morph::offline::SyncResult& result) {
                         _queueDepth = static_cast<int>(_offlineQueue->size());
                         emit syncStatusChanged(_queueDepth, _deadLetteredCount);
                         // A successful replay applied a move server-side that
@@ -671,7 +671,9 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
         std::move(probe), _callbacks.guard([this] {
             _executor->post(_callbacks.guard([this] { _reconnectCoordinator->onOffline(); }));
         }),
-        _callbacks.guard([this] { _executor->post(_callbacks.guard([this] { _reconnectCoordinator->onOnline(); })); }),
+        _callbacks.guard([this] {
+            _executor->post(_callbacks.guard([this] { (void)_reconnectCoordinator->onOnline(*_executor); }));
+        }),
         monitorConfig);
 }
 

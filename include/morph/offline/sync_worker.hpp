@@ -128,7 +128,9 @@ struct SyncResult {
 /// or any other strand. Its queue drain, attempt counts and dead-lettering run
 /// only in that owner's tasks. `run()` is callable from any thread: on the
 /// owner it drains at once; elsewhere it posts the drain to the owner, so two
-/// runs never overlap. `stop()` is the one cross-thread signal, an atomic.
+/// runs never overlap. Its answer is delivered on the executor the caller
+/// names, so a caller attaches to it where it already runs. `stop()` is the
+/// one cross-thread signal, an atomic.
 ///
 /// The drain calls the queue's synchronous verbs, which answer only on the
 /// queue's own owner (see `IOfflineQueue`, "One owner"): give the queue the
@@ -228,11 +230,14 @@ public:
     /// drain it has posted: destroy it once every `run()` has settled, or
     /// after its owner is closed.
     ///
+    /// @param replyExec Executor the answer is delivered on and the caller
+    ///        attaches its callbacks on: the caller's own. Borrowed: it must
+    ///        outlive the returned `Completion`.
     /// @return A `Completion` settled on the owner with the counts of
-    ///         successful / failed / dead-lettered replays; its callbacks run
-    ///         on the owner.
-    ::morph::async::Completion<SyncResult> run() {
-        auto settleable = ::morph::async::Completion<SyncResult>::makeSettleable(&_owner);
+    ///         successful / failed / dead-lettered replays, delivered on
+    ///         @p replyExec.
+    ::morph::async::Completion<SyncResult> run(::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND) {
+        auto settleable = ::morph::async::Completion<SyncResult>::makeSettleable(&replyExec);
         if (::morph::exec::runningOn(_owner)) {
             settleable.second.resolve(drainHere());
             return std::move(settleable.first);

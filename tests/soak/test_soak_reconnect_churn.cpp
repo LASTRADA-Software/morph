@@ -87,7 +87,7 @@ TEST_CASE("soak: NetworkMonitor/ReconnectCoordinator/SyncWorker offline-online f
          .replay =
              [&] {
                  replayCalls.fetch_add(1, std::memory_order_relaxed);
-                 (void)sync->run();
+                 (void)sync->run(coordinator.strand());
              },
          .shouldContinue = [&] { return netOnline.load(); },
          .sleep = [](std::chrono::milliseconds) {}},
@@ -101,7 +101,8 @@ TEST_CASE("soak: NetworkMonitor/ReconnectCoordinator/SyncWorker offline-online f
     // transition is observed on the very next probe tick instead of waiting
     // out the (much larger) production defaults.
     morph::offline::NetworkMonitor monitor{
-        [&] { return netOnline.load(); }, [&] { coordinator.onOffline(); }, [&] { (void)coordinator.onOnline(); },
+        [&] { return netOnline.load(); }, [&] { coordinator.onOffline(); },
+        [&] { (void)coordinator.onOnline(coordinator.strand()); },
         morph::offline::NetworkMonitorConfig{.probeInterval = 1ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
     for (int cycle = 0; cycle < flapCycles; ++cycle) {

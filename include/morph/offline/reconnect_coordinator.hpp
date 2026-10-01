@@ -122,7 +122,8 @@ public:
         std::function<void()> bindContext;
 
         /// @brief Replay the offline queue against the now-active primary.
-        /// Typically wraps `SyncWorker::run()` on a worker owned by `strand()`.
+        /// Typically wraps `SyncWorker::run(replyExec)` on a worker owned by
+        /// `strand()`.
         /// Called last in `onOnline()`.
         std::function<void()> replay;
 
@@ -168,11 +169,15 @@ public:
     /// Posted as one task, after any `onOnline()`/`onOffline()` posted before
     /// it. Callable from any thread; returns at once.
     ///
+    /// @param replyExec Executor the outcome is delivered on and the caller
+    ///        attaches its callbacks on: the caller's own, or `strand()` for a
+    ///        caller that does not wait for it. Borrowed: it must outlive the
+    ///        returned `Completion`.
     /// @return A `Completion` settled on the offline strand with how the
-    ///         sequence ended (see `ReconnectOutcome`); its callbacks run on the
-    ///         offline strand.
-    ::morph::async::Completion<ReconnectOutcome> onOnline() {
-        auto settleable = ::morph::async::Completion<ReconnectOutcome>::makeSettleable(&_strand);
+    ///         sequence ended (see `ReconnectOutcome`), delivered on
+    ///         @p replyExec.
+    ::morph::async::Completion<ReconnectOutcome> onOnline(::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND) {
+        auto settleable = ::morph::async::Completion<ReconnectOutcome>::makeSettleable(&replyExec);
         _strand.postTask([state = _state, strand = &_strand, promise = std::move(settleable.second)]() mutable {
             ::morph::exec::detail::noteOwner("ReconnectCoordinator::onOnline", strand->coreExecutor(),
                                              strand->runningHere());

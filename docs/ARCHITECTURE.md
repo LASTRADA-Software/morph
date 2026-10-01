@@ -350,7 +350,8 @@ guarantee (each step waits for the previous), and the abort checks
 (`shouldContinue()` is polled before each attempt and again before replay). It
 performs no I/O and owns no thread: it owns a strand over the executor it is
 given, and `onOnline()` / `onOffline()` post their bodies there, so they run one
-at a time in call order. `onOnline()` returns a `Completion<ReconnectOutcome>`
+at a time in call order. `onOnline(replyExec)` returns a
+`Completion<ReconnectOutcome>` delivered on the caller's `replyExec`
 (`Reconnected` / `GaveUp` after `maxAttempts` / `Aborted`); retry tuning lives in
 `ReconnectCoordinatorConfig` (`maxAttempts`, `retryDelay`). `tryReconnect` and
 `shouldContinue` throwing are treated as a failed attempt / "do not continue"
