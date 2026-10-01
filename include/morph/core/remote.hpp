@@ -355,8 +355,7 @@ public:
                      ::morph::model::detail::defaultDispatcher(),
                  ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
                      ::morph::model::detail::defaultRegistry())
-        : _pool{workerPool},
-          _strand{workerPool},
+        : _strand{workerPool},
           _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)},
           _dispatcher{dispatcher},
           _registry{registry},
@@ -545,12 +544,16 @@ public:
     /// @brief The server's health, answered on the server strand.
     ///
     /// Posted, so the answer reflects every envelope and verb this thread
-    /// handed the server before calling. Callable from any thread.
+    /// handed the server before calling. Callable from any thread; the caller
+    /// attaches to the answer on @p replyExec, the owner it names.
+    /// @param replyExec Executor the answer is delivered on, and the one the
+    ///        caller attaches its callbacks from. Borrowed: it must outlive the
+    ///        returned `Completion`'s delivery.
     /// @return A `Completion` settled on the server strand with `ready`, the
     ///         live model count and the in-flight execute count; its callbacks
-    ///         run on the worker pool.
-    [[nodiscard]] ::morph::async::Completion<HealthStatus> health() {
-        auto settleable = ::morph::async::Completion<HealthStatus>::makeSettleable(&_pool);
+    ///         run on @p replyExec.
+    [[nodiscard]] ::morph::async::Completion<HealthStatus> health(::morph::exec::IExecutor& replyExec) {
+        auto settleable = ::morph::async::Completion<HealthStatus>::makeSettleable(&replyExec);
         _strand.postTask([self = shared_from_this(), promise = std::move(settleable.second)]() mutable {
             self->noteOwner("RemoteServer::health");
             promise.resolve(self->snapshotHealth());
@@ -593,14 +596,19 @@ public:
     /// `LimitPolicy::executeTimeout` firing first). The same count
     /// `LimitPolicy::maxInFlightExecutes` gates and `health()`'s `inFlight`
     /// reads. Independent of `beginShutdown()`: it observes, it does not stop
-    /// new work from arriving. Callable from any thread; nothing blocks.
+    /// new work from arriving. Callable from any thread; nothing blocks. The
+    /// caller attaches to the answer on @p replyExec, the owner it names.
     /// @param deadline Longest time to wait; `0` answers from the count as it
     ///        stands.
+    /// @param replyExec Executor the answer is delivered on, and the one the
+    ///        caller attaches its callbacks from. Borrowed: it must outlive the
+    ///        returned `Completion`'s delivery.
     /// @return A `Completion` settled on the server strand: `true` once the
     ///         count is zero, `false` if @p deadline elapses first. Its
-    ///         callbacks run on the worker pool.
-    [[nodiscard]] ::morph::async::Completion<bool> drainedWithin(std::chrono::milliseconds deadline) {
-        auto settleable = ::morph::async::Completion<bool>::makeSettleable(&_pool);
+    ///         callbacks run on @p replyExec.
+    [[nodiscard]] ::morph::async::Completion<bool> drainedWithin(std::chrono::milliseconds deadline,
+                                                                 ::morph::exec::IExecutor& replyExec) {
+        auto settleable = ::morph::async::Completion<bool>::makeSettleable(&replyExec);
         _strand.postTask(
             [self = shared_from_this(), deadline,
              promise = std::make_shared<::morph::async::Completion<bool>::Promise>(std::move(settleable.second))] {
@@ -1572,7 +1580,6 @@ private:
         run.holder->actionGate().leave();
     }
 
-    ::morph::exec::IExecutor& _pool;
     // The server strand. Declared before every member its tasks touch, and
     // closed first, in the destructor's body.
     ::morph::exec::OwnerStrand _strand;

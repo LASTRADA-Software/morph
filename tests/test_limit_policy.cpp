@@ -298,8 +298,8 @@ TEST_CASE("LimitPolicy: executeTimeout surfaces as backend::TimeoutError through
         return result;
     };
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
-    auto completion = backend.execute(mid, std::move(call), &cbPool);
+    morph::exec::MainThreadExecutor owner;
+    auto completion = backend.execute(mid, std::move(call), &owner);
 
     std::atomic<bool> gotTimeoutError{false};
     completion.onError([&](const std::exception_ptr& exc) {
@@ -311,5 +311,6 @@ TEST_CASE("LimitPolicy: executeTimeout surfaces as backend::TimeoutError through
         }
     });
 
-    REQUIRE(morph::testing::waitUntil([&] { return gotTimeoutError.load(); }, morph::testing::WaitBudget{2s}));
+    REQUIRE(
+        morph::testing::pumpOwnerUntil(owner, [&] { return gotTimeoutError.load(); }, morph::testing::WaitBudget{2s}));
 }

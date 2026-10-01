@@ -30,7 +30,6 @@
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
-#include <future>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -39,6 +38,7 @@
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -128,16 +128,20 @@ struct Fixture {
 };
 
 /// The server's live model count. `health()` answers on the server's strand,
-/// which runs on its pool, not on this (Qt) thread, so waiting here blocks
-/// nothing the answer needs.
+/// on its pool, and delivers the answer on `owner`, which this thread pumps
+/// until it arrives.
 std::size_t liveModels(morph::backend::RemoteServer& server) {
-    auto answer = std::make_shared<std::promise<morph::backend::HealthStatus>>();
-    auto future = answer->get_future();
-    server.health().then([answer](const morph::backend::HealthStatus& status) { answer->set_value(status); });
-    if (future.wait_for(std::chrono::seconds{10}) != std::future_status::ready) {
+    morph::exec::MainThreadExecutor owner;
+    std::optional<morph::backend::HealthStatus> answer;
+    server.health(owner).then([&answer](const morph::backend::HealthStatus& status) { answer = status; });
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+    while (!answer && std::chrono::steady_clock::now() < deadline) {
+        owner.runFor(std::chrono::milliseconds{10});
+    }
+    if (!answer) {
         throw std::runtime_error("RemoteServer::health() did not answer");
     }
-    return future.get().liveModels;
+    return answer->liveModels;
 }
 
 }  // namespace

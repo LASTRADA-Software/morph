@@ -456,7 +456,7 @@ TEST_CASE("an unattached shared handler fails a keyless action fast", "[shared-i
 }
 
 TEST_CASE("sharing works identically across a remote backend", "[shared-instances]") {
-    morph::testing::InlineExecutor exec;
+    morph::exec::MainThreadExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
@@ -468,14 +468,14 @@ TEST_CASE("sharing works identically across a remote backend", "[shared-instance
     BridgeHandler<ShiCounterModel, AllowShared> fromA{clientA, &exec};
     BridgeHandler<ShiCounterModel, AllowShared> fromB{clientB, &exec};
 
-    REQUIRE(settle(fromA.execute(ShiAddTo{.id = 314, .amount = 20})).value == 20);
+    REQUIRE(settle(exec, fromA.execute(ShiAddTo{.id = 314, .amount = 20})).value == 20);
     // The second *client* — not merely the second handler — sees the first's work.
-    REQUIRE(settle(fromB.execute(ShiAddTo{.id = 314, .amount = 2})).value == 22);
-    REQUIRE(settle(fromB.instances()) == std::vector<std::int64_t>{314});
+    REQUIRE(settle(exec, fromB.execute(ShiAddTo{.id = 314, .amount = 2})).value == 22);
+    REQUIRE(settle(exec, fromB.instances()) == std::vector<std::int64_t>{314});
 }
 
 TEST_CASE("a remote plain handler still gets its own instance", "[shared-instances]") {
-    morph::testing::InlineExecutor exec;
+    morph::exec::MainThreadExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), exec};
@@ -483,9 +483,9 @@ TEST_CASE("a remote plain handler still gets its own instance", "[shared-instanc
     BridgeHandler<ShiCounterModel, AllowShared> shared{bridge, &exec};
     BridgeHandler<ShiCounterModel> priv{bridge, &exec};
 
-    settle(shared.execute(ShiAddTo{.id = 8, .amount = 30}));
-    REQUIRE(settle(priv.execute(ShiAddTo{.id = 8, .amount = 1})).value == 1);
-    REQUIRE(settle(shared.execute(ShiRead{.id = 8})).value == 30);
+    settle(exec, shared.execute(ShiAddTo{.id = 8, .amount = 30}));
+    REQUIRE(settle(exec, priv.execute(ShiAddTo{.id = 8, .amount = 1})).value == 1);
+    REQUIRE(settle(exec, shared.execute(ShiRead{.id = 8})).value == 30);
 }
 
 TEST_CASE("a result-sourced key promotes the instance the create ran on", "[shared-instances]") {
@@ -728,14 +728,14 @@ TEST_CASE("listInstances filters by type when the directory holds more than one"
 }
 
 TEST_CASE("a shared handler survives switchBackend", "[shared-instances]") {
-    morph::testing::InlineExecutor exec;
+    morph::exec::MainThreadExecutor exec;
     morph::exec::ThreadPoolExecutor poolA{2};
     morph::exec::ThreadPoolExecutor poolB{2};
     Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA), exec};
 
     BridgeHandler<ShiCounterModel, AllowShared> attached{bridge, &exec};
     BridgeHandler<ShiCounterModel, AllowShared> neverAttached{bridge, &exec};
-    settle(attached.execute(ShiAddTo{.id = 77, .amount = 4}));
+    settle(exec, attached.execute(ShiAddTo{.id = 77, .amount = 4}));
 
     // The attached binding is re-registered on the new backend through the
     // directory; the one that never attached has no instance to re-create and
@@ -743,7 +743,7 @@ TEST_CASE("a shared handler survives switchBackend", "[shared-instances]") {
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(poolB));
 
     REQUIRE(attached.primary().value_or(-1) == 77);
-    REQUIRE(settle(attached.instances()) == std::vector<std::int64_t>{77});
+    REQUIRE(settle(exec, attached.instances()) == std::vector<std::int64_t>{77});
     REQUIRE_FALSE(neverAttached.primary().has_value());
 }
 
@@ -771,7 +771,7 @@ TEST_CASE("a shared register is refused once the server is at its model cap", "[
 }
 
 TEST_CASE("a shared handler re-pointing to a new key does not lose its slot to maxLiveModels", "[shared-instances]") {
-    morph::testing::InlineExecutor exec;
+    morph::exec::MainThreadExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::backend::ServerConfig serverConfig;
     serverConfig.limits = morph::backend::LimitPolicy{.maxLiveModels = 1};
@@ -781,15 +781,15 @@ TEST_CASE("a shared handler re-pointing to a new key does not lose its slot to m
     BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
 
     // Fills the server's one slot.
-    settle(handler.execute(ShiAddTo{.id = 1, .amount = 5}));
+    settle(exec, handler.execute(ShiAddTo{.id = 1, .amount = 5}));
     REQUIRE(handler.primary().value_or(-1) == 1);
 
     // Re-pointing to a *different* key must release key 1's slot and use it
     // for key 2 -- the whole point of the single `attach` wire request being
     // atomic. This must succeed, not strand the handler.
-    settle(handler.execute(ShiAddTo{.id = 2, .amount = 7}));
+    settle(exec, handler.execute(ShiAddTo{.id = 2, .amount = 7}));
     REQUIRE(handler.primary().value_or(-1) == 2);
-    REQUIRE(settle(handler.execute(ShiPeek{})).value == 7);
+    REQUIRE(settle(exec, handler.execute(ShiPeek{})).value == 7);
 }
 
 TEST_CASE("a throwing construction during attach's re-point never releases the old instance", "[shared-instances]") {
@@ -917,14 +917,14 @@ TEST_CASE("instances() surfaces a key this client cannot decode", "[shared-insta
 }
 
 TEST_CASE("an attached shared handler re-registers through a remote backend on switch", "[shared-instances]") {
-    morph::testing::InlineExecutor exec;
+    morph::exec::MainThreadExecutor exec;
     morph::exec::ThreadPoolExecutor localPool{2};
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
 
     Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool), exec};
     BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
-    settle(handler.execute(ShiAddTo{.id = 800, .amount = 2}));
+    settle(exec, handler.execute(ShiAddTo{.id = 800, .amount = 2}));
 
     // Going local -> remote must carry the *key* across, not just re-register
     // something anonymous: the handler is still attached to 800 afterwards, and
@@ -932,7 +932,7 @@ TEST_CASE("an attached shared handler re-registers through a remote backend on s
     bridge.switchBackend(std::make_unique<morph::backend::SimulatedRemoteBackend>(*server));
 
     REQUIRE(handler.primary().value_or(-1) == 800);
-    REQUIRE(settle(handler.instances()) == std::vector<std::int64_t>{800});
+    REQUIRE(settle(exec, handler.instances()) == std::vector<std::int64_t>{800});
 }
 
 namespace {
@@ -952,13 +952,13 @@ struct VerifyingAuthorizer : morph::session::IAuthorizer {
 }  // namespace
 
 TEST_CASE("a change-aware model is tracked when registered shared", "[shared-instances]") {
-    morph::testing::InlineExecutor exec;
+    morph::exec::MainThreadExecutor exec;
     morph::exec::ThreadPoolExecutor poolA{2};
     morph::exec::ThreadPoolExecutor poolB{2};
     Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA), exec};
 
     BridgeHandler<ShiAwareModel, AllowShared> handler{bridge, &exec};
-    settle(handler.execute(ShiAwareRead{.id = 900}));
+    settle(exec, handler.execute(ShiAwareRead{.id = 900}));
 
     // Registering through the shared path must record change-awareness exactly
     // as the private path does, or the model silently stops being notified.
@@ -968,7 +968,7 @@ TEST_CASE("a change-aware model is tracked when registered shared", "[shared-ins
     // onBackendChanged onto the instance's strand, and this execute posts onto
     // the same strand, so it is ordered strictly after — a poll here would
     // merely hide a real ordering bug behind a retry.
-    REQUIRE(settle(handler.execute(ShiAwareRead{.id = 900})).value == 1);
+    REQUIRE(settle(exec, handler.execute(ShiAwareRead{.id = 900})).value == 1);
 }
 
 TEST_CASE("the server refuses to re-file an already-keyed instance onto a different key", "[shared-instances]") {
@@ -1078,11 +1078,11 @@ TEST_CASE("an empty primary with no instance currently held registers privately 
         std::string{}, morph::exec::detail::ModelId{0});
     REQUIRE(fresh.v != 0U);
     REQUIRE(backend.listInstances("SHI_CounterModel").empty());
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 }
 
 TEST_CASE("execute() reports an attach failure through onError instead of throwing", "[shared-instances]") {
-    morph::testing::InlineExecutor exec;
+    morph::exec::MainThreadExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::backend::ServerConfig serverConfig;
     serverConfig.limits = morph::backend::LimitPolicy{.maxLiveModels = 1};
@@ -1092,7 +1092,7 @@ TEST_CASE("execute() reports an attach failure through onError instead of throwi
 
     // Fills the server's one slot with an unrelated private instance.
     BridgeHandler<ShiCounterModel> filler{bridge, &exec};
-    settle(filler.execute(ShiAddTo{.id = 1, .amount = 1}));
+    settle(exec, filler.execute(ShiAddTo{.id = 1, .amount = 1}));
 
     // A payload-keyed action on a fresh shared handler must attach a *new*
     // instance for key 2, and the server is already full: the attach call
@@ -1103,7 +1103,7 @@ TEST_CASE("execute() reports an attach failure through onError instead of throwi
     bool failed = false;
     REQUIRE_NOTHROW(
         handler.execute(ShiAddTo{.id = 2, .amount = 1}).onError([&](const std::exception_ptr&) { failed = true; }));
-    REQUIRE(failed);
+    REQUIRE(morph::testing::pumpOwnerUntil(exec, [&] { return failed; }));
 }
 
 TEST_CASE("LocalBackend: a re-attach to an already-held key does not destroy the instance", "[shared-instances]") {
@@ -1348,7 +1348,7 @@ TEST_CASE("deregistering a poisoned instance evicted from the directory tears it
 TEST_CASE("an attach racing a failed first action out of the dispatch is not handed the failed instance",
           "[shared-instances][backend]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor callbackExec;
+    morph::exec::MainThreadExecutor callbackExec;
     morph::backend::LocalBackend backend{pool};
     auto factory = [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); };
 
@@ -1387,7 +1387,7 @@ TEST_CASE("an attach racing a failed first action out of the dispatch is not han
     backend.execute(first, std::move(call), &callbackExec).onError([&](const std::exception_ptr&) {
         errored.store(true);
     });
-    REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(callbackExec, [&] { return errored.load(); }));
 
     REQUIRE(reentered.load());
     REQUIRE(attached.load() != 0U);
@@ -1490,7 +1490,7 @@ TEST_CASE("the server does not hand out an instance between its first action fai
 TEST_CASE("an instance evicted from its key as poisoned is never re-keyed by assignPrimary",
           "[shared-instances][backend]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor callbackExec;
+    morph::exec::MainThreadExecutor callbackExec;
     morph::backend::LocalBackend backend{pool};
     auto factory = [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); };
 
@@ -1506,7 +1506,7 @@ TEST_CASE("an instance evicted from its key as poisoned is never re-keyed by ass
     backend.execute(first, std::move(call), &callbackExec).onError([&](const std::exception_ptr&) {
         errored.store(true);
     });
-    REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(callbackExec, [&] { return errored.load(); }));
 
     // A second attacher evicts it from "A". It stays live -- its creator never
     // released it -- but it no longer holds a key.

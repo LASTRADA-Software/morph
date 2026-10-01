@@ -240,6 +240,10 @@ TEST_CASE("SectionSet: a not-ready draft is not sent at all", "[sections]") {
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{
         handler, [&errors](const std::exception_ptr&) { errors.fetch_add(1); }};
 
+    // The handler's bind settled while it was constructed, and that settle
+    // posted its delivery here; run it, so what is queued below is only what
+    // the draft sends.
+    drain(cbExec);
     recorder().clear();
 
     // SecPrefs::validate() requires a non-empty theme; profileId alone is not ready.

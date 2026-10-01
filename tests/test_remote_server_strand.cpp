@@ -163,7 +163,7 @@ TEST_CASE(
     REQUIRE(dereg.env.kind == "ok");
     REQUIRE(providerCalls.load() == 1);
     // Posted after closeConnection() by the same thread's successor, so answered after it.
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 
     CHECK(recorder.count("RemoteServer::dispatch") == 3U);
     CHECK(recorder.allPosted("RemoteServer::dispatch"));
@@ -200,7 +200,9 @@ TEST_CASE("RemoteServer: health() called from a pool thread is answered on the s
     REQUIRE(reg.await());
 
     // Asked from inside a task of the very pool the server strand runs on, but
-    // not from inside the strand: the answer is still the strand's.
+    // not from inside the strand: the answer is still the strand's. The asker
+    // is its own strand over the pool, and the answer is delivered there.
+    morph::exec::OwnerStrand asker{pool};
     struct Asked {
         std::atomic<bool> done{false};
         std::atomic<bool> callerOnPool{false};
@@ -208,10 +210,10 @@ TEST_CASE("RemoteServer: health() called from a pool thread is answered on the s
         std::optional<morph::backend::HealthStatus> status;
     };
     auto asked = std::make_shared<Asked>();
-    pool.post([&pool, server, asked] {
+    asker.post([&pool, &asker, server, asked] {
         asked->callerOnPool.store(morph::exec::runningOn(pool));
         asked->callerOnStrand.store(morph::exec::runningOn(server->strand()));
-        server->health().then([asked](const morph::backend::HealthStatus& status) {
+        server->health(asker).then([asked](const morph::backend::HealthStatus& status) {
             asked->status = status;
             asked->done.store(true);
         });
@@ -248,7 +250,8 @@ TEST_CASE("RemoteServer: beginShutdown and drainedWithin called off the strand r
     std::optional<bool> drained;
     onAnotherThread([&] {
         server->beginShutdown();
-        drained = morph::testing::awaitValue(server->drainedWithin(std::chrono::milliseconds{2000}));
+        drained = morph::testing::awaitAnswer(
+            [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{2000}, owner); });
     });
 
     REQUIRE(drained.has_value());
@@ -282,16 +285,19 @@ TEST_CASE("RemoteServer: a drainedWithin deadline is answered false on the serve
     // The execute is in flight on its model's strand; the deadline elapses
     // first, and its expiry is posted back to the server strand.
     std::optional<bool> timedOut;
-    onAnotherThread(
-        [&] { timedOut = morph::testing::awaitValue(server->drainedWithin(std::chrono::milliseconds{20})); });
+    onAnotherThread([&] {
+        timedOut = morph::testing::awaitAnswer(
+            [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{20}, owner); });
+    });
     REQUIRE(timedOut.has_value());
     CHECK_FALSE(*timedOut);
-    CHECK(morph::testing::awaitValue(server->health()).inFlight == 1U);
+    CHECK(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).inFlight == 1U);
 
     gRssHoldRelease.store(true);
     REQUIRE(exec.await());
     CHECK(exec.env.kind == "ok");
-    CHECK(morph::testing::awaitValue(server->drainedWithin(std::chrono::milliseconds{2000})));
+    CHECK(morph::testing::awaitAnswer(
+        [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{2000}, owner); }));
     CHECK(recorder.count("RemoteServer::drainedWithin") == 3U);
     CHECK(recorder.allPosted("RemoteServer::drainedWithin"));
     CHECK(recorder.allPosted("RemoteServer::executeFinished"));

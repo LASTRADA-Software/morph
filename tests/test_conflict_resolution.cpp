@@ -136,10 +136,12 @@ static std::shared_ptr<morph::bridge::detail::HandlerBinding> makeOrderBinding(m
 
 // ── Helper: wait for a morph::async::Completion<int> ───────────────────────────────────────
 
-static int waitInt(auto completion) {
+// The result is delivered on the bridge's owner, so this thread pumps it while
+// it waits.
+static int waitInt(morph::exec::MainThreadExecutor& owner, auto completion) {
     std::atomic<int> result{-999};
     std::move(completion).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
-    morph::testing::waitUntil([&] { return result.load() != -999; });
+    morph::testing::pumpOwnerUntil(owner, [&] { return result.load() != -999; });
     return result.load();
 }
 
@@ -169,7 +171,7 @@ static bool waitForQueueDrained(morph::offline::InMemoryOfflineQueue& queue) {
 TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBackend", "[conflict]") {
     morph::exec::ThreadPoolExecutor pool1{2};
     morph::exec::ThreadPoolExecutor pool2{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::offline::InMemoryOfflineQueue queue;
 
     (void)queue.enqueue(R"({"amount":10})");
@@ -190,7 +192,7 @@ TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBack
     REQUIRE(queue.drain().empty());
 
     // Query the new model instance's counters via execute.
-    REQUIRE(waitInt(handler.execute(OrderQueryAction{})) == 1);  // notifyCount == 1
+    REQUIRE(waitInt(cbExec, handler.execute(OrderQueryAction{})) == 1);  // notifyCount == 1
 }
 
 TEST_CASE("ConflictResolution: conflicting items discarded  -  resolver returns empty", "[conflict]") {
@@ -251,7 +253,7 @@ TEST_CASE("ConflictResolution: framework fires onBackendChanged exactly once per
     morph::exec::ThreadPoolExecutor pool2{2};
     morph::exec::ThreadPoolExecutor pool3{2};
     morph::exec::ThreadPoolExecutor pool4{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::offline::InMemoryOfflineQueue queue;
 
     auto binding = makeOrderBinding(
@@ -263,15 +265,15 @@ TEST_CASE("ConflictResolution: framework fires onBackendChanged exactly once per
     // Switch once  -  new model instance created, notifyCount becomes 1.
     // waitInt's own poll loop is the wait here: no separate fixed sleep needed.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
-    REQUIRE(waitInt(handler.execute(OrderQueryAction{})) == 1);
+    REQUIRE(waitInt(cbExec, handler.execute(OrderQueryAction{})) == 1);
 
     // Switch again  -  another fresh instance, again notifyCount == 1.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool3));
-    REQUIRE(waitInt(handler.execute(OrderQueryAction{})) == 1);
+    REQUIRE(waitInt(cbExec, handler.execute(OrderQueryAction{})) == 1);
 
     // Third switch.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool4));
-    REQUIRE(waitInt(handler.execute(OrderQueryAction{})) == 1);
+    REQUIRE(waitInt(cbExec, handler.execute(OrderQueryAction{})) == 1);
 }
 
 TEST_CASE("ConflictResolution: full offline scenario  -  accumulate offline, sync on reconnect",
@@ -288,7 +290,7 @@ TEST_CASE("ConflictResolution: full offline scenario  -  accumulate offline, syn
 
     morph::exec::ThreadPoolExecutor localPool{2};
     morph::exec::ThreadPoolExecutor remotePool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::offline::InMemoryOfflineQueue queue;
 
     // Simulate three offline writes.
@@ -314,5 +316,5 @@ TEST_CASE("ConflictResolution: full offline scenario  -  accumulate offline, syn
     REQUIRE(queue.drain().empty());
 
     // New model is live  -  execute works.
-    REQUIRE(waitInt(handler.execute(OrderQueryAction{})) == 1);
+    REQUIRE(waitInt(cbExec, handler.execute(OrderQueryAction{})) == 1);
 }

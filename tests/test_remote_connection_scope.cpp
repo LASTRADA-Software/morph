@@ -616,11 +616,11 @@ TEST_CASE("morph::backend::RemoteServer: a register arriving after closeConnecti
     // The decisive assertion: no instance was retained. A resurrected scope
     // would leave liveModels at 1 with no way to ever reclaim it, which is what
     // exhausts LimitPolicy::maxLiveModels and wedges the server.
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 
     // And closing again stays a no-op rather than finding a recreated scope.
     server->closeConnection(cid);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 TEST_CASE("morph::backend::RemoteServer: repeated registers on a closed scope never accumulate models",
@@ -640,7 +640,7 @@ TEST_CASE("morph::backend::RemoteServer: repeated registers on a closed scope ne
         REQUIRE(reg.await());
         REQUIRE(reg.env.kind == "err");
     }
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 // ── Shared instance directory: the server side of keyed instances ────────────
@@ -671,12 +671,12 @@ TEST_CASE("morph::backend::RemoteServer: two connections sharing a key reach one
 
     // One instance, not two: the second register attached to the first's.
     REQUIRE(regB.env.modelId == regA.env.modelId);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     // Closing one connection releases only *its* reference — the instance must
     // survive for the connection still attached. This is the A7 change.
     server->closeConnection(cidA);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     morph::wire::Envelope execReq;
     execReq.kind = "execute";
@@ -692,7 +692,7 @@ TEST_CASE("morph::backend::RemoteServer: two connections sharing a key reach one
 
     // The last reference goes, and so does the instance.
     server->closeConnection(cidB);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 TEST_CASE("morph::backend::RemoteServer: instances lists live shared keys",
@@ -776,7 +776,7 @@ TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old i
     server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "1")), std::ref(first), cid);
     REQUIRE(first.await());
     REQUIRE(first.env.kind == "ok");
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     WaitReply moved;
     server->handle(morph::wire::encode(morph::wire::makeAttach("CS_SquareModel", "2", first.env.modelId)),
@@ -785,7 +785,7 @@ TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old i
     REQUIRE(moved.env.kind == "ok");
     REQUIRE(moved.env.modelId != first.env.modelId);
     // Nobody else held key 1, so re-pointing destroyed it rather than leaking.
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 }
 
 TEST_CASE(
@@ -821,7 +821,7 @@ TEST_CASE(
     REQUIRE(second.await());
     REQUIRE(second.env.kind == "ok");
     REQUIRE(second.env.modelId == first.env.modelId);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     // First deregister drops one of the two references -- the instance must
     // still be alive, since the connection's own scoped count is still 1.
@@ -829,7 +829,7 @@ TEST_CASE(
     server->handle(morph::wire::encode(morph::wire::makeDeregister(first.env.modelId)), std::ref(firstDereg), cid);
     REQUIRE(firstDereg.await());
     REQUIRE(firstDereg.env.kind == "ok");
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     morph::wire::Envelope stillLiveExec;
     stillLiveExec.kind = "execute";
@@ -848,7 +848,7 @@ TEST_CASE(
     server->handle(morph::wire::encode(morph::wire::makeDeregister(first.env.modelId)), std::ref(secondDereg), cid);
     REQUIRE(secondDereg.await());
     REQUIRE(secondDereg.env.kind == "ok");
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 TEST_CASE(
@@ -880,7 +880,7 @@ TEST_CASE(
     REQUIRE(regB.await());
     REQUIRE(regB.env.kind == "ok");
     REQUIRE(regB.env.modelId == regA.env.modelId);  // both connections share the one instance for key 1
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     // cidA re-points from key 1 to key 2. cidB still holds key 1, so the old
     // instance's refcount drops from 2 to 1 -- not to 0 -- and must survive.
@@ -892,7 +892,7 @@ TEST_CASE(
     REQUIRE(moved.env.modelId != regA.env.modelId);
     // Two live instances now: the new one for key 2, and the old one for key
     // 1 -- still alive because cidB is still attached to it.
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 2U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 2U);
 
     // Key 1 is still reachable and still the same instance cidB originally
     // attached to -- proving it was kept alive, not silently recreated.
@@ -902,12 +902,14 @@ TEST_CASE(
     REQUIRE(reattachB.await());
     REQUIRE(reattachB.env.kind == "ok");
     REQUIRE(reattachB.env.modelId == regA.env.modelId);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 2U);  // no new instance was created
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels ==
+            2U);  // no new instance was created
 
     // Finally, cidB releases its own reference to key 1 -- now the refcount
     // does hit zero, and the old instance is reclaimed.
     server->closeConnection(cidB);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);  // only key 2's instance remains
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels ==
+            1U);  // only key 2's instance remains
 }
 
 TEST_CASE("morph::backend::RemoteServer: assign files a live instance under a key",
@@ -1096,7 +1098,7 @@ TEST_CASE("morph::backend::RemoteServer: a shared register on a closed scope is 
     REQUIRE(reg.await());
     REQUIRE(reg.env.kind == "err");
     REQUIRE(reg.env.message == "connection closed");
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 // ── Connection-scoped SimulatedRemoteBackend ────────────────────────────────
@@ -1123,7 +1125,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: the unscoped constructor stil
     // never-opened cid must not affect it (mirrors the existing "unscoped
     // handle() never populates any connection scope" regression test above).
     server->closeConnection(999999);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 }
 
 TEST_CASE(
@@ -1139,10 +1141,10 @@ TEST_CASE(
 
     auto mid = backend.registerModelWithContext("CS_SquareModel", {}, {});
     REQUIRE(mid.v != 0U);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     server->closeConnection(cid);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 TEST_CASE(
@@ -1161,16 +1163,16 @@ TEST_CASE(
     auto midA = morph::testing::bindShared(backendA, "CS_SquareModel", {}, "42", "42");
     auto midB = morph::testing::bindShared(backendB, "CS_SquareModel", {}, "42", "42");
     REQUIRE(midA.v == midB.v);  // one instance, not two
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     // Closing A's connection releases only A's reference -- B still holds
     // the instance, exactly the cross-connection accounting a real
     // QtWebSocketServer/SocketServer gives, now reachable without a socket.
     server->closeConnection(cidA);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     server->closeConnection(cidB);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 TEST_CASE(
@@ -1193,12 +1195,12 @@ TEST_CASE(
     // A releases its own reference explicitly; the instance must survive
     // because B's reference is still live.
     backendA.deregisterModel(midA);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     // Closing B's connection (which never explicitly deregistered) is what
     // finally releases the last reference.
     server->closeConnection(cidB);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 TEST_CASE(
@@ -1229,7 +1231,7 @@ TEST_CASE(
     // One instance, not two, regardless of which call's create() actually won
     // the race -- the load-bearing assertion this test exists for.
     REQUIRE(first.env.modelId == second.env.modelId);
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 }
 
 TEST_CASE(
@@ -1277,7 +1279,7 @@ TEST_CASE(
     const auto& loser = firstOk ? second : first;
     REQUIRE(loser.env.kind == "err");
     REQUIRE(loser.env.message == "too many models");
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 }
 
 TEST_CASE(
@@ -1321,7 +1323,7 @@ TEST_CASE(
     REQUIRE(second.await());
     REQUIRE(second.env.kind == "err");
     REQUIRE(second.env.message == "too many models");
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 }
 
 namespace {
@@ -1501,7 +1503,7 @@ TEST_CASE(
     REQUIRE(oldReg.await());
     REQUIRE(oldReg.env.kind == "ok");
     auto const oldMid = oldReg.env.modelId;
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     // First attach: re-points from `oldMid` to a brand-new key, on
     // CsRaceModel (whose factory sleeps on the first call reaching it) --
@@ -1528,7 +1530,7 @@ TEST_CASE(
     // releaseCurrent branch, since the first attach never reached its own
     // pre-construct check's hit (the key did not exist yet when it started).
     // Only the new CsRaceModel instance remains live.
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     morph::wire::Envelope oldExec;
     oldExec.kind = "execute";
@@ -1573,7 +1575,7 @@ TEST_CASE(
     REQUIRE(oldReg.await());
     REQUIRE(oldReg.env.kind == "ok");
     auto const oldMid = oldReg.env.modelId;
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     // Re-points from `oldMid` to a brand-new key on CS_ReentrantAttachModel.
     // The reentrant factory guarantees this call's own second
@@ -1589,7 +1591,7 @@ TEST_CASE(
     // gone -- released via the second attachExisting hit's
     // releaseCurrent branch. Only the new CsReentrantAttachModel instance
     // (inserted by the reentrant attach) remains live.
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 
     morph::wire::Envelope oldExec;
     oldExec.kind = "execute";

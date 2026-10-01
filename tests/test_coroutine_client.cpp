@@ -339,11 +339,13 @@ public:
 
 TEST_CASE("co_await whose handler cannot be attached rethrows at the co_await and leaves nothing attached",
           "[coroutine][client]") {
-    // Already settled, so attaching fires the handler through the completion's
-    // executor at once -- and that executor refuses it, inside await_suspend.
+    // The awaiting coroutine is not on the completion's executor, so the
+    // attach is posted there -- and that executor refuses it, inside
+    // await_suspend. The settle's own delivery was refused already: the settle
+    // throws to its caller, and the state stays settled.
     RefusingExecutor refusing;
     auto [completion, promise] = Completion<int>::makeSettleable(&refusing);
-    promise.resolve(5);
+    REQUIRE_THROWS_AS(promise.resolve(5), std::runtime_error);
     morph::exec::MainThreadExecutor exec;
     auto seen = std::make_shared<Observed>();
 

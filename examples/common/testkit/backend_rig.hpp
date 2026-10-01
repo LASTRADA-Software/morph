@@ -75,7 +75,13 @@ public:
     /// identical hazard (`include/morph/core/bridge.hpp`).
     /// @param task Callable to execute on the next event-loop turn.
     void post(std::function<void()> task) override {
-        _inner.post(std::move(task));
+        // Each task runs inside this executor's own scope, not only `_inner`'s:
+        // what was posted here asks `runningOn(*this)`, a `Completion`
+        // delivered here among them.
+        _inner.post([self = &coreExecutor(), task = std::move(task)] {
+            ::core::async::ExecutorScope const scope{*self};
+            task();
+        });
         QTimer::singleShot(0, [this, weakLiveness = std::weak_ptr<const void>{_liveness}] {
             if (weakLiveness.expired()) {
                 return;  // This executor is gone; `this` is dangling.

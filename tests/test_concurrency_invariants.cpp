@@ -37,7 +37,6 @@ using namespace std::chrono_literals;
 
 namespace {
 
-using InlineExec = morph::testing::InlineExecutor;
 using morph::testing::waitUntil;
 using LogGuard = morph::log::ScopedLoggerOverride;
 
@@ -152,15 +151,21 @@ TEST_CASE("morph::async::Completion: callback runs on cbExec thread, not the set
     morph::async::Completion<int> comp{state, &cbPool};
 
     std::atomic<bool> fired{false};
+    std::atomic<bool> attached{false};
     std::thread::id cbThread{};
     std::mutex idMtx;
-    comp.then([&](int) {
-        {
-            std::scoped_lock lock{idMtx};
-            cbThread = std::this_thread::get_id();
-        }
-        fired.store(true);
+    // Attached on the owner, the pool's one thread, as a consumer must.
+    cbPool.post([&] {
+        comp.then([&](int) {
+            {
+                std::scoped_lock lock{idMtx};
+                cbThread = std::this_thread::get_id();
+            }
+            fired.store(true);
+        });
+        attached.store(true);
     });
+    REQUIRE(waitUntil([&] { return attached.load(); }));
 
     auto producerId = std::this_thread::get_id();
     state->setValue(42);
@@ -174,7 +179,7 @@ TEST_CASE("morph::async::Completion: callback runs on cbExec thread, not the set
 
 TEST_CASE("morph::async::Completion: concurrent setValue calls fire the success callback exactly once",
           "[completion][concurrency][quantum-parity]") {
-    InlineExec exec;
+    morph::exec::MainThreadExecutor exec;
     auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
     morph::async::Completion<int> comp{state, &exec};
 
@@ -190,7 +195,10 @@ TEST_CASE("morph::async::Completion: concurrent setValue calls fire the success 
     for (auto& thr : setters) {
         thr.join();
     }
-    // Callbacks are inline → already fired by setValue. Sleep is unnecessary.
+    // Only the settle that won posted a delivery; this thread is the owner and
+    // runs whatever was posted.
+    while (exec.runOnce()) {
+    }
     REQUIRE(fireCount.load() == 1);
 }
 

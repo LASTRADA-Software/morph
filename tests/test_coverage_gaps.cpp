@@ -263,7 +263,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: execute error reply is delive
     // Exercises the err-prefixed reply branch (line 234) and confirms the
     // catch(...) -> setException path is wired up end-to-end.
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cb;
+    morph::exec::MainThreadExecutor cb;
     auto& env = covRemoteEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     morph::backend::SimulatedRemoteBackend backend{*server};
@@ -289,7 +289,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: execute error reply is delive
         }
         errored.store(true);
     });
-    REQUIRE(waitFor([&] { return errored.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cb, [&] { return errored.load(); }));
     REQUIRE(errMsg.contains("remote action failed"));
 
     backend.deregisterModel(mid);

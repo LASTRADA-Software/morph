@@ -321,9 +321,10 @@ statement. `morph::flows::FlowSession` does exactly this.
   cancellation tree) is a deliberate future extension, not present today.
 - **Pruning dead subscription sinks.** A subscription whose scope has gone
   inactive stops being delivered to but is not removed from the subscriber list.
-- **Debug-build affinity assertions.** Asserting that scope operations happen on
-  the delivery executor's thread needs a cheap "am I on your thread?" query on
-  `IExecutor`, which does not exist yet.
+- **Debug-build affinity assertions.** `requestStop()`, `reset()` and `token()`
+  are not asserted to run on the delivery executor. The query exists
+  (`morph::exec::runningOn(executor)`), but a scope is not told which executor
+  delivers to it, so it has nothing to ask about.
 
 ## Cross-references
 

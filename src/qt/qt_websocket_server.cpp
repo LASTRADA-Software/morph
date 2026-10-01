@@ -10,6 +10,7 @@
 #include <chrono>
 #include <memory>
 #include <morph/core/logger.hpp>
+#include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <string_view>
 #include <utility>
@@ -95,11 +96,14 @@ bool QtWebSocketServer::closeGracefully(std::chrono::milliseconds deadline) {
     _server.beginShutdown();
 
     // Step 3: wait for in-flight replies without blocking the event loop.
-    // drainedWithin answers on the server's strand, off this thread; pumping
-    // processEvents until it does lets the reply callbacks RemoteServer
-    // already queued via QMetaObject::invokeMethod (see onTextMessage) run,
-    // which is what actually delivers those replies over the still-open
-    // sockets.
+    // drainedWithin answers on the server's strand and delivers the answer on
+    // the Qt thread, through `replyExec`; pumping processEvents until it
+    // arrives also runs the reply callbacks RemoteServer already queued via
+    // QMetaObject::invokeMethod (see onTextMessage), which is what actually
+    // delivers those replies over the still-open sockets. `replyExec` posts to
+    // the application object rather than to this server, and the handler
+    // holds it, so an answer settled after this method stops waiting -- or
+    // after this server is gone -- still posts to a live executor and target.
     struct DrainAnswer {
         std::atomic<bool> settled{false};
         std::atomic<bool> drained{false};
@@ -108,7 +112,8 @@ bool QtWebSocketServer::closeGracefully(std::chrono::milliseconds deadline) {
     auto const budget = std::max(
         std::chrono::milliseconds{0},
         std::chrono::duration_cast<std::chrono::milliseconds>(absoluteDeadline - std::chrono::steady_clock::now()));
-    _server.drainedWithin(budget).then([answer](bool drainedNow) {
+    auto const replyExec = std::make_shared<QtExecutor>(QCoreApplication::instance());
+    _server.drainedWithin(budget, *replyExec).then([answer, replyExec](bool drainedNow) {
         answer->drained.store(drainedNow);
         answer->settled.store(true);
     });

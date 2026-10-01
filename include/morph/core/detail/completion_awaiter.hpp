@@ -39,6 +39,10 @@ struct CompletionState;
 /// *the stop callback* moves `Shared::outcome` off `Pending`, and only that one
 /// resumes the coroutine.
 ///
+/// The pair is attached on the completion's executor, which owns its handler
+/// lists: directly when the awaiting coroutine is running there, otherwise by
+/// a task posted there. So any coroutine may await any completion.
+///
 /// `await_suspend` touches only local copies of the shared pointers once it has
 /// published anything another thread could act on: from then on the coroutine
 /// may already have been resumed elsewhere, and the awaiter with its frame
@@ -177,20 +181,24 @@ public:
             }
         }
 
-        auto const token = shared->scope.token();
         try {
-            state->attachThen([token, shared](const T& settled) {
-                if (token.active() && shared->decide(Outcome::Settled)) {
-                    shared->value.emplace(settled);
-                    shared->resumeSettled();
-                }
-            });
-            state->attachOnError([token, shared](std::exception_ptr error) {
-                if (token.active() && shared->decide(Outcome::Settled)) {
-                    shared->error = std::move(error);
-                    shared->resumeSettled();
-                }
-            });
+            if (::morph::exec::runningOn(*state->cbExec)) {
+                attach(*state, shared);
+            } else {
+                // Attaching is the owner's: post it there. The executor's
+                // queue then orders it with the settle's delivery, and the
+                // handlers it attaches resume the coroutine as above.
+                state->cbExec->post([state, shared] {
+                    try {
+                        attach(*state, shared);
+                    } catch (...) {
+                        if (shared->decide(Outcome::Settled)) {
+                            shared->error = std::current_exception();
+                            shared->resumeSettled();
+                        }
+                    }
+                });
+            }
         } catch (...) {
             // The throw resumes the coroutine, so nothing else may. If a stop
             // has claimed the await it is resuming the coroutine already, and
@@ -231,6 +239,23 @@ public:
     }
 
 private:
+    /// Attaches the await's handler pair to @p state; runs on its executor.
+    static void attach(CompletionState<T>& state, const std::shared_ptr<Shared>& shared) {
+        auto const token = shared->scope.token();
+        state.attachThen([token, shared](const T& settled) {
+            if (token.active() && shared->decide(Outcome::Settled)) {
+                shared->value.emplace(settled);
+                shared->resumeSettled();
+            }
+        });
+        state.attachOnError([token, shared](std::exception_ptr error) {
+            if (token.active() && shared->decide(Outcome::Settled)) {
+                shared->error = std::move(error);
+                shared->resumeSettled();
+            }
+        });
+    }
+
     std::shared_ptr<CompletionState<T>> _state;
     std::shared_ptr<Shared> _shared;
 };

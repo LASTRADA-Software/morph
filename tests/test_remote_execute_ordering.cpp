@@ -272,7 +272,8 @@ TEST_CASE(
     CHECK(replyB.env.kind == "ok");
     CHECK(replyB.env.body == "11");
 
-    CHECK(morph::testing::awaitValue(server->drainedWithin(std::chrono::milliseconds{2000})));
+    CHECK(morph::testing::awaitAnswer(
+        [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{2000}, owner); }));
 }
 
 namespace {
@@ -396,7 +397,8 @@ void runThrowingHookStrandsNothing(ThrowingHook hook) {
     CHECK(replyB.env.body == "11");
 
     // A throw during admission leaves no in-flight slot behind.
-    CHECK(morph::testing::awaitValue(server->drainedWithin(std::chrono::milliseconds{2000})));
+    CHECK(morph::testing::awaitAnswer(
+        [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{2000}, owner); }));
 }
 
 }  // namespace
@@ -623,5 +625,6 @@ TEST_CASE(
     CHECK(replyC.env.kind == "ok");
     CHECK(replyC.env.body == "12");
 
-    CHECK(morph::testing::awaitValue(server->drainedWithin(std::chrono::milliseconds{2000})));
+    CHECK(morph::testing::awaitAnswer(
+        [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{2000}, owner); }));
 }

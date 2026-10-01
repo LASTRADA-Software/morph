@@ -30,7 +30,7 @@ BRIDGE_REGISTER_ACTION(PingModel, PingFailAction, "Test_PingFailAction")
 
 TEST_CASE("morph::backend::LocalBackend: action result delivered via then", "[bridge][local]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PingModel> handler{bridge, &cbExec};
 
@@ -40,7 +40,7 @@ TEST_CASE("morph::backend::LocalBackend: action result delivered via then", "[br
 
     // Wait for the worker to complete and the callback to fire
     for (int idx = 0; idx < 50 && result.load() == -1; ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        cbExec.runFor(std::chrono::milliseconds(10));
     }
 
     REQUIRE(result.load() == 42);
@@ -48,7 +48,7 @@ TEST_CASE("morph::backend::LocalBackend: action result delivered via then", "[br
 
 TEST_CASE("morph::backend::LocalBackend: exception delivered via on_error", "[bridge][local]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PingModel> handler{bridge, &cbExec};
 
@@ -62,7 +62,7 @@ TEST_CASE("morph::backend::LocalBackend: exception delivered via on_error", "[br
     });
 
     for (int idx = 0; idx < 50 && !errorFired.load(); ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        cbExec.runFor(std::chrono::milliseconds(10));
     }
 
     REQUIRE(errorFired.load());
@@ -70,7 +70,7 @@ TEST_CASE("morph::backend::LocalBackend: exception delivered via on_error", "[br
 
 TEST_CASE("morph::backend::LocalBackend: multiple sequential actions on same handler", "[bridge][local]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PingModel> handler{bridge, &cbExec};
 
@@ -88,7 +88,7 @@ TEST_CASE("morph::backend::LocalBackend: multiple sequential actions on same han
     }
 
     for (int idx = 0; idx < 100 && count.load() < numActions; ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        cbExec.runFor(std::chrono::milliseconds(10));
     }
 
     REQUIRE(count.load() == numActions);

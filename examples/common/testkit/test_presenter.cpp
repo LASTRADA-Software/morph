@@ -455,16 +455,13 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
     presenter.bumpConcurrent(2);
 
     // Both actions run on the pool and post onto clientExec as they finish --
-    // wait until both have queued *something* there before stepping, so the
-    // pool's own scheduling can't race this test. Each action's full
-    // settlement is actually two chained posts on clientExec, not one:
-    // Bridge::executeVia's raw backend Completion resolves first (queuing its
-    // own .then() translation lambda), and *that* lambda -- once it runs --
-    // is what calls the typed CompletionState::setValue() that queues
-    // track()'s own .then() callback in turn. The two actions' chains can
-    // interleave in either order (both settle on the pool independently), so
-    // this steps one at a time and watches settledOrder itself rather than
-    // assuming a fixed step count per action.
+    // wait until both have queued *something* there before stepping. Each
+    // action's settlement is a chain of posts on clientExec, each queued only
+    // when the one before it runs, and an action's first post lands whenever
+    // the pool settles it; so every step waits for a post to be queued rather
+    // than assuming one already is. The two actions' chains can interleave in
+    // either order, so this steps one at a time and watches settledOrder
+    // itself rather than assuming a fixed step count per action.
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return clientExec.pending() >= 2; }));
     REQUIRE(presenter.busy());  // both queued before either callback ran
 
@@ -472,7 +469,7 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
     // this is finishOne()'s fetch_sub(1) returning 2, not 1, the branch no
     // other test in this suite reaches.
     while (presenter.settledOrder.empty()) {
-        REQUIRE(clientExec.pending() > 0);
+        REQUIRE(morph::ladder::testkit::pumpUntil([&] { return clientExec.pending() > 0; }));
         clientExec.step();
     }
     REQUIRE(presenter.settledOrder.size() == 1);
@@ -480,7 +477,7 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
     REQUIRE(idleCount == 0);
 
     while (presenter.busy()) {
-        REQUIRE(clientExec.pending() > 0);
+        REQUIRE(morph::ladder::testkit::pumpUntil([&] { return clientExec.pending() > 0; }));
         clientExec.step();
     }
     REQUIRE(idleCount == 1);  // idle() fires exactly once, when the counter actually reaches zero

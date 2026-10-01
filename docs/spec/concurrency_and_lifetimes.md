@@ -164,21 +164,20 @@ Each shares its strands with the resumers of the Task handlers it started (see
 ## Completion callback marshalling
 
 `Completion<T>` (`completion.hpp`) is the seam between the producing thread (a
-pool/strand thread) and the consuming thread (the GUI executor). The invariant:
-**`.then` / `.onError` callbacks are always posted to the `cbExec` executor
-supplied at construction, never invoked directly on the producing thread.** So a
-callback attached from the GUI runs back on the GUI thread even though the value
-was produced on a pool thread.
+pool/strand thread, a transport's loop) and the consuming executor (the GUI
+executor, a bridge's owner). It belongs to the consumer's executor, `cbExec`,
+and the invariant is: **a settle posts its delivery to `cbExec`, and `.then` /
+`.onError` are attached and run there, never on the producing thread.** So a
+callback attached from the GUI runs back on the GUI thread even though the
+value was produced on a pool thread.
 
-If `cbExec` is `nullptr`, callbacks are never delivered (silently dropped) — and
-because delivery is the only thing that discharges an error, a **null `cbExec`
-forces orphan logging even when an `onError` handler *was* attached.** Both
-`setException` and `attachOnError` set `onErrAttached = (cbExec != nullptr)`, so
-with no executor the error still reaches the orphan logger in `~CompletionState`
-rather than vanishing into a handler that can never run.
+If `cbExec` is `nullptr`, nothing is ever delivered and attaching is a no-op —
+so an `onError` attached to such a state does not discharge an error, which
+still reaches the orphan logger in `~CompletionState` rather than vanishing
+into a handler that can never run.
 
 See [`Completion` / `CompletionState` thread-safety](#completion--completionstate-thread-safety)
-for the internal locking and the one non-mutex-guarded field.
+for which thread owns which field.
 
 ## Destruction ordering — who must outlive whom
 
@@ -559,26 +558,44 @@ the authenticated identity, not the client's unverified claim. See
 
 ## `Completion` / `CompletionState` thread-safety
 
-`CompletionState<T>` (`completion.hpp`) is shared between the producing thread
-and the attaching thread, so its mutable state is mutex-protected:
+`CompletionState<T>` (`completion.hpp`) has no lock. It is shared between the
+producer and the consumer, and every field belongs to one side:
 
-| Field | Protection |
-|---|---|
-| `value`, `error`, `ready`, `onOk`, `onErr`, `onErrAttached` | `mtx` (all reads/writes) |
-| `cbExec` | **Not** mutex-guarded — happens-before, see below |
+| Field | Written by | Read by |
+|---|---|---|
+| `settled` | the first settle (atomic exchange) | every settle |
+| `value`, `error` | the settle that claimed `settled`, once | anyone who acquire-loads `ready == true` |
+| `ready` | that settle (release store) | `deliver()`, `takeSettled`, the destructor |
+| `onOk`, `onErr`, `delivered`, `stopLinks` | the owner, `cbExec`: attaches and `deliver()` | the owner |
+| `onErrAttached` | an owner attach, or `takeSettled` (atomic) | the destructor |
+| `cbExec`, `stopSource` | the constructor / producer, before publication | everyone, afterwards |
 
-`setValue` / `setException` are idempotent: once `ready` is set, later calls
-return immediately. This is what lets a backend `cancelPending(...)` a completion
-and then have a late server reply arrive as a harmless no-op.
+`setValue` / `setException` are idempotent: the first claims `settled` with an
+atomic exchange and every later call returns before allocating. This is what
+lets a backend `cancelPending(...)` a completion and then have a late server
+reply arrive as a harmless no-op.
 
-**`cbExec` is a happens-before requirement, not a lock.** It is written once, in
-the `Completion` constructor, before the state is published to any other thread,
-and only read afterward. The contract is: *construct the `Completion` handle
-(which sets `cbExec`) before the producing thread can call
-`setValue`/`setException`.* The backends honour this — they build the
+**Settle posts, the owner delivers.** The claimant stores the outcome where it
+settles, publishes it, and posts `deliver()` to `cbExec` — one post per settle,
+whether or not a handler is attached yet. `deliver()` and the consumer's
+attaches both run on `cbExec`, so the executor's queue orders them: a handler
+attached before the delivery runs runs in it, and one attached after is posted
+behind it.
+
+**Attaching off the owner is a contract violation.** Inside a task of `cbExec`
+is the owner; a thread running no executor's task is presumed to be the
+owner's own (a Qt slot, a test body) and checked against where `deliver()`
+runs; attaching from another executor's task is reported through
+`exec::detail::noteOwner` (a debug assertion). A `co_await` is the exception
+that is not one: the awaiter posts its attach to `cbExec` when it runs
+elsewhere. A completion delivered on `inlineExecutor()` is owned by whoever
+settles it, and its consumer attaches there or after the settle.
+
+**`cbExec` is a happens-before requirement, not an atomic.** It is written once,
+in the `Completion` constructor, before the state is published to any other
+thread, and only read afterward. The backends honour this — they build the
 `Completion` object before posting the strand/transport task that resolves the
-state. Guarding `cbExec` with `mtx` would be redundant given that ordering, so it
-is deliberately left unguarded.
+state.
 
 ## `MORPH_LIFETIMEBOUND` — the "must outlive" rules, told to the compiler
 

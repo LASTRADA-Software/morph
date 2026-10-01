@@ -338,7 +338,7 @@ EmptyThrowEnv& emptyThrowEnv() {
 TEST_CASE("morph::backend::SimulatedRemoteBackend: empty err message surfaces as \"malformed reply\"",
           "[coverage][remote]") {
     ::morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cb;
+    morph::exec::MainThreadExecutor cb;
     auto& env = emptyThrowEnv();
     auto server = std::make_shared<::morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     ::morph::backend::SimulatedRemoteBackend backend{*server};
@@ -364,7 +364,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: empty err message surfaces as
         }
         errored.store(true);
     });
-    REQUIRE(waitFor([&] { return errored.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cb, [&] { return errored.load(); }));
     REQUIRE(message == "malformed reply");
 
     backend.deregisterModel(mid);
@@ -375,7 +375,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: empty err message surfaces as
 TEST_CASE("morph::backend::SimulatedRemoteBackend: cancelPending tolerates an expired pending state",
           "[coverage][remote]") {
     ::morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cb;
+    morph::exec::MainThreadExecutor cb;
     auto& env = emptyThrowEnv();
     auto server = std::make_shared<::morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     ::morph::backend::SimulatedRemoteBackend backend{*server};
@@ -394,7 +394,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: cancelPending tolerates an ex
         // Wait for the reply lambda to run so it releases its ref to the state.
         std::atomic<bool> done{false};
         comp.onError([&](const std::exception_ptr&) { done.store(true); });
-        REQUIRE(waitFor([&] { return done.load(); }));
+        REQUIRE(morph::testing::pumpOwnerUntil(cb, [&] { return done.load(); }));
         // `comp` (last owner of the state) is dropped at end of this scope.
     }
     // The tracked weak_ptr is now expired → cancelPending's `if (state = weak.lock())`

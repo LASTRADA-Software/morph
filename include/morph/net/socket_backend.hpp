@@ -433,8 +433,18 @@ private:
         }
         auto done = std::make_shared<std::promise<T>>();
         auto result = done->get_future();
-        completion.then([done](const T& value) { done->set_value(value); })
-            .onError([done](const std::exception_ptr& failure) { done->set_exception(failure); });
+        // The completion is delivered on `inlineExecutor()`, so wherever the
+        // loop settles it: the loop is its owner, and the attach runs there,
+        // ordered after the request it waits for was filed.
+        bool attached = false;
+        _loop->runAndWait([&completion, &attached, done] {
+            completion.then([done](const T& value) { done->set_value(value); })
+                .onError([done](const std::exception_ptr& failure) { done->set_exception(failure); });
+            attached = true;
+        });
+        if (!attached) {
+            throw std::runtime_error(std::string{what} + " failed: the I/O loop has stopped");
+        }
         try {
             return result.get();
         } catch (const ::morph::backend::DisconnectedError&) {

@@ -29,6 +29,7 @@ add_executable(morph_tests
     test_completion_multi_handler.cpp
     test_completion_promise.cpp
     test_completion_value_contract.cpp
+    test_completion_owner.cpp
     test_coroutine_client.cpp
     test_coroutine_model.cpp
     test_async_delay.cpp

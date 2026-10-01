@@ -190,7 +190,7 @@ TEST_CASE("ActionDispatcher: outbox-managed holder does not auto-append despite 
 TEST_CASE("Bridge/LocalBackend: outbox-managed holder does not auto-append despite an attached log",
           "[outbox][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<InMemoryActionLog>();
@@ -208,7 +208,7 @@ TEST_CASE("Bridge/LocalBackend: outbox-managed holder does not auto-append despi
     handler.execute(OBDeposit{.amount = 20})
         .then([&](int v) { depositResult.store(v); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return depositResult.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return depositResult.load() != -1; }));
     REQUIRE(depositResult.load() == 20);
 
     REQUIRE(log->entries().empty());

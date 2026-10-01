@@ -368,14 +368,15 @@ inline std::optional<BindOutcome> takeSettled(
     if (state == nullptr) {
         return BindOutcome{.id = {}, .failure = std::make_exception_ptr(std::runtime_error{"empty bind completion"})};
     }
-    std::scoped_lock const lock{state->mtx};
-    if (!state->ready) {
+    // `ready` publishes the write-once outcome, so reading it here needs no
+    // hop to the completion's executor.
+    if (!state->ready.load(std::memory_order_acquire)) {
         return std::nullopt;
     }
     if (state->value) {
         return BindOutcome{.id = *state->value, .failure = nullptr};
     }
-    state->onErrAttached = true;
+    state->onErrAttached.store(true, std::memory_order_relaxed);
     return BindOutcome{.id = {}, .failure = state->error};
 }
 
@@ -451,10 +452,7 @@ public:
     /// @brief Whether the state already settled — a deadline that fired while
     ///        the call waited for its bind.
     /// @return True once settled.
-    [[nodiscard]] bool alreadySettled() {
-        std::scoped_lock const lock{this->mtx};
-        return this->ready;
-    }
+    [[nodiscard]] bool alreadySettled() const { return this->ready.load(std::memory_order_acquire); }
 
     /// @brief Undoes `armDeadline` and the pending count for a dispatch that
     ///        never started, because `IBackend::executeInto` threw or the
@@ -2397,6 +2395,9 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
         return [](void* handlerVoid, std::string_view bodyJson) -> ::morph::async::Completion<std::string> {
             auto* handler = static_cast<BridgeHandler<Model, Sharing>*>(handlerVoid);
             auto resultState = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
+            // Named before anything can settle it: a settle posts its delivery to
+            // the owner the state already has, and a decode failure settles here.
+            ::morph::async::Completion<std::string> completion{resultState, handler->guiExecutor()};
             try {
                 Action action = ::morph::model::ActionTraits<Action>::fromJson(bodyJson);
                 // Retag any Quantity fields to their declared precision so the stored
@@ -2452,7 +2453,7 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
             } catch (...) {
                 resultState->setException(std::current_exception());
             }
-            return {resultState, handler->guiExecutor()};
+            return completion;
         };
     };
     _executors[Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(NoSharing)}}] =

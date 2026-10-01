@@ -236,7 +236,7 @@ TEST_CASE(
     "[action_log][phase2][integration]") {
     TempFile tmp{"save_e2e"};
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto sessionLog = std::make_shared<morph::journal::SessionLog>();
@@ -256,7 +256,7 @@ TEST_CASE(
         handler.execute(P2Deposit{.amount = amount})
             .then([&](int) { done.store(true); })
             .onError([](const std::exception_ptr&) {});
-        REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+        REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     }
     REQUIRE(sessionLog->entries().size() == 3);
     REQUIRE(fileLog->entries().empty());  // nothing durable yet — no checkpoint has run
@@ -270,7 +270,7 @@ TEST_CASE(
             saved.store(true);
         })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return saved.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return saved.load(); }));
 
     auto onDisk = fileLog->entries();
     REQUIRE(onDisk.size() == 3);  // three Deposits, all distinct (coalesce==false default)
@@ -403,7 +403,7 @@ TEST_CASE("RemoteServer ServerConfig::logProvider: a provider returning nullptr 
 TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvider via SimulatedRemoteBackend",
           "[action_log][phase2][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
     registry.registerModel<P2Model>("P2_Model");
@@ -426,7 +426,7 @@ TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvid
     handler.execute(P2Deposit{.amount = 30})
         .then([&](int v) { result.store(v); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return result.load() != -1; }));
     REQUIRE(result.load() == 30);
 
     auto entries = log->entries();

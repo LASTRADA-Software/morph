@@ -566,9 +566,9 @@ writes it afterwards. The model instances themselves run on their own strands
 | `handleInline(msg[, cid])` | Posts a control envelope to the server strand and waits (inline when already on it) | Its return value |
 | `openConnection()` | Draws the id from an atomic, posts the scope's creation | The id, at once |
 | `closeConnection(cid)` | Posts | — |
-| `health()` | Posts | A `Completion<HealthStatus>` settled on the strand |
+| `health(replyExec)` | Posts | A `Completion<HealthStatus>` settled on the strand, delivered on `replyExec` |
 | `beginShutdown()` | Posts | — |
-| `drainedWithin(deadline)` | Posts | A `Completion<bool>` settled on the strand |
+| `drainedWithin(deadline, replyExec)` | Posts | A `Completion<bool>` settled on the strand, delivered on `replyExec` |
 | `payloadCompleteness()`, `strand()` | Read immutable members | At once |
 
 A task posted to the server strand by one thread runs after every task that
@@ -736,7 +736,9 @@ settled on the server strand, `HealthStatus{ready, liveModels, inFlight}`:
 count `LimitPolicy::maxInFlightExecutes` gates, `drainedWithin()` waits on and
 the `executeInFlight` metric reports. `ready` starts `true` and is flipped to
 `false`, once and for good, by `beginShutdown()` — there is no un-shutdown.
-The completion's callbacks run on the worker pool.
+The completion is delivered on the `replyExec` the caller passes, the owner it
+attaches its callbacks from: a `Completion`'s handlers are attached and run on
+one executor, and only the caller knows which one it is on.
 
 **Metrics and tracing.** The `register`/`deregister` branches emit
 `registerCount`/`deregisterCount`; admission and the in-flight decrement emit
@@ -949,8 +951,8 @@ irreversible — there is no un-shutdown; a restarted service constructs a fresh
 on the server strand — the mechanism that lets an orchestrator stop routing to
 a server that is draining.
 
-`drainedWithin(deadline)` returns a `Completion<bool>` settled on the server
-strand: `true` once the in-flight count is zero — at once if it already is —
+`drainedWithin(deadline, replyExec)` returns a `Completion<bool>` settled on the
+server strand and delivered on `replyExec`, the caller's owner: `true` once the in-flight count is zero — at once if it already is —
 or `false` when `deadline` elapses first (a `deadline` of `0` answers from the
 count as it stands). A waiter is server-strand state; its deadline is a timer
 on a `TimeoutScheduler` the strand creates on first use, whose expiry is posted
@@ -1355,8 +1357,9 @@ pool threads and are each marshalled back to their originating socket.
 counterpart to `RemoteServer::beginShutdown()`/`drainedWithin()`: it calls
 `QWebSocketServer::pauseAccepting()` (no new connections), then
 `beginShutdown()` on the `RemoteServer` (new `register`/`execute` now fail
-fast on every existing connection), then asks `drainedWithin(deadline)` and
-pumps the Qt event loop until it answers — so the reply callbacks
+fast on every existing connection), then asks `drainedWithin(deadline)` for an
+answer delivered on its own thread through a `QtExecutor`, and pumps the Qt
+event loop until it answers — so the reply callbacks
 `onTextMessage` already queued via `QMetaObject::invokeMethod` actually run
 while it waits. Because `drainedWithin()`'s in-flight count can reach zero a
 moment before that queued reply callback has actually flushed the bytes over
@@ -1836,9 +1839,9 @@ server: each call is a loop task, so the loop serialises them.
 | `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
 | `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
 | `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |
-| `health()` | `[[nodiscard]] Completion<HealthStatus> health()` — readiness/liveModels/inFlight, answered on the server strand; callbacks on the pool. See [observability.md](observability.md). |
+| `health(replyExec)` | `[[nodiscard]] Completion<HealthStatus> health(IExecutor& replyExec)` — readiness/liveModels/inFlight, answered on the server strand; delivered on `replyExec`, the executor the caller attaches from (borrowed: it must outlive the delivery). See [observability.md](observability.md). |
 | `beginShutdown()` | Posts: subsequent `register`/`attach`/`execute` envelopes get `err "server shutting down"`; `deregister` still served. A client therefore cannot re-attach to a shared instance during the drain window. Idempotent, irreversible. Flips `ready` to `false` and calls `ServerConfig::healthHandler`, on the server strand. |
-| `drainedWithin(deadline)` | `[[nodiscard]] Completion<bool> drainedWithin(std::chrono::milliseconds deadline)` — settled on the server strand: `true` once no `execute` is in flight, `false` if `deadline` elapses first. Blocks nothing. |
+| `drainedWithin(deadline, replyExec)` | `[[nodiscard]] Completion<bool> drainedWithin(std::chrono::milliseconds deadline, IExecutor& replyExec)` — settled on the server strand: `true` once no `execute` is in flight, `false` if `deadline` elapses first; delivered on `replyExec`, the executor the caller attaches from (borrowed: it must outlive the delivery). Blocks nothing. |
 
 ### `ServerConfig`
 

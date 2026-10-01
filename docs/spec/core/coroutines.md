@@ -120,14 +120,28 @@ core::async::Task<void> refresh(BridgeHandler<AccountModel>& accounts)
 - **How it attaches.** The awaiter uses the completion's ordinary `then` and
   `onError` fan-out, so handlers attached before or after it still run. The
   await is one more handler pair, not a replacement for them.
+- **Where it attaches.** A completion's handlers belong to its executor, and
+  attaching anywhere else is a contract violation for `then()`. The awaiter
+  does not inherit that restriction: when the coroutine is running on the
+  completion's executor it attaches directly, and otherwise it **posts the
+  attach to the completion's executor**. One extra hop, and always correct, so
+  any coroutine may await any completion — a Task handler on its model's
+  strand awaiting another model's call delivered on the GUI executor
+  included. The alternative, allowing `co_await` only from a coroutine already
+  on the completion's executor, would make that common case an error. The
+  posted attach is ordered behind the settle's own posted delivery by the
+  executor's queue, exactly like a late `then()`; resumption is unchanged,
+  through the coroutine's own resume target. An attach that cannot be posted
+  (the executor refuses the task) throws at the `co_await`; one that throws on
+  the executor resumes the coroutine with that exception.
 - **Where it resumes.** See the rule above: on the executor the coroutine
   was running on when it suspended, or on the completion's executor if it was
   inside no executor's task.
   With a `MainThreadExecutor` as the completion's executor, the coroutine
   resumes inside `runFor`.
 - **An already-settled completion.** The coroutine still suspends and resumes
-  through the executor. It never continues inline, because `then()` on a ready
-  state posts too, and one rule is simpler to reason about than two.
+  through the executor. It never continues inline, because `then()` after
+  delivery posts too, and one rule is simpler to reason about than two.
 - **An empty completion.** A default-constructed or moved-from `Completion`
   has no state. Awaiting it throws `std::logic_error` from `await_resume`
   without suspending.

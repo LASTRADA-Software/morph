@@ -595,7 +595,7 @@ TEST_CASE("morph::backend::RemoteServer: health() reports liveModels and inFligh
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    auto initial = morph::testing::awaitValue(server->health());
+    auto initial = morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); });
     REQUIRE(initial.ready);
     REQUIRE(initial.liveModels == 0);
     REQUIRE(initial.inFlight == 0);
@@ -603,12 +603,12 @@ TEST_CASE("morph::backend::RemoteServer: health() reports liveModels and inFligh
     WaitReply reg;
     server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
     reg.await();
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1);
 
     WaitReply dereg;
     server->handle(morph::wire::encode(morph::wire::makeDeregister(reg.env.modelId)), std::ref(dereg));
     dereg.await();
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0);
 }
 
 TEST_CASE(

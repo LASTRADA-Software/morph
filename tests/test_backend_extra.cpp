@@ -148,7 +148,7 @@ TEST_CASE("morph::bridge::Bridge::executeVia when handler currentId is zero retu
 
 TEST_CASE("morph::bridge::BridgeHandler destructor deregisters model cleanly", "[bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     std::atomic<int> result{-1};
@@ -159,7 +159,7 @@ TEST_CASE("morph::bridge::BridgeHandler destructor deregisters model cleanly", "
             .onError([](const std::exception_ptr&) {});
 
         for (int i = 0; i < 50 && result.load() == -1; ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            cbExec.runFor(std::chrono::milliseconds(10));
         }
         // handler goes out of scope here — deregister must not crash
     }
@@ -172,7 +172,7 @@ TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and togg
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::backend::LocalBackend backend{pool};
 
     auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
@@ -200,7 +200,7 @@ TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and togg
     std::atomic<bool> done{false};
     backend.execute(mid, std::move(call), &cbExec).then([&](const std::shared_ptr<void>&) { done = true; });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(latencyEvents.load() == 1);
     std::scoped_lock const lock{sampleMtx};
     REQUIRE(inFlightSamples.size() == 2);
@@ -211,7 +211,7 @@ TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and togg
 TEST_CASE("morph::backend::LocalBackend: an erroring action emits executeErrors", "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::backend::LocalBackend backend{pool};
 
     auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
@@ -235,7 +235,7 @@ TEST_CASE("morph::backend::LocalBackend: an erroring action emits executeErrors"
         .then([](const std::shared_ptr<void>&) {})
         .onError([&](const std::exception_ptr&) { errored = true; });
 
-    REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return errored.load(); }));
     REQUIRE(errorEvents.load() == 1);
 }
 
@@ -266,7 +266,7 @@ TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginS
           "[backend][local][observability]") {
     morph::observe::ScopedObserveOverride guard;
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::backend::LocalBackend backend{pool};
 
     auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
@@ -298,7 +298,7 @@ TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginS
     std::atomic<bool> done{false};
     backend.execute(mid, std::move(call), &cbExec).then([&](const std::shared_ptr<void>&) { done = true; });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(beginCalls.load() == 1);
     REQUIRE(endCalls.load() == 1);
 }

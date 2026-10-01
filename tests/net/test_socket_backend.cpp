@@ -507,16 +507,16 @@ TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not taken for 
         .session = {},
     };
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     std::atomic<bool> settled{false};
     std::string echoed;
-    backend.execute(mid2, std::move(call), &cbPool)
+    backend.execute(mid2, std::move(call), &cbOwner)
         .then([&](const std::shared_ptr<void>& res) {
             echoed = *std::static_pointer_cast<std::string>(res);
             settled.store(true);
         })
         .onError([&](const std::exception_ptr&) { settled.store(true); });
-    spinUntil([&] { return settled.load(); });
+    spinUntil(cbOwner, [&] { return settled.load(); });
     REQUIRE(echoed == "7");
 }
 
@@ -923,8 +923,8 @@ TEST_CASE("SocketBackend: an undecodable message from the server with no sync ca
     // Drain the outgoing "execute" request off the wire first, so the pending
     // entry genuinely exists server-side before the garbage reply lands.
     std::thread serverThread{[&] { (void)fake.receiveEnvelope(); }};
-    morph::exec::ThreadPoolExecutor cbPool{1};
-    auto comp = backendPtr->execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    morph::exec::MainThreadExecutor cbOwner;
+    auto comp = backendPtr->execute(morph::exec::detail::ModelId{1}, std::move(call), &cbOwner);
     serverThread.join();
 
     std::atomic<bool> gotProtocolError{false};
@@ -940,7 +940,7 @@ TEST_CASE("SocketBackend: an undecodable message from the server with no sync ca
 
     fake.sendFrame(morph::net::detail::WsOpcode::kText, "this is not a valid envelope");
 
-    spinUntil([&] { return gotProtocolError.load(); });
+    spinUntil(cbOwner, [&] { return gotProtocolError.load(); });
     REQUIRE(gotProtocolError.load());
 }
 
@@ -989,13 +989,13 @@ TEST_CASE("SocketBackend: an execute reply with an unrecognized callId from the 
         fake.sendFrame(morph::net::detail::WsOpcode::kText, morph::wire::encode(morph::wire::makeOk(env.callId, "7")));
     }};
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     std::atomic<int> result{-1};
-    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbOwner);
     comp.then([&](const std::shared_ptr<void>& v) { result.store(*std::static_pointer_cast<int>(v)); })
         .onError([](const std::exception_ptr&) {});
 
-    spinUntil([&] { return result.load() != -1; });
+    spinUntil(cbOwner, [&] { return result.load() != -1; });
     REQUIRE(result.load() == 7);
     serverThread.join();
 }
@@ -1021,12 +1021,12 @@ TEST_CASE("SocketBackend: execute resolves with an exception when the server's o
                        morph::wire::encode(morph::wire::makeOk(env.callId, "not-a-number")));
     }};
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     std::atomic<bool> gotError{false};
-    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbOwner);
     comp.then([](const std::shared_ptr<void>&) {}).onError([&](const std::exception_ptr&) { gotError.store(true); });
 
-    spinUntil([&] { return gotError.load(); });
+    spinUntil(cbOwner, [&] { return gotError.load(); });
     REQUIRE(gotError.load());
     serverThread.join();
 }
@@ -1206,7 +1206,7 @@ TEST_CASE("SocketBackend: execute while disconnected resolves immediately with D
     morph::net::SocketBackend backend{"ws://127.0.0.1:1"};
     REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{200}));
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SbEchoModel";
     call.actionTypeId = "SbEchoAction";
@@ -1214,7 +1214,7 @@ TEST_CASE("SocketBackend: execute while disconnected resolves immediately with D
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
 
     std::atomic<bool> gotDisconnected{false};
-    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbOwner);
     comp.onError([&](const std::exception_ptr& exc) {
         try {
             std::rethrow_exception(exc);
@@ -1222,7 +1222,7 @@ TEST_CASE("SocketBackend: execute while disconnected resolves immediately with D
             gotDisconnected.store(true);
         }
     });
-    spinUntil([&] { return gotDisconnected.load(); });
+    spinUntil(cbOwner, [&] { return gotDisconnected.load(); });
     REQUIRE(gotDisconnected.load());
 }
 
@@ -1261,14 +1261,13 @@ TEST_CASE("SocketBackend: server dropping mid-call resolves the pending completi
 
 TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completion unresolved",
           "[net][socket_backend][disconnect]") {
-    // Targets the exact TOCTOU window execute()'s _pendingMtx re-check of
-    // _connected closes (see that function's own comment): onDisconnected()
-    // sets _connected = false and then sweeps _pending, both under
-    // _pendingMtx. Before the fix, execute() checked _connected once, *before*
-    // taking that lock; a disconnect's sweep landing strictly between that
-    // check and the _pending insert drained a table the about-to-be-inserted
-    // entry had not joined yet, leaving that one Completion permanently
-    // unresolved -- a silent hang, not a crash.
+    // Targets the window between execute()'s caller-side `connected` check
+    // and the I/O loop filing the call: execute() reads `connected` on the
+    // calling thread and posts to the loop, and a disconnect handled on the
+    // loop in between has already swept the pending table the call is about
+    // to join. The loop re-checks `connected` when it files the call and
+    // rejects it with DisconnectedError instead; without that re-check the
+    // Completion would stay unresolved -- a silent hang, not a crash.
     //
     // The window is a handful of instructions wide and cannot be hit
     // deterministically without a test-only hook this header does not have.
@@ -1348,20 +1347,16 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
 
 TEST_CASE("SocketBackend: sendFrame-triggering calls racing a hard disconnect never hang or corrupt state",
           "[net][socket_backend][disconnect]") {
-    // Targets the narrow TOCTOU windows between a caller-side "am I
-    // connected" check (deregisterModel()'s _connected.load(), execute()'s
-    // insertIf admit predicate, sendSync()'s own _connected.load()) and
-    // sendFrame()'s separately-locked `_socket.valid()` check a moment later:
-    // onDisconnected() sets `_connected = false` and only *then* resets
-    // `_socket`, under `_socketMtx` (see that function's own comment), so a
-    // concurrent caller can pass its own check and still lose the race to the
-    // socket being torn down by the time it actually writes. Same statistical
-    // technique already proven above ("execute() racing a disconnect never
-    // leaves a Completion unresolved") and in socket_server.hpp's own
-    // TOCTOU-window tests (findings #9/#11 there, which needed ~200
-    // iterations) -- broadened across every sendFrame() call site at once,
-    // since it is the same underlying window regardless of which caller hits
-    // it.
+    // Targets the windows between a caller-side "am I connected" check
+    // (deregisterModel()'s `connected` load, execute()'s) and the write that
+    // follows on the I/O loop: the caller's check passes, the loop handles
+    // the disconnect, and only then runs the posted write. Every write runs
+    // on the loop and checks the connection there, so it finds it gone rather
+    // than writing to a closed one; registerModel() meanwhile waits for a
+    // reply the disconnect rejects. Same statistical technique as
+    // "execute() racing a disconnect never leaves a Completion unresolved"
+    // above, across every caller that ends in a write, since it is the same
+    // window whichever caller hits it.
     for (int iter = 0; iter < 80; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{2};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1672,7 +1667,8 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave the
 
         // The server must be able to drain: an execute never answered pins
         // the in-flight count above zero for good.
-        REQUIRE(morph::testing::awaitValue(server->drainedWithin(std::chrono::milliseconds{5000})));
+        REQUIRE(morph::testing::awaitAnswer(
+            [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{5000}, owner); }));
 
         // Same port-reuse pause as the sibling disconnect tests.
         std::this_thread::sleep_for(std::chrono::milliseconds{50});
@@ -2036,14 +2032,15 @@ TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural
     // surface: issue the bind, attach a continuation, return. The
     // handler parks on nothing, so it has no reply to wait for and cannot hold
     // up whichever thread runs it.
+    // The handler's own executor is the bind's owner: the reply is delivered
+    // where the continuation was attached.
     ReconnectFixture fixture;
-    morph::exec::ThreadPoolExecutor callerPool{1};
     std::atomic<bool> handlerRan{false};
     std::atomic<bool> reboundOk{false};
 
     fixture.bounce([&] {
         handlerRan.store(true);
-        fixture.backend->bindModel(privateBind("SbEchoModel"), callerPool)
+        fixture.backend->bindModel(privateBind("SbEchoModel"), fixture.handlerExec)
             .thenDetached([&](morph::exec::detail::ModelId mid) { reboundOk.store(mid.v != 0U); });
     });
 
@@ -2134,12 +2131,12 @@ TEST_CASE("SocketBackend: a private registration carries contextKey to the serve
             .localOp = nullptr,
             .session = {},
         };
-        morph::exec::ThreadPoolExecutor cbPool{1};
+        morph::exec::MainThreadExecutor cbOwner;
         std::atomic<bool> settled{false};
-        backend.execute(bound, std::move(call), &cbPool)
+        backend.execute(bound, std::move(call), &cbOwner)
             .then([&](const std::shared_ptr<void>&) { settled.store(true); })
             .onError([&](const std::exception_ptr&) { settled.store(true); });
-        spinUntil([&] { return settled.load(); });
+        spinUntil(cbOwner, [&] { return settled.load(); });
         REQUIRE(settled.load());
 
         auto entries = log->entries();
@@ -2327,11 +2324,11 @@ TEST_CASE("SocketBackend: a timer and a connected socket share one loop, and the
 
     // And the socket still carries a round trip on the same loop.
     auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     std::atomic<bool> replied{false};
-    auto comp = stack.backend->execute(mid, echoCall(), &cbPool);
+    auto comp = stack.backend->execute(mid, echoCall(), &cbOwner);
     comp.then([&](const std::shared_ptr<void>&) { replied = true; }).onError([](const std::exception_ptr&) {});
-    CHECK(morph::testing::waitUntil([&] { return replied.load(); }));
+    CHECK(morph::testing::pumpOwnerUntil(cbOwner, [&] { return replied.load(); }));
 }
 
 TEST_CASE("SocketBackend: destroyed on the loop thread, from a timer callback, it does not deadlock",

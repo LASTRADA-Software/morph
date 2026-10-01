@@ -32,124 +32,98 @@ than vanishing (see [Failure modes](#failure-modes)).
 ## Shared state — `CompletionState<T>`
 
 `detail::CompletionState<T>` is the heap-allocated backing that both the
-producer and the consumer reference through `std::shared_ptr`. All mutation is
-guarded by `std::mutex mtx`.
+producer and the consumer reference through `std::shared_ptr`. It has **no
+lock**. It belongs to one executor, `cbExec` — its owner — and is split in two:
+
+- **The outcome** (`value`, `error`) is written once, by whichever settle
+  claims `settled`, and published by a release store of `ready`. Any thread
+  that sees `ready == true` may read it.
+- **Everything else** — the handler lists, `delivered`, the stop links — is
+  touched only on the owner: by `deliver()`, which the settle posts there, and
+  by the consumer's attaches, which run there. The executor's queue is the
+  happens-before edge between a settle and the handlers it reaches.
 
 It derives from `std::enable_shared_from_this<CompletionState<T>>`. That is
-load-bearing: both dispatch closures capture `shared_from_this()` and read the
-settled value *in place* rather than carrying a copy of it, which is what makes
-the copy budget independent of handler count and what lets `T` be move-only —
-the closure stores a refcounted handle, so it stays copy-constructible and
-`IExecutor::post`'s `std::function<void()>` needs no change. The precondition is
-that every `CompletionState<T>` is created by `std::make_shared`, which every
-site in the tree does (`Completion<T>::makeSettleable`, `Bridge`, the backends).
+load-bearing: `deliver()` and a late attach's fire-now closure capture
+`shared_from_this()` and read the settled value *in place* rather than carrying
+a copy of it, which is what makes the copy budget independent of handler count
+and what lets `T` be move-only — the closure stores a refcounted handle, so it
+stays copy-constructible and `IExecutor::post`'s `std::function<void()>` needs
+no change. It is also what keeps the state, and its orphan logger, alive until
+delivery has run. The precondition is that every `CompletionState<T>` is created
+by `std::make_shared`, which every site in the tree does
+(`Completion<T>::makeSettleable`, `Bridge`, the backends).
 
-Reading `value` from a dispatch closure without holding `mtx` is safe because
-`value` is **write-once**: `setValue` and `setException` both return early when
-`ready`, and nothing else assigns it. The store happens under the lock before
-the closure is handed to the executor, and the executor's queue supplies the
-happens-before edge to the thread that runs it.
-
-| Member | Type | Purpose |
-|---|---|---|
-| `mtx` | `std::mutex` | Guards all state and callback registration |
-| `value` | `std::optional<T>` | The success value, set once |
-| `error` | `std::exception_ptr` | The error, set once via `setException`; never null once `ready` is `true` |
-| `ready` | `bool` | `true` once either `value` or `error` is set |
-| `onOk` | `std::vector<std::function<void(const T&)>>` | Stored success callbacks, in attachment order; moved out on dispatch. Erased as `void(const T&)` so a handler pays for its own copy only if it asks for one — see [Value-handling contract](#value-handling-contract) |
-| `onErr` | `std::vector<std::function<void(std::exception_ptr)>>` | Stored error callbacks, in attachment order; moved out on dispatch |
-| `onErrAttached` | `bool` | Suppresses orphan logging when `true`; set to `(cbExec != nullptr)` — never set on a null-executor state |
-| `cbExec` | `::morph::exec::IExecutor*` | Executor for callback dispatch; may be `nullptr` |
+| Member | Type | Owner | Purpose |
+|---|---|---|---|
+| `value` | `std::optional<T>` | the claiming settle | The success value, written once |
+| `error` | `std::exception_ptr` | the claiming settle | The error, written once; never null once `ready` |
+| `settled` | `std::atomic<bool>` | any thread | Claimed by the first settle with an exchange; later settles return at once |
+| `ready` | `std::atomic<bool>` | any thread | Release-stored after the outcome is written: exactly one of `value`/`error` is engaged and final |
+| `onOk` | `std::vector<std::function<void(const T&)>>` | `cbExec` | Success callbacks, in attachment order; drained by `deliver()`. Erased as `void(const T&)` so a handler pays for its own copy only if it asks for one — see [Value-handling contract](#value-handling-contract) |
+| `onErr` | `std::vector<std::function<void(std::exception_ptr)>>` | `cbExec` | Error callbacks, in attachment order; drained by `deliver()` |
+| `delivered` | `std::atomic<bool>` | `cbExec` | Set by `deliver()`; an attach after it posts its handler on its own |
+| `onErrAttached` | `std::atomic<bool>` | `cbExec`, or a synchronous taker | Suppresses orphan logging; set by an `onError` attach on a state with an executor, and by `bridge::detail::takeSettled` |
+| `presumedOwnerThread`, `deliveredOn` | `std::atomic<std::thread::id>` | — | The debug check of an attach made outside every executor's task; see [Thread safety](#thread-safety) |
+| `cbExec` | `::morph::exec::IExecutor*` | set before publication | The owner; may be `nullptr` |
+| `stopSource`, `stopLinks` | | `cbExec` | The call's stop source and the scope links relaying to it; released by `deliver()` |
 
 **Setting a value or exception.** `setValue(T)` and `setException(exception_ptr)`
-are called by the producer. If the state is already `ready`, the call is a no-op
-(only the first result wins). **A null `exception_ptr` is never
-stored**: `setException(nullptr)` substitutes a `std::runtime_error` and settles
-with that instead, so `ready == true` always implies exactly one of `value` or
-`error` is engaged.
+are called by the producer, on any thread. The first claims `settled` with an
+atomic exchange; every later call returns before allocating anything, which is
+what makes a late server reply after `cancelPending` free. The claimant stores
+the outcome, release-stores `ready`, and — when `cbExec` is set — posts
+`deliver()` to `cbExec`: **one post per settle, whether or not a handler is
+attached yet**, because a handler attached later is attached on the owner and
+must find the delivery already applied or still queued ahead of it. With a null
+`cbExec` nothing is posted: nothing could ever be delivered.
 
-That substitution closes a defect rather than tidying an edge case. Storing the
-null would set `ready` while leaving `error` falsy, and neither attach could
-then act on the result: `attachOnError` tests `ready && error`, `attachThen`
-tests `ready && value`, so both fall through and a handler attached afterwards
-is neither fired nor queued — the completion is dead in both directions for
-every later caller, and silently, since `attachOnError` sets `onErrAttached` on
-entry and so suppresses the destructor's orphan logger too. A handler attached
-*before* such a settlement does fire, but with a null `exception_ptr`, which is
-undefined behaviour to `std::rethrow_exception` — the idiomatic handler body,
-this file's own orphan logger included. The guard lives here rather than at any
-one producer because `Completion<T>::Promise::reject()` is public and around ten
-sites forward an `exception_ptr` through untouched (`.onError([state](auto e) {
-state->setException(e); })`), so a per-producer guard would leave every other
-one able to reintroduce it.
+A `T` whose move throws while being stored releases the claim and leaves the
+state unsettled with every handler kept, so the exception propagates to the
+settler and nothing looks settled that is not. `value` is stored with
+`optional::emplace`, never assigned, so `T` need not be move-assignable.
 
-When one or more callbacks are already registered
-(via `attachThen` / `attachOnError`), a fire-once closure invoking every
-registered callback, in attachment order, is built under the lock and posted to
-the executor outside the lock, so no callback ever runs under the mutex. The
-closure is posted only when `cbExec != nullptr`; with a null executor it is
-built but never delivered. Each individual handler invocation inside that
-closure is wrapped in its own `try { ... } catch (...) { logError(...); }`, so a
-throwing handler is logged and skipped without preventing the handlers attached
-after it from running — fan-out means every attached handler gets its turn,
-independent of an earlier one misbehaving.
+**A null `exception_ptr` is never stored**: `setException(nullptr)` substitutes
+a `std::runtime_error` and settles with that instead, so `ready == true` always
+implies exactly one of `value` or `error` is engaged. Storing the null would
+publish a state no attach could act on — `deliver()` and a late `onError`
+attach test `error`, a late `then` tests `value` — and would hand an attached
+handler a null `exception_ptr`, which is undefined behaviour to
+`std::rethrow_exception`. The guard lives here rather than at any one producer
+because `Completion<T>::Promise::reject()` is public and many sites forward an
+`exception_ptr` through untouched (`.onError([state](auto e) {
+state->setException(e); })`).
 
-A handler attached **after** settlement is posted on its own by
-`attachThen`/`attachOnError` and gets the same `try`/`catch`. Which path a
-handler takes is a race between the producer settling and the consumer
-attaching, so a throw must be logged on both or it reaches the executor — the
-Qt event loop, say — only when the attach happened to lose.
-
-`setException` additionally sets `onErrAttached = (cbExec != nullptr)` — but
-only along the branch where at least one `onErr` handler was already
-registered. It marks the error handled (suppressing the orphan logger) **only
-when an executor exists to actually deliver it**. With a null executor the
-handlers are present but the closure is never posted, so `onErrAttached` stays
-`false` and the abandoned error still reaches the destructor's orphan logger
-rather than vanishing silently.
+**Delivering.** `deliver()` runs on `cbExec`. It sets `delivered`, releases the
+stop links, and invokes every stored handler of the settled kind, in
+attachment order, each wrapped in its own `try { ... } catch (...) {
+logError(...); }`, so a throwing handler is logged and skipped without
+preventing the handlers attached after it from running. Handlers of the other
+kind are never invoked.
 
 **Attaching callbacks — composes, does not overwrite.** `attachThen(handler)`
-and `attachOnError(handler)` are called by `Completion::then()` / `onError()`.
-If the state is already ready with the corresponding kind of result (value for
-`then`, exception for `onError`), a fire-now closure for *this* handler is built
-and posted to the executor immediately (this handler alone — earlier handlers,
-if any, already fired when the state became ready, or will each fire from their
-own immediate call). Otherwise, if the state is not yet ready, the handler is
-appended to `onOk` / `onErr` — **every** handler attached while the state is
-still pending is kept, not just the most recent one. When the result finally
-arrives, `setValue`/`setException` invokes all of them, in the order they were
-attached, from one posted closure. If the state is already ready with the
-*opposite* kind of result (e.g. `attachThen` on an error state, or
-`attachOnError` on a value state), neither branch runs: no closure is built and
-no handler is stored — the attach is a silent no-op, for that call only (it does
-not affect any other handler already stored).
+and `attachOnError(handler)` are called by `Completion::then()` / `onError()`,
+on the owner. Before delivery, the handler is appended to `onOk` / `onErr` —
+**every** handler attached while delivery is pending is kept, and `deliver()`
+invokes all of them in the order they were attached. After delivery, a handler
+matching the settled outcome is **posted on its own** with the same
+`try`/`catch`; a mismatched one (`then` on an error, `onError` on a value) is a
+silent no-op for that call. A late handler is posted rather than run inside the
+attach: a handler attached later must not overtake one attached earlier, and
+the earlier one may still be in a posted `deliver()` that has not run. With a
+null `cbExec` both attaches are no-ops.
 
-**Copy vs. move of the value on dispatch.** Both dispatch paths read the
-stored value in place, and neither copies nor moves it:
-
-- *Set-after-attach* (`setValue` finds one or more already-registered `onOk`
-  handlers): `value = std::move(val)` stores the value, `ready` is set, and the
-  drained handler vector goes into a closure that also captures
-  `shared_from_this()`. Each handler is invoked as `fn(*self->value)` — the
-  state's own store, read, never taken.
-- *Attach-after-ready* (`attachThen` fires now against a settled value): the
-  same shape with one handler — the closure captures `shared_from_this()` and
-  invokes `handler(*self->value)`.
+**Copy vs. move of the value on dispatch.** Both dispatch paths read the stored
+value in place, and neither copies nor moves it: `deliver()` invokes each
+handler as `handler(*value)`, and a late attach's closure captures
+`shared_from_this()` and invokes `handler(*self->value)`.
 
 **The value is observed, never consumed.** No dispatch path can move out of
-`value`, so a `then()` attached after a set-after-attach dispatch already ran
-still fires against the genuine result rather than a moved-from husk (see
-[Failure modes](#failure-modes)), and no handler in a fan-out can leave a
-husk for its siblings. A handler that wants to consume takes `T` **by value** and
-moves out of its own copy. Errors behave the same way for a different reason —
-an `exception_ptr` is a refcounted handle, cheap to copy, and is copied for every
-handler on both paths, so `error` is never emptied.
-
-`attachOnError` sets `onErrAttached = (cbExec != nullptr)` unconditionally on
-entry, before inspecting the state. So attaching an error handler on a
-null-executor state does **not** suppress orphan logging: the handler will never
-be posted, so the error is preserved for the destructor's orphan logger instead
-of being both dropped and silenced.
+`value`, so a `then()` attached after delivery still fires against the genuine
+result rather than a moved-from husk, and no handler in a fan-out can leave a
+husk for its siblings. A handler that wants to consume takes `T` **by value**
+and moves out of its own copy. Errors are refcounted `exception_ptr`s, copied
+for every handler, so `error` is never emptied either.
 
 ## Value-handling contract
 
@@ -184,7 +158,8 @@ regression.
 
 Settling itself moves `T` exactly twice for a prvalue argument — into
 `resolve`'s by-value parameter, then into `setValue`'s, then into `value`, with
-the first elided — and dispatch adds none.
+the first elided — and dispatch adds none: the posted `deliver()` carries the
+state, not the value.
 
 The obvious alternative — erasing `onOk` as `std::function<void(T)>` — costs
 **N + 2M** copies per settle (N handlers attached before settling, M after) and
@@ -193,7 +168,7 @@ copy whether or not it wants one, and a fire-now path under that erasure has to
 copy `*value` into a local and capture that local *by copy* before moving it
 into the handler: two copies where the handler asked for at most one.
 
-**What this costs.** A cheap `T` pays a little more per settle: the dispatch
+**What this costs.** A cheap `T` pays a little more per settle: the delivery
 closure holds a `shared_ptr` to the state and so pays an atomic refcount pair
 rather than a copy of a small value. Against the JSON encode/decode — and often
 a socket write — that surrounds a settle, that is noise, and it buys a large `T`
@@ -227,21 +202,19 @@ still escape. If the record cannot be emitted, the logging layer counts it in
 This prevents silent loss of error information when a `Completion` goes out of
 scope without an `onError` handler.
 
-`onErrAttached` is set by both `attachOnError` (unconditionally, on entry) and
-`setException` (on the branch where an `onErr` handler was already registered),
-but in both cases the value written is `(cbExec != nullptr)`, **not** an
-unconditional `true`. The consequences:
+`onErrAttached` is set by an `onError` attach on a state that has an executor,
+and by `bridge::detail::takeSettled`, which takes a settled bind's outcome
+without attaching and so handles the error itself. An `onError` attach on a
+null-executor state is a no-op and sets nothing: the handler can never be
+delivered, so the error stays the orphan logger's rather than being both
+dropped and silenced. In short, orphan logging is suppressed precisely when the
+error has a real delivery path, or was taken.
 
-- **With an executor:** once an error handler has been attached (or an error has
-  been dispatched to an already-registered handler), `onErrAttached` is `true`
-  and the destructor treats the error as handled — no orphan is logged.
-- **With a null executor:** the handler can never be posted, so `onErrAttached`
-  stays `false` and the destructor still logs the orphan. This closes a hole
-  where a null-executor error handler used to both drop the error (no executor
-  to post on) *and* silence the orphan logger, losing the error entirely.
-
-In short, orphan logging is suppressed precisely when the error has a real
-delivery path; if the error can never be delivered, it is never silenced.
+**The log comes after delivery, exactly once.** The posted `deliver()` holds a
+`shared_ptr` to the state, so a state settled with an error and dropped by both
+its producer and its consumer is still alive while its delivery is queued. The
+destructor runs after `deliver()` — and after any posted attach — had its
+chance to hand the error to a handler, and runs once.
 
 ## Move-only handle — `Completion<T>`
 
@@ -250,9 +223,9 @@ construction or copy assignment. The default constructor produces an empty
 (no-op) completion with a null state pointer.
 
 The two-argument constructor takes a shared state and an executor pointer,
-storing the executor in `state->cbExec`. All subsequent `then()` / `onError()`
-calls forward to the state's `attachThen` / `attachOnError`, which use `cbExec`
-for posting.
+storing the executor in `state->cbExec` — the completion's owner. All
+subsequent `then()` / `onError()` calls forward to the state's `attachThen` /
+`attachOnError`, on the owner.
 
 `then()` and `onError()` return `*this` for chaining:
 
@@ -290,8 +263,9 @@ methods:
 Both are no-ops if the state is already settled (first-result-wins, same as
 `CompletionState<T>::setValue`/`setException`) or if this `Promise` was itself
 moved from (mirroring `Completion<T>::then()`/`onError()`'s null-state no-op —
-see [Empty state](#empty-state)). Both are safe to call from any thread, since
-they forward directly to the mutex-guarded `CompletionState<T>` methods.
+see [Empty state](#empty-state)). Both are safe to call from any thread: the
+settle claims the state with an atomic exchange and posts its delivery to the
+completion's executor.
 
 `Promise` never exposes `CompletionState<T>` in its own interface — its
 constructor is private, reachable only via the `friend`ed `makeSettleable()` —
@@ -300,25 +274,55 @@ namespace ever appearing in their code.
 
 ## Thread safety
 
-- `then()` and `onError()` may be called from any thread — the mutex guards
-  `value`, `error`, `ready`, and the callback slots (`onOk` / `onErr`), so
-  registration and result-setting race safely.
-- Callbacks are never invoked directly from the producing thread. They are
-  posted to `cbExec` via `IExecutor::post()` and run on the executor's thread.
-- If `cbExec` is `nullptr`, no callback is posted (the fire-now/fire-once
-  closure is built but never delivered, and stored callbacks are never
-  invoked). See [Failure modes](#failure-modes) for what happens to an
-  abandoned error in this case.
+A `Completion<T>` belongs to the executor it was constructed with, `cbExec`.
+There is no lock; every touch of the handler side happens on `cbExec`.
 
-**`cbExec` is not mutex-guarded.** The `mtx` protects `value` / `error` /
-`ready` / `onOk` / `onErr`, but `cbExec` is read outside the lock (after the
-scoped lock is released) in `setValue`, `setException`, `attachThen`, and
-`attachOnError`. This is safe only because of a happens-before requirement, not
-a lock: the `Completion<T>` handle writes `cbExec` in its constructor, and the
-state must be fully constructed (with its executor assigned) **before** it is
-published to any producer or consumer thread. Once published, `cbExec` is never
-reassigned. There is no atomic and no lock around it — the ordering guarantee is
-structural (construct-then-share), not enforced at runtime.
+- **Settling — any thread.** `setValue` / `setException` (and `Promise`'s
+  `resolve` / `reject`) claim the state with an atomic exchange, store the
+  outcome, publish it with a release store of `ready`, and post `deliver()` to
+  `cbExec`. A second settle — `cancelPending` racing a reply, a deadline racing
+  the real result — loses the exchange and returns before allocating.
+- **Delivery — on `cbExec`.** Callbacks are never invoked on the producing
+  thread, and never inside the call that attached them.
+- **Attaching — on `cbExec`.** `then()` / `onError()` must be called on the
+  owner: inside one of its tasks, or on the owner's own thread outside them (a
+  Qt slot, a QML handler, a test body before it pumps). **Attaching from
+  another executor's task is a contract violation**, reported through
+  `exec::detail::noteOwner` — a debug-build assertion, or the owner probe a test
+  installs. An attach made on a thread running no executor's task is presumed
+  to be on the owner's thread; the thread is recorded and checked against the
+  thread `deliver()` runs on, in whichever order the two happen, so a bare
+  thread attaching to a completion whose executor is a pool is reported at
+  delivery. This is a debug check, not a guarantee; the ThreadSanitizer leg is
+  the backstop.
+- **`inlineExecutor()` completions.** Delivery runs wherever the settle happens,
+  so the owner is the settler. Their consumer attaches before handing the
+  state to the producer, after it settled, or on the settler's own executor
+  (`SocketBackend`'s synchronous verbs attach on the I/O loop that settles
+  them). This cannot be checked and is not.
+- **Synchronous readers — any thread.** Anything that acquire-loads `ready ==
+  true` may read `value` / `error`: `bridge::detail::takeSettled` reads a bind
+  a backend settled before returning, without a hop to the owner.
+- **`co_await` — any coroutine.** The awaiter attaches directly when the
+  coroutine is running on `cbExec`, and otherwise posts its attach there (see
+  [`coroutines.md`](coroutines.md#co_await-on-a-completiont)).
+- If `cbExec` is `nullptr`, nothing is posted and attaching is a no-op. See
+  [Failure modes](#failure-modes) for what happens to an abandoned error.
+
+**`cbExec` is a happens-before requirement, not an atomic.** The `Completion<T>`
+handle writes it in its constructor, and the state must be constructed with its
+executor assigned **before** it is published to any producer or consumer
+thread. Once published, `cbExec` is never reassigned. The backends honour this:
+they build the `Completion` before posting the task that settles it. It also
+has to precede a settle made on the producer's own thread: a settle sees the
+owner it has at that moment, and one made while `cbExec` is still unset posts
+no delivery, so its handlers would never run. `executeJson`'s decode and
+validation failures settle synchronously, which is why it builds its
+`Completion` before decoding.
+
+**Cost.** One post per settle, even with no handler attached yet; a settle with
+handlers attached costs the same one post it did when delivery was a closure
+built under a lock. A late attach costs one post per handler.
 
 ## Failure modes
 
@@ -351,19 +355,18 @@ throw — they are silent by construction.
   [Setting a value or exception](#setting-a-value-or-exception)); this bullet
   depends on it staying so.
 
-- **Null-executor error drop, but no silencing.** With `cbExec == nullptr`, any
-  attached or pending error handlers are never delivered — there is no executor
-  to post them on. Crucially, `onErrAttached` is left `false` in that case (it
-  is set to `(cbExec != nullptr)`), so the abandoned error still reaches the
-  destructor's orphan logger. The error is *undelivered* but never *lost*: it
+- **Null-executor error drop, but no silencing.** With `cbExec == nullptr`, no
+  handler is ever delivered — there is no executor to post on, and attaching is
+  a no-op. Crucially, `onErrAttached` is therefore left `false`, so the
+  abandoned error still reaches the destructor's orphan logger. The error is *undelivered* but never *lost*: it
   surfaces as an `[orphan]` log line instead. (A null-executor **value** is
   simply dropped with no diagnostic — only errors have orphan logging.)
 
-- **Attaching after delivery re-fires against the settled state.** Once every
-  stored handler has fired (the vector was moved out on dispatch), a further
+- **Attaching after delivery re-fires against the settled state.** Once
+  `deliver()` has run (the vector was moved out), a further
   `then()`/`onError()` call is governed by the rules above against the
-  now-`ready` state — i.e. a matching-outcome attach fires immediately with the
-  settled result, a mismatched one is a no-op. A late `then()` fires against the
+  delivered state — i.e. a matching-outcome attach is posted on its own with
+  the settled result, a mismatched one is a no-op. A late `then()` fires against the
   *stored* value, read in place by a closure holding `shared_from_this()` (see
   [Shared state](#shared-state--completionstatet)), so no fire-now dispatch
   consumes it and a handler taking `const T&` pays nothing for it. This holds
@@ -435,7 +438,7 @@ class `RemoteServer` uses for its server-side `LimitPolicy::executeTimeout`). Th
 `CompletionState` — never the `Bridge` — and resolves it with
 `morph::backend::ClientTimeoutError`. The real reply and the timer therefore
 race, and **whichever settles the state first wins**, because `setValue` /
-`setException` are no-ops once the state is `ready` (see
+`setException` are no-ops once a settle has claimed the state (see
 [Failure modes](#failure-modes) and the *first-result-wins* row in
 [Design decisions](#design-decisions)). A real reply that arrives after the
 deadline already fired is silently discarded — it is an ordinary late write to
@@ -493,8 +496,9 @@ interacts with this file's own machinery:
 
 - **Nothing in `CompletionState<T>` changes.** The gate is wrapped around the
   handler at attach time, so it composes with handler fan-out, with the
-  attach-after-ready fire-now path and with `cbExec` marshalling exactly as the
-  ungated form does.
+  attach-after-delivery fire-now path and with `cbExec` marshalling exactly as
+  the ungated form does. The scope's stop link is added on the owner, with the
+  attach, and released by `deliver()`.
 - **A suppressed error still counts as handled.** `onError(scope, fn)` sets
   `onErrAttached` exactly as `onError(fn)` does, so an error whose delivery the
   scope then refuses does **not** re-arm the destructor's orphan logging
@@ -555,10 +559,10 @@ that will never signal.
 
 | Member | Signature | Notes |
 |---|---|---|
-| `setValue(T)` | `void setValue(T)` | Producer-side; no-op if already ready. Posts one closure invoking every registered success handler, in attachment order, if any were registered. |
-| `setException(exception_ptr)` | `void setException(std::exception_ptr const&)` | Producer-side; no-op if already ready. Posts one closure invoking every registered error handler, in attachment order, if any were registered. |
-| `attachThen(function<void(const T&)>)` | `void attachThen(std::function<void(const T&)>)` | Consumer-side; fires immediately (this handler only) if ready with value, else appends to the stored handler list. |
-| `attachOnError(function<void(exception_ptr)>)` | `void attachOnError(std::function<void(std::exception_ptr)>)` | Consumer-side; fires immediately (this handler only) if ready with error, appends to the stored handler list if not yet ready, no-op if ready with a value. Sets `onErrAttached = (cbExec != nullptr)`, so orphan logging is suppressed only when an executor exists to deliver on. |
+| `setValue(T)` | `void setValue(T)` | Producer-side, any thread; no-op if a settle already claimed the state. Stores the value, publishes `ready`, posts `deliver()` to `cbExec` (when set). |
+| `setException(exception_ptr)` | `void setException(std::exception_ptr const&)` | Producer-side, any thread; no-op if a settle already claimed the state. Stores the error (a null one replaced), publishes `ready`, posts `deliver()` to `cbExec` (when set). |
+| `attachThen(function<void(const T&)>)` | `void attachThen(std::function<void(const T&)>)` | Consumer-side, on `cbExec`; appends before delivery, posts this handler alone after a value was delivered, no-op after an error or with a null `cbExec`. |
+| `attachOnError(function<void(exception_ptr)>)` | `void attachOnError(std::function<void(std::exception_ptr)>)` | Consumer-side, on `cbExec`; appends before delivery, posts this handler alone after an error was delivered, no-op after a value. Sets `onErrAttached`; a no-op that sets nothing with a null `cbExec`. |
 | destructor | `~CompletionState()` | Orphan-detection: logs unhandled exceptions when destroyed with an error and no `onErr` attached. |
 
 ## `detail::ISettleSink` — where a backend settles one dispatch
@@ -628,10 +632,12 @@ for the same argument applied to the journal codec.
 | Decision | Choice | Why |
 |---|---|---|
 | Callback dispatch | **Posted to `IExecutor`, never direct** | Ensures callbacks run on the intended thread (e.g. GUI/main thread) regardless of which thread completes the operation. |
-| Mutex scope | **Lock held only during state access, not during callback invocation** | Callback closures are built under the lock but invoked outside it, preventing callback re-entrancy into the mutex and avoiding deadlock. |
+| No lock | **Settle claims atomically and posts its delivery; the handler side is owned by `cbExec`** | Producer and consumer never touch the same mutable field: the outcome is write-once and published by a release store, and the handler lists are touched only on the owner, ordered by its queue. One post per settle is the price, paid even with no handler attached. |
+| Settle stores, owner delivers | **The claimant stores the outcome where it settles; only delivery is posted** | A completion settled synchronously — a `LocalBackend` bind on the owner's thread outside its tasks — is readable at once by `takeSettled`, so a handler over such a backend is bound when its constructor returns. Storing on the owner would make it look unsettled until the owner next ran. |
+| Late attach | **Posted, never run inside `then()`** | An earlier handler may still be in a queued `deliver()`; running a later one inline would overtake it. |
 | Orphan detection | **Destructor logs through `logError`** | Prevents silent loss of error information when a `Completion` is destroyed without an `onError` handler. The exception is re-thrown just to extract a message (`what()` for a `std::exception`, a generic string otherwise), which is logged; the `logError` call is itself wrapped in an empty `catch (...)` so the `noexcept` destructor never lets an exception escape. |
-| No executor callback | **`cbExec == nullptr` disables posting** | A `Completion` without an executor is a write-only endpoint — the producer can set a value or error, but stored callbacks are never invoked. This is by design for internal patterns where the consumer never attaches. An abandoned *error* is not silenced, though: `onErrAttached` tracks `(cbExec != nullptr)`, so a null-executor error still reaches the destructor's orphan logger. |
-| First-result-wins | **`setValue`/`setException` are no-ops after `ready`** | An asynchronous operation should complete exactly once; subsequent calls are silently ignored. |
+| No executor callback | **`cbExec == nullptr` disables posting and attaching** | A `Completion` without an executor is a write-only endpoint — the producer can set a value or error, but no callback is ever invoked. An abandoned *error* is not silenced, though: an attach sets nothing on such a state, so the error still reaches the destructor's orphan logger. |
+| First-result-wins | **`setValue`/`setException` claim `settled` with an atomic exchange; the loser returns** | An asynchronous operation should complete exactly once; subsequent calls are silently ignored, before they allocate a post. |
 | Move-only handle | **`Completion` is move-only, `CompletionState` is shared via `shared_ptr`** | The handle is owned by one consumer at a time; the shared state is owned jointly by the producer and any consumer that has moved the handle. |
 | Empty completion | **Null state pointer makes `then`/`onError` no-ops** | Default-constructed `Completion` is a safe placeholder that never signals. |
 | Value handling on dispatch | **Both paths read `*value` in place; neither copies nor moves it** | Handlers are erased as `std::function<void(const T&)>` and the dispatch closures capture `shared_from_this()`, so the copy budget is exactly one per by-value handler and zero per `const T&` handler, whenever it attached. `value` is never consumed, so a `then()` attached after settling still sees the genuine result, and `T` need only be move-constructible. See [Value-handling contract](#value-handling-contract). |
@@ -650,8 +656,6 @@ future/promise or a monadic async type. Its scope is narrow by design:
   `T → U` mapping and no way to chain one asynchronous step onto another. To
   sequence work, the consumer must start a fresh operation from inside the
   handler.
-- **No `co_await`.** `Completion<T>` is not an awaitable; it has no coroutine
-  promise/awaiter machinery. Consumption is callback-only.
 - **No *work* cancellation.** There is no handle to cancel an outstanding
   operation; once started, it runs to completion (or is abandoned).
   `Bridge::setExecuteDeadline` (see
@@ -704,8 +708,9 @@ outlives the `Completion`. See [concurrency_and_lifetimes.md](../concurrency_and
 - [`coroutines.md`](coroutines.md) — awaiting a `Completion<T>` from a
   coroutine (`operator co_await() &&`), where it resumes, and how a stop
   withdraws the await.
-- [`executor.md`](executor.md) — `IExecutor` and its implementations; `cbExec`
-  is the executor on which every callback is posted.
+- [`executor.md`](executor.md) — `IExecutor` and its implementations, and
+  `runningOn`; `cbExec` is the executor that owns the completion's handler
+  side and on which every callback runs.
 - [`logger.md`](logger.md) — `morph::log::logError`, the error-handling sink
   used by orphan detection when an error is abandoned.
 - [`backend.md`](backend.md) — backends resolve the pending `Completion` when a

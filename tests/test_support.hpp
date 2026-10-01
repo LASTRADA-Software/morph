@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <concepts>
 #include <cstddef>
 #include <deque>
 #include <exception>
@@ -490,17 +491,19 @@ inline ::morph::exec::OwnerStrand& inlineOwner() {
 
 /// @brief Waits for @p completion to settle and returns its value.
 ///
-/// For a verb that answers through a `Completion` settled on its owner
-/// (`RemoteServer::health()`, `drainedWithin()`, `SyncWorker::run()`, …) when
-/// the test itself is not on that owner. The callbacks run wherever the
-/// completion delivers them; this thread polls, as `waitUntil` does.
+/// For a verb that answers through a `Completion` delivered on the verb's own
+/// owner (`SyncWorker::run()`, `ReconnectCoordinator::onOnline()`, …) when the
+/// test itself is not on that owner. The callbacks are attached on the
+/// completion's owner, by a task posted there, and run there; this thread
+/// polls, as `waitUntil` does.
 ///
 /// @param completion The completion to wait on.
 /// @param budget     Longest wait: a hang guard, not a timing assertion, so
 ///                   generous by default.
 /// @return The settled value.
-/// @throws std::runtime_error if nothing settles within @p budget; the
-///         completion's own exception if it settles with one.
+/// @throws std::runtime_error if @p completion has no owner to deliver on, or
+///         nothing settles within @p budget; the completion's own exception if
+///         it settles with one.
 template <typename T>
 T awaitValue(::morph::async::Completion<T> completion, std::chrono::milliseconds budget = std::chrono::seconds{30}) {
     struct Outcome {
@@ -508,14 +511,22 @@ T awaitValue(::morph::async::Completion<T> completion, std::chrono::milliseconds
         std::optional<T> value;
         std::exception_ptr error;
     };
+    auto const state = completion.state();
+    ::morph::exec::IExecutor* const owner = state != nullptr ? state->cbExec : nullptr;
+    if (owner == nullptr) {
+        throw std::runtime_error("awaitValue: the completion has no owner to deliver on");
+    }
     auto outcome = std::make_shared<Outcome>();
-    completion.then([outcome](const T& value) {
-        outcome->value.emplace(value);
-        outcome->done.store(true);
-    });
-    completion.onError([outcome](std::exception_ptr error) {
-        outcome->error = std::move(error);
-        outcome->done.store(true);
+    auto held = std::make_shared<::morph::async::Completion<T>>(std::move(completion));
+    owner->post([held, outcome] {
+        held->then([outcome](const T& value) {
+            outcome->value.emplace(value);
+            outcome->done.store(true);
+        });
+        held->onError([outcome](std::exception_ptr error) {
+            outcome->error = std::move(error);
+            outcome->done.store(true);
+        });
     });
     if (!waitUntil([&outcome] { return outcome->done.load(); }, WaitBudget{budget})) {
         throw std::runtime_error("awaitValue: the completion did not settle within the budget");
@@ -524,6 +535,62 @@ T awaitValue(::morph::async::Completion<T> completion, std::chrono::milliseconds
         std::rethrow_exception(outcome->error);
     }
     return std::move(*outcome->value);
+}
+
+/// @brief Waits for @p completion, delivered on @p owner, pumping @p owner on
+///        this thread until it settles, and returns its value.
+///
+/// For a verb that takes the executor its answer is delivered on
+/// (`RemoteServer::health()`, `drainedWithin()`): this thread is that owner, so
+/// it attaches here and runs the delivery itself.
+/// @tparam T The completion's value type.
+/// @param owner      The executor @p completion delivers on; this thread pumps it.
+/// @param completion The completion to wait on.
+/// @param budget     Longest wait: a hang guard, not a timing assertion.
+/// @return The settled value.
+/// @throws std::runtime_error if nothing settles within @p budget; the
+///         completion's own exception if it settles with one.
+template <typename T>
+T awaitValueOn(::morph::exec::MainThreadExecutor& owner, ::morph::async::Completion<T> completion,
+               std::chrono::milliseconds budget = std::chrono::seconds{30}) {
+    std::optional<T> value;
+    std::exception_ptr error;
+    bool done = false;
+    completion.then([&value, &done](const T& settled) {
+        value.emplace(settled);
+        done = true;
+    });
+    completion.onError([&error, &done](std::exception_ptr settled) {
+        error = std::move(settled);
+        done = true;
+    });
+    if (!pumpOwnerUntil(owner, [&done] { return done; }, WaitBudget{budget})) {
+        throw std::runtime_error("awaitValueOn: the completion did not settle within the budget");
+    }
+    if (error) {
+        std::rethrow_exception(error);
+    }
+    return std::move(*value);
+}
+
+/// @brief Asks @p ask for a completion delivered on an owner this thread
+///        pumps, and waits for its value.
+///
+/// `awaitAnswer([&](auto& owner) { return server->health(owner); })`: the
+/// owner is a `MainThreadExecutor` local to this call, so the answer's
+/// handlers run on this thread and nothing outlives the wait.
+/// @tparam Ask Callable taking the owner (`morph::exec::IExecutor&`) and
+///         returning a `Completion`.
+/// @param ask    Asks the question, naming the owner the answer is delivered on.
+/// @param budget Longest wait: a hang guard, not a timing assertion.
+/// @return The settled value.
+/// @throws std::runtime_error if nothing settles within @p budget; the
+///         completion's own exception if it settles with one.
+template <typename Ask>
+    requires std::invocable<Ask&, ::morph::exec::IExecutor&>
+auto awaitAnswer(Ask ask, std::chrono::milliseconds budget = std::chrono::seconds{30}) {
+    ::morph::exec::MainThreadExecutor owner;
+    return awaitValueOn(owner, ask(static_cast<::morph::exec::IExecutor&>(owner)), budget);
 }
 
 }  // namespace morph::testing

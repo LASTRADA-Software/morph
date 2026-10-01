@@ -76,7 +76,7 @@ TEST_CASE("Bridge: pendingCalls() increments on dispatch and decrements on succe
     gPendingCallsSlowRelease.store(false);
 
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
 
@@ -86,7 +86,7 @@ TEST_CASE("Bridge: pendingCalls() increments on dispatch and decrements on succe
     // Wait until the model actually started executing, so the call is
     // genuinely in flight (not just queued).
     for (int idx = 0; idx < 200 && gPendingCallsSlowStarted.load() == 0; ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        cbExec.runFor(std::chrono::milliseconds(5));
     }
     REQUIRE(gPendingCallsSlowStarted.load() == 1);
     REQUIRE(bridge.pendingCalls() == 1);
@@ -94,7 +94,7 @@ TEST_CASE("Bridge: pendingCalls() increments on dispatch and decrements on succe
     gPendingCallsSlowRelease.store(true);
 
     for (int idx = 0; idx < 200 && !done.load(); ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        cbExec.runFor(std::chrono::milliseconds(5));
     }
     REQUIRE(done.load());
     REQUIRE(bridge.pendingCalls() == 0);
@@ -102,7 +102,7 @@ TEST_CASE("Bridge: pendingCalls() increments on dispatch and decrements on succe
 
 TEST_CASE("Bridge: pendingCalls() decrements on error resolution too", "[bridge][pending-calls]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
 
@@ -110,7 +110,7 @@ TEST_CASE("Bridge: pendingCalls() decrements on error resolution too", "[bridge]
     handler.execute(PCFailAction{}).then([](int) {}).onError([&](const std::exception_ptr&) { errored.store(true); });
 
     for (int idx = 0; idx < 200 && !errored.load(); ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        cbExec.runFor(std::chrono::milliseconds(5));
     }
     REQUIRE(errored.load());
     REQUIRE(bridge.pendingCalls() == 0);
@@ -124,7 +124,7 @@ TEST_CASE("Bridge: pendingCalls() reflects multiple concurrent in-flight calls",
     gPendingCallsSlowRelease.store(false);
 
     morph::exec::ThreadPoolExecutor pool{4};
-    SyncExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<PCModel> handler2{bridge, &cbExec};
@@ -139,7 +139,7 @@ TEST_CASE("Bridge: pendingCalls() reflects multiple concurrent in-flight calls",
     handler3.execute(PCSlowAction{}).then(onDone).onError(onErr);
 
     for (int idx = 0; idx < 200 && gPendingCallsSlowStarted.load() < numCalls; ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        cbExec.runFor(std::chrono::milliseconds(5));
     }
     REQUIRE(gPendingCallsSlowStarted.load() == numCalls);
     REQUIRE(bridge.pendingCalls() == numCalls);
@@ -147,7 +147,7 @@ TEST_CASE("Bridge: pendingCalls() reflects multiple concurrent in-flight calls",
     gPendingCallsSlowRelease.store(true);
 
     for (int idx = 0; idx < 200 && doneCount.load() < numCalls; ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        cbExec.runFor(std::chrono::milliseconds(5));
     }
     REQUIRE(doneCount.load() == numCalls);
     REQUIRE(bridge.pendingCalls() == 0);

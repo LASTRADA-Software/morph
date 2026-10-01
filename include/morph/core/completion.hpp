@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <atomic>
 #include <concepts>
+#include <core/async/ExecutorContext.hpp>
 #include <core/async/StopToken.hpp>
 #include <exception>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "../attributes.hpp"
 #include "callback_scope.hpp"
 #include "detail/completion_awaiter.hpp"
+#include "detail/owner_probe.hpp"
 #include "executor.hpp"
 #include "logger.hpp"
 
@@ -25,21 +28,25 @@ namespace detail {
 
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 //
-// `enable_shared_from_this` is load-bearing, not decoration: the dispatch
-// closures below capture a `shared_ptr` to this state and read the settled
-// value *in place* instead of carrying a copy of it. That is what makes the
-// copy budget independent of how many handlers are attached, and what lets `T`
-// be move-only -- the closure stores a refcounted handle, so it stays
-// copy-constructible and `IExecutor::post`'s `std::function<void()>` is
-// untouched. Every `CompletionState<T>` in the tree is created by
-// `std::make_shared` (`Completion<T>::makeSettleable`, `Bridge`, the backends),
-// which is the precondition `shared_from_this()` needs.
+// One state per operation, shared by the producer that settles it and the
+// consumer that attaches to it, with no lock between them:
 //
-// Reading `value` outside `mtx` from those closures is safe because `value` is
-// write-once: both `setValue` and `setException` return early when `ready`, and
-// nothing else ever assigns it. The store happens under the lock before the
-// closure is handed to the executor, and the executor's own queue provides the
-// happens-before edge to the thread that runs it.
+// - **Settling** is claimed once with an atomic exchange (`settled`), so a late
+//   settle -- a reply after `cancelPending` -- returns before it allocates
+//   anything. The claimant stores `value` or `error` and publishes it with a
+//   release store of `ready`; both are write-once, so any thread that sees
+//   `ready` may read them. It then posts `deliver()` to `cbExec`.
+// - **Everything else is the owner's**: `onOk`, `onErr`, `delivered`,
+//   `stopLinks` are touched only on `cbExec` -- by `deliver()`, and by the
+//   consumer's attaches, which run there (`onOwner`). The executor's queue is
+//   the happens-before edge between the settle and the handlers.
+//
+// `enable_shared_from_this` is load-bearing: `deliver()` and a late attach's
+// fire-now closure capture a `shared_ptr` to this state and read the settled
+// value *in place*. That is what makes the copy budget independent of how many
+// handlers are attached, what lets `T` be move-only, and what keeps the state
+// -- and so its orphan logger -- alive until delivery has run. Every
+// `CompletionState<T>` in the tree is created by `std::make_shared`.
 template <typename T>
 struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
     static_assert(std::move_constructible<T>,
@@ -47,15 +54,17 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
                   "per-handler obligation: a handler taking `const T&` imposes nothing, a handler taking `T` by "
                   "value requires T to be copyable and is diagnosed where that handler is written.");
 
-    std::mutex mtx;
     std::optional<T> value;
     std::exception_ptr error;
-    bool ready = false;
-    // Every handler attached while the state is not yet ready is kept (not
+    // Claimed by the first settle; every later one returns at once.
+    std::atomic<bool> settled{false};
+    // Published by the settle that claimed `settled`, after `value` or `error`
+    // is stored: `true` means exactly one of them is engaged and final.
+    std::atomic<bool> ready{false};
+    // Every handler attached while the state is not yet delivered is kept (not
     // overwritten): a second/third attach composes with earlier ones instead of
-    // silently discarding them. Dispatch invokes all of them, in attachment
-    // order, from a single posted closure. See docs/spec/core/completion.md,
-    // "Failure modes" / fan-out.
+    // silently discarding them. `deliver()` invokes all of them, in attachment
+    // order. See docs/spec/core/completion.md, "Failure modes" / fan-out.
     //
     // Erased as `void(const T&)`, not `void(T)`. One erased type accepts every
     // handler spelling a caller already writes -- `[](const T&)`, `[](T)`, a
@@ -66,15 +75,26 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
     // charge every handler a copy whether or not it wanted one.
     std::vector<std::function<void(const T&)>> onOk;
     std::vector<std::function<void(std::exception_ptr)>> onErr;
-    bool onErrAttached = false;
+    // Whether the error is someone's to handle, which silences the orphan
+    // logger. Atomic because `bridge::detail::takeSettled` takes an outcome
+    // without attaching, on whichever thread holds the completion.
+    std::atomic<bool> onErrAttached{false};
+    // Set by `deliver()`, on the owner. A handler attached after it is posted on
+    // its own; one attached before is in the lists `deliver()` drains.
+    std::atomic<bool> delivered{false};
+    // The thread an attach outside every executor's task presumed to be the
+    // owner's own, and the thread `deliver()` ran on: compared, in both
+    // orders, so that presumption is checked rather than trusted.
+    std::atomic<std::thread::id> presumedOwnerThread{};
+    std::atomic<std::thread::id> deliveredOn{};
     ::morph::exec::IExecutor* cbExec = nullptr;
     // The stop source of the call this state reports on, or null for a call
     // that cannot be stopped. Set by the producer before the state is handed
-    // out, and read only under `mtx`.
+    // out, and read only on the owner.
     std::shared_ptr<::core::async::StopSource> stopSource;
     // One `StopCallback` per `CallbackScope` a gated handler was attached
     // through, relaying that scope's stop to `stopSource`. Released when the
-    // state settles: a settled call has nothing left to stop.
+    // state is delivered: a settled call has nothing left to stop.
     std::vector<std::shared_ptr<void>> stopLinks;
 
     // Relays a scope's stop request to the call's own stop source. Holds the
@@ -88,215 +108,138 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
         }
     };
 
-    // Links the stop of the scope @p scopeStop belongs to with this call's own
-    // stop source, until the state settles. A no-op for a call with no stop
-    // source, a scope that can no longer be stopped, or a state already
-    // settled. A scope already stopped stops the call here.
-    void linkStop(::core::async::StopToken scopeStop) {
-        std::shared_ptr<::core::async::StopSource> source;
-        {
-            std::scoped_lock const lock{mtx};
-            if (ready || stopSource == nullptr) {
-                return;
-            }
-            source = stopSource;
-        }
-        if (!scopeStop.stop_possible()) {
+    /// Whether the calling thread may touch the owner's half of this state,
+    /// reporting it (assert, or the test probe) when it may not.
+    ///
+    /// The owner is `cbExec`. Inside one of its tasks is the owner. Outside
+    /// every executor's task is presumed to be the owner's own thread running
+    /// code outside its tasks -- a Qt slot, a test body -- and recorded, so
+    /// `deliver()` can check the presumption against where it actually runs.
+    /// `inlineExecutor()` delivers wherever the settle happens: its consumer
+    /// attaches before handing the state to the producer, or after it settled,
+    /// and nothing here can tell those apart from a race.
+    void checkOwner(char const* site) noexcept {
+        if (::morph::exec::runningOn(*cbExec) || cbExec == &::morph::exec::detail::inlineExecutor()) {
             return;
         }
-        std::shared_ptr<void> link = std::make_shared<::core::async::StopCallback<StopRelay>>(
-            std::move(scopeStop), StopRelay{std::weak_ptr<::core::async::StopSource>{source}});
-        std::scoped_lock const lock{mtx};
-        if (!ready) {
-            stopLinks.push_back(std::move(link));
+        if (::core::async::ExecutorScope::innermost() != nullptr) {
+            ::morph::exec::detail::noteOwner(site, cbExec->coreExecutor(), false);
+            return;
         }
-        // Settled meanwhile: `link` is released as this returns.
+        auto const self = std::this_thread::get_id();
+        presumedOwnerThread.store(self, std::memory_order_relaxed);
+        if (delivered.load(std::memory_order_acquire) && deliveredOn.load(std::memory_order_relaxed) != self) {
+            ::morph::exec::detail::noteOwner(site, cbExec->coreExecutor(), false);
+        }
+    }
+
+    // Links the stop of the scope @p scopeStop belongs to with this call's own
+    // stop source, until the state is delivered. A no-op for a call with no
+    // stop source, a scope that can no longer be stopped, a state already
+    // delivered, or one with no executor to deliver on. A scope already stopped
+    // stops the call here. Runs on the owner.
+    void linkStop(::core::async::StopToken scopeStop) {
+        if (cbExec == nullptr || stopSource == nullptr || delivered.load(std::memory_order_relaxed) ||
+            !scopeStop.stop_possible()) {
+            return;
+        }
+        checkOwner("Completion::linkStop");
+        stopLinks.push_back(std::make_shared<::core::async::StopCallback<StopRelay>>(
+            std::move(scopeStop), StopRelay{std::weak_ptr<::core::async::StopSource>{stopSource}}));
     }
 
     void setValue(T val) {
-        std::function<void()> callback;
-        // Released after the lock: destroying a link waits for its relay if
-        // that is running on another thread.
-        std::vector<std::shared_ptr<void>> links;
-        {
-            std::scoped_lock const lock{mtx};
-            if (ready) {
-                return;
-            }
-            // Store first, drain `onOk` last. `value` is this state's own
-            // store and is never moved out of: a `then()` attached *after*
-            // this point (attachThen's `ready && value` branch) reads it
-            // again, and moving out of it would leave it engaged but
-            // moved-from, so a later attacher would silently observe a husk. The value
-            // is observed, never consumed -- structurally, now that no
-            // dispatch path can take it.
-            //
-            // The ordering is what gives this block the strong exception
-            // guarantee for a `T` whose *move* constructor can throw: nothing
-            // has changed when the store below runs, and `optional::emplace`
-            // leaves the optional disengaged if the construction throws, so an
-            // escape leaves `onOk` holding every handler and the state unready
-            // rather than a state that already looks settled with its handlers
-            // already lost. Draining first (as an earlier revision did) meant
-            // a throwing store unwound with `savedFns` -- a local -- carrying
-            // every handler to its destructor: permanently unsettled, no
-            // handlers, and silent, because the destructor's orphan logger
-            // only fires when `error` is set. `std::move` on a vector is
-            // noexcept, so the ordering costs nothing.
-            //
-            // `emplace`, not `value = std::move(val)`: assigning through
-            // `std::optional` requires `T` to be move-*assignable* as well as
-            // move-constructible, which would quietly make the `static_assert`
-            // above a lie for a `T` with a deleted assignment operator.
-            // `value` is guaranteed disengaged here -- it is written only on
-            // this line, and the `ready` guard above makes this line run once.
+        if (settled.exchange(true, std::memory_order_acq_rel)) {
+            return;
+        }
+        // `emplace`, not `value = std::move(val)`: assigning through
+        // `std::optional` requires `T` to be move-*assignable* as well as
+        // move-constructible, which would quietly make the `static_assert`
+        // above a lie for a `T` with a deleted assignment operator. A store
+        // whose move throws leaves `value` disengaged and releases the claim,
+        // so the state is still unsettled with every handler kept.
+        try {
             value.emplace(std::move(val));
-            ready = true;
-            links = std::move(stopLinks);
-            if (!onOk.empty()) {
-                auto savedFns = std::move(onOk);
-                callback = [self = this->shared_from_this(), savedFns = std::move(savedFns)]() {
-                    // Every handler reads the one stored value in place; none
-                    // can move out of it, so no handler can leave a husk for
-                    // its siblings or for a later attacher, and the count of
-                    // handlers costs nothing in copies. Each handler is
-                    // isolated in its own try/catch so one throwing handler
-                    // cannot prevent its siblings from running -- fan-out means
-                    // every attached handler gets its turn, independent of
-                    // whether an earlier one misbehaves. An escaping exception
-                    // here would otherwise unwind the whole posted closure and
-                    // silently skip every handler after the one that threw.
-                    for (const auto& fn : savedFns) {
-                        try {
-                            fn(*self->value);
-                        } catch (...) {
-                            ::morph::log::logError("[completion] then handler threw; continuing with next handler");
-                        }
-                    }
-                };
-            }
+        } catch (...) {
+            settled.store(false, std::memory_order_release);
+            throw;
         }
-        if (callback != nullptr && cbExec != nullptr) {
-            cbExec->post(std::move(callback));
-        }
+        publish();
     }
+
     void setException(const std::exception_ptr& exc) {
-        std::function<void()> callback;
-        std::vector<std::shared_ptr<void>> links;
-        {
-            std::scoped_lock const lock{mtx};
-            if (ready) {
-                return;
-            }
-            // A null `exc` must never reach `error`. Storing one would set
-            // `ready` with `error` still falsy — a state no attach can act on,
-            // because `attachOnError` tests `ready && error` and `attachThen`
-            // tests `ready && value`, so both branches fall through and the
-            // handler is neither fired nor queued. The completion would then
-            // be dead in both directions for every later caller, and silently:
-            // `attachOnError` sets `onErrAttached` on entry, so even the
-            // destructor's orphan logger is suppressed. It would also hand any
-            // *already*-attached handler a null `exception_ptr`, which is UB to
-            // `std::rethrow_exception` — the idiomatic handler body, this
-            // file's own orphan logger included.
-            //
-            // Substituting here rather than at any one producer is deliberate:
-            // `reject(nullptr)` is reachable through the public `Promise<T>`
-            // seam, and around ten sites in the tree forward an
-            // `exception_ptr` straight through (`.onError([state](auto e) {
-            // state->setException(e); })`) without inspecting it, so a guard
-            // at one producer would leave every other one able to reintroduce
-            // the same wedge.
-            error = exc ? exc
-                        : std::make_exception_ptr(
-                              std::runtime_error{"completion rejected with no exception (null exception_ptr)"});
-            ready = true;
-            links = std::move(stopLinks);
-            if (!onErr.empty()) {
-                auto savedFns = std::move(onErr);
-                auto savedErr = error;
-                callback = [savedFns = std::move(savedFns), savedErr]() mutable {
-                    // Isolate each handler so one throwing onError handler
-                    // cannot suppress its siblings -- see the matching comment
-                    // in setValue's callback above.
-                    for (auto& fn : savedFns) {
-                        try {
-                            fn(savedErr);
-                        } catch (...) {
-                            ::morph::log::logError("[completion] onError handler threw; continuing with next handler");
-                        }
-                    }
-                };
-                // Only mark the error handled (suppressing the destructor's orphan
-                // log) if we actually have an executor to deliver on. With a null
-                // executor the callback below is never posted, so the error must
-                // still reach the orphan logger rather than vanish silently.
-                onErrAttached = (cbExec != nullptr);
-            }
+        if (settled.exchange(true, std::memory_order_acq_rel)) {
+            return;
         }
-        if (callback != nullptr && cbExec != nullptr) {
-            cbExec->post(std::move(callback));
-        }
+        // A null `exc` must never reach `error`. Storing one would publish
+        // `ready` with `error` still falsy -- a state no attach can act on,
+        // because `deliver()` and a late `attachOnError` both test `error`, and
+        // `attachThen` tests `value`, so a handler is neither fired nor kept.
+        // It would also hand an attached handler a null `exception_ptr`, which
+        // is UB to `std::rethrow_exception` -- the idiomatic handler body, this
+        // file's own orphan logger included.
+        //
+        // Substituting here rather than at any one producer is deliberate:
+        // `reject(nullptr)` is reachable through the public `Promise<T>` seam,
+        // and many sites forward an `exception_ptr` straight through
+        // (`.onError([state](auto e) { state->setException(e); })`) without
+        // inspecting it.
+        error = exc ? exc
+                    : std::make_exception_ptr(
+                          std::runtime_error{"completion rejected with no exception (null exception_ptr)"});
+        publish();
     }
+
     void attachThen(std::function<void(const T&)> handler) {
-        std::function<void()> fireNow;
-        {
-            std::scoped_lock const lock{mtx};
-            if (ready && value) {
-                // Keep the state alive and read `value` in place rather than
-                // snapshotting it. Copying `*value` into a local and then
-                // capturing that local *by copy* before moving it into the
-                // handler costs two copies where the handler asked for at most
-                // one, so a late attacher would pay 2 rather than 1.
-                //
-                // Isolated exactly as setValue's composed closure isolates each
-                // handler: which of the two paths a handler takes depends only
-                // on whether it was attached before or after settlement, so a
-                // throw must not reach the executor on one path and be logged
-                // on the other.
-                fireNow = [self = this->shared_from_this(), handler = std::move(handler)]() {
-                    try {
-                        handler(*self->value);
-                    } catch (...) {
-                        ::morph::log::logError("[completion] then handler threw; continuing with next handler");
-                    }
-                };
-            } else if (!ready) {
-                onOk.push_back(std::move(handler));
+        if (cbExec == nullptr) {
+            return;  // Nothing could ever deliver it.
+        }
+        checkOwner("Completion::attach");
+        if (!delivered.load(std::memory_order_relaxed)) {
+            onOk.push_back(std::move(handler));
+            return;
+        }
+        if (!value) {
+            return;  // Settled with an error: a `then` has nothing to observe.
+        }
+        // Posted, not run here: a handler attached later must not overtake
+        // one attached earlier, and a handler never runs inside the call that
+        // attached it. The closure reads `value` in place.
+        cbExec->post([self = this->shared_from_this(), handler = std::move(handler)]() {
+            try {
+                handler(*self->value);
+            } catch (...) {
+                ::morph::log::logError("[completion] then handler threw; continuing with next handler");
             }
-        }
-        if (fireNow != nullptr && cbExec != nullptr) {
-            cbExec->post(std::move(fireNow));
-        }
+        });
     }
+
     void attachOnError(std::function<void(std::exception_ptr)> handler) {
-        std::function<void()> fireNow;
-        {
-            std::scoped_lock const lock{mtx};
-            // See setException: only suppress orphan logging when an executor
-            // exists to actually deliver the handler; a null executor otherwise
-            // drops the error and silences the orphan logger both at once.
-            onErrAttached = (cbExec != nullptr);
-            if (ready && error) {
-                auto savedErr = error;
-                // Isolated as in setException's closure -- see attachThen.
-                fireNow = [handler = std::move(handler), savedErr]() mutable {
-                    try {
-                        handler(savedErr);
-                    } catch (...) {
-                        ::morph::log::logError("[completion] onError handler threw; continuing with next handler");
-                    }
-                };
-            } else if (!ready) {
-                onErr.push_back(std::move(handler));
+        if (cbExec == nullptr) {
+            // Nothing could ever deliver it, so the error stays the orphan
+            // logger's rather than being dropped and silenced at once.
+            return;
+        }
+        checkOwner("Completion::attach");
+        onErrAttached.store(true, std::memory_order_relaxed);
+        if (!delivered.load(std::memory_order_relaxed)) {
+            onErr.push_back(std::move(handler));
+            return;
+        }
+        if (!error) {
+            return;  // Settled with a value.
+        }
+        cbExec->post([handler = std::move(handler), savedErr = error]() mutable {
+            try {
+                handler(savedErr);
+            } catch (...) {
+                ::morph::log::logError("[completion] onError handler threw; continuing with next handler");
             }
-        }
-        if (fireNow != nullptr && cbExec != nullptr) {
-            cbExec->post(std::move(fireNow));
-        }
+        });
     }
+
     ~CompletionState() {
-        if (!ready || !error || onErrAttached) {
+        if (!ready.load(std::memory_order_acquire) || !error || onErrAttached.load(std::memory_order_relaxed)) {
             return;
         }
         // No local guard around the logging calls: `morph::log`'s helpers are
@@ -311,6 +254,50 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
             ::morph::log::logError("[orphan] unhandled exception: {}", exc.what());
         } catch (...) {
             ::morph::log::logError("[orphan] unhandled unknown exception");
+        }
+    }
+
+private:
+    /// Publishes the stored outcome and hands its delivery to the owner.
+    void publish() {
+        ready.store(true, std::memory_order_release);
+        if (cbExec != nullptr) {
+            cbExec->post([self = this->shared_from_this()] { self->deliver(); });
+        }
+    }
+
+    /// Runs on `cbExec`: every handler attached so far, in attachment order,
+    /// each isolated so one that throws cannot cost its siblings their turn.
+    void deliver() {
+        auto const here = std::this_thread::get_id();
+        deliveredOn.store(here, std::memory_order_relaxed);
+        delivered.store(true, std::memory_order_release);
+        // An attach outside every task presumed this thread was the owner's;
+        // delivery running elsewhere refutes it -- that attach raced this.
+        if (auto const presumed = presumedOwnerThread.load(std::memory_order_relaxed);
+            presumed != std::thread::id{} && presumed != here) {
+            ::morph::exec::detail::noteOwner("Completion::deliver", cbExec->coreExecutor(), false);
+        }
+        // Released here, on the owner, where they were added.
+        auto const links = std::move(stopLinks);
+        if (value) {
+            auto const handlers = std::move(onOk);
+            for (const auto& handler : handlers) {
+                try {
+                    handler(*value);
+                } catch (...) {
+                    ::morph::log::logError("[completion] then handler threw; continuing with next handler");
+                }
+            }
+            return;
+        }
+        auto const handlers = std::move(onErr);
+        for (const auto& handler : handlers) {
+            try {
+                handler(error);
+            } catch (...) {
+                ::morph::log::logError("[completion] onError handler threw; continuing with next handler");
+            }
         }
     }
 };
@@ -396,8 +383,14 @@ private:
 /// they always run on the intended thread (e.g. the GUI thread).
 ///
 /// @par Thread safety
-/// `then()` and `onError()` may be called from any thread. The registered
-/// callbacks are invoked via the executor, never directly from the producing thread.
+/// A completion belongs to the executor supplied at construction, its owner.
+/// It may be settled from any thread: the first settle wins, and its delivery
+/// is posted to the owner, where every registered callback runs. `then()` and
+/// `onError()` must be called on the owner -- inside one of its tasks, or on
+/// its own thread outside them (a Qt slot, a test body). Calling them from
+/// another executor's task is a contract violation, asserted in a debug
+/// build. `co_await` may be used from any coroutine: it posts its attach to
+/// the owner when it is not running there.
 ///
 /// @par Orphan detection
 /// If a `Completion` is destroyed before an `onError()` handler is attached and
@@ -438,9 +431,9 @@ public:
 
     /// @brief Constructs a completion backed by @p statePtr, delivering callbacks via @p execPtr.
     /// @param statePtr Shared state produced by the backend.
-    /// @param execPtr  Executor on which callbacks are posted. If `nullptr`, callbacks are
-    ///                 never delivered — they are silently dropped (see `setValue`/`setException`,
-    ///                 which post only when `cbExec != nullptr`).
+    /// @param execPtr  The completion's owner: settling posts the delivery there, and
+    ///                 callbacks are attached and run there. If `nullptr`, callbacks are
+    ///                 never delivered — attaching one is a no-op.
     Completion(std::shared_ptr<detail::CompletionState<T>> statePtr, ::morph::exec::IExecutor* execPtr)
         : _state{std::move(statePtr)} {
         if (_state != nullptr) {
@@ -458,9 +451,10 @@ public:
 
     /// @brief Registers a success callback.
     ///
-    /// @p handler is posted to the executor with the result value when the
-    /// operation completes successfully. If the operation has already completed,
-    /// the callback is posted immediately.
+    /// @p handler runs on the executor with the result value when the
+    /// operation completes successfully. If the result has already been
+    /// delivered, the callback is posted on its own. Call on the owner (see
+    /// the class's thread-safety note).
     ///
     /// @param handler Callable receiving the result. Take `const T&` to observe it for free;
     ///                take `T` by value to get your own copy, at the cost of exactly one copy.
@@ -475,9 +469,10 @@ public:
 
     /// @brief Registers an error callback.
     ///
-    /// @p handler is posted to the executor with the `std::exception_ptr` when
-    /// the operation fails. If the operation has already failed, the callback
-    /// is posted immediately. Attaching this handler suppresses orphan logging.
+    /// @p handler runs on the executor with the `std::exception_ptr` when
+    /// the operation fails. If the failure has already been delivered, the
+    /// callback is posted on its own. Attaching this handler suppresses orphan
+    /// logging. Call on the owner (see the class's thread-safety note).
     ///
     /// @param handler Callable receiving the exception pointer.
     /// @return `*this` for chaining — a reference into this `Completion`, valid
@@ -648,7 +643,8 @@ public:
         /// No-op if the state is already settled (first result wins — see
         /// `detail::CompletionState<T>::setValue`), or if this `Promise` was
         /// moved from (mirrors `Completion<T>::then()`'s null-state no-op).
-        /// Safe to call from any thread.
+        /// Safe to call from any thread; the delivery is posted to the
+        /// completion's executor.
         /// @param val Success value delivered to every attached `then()` handler.
         void resolve(T val) {
             if (_state != nullptr) {
@@ -661,7 +657,8 @@ public:
         /// No-op if the state is already settled (first result wins — see
         /// `detail::CompletionState<T>::setException`), or if this `Promise` was
         /// moved from (mirrors `Completion<T>::onError()`'s null-state no-op).
-        /// Safe to call from any thread.
+        /// Safe to call from any thread; the delivery is posted to the
+        /// completion's executor.
         /// @param exc Error delivered to every attached `onError()` handler, or
         ///            logged as an orphan if none is ever attached.
         void reject(std::exception_ptr exc) {

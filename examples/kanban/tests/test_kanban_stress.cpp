@@ -66,14 +66,10 @@
 // This version drives `BoardModel` through a bare `morph::bridge::Bridge`
 // wrapping a `morph::backend::LocalBackend` directly (the exact pattern
 // `tests/test_concurrency_invariants.cpp`'s own concurrent-dispatch test
-// already uses), with `morph::testing::InlineExecutor`-equivalent semantics
-// for client-facing callback delivery (defined locally below -- `tests/
-// test_support.hpp` itself is private to the `tests/` target, not on
-// `examples/`'s include path, and the class is two lines) instead of
-// `QtExecutor`. `BoardModel`'s own `requireRole`/session checks are backend-
-// agnostic (they read `morph::session::current()` directly, never routed
-// through an `IAuthorizer` in `Mode::Local`'s old shape either -- confirmed
-// against board_model.hpp and backend_rig.hpp: `Mode::Local` never
+// already uses), with a `MainThreadExecutor` the test thread pumps as the
+// client-facing callback executor instead of `QtExecutor`. `BoardModel`'s own `requireRole`/session checks are
+// backend- agnostic (they read `morph::session::current()` directly, never routed through an `IAuthorizer` in
+// `Mode::Local`'s old shape either -- confirmed against board_model.hpp and backend_rig.hpp: `Mode::Local` never
 // constructs or uses an authorizer at all), so `Bridge::setDefaultSession`
 // still gates access exactly as before. `ModelKeyTraits<BoardModel>`'s
 // shared-per-project instance semantics are a `Bridge`-level mechanism
@@ -111,21 +107,6 @@ using morph::bridge::BridgeHandler;
 using morph::ladder::testkit::SeededScript;
 
 namespace {
-
-/// @brief Client-facing callback executor that runs every posted continuation
-///        immediately, on whichever thread resolves the `Completion` --
-///        never Qt's event loop. Same two-line shape as `morph::testing::
-///        InlineExecutor` (`tests/test_support.hpp`, private to the `tests/`
-///        target) and the identical role `test_concurrency_invariants.cpp`'s
-///        own `InlineExec` alias plays for `morph::bridge::Bridge`'s
-///        concurrent-dispatch test. `.then()`/`.onError()` bodies below only
-///        touch `std::atomic`s, so running them concurrently from multiple
-///        `ThreadPoolExecutor` worker threads (one per resolving completion)
-///        is race-free by construction -- no additional synchronization
-///        needed here.
-struct InlineExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
 
 // -- Why the two durations below are two types -------------------
 //
@@ -227,6 +208,27 @@ template <typename Pred>
     return true;
 }
 
+/// @brief `waitUntil`, running whatever is queued on @p owner before each
+///        poll: the client-facing executor the bridge delivers every
+///        continuation on, owned by this thread.
+///
+/// @tparam Pred  Predicate polled for completion.
+/// @param owner  The executor this thread owns and pumps.
+/// @param pred   Polled until it returns `true`.
+/// @param budget Unscaled wall-clock budget; scaled as `waitUntil`'s is.
+/// @return `true` if @p pred became true before the scaled budget elapsed.
+template <typename Pred>
+[[nodiscard]] bool pumpOwnerUntil(morph::exec::MainThreadExecutor& owner, Pred pred,
+                                  WaitBudget budget = WaitBudget{kDefaultWaitBudget}) {
+    return waitUntil(
+        [&owner, &pred] {
+            while (owner.runOnce()) {
+            }
+            return pred();
+        },
+        budget);
+}
+
 namespace detail {
 
 // Satisfied when `waitUntil` is callable with `Args` -- the predicate type
@@ -313,7 +315,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
     // `workerPool`; every model action genuinely runs on one of these 4
     // threads, serialized per-model-instance by the strand.
     morph::exec::ThreadPoolExecutor workerPool{4};
-    InlineExecutor clientExecutor;
+    morph::exec::MainThreadExecutor clientExecutor;
     Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), clientExecutor};
 
     constexpr std::string_view kSecret = "test-secret-32-bytes-minimum!!!!";
@@ -336,7 +338,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
                 done.store(true);
             })
             .onError([&](const std::exception_ptr&) { done.store(true); });
-        REQUIRE(waitUntil([&] { return done.load(); }));
+        REQUIRE(pumpOwnerUntil(clientExecutor, [&] { return done.load(); }));
     }
     const auto projectId = createdProject.id;
 
@@ -354,7 +356,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
             ->execute(kanban::OpenBoard{.projectId = projectId})
             .then([&](const kanban::GetBoardResult&) { opened.store(true); })
             .onError([&](const std::exception_ptr&) { opened.store(true); });
-        REQUIRE(waitUntil([&] { return opened.load(); }));
+        REQUIRE(pumpOwnerUntil(clientExecutor, [&] { return opened.load(); }));
     }
 
     // Seed the board: 2 columns (unlimited WIP -- a WIP-limit Conflict would
@@ -375,7 +377,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
                 done.store(true);
             })
             .onError([&](const std::exception_ptr&) { done.store(true); });
-        REQUIRE(waitUntil([&] { return done.load(); }));
+        REQUIRE(pumpOwnerUntil(clientExecutor, [&] { return done.load(); }));
     }
     {
         std::atomic<bool> done{false};
@@ -385,7 +387,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
                 done.store(true);
             })
             .onError([&](const std::exception_ptr&) { done.store(true); });
-        REQUIRE(waitUntil([&] { return done.load(); }));
+        REQUIRE(pumpOwnerUntil(clientExecutor, [&] { return done.load(); }));
     }
     {
         std::atomic<bool> done{false};
@@ -395,7 +397,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
                 done.store(true);
             })
             .onError([&](const std::exception_ptr&) { done.store(true); });
-        REQUIRE(waitUntil([&] { return done.load(); }));
+        REQUIRE(pumpOwnerUntil(clientExecutor, [&] { return done.load(); }));
     }
 
     std::vector<kanban::TaskId> taskIds;
@@ -411,7 +413,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
                 done.store(true);
             })
             .onError([&](const std::exception_ptr&) { done.store(true); });
-        REQUIRE(waitUntil([&] { return done.load(); }));
+        REQUIRE(pumpOwnerUntil(clientExecutor, [&] { return done.load(); }));
         taskIds.push_back(newTaskId);
     }
     REQUIRE(taskIds.size() == 8);
@@ -471,10 +473,8 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
     // Completions still resolve one at a time (the strand serializes the
     // *work*), but the *posting*/dispatch machinery around it runs from real,
     // concurrently-scheduled pool threads -- exactly what a ThreadSanitizer
-    // run over this test exists to check. `.then`/`.onError` now run inline
-    // on whichever pool thread resolves the completion (InlineExecutor,
-    // above), not on a Qt thread -- both callbacks only touch atomics, so
-    // this is race-free.
+    // run over this test exists to check. `.then`/`.onError` run on
+    // `clientExecutor`, pumped by this thread, not on a Qt thread.
     std::atomic<int> outstanding{0};
     std::atomic<int> failures{0};
     for (std::size_t i = 0; i < kClients; ++i) {
@@ -505,18 +505,12 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
 
     // 90s, not 20s -- and, like every budget in this file, scaled from there
     // by MORPH_LADDER_DEADLINE_MS (see waitUntil above), so this number is a
-    // baseline rather than a ceiling. This loop's own real-thread-pool
-    // callback delivery (InlineExecutor, above) runs every .then()/.onError()
-    // directly on whichever pool worker resolves each completion, unlike the
-    // original Qt-based version's client-side callback delivery -- and ThreadSanitizer
-    // instrumentation adds a well-documented 5-15x slowdown on top of that.
-    // Confirmed empirically: this exact 200-action workload (4 clients x 50
-    // actions) finished in ~32s under real TSan instrumentation in CI, comfortably
-    // inside 90s but past the original, un-scaled 20s budget the Qt-based
-    // version used without ever actually needing more (its own callback
-    // delivery path happened to be fast enough not to hit this).
-    REQUIRE(
-        waitUntil([&outstanding] { return outstanding.load() == 0; }, WaitBudget{std::chrono::milliseconds{90000}}));
+    // baseline rather than a ceiling. ThreadSanitizer instrumentation slows
+    // this 200-action workload (4 clients x 50 actions) by 5-15x; it has run
+    // in ~32s under TSan in CI, inside 90s and past a 20s budget.
+    REQUIRE(pumpOwnerUntil(
+        clientExecutor, [&outstanding] { return outstanding.load() == 0; },
+        WaitBudget{std::chrono::milliseconds{90000}}));
     CAPTURE(failures.load());
 
     // Fetch one final GetBoardState and assert both design spec §8 invariants.
@@ -530,7 +524,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
                 done.store(true);
             })
             .onError([&](const std::exception_ptr&) { done.store(true); });
-        REQUIRE(waitUntil([&] { return done.load(); }));
+        REQUIRE(pumpOwnerUntil(clientExecutor, [&] { return done.load(); }));
     }
 
     if (!positionsAreDenseAndUnique(finalState)) {

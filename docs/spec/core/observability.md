@@ -81,12 +81,13 @@ struct HealthStatus {
     std::size_t inFlight;
 };
 
-[[nodiscard]] morph::async::Completion<HealthStatus> health();
+[[nodiscard]] morph::async::Completion<HealthStatus> health(morph::exec::IExecutor& replyExec);
 // ServerConfig::healthHandler — std::function<void(const HealthStatus&)>
 ```
 
-`health()` is answered on the server strand, where the model registry and the
-in-flight count live: `liveModels` from the registry, `inFlight` from the
+`health(replyExec)` is answered on the server strand, where the model registry
+and the in-flight count live, and delivered on `replyExec`, the executor the
+caller attaches from: `liveModels` from the registry, `inFlight` from the
 in-flight count — the same count `LimitPolicy::maxInFlightExecutes` enforces,
 the `executeInFlight` metric reports, and `RemoteServer::drainedWithin()` waits
 on (see [Thread safety](#thread-safety) and [backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)):

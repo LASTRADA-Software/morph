@@ -152,14 +152,14 @@ using SyncExec = morph::testing::InlineExecutor;
 
 TEST_CASE("morph::bridge::Bridge::switchBackend  -  handler works before and after switch", "[bridge][switch]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
     // Execute on original backend.
     std::atomic<int> res1{-1};
     handler.execute(CountAction{5}).then([&](int val) { res1.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return res1.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return res1.load() != -1; }));
     REQUIRE(res1.load() == 5);
 
     // Switch to a fresh backend  -  model state resets (new instance).
@@ -168,7 +168,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  handler works before and aft
 
     std::atomic<int> res2{-1};
     handler.execute(CountAction{7}).then([&](int val) { res2.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return res2.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return res2.load() != -1; }));
     REQUIRE(res2.load() == 7);
 }
 
@@ -188,7 +188,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  destroyed handler not re-reg
 
 TEST_CASE("morph::bridge::Bridge::switchBackend  -  multiple live handlers all re-registered", "[bridge][switch]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<CountModel> handler2{bridge, &cbExec};
@@ -202,7 +202,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  multiple live handlers all r
     });
     handler2.execute(CountAction{20}).then([&](int val) { res2.store(val); }).onError([](const std::exception_ptr&) {
     });
-    REQUIRE(morph::testing::waitUntil([&] { return res1.load() != -1 && res2.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return res1.load() != -1 && res2.load() != -1; }));
     REQUIRE(res1.load() == 10);
     REQUIRE(res2.load() == 20);
 }
@@ -210,7 +210,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  multiple live handlers all r
 TEST_CASE("morph::bridge::Bridge::switchBackend(shared_ptr)  -  caller-owned instance can be re-installed",
           "[bridge][switch][shared_ptr]") {
     morph::exec::ThreadPoolExecutor poolInitial{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInitial), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
@@ -233,7 +233,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend(shared_ptr)  -  caller-owned ins
 
     std::atomic<int> res{-1};
     handler.execute(CountAction{9}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return res.load() != -1; }));
     REQUIRE(res.load() == 9);
 }
 
@@ -252,7 +252,7 @@ TEST_CASE(
     // reason.
     morph::exec::ThreadPoolExecutor poolInit{2};
     morph::exec::ThreadPoolExecutor poolObs{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInit), cbExec};
 
     auto observer = std::make_shared<SwitchSelfObserverBackend>(poolObs);
@@ -271,7 +271,7 @@ TEST_CASE(
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
     std::atomic<int> res{-1};
     handler.execute(CountAction{4}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return res.load() != -1; }));
     REQUIRE(res.load() == 4);
 }
 
@@ -280,7 +280,7 @@ TEST_CASE(
     "overload)",
     "[bridge][switch][shared_ptr]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
@@ -289,7 +289,7 @@ TEST_CASE(
 
     std::atomic<int> res{-1};
     handler.execute(CountAction{3}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return res.load() != -1; }));
     REQUIRE(res.load() == 3);
 }
 
@@ -299,7 +299,7 @@ TEST_CASE(
     "morph::bridge::Bridge::switchBackend  -  onBackendChanged called exactly once on new model after one switch",
     "[bridge][switch][notify]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
@@ -311,7 +311,7 @@ TEST_CASE(
     handler.execute(SwitchCountAction{})
         .then([&](int val) { count.store(val); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return count.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return count.load() != -1; }));
     REQUIRE(count.load() == 1);
 }
 
@@ -319,7 +319,7 @@ TEST_CASE(
     "morph::bridge::Bridge::switchBackend  -  onBackendChanged called exactly once per switch across two switches",
     "[bridge][switch][notify]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
@@ -335,7 +335,7 @@ TEST_CASE(
     handler.execute(SwitchCountAction{})
         .then([&](int val) { count.store(val); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return count.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return count.load() != -1; }));
     REQUIRE(count.load() == 1);
 }
 
@@ -581,7 +581,7 @@ private:
 TEST_CASE("morph::bridge::Bridge::switchBackend  -  rollback on partial failure leaves old backend active",
           "[bridge][switch][rollback]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<CountModel> handler2{bridge, &cbExec};
@@ -605,7 +605,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  rollback on partial failure 
     // The old backend is still active and functional.
     std::atomic<int> res{-1};
     handler1.execute(CountAction{3}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return res.load() != -1; }));
     REQUIRE(res.load() == 3);
 }
 
@@ -1021,7 +1021,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend rolls back on a rejected bind, n
           "[bridge][switch][rollback][registration-surface]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::ThreadPoolExecutor pool2{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<CountModel> const handler2{bridge, &cbExec};
@@ -1044,6 +1044,6 @@ TEST_CASE("morph::bridge::Bridge::switchBackend rolls back on a rejected bind, n
     // The old backend is still the active one.
     std::atomic<int> res{-1};
     handler1.execute(CountAction{5}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return res.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return res.load() != -1; }));
     REQUIRE(res.load() == 5);
 }

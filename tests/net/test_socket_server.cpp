@@ -379,11 +379,14 @@ TEST_CASE("SocketServer: dropping a client reclaims the models it registered", "
         REQUIRE(regReply.kind == "ok");
         modelId = regReply.modelId;
         REQUIRE(modelId != 0U);
-        REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
+        REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
     }  // client destructs: the socket closes and the server observes EOF
 
-    REQUIRE(morph::testing::waitUntil([&] { return morph::testing::awaitValue(server->health()).liveModels == 0U; },
-                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+    REQUIRE(morph::testing::waitUntil(
+        [&] {
+            return morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U;
+        },
+        morph::testing::WaitBudget{std::chrono::seconds{5}}));
 
     // A late execute against the reclaimed id is answered, not serviced.
     RawWsClient probe{wsServer.port()};
@@ -415,12 +418,15 @@ TEST_CASE("SocketServer: each client's models are reclaimed independently", "[ne
         RawWsClient transient{wsServer.port()};
         transient.send(morph::wire::makeRegister("NetEchoModel"));
         REQUIRE(transient.receive().kind == "ok");
-        REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 2U);
+        REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 2U);
     }
 
     // Only the departed client's instance goes; the survivor keeps working.
-    REQUIRE(morph::testing::waitUntil([&] { return morph::testing::awaitValue(server->health()).liveModels == 1U; },
-                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+    REQUIRE(morph::testing::waitUntil(
+        [&] {
+            return morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U;
+        },
+        morph::testing::WaitBudget{std::chrono::seconds{5}}));
 
     morph::wire::Envelope execReq;
     execReq.kind = "execute";
@@ -490,12 +496,12 @@ TEST_CASE("SocketServer::close() reclaims every connected client's models", "[ne
     RawWsClient clientB{wsServer->port()};
     clientB.send(morph::wire::makeRegister("NetEchoModel"));
     REQUIRE(clientB.receive().kind == "ok");
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 2U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 2U);
 
     // close() joins the client threads, each of which runs its own scope
     // teardown on the way out.
     wsServer->close();
-    REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 // ── Task 6b: closing socket_server.hpp's remaining coverage gaps ───────────
@@ -1372,7 +1378,7 @@ TEST_CASE("SocketServer: a stalled reply write on a still-readable connection re
     sendEnvelope(morph::wire::makeRegister("NetEchoModel"));
     auto reg = recvOne();
     REQUIRE(reg.kind == "ok");
-    REQUIRE(morph::testing::awaitValue(stack->server->health()).liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return stack->server->health(owner); }).liveModels == 1U);
 
     // Flood large replies without ever reading them: the client's receive
     // window fills, the server's `sendAll` for a later reply stalls, and
@@ -1405,8 +1411,13 @@ TEST_CASE("SocketServer: a stalled reply write on a still-readable connection re
 
     auto reclaimed = std::make_shared<std::atomic<bool>>(false);
     std::thread waiter{[stack, reclaimed] {
-        morph::testing::waitUntil([&] { return morph::testing::awaitValue(stack->server->health()).liveModels == 0U; },
-                                  morph::testing::WaitBudget{std::chrono::seconds{15}});
+        morph::testing::waitUntil(
+            [&] {
+                return morph::testing::awaitAnswer([&](auto& owner) {
+                           return stack->server->health(owner);
+                       }).liveModels == 0U;
+            },
+            morph::testing::WaitBudget{std::chrono::seconds{15}});
         reclaimed->store(true);
     }};
 
@@ -1421,7 +1432,7 @@ TEST_CASE("SocketServer: a stalled reply write on a still-readable connection re
     // The connection must actually have been retired -- its flow ended and
     // its ScopeGuard reclaimed the model -- not merely "eventually true by
     // coincidence".
-    REQUIRE(morph::testing::awaitValue(stack->server->health()).liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return stack->server->health(owner); }).liveModels == 0U);
 }
 
 // ── One I/O loop owns the server ────────────────────────────────────────────
@@ -1464,7 +1475,7 @@ TEST_CASE("SocketServer: connections are accepted and closed on the loop", "[net
     CHECK(recorder.allPosted("SocketServer::listen"));
     CHECK(recorder.allPosted("SocketServer::accept"));
     CHECK(recorder.allPosted("SocketServer::close"));
-    CHECK(morph::testing::awaitValue(server->health()).liveModels == 0U);
+    CHECK(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 TEST_CASE("SocketServer: close() from two threads at once runs twice on the loop, one after the other",

@@ -174,7 +174,7 @@ TEST_CASE("Bridge: a LocalBackend handler's first execute dispatches without pum
           "[bridge][owner][bind]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor owner;  // never pumped in this test
-    morph::testing::InlineExecutor gui;
+    morph::exec::MainThreadExecutor gui;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
     morph::bridge::BridgeHandler<PingModel> handler{bridge, &gui};
 
@@ -182,7 +182,7 @@ TEST_CASE("Bridge: a LocalBackend handler's first execute dispatches without pum
     REQUIRE(handler.isBound());
     std::atomic<int> result{0};
     handler.execute(Ping{.value = 21}).then([&](const Pong& pong) { result.store(pong.value); });
-    REQUIRE(morph::testing::waitUntil([&] { return result.load() == 42; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(gui, [&] { return result.load() == 42; }));
 }
 
 TEST_CASE("Bridge: an execute made before the bind settles is held and dispatched on the owner",

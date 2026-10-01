@@ -566,7 +566,7 @@ TEST_CASE("ActionDispatcher: runner records for hand-written ActionTraits with n
 TEST_CASE("Bridge/LocalBackend: local-mode execution records loggable actions, skips opted-out ones",
           "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<InMemoryActionLog>();
@@ -583,14 +583,14 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records loggable actions, s
     handler.execute(ALDeposit{.amount = 20})
         .then([&](int v) { depositResult.store(v); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return depositResult.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return depositResult.load() != -1; }));
     REQUIRE(depositResult.load() == 20);
 
     std::atomic<int> balanceResult{-1};
     handler.execute(ALGetBalance{})
         .then([&](int v) { balanceResult.store(v); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return balanceResult.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return balanceResult.load() != -1; }));
 
     auto entries = log->entries();
     REQUIRE(entries.size() == 1);  // GetBalance opted out
@@ -601,7 +601,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records loggable actions, s
 TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when Model::execute throws",
           "[action_log][bridge][issue23]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<InMemoryActionLog>();
@@ -618,7 +618,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when
     handler.execute(ALWithdraw{.amount = 50}).then([&](int) {}).onError([&](const std::exception_ptr&) {
         errored.store(true);
     });
-    REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return errored.load(); }));
 
     auto entries = log->entries();
     REQUIRE(entries.size() == 1);  // the rejected attempt is still journaled
@@ -724,7 +724,7 @@ TEST_CASE("ActionDispatcher: a result that will not serialise is not recorded as
 TEST_CASE("Bridge/LocalBackend: a sink that refuses the success append does not report the action as failed",
           "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<SuccessRefusingLog>();
@@ -745,7 +745,7 @@ TEST_CASE("Bridge/LocalBackend: a sink that refuses the success append does not 
             failure = eptr;
             settled.store(true);
         });
-    REQUIRE(morph::testing::waitUntil([&] { return settled.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return settled.load(); }));
     REQUIRE(failure);
     auto seen = reportedFrom(failure);
 
@@ -758,7 +758,7 @@ TEST_CASE("Bridge/LocalBackend: a sink that refuses the success append does not 
     // instance back without the sink ever being asked.
     std::atomic<int> balance{-1};
     handler.execute(ALGetBalance{}).then([&](int v) { balance.store(v); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return balance.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return balance.load() != -1; }));
     REQUIRE(balance.load() == 10);
 
     REQUIRE(log->entries().empty());
@@ -771,7 +771,7 @@ TEST_CASE("Bridge/LocalBackend: a sink that refuses the success append does not 
 TEST_CASE("Bridge/LocalBackend: a genuine Model::execute throw still records Outcome::Failed with the model's message",
           "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<SuccessRefusingLog>();
@@ -792,7 +792,7 @@ TEST_CASE("Bridge/LocalBackend: a genuine Model::execute throw still records Out
             failure = eptr;
             settled.store(true);
         });
-    REQUIRE(morph::testing::waitUntil([&] { return settled.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return settled.load(); }));
     REQUIRE(failure);
     auto seen = reportedFrom(failure);
 
@@ -810,7 +810,7 @@ TEST_CASE("Bridge/LocalBackend: a genuine Model::execute throw still records Out
 
 TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log does not crash", "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<ALModel> handler{bridge, &cbExec};  // default factory — no log
 
@@ -818,7 +818,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log doe
     handler.execute(ALDeposit{.amount = 4})
         .then([&](int v) { result.store(v); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return result.load() != -1; }));
     REQUIRE(result.load() == 4);
 }
 
@@ -833,7 +833,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log doe
 TEST_CASE("SimulatedRemoteBackend: client-side factory (and its attached log) is never invoked",
           "[action_log][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
 
     morph::model::detail::ModelRegistryFactory serverRegistry;
     morph::model::detail::ActionDispatcher serverDispatcher;
@@ -859,7 +859,7 @@ TEST_CASE("SimulatedRemoteBackend: client-side factory (and its attached log) is
     handler.execute(ALDeposit{.amount = 7})
         .then([&](int v) { result.store(v); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return result.load() != -1; }));
     REQUIRE(result.load() == 7);  // executed correctly, server-side, with no log attached there
 
     REQUIRE_FALSE(factoryCalled.load());

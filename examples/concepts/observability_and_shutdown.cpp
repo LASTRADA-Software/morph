@@ -116,11 +116,11 @@ TEST_CASE("graceful shutdown: beginShutdown rejects new registers and flips heal
           "[concepts][shutdown]") {
     InlineExecutor pool;
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    REQUIRE(answeredNow(server->health()).ready);
+    REQUIRE(answeredNow(server->health(pool)).ready);
 
     server->beginShutdown();
 
-    REQUIRE_FALSE(answeredNow(server->health()).ready);
+    REQUIRE_FALSE(answeredNow(server->health(pool)).ready);
 
     CapturedReply reply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("ObsDemo_Model")), std::ref(reply));
@@ -137,5 +137,5 @@ TEST_CASE("graceful shutdown: drainedWithin returns true immediately once nothin
 
     // With an InlineExecutor every call already ran to completion by the time
     // handle() returns, so there is nothing left in flight to wait for.
-    REQUIRE(answeredNow(server->drainedWithin(std::chrono::milliseconds{0})));
+    REQUIRE(answeredNow(server->drainedWithin(std::chrono::milliseconds{0}, pool)));
 }

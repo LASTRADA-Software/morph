@@ -9,7 +9,6 @@
 #include <functional>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
-#include <morph/core/owner_strand.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
@@ -45,13 +44,10 @@ TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") 
 
     // --- On "reconnect": drain the queue, replaying each action via the bridge.
     // SyncWorker drains on the executor it is given, which must run one task
-    // at a time: a strand. Over an executor that runs a task on the posting
-    // thread, run() has drained before it returns.
-    struct RunHere final : morph::exec::IExecutor {
-        void post(std::function<void()> task) override { task(); }
-    } here;
-    morph::exec::OwnerStrand owner{here};
-    morph::offline::SyncWorker worker{owner, queue, [&](const std::string& payload) -> bool {
+    // at a time. The GUI loop is that executor here: the replay awaits each
+    // action's reply, which is delivered on the GUI loop, so the replay runs
+    // there too.
+    morph::offline::SyncWorker worker{app.guiLoop(), queue, [&](const std::string& payload) -> bool {
                                           try {
                                               await(txns.execute(Codec::fromJson(payload)), app.guiLoop());
                                               return true;
@@ -59,8 +55,7 @@ TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") 
                                               return false;
                                           }
                                       }};
-    morph::offline::SyncResult result;
-    worker.run().then([&result](const morph::offline::SyncResult& drained) { result = drained; });
+    auto const result = await(worker.run(), app.guiLoop());
 
     REQUIRE(result.successful == 2);
     REQUIRE(result.failed == 0);

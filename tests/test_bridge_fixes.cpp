@@ -120,10 +120,10 @@ using bfa::ReentrantModel;
 
 namespace {
 
-int waitInt(auto completion) {
+int waitInt(morph::exec::MainThreadExecutor& owner, auto completion) {
     std::atomic<int> result{-999};
     std::move(completion).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
-    morph::testing::waitUntil([&] { return result.load() != -999; });
+    morph::testing::pumpOwnerUntil(owner, [&] { return result.load() != -999; });
     return result.load();
 }
 
@@ -133,7 +133,7 @@ TEST_CASE("Bridge::switchBackend fires onBackendChanged on the model strand - se
           "[bridge][backend-changed]") {
     morph::exec::ThreadPoolExecutor pool1{2};
     morph::exec::ThreadPoolExecutor pool2{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = std::string{morph::model::ModelTraits<ReactModel>::typeId()};
@@ -149,7 +149,7 @@ TEST_CASE("Bridge::switchBackend fires onBackendChanged on the model strand - se
     // onBackendChanged runs on the strand asynchronously; the query races behind
     // it on the SAME strand, so once the query returns 1 we know the mutation
     // was serialised ahead of it (no torn state, no lock).
-    REQUIRE(waitInt(handler.execute(BFQueryAction{})) == 1);
+    REQUIRE(waitInt(cbExec, handler.execute(BFQueryAction{})) == 1);
 }
 
 TEST_CASE("onBackendChanged that re-enters registerHandler/deregisterHandler does not deadlock",
@@ -292,7 +292,7 @@ TEST_CASE("executeJson rejects an action that fails its validator (not silently 
 
 TEST_CASE("executeJson dispatches a valid action", "[bridge][execute-json][validation]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<MassModel> handler{bridge, &cbExec};
 
@@ -305,14 +305,14 @@ TEST_CASE("executeJson dispatches a valid action", "[bridge][execute-json][valid
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(result.has_value());
     REQUIRE(result->find(R"("engaged":true)") != std::string::npos);
 }
 
 TEST_CASE("executeJson retags a submitted Quantity to its declared precision", "[bridge][execute-json][precision]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<MassModel> handler{bridge, &cbExec};
 
@@ -327,7 +327,7 @@ TEST_CASE("executeJson retags a submitted Quantity to its declared precision", "
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(result.has_value());
     // receivedDp is the declared precision (3), not the client's submitted dp (2).
     REQUIRE(result->find(R"("receivedDp":3)") != std::string::npos);

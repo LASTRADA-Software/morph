@@ -28,8 +28,9 @@
 //     warm-up is done, so process start-up, model registration and the first
 //     50 dispatches are excluded.
 //   * The workload is the smallest one there is: `Ping{int}` -> `Pong{int}`
-//     through `LocalBackend` on a one-thread pool, with an inline callback
-//     executor. No JSON, no socket. What is left is framework overhead.
+//     through `LocalBackend` on a one-thread pool, with a callback executor
+//     the main thread pumps. No JSON, no socket. What is left is framework
+//     overhead.
 //   * Every call is waited out before the next one starts, so the count is per
 //     completed round trip rather than per queued dispatch.
 //   * `--attribute` additionally prints the size of every allocation made
@@ -104,6 +105,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <deque>
 #include <exception>
@@ -244,15 +246,48 @@ BRIDGE_REGISTER_ACTION(BenchAllocLongIdModel, BenchAllocLongIdPing, "BenchAllocL
 
 namespace {
 
-// Runs each task on the calling thread, so the callback executor contributes
-// no allocations of its own and what is counted is the dispatch path.
-class InlineCallbackExecutor : public ::morph::exec::IExecutor {
+// The main thread's callback executor: it attaches the handlers, and the
+// replies are delivered back to it, as they are to a GUI client's own thread.
+// Queued in a fixed ring of slots, so the executor contributes no allocations
+// of its own and what is counted is the dispatch path.
+class PumpedCallbackExecutor : public ::morph::exec::IExecutor {
 public:
     void post(std::function<void()> task) override {
-        if (task) {
-            task();
+        std::scoped_lock const lock{_mtx};
+        if (_count == _slots.size()) {
+            std::fputs("PumpedCallbackExecutor: more tasks queued than it has slots\n", stderr);
+            std::abort();
+        }
+        _slots.at((_head + _count) % _slots.size()) = std::move(task);
+        ++_count;
+    }
+
+    // Runs everything queued, including what those tasks queue, on the
+    // calling thread: the one that owns this executor.
+    void runPending() {
+        for (;;) {
+            std::function<void()> task;
+            {
+                std::scoped_lock const lock{_mtx};
+                if (_count == 0) {
+                    return;
+                }
+                task = std::move(_slots.at(_head));
+                _head = (_head + 1) % _slots.size();
+                --_count;
+            }
+            ::core::async::ExecutorScope const scope{coreExecutor()};
+            if (task) {
+                task();
+            }
         }
     }
+
+private:
+    std::mutex _mtx;
+    std::array<std::function<void()>, 16> _slots;
+    std::size_t _head = 0;
+    std::size_t _count = 0;
 };
 
 // A one-thread worker pool whose queue can be held shut. See the file header:
@@ -438,13 +473,14 @@ double migrationFindCensus(std::string_view actionType, std::string_view fromSch
 // Gated exactly as `roundTrip` is, for the reason the file header gives.
 //
 // @tparam Model Registered model whose handler dispatches.
-// @param pool     The gated worker the bridge runs on.
-// @param handler  Handler for @p Model, already bound.
+// @param pool         The gated worker the bridge runs on.
+// @param callbackExec The bridge's owner, pumped by this thread.
+// @param handler      Handler for @p Model, already bound.
 // @param actionId Registered action type-id to execute.
 // @return Allocations per completed `executeJson`, averaged over `kCalls` of them.
 template <typename Model>
-double executeJsonCensus(GatedWorkerExecutor& pool, ::morph::bridge::BridgeHandler<Model>& handler,
-                         std::string_view actionId) {
+double executeJsonCensus(GatedWorkerExecutor& pool, PumpedCallbackExecutor& callbackExec,
+                         ::morph::bridge::BridgeHandler<Model>& handler, std::string_view actionId) {
     Census& state = census();
     std::atomic<int> settled{0};
     auto once = [&] {
@@ -455,6 +491,7 @@ double executeJsonCensus(GatedWorkerExecutor& pool, ::morph::bridge::BridgeHandl
             .onError([&settled](const std::exception_ptr&) { settled.fetch_add(1, std::memory_order_relaxed); });
         pool.release();
         while (settled.load(std::memory_order_acquire) < target) {
+            callbackExec.runPending();
             std::this_thread::yield();
         }
     };
@@ -474,7 +511,7 @@ double executeJsonCensus(GatedWorkerExecutor& pool, ::morph::bridge::BridgeHandl
 int run(bool attribute, double budget, double lookupBudget, double idLengthBudget) {
     Census& state = census();
     GatedWorkerExecutor pool;
-    InlineCallbackExecutor callbackExec;
+    PumpedCallbackExecutor callbackExec;
     ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool), callbackExec};
     ::morph::bridge::BridgeHandler<BenchAllocModel> handler{bridge, &callbackExec};
     // Only `executeJsonCensus` uses these two; they exist so that census can
@@ -484,7 +521,7 @@ int run(bool attribute, double budget, double lookupBudget, double idLengthBudge
     ::morph::bridge::BridgeHandler<BenchAllocLongIdModel> longIdHandler{bridge, &callbackExec};
 
     std::atomic<int> settled{0};
-    auto roundTrip = [&handler, &settled, &pool](int value) {
+    auto roundTrip = [&handler, &settled, &pool, &callbackExec](int value) {
         int const target = settled.load(std::memory_order_relaxed) + 1;
         // Hold the worker across the dispatch and both attaches, so the strand
         // task cannot settle the completion before the handlers are on it. See
@@ -495,6 +532,7 @@ int run(bool attribute, double budget, double lookupBudget, double idLengthBudge
             .onError([&settled](const std::exception_ptr&) { settled.fetch_add(1, std::memory_order_relaxed); });
         pool.release();
         while (settled.load(std::memory_order_acquire) < target) {
+            callbackExec.runPending();
             std::this_thread::yield();
         }
     };
@@ -550,8 +588,9 @@ int run(bool attribute, double budget, double lookupBudget, double idLengthBudge
     double const shortMigrationFind = migrationFindCensus("BA_A", "BA_S");
     double const longCreate = registryCreateCensus("BenchAllocLongId_ModelTypeId");
     double const shortCreate = registryCreateCensus("BA_M");
-    double const longExecuteJson = executeJsonCensus(pool, longIdHandler, "BenchAllocLongId_ActionTypeId");
-    double const shortExecuteJson = executeJsonCensus(pool, tinyHandler, "BA_A");
+    double const longExecuteJson =
+        executeJsonCensus(pool, callbackExec, longIdHandler, "BenchAllocLongId_ActionTypeId");
+    double const shortExecuteJson = executeJsonCensus(pool, callbackExec, tinyHandler, "BA_A");
     std::cout << std::format("\nPayloadMigrationRegistry   : find, {} times\n", kLookups)
               << std::format("  both ids past SSO        : {:.2f} allocations per lookup\n", longMigrationFind)
               << std::format("  both ids inside SSO      : {:.2f} allocations per lookup\n", shortMigrationFind)
