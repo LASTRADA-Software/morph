@@ -12,7 +12,7 @@
 //    (examples/bookmarks/tests/test_bookmark_model.cpp's own
 //    GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket) matrix),
 //    but rung 2's matrix only ever proved the *plain-registration* path;
-//    this proves the *keyed* attach path (registerModelShared/attachModel,
+//    this proves the *keyed* attach path (bindModel,
 //    docs/spec/core/shared_instances.md) works identically across all three
 //    modes.
 // 2. Shared-instance lifetime: N BridgeHandler<PollModel, AllowShared>
@@ -142,7 +142,7 @@ TEST_CASE(
     // *instances()* call is the identical hazard, since both are ordinary
     // sendSync callers competing for the same callId-0 bucket -- a third
     // independent reproduction site, after rung 2's own Task 17 discovery
-    // and QtWebSocketBackend::attachModel's empty-key path hitting it too.
+    // and QtWebSocketBackend::bindModel's empty-key path hitting it too.
     // QtWebSocketBackend::deregisterModel now assigns a real, tracked callId
     // rather than sharing the zero sentinel, closing the race framework-side;
     // this test's own connection-isolation setup (5 clients, not 4) is kept

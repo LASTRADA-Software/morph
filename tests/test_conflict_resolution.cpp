@@ -180,7 +180,7 @@ TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBack
         queue, [](const std::string&) { return false; },      // no conflicts
         [](const std::string& payload) { return payload; });  // resolver never called
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1), cbExec};
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
@@ -207,7 +207,7 @@ TEST_CASE("ConflictResolution: conflicting items discarded  -  resolver returns 
         queue, [](const std::string& payload) { return payload.contains("CONFLICT"); },
         [](const std::string&) -> std::string { return ""; });  // discard
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1), cbExec};
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
@@ -231,7 +231,7 @@ TEST_CASE("ConflictResolution: conflicting items merged  -  resolver returns non
         queue, [](const std::string& payload) { return payload.contains("CONFLICT"); },
         [](const std::string&) -> std::string { return "merged_value"; });  // merge
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1), cbExec};
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
@@ -257,7 +257,7 @@ TEST_CASE("ConflictResolution: framework fires onBackendChanged exactly once per
     auto binding = makeOrderBinding(
         queue, [](const std::string&) { return false; }, [](const std::string& payload) { return payload; });
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1), cbExec};
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     // Switch once  -  new model instance created, notifyCount becomes 1.
@@ -303,7 +303,7 @@ TEST_CASE("ConflictResolution: full offline scenario  -  accumulate offline, syn
         // Resolver: take server version (non-empty → merge applied).
         [](const std::string&) -> std::string { return R"({"item":"order_B_server"})"; });
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool), cbExec};
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     // Simulate reconnection  -  switch to remote backend.

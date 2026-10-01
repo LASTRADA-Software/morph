@@ -26,6 +26,7 @@
 #include <string>
 #include <thread>
 
+#include "bind_support.hpp"
 #include "test_support.hpp"
 
 using namespace std::chrono_literals;
@@ -75,7 +76,9 @@ struct ControllableBackend : ::morph::backend::detail::IBackend {
     }
     void notifyBackendChanged() override {}
     void cancelPending(const std::exception_ptr& /*exc*/) override {}
-    void setReconnectHandler(const std::function<void()>& handler) override { reconnect = std::move(handler); }
+    void setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* /*exec*/) override {
+        reconnect = std::move(handler);
+    }
 };
 
 // A denying authorizer for the RemoteServer unauthorized path.
@@ -100,12 +103,13 @@ std::shared_ptr<::morph::bridge::detail::HandlerBinding> makeBinding() {
 TEST_CASE("morph::bridge::Bridge: reconnect handler re-registers live bindings and skips expired ones",
           "[coverage][bridge]") {
     // Firing the reconnect handler while its backend is still active drives the
-    // "proceed" path: pinned != nullptr and pinned == loadBackend() (both false
+    // "proceed" path: pinned != nullptr and pinned == the active backend (both false
     // arms of 293), the handler loop (296), and both arms of `!binding` (298) —
     // a live binding (false arm) plus an expired weak_ptr (true arm / continue).
     auto backend = std::make_unique<ControllableBackend>();
     auto* raw = backend.get();
-    ::morph::bridge::Bridge bridge{std::move(backend)};
+    morph::testing::InlineExecutor bridgeOwner;
+    ::morph::bridge::Bridge bridge{std::move(backend), bridgeOwner};
 
     auto live = makeBinding();
     bridge.registerHandler(live);
@@ -133,7 +137,8 @@ TEST_CASE("morph::bridge::Bridge: reconnect handler from a superseded backend is
     // lambda captures the still-alive Bridge, not backend A.
     auto backendA = std::make_unique<ControllableBackend>();
     auto* rawA = backendA.get();
-    ::morph::bridge::Bridge bridge{std::move(backendA)};
+    morph::testing::InlineExecutor bridgeOwner;
+    ::morph::bridge::Bridge bridge{std::move(backendA), bridgeOwner};
 
     std::function<void()> stale = rawA->reconnect;
     REQUIRE(stale);
@@ -146,7 +151,8 @@ TEST_CASE("morph::bridge::Bridge: reconnect handler from a superseded backend is
 
 TEST_CASE("morph::bridge::Bridge: setDefaultSession / defaultSession round-trip", "[coverage][bridge]") {
     ::morph::exec::ThreadPoolExecutor pool{1};
-    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
+    morph::testing::InlineExecutor bridgeOwner;
+    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool), bridgeOwner};
 
     ::morph::session::Context ctx;
     ctx.principal = "alice";
@@ -160,10 +166,11 @@ TEST_CASE("morph::bridge::Bridge: setDefaultSession / defaultSession round-trip"
 // ── bridge.hpp:91-95,283-285 — a null initial backend is tolerated ───────────
 
 TEST_CASE("morph::bridge::Bridge: constructed with a null backend and destroyed", "[coverage][bridge]") {
-    // installReconnectHandler sees a null backend and returns early (283-285);
-    // the destructor's `if (auto active = loadBackend())` takes its null/false
-    // arm (92) because the backend is still null at destruction.
-    REQUIRE_NOTHROW([] { ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}}; }());
+    // A null backend is tolerated at construction and at destruction.
+    morph::testing::InlineExecutor bridgeOwner;
+    REQUIRE_NOTHROW([&bridgeOwner] {
+        ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}, bridgeOwner};
+    }());
 }
 
 // ── bridge.hpp:184,190 — switchBackend from a null backend ───────────────────
@@ -174,7 +181,8 @@ TEST_CASE("morph::bridge::Bridge: switchBackend from a null backend skips the pr
     // `if (previous && previous != newShared)` guards (184, 190) take their false
     // arm and the old-backend teardown is skipped.
     ::morph::exec::ThreadPoolExecutor pool{1};
-    ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}};
+    morph::testing::InlineExecutor bridgeOwner;
+    ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}, bridgeOwner};
     REQUIRE_NOTHROW(bridge.switchBackend(std::make_unique<::morph::backend::LocalBackend>(pool)));
 }
 
@@ -186,7 +194,7 @@ TEST_CASE("morph::bridge::Bridge: executeVia on an unregistered binding fails wi
     // hits the `if (raw == 0U)` branch (239 true arm) and resolves with an error.
     ::morph::exec::ThreadPoolExecutor pool{1};
     SyncExecutor cbExec;
-    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
+    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool), cbExec};
 
     auto unbound = std::make_shared<::morph::bridge::detail::HandlerBinding>();
     auto comp = bridge.executeVia<P95Model, P95Action>(unbound, P95Action{5}, &cbExec);
@@ -575,7 +583,6 @@ TEST_CASE(
     // fresh shared registration under that key gets its own new id, not
     // mid's -- if assignPrimary's guard had been bypassed, this would instead
     // reach mid.
-    auto attached = backend.registerModelShared("Cov_EmptyThrowModel", {},
-                                                ::morph::backend::detail::InstanceIdentity{.primary = "some-key"});
+    auto attached = morph::testing::bindShared(backend, "Cov_EmptyThrowModel", {}, "some-key");
     REQUIRE(attached.v != mid.v);
 }

@@ -88,7 +88,7 @@ App::App(std::filesystem::path actionLogPath, std::string tokenSecret,
       _server{std::make_shared<::morph::backend::RemoteServer>(
           _pool, std::make_shared<auth::BookmarksAuthorizer>(tokenSecret, ::morph::session::hmacSha256),
           serverConfig())},
-      _fetchBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server)},
+      _fetchBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _fetchExecutor},
       _fetcher{std::move(fetcher)} {
     ::morph::journal::setActionLog(_actionLog);
 

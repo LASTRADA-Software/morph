@@ -253,7 +253,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: action result delivered via then", "[q
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     std::atomic<int> result{-1};  // declared BEFORE handler so it outlives it
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
 
@@ -300,7 +300,7 @@ TEST_CASE(
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "WsEchoModel";
@@ -344,7 +344,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: Config-only constructor overload omits
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "WsEchoModel";
@@ -386,7 +386,7 @@ TEST_CASE(
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "WsEchoModel";
@@ -423,7 +423,7 @@ TEST_CASE(
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "WsEchoModel";
@@ -441,8 +441,7 @@ TEST_CASE(
 }
 
 // ── The keyed shapes of the structural surface ───────────────────────────────
-// `bindModel` with a non-empty `primary` is the register-or-attach the
-// `registerModelShared`/`attachModel` pair used to spell as two verbs; these
+// `bindModel` with a non-empty `primary` is a register-or-attach; these
 // drive it against a real RemoteServer, end to end.
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -513,13 +512,21 @@ TEST_CASE("morph::qt::QtWebSocketBackend: bindModel re-points from a live instan
                                           morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
     REQUIRE(backend.waitForConnected());
 
-    // Seed the directory synchronously, so the bind below has something to join
-    // and its reply can be compared against a known id.
-    auto const seeded =
-        backend.registerModelShared("WsEchoModel", nullptr, {.contextKey = "acct-7", .primary = "acct-7"});
+    morph::exec::MainThreadExecutor cbExec;
+    // Seed the directory first, so the bind below has something to join and its
+    // reply can be compared against a known id.
+    ControlOutcome seededOutcome;
+    auto seed = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "acct-7", .primary = "acct-7", .current = {}},
+        cbExec);
+    observe(seed, seededOutcome);
+    pumpUntil([&] {
+        cbExec.drain();
+        return seededOutcome.settled.load();
+    });
+    morph::exec::detail::ModelId const seeded{seededOutcome.modelId.load()};
     REQUIRE(seeded.v != 0U);
 
-    morph::exec::MainThreadExecutor cbExec;
     ControlOutcome joined;
     auto join = backend.bindModel(
         {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = "acct-7", .primary = "acct-7", .current = {}},
@@ -580,8 +587,8 @@ TEST_CASE("morph::qt::QtWebSocketBackend: bindModel with an empty primary is a p
     });
     CHECK(outcome.failure.empty());
     REQUIRE(outcome.modelId.load() != 0U);
-    // Private, exactly like the synchronous attachModel's own empty-primary
-    // branch: nothing was filed in the shared directory.
+    // An empty primary binds privately: nothing was filed in the shared
+    // directory.
     CHECK(backend.listInstances("WsEchoModel").empty());
 }
 
@@ -722,7 +729,7 @@ TEST_CASE(
         morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "WsEchoModel";
@@ -800,7 +807,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: exception delivered via onError", "[qt
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
 
     std::atomic<bool> errorFired{false};
@@ -828,7 +835,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: multiple actions on same handler", "[q
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
 
     std::atomic<int> sum{0};
@@ -865,8 +872,8 @@ TEST_CASE("Two QtWebSocketBackends share one server but have isolated model stat
     REQUIRE(backendB->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridgeA{std::move(backendA)};
-    morph::bridge::Bridge bridgeB{std::move(backendB)};
+    morph::bridge::Bridge bridgeA{std::move(backendA), qtExec};
+    morph::bridge::Bridge bridgeB{std::move(backendB), qtExec};
     morph::bridge::BridgeHandler<WsCounterModel> handlerA{bridgeA, &qtExec};
     morph::bridge::BridgeHandler<WsCounterModel> handlerB{bridgeB, &qtExec};
 
@@ -916,7 +923,7 @@ TEST_CASE("Many QtWebSocketBackends concurrently dispatch — every action resol
     bridges.reserve(numClients);
     handlers.reserve(numClients);
     for (auto& backend : backends) {
-        auto bridge = std::make_unique<morph::bridge::Bridge>(std::move(backend));
+        auto bridge = std::make_unique<morph::bridge::Bridge>(std::move(backend), qtExec);
         handlers.push_back(std::make_unique<morph::bridge::BridgeHandler<WsCounterModel>>(*bridge, &qtExec));
         bridges.push_back(std::move(bridge));
     }
@@ -962,7 +969,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: setConnectHandler fires on the first c
     std::atomic<int> connectCount{0};
     std::atomic<int> reconnectCount{0};
     backend.setConnectHandler([&] { connectCount.fetch_add(1); });
-    backend.setReconnectHandler([&] { reconnectCount.fetch_add(1); });
+    backend.setReconnectHandler([&] { reconnectCount.fetch_add(1); }, &morph::exec::detail::inlineExecutor());
 
     REQUIRE(backend.waitForConnected());
     pumpUntil([&] { return connectCount.load() >= 1; });
@@ -1022,7 +1029,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: setDisconnectHandler fires strictly be
             morph::qt::QtWebSocketBackend::Config{.initialReconnectDelay = std::chrono::milliseconds{10}});
         REQUIRE(backendPtr->waitForConnected());
 
-        backendPtr->setReconnectHandler([&] { reconnectCount.fetch_add(1); });
+        backendPtr->setReconnectHandler([&] { reconnectCount.fetch_add(1); }, &morph::exec::detail::inlineExecutor());
         backendPtr->setDisconnectHandler([&] {
             // The doc-comment-claimed ordering: disconnect must observe zero
             // reconnect activity, since scheduleReconnect() -- let alone a
@@ -1069,7 +1076,7 @@ TEST_CASE(
     std::atomic<int> reconnectCount{0};
     backendPtr->setConnectHandler([&] { connectCount.fetch_add(1); });
     backendPtr->setDisconnectHandler([&] { disconnectCount.fetch_add(1); });
-    backendPtr->setReconnectHandler([&] { reconnectCount.fetch_add(1); });
+    backendPtr->setReconnectHandler([&] { reconnectCount.fetch_add(1); }, &morph::exec::detail::inlineExecutor());
 
     // First cycle: drop the connection (fires disconnect), then have the
     // backend auto-reconnect to a fresh server on the same port (fires
@@ -1090,7 +1097,7 @@ TEST_CASE(
     // Clear all three handlers, then force a second disconnect/reconnect cycle.
     backendPtr->setConnectHandler(nullptr);
     backendPtr->setDisconnectHandler(nullptr);
-    backendPtr->setReconnectHandler(nullptr);
+    backendPtr->setReconnectHandler(nullptr, nullptr);
 
     int const connectCountBefore = connectCount.load();
     int const disconnectCountBefore = disconnectCount.load();
@@ -1125,7 +1132,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend reconnects to a fresh server on the sam
         REQUIRE(backendPtr->waitForConnected());
 
         morph::qt::QtExecutor qtExec;
-        morph::bridge::Bridge bridge{std::move(backendPtr)};
+        morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
         morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
         std::atomic<int> result{-1};
         handler.execute(WsEchoAction{7})
@@ -1146,7 +1153,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend reconnects to a fresh server on the sam
     REQUIRE(backendPtr->waitForConnected(2000));
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
     std::atomic<int> result{-1};
     handler.execute(WsEchoAction{42}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
@@ -1256,7 +1263,7 @@ TEST_CASE("Server closing notifies morph::qt::QtWebSocketBackend disconnected si
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
 
     // Sanity: round-trip works while the server is alive.
@@ -1316,7 +1323,7 @@ TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully waits for an in-flight 
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
 
     std::atomic<bool> completed{false};
@@ -1350,7 +1357,7 @@ TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully hard-stops once the dea
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
 
     handler.execute(WsSlowAction{2000}).onError([](const std::exception_ptr&) {});
@@ -1507,7 +1514,7 @@ TEST_CASE("Server keeps serving good clients after a malformed message", "[qt][w
     auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
 
     std::atomic<int> result{-1};
@@ -1708,7 +1715,7 @@ TEST_CASE("morph::qt::QtWebSocketServer: default config behaves exactly as befor
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
     std::atomic<int> result{-1};
     handler.execute(WsEchoAction{5}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
@@ -1935,7 +1942,7 @@ TEST_CASE(
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
 
     std::atomic<bool> gotTimeoutError{false};
@@ -2081,7 +2088,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend TLS: action result delivered via then",
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
 
     std::atomic<int> result{-1};
@@ -2106,7 +2113,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend TLS: exception delivered via onError", 
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
 
     std::atomic<bool> errorFired{false};
@@ -2181,7 +2188,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend TLS: tlsPinnedConfig accepts the real s
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
 
     std::atomic<int> result{-1};

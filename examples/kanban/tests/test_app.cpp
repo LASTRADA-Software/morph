@@ -136,10 +136,10 @@ TEST_CASE(
         kanban::app::App app{logPath, std::string{kSecret}};
 
         const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
-        auto backend = std::make_unique<::morph::backend::SimulatedRemoteBackend>(*app.server());
-        Bridge bridge{std::move(backend)};
-        bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
         ::morph::qt::QtExecutor exec;
+        auto backend = std::make_unique<::morph::backend::SimulatedRemoteBackend>(*app.server());
+        Bridge bridge{std::move(backend), exec};
+        bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
         // CreateProject over a plain (non-keyed) handler -- alice becomes
         // the project's Manager, per design spec §3.
@@ -217,10 +217,10 @@ TEST_CASE(
     {
         kanban::app::App app{logPath, std::string{kSecret}};
         const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
-        auto backend = std::make_unique<::morph::backend::SimulatedRemoteBackend>(*app.server());
-        Bridge bridge{std::move(backend)};
-        bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
         ::morph::qt::QtExecutor exec;
+        auto backend = std::make_unique<::morph::backend::SimulatedRemoteBackend>(*app.server());
+        Bridge bridge{std::move(backend), exec};
+        bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
         BridgeHandler<ProjectAdminModel> admin{bridge, &exec};
         const auto created = awaitQt(admin.execute(kanban::CreateProject{.name = "Plain Registration Board"}));

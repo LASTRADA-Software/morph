@@ -65,7 +65,9 @@ GUI, and the GUI thread never runs model work — the executors enforce the spli
 | `TimeoutScheduler` callbacks (execute deadlines, `delay()`) | **The I/O loop** — the injected one, or the scheduler's own | A loop timer armed by a posted `schedule()` |
 | `ReconnectCoordinator::onOnline`/`onOffline` bodies (reconnect → activate → bind → replay, retry sleeps included) | The offline strand, over the executor the coordinator was given (a worker pool; **not** the I/O loop) | `onOnline()`/`onOffline()` post, from any thread |
 | `SyncWorker::run`'s drain (offline-queue replay) | The worker's owner — the offline strand when given `ReconnectCoordinator::strand()`; inline when `run()` is already on it | `run()` posts, from any other thread; the coordinator's `replay` step runs it inline |
-| Backend reconnect handler (re-register bindings) | The backend's own: the Qt thread for `QtWebSocketBackend`, a dedicated handler thread for `SocketBackend` (never its I/O loop, which must deliver the replies the handler waits for) | `IBackend::setReconnectHandler` callback |
+| Backend reconnect handler (re-bind the bridge's handlers) | The executor it was installed with — the bridge's owner. Never the backend's own thread | The backend posts it after a reconnect (`IBackend::setReconnectHandler(handler, exec)`) |
+| Bind and promote replies (`IBackend::bindModel`/`promoteModel`) | The executor the call named — the bridge's owner | The backend settles the `Completion` on its own thread; `Completion` posts the continuation |
+| `Bridge`/`BridgeHandler`/backend verbs, and the bridge-side work an action's result triggers (subscription fan-out, a result-keyed promotion) | The bridge's owner | Called there; a result settled elsewhere posts its bridge-side work there |
 | Log sink invocation | Whatever thread called `log*()` | `morph::log::detail::log` |
 
 **One I/O loop, injected.** The application constructs one `exec::IoLoop` and
@@ -294,18 +296,21 @@ cannot free the model out from under a running action.
 ### Synchronous re-entry into a backend from a pool thread
 
 A `BridgeHandler` can be constructed *from inside* a running action (e.g. a
-model that registers a sub-model), which means the constructor's
-`registerModelWithContext` call may run on the very worker-pool thread that is
-executing the action. On the remote path this reaches `RemoteServer` on a pool
-thread, through the **synchronous** `handleInline`. `handleInline` posts the
-control envelope to the server strand and waits for its reply: the registry is
-the server strand's, so the envelope cannot run on the caller's thread. The
-waiting pool thread holds a model's strand, never the server strand, and the
-server strand's tasks never wait on a model — so another pool thread runs the
-envelope and the wait ends. When the caller *is* on the server strand (host
-code the strand is running — a model constructor, a `LogProvider` — calling
-back in), `handleInline` runs the envelope inline, since waiting would wait on
-itself.
+model that registers a sub-model), on the worker-pool thread executing the
+action. That thread is not the bridge's owner, so the constructor touches
+neither the bridge nor the backend there: it posts its registration to the
+owner and returns ([bridge.md](core/bridge.md#registration-readiness--the-bind-rule)).
+The bind then runs on the owner like any other.
+
+`RemoteServer` still has a synchronous entry, `handleInline`, which
+`SimulatedRemoteBackend`'s binds use and which host code the server runs (a
+model factory, a `LogProvider`) can reach from a pool thread. `handleInline`
+posts the control envelope to the server strand and waits for its reply: the
+registry is the server strand's, so the envelope cannot run on the caller's
+thread. A waiting pool thread holds a model's strand, never the server strand,
+and the server strand's tasks never wait on a model — so another pool thread
+runs the envelope and the wait ends. When the caller *is* on the server strand,
+`handleInline` runs the envelope inline, since waiting would wait on itself.
 
 What it needs is a pool thread other than the caller's: a pool of one thread
 calling `handleInline` from inside its own task, or every pool thread blocked in
@@ -315,16 +320,42 @@ model strand, *after* `handleInline` has returned and destroyed the local reply
 buffer the deferred callback would write into — a dangling-write hazard. See
 [backend.md](core/backend.md) for the exact wiring.
 
-### `cancelPending` — snapshot-then-deliver, weak-ptr tracked
+### `cancelPending` — take-then-deliver, weak-ptr tracked
 
-Both backends track their in-flight completions as `weak_ptr<CompletionState>`
-in a `_pending` vector guarded by `_pendingMtx`. `cancelPending(exc)` **swaps the
-vector out under the lock and delivers `exc` outside it**, so no completion
-callback runs while `_pendingMtx` is held — otherwise a callback that re-enters
-the backend would deadlock. The `weak_ptr` tracking is what lets an already
-resolved-and-destroyed completion be skipped (its state is gone) rather than
-resurrected, and `setException` on a still-live-but-already-`ready` state is the
-idempotent no-op described below.
+`LocalBackend`, `SynchronousBackendAdapter` and the wire backends track their
+in-flight completions as `weak_ptr`s (or a pending table) owned by their owner
+— the bridge's owner, or the I/O loop / Qt thread for a transport — without a
+lock. `cancelPending(exc)` **takes the whole table out before delivering `exc`
+to any entry**, so a continuation that re-enters the backend files into an
+empty table rather than into the one being iterated. The `weak_ptr` tracking is
+what lets an already resolved-and-destroyed completion be skipped (its state is
+gone) rather than resurrected, and `setException` on a still-live-but-already-
+`ready` state is the idempotent no-op described below.
+
+### Cancellation — what a cancel verb stops
+
+A call is settled **and** its work asked to stop by every cancel path that
+fails it, when the work can be stopped — today, a `Bridge` call whose handler
+returns a `core::async::Task` on `LocalBackend`, which carries a
+`core::async::StopSource`:
+
+| Verb | Settles the call with | Requests stop on |
+|---|---|---|
+| `CallbackScope::requestStop()` / `reset()` / destruction | Nothing — its callbacks are refused | Every unsettled call a callback was attached to through the scope ([callback_scope.md](core/callback_scope.md#stopping-the-calls-a-scope-owns)) |
+| `Bridge::switchBackend` | `BackendChangedError` (the old backend's `cancelPending`) | Every Task handler still running on the old backend |
+| `~Bridge` | `BridgeDestroyedError` | Every Task handler still running on the backend |
+| `IBackend::cancelPending` on `LocalBackend` | The given error | Every Task handler still running there |
+| The client-side execute deadline | `ClientTimeoutError` | That call |
+
+A stopped handler suspended in a stop-aware await resumes with
+`OperationCancelled` on its model's strand. A synchronous handler has nothing
+to stop and runs to completion; its result is discarded by the settled state. A
+call on a remote backend is settled locally only — the wire carries no
+cancellation. `tests/test_coroutine_model.cpp` measures the scope's
+`requestStop()`, the switch, `cancelPending` and the deadline: a handler
+suspended on a long delay records its cancellation after the verb. `~Bridge`
+reaches the handler through the same `LocalBackend::cancelPending`; a scope's
+`reset()` and destruction through the same stop request as `requestStop()`.
 
 ## Gating callbacks on a receiver's lifetime — `CallbackScope`
 
@@ -379,82 +410,53 @@ receiver going away.
 
 ## Synchronisation specifics per subsystem
 
-### `Bridge::switchBackend` — atomic, exception-safe; `onBackendChanged` is posted to the model strand
+### `Bridge::switchBackend` — on the owner; `onBackendChanged` is posted to the model strand
 
-`switchBackend` holds `Bridge::_mtx` for its **entire** duration. Within that
-lock it uses a **stage-all-then-commit** protocol (recent fix):
+`switchBackend` runs on the bridge's owner and takes no lock. It issues a
+re-bind for every live binding on the new backend, with the owner as the
+delivery executor. The binds the new backend settles before returning decide
+it: if any failed, everything acquired is released and the failure is
+rethrown with the old backend and every binding untouched. Otherwise it
+publishes the settled ids, leaves a binding whose bind is still in flight
+holding its calls, swaps the backend, calls `notifyBackendChanged()`, and
+cancels the outgoing backend's pending calls with `BackendChangedError`
+([bridge.md](core/bridge.md)).
 
-1. **Phase 1** — register every live binding on the new backend, staging
-   `(binding, newId)` pairs *without mutating any `currentId`*. If any
-   registration throws (a plausible remote/transport failure), it rolls back the
-   registrations already made and rethrows, leaving the old backend and every
-   `currentId` untouched. The switch is therefore **atomic**: it either fully
-   succeeds or is a complete no-op.
-2. **Phase 2** — commit: publish the new ids, swap the backend pointer, and call
-   `notifyBackendChanged()` (still under `_mtx`).
-
-Cancellation of the outgoing backend's pending completions
-(`cancelPending(BackendChangedError)`) happens **outside** `_mtx`, because it
-delivers callbacks through the caller's GUI executor and the bridge must never
-hold `_mtx` while user code runs.
-
-**`notifyBackendChanged()` runs under `_mtx`, but only posts — it does not run
-model code under the lock.** `LocalBackend::notifyBackendChanged` dispatches each
-model's `onBackendChanged()` onto that model's own strand (the per-`ModelId`
-serial queue) rather than invoking it inline. The cheap `post()` happens under
-`_mtx`; the callback body runs later on a pool thread with `_mtx` free. This is
-what makes the model-side contract both true and safe:
+**`notifyBackendChanged()` only posts.** `LocalBackend::notifyBackendChanged`
+dispatches each change-aware model's `onBackendChanged()` onto that model's own
+strand rather than invoking it inline, so the callback runs later on a pool
+thread:
 
 - **Strand-serialised, no model locking.** `onBackendChanged()` runs on the same
   strand as `execute()` for that model, so the two never overlap — a model
   draining a queue and mutating its own counters there needs no locking. This is
-  the guarantee `offline.md`'s conflict-resolution path relies on. (Earlier the
-  callback ran inline on the switch caller's thread, which contradicted that
-  claim; the conflict-resolution tests only passed because they slept.)
-- **`registerHandler` / `deregisterHandler` are safe from `onBackendChanged()`.**
-  They re-acquire `_mtx`, but on a *different* thread (the strand) with the lock
-  already released by the switch caller — no self-deadlock. This was the
-  reentrant-deadlock fix: the old inline-under-`_mtx` design hung here.
-- **`switchBackend` from `onBackendChanged()` is still unsupported.** Not because
-  of `_mtx` (that is free now) but because the callback runs on the *outgoing*
-  backend's strand; a nested switch drops the last reference to that backend when
-  it returns, and `~LocalBackend` drains its strands, which includes the one
-  calling it — a self-join hang, asserted in a debug build. Re-register or reconcile from
-  the callback; do not swap the backend again inside it.
-- **`executeVia` IS safe from `onBackendChanged()`.** It never takes `_mtx`; it
-  reads a **lock-free snapshot** of the backend `shared_ptr` (via `_backendMtx`,
-  a short separate lock) and the binding's `std::atomic currentId`. A concurrent
-  switch cannot free the old backend out from under the call because its
-  `shared_ptr` refcount is still > 0; the call either succeeds or fails with
-  "model not found", both safe.
+  the guarantee `offline.md`'s conflict-resolution path relies on.
+- **It is off the owner.** A handler constructed there is a handler constructed
+  inside a running action: its registration is posted to the owner. Owner-only
+  verbs (`switchBackend`, `deregisterHandler`, a handler's `execute`) are not
+  called from there.
+- **`switchBackend` from `onBackendChanged()` is unsupported** on two counts: it
+  is owner-only, and the callback runs on the *outgoing* backend's strand, so a
+  nested switch that drops the last reference to that backend makes
+  `~LocalBackend` drain the strand calling it — a self-join hang, asserted in a
+  debug build.
 
-Lock ordering remains `Bridge::_mtx` before `LocalBackend::_regMtx`.
+### Reconnect handler — posted to the owner, guarded against a dead `Bridge`
 
-### Reconnect handler — fires on the backend's thread, guarded against a dead `Bridge`
+A backend never runs the reconnect handler on its own thread: after a
+reconnect it posts the handler to the executor `setReconnectHandler` was given,
+which for `Bridge` is its owner. The handler's re-binds are therefore ordinary
+owner tasks, and their replies are delivered on the owner too. Two guards
+cover a backend that outlives its `Bridge`:
 
-The reconnect handler a `Bridge` installs on its backend
-(`installReconnectHandler`) runs on **a thread the backend chooses** — the Qt
-thread for `QtWebSocketBackend`, `SocketBackend`'s handler thread — not the
-GUI or pool thread, and it captures the bare `Bridge* this` (it needs `_mtx`,
-`_handlers`, and `loadBackend()`). A backend can be co-owned or otherwise outlive
-its `Bridge`, so a reconnect firing after the `Bridge` is destroyed would
-dereference freed memory. Two layers prevent this:
-
-- **`~Bridge` clears the active backend's handler** (`setReconnectHandler(nullptr)`)
-  before cancelling pending work, and `switchBackend` clears the *outgoing*
-  backend's handler after the swap. This removes the callback from the common
-  path. The clear is done **outside `Bridge::_mtx`** — `setReconnectHandler` only
-  stores a callback and never re-enters the bridge, so there is no lock-ordering
-  hazard with the handler body (which does take `_mtx`).
-- **The handler guards on a `_callbacks` token.** It captures a
-  `morph::async::CallbackToken` from the bridge's `CallbackScope` (the same
-  scope `BridgeHandler` observes) and, on invocation, checks it *before* touching
-  `this`. If the token is inactive the `Bridge` is gone and the handler returns
-  immediately.
-  This covers the race the clear alone cannot: a reconnect already latched on the
-  backend's thread at the moment `~Bridge` runs. After the liveness check it also
-  re-checks `pinned == loadBackend()` to ignore a reconnect for a backend the
-  bridge has since switched away from.
+- **`~Bridge` clears the active backend's handler** before cancelling pending
+  work, and `switchBackend` clears the *outgoing* backend's handler after the
+  swap.
+- **The handler checks the bridge's `CallbackToken`** before touching `this`.
+  A reconnect already posted to the owner when `~Bridge` runs finds it expired
+  and does nothing; on the owner that check is exact, because the destructor
+  runs there too. It then ignores a reconnect of a backend the bridge has since
+  switched away from.
 
 ### `QtWebSocketBackend::sendSync` — a disconnect must not freeze the Qt thread
 
@@ -643,9 +645,11 @@ One-liners to remember:
 
 - Never destroy the pool before the backend → the backend's drain hangs.
 - Never `post()` to a backend whose destructor has begun.
-- `onBackendChanged()` runs posted on the model's strand (not inline under
-  `_mtx`): `registerHandler`/`deregisterHandler`/`executeVia` are safe from it,
-  but never call `switchBackend` there (it self-joins the strand it runs on).
+- `onBackendChanged()` runs posted on the model's strand, off the owner: a
+  handler constructed there posts its registration; never call `switchBackend`
+  there (it is owner-only, and self-joins the strand it runs on).
+- Call a `Bridge`, its handlers and its backend only on the bridge's owner;
+  destroy handlers before the bridge, there.
 - Never block from anything the I/O loop runs: a `NetworkMonitor` probe or
   callback, a `TimeoutScheduler` callback.
 - Never destroy an `IoLoop` before the components built on it.

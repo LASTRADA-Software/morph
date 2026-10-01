@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <QCoreApplication>
+#include <QThread>
 #include <QTimer>
 #include <algorithm>
+#include <cassert>
 #include <cctype>
 #include <morph/core/detail/reply_router.hpp>
 #include <morph/core/wire.hpp>
@@ -53,8 +55,8 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
         flushQueuedRegistrations();
         // Fire the reconnect handler only on subsequent connects, never on the
         // first one — initial registration is handled by the BridgeHandler ctors.
-        if (isReconnect && _reconnectHandler) {
-            _reconnectHandler();
+        if (isReconnect && _reconnectHandler && _reconnectExec != nullptr) {
+            _reconnectExec->post(_reconnectHandler);
         }
     });
     QObject::connect(&_socket, &QWebSocket::disconnected, [this]() {
@@ -166,19 +168,21 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
 
 ::morph::async::Completion<::morph::exec::detail::ModelId> QtWebSocketBackend::bindModel(
     ::morph::backend::detail::BindRequest request, ::morph::exec::IExecutor& cbExec) {
+    checkThread("QtWebSocketBackend::bindModel");
+    auto [completion, promise] = ::morph::async::Completion<::morph::exec::detail::ModelId>::makeSettleable(&cbExec);
     if (!_cfg.asyncRegistrationEnabled) {
         // Blocking by request (see QtWebSocketBackendConfig::asyncRegistrationEnabled):
-        // IBackend's default runs the synchronous verb this request's shape
-        // names and settles from this thread, preserving every existing
-        // embedder's behaviour unless it explicitly asks for the non-blocking
-        // path.
-        return ::morph::backend::detail::IBackend::bindModel(std::move(request), cbExec);
+        // settled from this thread before returning.
+        try {
+            promise.resolve(bindBlocking(request));
+        } catch (...) {
+            promise.reject(std::current_exception());
+        }
+        return std::move(completion);
     }
 
-    auto [completion, promise] = ::morph::async::Completion<::morph::exec::detail::ModelId>::makeSettleable(&cbExec);
-
     if (request.primary.empty()) {
-        // Mirrors the synchronous attachModel's empty-primary branch: release
+        // An empty primary with a live instance: release
         // the instance currently held (fire-and-forget, as deregisterModel
         // already is) and degrade to a private registration.
         if (request.current.v != 0U) {
@@ -194,7 +198,6 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
             // backend is torn down (or the socket disconnects) before that
             // happens, cancelPending() drains this queue too and still settles
             // the promise exactly once.
-            std::scoped_lock const lock{_pendingMtx};
             _queuedRegistrations.push_back(QueuedRegistration{.typeId = std::move(request.typeId),
                                                               .contextKey = std::move(request.contextKey),
                                                               .promise = std::move(promise)});
@@ -214,9 +217,7 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
     }
 
     // `registerShared` for a first bind, `attach` when re-pointing from a live
-    // instance -- the same two envelopes registerModelShared/attachModel build,
-    // selected by the same field of the request that IBackend::bindModelBlocking
-    // selects the synchronous verb by.
+    // instance.
     auto env = request.current.v == 0U
                    ? ::morph::wire::makeRegisterShared(request.typeId, request.primary, request.contextKey)
                    : ::morph::wire::makeAttach(request.typeId, request.primary, request.current.v, request.contextKey);
@@ -252,19 +253,13 @@ void QtWebSocketBackend::sendControl(::morph::wire::Envelope env,
         promise.reject(std::current_exception());
         return;
     }
-    {
-        std::scoped_lock const lock{_pendingMtx};
-        _pendingRegistrations.insert_or_assign(callId, std::move(promise));
-    }
+    _pendingRegistrations.insert_or_assign(callId, std::move(promise));
     _socket.sendTextMessage(encoded);
 }
 
 void QtWebSocketBackend::flushQueuedRegistrations() {
-    std::vector<QueuedRegistration> queued;
-    {
-        std::scoped_lock const lock{_pendingMtx};
-        queued.swap(_queuedRegistrations);
-    }
+    checkThread("QtWebSocketBackend::flushQueuedRegistrations");
+    auto queued = std::exchange(_queuedRegistrations, {});
     for (auto& entry : queued) {
         sendControl(::morph::wire::makeRegister(entry.typeId, entry.contextKey), std::move(entry.promise));
     }
@@ -297,31 +292,25 @@ namespace {
 
 }  // namespace
 
-::morph::exec::detail::ModelId QtWebSocketBackend::registerModelShared(
-    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-    ::morph::backend::detail::InstanceIdentity identity) {
-    if (identity.primary.empty()) {
-        return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+::morph::exec::detail::ModelId QtWebSocketBackend::bindBlocking(const ::morph::backend::detail::BindRequest& request) {
+    if (request.primary.empty()) {
+        if (request.current.v != 0U) {
+            deregisterModel(request.current);
+        }
+        return registerModelWithContext(request.typeId, {}, request.contextKey);
     }
-    auto env =
-        ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
+    bool const attach = request.current.v != 0U;
+    auto env = attach
+                   ? ::morph::wire::makeAttach(request.typeId, request.primary, request.current.v, request.contextKey)
+                   : ::morph::wire::makeRegisterShared(request.typeId, request.primary, request.contextKey);
     env.session = _session;
-    return modelIdFromReply(sendSync(::morph::wire::encode(env)), "register");
+    return modelIdFromReply(sendSync(::morph::wire::encode(env)), attach ? "attach" : "register");
 }
 
-::morph::exec::detail::ModelId QtWebSocketBackend::attachModel(
-    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-    ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) {
-    if (identity.primary.empty()) {
-        if (current.v != 0U) {
-            deregisterModel(current);
-        }
-        return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
-    }
-    auto env =
-        ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey});
-    env.session = _session;
-    return modelIdFromReply(sendSync(::morph::wire::encode(env)), "attach");
+void QtWebSocketBackend::checkThread(char const* site) const noexcept {
+    // A QObject's state belongs to the thread it lives on.
+    static_cast<void>(site);
+    assert(QThread::currentThread() == _socket.thread() && "QtWebSocketBackend used off its socket's thread");
 }
 
 void QtWebSocketBackend::assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
@@ -381,11 +370,9 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     // on. Tracked in _pendingDeregisters purely so onTextMessage can
     // recognise and drop it explicitly instead of routing it to whichever
     // sendSync loop happens to be parked when it arrives.
+    checkThread("QtWebSocketBackend::deregisterModel");
     uint64_t const callId = ++_nextCallId;
-    {
-        std::scoped_lock const lock{_pendingMtx};
-        _pendingDeregisters.insert(callId);
-    }
+    _pendingDeregisters.insert(callId);
     auto env = ::morph::wire::makeDeregister(mid.v);
     env.callId = callId;
     env.session = _session;
@@ -412,30 +399,24 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     env.body = call.serializeBody();
     env.session = std::move(call.session);
 
-    {
-        std::scoped_lock const lock{_pendingMtx};
-        _pending[callId] =
-            PendingExecute{.state = compState, .deserialize = std::move(call.deserializeResult), .cbExec = cbExec};
-    }
+    checkThread("QtWebSocketBackend::execute");
+    _pending[callId] =
+        PendingExecute{.state = compState, .deserialize = std::move(call.deserializeResult), .cbExec = cbExec};
 
     _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
     return comp;
 }
 
 void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
-    std::unordered_map<uint64_t, PendingExecute> drainedExecutes;
-    std::unordered_map<uint64_t, ::morph::async::Completion<::morph::exec::detail::ModelId>::Promise>
-        drainedRegistrations;
-    std::vector<QueuedRegistration> drainedQueue;
-    {
-        std::scoped_lock const lock{_pendingMtx};
-        drainedExecutes.swap(_pending);
-        drainedRegistrations.swap(_pendingRegistrations);
-        drainedQueue.swap(_queuedRegistrations);
-        // _pendingDeregisters tracks fire-and-forget requests nobody awaits --
-        // just drop the bookkeeping, there is no callback to invoke.
-        _pendingDeregisters.clear();
-    }
+    checkThread("QtWebSocketBackend::cancelPending");
+    // Taken out before any settle: a settle that re-enters this backend files
+    // into empty tables.
+    auto drainedExecutes = std::exchange(_pending, {});
+    auto drainedRegistrations = std::exchange(_pendingRegistrations, {});
+    auto drainedQueue = std::exchange(_queuedRegistrations, {});
+    // _pendingDeregisters tracks fire-and-forget requests nobody awaits --
+    // just drop the bookkeeping, there is no callback to invoke.
+    _pendingDeregisters.clear();
     for (auto& [ignoredCallId, pending] : drainedExecutes) {
         if (pending.state) {
             pending.state->setException(exc);
@@ -459,7 +440,10 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     }
 }
 
-void QtWebSocketBackend::setReconnectHandler(const std::function<void()>& handler) { _reconnectHandler = handler; }
+void QtWebSocketBackend::setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* exec) {
+    _reconnectHandler = std::move(handler);
+    _reconnectExec = exec;
+}
 
 void QtWebSocketBackend::setConnectHandler(const std::function<void()>& handler) { _connectHandler = handler; }
 
@@ -512,16 +496,13 @@ void QtWebSocketBackend::onUndecodableMessage(std::string msg) {
 }
 
 bool QtWebSocketBackend::tryRouteExecuteReply(const ::morph::wire::Envelope& env) {
-    PendingExecute execPending;
-    {
-        std::scoped_lock const lock{_pendingMtx};
-        auto iter = _pending.find(env.callId);
-        if (iter == _pending.end()) {
-            return false;
-        }
-        execPending = std::move(iter->second);
-        _pending.erase(iter);
+    checkThread("QtWebSocketBackend::tryRouteExecuteReply");
+    auto iter = _pending.find(env.callId);
+    if (iter == _pending.end()) {
+        return false;
     }
+    PendingExecute execPending = std::move(iter->second);
+    _pending.erase(iter);
 
     // Triage shared with net::SocketBackend and SimulatedRemoteBackend
     // (core/detail/reply_router.hpp). This site used to match a
@@ -551,21 +532,16 @@ bool QtWebSocketBackend::tryRouteExecuteReply(const ::morph::wire::Envelope& env
 }
 
 bool QtWebSocketBackend::tryRouteControlReply(const ::morph::wire::Envelope& env) {
-    std::optional<::morph::async::Completion<::morph::exec::detail::ModelId>::Promise> promise;
-    {
-        std::scoped_lock const lock{_pendingMtx};
-        auto iter = _pendingRegistrations.find(env.callId);
-        if (iter == _pendingRegistrations.end()) {
-            return false;
-        }
-        promise.emplace(std::move(iter->second));
-        _pendingRegistrations.erase(iter);
+    checkThread("QtWebSocketBackend::tryRouteControlReply");
+    auto iter = _pendingRegistrations.find(env.callId);
+    if (iter == _pendingRegistrations.end()) {
+        return false;
     }
-
-    // Settled outside `_pendingMtx`: settling runs the caller's continuation on
-    // whatever executor it named, and an executor that runs inline (which is
-    // what `Bridge` names) would then re-enter this backend under a lock this
-    // frame still holds.
+    std::optional<::morph::async::Completion<::morph::exec::detail::ModelId>::Promise> promise;
+    promise.emplace(std::move(iter->second));
+    // Erased before the settle: a continuation delivered inline may re-enter
+    // this backend.
+    _pendingRegistrations.erase(iter);
     if (env.kind == "ok") {
         promise->resolve(::morph::exec::detail::ModelId{env.modelId});
     } else {
@@ -580,7 +556,6 @@ bool QtWebSocketBackend::tryRouteDeregisterReply(const ::morph::wire::Envelope& 
     // to the callId==0 branch in onTextMessage and being handed to whichever
     // sendSync waiter happens to be parked. Nobody observes the
     // reply either way -- ok or err, drop it.
-    std::scoped_lock const lock{_pendingMtx};
     auto iter = _pendingDeregisters.find(env.callId);
     if (iter == _pendingDeregisters.end()) {
         return false;

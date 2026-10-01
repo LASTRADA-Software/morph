@@ -56,7 +56,7 @@ runs on.
    call sites; it was removed rather than left implying a check that does
    not happen.
 2. **Registration identity applies to shared/keyed registration too, not
-   just plain registration.** `registerModelShared`/`attachModel`'s wire
+   just plain registration.** A keyed `bindModel`'s wire
    form is still a `register` envelope (`docs/spec/core/shared_instances.md`:
    "`register` grows `primary` and `shared`" — additive, same envelope
    kind), and `wire::makeRegisterShared` carries the caller's session, just
@@ -221,7 +221,7 @@ each now lives:
 
 - **Async shared/keyed attach.** *Shipped:* `IBackend::bindModel`
   (`include/morph/core/backend.hpp`), dispatched to by
-  `Bridge::ensureBoundAsync`/`attachHandlerAsync` and implemented natively by
+  every keyed `BridgeHandler::execute` and implemented natively by
   `QtWebSocketBackend`. The blocking `sendSync` path a wire backend used to
   take for a keyed acquire nests a `QEventLoop` and aborts the page on the
   WASM main thread, so a WASM client must not reach it — and with
@@ -344,7 +344,7 @@ log table above.
 ## Expected strain points
 
 - **WASM + shared handlers**: the *synchronous* shared/keyed attach path
-  (`registerModelShared`/`attachModel`) nests an event loop and **aborts the
+  (a blocking `QtWebSocketBackend::bindModel`) nests an event loop and **aborts the
   page on the WASM main thread**, so a WASM tab's very first `OpenPoll` must
   not go through it. This is no longer a framework prerequisite:
   `IBackend::bindModel` carries the keyed acquire without blocking

@@ -38,58 +38,7 @@ signals:
     /// @brief Emitted the moment `busy()` transitions from `true` to `false`.
     void idle();
 
-    /// @brief Emitted once, the first time this presenter's readiness gate
-    ///        (whichever `BridgeHandler` a subclass names in `trackBound()`)
-    ///        settles — i.e. once `Bridge::whenBound()`'s `Completion<bool>`
-    ///        resolves, however it resolves. `Remote` mode's registration is
-    ///        a round trip (`docs/spec/core/backend.md`,
-    ///        "Why registration needs a non-blocking path"): a `BridgeHandler` built the
-    ///        instant the socket connects is handed back *unbound*
-    ///        (`currentId == 0`) and rejects every dispatch with "handler
-    ///        not bound" until the register reply lands. A subclass that
-    ///        calls `trackBound()` in its constructor lets its view layer
-    ///        gate its first dispatch on this signal instead of polling on
-    ///        a `QTimer` — `Local` mode's handler is already bound by
-    ///        construction, so `trackBound()` emits this synchronously
-    ///        there.
-    void bound();
-
 protected:
-    /// @brief Wires @p whenBoundCompletion (a `BridgeHandler::whenBound()`
-    ///        call) to emit `bound()` exactly once, however it resolves.
-    ///
-    ///        `Bridge::whenBound()`'s own contract (`morph/core/bridge.hpp`)
-    ///        is "resolves with whatever `isBound()` would return once
-    ///        settled" — this presenter does not care which way it settled,
-    ///        only that the registration round trip (successful or not) is
-    ///        no longer in flight, since either outcome means the next
-    ///        dispatch attempt gets a real answer instead of a guaranteed
-    ///        "handler not bound".
-    /// @param whenBoundCompletion The handler's own `whenBound()` result.
-    void trackBound(::morph::async::Completion<bool> whenBoundCompletion) {
-        // `QPointer`, not a bare `this` capture: `whenBound()`'s Completion
-        // resolves through the executor, asynchronously — even `Local`
-        // mode's immediate resolution is *posted*, not delivered inline
-        // (`morph::async::detail::CompletionState<T>::attachThen`), so this
-        // presenter can already be destroyed by the time either handler
-        // below runs (e.g. a short-lived presenter torn down at the end of
-        // a test case). A `QPointer` reads back null instead of dereferencing
-        // freed memory, exactly like Qt's own auto-disconnect-on-destroy for
-        // signal/slot connections handles the same hazard.
-        QPointer<Presenter> self{this};
-        std::move(whenBoundCompletion)
-            .then([self](bool) {
-                if (self) {
-                    emit self->bound();
-                }
-            })
-            .onError([self](const std::exception_ptr&) {
-                if (self) {
-                    emit self->bound();
-                }
-            });
-    }
-
     /// @brief Wraps @p completion's `.then`/`.onError` in begin/end counters,
     ///        forwarding a successful result to @p onOk and, on failure, the
     ///        `std::exception_ptr` to @p onErr (if supplied) before the busy
@@ -119,11 +68,9 @@ protected:
     void track(::morph::async::Completion<T> completion, std::function<void(T)> onOk,
                std::function<void(const std::exception_ptr&)> onErr = {}) {
         _inFlight.fetch_add(1);
-        // `QPointer`, not a bare `this` capture — for exactly the reason
-        // `trackBound()` above documents, and which applies here just as
-        // much: a `Completion` resolves through the executor, so this
-        // presenter can already have been destroyed by the time either
-        // handler below runs. A presenter declared *after* the rig whose
+        // `QPointer`, not a bare `this` capture: a `Completion` resolves
+        // through the executor, so this presenter can already have been
+        // destroyed by the time either handler below runs. A presenter declared *after* the rig whose
         // bridge it wraps (the only order possible, since it is constructed
         // from that rig) is destroyed *before* it, and `BackendRig`'s
         // destructor then deliberately pumps the Qt event loop to flush

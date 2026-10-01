@@ -63,15 +63,11 @@ struct Remote {
 /// the socket has finished connecting and sends it once the connection
 /// comes up (`docs/spec/core/backend.md`, "The structural registration
 /// surface"), so building a `BridgeHandler` immediately after this
-/// constructor returns is no longer the correctness hazard it once was.
+/// constructor returns is safe.
 ///
-/// What it does not do is make that handler *bound*. With
-/// `asyncRegistrationEnabled` the backend answers
-/// `BindWait::kCallerMustNotBlock`, so `Bridge::registerHandler` returns an
-/// unbound handler and a call issued through it before the reply lands
-/// fails "handler not bound" — gate on
-/// `BridgeHandler::whenBound()`/`isBound()` (`docs/spec/core/bridge.md`,
-/// "Registration readiness").
+/// A call issued through such a handler before the bind reply lands waits
+/// for it and is dispatched once it does, or rejected if the bind fails
+/// (`docs/spec/core/bridge.md`, "Registration readiness").
 ///
 /// This class still detects readiness with `setConnectHandler` — not
 /// `waitForConnected()`, which nests an event loop and hangs a WASM page —

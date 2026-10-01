@@ -5,7 +5,6 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <core/async/Task.hpp>
 #include <core/net/EventLoop.hpp>
 #include <core/net/IConnector.hpp>
@@ -22,12 +21,10 @@
 #include <morph/core/io_loop.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
-#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -74,20 +71,20 @@ struct SocketBackendConfig {
 ///        event loop required.
 ///
 /// Mirrors `morph::qt::QtWebSocketBackend`'s observable behavior
-/// (`registerModel` synchronous, `deregisterModel` fire-and-forget, `execute`
-/// asynchronous and callId-multiplexed, `DisconnectedError`/reconnect
-/// semantics). Its socket, its pending calls and its reconnect state machine
-/// live on an `exec::IoLoop`, which it shares with every other socket, timer
-/// and probe the application builds on that loop.
+/// (`deregisterModel` fire-and-forget, `execute` and `bindModel` asynchronous
+/// and callId-multiplexed, `DisconnectedError`/reconnect semantics). Its
+/// socket, its pending calls, its session, its reconnect handler and its
+/// reconnect state machine live on an `exec::IoLoop`, which it shares with
+/// every other socket, timer and probe the application builds on that loop.
 ///
 /// Cross-thread surface: `execute`, `bindModel`, `promoteModel`,
-/// `deregisterModel` and `cancelPending` post to the loop and return;
-/// `waitForConnected` posts a waiter and blocks the caller, never the loop;
-/// the synchronous control verbs (`registerModel` and its siblings,
-/// `assignPrimary`, `listInstances`) post their request and park the caller
-/// until the loop hands the reply over; `setSession` and
-/// `setReconnectHandler` store under their own locks. Every other field is
-/// touched only on the loop.
+/// `deregisterModel`, `cancelPending`, `setSession` and `setReconnectHandler`
+/// post to the loop and return, so calls from one thread take effect in the
+/// order they were made; `waitForConnected` posts a waiter and blocks the
+/// caller, never the loop; the synchronous control verbs (`registerModel`,
+/// `registerModelWithContext`, `assignPrimary`, `listInstances`) issue the same
+/// posted request and wait for its reply, never on the loop's own thread.
+/// Every field is touched only on the loop, except the `connected` flag.
 ///
 /// @par TLS
 /// Not supported. `serverUrl` must be `ws://`; `wss://` throws from the
@@ -107,7 +104,7 @@ public:
     SocketBackend(::morph::exec::IoLoop& loop MORPH_LIFETIMEBOUND, std::string_view serverUrl, Config cfg = {})
         : _url{::morph::net::detail::parseWsUrl(serverUrl)},
           _loop{&loop},
-          _core{std::make_shared<Core>(loop, _url, cfg, *this)} {
+          _core{std::make_shared<Core>(loop, _url, cfg)} {
         start();
     }
 
@@ -121,7 +118,7 @@ public:
         : _url{::morph::net::detail::parseWsUrl(serverUrl)},
           _ownedLoop{std::make_unique<::morph::exec::IoLoop>()},
           _loop{_ownedLoop.get()},
-          _core{std::make_shared<Core>(*_ownedLoop, _url, cfg, *this)} {
+          _core{std::make_shared<Core>(*_ownedLoop, _url, cfg)} {
         start();
     }
 
@@ -130,27 +127,15 @@ public:
     SocketBackend(SocketBackend&&) = delete;
     SocketBackend& operator=(SocketBackend&&) = delete;
 
-    /// @brief Closes the connection, rejects every pending call with
-    ///        `DisconnectedError`, and stops the handler thread.
+    /// @brief Closes the connection and rejects every pending call with
+    ///        `DisconnectedError`.
     ///
     /// The close runs on the loop: inline when this runs on the loop's own
     /// thread (from a callback), posted and waited for otherwise. It never
     /// waits for a connect in progress: a dial that completes afterwards finds
     /// the backend closed and drops its socket.
     ~SocketBackend() override {
-        _shuttingDown.store(true);
         _loop->runAndWait([core = _core] { core->close(); });
-        // After the close, not before: a reconnect handler parked in sendSync
-        // is released by the close's `_syncCv` notify. Waking `_handlerCv`
-        // first would not free it -- that wait is on `_syncCv`.
-        {
-            std::scoped_lock const lock{_handlerMtx};
-            _handlerPending = false;
-        }
-        _handlerCv.notify_all();
-        if (_handlerThread.joinable()) {
-            _handlerThread.join();
-        }
     }
 
     /// @brief Blocks the calling thread until connected or @p timeout elapses.
@@ -174,97 +159,48 @@ public:
         return _core->connected.load();
     }
 
-    /// @brief Sends a `register` message and blocks until the reply arrives.
+    /// @brief Registers a private instance and waits for the reply.
     ///
-    /// Callable from any thread but the I/O loop's, which would be blocked on a
-    /// reply only it can deliver. Only one synchronous control call
-    /// (`registerModel`) may be in flight at a time across the whole backend; a
-    /// second call while one is outstanding throws immediately rather than
-    /// queuing. The factory
-    /// argument is ignored — model construction is delegated to the server.
+    /// The same request `bindModel` posts, waited for on the calling thread —
+    /// which must not be the I/O loop's, whose reply this would wait on. The
+    /// factory argument is ignored — model construction is delegated to the
+    /// server.
     /// @param typeId  String type-id of the model to register.
     /// @param factory Ignored — the server constructs via its own registry.
     /// @return `ModelId` assigned by the server.
     /// @throws std::runtime_error if the server replies with an error, the
-    ///         socket is not connected, or a synchronous call is already in flight.
+    ///         socket is not connected, or this is the loop's own thread.
     ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
         return registerModelWithContext(typeId, std::move(factory), {});
     }
 
-    /// @brief Sends a `register` message carrying @p contextKey and blocks for the reply.
+    /// @brief Registers a private instance carrying @p contextKey and waits for the reply.
     ///
-    /// `IBackend::registerModelWithContext`'s default drops @p contextKey, which
-    /// is right for `LocalBackend` — the caller's own factory closure already
-    /// captures the identity — but wrong for a backend whose instances live on
-    /// the far side of a wire protocol: the server constructs the holder itself,
-    /// so `contextKey` is the *only* channel by which the instance's identity
-    /// reaches it. `RemoteServer::attachLogIfConfigured` returns without
-    /// consulting its `LogProvider` at all when the envelope's `contextKey` is
-    /// empty, so dropping it here does not merely lose an entity key — it leaves
-    /// the instance unjournalled. `SimulatedRemoteBackend` overrides
-    /// this for the same reason; the two must not disagree.
-    ///
-    /// Same synchronous-call constraint as `registerModel`. The factory argument
-    /// is ignored — model construction is delegated to the server.
+    /// The server constructs the holder itself, so `contextKey` is the only
+    /// channel by which the instance's identity reaches it:
+    /// `RemoteServer::attachLogIfConfigured` consults its `LogProvider` only
+    /// for a non-empty one. Same waiting rule as `registerModel`.
     /// @param typeId     String type-id of the model to register.
+    /// @param factory    Ignored — the server constructs via its own registry.
     /// @param contextKey Stable identity of the new instance; empty if none.
     /// @return `ModelId` assigned by the server.
     /// @throws std::runtime_error if the server replies with an error, the
-    ///         socket is not connected, or a synchronous call is already in flight.
+    ///         socket is not connected, or this is the loop's own thread.
     ::morph::exec::detail::ModelId registerModelWithContext(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
         std::string_view contextKey) override {
-        auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
-        env.session = currentSession();
-        return sendControlForId(env, "register");
+        return awaitReply(bindModel(::morph::backend::detail::BindRequest{.typeId = typeId,
+                                                                          .factory = std::move(factory),
+                                                                          .contextKey = std::string{contextKey},
+                                                                          .primary = {},
+                                                                          .current = {}},
+                                    ::morph::exec::detail::inlineExecutor()),
+                          "register");
     }
 
-    /// @brief Sends a shared (register-or-attach) `register` and blocks for the reply.
-    ///
-    /// An empty primary degrades to the private path. Same synchronous-call
-    /// constraint as `registerModel`.
-    /// @param typeId   String type-id of the model.
-    /// @param factory  Ignored — the server constructs via its own registry.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @return `ModelId` of the shared (or newly created) instance.
-    /// @throws std::runtime_error if the server replies with an error or the socket is down.
-    ::morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        ::morph::backend::detail::InstanceIdentity identity) override {
-        if (identity.primary.empty()) {
-            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
-        }
-        auto env =
-            ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
-        env.session = currentSession();
-        return sendControlForId(env, "register");
-    }
-
-    /// @brief Sends an `attach` and blocks for the reply, re-pointing from @p current.
-    /// @param typeId   String type-id of the model.
-    /// @param factory  Ignored — the server constructs via its own registry.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @param current  Instance currently held, or `ModelId{0}` if none.
-    /// @return `ModelId` of the instance now attached to.
-    /// @throws std::runtime_error if the server replies with an error or the socket is down.
-    ::morph::exec::detail::ModelId attachModel(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override {
-        if (identity.primary.empty()) {
-            if (current.v != 0U) {
-                deregisterModel(current);
-            }
-            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
-        }
-        auto env = ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
-                                             std::string{identity.contextKey});
-        env.session = currentSession();
-        return sendControlForId(env, "attach");
-    }
-
-    /// @brief Files a live server-side instance under @p primary.
+    /// @brief Files a live server-side instance under @p primary and waits for the reply.
     /// @param mid     Live instance to promote.
     /// @param typeId  Model type id.
     /// @param primary Canonical string encoding of the key to file it under.
@@ -273,27 +209,20 @@ public:
         if (primary.empty() || mid.v == 0U) {
             return;
         }
-        auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
-        env.session = currentSession();
-        (void)sendControlForId(env, "assign");
+        static_cast<void>(awaitReply(promoteModel(
+                                         ::morph::backend::detail::PromoteRequest{
+                                             .mid = mid, .typeId = typeId, .primary = std::string{primary}},
+                                         ::morph::exec::detail::inlineExecutor()),
+                                     "assign"));
     }
 
     // ── The structural registration surface ──────────────────────────────
     //
     // Overridden natively rather than reached through
-    // `backend::SynchronousBackendAdapter`. The reasoning is recorded in
-    // docs/spec/core/backend.md (`SocketBackend`'s section, "The structural
-    // registration surface, natively"); the short form is that this transport
-    // already demultiplexes replies by `callId` on its I/O loop for
-    // `execute`, and a control call is the same shape. Running the *blocking*
-    // verb on a wrapper's strand would park a thread for a round trip this
-    // transport need not park for, and would keep every bind inside
-    // `sendSync`'s one-synchronous-call-at-a-time token — which a concurrent
-    // `listInstances` or legacy `registerModel` on another thread shares.
-    //
-    // The synchronous verbs are unaffected: `registerModel`,
-    // `registerModelShared`, `attachModel` and `assignPrimary` use `sendSync`
-    // and `callId == 0`.
+    // `backend::SynchronousBackendAdapter`: this transport already
+    // demultiplexes replies by `callId` on its I/O loop for `execute`, and a
+    // control call is the same shape. See docs/spec/core/backend.md,
+    // "The structural registration surface, natively".
 
     /// @brief Acquires a model instance without blocking the calling thread.
     ///
@@ -301,13 +230,10 @@ public:
     /// `backend::detail::BindRequest`'s table) carrying a non-zero `callId`
     /// drawn from the same counter `execute` uses, and settles the returned
     /// `Completion` on the I/O loop when the matching reply arrives. No thread
-    /// is parked anywhere: in particular this never enters `sendSync`, so a
-    /// bind neither waits on `_syncCv` nor takes the one-synchronous-call
-    /// token, and therefore cannot wait on the loop that would satisfy it.
+    /// is parked anywhere.
     ///
-    /// The two degradations the legacy verbs perform are preserved exactly: an
-    /// empty `primary` with a live `current` gives that instance up first, and
-    /// an empty `primary` binds a private instance.
+    /// An empty `primary` with a live `current` gives that instance up first,
+    /// and an empty `primary` binds a private instance.
     ///
     /// @param request Owning bind request; moved from.
     /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
@@ -319,7 +245,7 @@ public:
     ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(::morph::backend::detail::BindRequest request,
                                                                          ::morph::exec::IExecutor& cbExec) override {
         if (request.primary.empty() && request.current.v != 0U) {
-            // `attachModel`'s empty-primary branch: the instance being given up
+            // An empty primary with a live instance: the instance being given up
             // is released before the private bind that replaces it.
             deregisterModel(request.current);
         }
@@ -362,26 +288,24 @@ public:
                                 request.mid, cbExec);
     }
 
-    /// @brief Asks the server for the live shared primary keys of @p typeId.
+    /// @brief Asks the server for the live shared primary keys of @p typeId
+    ///        and waits for the reply, never on the loop's own thread.
     /// @param typeId String type-id to enumerate.
     /// @return Canonical key strings of the live shared instances.
-    /// @throws std::runtime_error if the server replies with an error or the socket is down.
+    /// @throws std::runtime_error if the server replies with an error, the
+    ///         socket is down, or this is the loop's own thread.
     std::vector<std::string> listInstances(const std::string& typeId) override {
-        std::string replyJson;
-        try {
-            auto env = ::morph::wire::makeInstances(typeId);
-            env.session = currentSession();
-            replyJson = sendSync(::morph::wire::encode(env));
-        } catch (const std::exception& exc) {
-            throw std::runtime_error(std::string{"instances failed: "} + exc.what());
-        }
-        auto reply = ::morph::wire::decode(replyJson);
-        if (reply.kind != "ok") {
-            throw std::runtime_error("instances failed: " + reply.message);
-        }
+        auto state = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
+        ::morph::async::Completion<std::string> comp{state, &::morph::exec::detail::inlineExecutor()};
+        _loop->post([core = _core, env = ::morph::wire::makeInstances(typeId),
+                     pending = PendingControl{
+                         .state = nullptr, .what = "instances", .echo = std::nullopt, .body = state}]() mutable {
+            core->fileControl(std::move(env), std::move(pending));
+        });
+        auto body = awaitReply(std::move(comp), "instances");
         std::vector<std::string> keys;
-        if (auto errCode = glz::read_json(keys, reply.body)) {
-            throw std::runtime_error("instances decode failed: " + glz::format_error(errCode, reply.body));
+        if (auto errCode = glz::read_json(keys, body)) {
+            throw std::runtime_error("instances decode failed: " + glz::format_error(errCode, body));
         }
         return keys;
     }
@@ -389,44 +313,19 @@ public:
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
     /// Posted to the loop, which gives it a real, non-zero `callId` drawn from
-    /// the same counter `execute()` uses, exactly as `QtWebSocketBackend` does:
-    /// `callId == 0` is the discriminator for "hand this payload to whichever
-    /// `sendSync()` is parked", so a fire-and-forget `deregister` sharing that
-    /// sentinel would have its own stray `ok` reply delivered to an unrelated
-    /// `register`/`attach` waiting on `_syncCv` whenever the two landed back to
-    /// back on one connection.
+    /// the same counter `execute()` uses and stamps the session.
     ///
-    /// Unlike `QtWebSocketBackend` this needs no `_pendingDeregisters` set to
-    /// recognise the reply and drop it: the reply router already drops any
-    /// non-zero `callId` that is not pending, and a `deregister` files none.
+    /// The reply router drops any `callId` that is not pending, and a
+    /// `deregister` files none, so its reply is dropped.
     ///
     /// @param mid Id of the model to remove on the server.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
         if (!_core->connected.load()) {
             return;
         }
-        auto env = ::morph::wire::makeDeregister(mid.v);
-        env.session = currentSession();
-        _loop->post([core = _core, env]() mutable { core->sendDeregister(std::move(env)); });
-    }
-
-    /// @brief Sends one synchronous control envelope and returns the replied `modelId`.
-    /// @param env  Envelope to send.
-    /// @param what Verb name used in the error message.
-    /// @return `ModelId` carried by the `ok` reply.
-    /// @throws std::runtime_error if the server errors or the socket is down.
-    ::morph::exec::detail::ModelId sendControlForId(const ::morph::wire::Envelope& env, std::string_view what) {
-        std::string replyJson;
-        try {
-            replyJson = sendSync(::morph::wire::encode(env));
-        } catch (const std::exception& exc) {
-            throw std::runtime_error(std::string{what} + " failed: " + exc.what());
-        }
-        auto reply = ::morph::wire::decode(replyJson);
-        if (reply.kind == "ok") {
-            return ::morph::exec::detail::ModelId{reply.modelId};
-        }
-        throw std::runtime_error(std::string{what} + " failed: " + reply.message);
+        _loop->post([core = _core, env = ::morph::wire::makeDeregister(mid.v)]() mutable {
+            core->sendDeregister(std::move(env));
+        });
     }
 
     /// @brief Sends an `execute` message and returns a `Completion` resolved on reply.
@@ -469,26 +368,13 @@ public:
     /// @brief No-op — this backend holds no local model objects.
     void notifyBackendChanged() override {}
 
-    /// @brief Whether a caller may wait for a bind to settle.
-    ///
-    /// The loop settles every bind, so a caller anywhere else may wait for
-    /// one. A caller on the loop's own thread — a timer or a monitor callback
-    /// sharing it — would be waiting on itself, and is told not to.
-    /// @return `kCallerMustNotBlock` on the loop's thread, `kCallerMayBlock`
-    ///         elsewhere.
-    [[nodiscard]] ::morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
-        return _loop->runningHere() ? ::morph::backend::detail::BindWait::kCallerMustNotBlock
-                                    : ::morph::backend::detail::BindWait::kCallerMayBlock;
-    }
-
     /// @brief Resolves every pending call's `Completion` with @p exc.
     ///
     /// Posted to the loop, so it covers every call issued before it — the loop
     /// runs posts in order. Covers both in-flight tables: the `execute` calls
     /// and the `bindModel`/`promoteModel` control calls. A bind left out of
     /// this sweep would hang forever on a disconnect, since its reply can now
-    /// only arrive on a connection that is gone — the async counterpart of
-    /// `sendSync`'s disconnect wake-up.
+    /// only arrive on a connection that is gone.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
         _loop->post([core = _core, exc] {
@@ -498,29 +384,62 @@ public:
         });
     }
 
-    /// @brief Installs the handler invoked after each *subsequent* successful (re)connect.
-    /// @param handler Callable invoked on this backend's dedicated handler
-    ///                thread — deliberately not the I/O loop, see
-    ///                `Core::onConnected`. Pass `nullptr` to clear.
-    void setReconnectHandler(const std::function<void()>& handler) override {
-        std::scoped_lock lock{_reconnectHandlerMtx};
-        _reconnectHandler = handler;
+    /// @brief Installs the handler posted to @p exec after each *subsequent*
+    ///        successful (re)connect.
+    ///
+    /// Stored on the loop. After a reconnect the loop posts the handler to
+    /// @p exec and goes on: whatever the handler does — a `Bridge`
+    /// re-registering its bindings through `bindModel` — never runs on the loop
+    /// whose replies it needs.
+    /// @param handler Callable posted to @p exec. Pass `nullptr` to clear.
+    /// @param exec    Executor the handler runs on. Borrowed: it must outlive
+    ///                the installation.
+    void setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* exec) override {
+        _loop->post([core = _core, handler = std::move(handler), exec]() mutable {
+            core->note("SocketBackend::setReconnectHandler");
+            core->reconnectHandler = std::move(handler);
+            core->reconnectExec = exec;
+        });
     }
 
     /// @brief Installs the session stamped onto every control envelope this
     ///        backend subsequently builds (`register`, `registerShared`,
-    ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
+    ///        `attach`, `assign`, `deregister`, `instances`). See
+    ///        `IBackend::setSession`.
+    ///
+    /// Stored on the loop, which stamps every control envelope as it files
+    /// it: a verb called after this, from the same thread, carries it.
     /// @param session Session to stamp; typically pushed by `Bridge::setDefaultSession()`.
     void setSession(::morph::session::Context session) override {
-        std::scoped_lock lock{_sessionMtx};
-        _session = std::move(session);
+        _loop->post([core = _core, session = std::move(session)]() mutable {
+            core->note("SocketBackend::setSession");
+            core->session = std::move(session);
+        });
     }
 
 private:
-    /// @brief Returns a copy of the session last installed via `setSession`.
-    [[nodiscard]] ::morph::session::Context currentSession() const {
-        std::scoped_lock lock{_sessionMtx};
-        return _session;
+    /// @brief Waits on the calling thread for @p completion, settled on the loop.
+    /// @tparam T The completion's value type.
+    /// @param completion A completion delivered on `inlineExecutor()`.
+    /// @param what       Verb name for the error message.
+    /// @return The settled value.
+    /// @throws std::runtime_error on the loop's own thread, on a disconnect,
+    ///         or with the server's refusal.
+    template <typename T>
+    T awaitReply(::morph::async::Completion<T> completion, std::string_view what) {
+        if (_loop->runningHere()) {
+            throw std::runtime_error(std::string{what} +
+                                     " failed: a synchronous call cannot wait on the I/O loop's own thread");
+        }
+        auto done = std::make_shared<std::promise<T>>();
+        auto result = done->get_future();
+        completion.then([done](const T& value) { done->set_value(value); })
+            .onError([done](const std::exception_ptr& failure) { done->set_exception(failure); });
+        try {
+            return result.get();
+        } catch (const ::morph::backend::DisconnectedError&) {
+            throw std::runtime_error(std::string{what} + " failed: disconnected");
+        }
     }
 
     struct PendingExecute {
@@ -536,20 +455,35 @@ private:
     /// tables share one `callId` counter (the execute table's), so an id is
     /// never ambiguous between them.
     struct PendingControl {
-        /// @brief State of the `Completion<ModelId>` this call settles.
+        /// @brief State of the `Completion<ModelId>` this call settles, or
+        ///        null for a call that settles `body` instead.
         std::shared_ptr<::morph::async::detail::CompletionState<::morph::exec::detail::ModelId>> state;
-        /// @brief Verb name prefixing the server's error message, matching the
-        ///        legacy verbs' `"<what> failed: ..."` wording.
+        /// @brief Verb name prefixing the server's error message:
+        ///        `"<what> failed: ..."`.
         std::string what;
         /// @brief Id to resolve with, for `promoteModel`, which echoes its
         ///        request's `mid`. `nullopt` means "resolve with the reply's".
         std::optional<::morph::exec::detail::ModelId> echo;
+        /// @brief State of a call answered with the reply's body
+        ///        (`instances`), or null.
+        std::shared_ptr<::morph::async::detail::CompletionState<std::string>> body;
+
+        /// @brief Rejects whichever state this call settles.
+        /// @param failure The failure.
+        void reject(const std::exception_ptr& failure) const {
+            if (state) {
+                state->setException(failure);
+            }
+            if (body) {
+                body->setException(failure);
+            }
+        }
     };
 
     /// @brief Posts one control envelope to the loop's callId-multiplexed
     ///        path and returns the `Completion` its reply will settle.
-    /// @param env    Envelope to send; its `callId` is assigned on the loop and
-    ///               its `session` filled in here.
+    /// @param env    Envelope to send; its `callId` and `session` are filled in
+    ///               on the loop.
     /// @param what   Verb name for the error message.
     /// @param echo   Id to resolve with, or `nullopt` to use the reply's `modelId`.
     /// @param cbExec Executor the continuation is delivered on.
@@ -559,9 +493,9 @@ private:
         ::morph::exec::IExecutor& cbExec) {
         auto state = std::make_shared<::morph::async::detail::CompletionState<::morph::exec::detail::ModelId>>();
         ::morph::async::Completion<::morph::exec::detail::ModelId> comp{state, &cbExec};
-        env.session = currentSession();
         _loop->post([core = _core, env,
-                     pending = PendingControl{.state = state, .what = std::string{what}, .echo = echo}]() mutable {
+                     pending = PendingControl{
+                         .state = state, .what = std::string{what}, .echo = echo, .body = nullptr}]() mutable {
             core->fileControl(std::move(env), std::move(pending));
         });
         return comp;
@@ -571,93 +505,19 @@ private:
     /// @param pending Entry taken out of the control table.
     /// @param reply   Decoded reply carrying the same `callId`.
     static void settleControl(const PendingControl& pending, const ::morph::wire::Envelope& reply) {
-        if (!pending.state) {
+        if (reply.kind != "ok") {
+            pending.reject(std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + reply.message)));
             return;
         }
-        if (reply.kind == "ok") {
+        if (pending.state) {
             pending.state->setValue(pending.echo.value_or(::morph::exec::detail::ModelId{reply.modelId}));
-            return;
         }
-        pending.state->setException(
-            std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + reply.message)));
-    }
-
-    std::string sendSync(const std::string& payload) {
-        if (_loop->runningHere()) {
-            // The reply can only be read by the loop this would block.
-            throw std::runtime_error("sendSync: a synchronous call cannot wait on the I/O loop's own thread");
-        }
-        std::unique_lock lock{_syncMtx};
-        if (_syncInFlight) {
-            throw std::runtime_error("sendSync: a synchronous call is already in flight (reentrant use)");
-        }
-        if (!_core->connected.load()) {
-            throw std::runtime_error("disconnected");
-        }
-        _syncInFlight = true;
-        _syncReply.reset();
-        lock.unlock();
-
-        _loop->post([core = _core, frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText,
-                                                                               payload, /*mask=*/true)]() mutable {
-            ::morph::exec::detail::noteOwner("SocketBackend::sendSync", core->loop.loop(), core->loop.runningHere());
-            // A refused frame needs no answer here: it is refused only because
-            // the connection is closing, and the disconnect that follows wakes
-            // this call with "disconnected".
-            static_cast<void>(core->send(std::move(frame)));
-        });
-
-        std::unique_lock waitLock{_syncMtx};
-        _syncCv.wait(waitLock, [this] { return _syncReply.has_value() || !_core->connected.load(); });
-        bool const gotReply = _syncReply.has_value();
-        std::string result = gotReply ? std::move(*_syncReply) : std::string{};
-        _syncReply.reset();
-        _syncInFlight = false;
-        if (!gotReply) {
-            throw std::runtime_error("disconnected");
-        }
-        return result;
-    }
-
-    /// Serializes reconnect-handler invocations off the I/O loop. Coalescing
-    /// via a flag (rather than queuing every request) is deliberate: if a second
-    /// reconnect lands while a handler is still running, re-running it once
-    /// afterwards is the correct catch-up, and it bounds concurrent handler runs
-    /// to one.
-    void handlerThreadMain() {
-        for (;;) {
-            std::function<void()> handler;
-            {
-                std::unique_lock lock{_handlerMtx};
-                _handlerCv.wait(lock, [this] { return _handlerPending || _shuttingDown.load(); });
-                if (_shuttingDown.load()) {
-                    return;
-                }
-                _handlerPending = false;
-            }
-            {
-                std::scoped_lock const lock{_reconnectHandlerMtx};
-                handler = _reconnectHandler;
-            }
-            if (!handler) {
-                continue;
-            }
-            try {
-                handler();
-            } catch (const std::exception& exc) {
-                // A handler that throws (typically because the link dropped
-                // again mid-re-registration, surfacing as "disconnected") must
-                // not take this thread down: the next reconnect has to find it
-                // still waiting.
-                ::morph::log::logWarn(std::string{"[net::SocketBackend] reconnect handler threw: "} + exc.what());
-            } catch (...) {
-                ::morph::log::logWarn("[net::SocketBackend] reconnect handler threw a non-std exception");
-            }
+        if (pending.body) {
+            pending.body->setValue(reply.body);
         }
     }
 
     void start() {
-        _handlerThread = std::thread{[this] { handlerThreadMain(); }};
         _loop->post([core = _core] { core->startAttempt(); });
     }
 
@@ -665,16 +525,10 @@ private:
     ///
     /// Held by `shared_ptr` from the backend and from every flow and task on
     /// the loop, so a flow that resumes after the backend is gone finds it
-    /// closed and ends. It reaches the backend itself — the synchronous-call and
-    /// handler-thread state — only through `owner`, which `close()` clears.
+    /// closed and ends. It never reaches the backend object itself.
     struct Core : std::enable_shared_from_this<Core> {
-        Core(::morph::exec::IoLoop& ioLoop, ::morph::net::detail::ParsedWsUrl target, Config config,
-             SocketBackend& backend)
-            : loop{ioLoop},
-              url{std::move(target)},
-              cfg{config},
-              owner{&backend},
-              reconnectDelay{config.initialReconnectDelay} {}
+        Core(::morph::exec::IoLoop& ioLoop, ::morph::net::detail::ParsedWsUrl target, Config config)
+            : loop{ioLoop}, url{std::move(target)}, cfg{config}, reconnectDelay{config.initialReconnectDelay} {}
 
         /// Owner check for every loop-side body.
         void note(char const* site) const noexcept {
@@ -724,18 +578,18 @@ private:
         void fileControl(::morph::wire::Envelope env, PendingControl pending) {
             note("SocketBackend::bindModel");
             if (!connected.load() || !conn) {
-                pending.state->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+                pending.reject(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
                 return;
             }
             std::uint64_t const callId = executes.nextCallId();
             env.callId = callId;
+            env.session = session;
             std::string frame;
             try {
                 frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText,
                                                             ::morph::wire::encode(env), /*mask=*/true);
             } catch (const std::exception& exc) {
-                pending.state->setException(
-                    std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + exc.what())));
+                pending.reject(std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + exc.what())));
                 return;
             }
             controls.insert(callId, std::move(pending));
@@ -748,6 +602,7 @@ private:
                 return;
             }
             env.callId = executes.nextCallId();
+            env.session = session;
             try {
                 static_cast<void>(send(::morph::net::detail::encodeWsFrame(
                     ::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env), /*mask=*/true)));
@@ -781,37 +636,8 @@ private:
                 }
             }
             for (auto& entry : drainedControl) {
-                if (entry.second.state) {
-                    entry.second.state->setException(exc);
-                }
+                entry.second.reject(exc);
             }
-        }
-
-        /// Hands @p payload to a parked synchronous call, if there is one.
-        /// @return Whether one took it.
-        bool handToSyncCall(std::string const& payload) {
-            if (owner == nullptr) {
-                return false;
-            }
-            std::scoped_lock const lock{owner->_syncMtx};
-            if (!owner->_syncInFlight) {
-                return false;
-            }
-            owner->_syncReply = payload;
-            owner->_syncCv.notify_all();
-            return true;
-        }
-
-        /// Wakes a parked synchronous call to observe the disconnect.
-        void wakeSyncCall() {
-            if (owner == nullptr) {
-                return;
-            }
-            {
-                std::scoped_lock const lock{owner->_syncMtx};
-                owner->_syncReply.reset();
-            }
-            owner->_syncCv.notify_all();
         }
 
         void onConnected() {
@@ -822,16 +648,10 @@ private:
             for (auto const& waiter : std::exchange(connectWaiters, {})) {
                 waiter->set_value();
             }
-            if (isReconnect && owner != nullptr) {
-                // Handed to the handler thread rather than run here. A
-                // reconnect handler is expected to re-register its models
-                // (Bridge::installReconnectHandler does exactly that), which
-                // goes through sendSync -> wait on _syncCv for a reply that only
-                // this loop can deliver. Run on the loop, that wait blocks the
-                // one thread responsible for satisfying it.
-                std::scoped_lock const lock{owner->_handlerMtx};
-                owner->_handlerPending = true;
-                owner->_handlerCv.notify_all();
+            if (isReconnect && reconnectHandler && reconnectExec != nullptr) {
+                // Posted, never run here: the handler re-registers through
+                // `bindModel`, whose replies this loop delivers.
+                reconnectExec->post(reconnectHandler);
             }
         }
 
@@ -841,7 +661,6 @@ private:
                 ::morph::net::detail::closeAfterFlush(conn);
                 conn.reset();
             }
-            wakeSyncCall();
             cancelAll(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
         }
 
@@ -877,8 +696,7 @@ private:
                 conn.reset();
             }
             connectWaiters.clear();
-            wakeSyncCall();
-            owner = nullptr;
+            reconnectHandler = nullptr;
             cancelAll(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
         }
 
@@ -887,13 +705,8 @@ private:
             try {
                 env = ::morph::wire::decode(payload);
             } catch (const std::exception&) {
-                // Hand the raw text to a parked synchronous call so it can
-                // report something better than "disconnected".
-                if (handToSyncCall(payload)) {
-                    return;
-                }
-                // No sync waiter, and the callId is unreadable, so this reply
-                // cannot be matched to the execute it belongs to. Every message
+                // The callId is unreadable, so this reply cannot be matched to
+                // the call it belongs to. Every message
                 // here is required to be one envelope, so an undecodable one
                 // means the peer's framing is no longer trustworthy: fail the
                 // pending calls rather than wait on a stream that may never
@@ -901,10 +714,6 @@ private:
                 // QtWebSocketBackend::onTextMessage.
                 cancelAll(std::make_exception_ptr(
                     std::runtime_error("protocol error: server sent a message that is not a valid envelope")));
-                return;
-            }
-            if (env.callId == 0U) {
-                static_cast<void>(handToSyncCall(payload));
                 return;
             }
             note("SocketBackend::reply");
@@ -1054,11 +863,14 @@ private:
         ::morph::exec::IoLoop& loop;
         ::morph::net::detail::ParsedWsUrl url;
         Config cfg;
-        /// The backend, until `close()`.
-        SocketBackend* owner;
-        /// The one field read off the loop: by `execute`'s fast path,
-        /// `waitForConnected` and `sendSync`.
+        /// The one field read off the loop: by `execute`'s fast path and
+        /// `waitForConnected`.
         std::atomic<bool> connected{false};
+        /// Stamped onto every control envelope as it is filed.
+        ::morph::session::Context session;
+        /// Posted to `reconnectExec` after every reconnect; cleared by `close()`.
+        std::function<void()> reconnectHandler;
+        ::morph::exec::IExecutor* reconnectExec{nullptr};
         bool everConnected{false};
         bool closed{false};
         std::chrono::milliseconds reconnectDelay;
@@ -1080,27 +892,6 @@ private:
     std::unique_ptr<::morph::exec::IoLoop> _ownedLoop;
     ::morph::exec::IoLoop* _loop;
     std::shared_ptr<Core> _core;
-    std::atomic<bool> _shuttingDown{false};
-
-    std::mutex _syncMtx;
-    std::condition_variable _syncCv;
-    bool _syncInFlight{false};
-    std::optional<std::string> _syncReply;
-
-    std::mutex _reconnectHandlerMtx;
-    std::function<void()> _reconnectHandler;
-
-    mutable std::mutex _sessionMtx;
-    ::morph::session::Context _session;
-
-    std::mutex _handlerMtx;
-    std::condition_variable _handlerCv;
-    bool _handlerPending{false};
-
-    // Declared last: the constructor starts this thread after every other
-    // member above is fully constructed, so its body never observes a
-    // partially-constructed `this`.
-    std::thread _handlerThread;
 };
 
 }  // namespace morph::net

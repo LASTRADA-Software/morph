@@ -20,6 +20,8 @@
 #include <testkit/log_level.hpp>
 #include <thread>
 
+#include "../test_support.hpp"
+
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based
 // get_name() needs these types to have external linkage (see
 // tests/qt/test_qt_websocket.cpp's WsEchoAction/WsEchoModel for the same
@@ -65,31 +67,6 @@ bool waitForConnectedPumpingQt(morph::net::SocketBackend& backend, int maxIterat
     return false;
 }
 
-// `BridgeHandler`'s constructor calls `IBackend::registerModelWithContext`
-// synchronously; on `SocketBackend` that blocks the calling thread on a
-// condition variable until the server's reply arrives (see
-// `SocketBackend::registerModel`'s `sendSync`). When the peer is a
-// `QtWebSocketServer`, that reply only ever gets produced by pumping the Qt
-// event loop -- so constructing the handler directly on this test's Qt thread
-// would deadlock exactly like the unpumped `waitForConnected()` above.
-// Build it on a worker thread instead, while this (Qt) thread keeps pumping
-// events until construction (and therefore the blocking register call)
-// completes.
-template <typename Model>
-std::unique_ptr<morph::bridge::BridgeHandler<Model>> makeHandlerPumpingQt(morph::bridge::Bridge& bridge,
-                                                                          ::morph::exec::IExecutor* cbExec) {
-    std::unique_ptr<morph::bridge::BridgeHandler<Model>> handler;
-    std::atomic<bool> done{false};
-    std::thread worker{[&] {
-        handler = std::make_unique<morph::bridge::BridgeHandler<Model>>(bridge, cbExec);
-        done.store(true, std::memory_order_release);
-    }};
-    while (!done.load(std::memory_order_acquire)) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-    }
-    worker.join();
-    return handler;
-}
 }  // namespace
 
 // ── morph::net::SocketBackend client <-> morph::qt::QtWebSocketServer ──────
@@ -106,13 +83,15 @@ TEST_CASE("SocketBackend interop: connects to a QtWebSocketServer and completes 
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(waitForConnectedPumpingQt(*backendPtr));
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
-    auto handler = makeHandlerPumpingQt<InteropEchoModel>(bridge, &cbPool);
-    REQUIRE(handler != nullptr);
+    // The bridge's owner is this (Qt) thread. Constructing the handler never
+    // waits: its bind is posted to the loop, and the call below is held until
+    // the reply, which pumping Qt lets the QtWebSocketServer produce.
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
+    morph::bridge::BridgeHandler<InteropEchoModel> handler{bridge, &qtExec};
 
     std::atomic<int> result{-1};
-    handler->execute(InteropEchoAction{123})
+    handler.execute(InteropEchoAction{123})
         .then([&](int val) { result.store(val); })
         .onError([](const std::exception_ptr&) {});
 
@@ -135,7 +114,7 @@ TEST_CASE("QtWebSocketBackend interop: connects to a SocketServer and completes 
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<InteropEchoModel> handler{bridge, &qtExec};
 
     std::atomic<int> result{-1};

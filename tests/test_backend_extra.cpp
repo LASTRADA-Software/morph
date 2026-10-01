@@ -109,7 +109,7 @@ TEST_CASE("morph::backend::LocalBackend: execute after deregisterModel delivers 
 TEST_CASE("morph::bridge::Bridge::deregisterHandler with already-zero currentId is a no-op", "[bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "BE_CounterModel";
@@ -124,7 +124,7 @@ TEST_CASE("morph::bridge::Bridge::deregisterHandler with already-zero currentId 
 TEST_CASE("morph::bridge::Bridge::executeVia when handler currentId is zero returns error", "[bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     // Manually create an unbound binding
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
@@ -149,7 +149,7 @@ TEST_CASE("morph::bridge::Bridge::executeVia when handler currentId is zero retu
 TEST_CASE("morph::bridge::BridgeHandler destructor deregisters model cleanly", "[bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     std::atomic<int> result{-1};
     {

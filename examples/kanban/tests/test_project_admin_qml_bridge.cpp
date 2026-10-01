@@ -100,7 +100,6 @@ TEST_CASE("ProjectAdminBridge exposes exactly the surface a login/project-list/m
     REQUIRE(meta->indexOfMethod("setMemberRole(qlonglong,QString,QString)") >= 0);
     REQUIRE(meta->indexOfMethod("removeMember(qlonglong,QString)") >= 0);
 
-    REQUIRE(meta->indexOfSignal("bound()") >= 0);
     REQUIRE(meta->indexOfSignal("loggedIn(QString)") >= 0);
     REQUIRE(meta->indexOfSignal("replyReceived(QString,bool,QString)") >= 0);
     REQUIRE(meta->indexOfSignal("projectsListed(QVariantList)") >= 0);
@@ -112,7 +111,7 @@ TEST_CASE("ProjectAdminBridge exposes exactly the surface a login/project-list/m
 
     // Nothing else: an adapter method with no binding site is a stub, and one
     // removed from under a binding is a silent runtime gap.
-    CHECK(ownMethodCount(meta) == 14);
+    CHECK(ownMethodCount(meta) == 13);
 }
 
 TEST_CASE("ProjectAdminBridge::login installs the returned token and updates the principal property",

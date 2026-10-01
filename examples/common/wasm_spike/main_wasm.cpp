@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
     auto* rawBackend = backendPtr.get();  // stays valid: Bridge below co-owns the same object
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
 
     // Holds the one BridgeHandler this spike ever constructs. Must outlive
     // the timer lambda below: a lambda-local BridgeHandler is destroyed the

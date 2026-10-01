@@ -10,7 +10,7 @@
 //    test_board_model.cpp's createProjectAs helper) -> handler.execute(
 //    OpenBoard{projectId}) to attach -> CreateColumn -> GetBoardState, across
 //    Mode::Local, Mode::LocalSingleThread, Mode::Socket. Proves the *keyed*
-//    attach path (registerModelShared/attachModel, docs/spec/core/
+//    attach path (bindModel, docs/spec/core/
 //    shared_instances.md) works identically across all three modes for
 //    BoardModel, not just the plain-registration path test_board_model.cpp's
 //    own tests already exercise.

@@ -1639,11 +1639,15 @@ private:
 ///        wire `Envelope` messages.
 ///
 /// Intended for testing and in-process simulation of remote execution.
-/// `registerModel()` and `deregisterModel()` are processed inline on the calling
-/// thread via `RemoteServer::handleInline`. `execute()` is asynchronous: it sends
-/// the message through `RemoteServer::handle` and resolves the returned
-/// `Completion` when the reply arrives (there is no `std::promise` and no
-/// blocking wait).
+/// Control envelopes (`bindModel`, `registerModel`, `deregisterModel`, ...) are
+/// processed through `RemoteServer::handleInline`, which answers before it
+/// returns, so a bind settles inside the call. `execute()` is asynchronous: it
+/// sends the message through `RemoteServer::handle` and resolves the returned
+/// `Completion` when the reply arrives.
+///
+/// Its pending list and session belong to the caller's owner (`setOwner`) and
+/// are touched only there, without a lock; the server's reply callback touches
+/// only the completion it settles.
 class SimulatedRemoteBackend : public detail::IBackend {
 public:
     /// @brief Constructs the backend targeting @p server, unscoped.
@@ -1688,9 +1692,8 @@ public:
 
     /// @brief Registers the model type on the server and returns its assigned id.
     ///
-    /// Processed inline on the calling thread (no pool round-trip), so it is safe
-    /// to call from any thread including a worker in the same pool that backs the
-    /// `RemoteServer`. The @p factory argument is ignored — model construction is
+    /// Processed through `RemoteServer::handleInline`, which answers before it
+    /// returns. The @p factory argument is ignored — model construction is
     /// delegated to the server's `ModelRegistryFactory`.
     ///
     /// @param typeId String type-id sent in the `register` message.
@@ -1715,8 +1718,9 @@ public:
     ::morph::exec::detail::ModelId registerModelWithContext(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
         std::string_view contextKey) override {
+        note("SimulatedRemoteBackend::registerModelWithContext");
         auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
-        env.session = currentSession();
+        env.session = _session;
         auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
@@ -1724,61 +1728,37 @@ public:
         throw std::runtime_error("register failed: " + reply.message);
     }
 
-    /// @brief Registers or attaches to the server's shared instance for @p identity.
+    /// @brief Acquires an instance on the server for @p request and settles
+    ///        the returned `Completion` before returning.
     ///
-    /// Sends a `shared` register, so the server returns the live instance for
-    /// `(typeId, primary)` when one exists rather than creating a second. An
-    /// empty primary degrades to the private path.
-    /// @param typeId   String type-id sent in the `register` message.
-    /// @param factory  Ignored — the server constructs via its own registry.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @return `ModelId` of the shared (or newly created) instance.
-    /// @throws std::runtime_error if the server replies with an error.
-    ::morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        detail::InstanceIdentity identity) override {
-        if (identity.primary.empty()) {
-            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+    /// Each shape of `BindRequest` is one envelope, processed through
+    /// `RemoteServer::handleInline` on the calling thread: a private
+    /// `register`, a shared `register` (register-or-attach), or an `attach`
+    /// that re-points from `current` in one request, so a re-pointing client
+    /// cannot lose its slot to `LimitPolicy::maxLiveModels` between releasing
+    /// the old instance and acquiring the new one. An empty `primary` with a
+    /// live `current` releases it first and binds a private instance.
+    /// @param request Owning bind request; moved from.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A settled `Completion`: the bound id, or the server's refusal as
+    ///         a `std::runtime_error`.
+    ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(detail::BindRequest request,
+                                                                         ::morph::exec::IExecutor& cbExec) override {
+        note("SimulatedRemoteBackend::bindModel");
+        auto [completion, promise] =
+            ::morph::async::Completion<::morph::exec::detail::ModelId>::makeSettleable(&cbExec);
+        try {
+            promise.resolve(bindNow(request));
+        } catch (...) {
+            promise.reject(std::current_exception());
         }
-        auto env =
-            ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
-        env.session = currentSession();
-        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
-        if (reply.kind == "ok") {
-            return ::morph::exec::detail::ModelId{reply.modelId};
-        }
-        throw std::runtime_error("register failed: " + reply.message);
+        return std::move(completion);
     }
 
-    /// @brief Re-points from @p current to the server's shared instance for @p identity.
-    ///
-    /// One `attach` request rather than a deregister/register pair, so the
-    /// re-pointing client cannot lose its slot to `LimitPolicy::maxLiveModels`
-    /// between releasing the old instance and acquiring the new one.
-    /// @param typeId   String type-id sent in the `attach` message.
-    /// @param factory  Ignored — the server constructs via its own registry.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @param current  Instance currently held, or `ModelId{0}` if none.
-    /// @return `ModelId` of the instance now attached to.
-    /// @throws std::runtime_error if the server replies with an error.
-    ::morph::exec::detail::ModelId attachModel(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override {
-        if (identity.primary.empty()) {
-            if (current.v != 0U) {
-                deregisterModel(current);
-            }
-            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
-        }
-        auto env = ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
-                                             std::string{identity.contextKey});
-        env.session = currentSession();
-        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
-        if (reply.kind == "ok") {
-            return ::morph::exec::detail::ModelId{reply.modelId};
-        }
-        throw std::runtime_error("attach failed: " + reply.message);
-    }
+    /// @brief Records the owner every verb is called from.
+    /// @param owner The caller's owner.
+    void setOwner(const ::morph::exec::detail::OwnerAffinity& owner) override { _affinity.emplace(owner); }
 
     /// @brief Files a live server-side instance under @p primary.
     /// @param mid     Live instance to promote.
@@ -1786,11 +1766,12 @@ public:
     /// @param primary Canonical string encoding of the key to file it under.
     void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
                        std::string_view primary) override {
+        note("SimulatedRemoteBackend::assignPrimary");
         if (primary.empty() || mid.v == 0U) {
             return;
         }
         auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
-        env.session = currentSession();
+        env.session = _session;
         (void)_server.handleInline(::morph::wire::encode(env), _cid);
     }
 
@@ -1799,6 +1780,7 @@ public:
     /// @return Canonical key strings of the live shared instances.
     /// @throws std::runtime_error if the server replies with an error.
     std::vector<std::string> listInstances(const std::string& typeId) override {
+        note("SimulatedRemoteBackend::listInstances");
         auto reply = ::morph::wire::decode(
             _server.handleInline(::morph::wire::encode(::morph::wire::makeInstances(typeId)), _cid));
         if (reply.kind != "ok") {
@@ -1828,7 +1810,7 @@ public:
         return keys;
     }
 
-    /// @brief Deregisters the model on the server. Processed inline; safe from any thread.
+    /// @brief Deregisters the model on the server. Processed inline.
     ///
     /// Carries this backend's own `ConnectionId`, so a shared instance's
     /// attach count is decremented against *this* backend's scope entry —
@@ -1836,8 +1818,9 @@ public:
     /// `deregister` does (`backend.md`, "Connection scopes").
     /// @param mid Id of the model to deregister.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
+        note("SimulatedRemoteBackend::deregisterModel");
         auto env = ::morph::wire::makeDeregister(mid.v);
-        env.session = currentSession();
+        env.session = _session;
         (void)_server.handleInline(::morph::wire::encode(env), _cid);
     }
 
@@ -1878,7 +1861,7 @@ public:
     ///         server predating this kind).
     [[nodiscard]] std::string fetchActionSchemas(std::string typeId) {
         auto env = ::morph::wire::makeSchemas(std::move(typeId));
-        env.session = currentSession();
+        env.session = _session;
         auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env)));
         if (reply.kind != "ok") {
             throw std::runtime_error("schemas request failed: " +
@@ -1901,6 +1884,7 @@ public:
     ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
                                                               detail::ActionCall call,
                                                               ::morph::exec::IExecutor* cbExec) override {
+        note("SimulatedRemoteBackend::execute");
         auto state = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{state, cbExec};
         trackPending(state);
@@ -1951,11 +1935,8 @@ public:
     /// @brief Resolves every still-pending completion this backend produced with @p exc.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
-        std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
-        {
-            std::scoped_lock const lock{_pendingMtx};
-            snapshot.swap(_pending);
-        }
+        note("SimulatedRemoteBackend::cancelPending");
+        auto snapshot = std::exchange(_pending, {});
         for (auto& weak : snapshot) {
             if (auto state = weak.lock()) {
                 state->setException(exc);
@@ -1968,21 +1949,46 @@ public:
     ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
     /// @param session Session to stamp; typically pushed by `Bridge::setDefaultSession()`.
     void setSession(::morph::session::Context session) override {
-        std::scoped_lock const lock{_sessionMtx};
+        note("SimulatedRemoteBackend::setSession");
         _session = std::move(session);
     }
 
 private:
-    void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
-        std::scoped_lock const lock{_pendingMtx};
-        std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
-        _pending.emplace_back(state);
+    /// @brief Checks, in a debug build, that the caller is on the owner the
+    ///        backend was given. Nothing to check before `setOwner`.
+    /// @param site Name of the calling body.
+    void note(char const* site) const noexcept {
+        if (_affinity) {
+            _affinity->note(site);
+        }
     }
 
-    /// @brief Returns a copy of the session last installed via `setSession`.
-    [[nodiscard]] ::morph::session::Context currentSession() const {
-        std::scoped_lock const lock{_sessionMtx};
-        return _session;
+    /// @brief `bindModel`'s body: one control envelope per request shape.
+    /// @param request The bind request.
+    /// @return The bound id.
+    /// @throws std::runtime_error if the server replies with an error.
+    ::morph::exec::detail::ModelId bindNow(const detail::BindRequest& request) {
+        if (request.primary.empty()) {
+            if (request.current.v != 0U) {
+                deregisterModel(request.current);
+            }
+            return registerModelWithContext(request.typeId, {}, request.contextKey);
+        }
+        auto env =
+            request.current.v == 0U
+                ? ::morph::wire::makeRegisterShared(request.typeId, request.primary, request.contextKey)
+                : ::morph::wire::makeAttach(request.typeId, request.primary, request.current.v, request.contextKey);
+        env.session = _session;
+        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
+        if (reply.kind == "ok") {
+            return ::morph::exec::detail::ModelId{reply.modelId};
+        }
+        throw std::runtime_error((request.current.v == 0U ? "register failed: " : "attach failed: ") + reply.message);
+    }
+
+    void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
+        std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
+        _pending.emplace_back(state);
     }
 
     RemoteServer& _server;
@@ -1990,9 +1996,10 @@ private:
     // constructed with a ConnectionId from server.openConnection(). Threaded
     // through every handle()/handleInline() call this backend makes.
     ConnectionId _cid{0};
-    std::mutex _pendingMtx;
+    // The owner every verb is called from, once `setOwner` has named it. The
+    // two fields below are touched only there.
+    std::optional<::morph::exec::detail::OwnerAffinity> _affinity;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
-    mutable std::mutex _sessionMtx;
     ::morph::session::Context _session;
 };
 

@@ -17,6 +17,7 @@ threading, and serialisation semantics differ per implementation.
 - [Lifetime & ownership](#lifetime--ownership)
 - [Thread safety](#thread-safety)
 - [Current executor](#current-executor)
+- [Owner affinity](#owner-affinity)
 - [Owner strands — `OwnerStrand`](#owner-strands--ownerstrand)
 - [The I/O loop — `IoLoop`](#the-io-loop--ioloop)
 - [Failure modes](#failure-modes)
@@ -404,6 +405,34 @@ make that check through `detail::noteOwner(site, owner, onOwner)`
 replaces with a probe that records the site and reads the scope itself. That
 probe is how the posted-call tests prove a verb called off the loop ran its
 body on it.
+
+## Owner affinity
+
+`runningOn(owner)` is true only inside a task the owner runs. A GUI owner's
+thread runs code outside its tasks too — a Qt slot, a QML handler, a test body,
+`main()` before the event loop starts — and that code is the owner as well.
+`exec::detail::OwnerAffinity` (`core/detail/owner_affinity.hpp`) is the answer
+a component that belongs to one executor gives for both:
+
+- It holds the owner, and — when it was constructed on a thread running no
+  executor's task (`ExecutorScope::innermost()` null there) — that thread.
+- `here()` is `runningOn(owner)`, or "on the constructing thread" when one was
+  recorded. A component constructed inside a task (on a strand, on a pool)
+  records no thread and is checked by `runningOn` alone.
+- `note(site)` is the check each owner-only body makes on entry: it calls
+  `detail::noteOwner(site, owner.coreExecutor(), here())`, which asserts in a
+  debug build or hands the site to an installed test probe.
+
+Copying an affinity hands a collaborator the same answer: `Bridge` gives its
+affinity to its backend (`IBackend::setOwner`) and to every `BridgeHandler`, so
+all three check against one owner.
+
+A stated scope cannot replace the recorded thread. `ExecutorScope` nests
+strictly per thread, and the objects that own a bridge on a GUI thread are
+destroyed in whatever order QML chooses, so a scope opened for one of them
+would not be the innermost when it closed. The probe a test installs reads the
+scope itself, not `here()`, so a posted-call test still proves its body ran in
+an owner **task**, independent of this fallback.
 
 ## Owner strands — `OwnerStrand`
 

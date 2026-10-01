@@ -229,7 +229,7 @@ TEST_CASE("Forms::NoDrift::ActionDispatcherAcceptsInBoundsQuantity", "[forms][de
 TEST_CASE("Forms::NoDrift::LocalBackendRejectsOutOfBoundsQuantityViaOnError", "[forms][decode][dispatch]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::InlineExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<QDVModel> handler{bridge, &cbExec};
 
     QDVReading const badReading{

@@ -213,14 +213,15 @@ public:
                 // has no staleness to converge from). No construction loop is
                 // needed: client<Model>(index) hands every index the same
                 // Bridge built here regardless of nClients' value.
-                _sharedLocalBridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend));
+                _sharedLocalBridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_qtExecutor);
                 break;
             }
             case Mode::LocalSingleThread: {
                 _mainThreadExecutor = std::make_unique<detail::QtDrivenMainThreadExecutor>();
                 _clientExecutor = _mainThreadExecutor.get();
                 auto backend = std::make_unique<::morph::backend::LocalBackend>(*_mainThreadExecutor);
-                _sharedLocalBridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend));
+                _sharedLocalBridge =
+                    std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_mainThreadExecutor);
                 break;
             }
             case Mode::Socket: {
@@ -249,7 +250,8 @@ public:
                     // can reach transport-level operations that have no
                     // Bridge-level equivalent (`negotiateProtocolVersion()`).
                     _socketBackends.push_back(backend.get());
-                    _socketBridges.push_back(std::make_unique<::morph::bridge::Bridge>(std::move(backend)));
+                    _socketBridges.push_back(
+                        std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_qtExecutor));
                 }
                 break;
             }

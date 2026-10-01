@@ -146,7 +146,7 @@ TEST_CASE("Bridge::executeVia rejects an invalid action on LocalBackend via onEr
     gGatedExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawValidationError{false};
@@ -172,7 +172,7 @@ TEST_CASE("Bridge::executeVia dispatches a valid action normally on LocalBackend
     gGatedExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
 
     std::atomic<int> observedPayload{-1};
@@ -193,7 +193,7 @@ TEST_CASE("Bridge::executeVia dispatches an action with no validator unchanged o
           "[bridge][local][validation]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<UngatedModel> handler{bridge, &cbExec};
 
     std::atomic<int> observedResult{-1};
@@ -219,7 +219,7 @@ TEST_CASE("SimulatedRemoteBackend rejects an invalid action with an err reply ca
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawError{false};
@@ -248,7 +248,7 @@ TEST_CASE("SimulatedRemoteBackend dispatches a valid action normally", "[bridge]
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
 
     std::atomic<int> observedPayload{-1};
@@ -269,7 +269,7 @@ TEST_CASE("SimulatedRemoteBackend dispatches an action with no validator unchang
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<UngatedModel> handler{bridge, &cbExec};
 
     std::atomic<int> observedResult{-1};

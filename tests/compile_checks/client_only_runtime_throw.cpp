@@ -55,7 +55,7 @@ int main() {
     // MORPH_CLIENT_ONLY must never be paired with LocalBackend. Exercising it
     // anyway is exactly how this probe proves the throw fires instead of
     // silently calling execute.
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<ClientOnlyRuntimeModel> handler{bridge, &cbExec};
 
     std::atomic<bool> gotExpectedError{false};

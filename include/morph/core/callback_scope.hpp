@@ -2,6 +2,7 @@
 
 #pragma once
 #include <atomic>
+#include <core/async/StopToken.hpp>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -12,10 +13,13 @@ namespace morph::async {
 
 namespace detail {
 
-/// Shared state behind one `CallbackScope` generation. Deliberately tiny: the
-/// control block is what carries liveness, and the single atomic carries stop.
+/// Shared state behind one `CallbackScope` generation. The control block
+/// carries liveness, the atomic carries stop for gating, and `stop` carries it
+/// to the calls the scope owns: a `Completion` attached through a token of
+/// this generation links the call's own stop source to it.
 struct CallbackScopeState {
     std::atomic<bool> stopped{false};
+    ::core::async::StopSource stop;
 };
 
 }  // namespace detail
@@ -83,6 +87,20 @@ public:
     /// `active()` it does not conflate "gone" with "stopped".
     /// @return `true` iff the issuing generation no longer exists.
     [[nodiscard]] bool expired() const noexcept { return _state.expired(); }
+
+    /// @brief The stop token of the issuing scope's generation: stop is
+    ///        requested on it when the scope is stopped, reset or destroyed.
+    ///
+    /// What a `Completion` attached through this token links its call's stop
+    /// source to, so stopping the scope stops the call as well as refusing its
+    /// callbacks. See `docs/spec/core/callback_scope.md`, "Stopping the calls a
+    /// scope owns".
+    /// @return The generation's token, or a token with no stop state once the
+    ///         generation is gone.
+    [[nodiscard]] ::core::async::StopToken stopToken() const noexcept {
+        auto const state = _state.lock();
+        return state == nullptr ? ::core::async::StopToken{} : state->stop.get_token();
+    }
 
     /// @brief Wraps @p fn so it runs only while this token is `Active`.
     ///
@@ -171,9 +189,9 @@ private:
 ///
 /// @par Teardown that pumps
 /// Members are destroyed *after* the destructor body runs. A destructor body
-/// that can pump a nested event loop (a `sendSync`-style blocking call) can
-/// therefore still deliver into a half-destroyed receiver. Such a destructor
-/// must call `requestStop()` as its first statement.
+/// that can pump a nested event loop (a blocking call that spins a
+/// `QEventLoop`) can therefore still deliver into a half-destroyed receiver.
+/// Such a destructor must call `requestStop()` as its first statement.
 ///
 /// @par Boundary of the guarantee
 /// - **Executor-affine use gets the full guarantee.** When the scope is
@@ -195,8 +213,10 @@ private:
 ///
 /// @par Thread safety
 /// `token()`, `guard()`, `requestStop()`, `stopRequested()` and the destructor
-/// are safe to call concurrently from any thread; `requestStop()` and
-/// `stopRequested()` are lock-free atomic operations on the current generation.
+/// are safe to call concurrently from any thread. `stopRequested()` is a
+/// lock-free atomic load; `requestStop()` stores the same atomic and then
+/// requests stop on the generation's `core::async::StopSource`, which runs the
+/// stop of every call the scope owns on the calling thread.
 ///
 /// **`reset()` is the exception and must be externally synchronised** against
 /// the others — call it from the thread that owns the scope. It replaces the
@@ -228,16 +248,21 @@ public:
     CallbackScope(CallbackScope&&) = delete;
     CallbackScope& operator=(CallbackScope&&) = delete;
 
-    /// @brief Marks this generation stopped: gated callbacks stop being delivered.
+    /// @brief Marks this generation stopped: gated callbacks stop being
+    ///        delivered, and every call the scope owns is asked to stop.
     ///
-    /// Idempotent and safe from any thread. The owner remains alive, so tokens
-    /// report `CallbackStatus::Stopped` rather than `Expired`. Undone only by
-    /// `reset()`, which starts a new generation.
+    /// A call is owned by the scope once a `Completion` carrying a stop source
+    /// (a `Bridge` call whose handler returns a `Task`) has a callback attached
+    /// through one of its tokens; its stop is requested here, on this thread,
+    /// before this returns. Idempotent and safe from any thread. The owner
+    /// remains alive, so tokens report `CallbackStatus::Stopped` rather than
+    /// `Expired`. Undone only by `reset()`, which starts a new generation.
     void requestStop() const noexcept {
         // `_state` is never null: the sole constructor make_shared's it, the
         // class is non-copyable and non-movable, and `reset()` always assigns a
         // fresh value. A `!= nullptr` guard here would be an unreachable branch.
         _state->stopped.store(true, std::memory_order_release);
+        static_cast<void>(_state->stop.request_stop());
     }
 
     /// @brief Retires every token issued so far and starts a fresh, live generation.

@@ -115,7 +115,7 @@ TEST_CASE("soak: switchBackend churn between LocalBackend and SimulatedRemoteBac
     morph::exec::ThreadPoolExecutor poolRemote{2};
     morph::testing::InlineExecutor cbExec;
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolLocal)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolLocal), cbExec};
     morph::bridge::BridgeHandler<SoakModel> handler{bridge, &cbExec};
 
     std::atomic<uint64_t> issued{0};

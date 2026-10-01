@@ -110,7 +110,7 @@ std::unique_ptr<morph::backend::detail::IBackend> makeLocal(morph::exec::IExecut
 
 TEST_CASE("a subscriber hears results produced by its own handler", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
     BridgeHandler<SubCounterModel, AllowShared> handler{bridge, &exec};
 
     std::int64_t seen = 0;
@@ -127,7 +127,7 @@ TEST_CASE("a subscriber hears results produced by its own handler", "[bridge][su
 
 TEST_CASE("a subscriber hears another handler's work on the shared instance", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
 
     BridgeHandler<SubCounterModel, AllowShared> watcher{bridge, &exec};
     BridgeHandler<SubCounterModel, AllowShared> actor{bridge, &exec};
@@ -144,7 +144,7 @@ TEST_CASE("a subscriber hears another handler's work on the shared instance", "[
 
 TEST_CASE("a subscriber hears nothing from a different instance", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
 
     BridgeHandler<SubCounterModel, AllowShared> watcher{bridge, &exec};
     BridgeHandler<SubCounterModel, AllowShared> elsewhere{bridge, &exec};
@@ -159,7 +159,7 @@ TEST_CASE("a subscriber hears nothing from a different instance", "[bridge][subs
 
 TEST_CASE("a subscription follows its handler when it re-points", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
 
     BridgeHandler<SubCounterModel, AllowShared> watcher{bridge, &exec};
     BridgeHandler<SubCounterModel, AllowShared> actor{bridge, &exec};
@@ -181,7 +181,7 @@ TEST_CASE("a subscription follows its handler when it re-points", "[bridge][subs
 
 TEST_CASE("distinct result types do not interfere", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
     BridgeHandler<SubCounterModel, AllowShared> handler{bridge, &exec};
     handler.attach(40);
 
@@ -201,7 +201,7 @@ TEST_CASE("distinct result types do not interfere", "[bridge][subscription]") {
 
 TEST_CASE("every action producing the type notifies the subscriber", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
     BridgeHandler<SubCounterModel, AllowShared> handler{bridge, &exec};
     handler.attach(50);
 
@@ -215,7 +215,7 @@ TEST_CASE("every action producing the type notifies the subscriber", "[bridge][s
 
 TEST_CASE("subscribing again replaces the previous callback", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
     BridgeHandler<SubCounterModel, AllowShared> handler{bridge, &exec};
     handler.attach(60);
 
@@ -231,7 +231,7 @@ TEST_CASE("subscribing again replaces the previous callback", "[bridge][subscrip
 
 TEST_CASE("unsubscribe stops further delivery", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
     BridgeHandler<SubCounterModel, AllowShared> handler{bridge, &exec};
     handler.attach(70);
 
@@ -247,7 +247,7 @@ TEST_CASE("unsubscribe stops further delivery", "[bridge][subscription]") {
 
 TEST_CASE("a failed action notifies nobody", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
     BridgeHandler<SubCounterModel, AllowShared> handler{bridge, &exec};
     handler.attach(80);
 
@@ -260,7 +260,7 @@ TEST_CASE("a failed action notifies nobody", "[bridge][subscription]") {
 
 TEST_CASE("delivery stops once the subscribing handler is destroyed", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
     BridgeHandler<SubCounterModel, AllowShared> actor{bridge, &exec};
     actor.attach(90);
 
@@ -279,7 +279,7 @@ TEST_CASE("delivery stops once the subscribing handler is destroyed", "[bridge][
 
 TEST_CASE("a private handler's results stay private", "[bridge][subscription]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{makeLocal(exec)};
+    Bridge bridge{makeLocal(exec), exec};
 
     BridgeHandler<SubCounterModel, AllowShared> watcher{bridge, &exec};
     BridgeHandler<SubCounterModel> priv{bridge, &exec};
@@ -421,10 +421,10 @@ TEST_CASE("publishResult skips an entry with no sink without disturbing other su
 }
 
 TEST_CASE("instance subscriptions work under SimulatedRemoteBackend", "[bridge][subscription][remote]") {
-    morph::testing::InlineExecutor exec;
+    morph::exec::MainThreadExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), exec};
 
     BridgeHandler<SubCounterModel, AllowShared> watcher{bridge, &exec};
     BridgeHandler<SubCounterModel, AllowShared> actor{bridge, &exec};
@@ -433,6 +433,7 @@ TEST_CASE("instance subscriptions work under SimulatedRemoteBackend", "[bridge][
     auto seen = std::make_shared<std::atomic<std::int64_t>>(-1);
     watcher.subscribe<SubCounterState>([seen](SubCounterState state) { seen->store(state.value); });
 
-    drain(actor.execute(SubBump{.id = 110, .by = 4}));
-    REQUIRE(morph::testing::waitUntil([&] { return seen->load() == 4; }));
+    // The reply settles on the server's pool; the fan-out runs on the owner.
+    actor.execute(SubBump{.id = 110, .by = 4});
+    REQUIRE(morph::testing::pumpOwnerUntil(exec, [&] { return seen->load() == 4; }));
 }

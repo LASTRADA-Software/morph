@@ -349,106 +349,54 @@ its primary so journal entries carry the entity key — but conflating them woul
 silently change behaviour for anyone already setting `contextKey` for journal
 purposes, which the framework's opt-in discipline forbids.
 
-## Async register-or-attach and attach
+## Register-or-attach and attach go through the bind rule
 
-No wire change: the three requests above are unchanged. What changed is that a
-backend may now answer them *without blocking the caller*, through the one
-structural acquire verb (see [backend.md](backend.md), "The structural
-registration surface"):
+No wire change: the three requests above are unchanged. Every keyed acquire
+`Bridge` makes is a `bindModel` with the owner as the delivery executor (see
+[backend.md](backend.md), "The structural registration surface", and
+[bridge.md](bridge.md#registration-readiness--the-bind-rule)):
 
-| `BindRequest` shape | Synchronous counterpart | Dispatched by |
-|---|---|---|
-| `primary` non-empty, `current` zero | `registerModelShared` | `Bridge::ensureBoundAsync` |
-| `primary` non-empty, `current` non-zero | `attachModel` | `Bridge::attachHandlerAsync` |
+| `BindRequest` shape | Issued by |
+|---|---|
+| `primary` non-empty, `current` zero | a shared handler's first attach, a reconnect's or switch's re-bind |
+| `primary` non-empty, `current` non-zero | an attach that re-points the handler |
+| `primary` empty, `current` zero | a result-keyed action's first, anonymous bind |
 
-`IBackend::bindModel`'s default runs exactly the synchronous verb the shape
-names and settles before returning, so a backend that overrides nothing behaves
-as it always did. `QtWebSocketBackend` overrides it, gated behind
-`QtWebSocketBackendConfig::asyncRegistrationEnabled` — one knob for every
-shape. Replies route through the existing `callId`-keyed pending map, which is
-verb-agnostic: `register` (shared or not) and `attach` all reply `ok` with a
-`modelId`, or `err`. An empty `primary` degrades to a private bind, mirroring
-the synchronous methods' own degrade-to-private behaviour rather than inventing
-new semantics.
+A backend that can settles the bind before returning (`LocalBackend`,
+`SimulatedRemoteBackend`, a blocking-configured `QtWebSocketBackend`);
+`QtWebSocketBackend` with `asyncRegistrationEnabled` and `SocketBackend` settle
+it when the reply arrives. Replies route through the existing `callId`-keyed
+pending map, which is verb-agnostic: `register` (shared or not) and `attach`
+all reply `ok` with a `modelId`, or `err`. An empty `primary` with a live
+`current` degrades to a private bind.
 
-Why a single dispatch virtual rather than one optional virtual per verb: see
-[backend.md](backend.md), "Why one bind virtual and not four".
+**What callers see.** A payload-keyed `execute()` waits for any bind already in
+flight for its handler, attaches (or re-points) if the handler does not already
+hold the key, and dispatches once the attach has settled; a refused attach
+rejects the call's `Completion` rather than throwing out of `execute()`. A
+result-keyed `execute()` gives an unbound handler an anonymous instance first,
+dispatches, and promotes the instance under the key its result carries — on the
+owner, before the caller's `.then` runs. On a WASM main thread none of this
+nests an event loop.
 
-**Why this exists.** `registerModelShared`/`attachModel` are synchronous, so on
-a wire backend they block in a nested `QEventLoop`, which a WASM main thread
-cannot spin at all. Without the async path, the *first* payload-keyed action a
-WASM client executes — the very shape a keyed screen is built on — aborts the
-page. See `examples/LADDER.md`, "Framework prerequisites" #1, for the rung-3
-(`polls`) scenario this serves.
+**`attach()` never throws or waits.** The standalone `handler.attach(key)` is
+the same posted bind with no dispatch: issued after any bind in flight for the
+handler, it returns at once. A refused attach is logged, leaves the handler on
+the instance it held, and is recorded on the handler: a call held behind it is
+rejected with its error when the handler has no instance to fall back to, and
+otherwise runs on the instance the handler still holds.
 
-**What callers see.** Nothing, by design. `BridgeHandler::execute()`'s
-signature and its documented contract are unchanged, including the promise that
-a payload- or result-keyed action's attach/promote step never throws out of the
-call but resolves the returned `Completion`'s `.onError(...)` instead. Only
-*how* that promise is kept changed: `execute()` now routes its keyed dispatch
-through `Bridge::attachHandlerAsync` / `Bridge::ensureBoundAsync`, which use the
-dispatch `IBackend::bindModel`: a backend with a genuinely non-blocking bind
-settles it later, one without settles it inline, having run the identical
-synchronous attach before returning. A backend that has not overridden
-`bindModel` behaves byte-for-byte as it did before. The one observable
-difference on a backend that *has* is that the dispatch happens after the
-attach's reply arrives rather than on the calling stack — which is the point.
+**Attaches for one handler are serialised.** A keyed call made while an attach
+is in flight for its handler is held until that attach settles, then finds the
+handler already on the key and dispatches without a second attach. Two
+back-to-back keyed calls for the same key therefore issue one `attach`, and the
+server records one attachment.
 
-**`attach()` stays synchronous.** The standalone `handler.attach(key)` is a
-`void` call with no `Completion` to route a failure through, so it still throws
-and still blocks. That is deliberate, and its own doc comment already named the
-escape hatch: *a caller that wants the failure delivered asynchronously should
-attach via a payload-keyed action's `execute()` instead.* This section is what
-makes that escape hatch real. Giving `attach()` itself an async form would mean
-changing its return type, which is a separate, breaking decision.
-
-**Locking.** `Bridge::attachHandlerAsync`/`ensureBoundAsync` hold `_attachMtx`
-across the guard check, the async dispatch, and the synchronous fallback's own
-state mutation — but never across the `onDone` callback. This is load-bearing,
-not stylistic: what `execute()` does from inside `onDone` is dispatch the
-action, and a result-keyed dispatch promotes its binding through
-`assignHandlerPrimary`, which takes `_attachMtx` itself. It is the same rule
-`registerHandlerImpl` already follows for `_mtx`.
-
-The rule holds unconditionally, including for a backend that settles its
-completion **inline** — synchronously, from inside `bindModel`, while the
-dispatching frame still holds the lock (the executor those call sites name is
-`exec::detail::inlineExecutor()`, so an inline settle runs the continuation
-right there). `QtWebSocketBackend` does this today on its `!_connected` branch
-(it rejects with `"disconnected"`), and nothing in `IBackend` forbids a backend
-from doing it on the *success* path too. An inline callback
-therefore parks its outcome instead of acting on it, and the dispatching frame
-applies it after its own dispatch call returns: publish under the lock it
-already holds, release, then report. See
-[bridge.md](bridge.md), "Thread safety", for the mechanism.
-
-**Known gap: no in-flight attach dedup.** Two calls for the *same* key issued
-before the first one's reply arrives are not coalesced. Both
-`attachHandlerAsync` and `ensureBoundAsync` guard on binding state
-(`primary`/`currentId`) that is only updated when the reply lands, so both
-calls pass the guard and both dispatch. This is a real behaviour difference
-from the synchronous predecessors, not merely something inherent to asynchrony:
-`attachHandler` held `_attachMtx` across the whole blocking round trip, which
-serialised concurrent callers for free. It takes no second thread to hit —
-two `handler.execute(...)` calls in one event-loop turn are enough. The server
-answers both with the same `ModelId` but records two attachments, so one
-server-side attach reference leaks. The leak is **bounded, not unbounded**: the
-connection scope releases every reference it holds when the connection closes
-(see "Lifetime and the A7 connection-scope change" below). Closing it properly
-needs in-flight tracking on the binding, so a second caller rides the first
-dispatch's completion instead of issuing its own; tracked as a follow-up.
-Until then, a caller should not fire the same keyed action twice back-to-back
-before the first settles.
-
-**The result-keyed *promote* step has since been covered too.** This section
-made the **bind** half of a result-keyed action non-blocking
-(`ensureBoundAsync`). At the time of writing the **promote** half still
-called the synchronous `IBackend::assignPrimary` — a `sendSync`, and so a nested
-`QEventLoop`, on `QtWebSocketBackend` — which blocked and aborted a WASM page.
-That is no longer true: `IBackend::promoteModel` is its structural counterpart
+**Promotion.** The promote half of a result-keyed action goes through
+`IBackend::promoteModel`
 ([backend.md](backend.md#the-structural-registration-surface--bindmodel-and-promotemodel)),
-`QtWebSocketBackend` overrides it, and `Bridge::assignHandlerPrimary` calls it
-unconditionally — there is no synchronous branch left to fall back to.
+which `QtWebSocketBackend` and `SocketBackend` implement natively; there is no
+synchronous branch.
 
 ## Ownership and authorization
 
@@ -608,7 +556,7 @@ strictly reduces pressure on it.
 - **One key per instance.** No secondary keys, no alternate indexes, no
   querying the directory by anything but model type.
 - **An empty-string primary key means "no primary".** `primary.empty()` is the
-  sentinel every layer (`LocalBackend::registerModelShared`/`assignPrimary`,
+  sentinel every layer (`LocalBackend::bindModel`/`assignPrimary`,
   `Bridge::assignHandlerPrimary`, `RemoteServer`'s directory operations) uses
   for "anonymous, therefore unshareable" — there is no separate encoding for
   "a real key whose value happens to be the empty string". A model whose

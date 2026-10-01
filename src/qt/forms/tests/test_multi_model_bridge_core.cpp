@@ -185,7 +185,7 @@ TEST_CASE("MultiModelBridgeCore reports an unrouted action type via onError, not
 TEST_CASE("MultiModelBridgeCore composes over a caller-supplied Bridge/executor", "[multi_model_bridge_core]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::qt::QtExecutor gui;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), gui};
 
     morph::qt::bridge::MultiModelBridgeCore<morph::bridge::NoSharing, PingModel, PongModel> core{bridge, &gui};
 

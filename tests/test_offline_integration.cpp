@@ -63,12 +63,12 @@ using SyncExec = morph::testing::InlineExecutor;
 TEST_CASE("Integration: offline queue replayed and backend switched on network recovery", "[integration]") {
     morph::exec::ThreadPoolExecutor localPool{2};
     morph::exec::ThreadPoolExecutor remotePool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor owner;
     morph::offline::InMemoryOfflineQueue queue;
 
     // Start in local (offline) mode.
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool)};
-    morph::bridge::BridgeHandler<OffModel> handler{bridge, &cbExec};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool), owner};
+    morph::bridge::BridgeHandler<OffModel> handler{bridge, &owner};
 
     // Enqueue payloads that were written while offline.
     (void)queue.enqueue("{\"x\":1}");
@@ -94,16 +94,14 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     morph::offline::NetworkMonitor monitor{
         [&] { return networkOnline.load(); }, [] {},  // onOffline — not exercised here
         [&] {
-            // onOnline fires on the probe thread — replay then switch backend.
-            // `backendSwitched` is set only *after* switchBackend returns, so a
-            // waiter never observes "queue replayed" as a stand-in for "backend
-            // switched": the two used to be conflated by relying on the fixed
-            // 150ms sleep that preceded this test's waitUntil migration to have
-            // given switchBackend() enough slack to finish too, which held in
-            // practice but was never actually waited for.
+            // onOnline fires on the I/O loop: replay there, then ask the
+            // bridge's owner to switch. `backendSwitched` is set only after
+            // switchBackend returns.
             morph::testing::awaitValue(syncWorker.run());
-            bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
-            backendSwitched.store(true);
+            owner.post([&] {
+                bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
+                backendSwitched.store(true);
+            });
         },
         morph::offline::NetworkMonitor::Config{.probeInterval = 30ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
@@ -124,13 +122,12 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     }
     REQUIRE(queue.drain().empty());
 
-    // Wait for the backend switch itself, not just the replay that precedes it
-    // in the same callback -- see the comment on `backendSwitched` above.
-    REQUIRE(morph::testing::waitUntil([&] { return backendSwitched.load(); }));
+    // Wait for the backend switch itself, which runs on the owner this test pumps.
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return backendSwitched.load(); }));
 
     // morph::bridge::Bridge now routes to remotePool — execute still works.
     std::atomic<int> result{-1};
     handler.execute(OffAction{5}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return result.load() != -1; }));
     REQUIRE(result.load() == 50);
 }

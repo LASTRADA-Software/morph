@@ -59,7 +59,7 @@ TEST_CASE("AccountModel runs unchanged over a remote backend", "[remote]") {
     morph::exec::MainThreadExecutor gui;
 
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, std::make_shared<NoCloseAuthorizer>());
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), gui};
 
     morph::session::Context ctx;
     ctx.principal = "olivia-remote";

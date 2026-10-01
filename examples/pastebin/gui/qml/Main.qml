@@ -43,23 +43,16 @@ ApplicationWindow {
         root.statusIsError = isError
     }
 
-    // The first listing cannot simply be requested from Component.onCompleted.
-    // In Remote mode AppContext::onReady() fires when the *socket* connects,
-    // which is when gui/main.cpp builds the presenters — but a BridgeHandler's
-    // registration is a round trip, and until its reply lands every dispatch
-    // through it fails fast with "handler not bound" (morph/core/bridge.hpp).
-    // Verified, not theorised: an unconditional refresh() on completion
-    // reliably reported exactly that error and left the list empty on every
-    // launch against a real server. `PasteBridge::bound` (backed by
-    // `Bridge::whenBound()`) is that round trip's settlement signal — Local
-    // mode's handler is already bound by construction, so this fires
-    // synchronously there.
+    // The first listing is requested on completion in both modes: a dispatch
+    // made while the handler's registration round trip is still in flight
+    // waits for it and is sent once it lands, so nothing here gates on it.
+    Component.onCompleted: {
+        if (root.pasteController !== null)
+            root.pasteController.refresh()
+    }
+
     Connections {
         target: root.pasteController
-
-        function onBound() {
-            root.pasteController.refresh()
-        }
 
         function onListed(rows) {
             root.rows = rows

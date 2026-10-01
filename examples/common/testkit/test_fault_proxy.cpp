@@ -79,7 +79,7 @@ struct ProxyRig {
         if (!backendPtr->waitForConnected()) {
             throw std::runtime_error("ProxyRig: client failed to connect through the proxy");
         }
-        bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backendPtr));
+        bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backendPtr), qtExec);
     }
 
     ProxyRig(const ProxyRig&) = delete;
@@ -269,7 +269,7 @@ TEST_CASE("FaultProxy: a second client connection replaces the first, still work
     auto secondBackend = std::make_unique<::morph::qt::QtWebSocketBackend>(
         rig.proxy->url(), std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
     REQUIRE(secondBackend->waitForConnected());
-    ::morph::bridge::Bridge secondBridge{std::move(secondBackend)};
+    ::morph::bridge::Bridge secondBridge{std::move(secondBackend), rig.qtExec};
     ::morph::bridge::BridgeHandler<FaultProbeCounter> secondHandler{secondBridge, &rig.qtExec};
 
     // The replacement leg genuinely relays end-to-end through the proxy. A

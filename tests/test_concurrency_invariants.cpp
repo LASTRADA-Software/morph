@@ -30,6 +30,7 @@
 #include <utility>
 #include <vector>
 
+#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 using namespace std::chrono_literals;
@@ -248,94 +249,79 @@ struct morph::model::ActionTraits<LoadCountAction> {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE(
-    "morph::bridge::Bridge: concurrent executeVia under repeated switchBackend resolves every "
-    "morph::async::Completion",
-    "[bridge][concurrency][quantum-parity]") {
+    "morph::bridge::Bridge: executeVia and switchBackend posted from many threads resolve every "
+    "morph::async::Completion, on the owner",
+    "[bridge][concurrency][quantum-parity][owner]") {
     morph::exec::ThreadPoolExecutor poolA{2};
     morph::exec::ThreadPoolExecutor poolB{2};
-    InlineExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA)};
-    morph::bridge::BridgeHandler<LoadCountModel> handler{bridge, &cbExec};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA), owner};
+    morph::bridge::BridgeHandler<LoadCountModel> handler{bridge, &owner};
 
     constexpr int numProducers = 4;
     constexpr int perProducer = 50;
     constexpr int totalActions = numProducers * perProducer;
+    constexpr int switches = 40;
 
     std::atomic<int> resolved{0};
     std::atomic<int> succeeded{0};
     std::atomic<int> failed{0};
+    std::atomic<int> switched{0};
 
-    std::atomic<bool> stopSwitch{false};
-    std::thread switcher([&] {
-        bool flip = false;
-        while (!stopSwitch.load()) {
-            morph::exec::ThreadPoolExecutor& target = flip ? poolA : poolB;
-            bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(target));
-            flip = !flip;
+    morph::testing::OwnerProbeRecorder const recorder{owner.coreExecutor()};
+    // Every thread that is not the owner reaches the bridge by posting to it:
+    // a switcher standing in for a connectivity monitor, and producers standing
+    // in for anything else that wants an action run.
+    std::thread switcher{[&] {
+        for (int idx = 0; idx < switches; ++idx) {
+            morph::exec::ThreadPoolExecutor& target = idx % 2 == 0 ? poolB : poolA;
+            owner.post([&bridge, &target, &switched] {
+                bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(target));
+                switched.fetch_add(1);
+            });
             std::this_thread::sleep_for(1ms);
         }
-    });
-    // Stops and joins the switcher on every way out of this scope. Without it a
-    // failed REQUIRE below unwinds past a joinable std::thread, whose destructor
-    // calls std::terminate: the failure became an abort() (on Windows, a dialog)
-    // instead of a reported assertion.
-    struct StopAndJoin {
-        std::atomic<bool>* stop;
-        std::thread* thread;
-        StopAndJoin(std::atomic<bool>* stop_, std::thread* thread_) noexcept : stop{stop_}, thread{thread_} {}
-        StopAndJoin(const StopAndJoin&) = delete;
-        StopAndJoin& operator=(const StopAndJoin&) = delete;
-        StopAndJoin(StopAndJoin&&) = delete;
-        StopAndJoin& operator=(StopAndJoin&&) = delete;
-        ~StopAndJoin() {
-            stop->store(true);
-            if (thread->joinable()) {
-                thread->join();
-            }
-        }
-    } const stopSwitcher{&stopSwitch, &switcher};
-
+    }};
     std::vector<std::thread> producers;
     producers.reserve(numProducers);
     for (int prodIdx = 0; prodIdx < numProducers; ++prodIdx) {
         producers.emplace_back([&] {
             for (int idx = 0; idx < perProducer; ++idx) {
-                handler.execute(LoadCountAction{1})
-                    .then([&](int) {
-                        succeeded.fetch_add(1);
-                        resolved.fetch_add(1);
-                    })
-                    .onError([&](const std::exception_ptr&) {
-                        failed.fetch_add(1);
-                        resolved.fetch_add(1);
-                    });
+                owner.post([&] {
+                    handler.execute(LoadCountAction{1})
+                        .then([&](int) {
+                            succeeded.fetch_add(1);
+                            resolved.fetch_add(1);
+                        })
+                        .onError([&](const std::exception_ptr&) {
+                            failed.fetch_add(1);
+                            resolved.fetch_add(1);
+                        });
+                });
             }
         });
     }
     for (auto& thr : producers) {
         thr.join();
     }
-
-    REQUIRE(waitUntil([&] { return resolved.load() == totalActions; }, morph::testing::WaitBudget{10s}));
-    stopSwitch.store(true);
     switcher.join();
 
-    REQUIRE(resolved.load() == totalActions);
+    REQUIRE(morph::testing::pumpOwnerUntil(
+        owner, [&] { return resolved.load() == totalActions && switched.load() == switches; },
+        morph::testing::WaitBudget{10s}));
     REQUIRE(succeeded.load() + failed.load() == totalActions);
+    REQUIRE(recorder.allPosted("Bridge::switchBackend"));
+    REQUIRE(recorder.allPosted("Bridge::executeVia"));
 
-    // The structural claim is that the snapshot-and-dispatch path still
-    // *resolves successfully* after repeated backend switching — not that it
-    // wins any particular race. Assert it against the now-quiesced bridge
-    // rather than against the churn above: under a thread-serialising tool
-    // (Valgrind runs every thread on one core) the switcher can legitimately
-    // cancel all 200 in-flight calls, which made a `succeeded > 0` check on the
-    // churn a coin flip rather than an invariant.
+    // The structural claim is that dispatch still resolves successfully after
+    // repeated switching, not that it wins any particular race against it.
     std::atomic<int> afterSwitching{0};
     constexpr int settledActions = 5;
     for (int idx = 0; idx < settledActions; ++idx) {
         handler.execute(LoadCountAction{1}).then([&](int) { afterSwitching.fetch_add(1); });
     }
-    REQUIRE(waitUntil([&] { return afterSwitching.load() == settledActions; }, morph::testing::WaitBudget{10s}));
+    REQUIRE(morph::testing::pumpOwnerUntil(
+        owner, [&] { return afterSwitching.load() == settledActions; }, morph::testing::WaitBudget{10s}));
 }
 
 // ── morph::offline::NetworkMonitor: stop() called from onOnline does not deadlock ─────────────

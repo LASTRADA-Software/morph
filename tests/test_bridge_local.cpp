@@ -31,7 +31,7 @@ BRIDGE_REGISTER_ACTION(PingModel, PingFailAction, "Test_PingFailAction")
 TEST_CASE("morph::backend::LocalBackend: action result delivered via then", "[bridge][local]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PingModel> handler{bridge, &cbExec};
 
     std::atomic<int> result{-1};
@@ -49,7 +49,7 @@ TEST_CASE("morph::backend::LocalBackend: action result delivered via then", "[br
 TEST_CASE("morph::backend::LocalBackend: exception delivered via on_error", "[bridge][local]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PingModel> handler{bridge, &cbExec};
 
     std::atomic<bool> errorFired{false};
@@ -71,7 +71,7 @@ TEST_CASE("morph::backend::LocalBackend: exception delivered via on_error", "[br
 TEST_CASE("morph::backend::LocalBackend: multiple sequential actions on same handler", "[bridge][local]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PingModel> handler{bridge, &cbExec};
 
     std::atomic<int> sum{0};

@@ -13,6 +13,8 @@
 #include <morph/session/session.hpp>
 #include <string>
 
+#include "test_support.hpp"
+
 using morph::session::Principal;
 
 // ── morph::session::Principal ────────────────────────────────────────────────
@@ -36,7 +38,8 @@ TEST_CASE("morph::session::Principal::hasRole: true for a present role, false fo
 
 TEST_CASE("morph::bridge::Bridge::currentPrincipal: empty before any setPrincipal call", "[bridge][principal]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), bridgeOwner};
 
     auto principal = bridge.currentPrincipal();
     REQUIRE(principal.id.empty());
@@ -46,7 +49,8 @@ TEST_CASE("morph::bridge::Bridge::currentPrincipal: empty before any setPrincipa
 TEST_CASE("morph::bridge::Bridge::setPrincipal/currentPrincipal: round-trips id, roles, and claims",
           "[bridge][principal]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), bridgeOwner};
 
     bridge.setPrincipal(Principal{
         .id = "alice",
@@ -70,7 +74,8 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal: readable without an active dispa
     // session::current() (Context) only exists during a dispatch; Principal
     // does not have that restriction.
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), bridgeOwner};
 
     bridge.setPrincipal(Principal{.id = "bob", .roles = {"viewer"}, .claims = {}});
     REQUIRE(bridge.currentPrincipal().hasRole("viewer"));
@@ -80,7 +85,8 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal: readable without an active dispa
 TEST_CASE("morph::bridge::Bridge::setPrincipal: passing a default-constructed Principal clears it (sign-out)",
           "[bridge][principal]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), bridgeOwner};
 
     bridge.setPrincipal(Principal{.id = "alice", .roles = {"editor"}, .claims = {}});
     REQUIRE(bridge.currentPrincipal().id == "alice");
@@ -94,8 +100,9 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal/currentPrincipal: independent per
           "[bridge][principal]") {
     morph::exec::ThreadPoolExecutor pool1{2};
     morph::exec::ThreadPoolExecutor pool2{2};
-    morph::bridge::Bridge bridgeA{std::make_unique<morph::backend::LocalBackend>(pool1)};
-    morph::bridge::Bridge bridgeB{std::make_unique<morph::backend::LocalBackend>(pool2)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridgeA{std::make_unique<morph::backend::LocalBackend>(pool1), bridgeOwner};
+    morph::bridge::Bridge bridgeB{std::make_unique<morph::backend::LocalBackend>(pool2), bridgeOwner};
 
     bridgeA.setPrincipal(Principal{.id = "alice", .roles = {}, .claims = {}});
     bridgeB.setPrincipal(Principal{.id = "bob", .roles = {}, .claims = {}});

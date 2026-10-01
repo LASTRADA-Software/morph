@@ -567,7 +567,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records loggable actions, s
           "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<InMemoryActionLog>();
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
@@ -602,7 +602,7 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when
           "[action_log][bridge][issue23]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<InMemoryActionLog>();
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
@@ -725,7 +725,7 @@ TEST_CASE("Bridge/LocalBackend: a sink that refuses the success append does not 
           "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<SuccessRefusingLog>();
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
@@ -772,7 +772,7 @@ TEST_CASE("Bridge/LocalBackend: a genuine Model::execute throw still records Out
           "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<SuccessRefusingLog>();
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
@@ -811,7 +811,7 @@ TEST_CASE("Bridge/LocalBackend: a genuine Model::execute throw still records Out
 TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log does not crash", "[action_log][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<ALModel> handler{bridge, &cbExec};  // default factory — no log
 
     std::atomic<int> result{-1};
@@ -841,7 +841,7 @@ TEST_CASE("SimulatedRemoteBackend: client-side factory (and its attached log) is
     serverDispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
 
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverDispatcher, serverRegistry);
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
 
     std::atomic<bool> factoryCalled{false};
     auto clientLog = std::make_shared<InMemoryActionLog>();

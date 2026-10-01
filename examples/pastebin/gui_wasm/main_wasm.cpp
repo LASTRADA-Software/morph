@@ -32,13 +32,11 @@
 /// Note what is *not* here: no `asyncRegistrationEnabled` flag, no
 /// `setConnectHandler`, no hand-rolled wait-for-binding timer. The spike had
 /// to hand-roll all three; `AppContext` (`examples/common/gui/app_context.hpp`)
-/// now owns the first two generically for every client, native or browser, and
-/// `PasteBridge::bound` — backed by `Bridge::whenBound()`, shared like the
-/// rest of the QML adapters — covers the third (the "handler not bound"
-/// window that opens on connect and closes when registration settles; it is
-/// a *remote* mode gap, so this client hits exactly the same one the desktop
-/// client does in `--server` mode, and `Main.qml` gates its bootstrap
-/// `refresh()` on the same signal in both).
+/// now owns the first two generically for every client, native or browser,
+/// and the third is not needed: a call made through a handler whose
+/// registration round trip is still in flight waits for it and is dispatched
+/// once it lands, so `Main.qml` requests its first listing on
+/// `Component.onCompleted` here exactly as the desktop client does.
 ///
 /// @par Verification status
 /// Structurally complete and reviewed, **never compiled**: no Emscripten

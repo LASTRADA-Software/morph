@@ -409,6 +409,30 @@ static_assert(!WaitUntilCallableWith<ExampleWaitPred, WaitStep, WaitStep>);
 
 }  // namespace detail
 
+/// @brief Pumps @p owner on the calling thread until @p pred holds or
+///        @p budget elapses.
+///
+/// What a test does when it is the owner of a `Bridge`: the bridge delivers
+/// bind replies, reconnects and result fan-out as tasks on its owner, so a test
+/// waiting for one runs them rather than sleeping.
+/// @tparam Pred Nullary predicate.
+/// @param owner  The executor the calling thread owns.
+/// @param pred   The predicate to poll between pumps.
+/// @param budget Longest time to keep pumping before returning `false`.
+/// @return `true` if @p pred became `true` within @p budget.
+template <typename Pred>
+bool pumpOwnerUntil(::morph::exec::MainThreadExecutor& owner, Pred pred,
+                    WaitBudget budget = WaitBudget{kDefaultWaitBudget}) {
+    const auto deadline = std::chrono::steady_clock::now() + budget.value;
+    while (!pred()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        owner.runFor(std::chrono::milliseconds{1});
+    }
+    return true;
+}
+
 /// @brief Collects a single `RemoteServer` reply and decodes it.
 ///
 /// Designed to be passed as the reply callback to `RemoteServer::handle()`:

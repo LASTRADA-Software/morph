@@ -2,6 +2,7 @@
 
 #pragma once
 #include <concepts>
+#include <core/async/StopToken.hpp>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -67,9 +68,56 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
     std::vector<std::function<void(std::exception_ptr)>> onErr;
     bool onErrAttached = false;
     ::morph::exec::IExecutor* cbExec = nullptr;
+    // The stop source of the call this state reports on, or null for a call
+    // that cannot be stopped. Set by the producer before the state is handed
+    // out, and read only under `mtx`.
+    std::shared_ptr<::core::async::StopSource> stopSource;
+    // One `StopCallback` per `CallbackScope` a gated handler was attached
+    // through, relaying that scope's stop to `stopSource`. Released when the
+    // state settles: a settled call has nothing left to stop.
+    std::vector<std::shared_ptr<void>> stopLinks;
+
+    // Relays a scope's stop request to the call's own stop source. Holds the
+    // source weakly, so a link outliving its call keeps nothing alive.
+    struct StopRelay {
+        std::weak_ptr<::core::async::StopSource> source;
+        void operator()() const noexcept {
+            if (auto const strong = source.lock()) {
+                static_cast<void>(strong->request_stop());
+            }
+        }
+    };
+
+    // Links the stop of the scope @p scopeStop belongs to with this call's own
+    // stop source, until the state settles. A no-op for a call with no stop
+    // source, a scope that can no longer be stopped, or a state already
+    // settled. A scope already stopped stops the call here.
+    void linkStop(::core::async::StopToken scopeStop) {
+        std::shared_ptr<::core::async::StopSource> source;
+        {
+            std::scoped_lock const lock{mtx};
+            if (ready || stopSource == nullptr) {
+                return;
+            }
+            source = stopSource;
+        }
+        if (!scopeStop.stop_possible()) {
+            return;
+        }
+        std::shared_ptr<void> link = std::make_shared<::core::async::StopCallback<StopRelay>>(
+            std::move(scopeStop), StopRelay{std::weak_ptr<::core::async::StopSource>{source}});
+        std::scoped_lock const lock{mtx};
+        if (!ready) {
+            stopLinks.push_back(std::move(link));
+        }
+        // Settled meanwhile: `link` is released as this returns.
+    }
 
     void setValue(T val) {
         std::function<void()> callback;
+        // Released after the lock: destroying a link waits for its relay if
+        // that is running on another thread.
+        std::vector<std::shared_ptr<void>> links;
         {
             std::scoped_lock const lock{mtx};
             if (ready) {
@@ -104,6 +152,7 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
             // this line, and the `ready` guard above makes this line run once.
             value.emplace(std::move(val));
             ready = true;
+            links = std::move(stopLinks);
             if (!onOk.empty()) {
                 auto savedFns = std::move(onOk);
                 callback = [self = this->shared_from_this(), savedFns = std::move(savedFns)]() {
@@ -133,6 +182,7 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
     }
     void setException(const std::exception_ptr& exc) {
         std::function<void()> callback;
+        std::vector<std::shared_ptr<void>> links;
         {
             std::scoped_lock const lock{mtx};
             if (ready) {
@@ -161,6 +211,7 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
                         : std::make_exception_ptr(
                               std::runtime_error{"completion rejected with no exception (null exception_ptr)"});
             ready = true;
+            links = std::move(stopLinks);
             if (!onErr.empty()) {
                 auto savedFns = std::move(onErr);
                 auto savedErr = error;
@@ -447,6 +498,11 @@ public:
     /// handler, so fan-out, the attach-after-ready fire-now path and executor
     /// marshalling all behave exactly as they do for the ungated form.
     ///
+    /// Attaching also makes the call this completion reports on one the scope
+    /// owns: when the call carries a stop source (a `Bridge` call whose handler
+    /// returns a `Task`), stopping, resetting or destroying the scope before it
+    /// settles requests stop on it.
+    ///
     /// The scope is observed weakly; attaching does **not** extend its lifetime.
     ///
     /// @param scope   Receiver-owned gate. Only a token for its *current*
@@ -473,6 +529,9 @@ public:
     /// @return `*this` for chaining — a reference into this `Completion`, valid
     ///         only for as long as it is.
     Completion& then(CallbackToken token, std::function<void(const T&)> handler) MORPH_LIFETIMEBOUND {
+        if (_state != nullptr) {
+            _state->linkStop(token.stopToken());
+        }
         return then(std::function<void(const T&)>{token.guard(std::move(handler))});
     }
 
@@ -505,6 +564,9 @@ public:
     /// @return `*this` for chaining — a reference into this `Completion`, valid
     ///         only for as long as it is.
     Completion& onError(CallbackToken token, std::function<void(std::exception_ptr)> handler) MORPH_LIFETIMEBOUND {
+        if (_state != nullptr) {
+            _state->linkStop(token.stopToken());
+        }
         return onError(std::function<void(std::exception_ptr)>{token.guard(std::move(handler))});
     }
 

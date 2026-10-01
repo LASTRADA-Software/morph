@@ -14,6 +14,7 @@
 #include <mutex>
 #include <thread>
 
+#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 // ── Test models ───────────────────────────────────────────────────────────────
@@ -127,7 +128,10 @@ class SwitchSelfObserverBackend : public morph::backend::LocalBackend {
 public:
     explicit SwitchSelfObserverBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
 
-    void setReconnectHandler(const std::function<void()>& handler) override { _handler = handler; }
+    void setReconnectHandler(std::function<void()> handler, morph::exec::IExecutor* exec) override {
+        _handler = std::move(handler);
+        _handlerExec = exec;
+    }
     void cancelPending(const std::exception_ptr& exc) override {
         ++_cancelCount;
         LocalBackend::cancelPending(exc);
@@ -138,6 +142,7 @@ public:
 
 private:
     std::function<void()> _handler;
+    morph::exec::IExecutor* _handlerExec = nullptr;
     int _cancelCount = 0;
 };
 
@@ -148,7 +153,7 @@ using SyncExec = morph::testing::InlineExecutor;
 TEST_CASE("morph::bridge::Bridge::switchBackend  -  handler works before and after switch", "[bridge][switch]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
     // Execute on original backend.
@@ -171,7 +176,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  destroyed handler not re-reg
           "[bridge][switch]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     {
         morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
@@ -184,7 +189,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  destroyed handler not re-reg
 TEST_CASE("morph::bridge::Bridge::switchBackend  -  multiple live handlers all re-registered", "[bridge][switch]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<CountModel> handler2{bridge, &cbExec};
 
@@ -206,7 +211,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend(shared_ptr)  -  caller-owned ins
           "[bridge][switch][shared_ptr]") {
     morph::exec::ThreadPoolExecutor poolInitial{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInitial)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInitial), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
     morph::exec::ThreadPoolExecutor poolA{2};
@@ -247,7 +252,8 @@ TEST_CASE(
     // reason.
     morph::exec::ThreadPoolExecutor poolInit{2};
     morph::exec::ThreadPoolExecutor poolObs{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInit)};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInit), cbExec};
 
     auto observer = std::make_shared<SwitchSelfObserverBackend>(poolObs);
     bridge.switchBackend(observer);
@@ -262,7 +268,6 @@ TEST_CASE(
 
     // The backend is still fully usable afterward -- a genuine end-to-end
     // sanity check, not just an internal-state probe.
-    SyncExec cbExec;
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
     std::atomic<int> res{-1};
     handler.execute(CountAction{4}).then([&](int val) { res.store(val); }).onError([](const std::exception_ptr&) {});
@@ -276,7 +281,7 @@ TEST_CASE(
     "[bridge][switch][shared_ptr]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
     morph::exec::ThreadPoolExecutor pool2{2};
@@ -295,7 +300,7 @@ TEST_CASE(
     "[bridge][switch][notify]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
     morph::exec::ThreadPoolExecutor pool2{2};
@@ -315,7 +320,7 @@ TEST_CASE(
     "[bridge][switch][notify]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
 
     morph::exec::ThreadPoolExecutor pool2{2};
@@ -341,14 +346,17 @@ TEST_CASE(
 // transport thread on a real reconnect) that re-registers every live
 // HandlerBinding. LocalBackend never fires it itself (no transport to
 // reconnect), so these tests use a small LocalBackend subclass that records
-// the installed handler and lets the test fire it directly, plus which of
-// registerModelShared/registerModelWithContext the re-registration loop used.
+// the installed handler and lets the test fire it directly, plus which bind
+// shape -- shared or private -- the re-registration used.
 namespace {
 class ReconnectableLocalBackend : public morph::backend::LocalBackend {
 public:
     explicit ReconnectableLocalBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
 
-    void setReconnectHandler(const std::function<void()>& handler) override { _handler = handler; }
+    void setReconnectHandler(std::function<void()> handler, morph::exec::IExecutor* exec) override {
+        _handler = std::move(handler);
+        _handlerExec = exec;
+    }
     void fireReconnect() const {
         if (_handler) {
             _handler();
@@ -362,19 +370,16 @@ public:
     // snapshotHandler() pattern.
     [[nodiscard]] std::function<void()> snapshotHandler() const { return _handler; }
 
-    morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-        morph::backend::detail::InstanceIdentity identity) override {
-        ++_sharedCallCount;
-        _lastSharedContextKey = std::string{identity.contextKey};
-        _lastSharedPrimary = std::string{identity.primary};
-        return LocalBackend::registerModelShared(typeId, std::move(factory), identity);
-    }
-    morph::exec::detail::ModelId registerModelWithContext(
-        const std::string& typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-        std::string_view contextKey) override {
-        ++_withContextCallCount;
-        return LocalBackend::registerModelWithContext(typeId, std::move(factory), contextKey);
+    morph::async::Completion<morph::exec::detail::ModelId> bindModel(morph::backend::detail::BindRequest request,
+                                                                     morph::exec::IExecutor& cbExec) override {
+        if (request.primary.empty()) {
+            ++_withContextCallCount;
+        } else {
+            ++_sharedCallCount;
+            _lastSharedContextKey = request.contextKey;
+            _lastSharedPrimary = request.primary;
+        }
+        return LocalBackend::bindModel(std::move(request), cbExec);
     }
 
     [[nodiscard]] int sharedCallCount() const { return _sharedCallCount; }
@@ -384,6 +389,7 @@ public:
 
 private:
     std::function<void()> _handler;
+    morph::exec::IExecutor* _handlerExec = nullptr;
     int _sharedCallCount = 0;
     int _withContextCallCount = 0;
     std::string _lastSharedContextKey;
@@ -400,7 +406,8 @@ TEST_CASE("Bridge: reconnect handler skips a shared binding that never attached 
     morph::exec::ThreadPoolExecutor pool{2};
     auto backend = std::make_unique<ReconnectableLocalBackend>(pool);
     auto* rawBackend = backend.get();
-    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::move(backend), bridgeOwner};
 
     auto binding = bridge.registerSharedHandler<CountModel>();
     REQUIRE(binding->currentId.load() == 0U);
@@ -414,17 +421,18 @@ TEST_CASE("Bridge: reconnect handler skips a shared binding that never attached 
 }
 
 TEST_CASE(
-    "Bridge: reconnect handler re-registers an attached shared binding via registerModelShared, with the "
+    "Bridge: reconnect handler re-registers an attached shared binding through the shared bind shape, with the "
     "correct key (Task 15a finding B15)",
     "[bridge][switch][reconnect]") {
     // Complement of B14: an attached shared binding (shared=true, primary
-    // non-empty) must come back through registerModelShared, carrying its
-    // real contextKey/primary -- not registerModelWithContext, which would
-    // silently drop the sharing.
+    // non-empty) must come back through a shared bind, carrying its real
+    // contextKey/primary -- not a private one, which would silently drop the
+    // sharing.
     morph::exec::ThreadPoolExecutor pool{2};
     auto backend = std::make_unique<ReconnectableLocalBackend>(pool);
     auto* rawBackend = backend.get();
-    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::move(backend), bridgeOwner};
 
     auto binding = bridge.registerSharedHandler<CountModel>();
     bridge.attachHandler<CountModel>(binding, "42");
@@ -447,9 +455,8 @@ TEST_CASE(
     "Bridge: a stale reconnect fired by a backend that is still alive but no longer current is ignored "
     "(Task 15a finding B5, reconnect variant)",
     "[bridge][switch][reconnect]") {
-    // The reconnect handler's own guard (`!pinned || pinned != loadBackend()`)
-    // has the identical shape as attachHandlerAsync/ensureBoundAsync/
-    // assignHandlerPrimary's stale-reply guards. switchBackend() itself
+    // The reconnect handler's own guard (the backend that reconnected must
+    // still be the active one). switchBackend() itself
     // correctly clears the OUTGOING backend's reconnect handler
     // (`previous->setReconnectHandler(nullptr)`) the moment it retires it, so
     // firing backendA's *current* handler after the switch would just be a
@@ -457,14 +464,14 @@ TEST_CASE(
     // Snapshotting the handler *before* the switch (mirroring
     // test_bridge_lifetime.cpp's identical FakeReconnectBackend::
     // snapshotHandler() pattern) and firing that snapshot afterward models a
-    // reconnect already latched on the transport thread at the moment the
-    // switch lands: weakBackend.lock() still succeeds (the test's own
-    // shared_ptr keeps backendA alive), but loadBackend() now returns
-    // backendB.
+    // reconnect already posted to the owner at the moment the switch lands:
+    // the backend is still alive (the test's own shared_ptr keeps backendA
+    // alive), but it is no longer the active one.
     morph::exec::ThreadPoolExecutor poolInit{2};
     morph::exec::ThreadPoolExecutor poolA{2};
     morph::exec::ThreadPoolExecutor poolB{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInit)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInit), bridgeOwner};
 
     auto backendA = std::make_shared<ReconnectableLocalBackend>(poolA);
     bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(backendA));
@@ -575,7 +582,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  rollback on partial failure 
           "[bridge][switch][rollback]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<CountModel> handler2{bridge, &cbExec};
 
@@ -606,7 +613,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  rollback still rethrows orig
           "[bridge][switch][rollback]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<CountModel> handler2{bridge, &cbExec};
 
@@ -641,7 +648,8 @@ TEST_CASE("morph::bridge::BridgeHandler destructor is a no-op when the bridge is
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     std::unique_ptr<morph::bridge::BridgeHandler<CountModel>> handler;
-    auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<morph::backend::LocalBackend>(pool));
+    auto bridge =
+        std::make_unique<morph::bridge::Bridge>(std::make_unique<morph::backend::LocalBackend>(pool), cbExec);
     handler = std::make_unique<morph::bridge::BridgeHandler<CountModel>>(*bridge, &cbExec);
     releaseBridge(std::move(bridge));  // bridge destroyed while handler still lives — its liveness token expires.
     REQUIRE_NOTHROW(handler.reset());  // handler dtor must not dereference the dangling Bridge&
@@ -842,30 +850,19 @@ TEST_CASE(
     (void)midB;
 }
 
-// ── The two re-registration sites and `bindWaitPolicy` ─────────────────────
+// ── The two re-registration sites on a backend whose binds settle later ──────
 //
-// `switchBackend`'s phase 1 and the reconnect handler both called the blocking
-// `registerModelShared`/`registerModelWithContext` directly, with no policy
-// check at all -- so a backend that answers `kCallerMustNotBlock`, which by
-// definition delivers its reply through the calling thread's own event loop,
-// was blocked at both of them anyway (on a WASM main thread: a page abort).
-// Both now go through `bindModel` and ask, exactly as `registerHandlerImpl`
-// does.
-//
-// The double below is what that costs to test honestly: its `bindModel` never
-// blocks and never settles on its own, while its legacy verbs park the calling
-// thread until the test releases them. So a site that went back to a blocking
-// verb does not merely fail an assertion -- it fails to return, which is the
-// real symptom. Each case therefore runs the site on its own thread, records
-// whether it came back within the polling budget, releases the latch so the
-// thread is joinable either way, and only then asserts. A regression fails the
-// case; it does not wedge the suite.
+// `switchBackend` and the reconnect handler never wait for a bind: each issues
+// it with the owner as the delivery executor and returns, and a call made
+// meanwhile is held until the bind settles. The double below never settles a
+// bind on its own; the test settles it, from its own thread, and the owner
+// applies it.
 
 namespace {
 
-/// @brief A backend with a genuinely non-blocking bind and blocking legacy
-///        verbs -- `QtWebSocketBackend` under `asyncRegistrationEnabled`, as
-///        far as `Bridge` can tell.
+/// @brief A backend with a genuinely non-blocking bind -- `QtWebSocketBackend`
+///        under `asyncRegistrationEnabled`, as far as `Bridge` can tell -- and
+///        a reconnect it fires from a thread standing in for its transport.
 class DeferredBindBackend : public morph::backend::LocalBackend {
 public:
     explicit DeferredBindBackend(morph::exec::IExecutor& pool MORPH_LIFETIMEBOUND) : LocalBackend{pool} {}
@@ -874,90 +871,54 @@ public:
     morph::async::Completion<morph::exec::detail::ModelId> bindModel(morph::backend::detail::BindRequest request,
                                                                      morph::exec::IExecutor& cbExec) override {
         auto [completion, promise] = morph::async::Completion<morph::exec::detail::ModelId>::makeSettleable(&cbExec);
-        std::scoped_lock const lock{_mtx};
         _pending.emplace_back(std::make_shared<Promise>(std::move(promise)), std::move(request));
         return std::move(completion);
     }
 
-    [[nodiscard]] morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
-        return morph::backend::detail::BindWait::kCallerMustNotBlock;
+    void setReconnectHandler(std::function<void()> handler, morph::exec::IExecutor* exec) override {
+        _handler = std::move(handler);
+        _handlerExec = exec;
     }
 
-    // The trap. Nothing in `Bridge` should reach either of these any more; a
-    // site that does parks here until `letGo()`.
-    morph::exec::detail::ModelId registerModelWithContext(
-        const std::string& typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-        std::string_view contextKey) override {
-        hold();
-        return LocalBackend::registerModelWithContext(typeId, std::move(factory), contextKey);
-    }
-    morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
-        morph::backend::detail::InstanceIdentity identity) override {
-        hold();
-        return LocalBackend::registerModelShared(typeId, std::move(factory), identity);
-    }
-
-    void setReconnectHandler(const std::function<void()>& handler) override { _handler = handler; }
+    /// @brief What a transport does after a reconnect: posts the handler to
+    ///        the executor it was installed with.
     void fireReconnect() const {
-        if (_handler) {
-            _handler();
+        if (_handler && _handlerExec != nullptr) {
+            _handlerExec->post(_handler);
         }
     }
 
     /// @brief Number of binds waiting for a reply.
-    [[nodiscard]] std::size_t pendingCount() const {
-        std::scoped_lock const lock{_mtx};
-        return _pending.size();
-    }
+    [[nodiscard]] std::size_t pendingCount() const { return _pending.size(); }
 
-    /// @brief Answers every waiting bind for real, through the blocking
-    ///        dispatch its own legacy verbs would have run.
+    /// @brief Answers every waiting bind for real, from a thread that is not
+    ///        the owner.
     void settlePending() {
-        std::vector<std::pair<std::shared_ptr<Promise>, morph::backend::detail::BindRequest>> taken;
-        {
-            std::scoped_lock const lock{_mtx};
-            taken.swap(_pending);
+        // The instances are created here, on the owner; only the replies are
+        // delivered from another thread.
+        std::vector<std::pair<std::shared_ptr<Promise>, morph::bridge::detail::BindOutcome>> replies;
+        for (auto& [promise, request] : std::exchange(_pending, {})) {
+            auto local = LocalBackend::bindModel(std::move(request), morph::exec::detail::inlineExecutor());
+            replies.emplace_back(promise, *morph::bridge::detail::takeSettled(local));
         }
-        for (auto& [promise, request] : taken) {
-            try {
-                promise->resolve(LocalBackend::bindModelBlocking(std::move(request)));
-            } catch (...) {
-                promise->reject(std::current_exception());
+        std::thread settler{[&replies] {
+            for (auto& [promise, outcome] : replies) {
+                if (outcome.failure) {
+                    promise->reject(outcome.failure);
+                } else {
+                    promise->resolve(outcome.id);
+                }
             }
-        }
-    }
-
-    /// @brief Releases anything parked in a legacy verb.
-    void letGo() {
-        {
-            std::scoped_lock const lock{_gateMtx};
-            _released = true;
-        }
-        _gate.notify_all();
+        }};
+        settler.join();
     }
 
 private:
     using Promise = morph::async::Completion<morph::exec::detail::ModelId>::Promise;
 
-    // Bounded only so a regression cannot wedge the suite for ever, and
-    // bounded far above `kDefaultWaitBudget` on purpose: each case measures
-    // "did the site come back within the polling budget", so a parked legacy
-    // verb must still be parked when that budget runs out. A bound near the
-    // budget would make the measurement a coin flip -- observed, while
-    // mutation-testing this pair: with both set to two seconds the mutated
-    // (blocking) build passed.
-    void hold() {
-        std::unique_lock lock{_gateMtx};
-        (void)_gate.wait_for(lock, std::chrono::seconds{60}, [this] { return _released; });
-    }
-
-    mutable std::mutex _mtx;
     std::vector<std::pair<std::shared_ptr<Promise>, morph::backend::detail::BindRequest>> _pending;
-    std::mutex _gateMtx;
-    std::condition_variable _gate;
-    bool _released = false;
     std::function<void()> _handler;
+    morph::exec::IExecutor* _handlerExec = nullptr;
 };
 
 /// @brief A backend whose second bind is **rejected**, never thrown.
@@ -977,11 +938,7 @@ public:
         if (++_calls >= 2) {
             promise.reject(std::make_exception_ptr(std::runtime_error{"bind refused"}));
         } else {
-            try {
-                promise.resolve(LocalBackend::bindModelBlocking(std::move(request)));
-            } catch (...) {
-                promise.reject(std::current_exception());
-            }
+            return LocalBackend::bindModel(std::move(request), cbExec);
         }
         return std::move(completion);
     }
@@ -1001,87 +958,63 @@ private:
 
 }  // namespace
 
-TEST_CASE("morph::bridge::Bridge::switchBackend does not block on a kCallerMustNotBlock backend",
+TEST_CASE("morph::bridge::Bridge::switchBackend to a backend whose binds settle later holds calls until they do",
           "[bridge][switch][registration-surface]") {
     morph::exec::ThreadPoolExecutor poolA{2};
     morph::exec::ThreadPoolExecutor poolB{2};
-    morph::exec::MainThreadExecutor waiterExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA)};
-
-    auto binding = bridge.registerHandler<CountModel>();
-    REQUIRE(morph::bridge::Bridge::isBound(binding));
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA), owner};
+    morph::bridge::BridgeHandler<CountModel> handler{bridge, &owner};
+    REQUIRE(handler.isBound());
 
     auto async = std::make_shared<DeferredBindBackend>(poolB);
-    std::atomic<bool> returned{false};
-    std::thread switcher{[&] {
-        bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(async));
-        returned.store(true);
-    }};
-    // The measurement: did the switch come back while its bind is still
-    // unanswered? On the blocking verbs it cannot -- nothing releases them
-    // until the line below, which runs either way so the thread is joinable.
-    bool const returnedPromptly = morph::testing::waitUntil([&] { return returned.load(); });
-    async->letGo();
-    switcher.join();
-    REQUIRE(returnedPromptly);
+    bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(async));
 
     // The swap happened, and the binding is unbound rather than holding the id
     // it had on the backend that is no longer there.
-    REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
+    REQUIRE_FALSE(handler.isBound());
     REQUIRE(async->pendingCount() == 1);
 
-    // ...and `whenBound()` says "in flight" rather than "nothing to wait for",
-    // which is what makes the unbound window usable by a caller.
-    bool bound = false;
-    bool settled = false;
-    bridge.whenBound(binding, &waiterExec)
-        .then([&](bool ok) {
-            bound = ok;
-            settled = true;
-        })
-        .onError([&](const std::exception_ptr&) { settled = true; });
-    waiterExec.runOnce();
-    REQUIRE_FALSE(settled);
+    // A call made now is held, not refused...
+    std::atomic<int> count{-1};
+    handler.execute(SwitchCountAction{}).then([&](int value) { count.store(value); });
+    owner.runFor(std::chrono::milliseconds{5});
+    REQUIRE(count.load() == -1);
 
+    // ...and dispatched once the bind, settled on another thread, is applied
+    // on the owner.
+    morph::testing::OwnerProbeRecorder const recorder{owner.coreExecutor()};
     async->settlePending();
-    REQUIRE(morph::bridge::Bridge::isBound(binding));
-    waiterExec.runOnce();
-    REQUIRE(settled);
-    REQUIRE(bound);
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return count.load() != -1; }));
+    REQUIRE(handler.isBound());
+    REQUIRE(recorder.allPosted("Bridge::applyBind"));
 }
 
-TEST_CASE("Bridge: the reconnect handler does not block on a kCallerMustNotBlock backend",
+TEST_CASE("Bridge: a reconnect fired on the transport's thread re-registers on the owner",
           "[bridge][switch][reconnect][registration-surface]") {
     morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
     auto owned = std::make_unique<DeferredBindBackend>(pool);
     auto* backend = owned.get();
-    morph::bridge::Bridge bridge{std::move(owned)};
+    morph::bridge::Bridge bridge{std::move(owned), owner};
 
     auto binding = bridge.registerHandler<CountModel>();
-    REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));  // registerHandler already honours the policy
+    REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
     backend->settlePending();
-    REQUIRE(morph::bridge::Bridge::isBound(binding));
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return morph::bridge::Bridge::isBound(binding); }));
 
-    // Fired from a thread standing in for the transport thread the real
-    // handler runs on -- the one a `QtWebSocketBackend` needs back in its event
-    // loop before the reply it is waiting for can possibly arrive.
-    std::atomic<bool> returned{false};
-    std::thread transport{[&] {
-        backend->fireReconnect();
-        returned.store(true);
-    }};
-    bool const returnedPromptly = morph::testing::waitUntil([&] { return returned.load(); });
-    backend->letGo();
+    morph::testing::OwnerProbeRecorder const recorder{owner.coreExecutor()};
+    std::thread transport{[&] { backend->fireReconnect(); }};
     transport.join();
-    REQUIRE(returnedPromptly);
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return backend->pendingCount() == 1; }));
+    // The re-registration ran in an owner task, not on the transport's thread.
+    REQUIRE(recorder.allPosted("Bridge::reconnect"));
 
     // The id it held belonged to the connection that just dropped, so it is
     // cleared rather than left to be dispatched against.
     REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
-    REQUIRE(backend->pendingCount() == 1);
-
     backend->settlePending();
-    REQUIRE(morph::bridge::Bridge::isBound(binding));
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return morph::bridge::Bridge::isBound(binding); }));
 }
 
 TEST_CASE("morph::bridge::Bridge::switchBackend rolls back on a rejected bind, not only on a thrown one",
@@ -1089,7 +1022,7 @@ TEST_CASE("morph::bridge::Bridge::switchBackend rolls back on a rejected bind, n
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::ThreadPoolExecutor pool2{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CountModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<CountModel> const handler2{bridge, &cbExec};
 

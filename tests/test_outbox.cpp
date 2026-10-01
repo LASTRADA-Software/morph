@@ -191,7 +191,7 @@ TEST_CASE("Bridge/LocalBackend: outbox-managed holder does not auto-append despi
           "[outbox][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto log = std::make_shared<InMemoryActionLog>();
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();

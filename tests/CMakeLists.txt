@@ -58,6 +58,7 @@ add_executable(morph_tests
     test_action_wire_rejection.cpp
     test_security_fixes.cpp
     test_bridge_lifetime.cpp
+    test_bridge_owner.cpp
     test_client_execute_deadline.cpp
     test_timeout_scheduler.cpp
     test_dispatch_di.cpp

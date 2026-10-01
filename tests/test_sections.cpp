@@ -200,7 +200,7 @@ TEST_CASE("sectionGroupSchemaJson carries each section's title, action and binds
 TEST_CASE("SectionSet: sections fire independently, in any order", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::StepExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
 
@@ -227,7 +227,7 @@ TEST_CASE("SectionSet: sections fire independently, in any order", "[sections]")
 TEST_CASE("SectionSet: a not-ready draft is not sent at all", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::StepExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
 
     // The gate is observed through onError, not through the recorder. The
@@ -262,7 +262,7 @@ TEST_CASE("SectionSet: a not-ready draft is not sent at all", "[sections]") {
 TEST_CASE("SectionSet: an already-fired section fires again on the next edit", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::StepExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
 
@@ -283,7 +283,7 @@ TEST_CASE("SectionSet: an already-fired section fires again on the next edit", "
 TEST_CASE("SectionSet: reset clears one section and leaves the others intact", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::StepExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
 
@@ -309,7 +309,7 @@ TEST_CASE("SectionSet: reset clears one section and leaves the others intact", "
 TEST_CASE("SectionSet: a fired section's fields are resolvable; an unfired one is not", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::StepExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
     morph::forms::SectionSet<SecModel, ProfileSection, PrefsSection> sections{handler};
 
@@ -331,7 +331,7 @@ TEST_CASE("SectionSet: a fired section's fields are resolvable; an unfired one i
 TEST_CASE("SectionSet: a failing dispatch reaches the onError callback", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::StepExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
 
     std::atomic<int> errors{0};
@@ -354,7 +354,7 @@ TEST_CASE("SectionSet: a failing dispatch reaches the onError callback", "[secti
 TEST_CASE("SectionSet: an unhandled failure logs instead of escaping", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::StepExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
 
     // Capture the log rather than only asserting nothing threw: the logged
@@ -386,8 +386,8 @@ TEST_CASE("SectionSet: an unhandled failure logs instead of escaping", "[section
 
 TEST_CASE("SectionSet: destroying it with a dispatch in flight delivers nothing", "[sections]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SecModel> handler{bridge, &cbExec};
 
     secSlowStarted().store(false);
@@ -401,14 +401,15 @@ TEST_CASE("SectionSet: destroying it with a dispatch in flight delivers nothing"
         // Wait until the model call is genuinely inside execute() before
         // leaving the scope. Without this the dispatch would usually finish
         // first and the destructor would race nothing at all.
-        REQUIRE(morph::testing::waitUntil([] { return secSlowStarted().load(); }));
+        REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [] { return secSlowStarted().load(); }));
     }
 
     // The set is gone; only now does the model return (by throwing). Its error
     // continuation resolves against an object that no longer exists, and must
     // find the callback scope stopped and do nothing.
     secSlowRelease().store(true);
-    CHECK(morph::testing::waitUntil([&errors] { return errors.load() != 0; },
-                                    morph::testing::WaitBudget{std::chrono::milliseconds{500}}) == false);
+    CHECK(morph::testing::pumpOwnerUntil(
+              cbExec, [&errors] { return errors.load() != 0; },
+              morph::testing::WaitBudget{std::chrono::milliseconds{500}}) == false);
     CHECK(errors.load() == 0);
 }

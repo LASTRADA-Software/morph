@@ -149,7 +149,7 @@ App::App(std::string tokenSecret, std::chrono::milliseconds runInterval, std::si
       // MORPH_REQUIRE_VETTED_HMAC.
       _server{std::make_shared<::morph::backend::RemoteServer>(
           _pool, std::make_shared<auth::LedgerAuthorizer>(tokenSecret, ::morph::session::hmacSha256), serverConfig())},
-      _reportBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server)} {
+      _reportBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _reportExecutor} {
     // Installed process-wide so AuthModel::execute(const Login&) can mint
     // tokens against this exact secret -- the same "registry-constructed
     // models are always default-constructed, so there is no DI seam" answer

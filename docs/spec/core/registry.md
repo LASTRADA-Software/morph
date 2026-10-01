@@ -481,8 +481,8 @@ struct IModelHolder {
   immediately after construction — see that method below. Independent of
   `attachActionLog`/`_contextKey`: `contextKey` is the action log's
   entity-key field, `primaryKey` is the shared-instance directory key (see
-  [backend.md](backend.md)'s `InstanceIdentity` for why the two are kept as
-  separate named fields rather than conflated); a caller wanting both calls
+  [backend.md](backend.md)'s `BindRequest`, which carries `contextKey` and
+  `primary` as separate named fields, for why the two are kept as separate named fields rather than conflated); a caller wanting both calls
   both.
 - `recordIfAttached` is called automatically by `ActionDispatcher`'s runner and
   `Bridge::executeVia` — model code never calls it directly. It fills

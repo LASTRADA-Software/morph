@@ -4,12 +4,12 @@
 //
 //   Part A  onBackendChanged threading — notifyBackendChanged must dispatch each
 //           model's onBackendChanged() onto that model's strand (serialised
-//           against execute, off Bridge::_mtx), so:
+//           against execute), so:
 //             (a) a model that reacts to a drained item and mutates state is not
 //                 racing switchBackend/execute (strand serialisation holds), and
-//             (b) a model whose onBackendChanged re-enters the bridge
-//                 (switchBackend/registerHandler/deregisterHandler) does NOT
-//                 self-deadlock — it completes.
+//             (b) a model whose onBackendChanged reaches back into the bridge
+//                 (registerHandler/deregisterHandler, posted to the owner)
+//                 completes.
 //
 //   Part B  executeJson dispatch must enforce the action's validator before
 //           invoking the handler (a failing action is rejected with an error,
@@ -83,18 +83,9 @@ public:
     int notifyCount = 0;
 };
 
-// A model whose onBackendChanged RE-ENTERS the bridge by calling
-// registerHandler + deregisterHandler on the SAME bridge — the conflict-
-// resolution reentrancy the audit flagged. Under a single-slot design,
-// notifyBackendChanged ran inline while Bridge::_mtx was held, so any of these
-// re-entrant calls (which also take _mtx) self-deadlocked. With strand dispatch
-// the callback runs on a pool thread with _mtx free, so the re-entrant calls
-// acquire the lock normally and complete.
-//
-// (Re-entering switchBackend specifically is NOT exercised: switchBackend from
-// inside onBackendChanged would destroy the very strand the callback is running
-// on — an inherent precondition documented in bridge.md, independent of the
-// _mtx fix.)
+// A model whose onBackendChanged reaches back into the same bridge to register
+// and deregister a handler. It runs on the model's strand, off the bridge's
+// owner, so it posts that work to the owner.
 class ReentrantModel {
 public:
     [[nodiscard]] int execute(const BFQueryAction&) const { return completed.load(); }
@@ -103,16 +94,18 @@ public:
         if (bridge == nullptr) {
             return;
         }
-        // Re-enter the bridge from inside onBackendChanged. Both calls take
-        // Bridge::_mtx; under the old inline-notify design this hung.
-        auto sub = std::make_shared<morph::bridge::detail::HandlerBinding>();
-        sub->typeId = std::string{morph::model::ModelTraits<ReactModel>::typeId()};
-        sub->modelFactory = [] -> std::unique_ptr<morph::model::detail::IModelHolder> {
-            return std::make_unique<morph::model::detail::ModelHolder<ReactModel>>();
-        };
-        bridge->registerHandler(sub);
-        bridge->deregisterHandler(sub);
-        completed.store(1);
+        // Runs on the model's strand, so it reaches the bridge by posting to
+        // the bridge's owner, as anything off the owner does.
+        bridge->owner().post([this] {
+            auto sub = std::make_shared<morph::bridge::detail::HandlerBinding>();
+            sub->typeId = std::string{morph::model::ModelTraits<ReactModel>::typeId()};
+            sub->modelFactory = [] -> std::unique_ptr<morph::model::detail::IModelHolder> {
+                return std::make_unique<morph::model::detail::ModelHolder<ReactModel>>();
+            };
+            bridge->registerHandler(sub);
+            bridge->deregisterHandler(sub);
+            completed.store(1);
+        });
     }
 
     morph::bridge::Bridge* bridge = nullptr;
@@ -148,7 +141,7 @@ TEST_CASE("Bridge::switchBackend fires onBackendChanged on the model strand - se
         return std::make_unique<morph::model::detail::ModelHolder<ReactModel>>();
     };
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1), cbExec};
     morph::bridge::BridgeHandler<ReactModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
@@ -163,7 +156,7 @@ TEST_CASE("onBackendChanged that re-enters registerHandler/deregisterHandler doe
           "[bridge][backend-changed][reentrant]") {
     morph::exec::ThreadPoolExecutor pool1{2};
     morph::exec::ThreadPoolExecutor pool2{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = std::string{morph::model::ModelTraits<ReentrantModel>::typeId()};
@@ -176,19 +169,21 @@ TEST_CASE("onBackendChanged that re-enters registerHandler/deregisterHandler doe
         return holder;
     };
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool1), cbExec};
     bridgePtr = &bridge;
     morph::bridge::BridgeHandler<ReentrantModel> handler{bridge, &cbExec, binding};
 
-    // This switch fires onBackendChanged on the new model, which itself calls
-    // registerHandler + deregisterHandler. If notifyBackendChanged ran inline
-    // under _mtx (the old design) this would self-deadlock; with strand dispatch
-    // it completes.
+    // This switch fires onBackendChanged on the new model, which posts a
+    // register + deregister to the owner.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
 
-    // completed == 1 proves the re-entrant calls ran to completion. If they
-    // deadlocked, this waits out its budget and returns 0.
-    REQUIRE(waitInt(handler.execute(BFQueryAction{})) == 1);
+    // completed == 1 proves the posted calls ran to completion on the owner.
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] {
+        std::atomic<int> result{-999};
+        handler.execute(BFQueryAction{}).then([&](int val) { result.store(val); });
+        REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return result.load() != -999; }));
+        return result.load() == 1;
+    }));
 }
 
 // ── Part B: executeJson enforces validation + precision reconciliation ──────────
@@ -273,7 +268,7 @@ TEST_CASE("executeJson rejects an action that fails its validator (not silently 
           "[bridge][execute-json][validation]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<MassModel> handler{bridge, &cbExec};
 
     std::atomic<bool> done{false};
@@ -298,7 +293,7 @@ TEST_CASE("executeJson rejects an action that fails its validator (not silently 
 TEST_CASE("executeJson dispatches a valid action", "[bridge][execute-json][validation]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<MassModel> handler{bridge, &cbExec};
 
     std::optional<std::string> result;
@@ -318,7 +313,7 @@ TEST_CASE("executeJson dispatches a valid action", "[bridge][execute-json][valid
 TEST_CASE("executeJson retags a submitted Quantity to its declared precision", "[bridge][execute-json][precision]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<MassModel> handler{bridge, &cbExec};
 
     std::optional<std::string> result;

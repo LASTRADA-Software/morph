@@ -262,9 +262,9 @@ using SyncExecutor = morph::testing::InlineExecutor;
 
 TEST_CASE("BridgeHandler::execute recomputes total before dispatching", "[bridge][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<CFModel> handler{bridge, &owner};
 
     std::mutex totalMtx;
     std::atomic<bool> haveTotal{false};
@@ -283,7 +283,8 @@ TEST_CASE("BridgeHandler::execute recomputes total before dispatching", "[bridge
                                .price = Rational{Numerator{2}, Denominator{1}, dp2},
                                .total = {}});
 
-    REQUIRE(morph::testing::waitUntil([&] { return haveTotal.load(); }));
+    // The subscription fan-out runs on the owner, which this test pumps.
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return haveTotal.load(); }));
     std::scoped_lock lock{totalMtx};
     CHECK(lastTotal == Rational{6, dp2});
 }
@@ -291,7 +292,7 @@ TEST_CASE("BridgeHandler::execute recomputes total before dispatching", "[bridge
 TEST_CASE("an action with a computed input missing fails its validator", "[bridge][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     std::atomic<bool> fired{false};
@@ -362,7 +363,7 @@ TEST_CASE("Bridge::executeVia's localOp overwrites a tampered computed field on 
           "[bridge][local][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     CFLineItem tampered{};
@@ -388,7 +389,7 @@ TEST_CASE("Bridge::executeVia's localOp overwrites a tampered computed field on 
 TEST_CASE("BridgeHandler::executeJson overwrites a tampered computed field before dispatch", "[bridge][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     std::atomic<bool> done{false};
@@ -413,7 +414,7 @@ TEST_CASE("SimulatedRemoteBackend overwrites a tampered computed field before Mo
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     CFLineItem tampered{};

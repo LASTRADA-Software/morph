@@ -169,11 +169,12 @@ TEST_CASE("BackendRig::Socket threads a custom authorizer through to the RemoteS
     auto authorizer = std::make_shared<DenyAllAuthorizer>();
     morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, /*nClients=*/1, authorizer};
 
-    // Registration itself is denied and throws synchronously from
-    // BridgeHandler's constructor — if the authorizer were silently ignored
-    // (the pre-fix default-allow behavior), this would construct cleanly
-    // instead.
-    REQUIRE_THROWS_WITH(rig.client<RigProbeModel>(0), Catch::Matchers::ContainsSubstring("unauthorized"));
+    // Registration is denied: the handler's bind fails, and the first call
+    // made through it is rejected with the bind's error. An authorizer that
+    // was silently ignored would let the call through instead.
+    auto handler = rig.client<RigProbeModel>(0);
+    REQUIRE_THROWS_WITH(morph::ladder::testkit::awaitQt(handler.execute(RigProbeAction{1})),
+                        Catch::Matchers::ContainsSubstring("unauthorized"));
 }
 
 TEST_CASE("BackendRig::Socket threads a custom QtWebSocketServerConfig through to the server it builds",

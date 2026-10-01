@@ -39,14 +39,10 @@
 /// `setConnectHandler`, no hand-rolled wait-for-binding timer. The
 /// `examples/common/wasm_spike/main_wasm.cpp` spike had to hand-roll both;
 /// `AppContext` (`examples/common/gui/app_context.hpp`) now owns them
-/// generically for every client, native or browser. This rung hits the same
-/// "handler not bound" window pastebin's own `--server`/WASM clients do (the
-/// registration round trip that opens on connect and closes once it lands),
-/// but needs no `whenBound()`-gated bootstrap dispatch of its own the way
-/// `pastebin::gui::PasteBridge::bound` gates `Main.qml`'s first `refresh()`:
-/// nothing in this rung's `Main.qml` dispatches on `Component.onCompleted`,
-/// so the window closes before a user can click anything, not before a
-/// bootstrap call needs to land.
+/// generically for every client, native or browser. A call made through a
+/// handler whose registration round trip is still in flight waits for it
+/// and is dispatched once it lands, so the bootstrap `refresh()` calls
+/// `BookmarkListView.qml` makes on `Component.onCompleted` need no gate.
 ///
 /// @par Verification status
 /// Structurally complete and reviewed, **never compiled**: no Emscripten

@@ -145,7 +145,7 @@ int main() {
     // which needs ModelFactory::create<Model>() and therefore Model complete.
     morph::exec::ThreadPoolExecutor pool{1};
     InlineExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = std::string{morph::model::ModelTraits<ClientOnlyFacadeModel>::typeId()};

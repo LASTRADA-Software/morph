@@ -95,7 +95,7 @@ struct Fixture {
     /// @brief Seeds a project with one column, one swimlane, and one task,
     ///        through the same RemoteServer the socket clients will reach.
     void seed() {
-        Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*app.server())};
+        Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*app.server()), exec};
         const auto ctx = tokenContextFor(issuer, "alice");
         token = ctx.token;
         bridge.setDefaultSession(ctx);
@@ -171,7 +171,7 @@ TEST_CASE("Process separation: real client processes drive one shared board", "[
     }
 
     // Every client's comment landed on the one shared instance.
-    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*fixture.app.server())};
+    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*fixture.app.server()), fixture.exec};
     bridge.setDefaultSession(tokenContextFor(fixture.issuer, "alice"));
     BridgeHandler<kanban::BoardModel, morph::bridge::AllowShared> board{bridge, &fixture.exec};
     const auto state =
@@ -223,7 +223,7 @@ TEST_CASE("Process separation: a killed client's models are reclaimed", "[kanban
     CHECK(reclaimed);
 
     // And the board itself survived the crash: a fresh client still opens it.
-    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*fixture.app.server())};
+    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*fixture.app.server()), fixture.exec};
     bridge.setDefaultSession(tokenContextFor(fixture.issuer, "alice"));
     BridgeHandler<kanban::BoardModel, morph::bridge::AllowShared> board{bridge, &fixture.exec};
     const auto state =

@@ -8,9 +8,7 @@
 namespace ledger::gui {
 
 RulePresenter::RulePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : Presenter{parent}, _handler{bridge, executor} {
-    trackBound(_handler.whenBound());
-}
+    : Presenter{parent}, _handler{bridge, executor} {}
 
 void RulePresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 

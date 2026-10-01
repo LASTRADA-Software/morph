@@ -61,7 +61,6 @@ ProjectAdminBridge::ProjectAdminBridge(::morph::bridge::Bridge& bridge, ::morph:
     // bookmark_qml_bridges.cpp's identical "Threading" note: no meta-type
     // registration is needed because every connection here is direct, not
     // queued.
-    connect(&_presenter, &ProjectAdminPresenter::bound, this, &ProjectAdminBridge::bound);
     connect(&_presenter, &ProjectAdminPresenter::loggedIn, this, [this](QString principal) {
         _principal = std::move(principal);
         emit loggedIn(_principal);

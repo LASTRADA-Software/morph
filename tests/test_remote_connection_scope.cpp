@@ -14,6 +14,7 @@
 #include <string_view>
 #include <thread>
 
+#include "bind_support.hpp"
 #include "test_support.hpp"
 
 using morph::testing::WaitReply;
@@ -1157,8 +1158,8 @@ TEST_CASE(
     morph::backend::SimulatedRemoteBackend backendA{*server, cidA};
     morph::backend::SimulatedRemoteBackend backendB{*server, cidB};
 
-    auto midA = backendA.registerModelShared("CS_SquareModel", {}, {.contextKey = "42", .primary = "42"});
-    auto midB = backendB.registerModelShared("CS_SquareModel", {}, {.contextKey = "42", .primary = "42"});
+    auto midA = morph::testing::bindShared(backendA, "CS_SquareModel", {}, "42", "42");
+    auto midB = morph::testing::bindShared(backendB, "CS_SquareModel", {}, "42", "42");
     REQUIRE(midA.v == midB.v);  // one instance, not two
     REQUIRE(morph::testing::awaitValue(server->health()).liveModels == 1U);
 
@@ -1185,8 +1186,8 @@ TEST_CASE(
     morph::backend::SimulatedRemoteBackend backendA{*server, cidA};
     morph::backend::SimulatedRemoteBackend backendB{*server, cidB};
 
-    auto midA = backendA.registerModelShared("CS_SquareModel", {}, {.contextKey = "7", .primary = "7"});
-    auto midB = backendB.registerModelShared("CS_SquareModel", {}, {.contextKey = "7", .primary = "7"});
+    auto midA = morph::testing::bindShared(backendA, "CS_SquareModel", {}, "7", "7");
+    auto midB = morph::testing::bindShared(backendB, "CS_SquareModel", {}, "7", "7");
     REQUIRE(midA.v == midB.v);
 
     // A releases its own reference explicitly; the instance must survive

@@ -59,7 +59,7 @@ TEST_CASE("Bridge::setDefaultSession's token reaches the register envelope so au
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, authz);
 
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
 
     morph::session::Context session;
     session.principal = "alice";
@@ -106,7 +106,7 @@ TEST_CASE("register's recorded owner principal is the Bridge's authenticated def
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, authz);
 
     SyncExecutor cbExec;
-    morph::bridge::Bridge aliceBridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge aliceBridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::session::Context aliceSession;
     aliceSession.principal = "alice";
     aliceSession.token = morph::session::TokenIssuer{secret}.issue(
@@ -130,7 +130,7 @@ TEST_CASE("register's recorded owner principal is the Bridge's authenticated def
     // *same* model id alice's handler was bound to. The recorded owner is
     // "alice", so authorizeInstance denies Bob rather than falling back to
     // allow-all.
-    morph::bridge::Bridge bobBridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bobBridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::session::Context bobSession;
     bobSession.principal = "bob";
     bobSession.token = morph::session::TokenIssuer{secret}.issue(

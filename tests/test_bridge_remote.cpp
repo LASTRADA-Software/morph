@@ -32,7 +32,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: action result delivered via t
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<EchoModel> handler{bridge, &cbExec};
 
     std::atomic<int> result{-1};
@@ -50,7 +50,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: exception delivered via onErr
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<EchoModel> handler{bridge, &cbExec};
 
     std::atomic<bool> errorFired{false};
@@ -73,7 +73,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: multiple actions on same hand
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<EchoModel> handler{bridge, &cbExec};
 
     std::atomic<int> sum{0};

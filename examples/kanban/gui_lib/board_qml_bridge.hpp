@@ -436,15 +436,6 @@ public:
 #endif
 
 signals:
-    // No `bound()` relay here, unlike `ProjectAdminBridge`. That signal exists
-    // so a view can delay its *first* dispatch until a Remote-mode handler's
-    // registration round trip lands (examples/common/gui/presenter.hpp), and
-    // `ProjectListView.qml` uses it for exactly that. This bridge has no such
-    // caller and could not usefully acquire one where it stands: `Main.qml`
-    // dispatches `openBoard()` and only then pushes `BoardView`, so a handler
-    // on that screen would attach after the signal could have fired.
-    // `BoardPresenter::bound` is still emitted; re-relaying it is one line if
-    // a future shell gates navigation on it.
     /// @brief `board` changed — any of `openBoard`/`refresh`/`createColumn`/
     ///        `createSwimlane`/`createTask`/`moveTask`/`addComment`
     ///        succeeded.

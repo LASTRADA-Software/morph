@@ -346,22 +346,15 @@ namespace detail {
 /// @brief Executor that runs each posted task on the posting thread, at once.
 ///
 /// "Deliver wherever the producer settled", expressed as an executor rather
-/// than as a rule nobody can check. `Bridge` names it at the structural
-/// registration surface (`IBackend::bindModel`/`promoteModel`, see
-/// `docs/spec/core/backend.md`) because `Bridge` owns no thread of its own: it
-/// has no event loop to post a registration continuation to, and the four
-/// legacy `*Async` verbs it is replacing delivered their callbacks on exactly
-/// this thread — whichever one the backend settled the reply on. Naming that
-/// choice at the call site is the point of the change: the *caller* now decides
-/// where a registration continuation runs, and can be changed to decide
-/// differently without touching a single backend.
+/// than as a rule nobody can check. A caller that is itself where the reply
+/// settles names it: `SynchronousBackendAdapter` calls its wrapped backend's
+/// `bindModel`/`promoteModel` with it on the control strand, and a synchronous
+/// `SocketBackend` verb waits on a reply delivered with it. `Bridge` never
+/// does: it names its owner (see `docs/spec/core/backend.md`).
 ///
 /// @warning Not a general-purpose executor. Posting to it re-enters the caller,
 ///          so a handler that takes a lock the posting frame already holds
-///          self-deadlocks. Every `Bridge` site that names it either releases
-///          its locks first or parks the outcome through
-///          `detail::AsyncDispatchHandoff` (see `Bridge::attachHandlerAsync`'s
-///          `@par Locking`). Application code that wants "run it now" should
+///          self-deadlocks. Application code that wants "run it now" should
 ///          call the function instead of posting it.
 ///
 /// States no `ExecutorScope`: the task runs on the caller's thread, so

@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <typeindex>
 #include <utility>
 #include <vector>
@@ -15,44 +14,26 @@
 #include "../strand.hpp"
 
 /// @file
-/// @brief Per-`Bridge` instance-subscription bookkeeping, extracted out of `Bridge`.
+/// @brief A `Bridge`'s instance subscriptions: at most one callback per
+///        (binding, result type), matched at publish time on the binding's
+///        *current* instance, so a re-pointed handler's subscriptions follow
+///        it; entries whose binding is gone are pruned.
 ///
-/// `Bridge`'s subscription set (`InstanceSubscription` before this extraction,
-/// `_subMtx`/`_subscriptions`/`_subscriptionCount`, and
-/// `addSubscription`/`removeSubscription`/`hasSubscribers`/`publishResult` --
-/// all `private`) is a standalone match-and-prune data structure that was
-/// trapped inside `Bridge` alongside five other, unrelated mutex-guarded
-/// concerns. Its contract -- register at most one callback per (binding,
-/// result type); match at publish time on the binding's *current* instance,
-/// not a fixed one, so a re-pointed handler's subscriptions follow it; prune
-/// entries whose binding has been destroyed without an explicit unsubscribe
-/// -- touches no backend, no session, no handler registry, and is expressible
-/// without `Bridge` at all.
-///
-/// This is a faithful, behavior-preserving port of the logic that used to
-/// live directly on `Bridge`: same locking, same fields, same semantics.
-/// Nothing here is new logic. The one structural change from a plain
-/// extraction is that this class is templated on the binding type
-/// (`Bridge` instantiates it with `morph::bridge::detail::HandlerBinding`,
-/// which is itself defined inside `bridge.hpp`) rather than naming
-/// `HandlerBinding` directly -- unlike a key type such as `ModelId`, which
-/// lives in its own header, `HandlerBinding` is defined inline in
-/// `bridge.hpp` with no header of its own, and a non-template class here
-/// would have to either forward-declare it (making this header silently
-/// depend on include order to compile) or pull in a `HandlerBinding` header
-/// that does not exist. Templating avoids both: the class body only touches
-/// `Binding`'s members (`currentId`) inside function templates, so nothing
-/// about `Binding`'s shape needs to be known until `Bridge` instantiates this
-/// with the real `HandlerBinding`, by which point it is a complete type. It
-/// also means this header can be unit-tested against a lightweight
-/// stand-in binding with no dependency on `bridge.hpp` at all, though the
-/// test suite happens to use the real `HandlerBinding` since it is already
-/// available wherever `Bridge` is being tested.
+/// Templated on the binding type so this header does not depend on
+/// `bridge.hpp`, which defines `HandlerBinding` inline: the body touches the
+/// binding's `currentId` only inside member functions, instantiated once the
+/// type is complete.
+
 namespace morph::bridge::detail {
 
 /// @brief Tracks, per `Binding`, at most one callback per result type, and
 ///        delivers matching results to every subscriber attached to the
 ///        instance a result was produced on.
+///
+/// Belongs to its `Bridge`'s owner: every member but `hasSubscribers()` is
+/// called there, so the list needs no lock. `hasSubscribers()` reads an atomic
+/// count and may be asked from any thread — a backend's, deciding whether a
+/// result needs to reach the owner at all.
 ///
 /// @tparam Binding The handler-binding type subscriptions are held against.
 ///                 Must expose `std::atomic<std::uint64_t> currentId` (read
@@ -76,7 +57,6 @@ public:
     /// @param exec    Executor the callback is delivered on.
     void addSubscription(const std::shared_ptr<Binding>& binding, std::type_index type,
                          std::function<void(const std::any&)> sink, ::morph::exec::IExecutor* exec) {
-        std::scoped_lock const lock{_mtx};
         for (auto& entry : _subscriptions) {
             auto owner = entry.binding.lock();
             if (owner && owner.get() == binding.get() && entry.type == type) {
@@ -93,7 +73,6 @@ public:
     /// @param binding Handler binding that owns the subscription.
     /// @param type    Result type to stop hearing about.
     void removeSubscription(const std::shared_ptr<Binding>& binding, std::type_index type) {
-        std::scoped_lock const lock{_mtx};
         std::erase_if(_subscriptions, [&](const Entry& entry) {
             auto owner = entry.binding.lock();
             return !owner || (owner.get() == binding.get() && entry.type == type);
@@ -103,13 +82,9 @@ public:
 
     /// @brief Whether any subscription is currently registered.
     ///
-    /// A single relaxed atomic load, so the overwhelmingly common case -- a
-    /// process with no subscribers at all -- pays nothing per result. Without
-    /// this, every successful action would build a `std::type_index`, copy its
-    /// result into a `std::any`, take the lock and walk the (empty)
-    /// subscription list before its `Completion` could resolve: a throughput
-    /// regression for every existing caller, on the hot path, to serve a
-    /// feature they are not using.
+    /// A single relaxed atomic load, so the common case -- a process with no
+    /// subscribers at all -- pays nothing per result: without subscribers a
+    /// result is never boxed and never sent to the owner.
     /// @return `true` if at least one subscription exists.
     [[nodiscard]] bool hasSubscribers() const noexcept { return _count.load(std::memory_order_relaxed) != 0U; }
 
@@ -124,29 +99,20 @@ public:
     /// every subscriber to special-case "was this mine", which is exactly the
     /// bookkeeping the feature exists to remove.
     ///
-    /// Sinks are snapshotted under the lock and invoked outside it, so a
-    /// subscriber that re-enters the registry (or the `Bridge` it backs)
-    /// cannot deadlock.
-    ///
+    /// The matching sinks are copied out before any is invoked: a sink
+    /// delivered through a null executor runs here, and may subscribe or
+    /// unsubscribe, which would otherwise change the list under the loop.
     /// @param mid   Instance the result was produced on.
     /// @param type  Result type produced.
     /// @param value Boxed result.
     void publishResult(::morph::exec::detail::ModelId mid, std::type_index type, const std::any& value) {
+        std::erase_if(_subscriptions, [](const Entry& entry) { return entry.binding.expired(); });
+        _count.store(_subscriptions.size(), std::memory_order_relaxed);
         std::vector<std::pair<std::function<void(const std::any&)>, ::morph::exec::IExecutor*>> targets;
-        {
-            std::scoped_lock const lock{_mtx};
-            // Prune while we are already holding the lock and walking the
-            // list: a handler that is destroyed without unsubscribing would
-            // otherwise leave its entry behind until some *other* handler
-            // happened to call add/removeSubscription, which in a long-lived
-            // app with many transient handlers is never.
-            std::erase_if(_subscriptions, [](const Entry& entry) { return entry.binding.expired(); });
-            _count.store(_subscriptions.size(), std::memory_order_relaxed);
-            for (const auto& entry : _subscriptions) {
-                auto owner = entry.binding.lock();
-                if (owner && entry.type == type && owner->currentId.load() == mid.v && entry.sink) {
-                    targets.emplace_back(entry.sink, entry.exec);
-                }
+        for (const auto& entry : _subscriptions) {
+            auto owner = entry.binding.lock();
+            if (owner && entry.type == type && owner->currentId.load() == mid.v && entry.sink) {
+                targets.emplace_back(entry.sink, entry.exec);
             }
         }
         for (auto& [sink, exec] : targets) {
@@ -158,26 +124,11 @@ public:
         }
     }
 
-    /// @brief Number of subscription entries currently stored, including any
-    ///        not yet pruned.
-    ///
-    /// Test-only observability -- stale the moment the lock is released, so it must not drive a
-    /// check-then-act decision. In particular, an entry whose binding has
-    /// already been destroyed still counts here until the next
-    /// `publishResult` prunes it: this is what lets a test observe the prune
-    /// step directly, by checking `size()` before and after a `publishResult`
-    /// call that follows the binding's destruction.
-    /// @return Current entry count.
-    [[nodiscard]] std::size_t size() const {
-        std::scoped_lock const lock{_mtx};
-        return _subscriptions.size();
-    }
+    /// @brief Number of registered subscriptions, dead ones not yet pruned included.
+    /// @return Size of the subscription list.
+    [[nodiscard]] std::size_t size() const { return _subscriptions.size(); }
 
 private:
-    // Constructed rather than aggregate-initialised so that every field is
-    // named in one place: `type` is a std::type_index, which has no default
-    // constructor, so there is no default member initialiser to fall back on
-    // and every construction site must supply all four fields.
     struct Entry {
         Entry(std::weak_ptr<Binding> bindingIn, std::type_index typeIn, std::function<void(const std::any&)> sinkIn,
               ::morph::exec::IExecutor* execIn)
@@ -189,11 +140,7 @@ private:
         ::morph::exec::IExecutor* exec = nullptr;
     };
 
-    mutable std::mutex _mtx;
     std::vector<Entry> _subscriptions;
-    // Mirrors _subscriptions.size() for the lock-free hasSubscribers() probe.
-    // Maintained under _mtx; read relaxed off it. A stale-by-one read is
-    // harmless: publishResult re-checks under the lock and finds nothing.
     std::atomic<std::size_t> _count{0};
 };
 

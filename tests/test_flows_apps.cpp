@@ -186,14 +186,12 @@ TEST_CASE("Flows::WizardSchemaJson omits prefill for steps with no Bind", "[flow
 // FlowSession
 // ---------------------------------------------------------------------------
 
-namespace {
-using SyncExecutor = morph::testing::InlineExecutor;
-}
+namespace {}
 
 TEST_CASE("FlowSession: fires step one, advances, and captures step two's prefill source", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
@@ -207,7 +205,7 @@ TEST_CASE("FlowSession: fires step one, advances, and captures step two's prefil
     CHECK_FALSE(flow.advance());
 
     flow.set<&FlowStepOne::label>(std::string{"sample A"});
-    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return flow.ready(); }));
 
     REQUIRE(flow.advance());
     CHECK(flow.currentIndex() == 1);
@@ -227,7 +225,7 @@ TEST_CASE("FlowSession: fires step one, advances, and captures step two's prefil
     CHECK_FALSE(flow.ready());  // note is still empty
     flow.set<&FlowStepTwo::note>(std::string{"looks fine"});
 
-    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return flow.ready(); }));
     REQUIRE(flow.advance());
     CHECK(flow.finished());
 
@@ -255,7 +253,7 @@ TEST_CASE("FlowSession: every set<> that leaves the draft ready dispatches again
     // touch the session. Stepping the continuations keeps every one of them on
     // this thread, so the flow is destroyed with nothing left to deliver.
     morph::testing::StepExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
@@ -298,14 +296,14 @@ TEST_CASE("FlowSession: every set<> that leaves the draft ready dispatches again
 
 TEST_CASE("FlowSession: back() returns to step one with its draft intact", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
 
     flow.set<&FlowStepOne::label>(std::string{"sample B"});
-    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return flow.ready(); }));
     REQUIRE(flow.advance());
 
     REQUIRE(flow.back());
@@ -315,16 +313,16 @@ TEST_CASE("FlowSession: back() returns to step one with its draft intact", "[flo
     // Re-editing step one's draft still re-fires: the handler's own draft for
     // FlowStepOne was never reset<>()'d.
     flow.set<&FlowStepOne::label>(std::string{"sample B revised"});
-    REQUIRE(morph::testing::waitUntil(
-        [&] { return flow.resolved("FlowsTest_FlowStepOne.label") == R"("sample B revised")"; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(
+        cbExec, [&] { return flow.resolved("FlowsTest_FlowStepOne.label") == R"("sample B revised")"; }));
 
     CHECK_FALSE(flow.back());  // already at step 0
 }
 
 TEST_CASE("FlowSession: set<> on an action that is not the current step throws", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
@@ -334,8 +332,8 @@ TEST_CASE("FlowSession: set<> on an action that is not the current step throws",
 
 TEST_CASE("FlowSession: backend switch mid-flight surfaces BackendChangedError on the flow's onError", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawBackendChanged{false};
@@ -352,18 +350,18 @@ TEST_CASE("FlowSession: backend switch mid-flight surfaces BackendChangedError o
     flow.set<&FlowStepOne::label>(std::string{"racing"});  // starts a 50ms fire (see FlowTestModel)
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool));
 
-    REQUIRE(morph::testing::waitUntil([&] { return sawBackendChanged.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return sawBackendChanged.load(); }));
 
     // The draft survives the switch: setting the same field again re-fires
     // cleanly against the new backend.
     flow.set<&FlowStepOne::label>(std::string{"racing again"});
-    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return flow.ready(); }));
 }
 
 TEST_CASE("FlowSession: resolved() returns nullopt for a path never captured", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
@@ -376,19 +374,19 @@ TEST_CASE("FlowSession: resolved() returns nullopt for a path never captured", "
 
 TEST_CASE("FlowSession: advance() on an already-finished flow returns false", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
 
     flow.set<&FlowStepOne::label>(std::string{"sample C"});
-    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return flow.ready(); }));
     REQUIRE(flow.advance());
 
     flow.set<&FlowStepTwo::refId>(std::int64_t{7});
     flow.set<&FlowStepTwo::note>(std::string{"final step"});
-    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return flow.ready(); }));
     REQUIRE(flow.advance());
     REQUIRE(flow.finished());
 
@@ -403,8 +401,8 @@ TEST_CASE("FlowSession: advance() on an already-finished flow returns false", "[
 
 TEST_CASE("FlowSession: no onError callback logs the failure instead", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     // No onError given -- FlowSession's default routes the failure through
@@ -428,7 +426,7 @@ TEST_CASE("FlowSession: no onError callback logs the failure instead", "[flows]"
 
     flow.set<&FlowStepExplodes::label>(std::string{"trigger"});
 
-    REQUIRE(morph::testing::waitUntil([&] {
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] {
         std::scoped_lock const lock{loggedMtx};
         return std::ranges::any_of(
             logged, [](const std::string& line) { return line.contains("FlowsTest_FlowStepExplodes"); });
@@ -438,8 +436,8 @@ TEST_CASE("FlowSession: no onError callback logs the failure instead", "[flows]"
 
 TEST_CASE("FlowSession: no onError callback logs a non-std::exception failure as unknown", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     // No onError given, and the step throws a type that is not a
@@ -460,7 +458,7 @@ TEST_CASE("FlowSession: no onError callback logs a non-std::exception failure as
 
     flow.set<&FlowStepExplodesNonStd::label>(std::string{"trigger"});
 
-    REQUIRE(morph::testing::waitUntil([&] {
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] {
         std::scoped_lock const lock{loggedMtx};
         return std::ranges::any_of(logged, [](const std::string& line) {
             return line.contains("FlowsTest_FlowStepExplodesNonStd") && line.contains("unknown exception");
@@ -472,7 +470,7 @@ TEST_CASE("FlowSession: no onError callback logs a non-std::exception failure as
 TEST_CASE("FlowSession: a late reply for a step already left behind is dropped", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::DeterministicExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
@@ -526,7 +524,7 @@ TEST_CASE("FlowSession: a late reply for a step already left behind is dropped",
 TEST_CASE("FlowSession: a late error for a step already left behind does not un-ready the new step", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::DeterministicExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     std::vector<std::string> errors;
@@ -612,7 +610,7 @@ TEST_CASE("FlowSession: a late error for a step left behind via back() does not 
 
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::DeterministicExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     std::vector<std::string> errors;
@@ -670,7 +668,7 @@ TEST_CASE("FlowSession: a late error for a step left behind via back() does not 
 TEST_CASE("FlowSession: a completion arriving after the flow is destroyed is a no-op", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::DeterministicExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     auto flow = std::make_unique<morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo>>(handler);
@@ -701,7 +699,7 @@ TEST_CASE("FlowSession: a completion arriving after the flow is destroyed is a n
 TEST_CASE("FlowSession: an error arriving after the flow is destroyed is a no-op", "[flows]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::DeterministicExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
 
     std::atomic<bool> onErrorCalled{false};

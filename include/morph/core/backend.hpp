@@ -9,11 +9,13 @@
 #include <cstdint>
 #include <exception>
 #include <functional>
+#include <future>
 #include <memory>
-#include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -23,6 +25,7 @@
 #include "../session/session.hpp"
 #include "completion.hpp"
 #include "detail/instance_directory.hpp"
+#include "detail/owner_affinity.hpp"
 #include "model.hpp"
 #include "observability.hpp"
 #include "registry.hpp"
@@ -142,42 +145,21 @@ struct ActionCall {
     }
 };
 
-/// @brief The two identities a model instance can carry, passed together.
-///
-/// Bundled into one struct rather than passed as two adjacent `string_view`
-/// parameters because they are trivially swappable at a call site and mean
-/// entirely different things: transposing them would silently file journal
-/// entries under the directory key and share instances under the log's entity
-/// key. Keeping them named at every call site makes that mistake unwritable.
-struct InstanceIdentity {
-    /// @brief Entity key for the action log; empty if none. See `journal::LogEntry::entityKey`.
-    std::string_view contextKey;
-
-    /// @brief Canonical string encoding of the primary key; empty if the
-    ///        instance is anonymous and therefore unshareable.
-    std::string_view primary;
-};
-
 /// @brief One *bind* request: everything needed to acquire a model instance.
 ///
-/// The request half of the structural registration surface
-/// (`IBackend::bindModel`). It replaces the three separate acquire verbs
-/// (`registerModelWithContext`, `registerModelShared`, `attachModel`) with one
-/// request whose *shape* selects the behaviour, because the three differ only
-/// in which fields are populated:
+/// The request half of `IBackend::bindModel`, the one acquire verb. Its *shape*
+/// selects the behaviour:
 ///
-/// | `primary` | `current` | Equivalent legacy verb |
+/// | `primary` | `current` | Meaning |
 /// |---|---|---|
-/// | empty | `0` | `registerModelWithContext(typeId, factory, contextKey)` |
-/// | non-empty | `0` | `registerModelShared(typeId, factory, identity)` |
-/// | non-empty | non-zero | `attachModel(typeId, factory, identity, current)` |
+/// | empty | `0` | A private instance, never entered in the shared directory. |
+/// | non-empty | `0` | Register-or-attach the shared instance for `(typeId, primary)`. |
+/// | non-empty | non-zero | Re-point from `current` to the shared instance for `(typeId, primary)`. |
+/// | empty | non-zero | Give `current` up and bind a private instance instead. |
 ///
-/// Unlike `InstanceIdentity`, every string here is **owned**. That is not a
-/// style preference: a bind may outlive the frame that issued it, so a
-/// `string_view` into the caller's stack is a dangling read waiting for a
-/// backend that copies its envelope after the dispatch call returns rather
-/// than before it. The synchronous verbs below take views and are safe only
-/// because they do not return until the backend has finished with them.
+/// Every string is **owned**: a bind may outlive the frame that issued it, so a
+/// `string_view` into the caller's stack would dangle for a backend that builds
+/// its envelope after the call returns.
 struct BindRequest {
     /// @brief String type-id of the model to instantiate (from `ModelTraits`).
     std::string typeId;
@@ -196,8 +178,8 @@ struct BindRequest {
     std::string primary;
 
     /// @brief Instance currently held, or `ModelId{0}` if none. Non-zero makes
-    ///        this bind a *re-point*: the backend names what it is re-pointing
-    ///        from, exactly as `attachModel` does.
+    ///        this bind a *re-point*: the backend releases it once the
+    ///        replacement is acquired.
     ::morph::exec::detail::ModelId current{};
 };
 
@@ -217,65 +199,27 @@ struct PromoteRequest {
     std::string primary;
 };
 
-/// @brief Whether a caller holding an unsettled `bindModel`/`promoteModel`
-///        `Completion` may block its own thread until that `Completion`
-///        settles.
-///
-/// This is the one thing `bindModel`'s signature cannot say, and it has to be
-/// said: two shipped backends both return an unsettled `Completion` from
-/// `bindModel`, and `Bridge::registerHandlerImpl` — a synchronous entry point
-/// that hands its caller a `BridgeHandler` usable on the next line — must wait
-/// for one of them and must not wait for the other. From the `Completion`
-/// alone the two are indistinguishable.
-///
-/// It is deliberately **not** a `bool` selecting a verb (see "The structural
-/// registration surface" below, point 1). Such a `bool` would make every call
-/// site carry two paths and let a backend be half-migrated. This chooses
-/// nothing: there is still exactly
-/// one verb, called unconditionally, and exactly one continuation. It says
-/// only whether the thread that issued the call is allowed to stop and wait
-/// for the continuation it already registered.
-enum class BindWait : std::uint8_t {
-    /// @brief The completion settles without the calling thread's
-    ///        participation — inside the call, or on a thread the caller does
-    ///        not own. A caller may block until it settles.
-    ///
-    /// The default, and correct for every backend that has not overridden
-    /// `bindModel` (the default settles before it returns) as well as for
-    /// `SocketBackend` off its I/O loop, which settles the completion. A backend
-    /// that returns this **must** settle every `Completion` it hands out
-    /// exactly once without further calls from the caller — including on
-    /// transport failure and on `cancelPending`/destruction — or a caller that
-    /// waits will wait forever.
-    kCallerMayBlock,
-
-    /// @brief The completion cannot settle while the calling thread is blocked
-    ///        in a wait, or blocking it would defeat the point of this
-    ///        backend. A caller must register its continuation and return.
-    ///
-    /// Two backends say this, for two different reasons:
-    ///
-    /// - `QtWebSocketBackend` with `Config::asyncRegistrationEnabled` set: the
-    ///   reply arrives through the Qt event loop of the thread that issued the
-    ///   call, so waiting is a deadlock. On a WASM main thread it aborts the
-    ///   page, which is the case this surface exists for.
-    /// - `SynchronousBackendAdapter`: it exists precisely to move a blocking
-    ///   call off the caller's thread, so a caller that then waits for it has
-    ///   bought nothing — and if the caller happens to be running on the
-    ///   adapter's own executor, has deadlocked.
-    kCallerMustNotBlock,
-};
-
 /// @brief Abstract interface for execution backends (local, remote, …).
 ///
 /// A backend owns model instances and dispatches actions against them.
-/// `Bridge` holds one active backend at a time and can swap it atomically
-/// via `Bridge::switchBackend()`.
+/// `Bridge` holds one active backend at a time and can swap it via
+/// `Bridge::switchBackend()`.
+///
+/// A backend installed in a `Bridge` belongs to the bridge's owner: the bridge
+/// calls every verb from there (`setOwner` tells the backend which executor
+/// that is), so a backend keeps the state those verbs touch without a lock.
+/// What arrives from the backend's own threads — a reply, a reconnect — reaches
+/// the bridge through an executor the bridge names: `bindModel`/`promoteModel`
+/// deliver on the one they are given, and `setReconnectHandler` posts to the
+/// one it is given.
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IBackend {
     virtual ~IBackend() = default;
 
     /// @brief Registers a new model instance and returns its opaque id.
+    /// @param typeId  String type-id of the model to instantiate.
+    /// @param factory Callable that constructs the `IModelHolder` (local path only).
+    /// @return Newly assigned `ModelId`.
     virtual ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) = 0;
 
@@ -299,69 +243,6 @@ struct IBackend {
         std::string_view contextKey) {
         (void)contextKey;
         return registerModel(typeId, std::move(factory));
-    }
-
-    /// @brief Registers or attaches to the shared instance holding @p primary.
-    ///
-    /// A *register-or-attach*: if an instance for `(typeId, primary)` is already
-    /// live in the backend's shared directory, its id is returned and its attach
-    /// count incremented — no new instance is created and @p factory is not
-    /// called. Otherwise a new instance is created, entered in the directory,
-    /// and returned with an attach count of one.
-    ///
-    /// An empty @p primary means "no identity": the call degrades to
-    /// `registerModelWithContext`, producing a private instance that never
-    /// enters the directory and can never be shared.
-    ///
-    /// The default implementation ignores @p primary and forwards to
-    /// `registerModelWithContext`, so a backend that has not implemented sharing
-    /// keeps its existing one-instance-per-caller behaviour rather than silently
-    /// handing two callers the same instance.
-    ///
-    /// @param typeId     String type-id of the model.
-    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
-    /// @param identity   Entity key for the action log plus the directory primary key.
-    /// @return Id of the shared (or newly created) instance.
-    virtual ::morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        InstanceIdentity identity) {
-        return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
-    }
-
-    /// @brief Re-points from @p current to the shared instance holding @p primary.
-    ///
-    /// The default implementation acquires the replacement via
-    /// `registerModelShared` first and only then releases @p current (when
-    /// non-zero), so a same-key re-attach never destroys and recreates the
-    /// instance it already holds, and a throwing acquire never strands the
-    /// caller with neither instance. Backends behind a wire protocol override
-    /// this with the single `attach` request so a re-pointing client cannot
-    /// lose its slot to `LimitPolicy::maxLiveModels` between the release and
-    /// the acquire.
-    ///
-    /// @param typeId     String type-id of the model.
-    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
-    /// @param identity   Entity key for the action log plus the directory primary key.
-    /// @param current    Instance currently held, or `ModelId{0}` if none.
-    /// @return Id of the instance now attached to.
-    virtual ::morph::exec::detail::ModelId attachModel(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        InstanceIdentity identity, ::morph::exec::detail::ModelId current) {
-        // Acquire the replacement before releasing `current`, not after: a
-        // same-key re-attach (registerModelShared finds `current` already
-        // live in the directory and takes a second reference to it) then
-        // hands back the identical id instead of destroying and recreating
-        // it, and a throwing acquire never touches `current` at all, so the
-        // caller's existing instance is never stranded by a failed attach.
-        // Either way, exactly one reference on `current` needs releasing
-        // afterward: the genuinely old instance's, if this re-pointed to a
-        // different key; or the redundant one registerModelShared just took,
-        // if it did not.
-        auto next = registerModelShared(typeId, std::move(factory), identity);
-        if (current.v != 0U) {
-            deregisterModel(current);
-        }
-        return next;
     }
 
     /// @brief Enters an already-live instance into the directory under @p primary.
@@ -394,67 +275,23 @@ struct IBackend {
         (void)primary;
     }
 
-    // ── The structural registration surface ──────────────────────────────
-    //
-    // `bindModel`/`promoteModel` are the five verbs above with the continuation
-    // made mandatory. Two properties carry the design, and both are visible in
-    // the signature rather than only in a comment:
-    //
-    //   1. **The continuation is not opt-in.** There is no `bool` saying "I
-    //      have no async path, call the other one" — so no call site carries a
-    //      second path, and a backend cannot be *half* migrated. A blocking
-    //      backend satisfies the surface through the default implementations
-    //      below, or without blocking the caller at all through
-    //      `SynchronousBackendAdapter`.
-    //
-    //      Whether the *calling thread* may wait for that continuation is a
-    //      separate question, and the signature cannot answer it either: two
-    //      shipped backends return an unsettled `Completion` and give opposite
-    //      answers (`SocketBackend`: yes, off its I/O loop, which settles it;
-    //      `QtWebSocketBackend` under `asyncRegistrationEnabled`: no, waiting
-    //      deadlocks the event loop the reply arrives on). `bindWaitPolicy()`
-    //      below carries exactly that one bit and nothing else — it never
-    //      selects a verb, so it creates no second path.
-    //
-    //   2. **The delivery thread is a parameter.** `Completion<T>` posts its
-    //      handlers to the executor it was built with, so the continuation runs
-    //      where @p cbExec says and nowhere else — the backend does not choose.
-    //      A threading contract stated only in prose would ask every backend
-    //      author to deliver on a thread from which `~Bridge` cannot run
-    //      concurrently, and nothing could check it. See
-    //      docs/spec/core/backend.md, "The threading contract, and the half
-    //      the surface does not close".
-    //      It does not by itself make a `~Bridge` race impossible: it moves the
-    //      choice of delivery thread from fifteen backend implementors, none of
-    //      which knows what the caller's teardown looks like, to the one caller
-    //      that does. `cbExec` is a reference precisely so that "deliver
-    //      nowhere" cannot be expressed — a null executor would silently drop
-    //      every continuation (see `Completion`'s constructor).
-    //
-    // The synchronous verbs above remain, but not as a surface any caller
-    // chooses: they are what `bindModelBlocking` — and therefore the *default*
-    // `bindModel` — dispatches to, one request shape at a time. Nothing in the
-    // tree calls them directly, which is why a backend that overrides only
-    // `registerModel` still works through `bindModel`.
-
-    /// @brief Acquires a model instance: the structural counterpart of
-    ///        `registerModelWithContext` / `registerModelShared` / `attachModel`.
+    /// @brief Acquires a model instance, selected by @p request's shape (see
+    ///        `BindRequest`), and reports it through a `Completion` delivered
+    ///        on @p cbExec.
     ///
-    /// One verb for all three, selected by @p request's shape — see
-    /// `BindRequest`'s table. The default implementation dispatches to exactly
-    /// the legacy verb each shape corresponds to and settles the returned
-    /// `Completion` from this thread, so a backend that has not overridden
-    /// anything keeps its current behaviour bit for bit, including its current
-    /// blocking behaviour: the default **blocks the calling thread** for as
-    /// long as the underlying synchronous verb does. A backend with a genuine
-    /// non-blocking path (`QtWebSocketBackend`) overrides this and
-    /// settles the `Completion` when its reply arrives; a blocking backend that
-    /// must not block its caller is wrapped in `SynchronousBackendAdapter`,
-    /// which moves the blocking call to an executor it names.
+    /// A backend that can settles the `Completion` before returning — the
+    /// default does, and so does every backend whose registration needs no
+    /// round trip — so a `Bridge` handler bound through it can dispatch at once.
+    /// A backend whose registration is a round trip settles it when the reply
+    /// arrives, on whatever thread that is; the continuation still runs on
+    /// @p cbExec, which `Bridge` passes as its owner.
     ///
-    /// An exception thrown by the underlying verb is delivered to the
-    /// `Completion`'s `onError` rather than propagated, so a caller has one
-    /// failure channel instead of two.
+    /// The default implementation has no shared directory: every shape binds a
+    /// private instance through `registerModelWithContext`, and a non-zero
+    /// `current` is released once the replacement is acquired, so a throwing
+    /// acquire never strands the caller with neither instance. An exception
+    /// from either verb rejects the `Completion` rather than propagating, so a
+    /// caller has one failure channel.
     ///
     /// @param request Owning bind request; moved from.
     /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
@@ -466,7 +303,11 @@ struct IBackend {
         auto [completion, promise] =
             ::morph::async::Completion<::morph::exec::detail::ModelId>::makeSettleable(&cbExec);
         try {
-            promise.resolve(bindModelBlocking(std::move(request)));
+            auto const next = registerModelWithContext(request.typeId, std::move(request.factory), request.contextKey);
+            if (request.current.v != 0U) {
+                deregisterModel(request.current);
+            }
+            promise.resolve(next);
         } catch (...) {
             promise.reject(std::current_exception());
         }
@@ -477,7 +318,7 @@ struct IBackend {
     ///        counterpart of `assignPrimary`.
     ///
     /// The default implementation calls `assignPrimary` and settles the
-    /// returned `Completion` from this thread, echoing @p request's `mid`
+    /// returned `Completion` before returning, echoing @p request's `mid`
     /// back — including for every no-op case `assignPrimary` documents
     /// (empty primary, dead `mid`, key already taken, `mid` already keyed
     /// differently), which are not backend failures and therefore resolve
@@ -506,62 +347,23 @@ struct IBackend {
     }
     // NOLINTEND(performance-unnecessary-value-param)
 
-    /// @brief Whether a caller may block until this backend's
-    ///        `bindModel`/`promoteModel` completions settle.
+    /// @brief Tells this backend which owner its caller runs on.
     ///
-    /// Answers the one question `Completion` cannot: an unsettled `Completion`
-    /// looks the same whether the reply is coming from a thread the caller does
-    /// not own or from the caller's own event loop. Only a frame that would
-    /// otherwise stop and wait asks it — `Bridge::registerHandlerImpl` (a
-    /// synchronous entry point that must hand back a *bound* instance),
-    /// `Bridge::switchBackend`'s staging phase, and
-    /// `Bridge::installReconnectHandler`'s handler, which is the one that runs
-    /// on the backend's own transport thread and so is the one a wrong answer
-    /// deadlocks outright. The asynchronous entry points never wait and never
-    /// consult it.
-    ///
-    /// A backend that returns `kCallerMayBlock` (the default) commits to
-    /// settling every `Completion` it returns exactly once without any further
-    /// call from the caller. Every backend that does not override `bindModel`
-    /// satisfies that trivially: the default settles before it returns.
-    ///
-    /// @return `BindWait::kCallerMayBlock` unless overridden.
-    [[nodiscard]] virtual BindWait bindWaitPolicy() const noexcept { return BindWait::kCallerMayBlock; }
-
-    /// @brief Runs @p request against the legacy synchronous verbs, blocking.
-    ///
-    /// Factored out of `bindModel`'s default implementation so that
-    /// `SynchronousBackendAdapter` runs the *same* dispatch on its own executor
-    /// instead of restating it — one definition of "which legacy verb does this
-    /// request shape mean", not two that can drift apart.
-    ///
-    /// Each branch is the verb the corresponding call site uses today, so
-    /// routing a plain registration through `attachModel` (which would also
-    /// have worked, since its default degrades) cannot change behaviour for a
-    /// backend that overrides only some of the three.
-    ///
-    /// @param request Owning bind request; moved from.
-    /// @return The bound `ModelId`.
-    ::morph::exec::detail::ModelId bindModelBlocking(BindRequest request) {
-        InstanceIdentity const identity{.contextKey = request.contextKey, .primary = request.primary};
-        if (request.current.v != 0U) {
-            return attachModel(request.typeId, std::move(request.factory), identity, request.current);
-        }
-        if (!request.primary.empty()) {
-            return registerModelShared(request.typeId, std::move(request.factory), identity);
-        }
-        return registerModelWithContext(request.typeId, std::move(request.factory), request.contextKey);
-    }
+    /// `Bridge` calls it when it installs the backend, with its own affinity,
+    /// and calls every other verb from that owner afterwards. A backend that
+    /// keeps state for those verbs records it to check, in a debug build, that
+    /// each is called there. Default implementation: ignore it.
+    /// @param owner The bridge's owner affinity. Its executor is borrowed: it
+    ///        must outlive this backend's use by that bridge.
+    virtual void setOwner(const ::morph::exec::detail::OwnerAffinity& owner) { (void)owner; }
 
     /// @brief Lists the primary keys of live shared instances of @p typeId.
     ///
-    /// Only instances created through `registerModelShared`/`attachModel` with a
-    /// non-empty primary appear; a private instance is invisible to the
-    /// directory by construction. The result is a snapshot and is stale the
-    /// moment it is returned.
+    /// Only instances bound with a non-empty `primary` appear; a private
+    /// instance is invisible to the directory by construction. The result is a
+    /// snapshot and is stale the moment it is returned.
     ///
-    /// Synchronous, matching `registerModel`, which already blocks on remote
-    /// backends. The asynchronous surface users see is
+    /// Synchronous. The asynchronous surface users see is
     /// `BridgeHandler::instances()`, which wraps this in a `Completion` so the
     /// call site reads identically local and remote.
     ///
@@ -577,9 +379,14 @@ struct IBackend {
     /// For a shared instance this *decrements* its attach count and destroys the
     /// instance only when the count reaches zero, so one caller releasing an
     /// instance never tears it out from under another that is still attached.
+    /// @param mid Id of the instance to release.
     virtual void deregisterModel(::morph::exec::detail::ModelId mid) = 0;
 
     /// @brief Dispatches @p call against the model identified by @p mid.
+    /// @param mid    Target model id.
+    /// @param call   Bundled action; moved from.
+    /// @param cbExec Executor the returned `Completion`'s callbacks are posted on.
+    /// @return A `Completion` settled with the opaque result or the failure.
     virtual ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
                                                                       ActionCall call,
                                                                       ::morph::exec::IExecutor* cbExec) = 0;
@@ -635,7 +442,10 @@ struct IBackend {
     /// Called by `Bridge::switchBackend()` on the outgoing backend after the swap,
     /// and by `Bridge`'s destructor. After this call, any later `setValue` /
     /// `setException` on those states is a no-op (the state is already ready), so
-    /// in-flight server replies cannot resurrect a cancelled completion.
+    /// in-flight server replies cannot resurrect a cancelled completion. A
+    /// backend that runs calls it can stop (`LocalBackend`'s Task handlers)
+    /// also requests stop on each one it fails.
+    /// @param exc Exception delivered to every pending completion's error sink.
     virtual void cancelPending(const std::exception_ptr& exc) = 0;
 
     /// @brief Installs a callback invoked when the backend reconnects to its peer.
@@ -649,11 +459,21 @@ struct IBackend {
     /// first connect there is nothing yet to re-register. See
     /// `setConnectHandler` for a hook that also covers the first connect.
     ///
+    /// The handler is never run on the backend's own thread: after a
+    /// reconnect the backend posts it to @p exec, so a `Bridge`'s
+    /// re-registration is an ordinary task on the bridge's owner.
+    ///
     /// Default implementation: store-and-ignore. Backends with no transport (e.g.
     /// `LocalBackend`) never invoke it.
-    /// @param handler Callable invoked on the backend's transport thread after a
-    ///                successful reconnect. Pass `nullptr` to clear.
-    virtual void setReconnectHandler(const std::function<void()>& handler) { (void)handler; }
+    /// @param handler Callable posted to @p exec after each successful
+    ///                reconnect. Pass `nullptr` to clear.
+    /// @param exec    Executor the handler is posted to. Borrowed: it must
+    ///                outlive the installation. May be null only when
+    ///                @p handler is.
+    virtual void setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* exec) {
+        (void)handler;
+        (void)exec;
+    }
 
     /// @brief Installs a callback invoked on every successful connect, including the first.
     ///
@@ -696,8 +516,8 @@ struct IBackend {
     /// `Bridge::executeVia` already stamps `Bridge::defaultSession()` onto the
     /// `ActionCall` passed to `execute()`, so the session reaches `execute`
     /// envelopes regardless of this hook. Control messages are different: they
-    /// are built directly by the concrete backend (`registerModelWithContext`,
-    /// `registerModelShared`, `attachModel`, `assignPrimary`, `deregisterModel`),
+    /// are built directly by the concrete backend (`bindModel`, `promoteModel`,
+    /// `registerModelWithContext`, `assignPrimary`, `deregisterModel`),
     /// which has no other way to learn the `Bridge`'s current session except
     /// this hook. Stamping the stored session onto those envelopes is what lets
     /// `RemoteServer::authorizeRegister` see a caller's identity and the owner
@@ -733,6 +553,13 @@ struct BackendChangedError : std::runtime_error {
 struct BridgeDestroyedError : std::runtime_error {
     /// @brief Constructs the error with a canned diagnostic message.
     BridgeDestroyedError() : std::runtime_error{"bridge destroyed before completion resolved"} {}
+};
+
+/// @brief Thrown to every call a `BridgeHandler` still holds for its bind when
+///        the handler is destroyed before the bind settles.
+struct HandlerDestroyedError : std::runtime_error {
+    /// @brief Constructs the error with a canned diagnostic message.
+    HandlerDestroyedError() : std::runtime_error{"handler destroyed before its bind settled"} {}
 };
 
 /// @brief Thrown to in-flight `Completion`s when a transport drops mid-call (e.g. a
@@ -774,58 +601,52 @@ struct ClientTimeoutError : std::runtime_error {
     ClientTimeoutError() : std::runtime_error{"execute timed out waiting for any reply"} {}
 };
 
-/// @brief Makes a blocking backend satisfy the structural registration surface
-///        without blocking the caller — and without touching the backend.
+/// @brief Makes a blocking backend reach its caller without blocking it — and
+///        without touching the backend.
 ///
-/// A decorator, not a base class: it wraps an existing `IBackend` and forwards
-/// every verb to it, overriding only `bindModel`/`promoteModel` to run the
-/// wrapped backend's *synchronous* control call on an executor this adapter
-/// names, then settle the returned `Completion`. That is the whole trick, and
-/// it is why a backend with no non-blocking path of its own (every backend in
-/// the tree except `QtWebSocketBackend`) reaches the structural surface by
-/// being wrapped rather than by being rewritten.
+/// A decorator, not a base class: it wraps an existing `IBackend` and runs
+/// every one of its verbs on one control strand over an executor this adapter
+/// names. That strand is the wrapped backend's one owner, so a backend that
+/// keeps its state without a lock (`LocalBackend`) stays correct behind it,
+/// and the caller's thread never pays for a blocking control call.
 ///
 /// @par What it does and does not change
 /// The wrapped backend still blocks — nothing here makes a nested event loop
 /// or a socket round trip non-blocking. What changes is **which thread pays**:
-/// the blocking call happens on the executor passed at construction, so the
-/// caller's thread returns from `bindModel` immediately with an unresolved
-/// `Completion`. A single-threaded WASM main thread has no such executor to
+/// `bindModel` returns at once with an unsettled `Completion`, settled from the
+/// strand when the wrapped backend's bind has run there, and `execute` returns
+/// at once too. A single-threaded WASM main thread has no such executor to
 /// offer and is therefore not what this adapter is for; that case needs a
 /// backend with a genuinely non-blocking path.
 ///
 /// @par Why the executor is required rather than optional
 /// "Where does the blocking happen" is the only question this class exists to
-/// answer, so it is a constructor parameter with no default. An adapter that
-/// silently ran the call inline when handed nothing would be a `bindModel`
-/// that blocks on some configurations and not others — the same
-/// contract-by-configuration the surface is replacing.
+/// answer, so it is a constructor parameter with no default.
 ///
 /// @par Ordering
-/// Control calls are serialised onto one strand, so the wrapped backend sees
-/// them one at a time, as it did when the blocking call itself serialised
-/// callers. `~SynchronousBackendAdapter` waits for every queued and in-flight
-/// control call to finish, so a reply can never land in a destroyed adapter;
-/// the executor must therefore still be running tasks when this adapter is
-/// destroyed (see docs/spec/concurrency_and_lifetimes.md, "Destruction
-/// ordering"). The single-threaded WebAssembly build has no thread to wait
-/// for: there the control calls still queued are dropped.
+/// Every verb is queued on the one strand, so the wrapped backend sees them
+/// one at a time and in the order they were issued. `~SynchronousBackendAdapter`
+/// waits for every queued and in-flight call, so a reply can never land in a
+/// destroyed adapter; the executor must therefore still be running tasks when
+/// this adapter is destroyed (see docs/spec/concurrency_and_lifetimes.md,
+/// "Destruction ordering"). The single-threaded WebAssembly build has no
+/// thread to wait for: there the calls still queued are dropped.
 ///
-/// @par Reconnect handlers
-/// A control call issued from a reconnect handler runs on the strand, never on
-/// the wrapped backend's transport thread, so a backend whose reply can only
-/// be delivered by the thread that is running the reconnect handler does not
-/// wait on itself. Whether that is enough to settle `SocketBackend`'s
-/// documented reconnect hazard is not a claim made here.
+/// @par Owner
+/// The adapter itself belongs to its caller's owner (`setOwner`): `bindModel`,
+/// `promoteModel` and `cancelPending` keep the list of pending binds there,
+/// without a lock. The synchronous verbs (`registerModel`,
+/// `registerModelWithContext`, `assignPrimary`, `listInstances`) wait for the
+/// strand, so they must not be called from the executor's only thread.
 class SynchronousBackendAdapter : public detail::IBackend {
 public:
-    /// @brief Wraps @p inner, running its blocking control calls on @p blockingExec.
+    /// @brief Wraps @p inner, running every one of its verbs on @p blockingExec.
     /// @param inner        Backend to wrap. Owned (shared): the adapter keeps it
-    ///                     alive for as long as any control call it dispatched is
-    ///                     still in flight. Must not be null.
-    /// @param blockingExec Executor the wrapped backend's blocking control calls
-    ///                     run on. Borrowed: it must outlive this adapter and
-    ///                     keep running tasks until the destructor's wait has
+    ///                     alive for as long as any call it queued is still in
+    ///                     flight. Must not be null.
+    /// @param blockingExec Executor the wrapped backend's calls run on.
+    ///                     Borrowed: it must outlive this adapter and keep
+    ///                     running tasks until the destructor's wait has
     ///                     completed.
     /// @throws std::invalid_argument if @p inner is null.
     SynchronousBackendAdapter(std::shared_ptr<detail::IBackend> inner,
@@ -836,8 +657,7 @@ public:
         }
     }
 
-    /// @brief Waits for every queued and in-flight control call; see
-    ///        "Ordering" above.
+    /// @brief Waits for every queued and in-flight call; see "Ordering" above.
     ~SynchronousBackendAdapter() override {
         _control.teardown([] {});
     }
@@ -859,74 +679,56 @@ public:
 
     /// @brief Acquires a model instance without blocking the calling thread.
     ///
-    /// Posts `IBackend::bindModelBlocking(request)` — the same legacy-verb
-    /// dispatch the default `bindModel` performs inline — to this adapter's
-    /// control strand and returns immediately. Exactly one of the returned
-    /// `Completion`'s `then`/`onError` handlers runs, on @p cbExec.
+    /// Queues the wrapped backend's `bindModel` on the control strand and
+    /// returns. Exactly one of the returned `Completion`'s `then`/`onError`
+    /// handlers runs, on @p cbExec.
     /// @param request Owning bind request; moved from.
     /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
     ///                must outlive the returned `Completion`.
     /// @return A `Completion` resolved with the bound `ModelId`, or rejected
-    ///         with whatever the wrapped backend threw.
+    ///         with the wrapped backend's failure.
     ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(detail::BindRequest request,
                                                                          ::morph::exec::IExecutor& cbExec) override {
-        return dispatch(cbExec, [inner = _inner, request = std::move(request)]() mutable {
-            return inner->bindModelBlocking(std::move(request));
+        note("SynchronousBackendAdapter::bindModel");
+        return dispatch(cbExec, [request = std::move(request)](detail::IBackend& inner) mutable {
+            return inner.bindModel(std::move(request), ::morph::exec::detail::inlineExecutor());
         });
     }
 
     /// @brief Files an already-live instance under a key without blocking the caller.
     ///
     /// The promote counterpart of `bindModel` above, on the same strand and
-    /// with the same settling rules: resolves with `request.mid` (echoed, as
-    /// `IBackend::promoteModel` documents) or rejects with what the wrapped
-    /// backend threw.
+    /// with the same settling rules.
     /// @param request Owning promote request; moved from.
     /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
     ///                must outlive the returned `Completion`.
     /// @return A `Completion` resolved with `request.mid`, or rejected.
     ::morph::async::Completion<::morph::exec::detail::ModelId> promoteModel(
         detail::PromoteRequest request, ::morph::exec::IExecutor& cbExec) override {
-        return dispatch(cbExec, [inner = _inner, request = std::move(request)]() mutable {
-            inner->assignPrimary(request.mid, request.typeId, request.primary);
-            return request.mid;
+        note("SynchronousBackendAdapter::promoteModel");
+        return dispatch(cbExec, [request = std::move(request)](detail::IBackend& inner) mutable {
+            return inner.promoteModel(std::move(request), ::morph::exec::detail::inlineExecutor());
         });
     }
 
-    /// @brief This adapter's whole purpose is that the caller does not block.
-    ///
-    /// Not forwarded to the wrapped backend, unlike everything below:
-    /// `bindModel`/`promoteModel` are the two verbs this adapter *reshapes*, so
-    /// the policy describing them describes this adapter, not what it wraps. A
-    /// caller that waited would pay exactly the blocking cost the adapter was
-    /// interposed to move elsewhere, and — if it happens to be running on
-    /// `blockingExec` — would deadlock against the strand it is waiting on.
-    ///
-    /// @return `BindWait::kCallerMustNotBlock`, always.
-    [[nodiscard]] detail::BindWait bindWaitPolicy() const noexcept override {
-        return detail::BindWait::kCallerMustNotBlock;
-    }
+    /// @brief Records the caller's owner. Not forwarded: the wrapped backend's
+    ///        owner is this adapter's control strand.
+    /// @param owner The caller's owner.
+    void setOwner(const ::morph::exec::detail::OwnerAffinity& owner) override { _affinity.emplace(owner); }
 
-    // ── Everything else is forwarded unchanged ───────────────────────────
-    //
-    // A decorator has to forward every verb it does not reshape. Those are the
-    // synchronous verbs only: a wrapped backend has no non-blocking path of
-    // its own left to forward, because the one verb
-    // that could carry one — `bindModel` — is the verb this adapter
-    // reshapes, and a backend that already has a non-blocking `bindModel`
-    // has no reason to be wrapped.
-
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Runs the wrapped backend's `registerModel` on the strand and waits for it.
     /// @param typeId  String type-id of the model to instantiate.
     /// @param factory Callable that constructs the `IModelHolder`.
     /// @return The wrapped backend's `ModelId`.
     ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
-        return _inner->registerModel(typeId, std::move(factory));
+        return runAndWait([typeId, factory = std::move(factory)](detail::IBackend& inner) mutable {
+            return inner.registerModel(typeId, std::move(factory));
+        });
     }
 
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Runs the wrapped backend's `registerModelWithContext` on the strand and waits for it.
     /// @param typeId     String type-id of the model to instantiate.
     /// @param factory    Callable that constructs the `IModelHolder`.
     /// @param contextKey Stable identity of the new instance; empty if none.
@@ -934,203 +736,211 @@ public:
     ::morph::exec::detail::ModelId registerModelWithContext(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
         std::string_view contextKey) override {
-        return _inner->registerModelWithContext(typeId, std::move(factory), contextKey);
+        return runAndWait(
+            [typeId, factory = std::move(factory), key = std::string{contextKey}](detail::IBackend& inner) mutable {
+                return inner.registerModelWithContext(typeId, std::move(factory), key);
+            });
     }
 
-    /// @brief Forwards to the wrapped backend.
-    /// @param typeId   String type-id of the model.
-    /// @param factory  Callable that constructs the `IModelHolder`.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @return The wrapped backend's `ModelId`.
-    ::morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        detail::InstanceIdentity identity) override {
-        return _inner->registerModelShared(typeId, std::move(factory), identity);
-    }
-
-    /// @brief Forwards to the wrapped backend.
-    /// @param typeId   String type-id of the model.
-    /// @param factory  Callable that constructs the `IModelHolder`.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @param current  Instance currently held, or `ModelId{0}` if none.
-    /// @return The wrapped backend's `ModelId`.
-    ::morph::exec::detail::ModelId attachModel(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override {
-        return _inner->attachModel(typeId, std::move(factory), identity, current);
-    }
-
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Runs the wrapped backend's `assignPrimary` on the strand and waits for it.
     /// @param mid     Live instance to promote.
     /// @param typeId  Model type id — the directory's first key component.
     /// @param primary Canonical string encoding of the key to file it under.
     void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
                        std::string_view primary) override {
-        _inner->assignPrimary(mid, typeId, primary);
+        static_cast<void>(runAndWait([mid, typeId, key = std::string{primary}](detail::IBackend& inner) {
+            inner.assignPrimary(mid, typeId, key);
+            return true;
+        }));
     }
 
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Runs the wrapped backend's `listInstances` on the strand and waits for it.
     /// @param typeId String type-id to enumerate.
     /// @return The wrapped backend's snapshot of live shared instance keys.
     std::vector<std::string> listInstances(const std::string& typeId) override {
-        return _inner->listInstances(typeId);
+        return runAndWait([typeId](detail::IBackend& inner) { return inner.listInstances(typeId); });
     }
 
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Queues the wrapped backend's `deregisterModel`.
     /// @param mid Instance to release.
-    void deregisterModel(::morph::exec::detail::ModelId mid) override { _inner->deregisterModel(mid); }
+    void deregisterModel(::morph::exec::detail::ModelId mid) override {
+        post([mid](detail::IBackend& inner) { inner.deregisterModel(mid); });
+    }
 
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Queues the dispatch on the strand and returns its `Completion` at once.
     /// @param mid    Instance to dispatch against.
     /// @param call   The action call to dispatch.
     /// @param cbExec Executor the resulting `Completion`'s callbacks are posted on.
-    /// @return The wrapped backend's `Completion`.
+    /// @return A `Completion` settled by the wrapped backend.
     ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
                                                               detail::ActionCall call,
                                                               ::morph::exec::IExecutor* cbExec) override {
-        return _inner->execute(mid, std::move(call), cbExec);
+        auto state = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
+        ::morph::async::Completion<std::shared_ptr<void>> comp{state, cbExec};
+        executeInto(mid, std::move(call), cbExec,
+                    std::make_shared<::morph::async::detail::CompletionSettleSink>(state));
+        return comp;
     }
 
-    /// @brief Forwards to the wrapped backend.
-    void notifyBackendChanged() override { _inner->notifyBackendChanged(); }
+    /// @brief Queues the wrapped backend's `executeInto` on the strand.
+    /// @param mid    Instance to dispatch against.
+    /// @param call   The action call to dispatch.
+    /// @param cbExec Executor for delivering callbacks attached to the caller's own completion.
+    /// @param sink   Where the wrapped backend settles the outcome.
+    void executeInto(::morph::exec::detail::ModelId mid, detail::ActionCall call, ::morph::exec::IExecutor* cbExec,
+                     std::shared_ptr<::morph::async::detail::ISettleSink> sink) override {
+        post([mid, call = std::move(call), cbExec, sink = std::move(sink)](detail::IBackend& inner) mutable {
+            try {
+                inner.executeInto(mid, std::move(call), cbExec, sink);
+            } catch (...) {
+                sink->settleException(std::current_exception());
+            }
+        });
+    }
 
-    /// @brief Rejects the completions *this adapter* produced, then forwards.
+    /// @brief Queues the wrapped backend's `notifyBackendChanged`.
+    void notifyBackendChanged() override {
+        post([](detail::IBackend& inner) { inner.notifyBackendChanged(); });
+    }
+
+    /// @brief Rejects the binds *this adapter* produced, then queues the
+    ///        wrapped backend's own `cancelPending`.
     ///
-    /// Not a plain forward, unlike everything else in this block, and for the
-    /// same reason `bindWaitPolicy()` is not: the two verbs this adapter
-    /// reshapes produce completions the wrapped backend has never heard of.
-    /// A `bindModel` here settles from a task on `_control`, so
-    /// `_inner->cancelPending` reaches nothing of it: without this override a
-    /// bind dispatched through this adapter goes on to resolve **successfully**
-    /// after cancellation, which is the exact opposite of what
-    /// `IBackend::cancelPending` promises ("after this call, any later
-    /// `setValue`/`setException` on those states is a no-op").
+    /// A `bindModel` here settles from a task on the strand, holding a promise
+    /// the wrapped backend never sees, so the wrapped backend's `cancelPending`
+    /// reaches nothing of it: without this a bind cancelled by `~Bridge` or by
+    /// `switchBackend` would go on to resolve **successfully** afterwards.
     ///
-    /// The adapter's own promises are rejected first and the forward happens
-    /// second: the strand task is still running `op()` while this executes, and
-    /// rejecting before handing control to the wrapped backend keeps that
-    /// window as short as the caller's own call. A task that finished first
-    /// wins — its completion was not "still pending" — and a task that finishes
-    /// after finds the promise settled, which `CompletionState::setValue`'s
-    /// `if (ready) return;` makes a no-op.
-    ///
-    /// Settling the promise is only half of it, because it cannot stop work the
-    /// strand has already been handed. Each dispatched task therefore carries a
-    /// cancellation flag next to its promise, and this verb **sets that flag
-    /// before rejecting**: a task still queued on `_control` sees it when it
-    /// reaches the head of the strand and returns without calling `op()`, so
-    /// the blocking control call never reaches the wrapped backend at all.
-    /// Without the flag the caller is told the bind was cancelled while the
-    /// registration goes through anyway — a live instance on a backend whose
-    /// `Bridge` is gone, which nothing will ever `deregisterModel`.
-    ///
-    /// **What this still does not do:** a task already *inside* `op()` cannot
-    /// be recalled. Only the queued-but-not-started window is closed, which is
-    /// all this adapter can close — it has no way to interrupt a blocking verb
-    /// it does not implement. A task that wins the race by a few instructions
-    /// (flag read, then this store) registers exactly as one that had already
-    /// entered `op()`, and its completion stays rejected either way.
+    /// Each queued bind carries a cancellation flag beside its promise, set
+    /// here before the promise is rejected: a bind still queued sees it when it
+    /// reaches the head of the strand and never reaches the wrapped backend, so
+    /// no instance is created that nothing will deregister. A bind already
+    /// running on the strand cannot be recalled; its completion stays rejected.
+    /// The wrapped backend's own pending calls are cancelled on the strand, in
+    /// order with everything queued before this call.
     /// @param exc Exception delivered to every still-pending completion, this
     ///            adapter's own and then the wrapped backend's.
     void cancelPending(const std::exception_ptr& exc) override {
-        std::vector<std::weak_ptr<PendingControl>> snapshot;
-        {
-            std::scoped_lock const lock{_pendingMtx};
-            snapshot.swap(_pending);
-            _compactAt = kPendingCompactFloor;
-        }
+        note("SynchronousBackendAdapter::cancelPending");
+        auto snapshot = std::exchange(_pending, {});
+        _compactAt = kPendingCompactFloor;
         for (auto& pendingWeak : snapshot) {
             if (auto pending = pendingWeak.lock()) {
-                // Flag first, promise second. A task that reads the flag after
-                // this store declines to run; one that read it just before
-                // finds its promise already rejected by the line below. That
-                // is the narrowest window this ordering leaves.
                 pending->cancelled.store(true, std::memory_order_release);
                 pending->promise.reject(exc);
             }
         }
-        _inner->cancelPending(exc);
+        post([exc](detail::IBackend& inner) { inner.cancelPending(exc); });
     }
 
-    /// @brief Forwards to the wrapped backend.
-    /// @param handler Callable invoked after a successful reconnect; `nullptr` clears.
-    void setReconnectHandler(const std::function<void()>& handler) override { _inner->setReconnectHandler(handler); }
+    /// @brief Queues the installation on the wrapped backend.
+    /// @param handler Callable posted to @p exec after a successful reconnect; `nullptr` clears.
+    /// @param exec    Executor the handler is posted to.
+    void setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* exec) override {
+        post([handler = std::move(handler), exec](detail::IBackend& inner) mutable {
+            inner.setReconnectHandler(std::move(handler), exec);
+        });
+    }
 
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Queues the installation on the wrapped backend.
     /// @param handler Callable invoked after every successful connect; `nullptr` clears.
-    void setConnectHandler(const std::function<void()>& handler) override { _inner->setConnectHandler(handler); }
+    void setConnectHandler(const std::function<void()>& handler) override {
+        post([handler](detail::IBackend& inner) { inner.setConnectHandler(handler); });
+    }
 
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Queues the installation on the wrapped backend.
     /// @param handler Callable invoked whenever the transport drops; `nullptr` clears.
-    void setDisconnectHandler(const std::function<void()>& handler) override { _inner->setDisconnectHandler(handler); }
+    void setDisconnectHandler(const std::function<void()>& handler) override {
+        post([handler](detail::IBackend& inner) { inner.setDisconnectHandler(handler); });
+    }
 
-    /// @brief Forwards to the wrapped backend.
+    /// @brief Queues the session on the wrapped backend.
     /// @param session Session stamped onto every subsequently built control envelope.
-    void setSession(::morph::session::Context session) override { _inner->setSession(std::move(session)); }
+    void setSession(::morph::session::Context session) override {
+        post(
+            [session = std::move(session)](detail::IBackend& inner) mutable { inner.setSession(std::move(session)); });
+    }
 
 private:
-    /// @brief One dispatched control call: its promise and its cancellation flag.
+    /// @brief One queued bind: its promise and its cancellation flag.
     ///
-    /// The two travel together because `cancelPending` has to act on both:
-    /// acting on the promise alone leaves the queued task free to make the
-    /// blocking control call the caller has just been told was cancelled.
-    /// The strand task holds the only `shared_ptr` to this
-    /// record; `_pending` holds `weak_ptr`s, so an entry expires by itself when
-    /// the task is destroyed.
+    /// The strand task holds the only `shared_ptr` to this record; `_pending`
+    /// holds `weak_ptr`s, so an entry expires by itself when the task is
+    /// destroyed.
     struct PendingControl {
         /// @brief Takes ownership of the dispatched call's promise.
         /// @param dispatched Producer side of the `Completion` handed to the caller.
         explicit PendingControl(BindPromise dispatched) : promise{std::move(dispatched)} {}
 
-        /// @brief Producer side of the completion this call settles.
-        ///
-        /// Touched by the strand task (resolve/reject) and by `cancelPending`
-        /// (reject); `Promise`'s own `CompletionState` is internally
-        /// synchronised, so no further lock is needed here.
+        /// @brief Producer side of the completion this call settles, from the
+        ///        strand or from `cancelPending`; `CompletionState` settles once.
         BindPromise promise;
 
         /// @brief Set by `cancelPending` before it rejects; read by the task
-        ///        before it calls `op()`.
-        ///
-        /// Atomic rather than guarded by `_pendingMtx`, so the strand task
-        /// never has to take a lock the caller's thread also takes just to
-        /// learn whether it should run.
+        ///        before it runs the bind.
         std::atomic_bool cancelled{false};
     };
 
-    /// @brief Posts @p op to the control strand and settles a `Completion` with its outcome.
-    ///
-    /// The posted task captures the wrapped backend's `shared_ptr` and the
-    /// promise, never `this`, so nothing it touches depends on the adapter
-    /// still existing.
-    /// @tparam Op     Callable returning the `ModelId` the completion resolves with.
-    /// @param  cbExec Executor the continuation is delivered on.
-    /// @param  op     The blocking control call to run on the strand.
+    /// @brief Checks, in a debug build, that the caller is on the owner the
+    ///        adapter was given. Nothing to check before `setOwner`.
+    /// @param site Name of the calling body.
+    void note(char const* site) const noexcept {
+        if (_affinity) {
+            _affinity->note(site);
+        }
+    }
+
+    /// @brief Queues @p task, run with the wrapped backend on the strand.
+    /// @tparam F Callable taking `detail::IBackend&`.
+    /// @param task What to run.
+    template <typename F>
+    void post(F task) {
+        _control.post(kControlStrand, [inner = _inner, task = std::move(task)]() mutable { task(*inner); });
+    }
+
+    /// @brief Runs @p task with the wrapped backend on the strand and waits for
+    ///        its result: inline when already on the strand.
+    /// @tparam F Callable taking `detail::IBackend&` and returning a value.
+    /// @param task What to run.
+    /// @return What @p task returned; rethrows what it threw.
+    template <typename F>
+    std::invoke_result_t<F&, detail::IBackend&> runAndWait(F task) {
+        using R = std::invoke_result_t<F&, detail::IBackend&>;
+        if (_control.runningHere(kControlStrand)) {
+            return task(*_inner);
+        }
+        auto done = std::make_shared<std::promise<R>>();
+        auto result = done->get_future();
+        post([done, task = std::move(task)](detail::IBackend& inner) mutable {
+            try {
+                done->set_value(task(inner));
+            } catch (...) {
+                done->set_exception(std::current_exception());
+            }
+        });
+        return result.get();
+    }
+
+    /// @brief Queues @p op on the strand and settles a `Completion` with the
+    ///        outcome of the `Completion` it returns.
+    /// @tparam Op    Callable taking `detail::IBackend&` and returning a `Completion<ModelId>`.
+    /// @param cbExec Executor the continuation is delivered on.
+    /// @param op     The call to run on the strand.
     /// @return A `Completion` settled by @p op's outcome.
     template <typename Op>
     ::morph::async::Completion<::morph::exec::detail::ModelId> dispatch(::morph::exec::IExecutor& cbExec, Op op) {
         using Settled = ::morph::async::Completion<::morph::exec::detail::ModelId>;
         auto [completion, promise] = Settled::makeSettleable(&cbExec);
         auto pending = std::make_shared<PendingControl>(std::move(promise));
-        // Tracked *before* the post, not after: a `cancelPending` that lands in
-        // between would otherwise find an empty list and leave a completion
-        // that is genuinely pending uncancelled. Rejecting a promise whose task
-        // has not started yet is safe — the task's own `resolve` then finds the
-        // state ready and returns.
         trackPending(pending);
-        _control.post(kControlStrand, [pending, op = std::move(op)]() mutable {
-            // Checked *before* `op()`: a
-            // promise settled by `cancelPending` makes the reply a no-op but
-            // says nothing about the call, and this task is the last place that
-            // can decline to make it. Read with acquire against
-            // `cancelPending`'s release store, so a task that observes the flag
-            // also observes everything the cancelling thread did before setting
-            // it.
+        post([pending, op = std::move(op)](detail::IBackend& inner) mutable {
             if (pending->cancelled.load(std::memory_order_acquire)) {
                 return;
             }
             try {
-                pending->promise.resolve(op());
+                op(inner)
+                    .then([pending](::morph::exec::detail::ModelId mid) { pending->promise.resolve(mid); })
+                    .onError([pending](const std::exception_ptr& failure) { pending->promise.reject(failure); });
             } catch (...) {
                 pending->promise.reject(std::current_exception());
             }
@@ -1140,22 +950,12 @@ private:
 
     /// @brief Records @p pending as cancellable until its task settles it.
     ///
-    /// The strand task holds the only `shared_ptr` to the record, so an entry
-    /// here expires exactly when that task is destroyed — "still pending" needs
-    /// no separate bookkeeping and no erase on the success path.
-    ///
     /// Swept on the same amortised schedule as `LocalBackend::trackPending`:
-    /// dead entries are reclaimed only when the list reaches
-    /// `_compactAt`, which each sweep re-arms at twice the surviving count, so
-    /// the per-dispatch cost is O(1) and the list stays bounded at twice the
-    /// live count plus the floor. Control calls are serialised onto one strand,
-    /// so in practice the live count is one and the floor is never reached;
-    /// without the sweep the list would still grow without bound on an adapter
-    /// whose `cancelPending` is never called.
+    /// dead entries are reclaimed only when the list reaches `_compactAt`,
+    /// which each sweep re-arms at twice the surviving count.
     /// @param pending Record to cancel and reject if `cancelPending` runs before
     ///                 its task settles it.
     void trackPending(const std::shared_ptr<PendingControl>& pending) {
-        std::scoped_lock const lock{_pendingMtx};
         if (_pending.size() >= _compactAt) {
             std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
             _compactAt = std::max(kPendingCompactFloor, _pending.size() * 2);
@@ -1163,9 +963,9 @@ private:
         _pending.emplace_back(pending);
     }
 
-    /// @brief The single strand key every control call shares, so they run one
-    ///        at a time. Not a real model id: these strands are private to the
-    ///        adapter and share no key space with any backend's own.
+    /// @brief The single strand key every call shares, so they run one at a
+    ///        time. Not a real model id: these strands are private to the
+    ///        adapter.
     static constexpr ::morph::exec::detail::ModelId kControlStrand{1};
 
     /// @brief Smallest size at which `trackPending` sweeps; see `LocalBackend`'s.
@@ -1173,14 +973,12 @@ private:
 
     std::shared_ptr<detail::IBackend> _inner;
     ::morph::exec::detail::ModelStrands _control;
-    mutable std::mutex _pendingMtx;
-    // Every `bindModel`/`promoteModel` record handed to a `_control` task and
-    // not yet settled by it. Weak, so a settled task's record drops out on its
-    // own; guarded by `_pendingMtx`, because `cancelPending` is called from
-    // `Bridge`'s thread while `dispatch` runs on whichever thread called it.
+    std::optional<::morph::exec::detail::OwnerAffinity> _affinity;
+    // Every bind handed to a `_control` task and not yet settled by it. Weak,
+    // so a settled task's record drops out on its own. Touched only on the
+    // caller's owner: `bindModel`/`promoteModel` add, `cancelPending` takes.
     std::vector<std::weak_ptr<PendingControl>> _pending;
-    // Size at which `trackPending` next sweeps `_pending`; re-armed at twice
-    // the surviving count. Guarded by `_pendingMtx` with `_pending` itself.
+    // Size at which `trackPending` next sweeps `_pending`.
     std::size_t _compactAt = kPendingCompactFloor;
 };
 
@@ -1188,6 +986,11 @@ private:
 ///
 /// Each model instance gets its own strand so actions are serialised per-model
 /// without a global lock on the pool.
+///
+/// Its registry, its pending list and its record of Task runs belong to the
+/// caller's owner — the `Bridge`'s, given through `setOwner` — and are touched
+/// only there, without a lock. Only the strand tasks it posts run elsewhere,
+/// and they reach nothing of the backend but what each carries.
 class LocalBackend : public detail::IBackend {
 public:
     /// @brief Constructs the backend using @p workerPool to run model actions.
@@ -1234,11 +1037,8 @@ public:
     /// each stopped handler unwinds inline in the stop, and the drains wait for
     /// nothing, since nothing else could run the strands.
     ~LocalBackend() override {
-        std::vector<std::weak_ptr<LocalRun>> runs;
-        {
-            std::scoped_lock const lock{_taskRunsMtx};
-            runs.swap(_taskRuns);
-        }
+        note("LocalBackend::~LocalBackend");
+        auto runs = std::exchange(_taskRuns, {});
         _strands->teardown([&runs] {
             for (auto const& weak : runs) {
                 if (auto const run = weak.lock()) {
@@ -1267,74 +1067,77 @@ public:
     ::morph::exec::detail::ModelId registerModel(
         const std::string& /*typeId*/,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
+        note("LocalBackend::registerModel");
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
-        std::scoped_lock const lock{_regMtx};
         return createAndTrack(std::move(factory));
     }
 
-    /// @brief Registers or attaches to the shared instance holding @p primary.
+    /// @brief Acquires an instance for @p request and settles the returned
+    ///        `Completion` before returning.
     ///
-    /// An empty @p primary bypasses the directory entirely and produces a
-    /// private instance, exactly as `registerModel` does.
-    /// @param typeId     String type-id of the model — the directory's first key component.
-    /// @param factory    Callable that constructs the `IModelHolder`; not called on an attach.
-    /// @param identity   Entity key for the action log plus the directory primary key.
-    /// @return Id of the shared (or newly created) instance.
-    ::morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        detail::InstanceIdentity identity) override {
-        if (identity.primary.empty()) {
-            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+    /// Every shape of `BindRequest` is answered here, against this backend's
+    /// own directory: an empty `primary` creates a private instance; a
+    /// non-empty one registers-or-attaches the shared instance for
+    /// `(typeId, primary)`, lazily evicting one whose first action failed
+    /// (`InstanceDirectory::attach`); a non-zero `current` is released once
+    /// the replacement is acquired, so a same-key re-attach keeps the instance
+    /// it already holds and a throwing acquire never strands the caller.
+    /// @param request Owning bind request; moved from.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A settled `Completion` carrying the bound id or the failure.
+    ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(detail::BindRequest request,
+                                                                         ::morph::exec::IExecutor& cbExec) override {
+        note("LocalBackend::bindModel");
+        auto [completion, promise] =
+            ::morph::async::Completion<::morph::exec::detail::ModelId>::makeSettleable(&cbExec);
+        try {
+            promise.resolve(bindNow(std::move(request)));
+        } catch (...) {
+            promise.reject(std::current_exception());
         }
-        ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
-        detail::DirectoryKey dirKey{typeId, std::string{identity.primary}};
-        std::scoped_lock const lock{_regMtx};
-        // Register-or-attach, including the lazy eviction of an instance whose
-        // first action failed, now lives in `InstanceDirectory::attach` — the
-        // one place `RemoteServer` reaches for it too.
-        if (auto const attached = _instances.attach(dirKey)) {
-            return *attached;
-        }
-        auto [mid, holder] = createHolder(std::move(factory));
-        _instances.insertShared(mid, std::move(holder), std::move(dirKey));
-        return mid;
+        return std::move(completion);
     }
 
+    /// @brief Records the owner every verb below is called from.
+    /// @param owner The caller's owner.
+    void setOwner(const ::morph::exec::detail::OwnerAffinity& owner) override { _affinity.emplace(owner); }
+
     /// @brief Enters an already-live, still-anonymous instance into the
-    ///        directory under @p primary. Thread-safe.
+    ///        directory under @p primary.
     /// @param mid     Live instance to promote.
     /// @param typeId  Model type id — the directory's first key component.
     /// @param primary Canonical string encoding of the key to file it under.
     void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
                        std::string_view primary) override {
+        note("LocalBackend::assignPrimary");
         if (primary.empty()) {
             return;
         }
-        std::scoped_lock const lock{_regMtx};
         // A no-op unless `mid` is live, has never held a directory key, and the
         // key is free — `InstanceDirectory::promote` holds all the guards and
         // the reasons for them.
         (void)_instances.promote(mid, detail::DirectoryKey{typeId, std::string{primary}});
     }
 
-    /// @brief Lists the primary keys of live shared instances of @p typeId. Thread-safe.
+    /// @brief Lists the primary keys of live shared instances of @p typeId.
     /// @param typeId String type-id to enumerate.
     /// @return Canonical key strings of the live shared instances, in unspecified order.
     std::vector<std::string> listInstances(const std::string& typeId) override {
-        std::scoped_lock const lock{_regMtx};
+        note("LocalBackend::listInstances");
         return _instances.keysOfType(typeId);
     }
 
-    /// @brief Removes the model with @p mid, or releases one attachment to it. Thread-safe.
+    /// @brief Removes the model with @p mid, or releases one attachment to it.
     ///
     /// A private instance is erased outright. A shared instance has its attach
     /// count decremented and is erased — and removed from the directory — only
     /// when that count reaches zero, so releasing one handler never destroys an
     /// instance another handler still holds.
-    /// @param mid Id returned by a prior `registerModel()`/`registerModelShared()` call.
+    /// @param mid Id returned by a prior `registerModel()`/`bindModel()` call.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
+        note("LocalBackend::deregisterModel");
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
-        std::scoped_lock const lock{_regMtx};
         // One lookup, not five: the attach count, the directory key and the
         // holder are one record, so releasing the last reference unfiles and
         // destroys it in a single step that cannot half-happen.
@@ -1343,7 +1146,7 @@ public:
         }
     }
 
-    /// @brief Schedules `onBackendChanged()` on each change-aware model's strand. Thread-safe.
+    /// @brief Schedules `onBackendChanged()` on each change-aware model's strand.
     ///
     /// Only models recorded in `_changeAware` — maintained by `createAndTrack`/
     /// `deregisterModel` from `IModelHolder::isBackendChangeAware()`, a
@@ -1359,30 +1162,19 @@ public:
     ///   `execute()` on the same model. A model reacting to a backend switch
     ///   (e.g. draining an offline queue and mutating counters) needs no locking
     ///   of its own state — exactly what `offline.md` promises.
-    /// - **Not under `Bridge::_mtx`.** `Bridge::switchBackend` calls this while
-    ///   holding `_mtx`, but only the cheap `post()` runs there; the model body
-    ///   runs later on a pool thread. A model that re-enters the bridge from
-    ///   `onBackendChanged()` (`switchBackend`/`registerHandler`/`deregisterHandler`)
-    ///   therefore acquires `_mtx` freshly on the strand thread instead of
-    ///   deadlocking on a lock the switch caller still holds.
+    /// - **Off the owner.** The model body runs later on a pool thread, never
+    ///   inside `Bridge::switchBackend`. A model that wants to reach the bridge
+    ///   from `onBackendChanged()` posts to the bridge's owner.
     ///
     /// A `shared_ptr` copy of each holder is captured into the posted task so a
     /// concurrent `deregisterModel` cannot free the model out from under its
     /// pending notification (mirrors `execute`'s holder capture).
     void notifyBackendChanged() override {
-        std::vector<std::pair<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>>>
-            aware;
-        {
-            std::scoped_lock const lock{_regMtx};
-            aware.reserve(_changeAware.size());
-            for (auto modelId : _changeAware) {
-                if (const auto* inst = _instances.find(modelId)) {
-                    aware.emplace_back(modelId, inst->holder);
-                }
+        note("LocalBackend::notifyBackendChanged");
+        for (auto modelId : _changeAware) {
+            if (const auto* inst = _instances.find(modelId)) {
+                _strands->post(modelId, [held = inst->holder]() mutable { held->onBackendChanged(); });
             }
-        }
-        for (auto& [modelId, holder] : aware) {
-            _strands->post(modelId, [held = std::move(holder)]() mutable { held->onBackendChanged(); });
         }
     }
 
@@ -1434,18 +1226,16 @@ public:
     void executeInto(::morph::exec::detail::ModelId mid, detail::ActionCall call, ::morph::exec::IExecutor* cbExec,
                      std::shared_ptr<::morph::async::detail::ISettleSink> sink) override {
         (void)cbExec;
+        note("LocalBackend::executeInto");
 
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
         std::shared_ptr<detail::HydrationState> hydration;
-        {
-            std::scoped_lock const lock{_regMtx};
-            // One lookup for the holder and its hydration state together: they
-            // are fields of one record now, not entries in two maps kept in
-            // lockstep by convention.
-            if (const auto* inst = _instances.find(mid)) {
-                holder = inst->holder;
-                hydration = inst->hydration;
-            }
+        // One lookup for the holder and its hydration state together: they
+        // are fields of one record, not entries in two maps kept in lockstep
+        // by convention.
+        if (const auto* inst = _instances.find(mid)) {
+            holder = inst->holder;
+            hydration = inst->hydration;
         }
         if (!holder) {
             sink->settleException(
@@ -1513,18 +1303,24 @@ public:
         });
     }
 
-    /// @brief Resolves every still-pending completion this backend produced with @p exc.
+    /// @brief Resolves every still-pending completion this backend produced
+    ///        with @p exc, and requests stop on every Task handler still running.
+    ///
+    /// A run still waiting for its instance's action gate is failed where it
+    /// waits (see `admitLocal`); a Task handler already running observes the
+    /// stop on its token at its next `co_await`.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
-        std::vector<std::weak_ptr<::morph::async::detail::ISettleSink>> snapshot;
-        {
-            std::scoped_lock const lock{_pendingMtx};
-            snapshot.swap(_pending);
-            _compactAt = kPendingCompactFloor;
-            // Under the same lock as the swap: a run admitted before this
-            // point is in `snapshot` and is failed below, and one admitted
-            // after it is not. See `startLocal`.
-            _cancels->record(exc);
+        note("LocalBackend::cancelPending");
+        auto snapshot = std::exchange(_pending, {});
+        _compactAt = kPendingCompactFloor;
+        // With the swap: a run admitted before this point is in `snapshot`
+        // and is failed below, and one admitted after it is not.
+        _cancels->record(exc);
+        for (auto const& weak : _taskRuns) {
+            if (auto const run = weak.lock()) {
+                static_cast<void>(run->stopSource->request_stop());
+            }
         }
         for (auto& weak : snapshot) {
             if (auto sink = weak.lock()) {
@@ -1547,19 +1343,50 @@ public:
     /// observable. For a count of in-flight *calls*, use `Bridge::pendingCalls()`.
     /// @return Size of the pending list, live and dead entries alike.
     [[nodiscard]] std::size_t trackedPendingCount() const {
-        std::scoped_lock const lock{_pendingMtx};
+        note("LocalBackend::trackedPendingCount");
         return _pending.size();
     }
 
 private:
+    /// @brief Checks, in a debug build, that the caller is on the owner the
+    ///        backend was given. Nothing to check before `setOwner`.
+    /// @param site Name of the calling body.
+    void note(char const* site) const noexcept {
+        if (_affinity) {
+            _affinity->note(site);
+        }
+    }
+
+    /// @brief `bindModel`'s body: acquires the instance @p request names.
+    /// @param request Owning bind request; moved from.
+    /// @return The bound id.
+    ::morph::exec::detail::ModelId bindNow(detail::BindRequest request) {
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
+        ::morph::exec::detail::ModelId next{};
+        if (request.primary.empty()) {
+            next = createAndTrack(std::move(request.factory));
+        } else {
+            detail::DirectoryKey dirKey{request.typeId, request.primary};
+            if (auto const attached = _instances.attach(dirKey)) {
+                next = *attached;
+            } else {
+                auto [mid, holder] = createHolder(std::move(request.factory));
+                _instances.insertShared(mid, std::move(holder), std::move(dirKey));
+                next = mid;
+            }
+        }
+        // After the acquire: a same-key re-attach took a second reference to
+        // `current`, and this releases the redundant one.
+        if (request.current.v != 0U) {
+            deregisterModel(request.current);
+        }
+        return next;
+    }
+
     /// @brief Builds a holder via @p factory, records it under a fresh id, and
-    ///        returns that id. Caller holds `_regMtx`.
+    ///        returns that id.
     ///
-    /// Shared by `registerModel`'s private-instance path and
-    /// `registerModelShared`'s fresh-instance path: both need exactly this —
-    /// construct, note change-awareness, file into `_instances` — before going
-    /// on to their own, differing bookkeeping (`registerModelShared` files the
-    /// instance under its directory key instead of as a private one).
+    /// Shared by `registerModel` and `bindModel`'s private path.
     /// @param factory Callable that constructs the `IModelHolder`.
     /// @return Newly assigned `ModelId`.
     ::morph::exec::detail::ModelId createAndTrack(
@@ -1570,11 +1397,10 @@ private:
     }
 
     /// @brief Allocates an id, builds the holder and notes change-awareness,
-    ///        without filing it anywhere. Caller holds `_regMtx`.
+    ///        without filing it anywhere.
     ///
-    /// The half `registerModel`'s private path and `registerModelShared`'s
-    /// fresh-instance path have in common; they differ only in how the result is
-    /// filed, which is `InstanceDirectory`'s job.
+    /// The half the private and the shared paths have in common; they differ
+    /// only in how the result is filed, which is `InstanceDirectory`'s job.
     /// @param factory Callable that constructs the `IModelHolder`.
     /// @return The newly assigned id and the constructed holder.
     std::pair<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>> createHolder(
@@ -1599,7 +1425,7 @@ private:
     /// is the whole price of dropping the per-dispatch scan.
     ///
     /// Sweeping on *every* append instead would cost `n` atomic
-    /// `weak_ptr::expired()` loads under `_pendingMtx` to admit one call with
+    /// `weak_ptr::expired()` loads to admit one call with
     /// `n` in flight, so a burst of `n` costs O(n²) — measured at 362ms of pure
     /// admission time for 32k queued executes against one slow model, against
     /// 7.6ms without the sweep.
@@ -1612,7 +1438,6 @@ private:
     /// @return The cancel epoch @p sink was admitted in: `cancelPending` has
     ///         failed the dispatch once the epoch has moved on.
     std::uint64_t trackPending(const std::shared_ptr<::morph::async::detail::ISettleSink>& sink) {
-        std::scoped_lock const lock{_pendingMtx};
         if (_pending.size() >= _compactAt) {
             std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
             _compactAt = std::max(kPendingCompactFloor, _pending.size() * 2);
@@ -1623,30 +1448,39 @@ private:
 
     /// What `cancelPending` has done so far, shared with every run: how many
     /// times it has run, and with what reason the last time.
+    ///
+    /// Written only by `cancelPending`, on the owner; read by runs on their
+    /// strands. Each reason is an immutable node published with a release
+    /// store before the epoch moves, so a run that sees the epoch move reads a
+    /// complete reason. Nodes live as long as the record: one per
+    /// `cancelPending`, which runs on a switch, a teardown or a disconnect.
     class CancelRecord {
     public:
-        /// Stores @p reason, then bumps the epoch. Called under `_pendingMtx`.
+        /// Publishes @p reason, then bumps the epoch. One writer: the owner.
         void record(const std::exception_ptr& reason) {
-            {
-                std::scoped_lock const lock{_mtx};
-                _reason = reason;
-            }
+            auto node = std::make_unique<Node>(Node{.reason = reason, .previous = std::move(_chain)});
+            _latest.store(node.get(), std::memory_order_release);
+            _chain = std::move(node);
             _epoch.fetch_add(1);
         }
 
         /// @return How many times `cancelPending` has run.
         [[nodiscard]] std::uint64_t epoch() const noexcept { return _epoch.load(); }
 
-        /// @return The reason the last `cancelPending` gave.
-        [[nodiscard]] std::exception_ptr lastReason() {
-            std::scoped_lock const lock{_mtx};
-            return _reason;
+        /// @return The reason the last `cancelPending` gave; null before the first.
+        [[nodiscard]] std::exception_ptr lastReason() const {
+            Node const* const node = _latest.load(std::memory_order_acquire);
+            return node == nullptr ? std::exception_ptr{} : node->reason;
         }
 
     private:
+        struct Node {
+            std::exception_ptr reason;
+            std::unique_ptr<Node> previous;
+        };
         std::atomic<std::uint64_t> _epoch{0};
-        std::mutex _mtx;
-        std::exception_ptr _reason;
+        std::atomic<Node const*> _latest{nullptr};
+        std::unique_ptr<Node> _chain;
     };
 
     /// Everything one local dispatch carries from `executeInto` to the moment
@@ -1799,7 +1633,6 @@ private:
     /// Records @p run among the Task runs the destructor stops, sweeping the
     /// ones that have finished amortised, as `trackPending` does.
     void rememberTaskRun(const std::shared_ptr<LocalRun>& run) {
-        std::scoped_lock const lock{_taskRunsMtx};
         if (_taskRuns.size() >= _taskRunsCompactAt) {
             std::erase_if(_taskRuns, [](const auto& weak) { return weak.expired(); });
             _taskRunsCompactAt = std::max(kPendingCompactFloor, _taskRuns.size() * 2);
@@ -1810,15 +1643,15 @@ private:
     // One strand per model instance. Shared with the Task handlers started
     // here, whose resumers outlive the backend; closed by the destructor.
     std::shared_ptr<::morph::exec::detail::ModelStrands> _strands;
-    std::mutex _regMtx;
+    // The owner every verb is called from, once `setOwner` has named it.
+    std::optional<::morph::exec::detail::OwnerAffinity> _affinity;
     // Every live instance, private and shared alike, plus the shared-instance
     // directory over them — holder, attach count, directory key and hydration
     // state as one record per instance rather than five parallel ModelId-keyed
-    // maps held in lockstep by convention. Guarded by `_regMtx`;
-    // `InstanceDirectory` is caller-locked by design, see its doc comment.
+    // maps held in lockstep by convention. Owner-only.
     detail::InstanceDirectory _instances;
     // Ids of models whose holder answered `isBackendChangeAware() == true` at
-    // registration time. An index over `_instances`, maintained under `_regMtx`
+    // registration time. An index over `_instances`, maintained on the owner
     // (inserted in `createHolder`, erased in `deregisterModel` when the instance
     // is actually destroyed) so `notifyBackendChanged()` never needs to inspect
     // a model it doesn't have to. Always a subset of `_instances`' keys.
@@ -1832,21 +1665,18 @@ private:
     // more than the handful of dead `weak_ptr`s it could reclaim, and a backend
     // that only ever has a few calls in flight never sweeps at all.
     static constexpr std::size_t kPendingCompactFloor = 32;
-    mutable std::mutex _pendingMtx;
     // Sinks, not completion states: a dispatch's settle point is whatever the
     // caller handed down, which for `Bridge` is its own typed completion state.
     // A `weak_ptr`, so this list cannot keep a finished dispatch alive.
     std::vector<std::weak_ptr<::morph::async::detail::ISettleSink>> _pending;
     // Size at which `trackPending` next sweeps `_pending` for expired entries;
-    // re-armed at twice the surviving count after each sweep. Guarded by
-    // `_pendingMtx` along with `_pending` itself. See `trackPending`.
+    // re-armed at twice the surviving count after each sweep. See `trackPending`.
     std::size_t _compactAt = kPendingCompactFloor;
-    // Recorded by `cancelPending` under `_pendingMtx`, as it takes the pending
-    // list. Shared with every run, which notes the epoch it was admitted under
-    // and skips its handler if the epoch has moved on by the time it starts.
+    // Recorded by `cancelPending` as it takes the pending list. Shared with every run, which notes the epoch it was
+    // admitted under and skips its handler if the epoch has moved on by the time it starts.
     std::shared_ptr<CancelRecord> _cancels = std::make_shared<CancelRecord>();
-    // The Task runs the destructor stops. Weak, so a finished run is not kept.
-    std::mutex _taskRunsMtx;
+    // The Task runs `cancelPending` and the destructor stop. Weak, so a
+    // finished run is not kept. Owner-only.
     std::vector<std::weak_ptr<LocalRun>> _taskRuns;
     std::size_t _taskRunsCompactAt = kPendingCompactFloor;
     // Concurrent in-flight executes, for the executeInFlight metric. A

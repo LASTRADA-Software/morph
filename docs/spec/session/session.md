@@ -79,8 +79,8 @@ From the `ActionCall` the session travels backend-specifically:
 **Control envelopes carry the session too.** The above covers `execute`
 envelopes, built once per call by `Bridge::executeVia`. Control envelopes —
 `register`, `registerShared`, `attach`, `assign`, `deregister` — are built
-directly inside the concrete backend (`registerModelWithContext`,
-`registerModelShared`, `attachModel`, `assignPrimary`, `deregisterModel`),
+directly inside the concrete backend (`bindModel`, `promoteModel`,
+`registerModelWithContext`, `assignPrimary`, `deregisterModel`),
 which has no other route to the `Bridge`'s session except
 `IBackend::setSession`: `Bridge` calls it on construction and on every
 `setDefaultSession()`, and on the incoming backend during `switchBackend()`

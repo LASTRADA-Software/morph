@@ -21,7 +21,6 @@
 #include <exception>
 #include <functional>
 #include <glaze/glaze.hpp>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -139,7 +138,9 @@ class SectionSet {
 public:
     /// @brief Constructs a section set dispatching through @p handler.
     /// @param handler Handler every section dispatches through. Must outlive
-    ///                this `SectionSet`.
+    ///                this `SectionSet`, which belongs to the handler's owner:
+    ///                it is built, used and destroyed there, and the handler's
+    ///                `guiExec` delivers its continuations there.
     /// @param onError Optional callback invoked when a section's dispatch
     ///                fails. When absent, the error is logged via
     ///                `morph::log::logError`. Stored and invoked for this
@@ -169,19 +170,18 @@ public:
     /// half-dead object. The body does not do that today; stopping first keeps
     /// it correct if one is ever added.
     ///
-    /// How strong the gate is depends on which thread destroys this object,
-    /// exactly as `CallbackScope`'s "Boundary of the guarantee" describes.
-    /// Destroying it off the delivery thread is advisory only, and that caller
-    /// owns its own synchronisation.
-    ~SectionSet() { _callbacks.requestStop(); }
+    /// Destroyed on the handler's owner, where its continuations run, so the
+    /// check a continuation makes and this destructor cannot interleave.
+    ~SectionSet() {
+        note("SectionSet::~SectionSet");
+        _callbacks.requestStop();
+    }
 
     /// @brief Sets one field of its section's draft, dispatching that section
     ///        if the draft is now ready.
     ///
     /// Unlike `FlowSession::set<>` this imposes no ordering: the field's action
-    /// need only be one of the declared sections. Readiness is evaluated on a
-    /// copy taken under the lock, so the dispatch happens with the lock
-    /// released and a concurrent edit to another section cannot block on it.
+    /// need only be one of the declared sections. On the handler's owner.
     /// @tparam FieldPtr Pointer-to-data-member of a declared section's action struct.
     /// @param value New value for the field.
     template <auto FieldPtr>
@@ -189,14 +189,10 @@ public:
         using A = ::morph::bridge::detail::MemberPointerTraits<decltype(FieldPtr)>::ClassType;
         static_assert((std::is_same_v<A, typename Sections::action> || ...),
                       "SectionSet::set<>: the field's action is not a section of this group");
-        A draft{};
-        {
-            std::scoped_lock const lock{_mtx};
-            std::get<A>(_drafts).*FieldPtr = std::move(value);
-            draft = std::get<A>(_drafts);
-        }
-        if (::morph::model::ActionValidator<A>::ready(draft)) {
-            fire<A>(std::move(draft));
+        note("SectionSet::set");
+        std::get<A>(_drafts).*FieldPtr = std::move(value);
+        if (::morph::model::ActionValidator<A>::ready(std::get<A>(_drafts))) {
+            fire<A>(std::get<A>(_drafts));
         }
     }
 
@@ -210,21 +206,20 @@ public:
     void reset() {
         static_assert((std::is_same_v<A, typename Sections::action> || ...),
                       "SectionSet::reset<>: not a section of this group");
-        std::scoped_lock const lock{_mtx};
+        note("SectionSet::reset");
         std::get<A>(_drafts) = A{};
     }
 
     /// @brief Snapshots one section's current draft.
     ///
-    /// A copy taken under the lock, not a reference into live state, so a
-    /// renderer can read one section while another thread edits a different one.
+    /// A copy, not a reference into live state. On the handler's owner.
     /// @tparam A The section's action type.
     /// @return The draft as it stands.
     template <typename A>
     [[nodiscard]] A draft() const {
         static_assert((std::is_same_v<A, typename Sections::action> || ...),
                       "SectionSet::draft<>: not a section of this group");
-        std::scoped_lock const lock{_mtx};
+        note("SectionSet::draft");
         return std::get<A>(_drafts);
     }
 
@@ -234,7 +229,7 @@ public:
     ///         never captured — the section never fired successfully, or has no
     ///         such field.
     [[nodiscard]] std::optional<std::string> resolved(std::string_view path) const {
-        std::scoped_lock const lock{_mtx};
+        note("SectionSet::resolved");
         auto iter = _resolvedValues.find(std::string{path});
         if (iter == _resolvedValues.end()) {
             return std::nullopt;
@@ -253,7 +248,7 @@ private:
     /// @param result The dispatch's successful result.
     template <typename A>
     void captureResult(const ::morph::model::ActionTraits<A>::Result& result) {
-        std::scoped_lock const lock{_mtx};
+        note("SectionSet::captureResult");
         auto const typeId = ::morph::model::ActionTraits<A>::typeId();
         auto record = [&](const auto& value) {
             ::morph::forms::detail::forEachNamedMember(
@@ -291,9 +286,10 @@ private:
 
     /// @brief Dispatches section @p A's ready draft and routes its outcome.
     ///
-    /// Both closures are gated on `_callbacks`, so neither touches anything on
-    /// `this` once the set has been destroyed — a completion can still resolve
-    /// after the set is gone.
+    /// Both closures run on the handler's `guiExec`, which must be its owner,
+    /// and are gated on `_callbacks`, so neither touches anything on `this`
+    /// once the set has been destroyed — a completion can still resolve after
+    /// the set is gone.
     ///
     /// Nothing here is keyed to a "current" section, which is what makes
     /// sections cheaper than flow steps: a late reply cannot be stale, because
@@ -316,14 +312,17 @@ private:
             });
     }
 
+    /// @brief Checks, in a debug build, that @p site runs on the handler's owner.
+    /// @param site Name of the calling body.
+    void note(char const* site) const noexcept {
+        ::morph::exec::detail::noteOwner(site, _handler.owner().coreExecutor(), _handler.onOwner());
+    }
+
     ::morph::bridge::BridgeHandler<Model>& _handler;
     std::function<void(std::exception_ptr)> _onError;
-    // _handler/_onError are set once at construction and never reassigned.
-    // Everything below is touched both by the owning thread (set/reset/draft)
-    // and by a dispatch's continuation, which runs on whatever thread resolves
-    // the BridgeHandler completion -- see docs/spec/core/bridge.md's
-    // executor/callback model.
-    mutable std::mutex _mtx;
+    // Touched only on the handler's owner: by set/reset/draft/resolved, and by
+    // a dispatch's continuation, delivered on the handler's `guiExec` — the
+    // owner.
     std::tuple<typename Sections::action...> _drafts{};
     std::unordered_map<std::string, std::string> _resolvedValues;
     // Declared last, so it is the first member destroyed: every gated callback

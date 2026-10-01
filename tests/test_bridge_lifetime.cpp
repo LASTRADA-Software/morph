@@ -1,44 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Regression tests for three Bridge memory-safety / robustness fixes:
-//   FIX 2 — ~Bridge clears the active backend's reconnect handler and the
-//           handler guards on the bridge's liveness token, so a reconnect fired
-//           by a co-owned backend after the Bridge is destroyed is a safe no-op
-//           rather than a use-after-free on the freed Bridge.
-//   FIX 4 — executeVia's value-forwarding `.then` closure catches an exception
-//           thrown while moving the result into the typed completion and routes
-//           it to onError, instead of letting it escape the callback executor
-//           (which would hang the completion or terminate the Qt loop).
-//   FIX 5 — executeVia's `.then` closure checks the bridge's liveness token
-//           BEFORE touching anything that reaches into the bridge (`onResult`
-//           and `hasSubscribers()`), so a backend completion that resolves
-//           after `~Bridge()` has run does not dereference the dangling
-//           `Bridge`. Two test cases cover the two guarded call sites, both
-//           deterministic: the `onResult` case observes a flag set as the
-//           very first statement of a callback that pre-fix ran completely
-//           unguarded; the `hasSubscribers()` case (POSIX-only) places the
-//           Bridge on an `mmap`'d guard page, destroys it in place, then
-//           `mprotect`s the page to `PROT_NONE` -- pre-fix, `hasSubscribers()`
-//           dereferences the protected page and faults (SIGSEGV or, on this
-//           machine's Darwin kernel, SIGBUS), which the test's own
-//           `sigsetjmp`/`siglongjmp`-based handler converts into a normal,
-//           reported Catch2 test failure; post-fix, the liveness check gates
-//           the call out before the page is ever touched.
-//
-//           *How* both call sites are made safe is separate from what either
-//           test observes:
-//           `_pendingCalls` and `_subscriptions` are now heap-allocated and
-//           captured by value into the `.then`/`.onError` continuations, so
-//           `hasSubscribers()` in particular no longer dereferences `this` at
-//           all once pinned -- the guard-page test's fault, if the fix ever
-//           regressed, would now have to come from a stale `bridgeAlive` read
-//           gating a call the pinned copy would otherwise make safe, not from
-//           `this` itself. `onResult` is still a genuine touch of `this` (it
-//           calls `assignHandlerPrimary`, which needs the *current*
-//           bridge/backend) and is still gated, now on `detail::BridgeLifetime`
-//           instead of the advisory `CallbackToken` -- see
-//           docs/spec/concurrency_and_lifetimes.md, "The same check-then-call
-//           shape, elsewhere in `Bridge`".
+// Bridge teardown and result-forwarding robustness:
+//   - ~Bridge clears the active backend's reconnect handler, and the handler
+//     checks the bridge's liveness token first, so a reconnect fired by a
+//     co-owned backend after the Bridge is gone touches nothing.
+//   - A throwing move of an action's result reaches onError instead of
+//     escaping the settling thread.
+//   - A result that settles after ~Bridge runs neither `onResult` nor the
+//     subscription fan-out: both are bridge-side work, run on the owner and
+//     gated on the bridge's token, and the check for subscribers reads a
+//     registry the sink holds, never the destroyed Bridge.
+//   - A Bridge constructed with no backend tolerates setDefaultSession.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -52,7 +24,6 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <new>
-#include <semaphore>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -89,7 +60,10 @@ public:
     }
     void notifyBackendChanged() override {}
     void cancelPending(const std::exception_ptr&) override {}
-    void setReconnectHandler(const std::function<void()>& handler) override { _handler = handler; }
+    void setReconnectHandler(std::function<void()> handler, morph::exec::IExecutor* exec) override {
+        _handler = std::move(handler);
+        _handlerExec = exec;
+    }
 
     // Test hooks.
     void fireReconnect() {
@@ -106,6 +80,7 @@ public:
 
 private:
     std::function<void()> _handler;
+    morph::exec::IExecutor* _handlerExec = nullptr;
     uint64_t _nextId{0};
 };
 
@@ -128,7 +103,9 @@ public:
     }
     void notifyBackendChanged() override { _target->notifyBackendChanged(); }
     void cancelPending(const std::exception_ptr& exc) override { _target->cancelPending(exc); }
-    void setReconnectHandler(const std::function<void()>& handler) override { _target->setReconnectHandler(handler); }
+    void setReconnectHandler(std::function<void()> handler, morph::exec::IExecutor* exec) override {
+        _target->setReconnectHandler(std::move(handler), exec);
+    }
 
 private:
     std::shared_ptr<FakeReconnectBackend> _target;
@@ -211,64 +188,6 @@ public:
     std::shared_ptr<morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
 };
 
-// ── Teardown-race fixtures ──────────────────────────────────────────────────
-
-// Shared bookkeeping for the teardown-race case below. It lives outside the
-// backend on purpose: pre-fix, `~Bridge` destroys the backend while a parked
-// `deregisterModel` call is still on another thread's stack, so the parked
-// frame must not touch `this` after it wakes.
-struct TeardownRaceState {
-    // Released by deregisterModel once it is provably inside the window
-    // ~BridgeHandler's gate is supposed to hold shut.
-    std::binary_semaphore entered{0};
-    // Released by the test to let that call finish.
-    std::binary_semaphore proceed{0};
-    // True for exactly as long as a deregistration is in flight.
-    std::atomic<bool> inDeregister{false};
-    // Set if ~Bridge ran its body while the flag above was true -- i.e. the
-    // bridge tore itself down underneath a handler it had already told it was
-    // safe to call in. Post-fix this must never happen.
-    std::atomic<bool> overlapped{false};
-};
-
-// A backend that parks inside deregisterModel, so the test can hold a
-// ~BridgeHandler exactly halfway through Bridge::deregisterHandler, and that
-// notices when ~Bridge's body runs during that window (cancelPending is
-// reached only from ~Bridge).
-class TeardownRaceBackend : public morph::backend::detail::IBackend {
-public:
-    explicit TeardownRaceBackend(std::shared_ptr<TeardownRaceState> state) : _state{std::move(state)} {}
-
-    morph::exec::detail::ModelId registerModel(
-        const std::string&, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>) override {
-        return morph::exec::detail::ModelId{1};
-    }
-    void deregisterModel(morph::exec::detail::ModelId) override {
-        // A local strong reference, taken before parking: pre-fix this very
-        // object is destroyed with the Bridge while we are parked, so neither
-        // `this` nor `_state` may be read once `proceed.acquire()` returns.
-        auto const state = _state;
-        state->inDeregister.store(true);
-        state->entered.release();
-        state->proceed.acquire();
-        state->inDeregister.store(false);
-    }
-    morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId,
-                                                            morph::backend::detail::ActionCall,
-                                                            morph::exec::IExecutor*) override {
-        return {};
-    }
-    void notifyBackendChanged() override {}
-    void cancelPending(const std::exception_ptr&) override {
-        if (_state->inDeregister.load()) {
-            _state->overlapped.store(true);
-        }
-    }
-
-private:
-    std::shared_ptr<TeardownRaceState> _state;
-};
-
 #if !defined(_WIN32)
 // Recovery machinery for the guard-page death test below. A signal handler
 // may only call async-signal-safe functions, so this does the minimum: record
@@ -332,7 +251,8 @@ TEST_CASE("Bridge destructor clears the reconnect handler so a later reconnect i
           "[bridge][lifetime]") {
     auto shared = std::make_shared<FakeReconnectBackend>();
     {
-        auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<BackendShim>(shared));
+        morph::testing::InlineExecutor bridgeOwner;
+        auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<BackendShim>(shared), bridgeOwner);
         REQUIRE(shared->hasHandler());  // installed by the Bridge ctor
         bridge.reset();                 // ~Bridge runs here
     }
@@ -351,7 +271,8 @@ TEST_CASE("reconnect handler guards on the bridge liveness token", "[bridge][lif
     auto shared = std::make_shared<FakeReconnectBackend>();
     std::function<void()> latched;
     {
-        auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<BackendShim>(shared));
+        morph::testing::InlineExecutor bridgeOwner;
+        auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<BackendShim>(shared), bridgeOwner);
         latched = shared->snapshotHandler();  // the real installed handler, capturing `this`
         REQUIRE(static_cast<bool>(latched));
         bridge.reset();  // ~Bridge expires the liveness token (and clears the backend's copy)
@@ -365,7 +286,8 @@ TEST_CASE("reconnect handler guards on the bridge liveness token", "[bridge][lif
 // ── FIX 4 ────────────────────────────────────────────────────────────────────
 
 TEST_CASE("executeVia routes a throwing result move to onError instead of hanging", "[bridge][completion]") {
-    morph::bridge::Bridge bridge{std::make_unique<PrebuiltResultBackend>()};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<PrebuiltResultBackend>(), bridgeOwner};
     morph::testing::InlineExecutor cbExec;
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
@@ -398,36 +320,15 @@ TEST_CASE("executeVia routes a throwing result move to onError instead of hangin
 // ── FIX 5 ────────────────────────────────────────────────────────────────────
 
 TEST_CASE("Bridge: onResult does not run once the bridge is destroyed", "[bridge][lifetime]") {
-    // Mirrors BridgeHandler::execute's ResultKeyed branch (bridge.hpp, the
-    // `if constexpr (kShared && ResultKeyed<Action>)` case): a non-empty
-    // `onResult` callback that calls back into the bridge through a captured
-    // raw pointer to adopt a result-sourced primary key
-    // (`bridgePtr->assignHandlerPrimary<Model>(...)`) -- the exact shape of
-    // the second bridge-touching side effect FIX 5 guards, and the more
-    // severe half of the original bug: pre-fix, `onResult` ran completely
-    // unconditionally, with no liveness check at all.
-    //
-    // This half is fully deterministic to detect even without a sanitizer.
-    // The lambda's first statement -- `onResultRan.store(true)` -- touches
-    // only a local test variable, not the bridge, so it is always safely
-    // observable if `onResult` is invoked at all, regardless of what the
-    // subsequent (genuinely dangerous) bridge access does. Pre-fix, the
-    // unconditional call means this flag always ends up `true`. Post-fix, the
-    // `onResult && bridgeAlive` guard means `onResult` -- and therefore this
-    // lambda -- never runs at all once the bridge is gone, so the flag stays
-    // `false`. If the dangerous call after it crashes the process on a
-    // pre-fix build (locking/copying the destroyed bridge's `_mtx`/`_backend`
-    // members), Catch2's fatal-signal handling reports that as a failure too
-    // -- either outcome (assertion failure or a crash) correctly fails this
-    // test against the pre-fix ordering.
+    // A result-keyed action's `onResult` calls back into the bridge. Its first
+    // statement touches only a local flag, so whether it ran at all is
+    // observable without touching the destroyed bridge.
     auto backendOwner = std::make_unique<DeferredResultBackend>();
     auto* const backendPtr = backendOwner.get();
     morph::testing::InlineExecutor cbExec;
 
-    // Heap-allocated (not stack-local via RAII scope exit) so the freed
-    // memory actually goes back to the allocator instead of merely leaving a
-    // stack frame whose bytes nothing has touched yet.
-    auto* bridge = new morph::bridge::Bridge(std::move(backendOwner));
+    // Heap-allocated so the freed memory goes back to the allocator.
+    auto* bridge = new morph::bridge::Bridge(std::move(backendOwner), cbExec);
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "BL_DeferredModel";
@@ -459,43 +360,12 @@ TEST_CASE("Bridge: onResult does not run once the bridge is destroyed", "[bridge
 // where the superseded heap-reuse probe this replaced was not.
 TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guard-page death test)",
           "[bridge][lifetime]") {
-    // A prior version of this test heap-allocated the Bridge with plain
-    // `new`/`delete` and tried to raise the odds of observing a crash by
-    // scribbling over freed memory. That could not reliably fail pre-fix
-    // (confirmed empirically -- see the report): reading a freed-but-still
-    // mapped `std::atomic<size_t>` is undefined behaviour, but not something
-    // that reliably *faults*, and downstream of that read the surviving
-    // `!alive.expired()` half of the pre-fix `hasSubscribers() &&
-    // !alive.expired()` condition is false regardless of evaluation order --
-    // so `publishResult()` never actually ran in either ordering, leaving no
-    // difference for a postcondition assertion to observe.
-    //
-    // This version instead makes the touch of the dangling `this` itself
-    // fault, deterministically: the Bridge is placement-new'd inside a page
-    // obtained via `mmap`, manually destroyed in place (not `delete` -- the
-    // memory isn't heap-owned), and the page is then `mprotect`'d to
-    // `PROT_NONE`. `hasSubscribers()` is a member function call that
-    // dereferences `this` to read its `SubscriptionRegistry` member's
-    // relaxed-atomic count (formerly `Bridge`'s own `_subscriptionCount`,
-    // before Task 13b's extraction); pre-fix, that dereference lands on a
-    // `PROT_NONE` page and faults immediately, before it can return any
-    // value at all.
-    //
-    // The fault is recovered in-process via `sigsetjmp`/`siglongjmp` (see
-    // `guardPageFaultHandler` above) rather than relying on Catch2's built-in
-    // fatal-signal handler: empirically (see the report), a PROT_NONE
-    // protection fault on this machine's Darwin kernel delivers **SIGBUS**,
-    // not SIGSEGV -- and Catch2's POSIX handler list is SIGINT/SIGILL/
-    // SIGFPE/SIGSEGV/SIGTERM/SIGABRT, which does not include SIGBUS, so an
-    // uncaught SIGBUS would kill the whole test *process* (not just this test
-    // case) with no Catch2 report at all. Installing our own handler for both
-    // SIGSEGV and SIGBUS and jumping back into ordinary control flow converts
-    // either one into a normal, explicit `FAIL(...)` -- a clean, attributable
-    // Catch2 failure for this one test case, and (unlike an uncaught signal)
-    // safe to run alongside every other test in one process. Post-fix,
-    // `bridgeAlive` is checked first and is false, so `hasSubscribers()` is
-    // never called at all -- the protected page is never touched, no signal
-    // fires, and the test runs through to a clean pass.
+    // The Bridge is placement-new'd inside an mmap'd page, destroyed in place,
+    // and the page is then mprotect'd to PROT_NONE: a result settling after
+    // that which touched the destroyed Bridge would fault. The fault is
+    // recovered in-process through sigsetjmp/siglongjmp (Darwin delivers
+    // SIGBUS for a PROT_NONE fault, which Catch2 does not handle), and turned
+    // into an ordinary FAIL.
     auto backendOwner = std::make_unique<DeferredResultBackend>();
     auto* const backendPtr = backendOwner.get();
     morph::testing::InlineExecutor cbExec;
@@ -521,7 +391,7 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     // stays on one physical line; see the note at
     // include/morph/detail/fixed_string.hpp:48.
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
-    auto* const bridge = new (bridgeMem) morph::bridge::Bridge(std::move(backendOwner));
+    auto* const bridge = new (bridgeMem) morph::bridge::Bridge(std::move(backendOwner), cbExec);
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "BL_DeferredModel";
@@ -573,11 +443,8 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     // to run for the first time.
     bool const faulted = sigsetjmp(gGuardPageJumpBuf, 1) != 0;
     if (!faulted) {
-        // Pre-fix: hasSubscribers() dereferences the now-protected `this`,
-        // faults, and control jumps straight to the `faulted` branch below
-        // instead of returning here. Post-fix: bridgeAlive gates
-        // hasSubscribers() out entirely, so this resolves and returns
-        // normally, and `faulted` stays false.
+        // A settle that touched the protected Bridge would fault and jump to
+        // the `faulted` branch below instead of returning here.
         pending->setValue(std::static_pointer_cast<void>(std::make_shared<int>(42)));
     }
 
@@ -602,70 +469,6 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
 }
 #endif  // !defined(_WIN32)
 
-// ── ~BridgeHandler racing ~Bridge across threads ────────────────────────────
-//
-// `docs/spec/core/bridge.md` promises that bridge-vs-handler teardown order
-// does not matter, and `~BridgeHandler` implemented that promise with a bare
-// `CallbackToken::active()` check. Across threads that check is advisory by
-// construction (`docs/spec/core/callback_scope.md`, "Boundary of the
-// guarantee"): it answers for an instant that has already passed by the time
-// `Bridge::deregisterHandler` reads `_handlers`. That window is
-// observable as a use-after-free — a metadata-fetch pass keeps its
-// `shared_ptr<BridgeHandler>` alive inside the completions it dispatched, a
-// worker-pool thread dropped the last reference while the owning thread was
-// inside `~App`, and `deregisterHandler` then walked a `_handlers` vector whose
-// `Bridge` had already been destroyed.
-//
-// This case holds a `~BridgeHandler` *inside* that window on purpose — the
-// backend parks in `deregisterModel`, which `deregisterHandler` calls after the
-// liveness question has been answered — and destroys the `Bridge` on another
-// thread while it is parked. Nothing about the assertion is timing-dependent:
-// `cancelPending` is reached only from `~Bridge`'s body, so observing it while
-// a deregistration is in flight *is* the violation. Post-fix the lifetime gate
-// makes it unreachable; pre-fix `~Bridge` runs straight through and the parked
-// handler goes on to read a destroyed `Bridge`.
-//
-// Measured on the ordinary Debug build: 25/25 runs failed before the fix (8 of
-// them by SIGSEGV, the rest on the assertion below), 0/25 after. **This case
-// earns its keep on the plain leg, not the sanitizer ones.** ASan's
-// instrumentation slows `~Bridge` enough that the parked handler wins every
-// round — 0/25 pre-fix failures and no `heap-use-after-free`, which is also why
-// ASan never reproduces the original race (0/200 runs of the bookmarks case it
-// was reported from, against 26/200 unsanitized).
-TEST_CASE("Bridge teardown does not overlap a handler destructor on another thread",
-          "[bridge][lifetime][teardown][issue486]") {
-    constexpr int kRounds = 64;
-    morph::exec::MainThreadExecutor exec;
-
-    int overlaps = 0;
-    for (int round = 0; round < kRounds; ++round) {
-        auto state = std::make_shared<TeardownRaceState>();
-        auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<TeardownRaceBackend>(state));
-        auto handler = std::make_shared<morph::bridge::BridgeHandler<DeferredModel>>(*bridge, &exec);
-
-        // Drops the last reference to the handler, exactly as a completion
-        // resolving on a worker thread does. Parks inside deregisterModel.
-        std::thread releaser{[&handler] { handler.reset(); }};
-        state->entered.acquire();
-
-        // The owner tears the bridge down while that deregistration is in
-        // flight. Post-fix this blocks on the lifetime gate until the releaser
-        // is out; pre-fix it runs to completion underneath it.
-        std::thread destroyer{[&bridge] { bridge.reset(); }};
-        state->proceed.release();
-
-        destroyer.join();
-        releaser.join();
-
-        if (state->overlapped.load()) {
-            ++overlaps;
-        }
-    }
-
-    INFO("rounds: " << kRounds);
-    CHECK(overlaps == 0);
-}
-
 // ── Coverage: setDefaultSession on a Bridge constructed with a null backend ──
 //
 // Bridge's constructor explicitly tolerates a null initial backend (see its
@@ -677,7 +480,8 @@ TEST_CASE("Bridge teardown does not overlap a handler destructor on another thre
 // call setDefaultSession, so this guard's `false` arm was never exercised.
 TEST_CASE("Bridge::setDefaultSession is a safe no-op on a Bridge with no active backend",
           "[bridge][lifetime][null-backend]") {
-    morph::bridge::Bridge bridge{nullptr};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{nullptr, bridgeOwner};
 
     ::morph::session::Context ctx;
     ctx.principal = "no-backend-yet";

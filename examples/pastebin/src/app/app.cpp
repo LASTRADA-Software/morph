@@ -39,7 +39,7 @@ App::App(std::filesystem::path actionLogPath, std::chrono::milliseconds sweepInt
       _actionLog{std::make_shared<::morph::journal::FileActionLog>(std::move(actionLogPath))},
       _pool{workers},
       _server{std::make_shared<::morph::backend::RemoteServer>(_pool)},
-      _sweepBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server)} {
+      _sweepBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _sweepExecutor} {
     ::morph::journal::setActionLog(_actionLog);
     connect(&_sweepTimer, &QTimer::timeout, this, &App::sweepExpiredOnce);
     _sweepTimer.start(sweepInterval);

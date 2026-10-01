@@ -201,7 +201,7 @@ int main() {
 
     // 1) Local backend: models run in this process on the worker pool.
     {
-        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), gui};
         runScenario(bridge, gui, "LocalBackend", "demo-local");
     }
 
@@ -212,7 +212,7 @@ int main() {
     {
         morph::exec::ThreadPoolExecutor serverPool{4};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-        morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), gui};
         runScenario(bridge, gui, "SimulatedRemoteBackend", "demo-remote");
     }
 

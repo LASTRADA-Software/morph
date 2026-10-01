@@ -15,7 +15,7 @@ AppContext::AppContext(Mode mode) {
     if (auto* local = std::get_if<Local>(&mode)) {
         _workerPool = std::make_unique<::morph::exec::ThreadPoolExecutor>(local->workers);
         auto backend = std::make_unique<::morph::backend::LocalBackend>(*_workerPool);
-        _bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend));
+        _bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_qtExecutor);
         // No transport to wait for: handlers may be built immediately.
         markReady();
         return;
@@ -37,7 +37,7 @@ AppContext::AppContext(Mode mode) {
 #endif
         ::morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
     auto* rawBackend = backend.get();  // stays valid: the Bridge below co-owns the same object
-    _bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend));
+    _bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_qtExecutor);
 
     // setConnectHandler, never waitForConnected(): the latter nests an event
     // loop and hangs a WASM page. Installed after the Bridge is built because

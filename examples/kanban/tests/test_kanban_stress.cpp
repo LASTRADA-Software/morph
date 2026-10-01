@@ -77,7 +77,7 @@
 // constructs or uses an authorizer at all), so `Bridge::setDefaultSession`
 // still gates access exactly as before. `ModelKeyTraits<BoardModel>`'s
 // shared-per-project instance semantics are a `Bridge`-level mechanism
-// (`registerModelShared`), unaffected by how `Bridge`/`LocalBackend` were
+// (a shared `bindModel`), unaffected by how `Bridge`/`LocalBackend` were
 // constructed. The result: every code path this test exercises is the real
 // morph core (Bridge, LocalBackend, ModelStrands, ThreadPoolExecutor,
 // Completion) with zero Qt frames anywhere in the call graph, making this
@@ -313,8 +313,8 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
     // `workerPool`; every model action genuinely runs on one of these 4
     // threads, serialized per-model-instance by the strand.
     morph::exec::ThreadPoolExecutor workerPool{4};
-    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
     InlineExecutor clientExecutor;
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), clientExecutor};
 
     constexpr std::string_view kSecret = "test-secret-32-bytes-minimum!!!!";
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -344,7 +344,7 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
     // projectId -- BoardModel is keyed per-project, so all four share one
     // server-side instance and therefore one strand (board_model.hpp's
     // ModelKeyTraits<BoardModel> specialization) -- a `Bridge`-level
-    // mechanism (`registerModelShared`), unaffected by dropping `BackendRig`.
+    // mechanism (a shared `bindModel`), unaffected by dropping `BackendRig`.
     constexpr std::size_t kClients = 4;
     std::vector<std::unique_ptr<BridgeHandler<kanban::BoardModel, AllowShared>>> handlers;
     for (std::size_t i = 0; i < kClients; ++i) {

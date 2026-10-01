@@ -246,17 +246,12 @@ is still blocked on them. Each is listed with where it landed, so a reader can
 check rather than take this section's word for it:
 
 1. **Async shared/keyed attach for WASM** (before rung 3's WASM story) —
-   `registerModelShared`/`attachModel` were synchronous and nested an event
-   loop, which aborts the page on the WASM main thread, and the non-blocking
-   counterpart that existed at the time covered only the plain path.
+   the keyed acquire was synchronous and nested an event loop, which aborts the
+   page on the WASM main thread.
    **Shipped:** `IBackend::bindModel` (`include/morph/core/backend.hpp`) —
    one non-blocking acquire verb whose *request shape* selects private
-   registration, register-or-attach or re-point — consumed by
-   `Bridge::ensureBoundAsync`/`attachHandlerAsync` and implemented natively by
-   `QtWebSocketBackend`. Not a pair of optional non-blocking twins beside the
-   synchronous verbs: there is the single surface above, under which the
-   synchronous verbs survive only as what `IBackend`'s *default* `bindModel`
-   dispatches to.
+   registration, register-or-attach or re-point — the only acquire verb
+   `Bridge` calls, and implemented natively by `QtWebSocketBackend`.
 2. **Client-side execute deadline** (before rung 3's polling helper) — no
    timeout existed on a `Completion`, so a black-holed server hung the client
    forever. **Shipped:** `Bridge::setExecuteDeadline`

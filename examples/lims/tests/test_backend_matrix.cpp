@@ -342,7 +342,7 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
     morph::exec::ThreadPoolExecutor before{1};
     morph::exec::ThreadPoolExecutor after{1};
     morph::ladder::testkit::detail::QtDrivenMainThreadExecutor callbackExecutor;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(before)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(before), callbackExecutor};
     morph::bridge::BridgeHandler<lims::SampleModel> handler{bridge, &callbackExecutor, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(after));

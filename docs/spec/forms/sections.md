@@ -127,7 +127,7 @@ sections.set<&UpdateProfile::name>("ada");   // fires UpdateProfile
 | `SectionSet(handler, onError = nullptr)` | `handler` must outlive the set. `onError` receives every failed dispatch; when absent, failures are logged via `morph::log::logError` and never escape the completion. |
 | `set<FieldPtr>(value)` | Assigns one field of its section's draft, then dispatches that section if `ActionValidator<A>::ready` now accepts the draft. The field's action need only be *one of* the declared sections — there is no current one. |
 | `reset<A>()` | Clears section `A`'s draft to a default-constructed action. Touches no other section and dispatches nothing. Values already in `resolved()` stay: they describe what the model was told, which resetting an editor does not undo. |
-| `draft<A>()` | Returns a copy of section `A`'s draft, taken under the lock. |
+| `draft<A>()` | Returns a copy of section `A`'s draft. |
 | `resolved(path)` | Returns the JSON-encoded value captured at `"<ActionTypeId>.<field>"`, or `std::nullopt` when that path was never captured. |
 
 `SectionSet` is neither copyable nor movable: its callbacks capture `this`.
@@ -173,33 +173,18 @@ A failed dispatch captures nothing.
 
 ## Concurrency and lifetime
 
-One mutex guards the drafts and the captured values. `set<>` takes it to
-assign the field and snapshot the draft, then **releases it before
-dispatching**, so a slow dispatch of one section cannot block an edit to
-another.
-
-Dispatch continuations run on whatever executor resolves the underlying
-`BridgeHandler` completion, not necessarily the thread that called `set<>` —
-see [../core/bridge.md](../core/bridge.md)'s executor/callback model.
+A `SectionSet` belongs to its handler's owner — the bridge's — and is built,
+used and destroyed there. The drafts and the captured values are touched only
+there, without a lock, and each member checks it in a debug build. The
+handler's `guiExec` delivers every dispatch continuation on the owner, so a
+capture never runs concurrently with `set<>` or with the destructor.
 
 Every continuation is gated on one `morph::async::CallbackScope`
 ([../core/callback_scope.md](../core/callback_scope.md)), declared last so it
 is the first member destroyed, and stopped explicitly at the top of
-`~SectionSet`. A completion resolving after the set is gone finds the token
-stopped and returns without touching anything.
-
-That covers a completion which has not yet started. It does not cover one
-already past its token check: `requestStop()` does not wait, by design. So a
-`SectionSet` may only be destroyed while a dispatch is outstanding if the
-destroying thread is the one completions are delivered on — the ordinary case
-for a UI-thread callback executor, and the boundary
-[../core/callback_scope.md](../core/callback_scope.md) describes.
-
-**Polling `resolved()` is not a substitute for that.** Capture publishes each
-key as it writes it, so a value becoming visible means the completion has
-started, not that it has finished. A caller that destroys a set on one thread
-the moment a value appears on another is destroying it mid-callback. `tests/test_sections.cpp` demonstrates the safe shape: deliver the completions on the
-thread that owns the set.
+`~SectionSet`. A completion delivered after the set is gone finds the token
+stopped and returns without touching anything; on the owner that check cannot
+be overtaken by the destructor, because both run on one thread.
 
 Unlike `FlowSession`, nothing here is keyed to a current position, so a reply
 arriving late cannot be *stale*: there is no position for it to be stale
@@ -281,9 +266,9 @@ make a member field wrong to set.
 - Destroying the set with a dispatch genuinely in flight (a section whose
   model call blocks until the test releases it) delivers nothing afterwards.
 
-Every other case delivers its completions on the test thread through a
-`StepExecutor` and drains before the set leaves scope, for the reason
-[Concurrency and lifetime](#concurrency-and-lifetime) gives.
+Every case uses a pumped executor on the test thread (`StepExecutor`, or a
+`MainThreadExecutor`) as the bridge's owner and the handler's `guiExec`, so completions are delivered on the test thread, as
+[Concurrency and lifetime](#concurrency-and-lifetime) requires.
 
 ## Cross-references
 

@@ -152,7 +152,7 @@ TEST_CASE("morph::qt::forms::FormsControllerCore composes over a caller-supplied
     // building and owning its own private, always-local Bridge.
     morph::exec::ThreadPoolExecutor pool{2};
     morph::qt::QtExecutor gui;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), gui};
 
     morph::qt::forms::FormsControllerCore<PingModel> core{bridge, &gui, R"({"EchoAction":{}})"};
     CHECK(core.schemasJson() == R"({"EchoAction":{}})");
@@ -180,7 +180,7 @@ TEST_CASE(
     // a private snapshot of the backend.
     morph::exec::ThreadPoolExecutor pool{2};
     morph::qt::QtExecutor gui;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), gui};
 
     morph::qt::forms::FormsControllerCore<PingModel> core{bridge, &gui, std::string{}};
 

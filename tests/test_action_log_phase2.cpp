@@ -237,7 +237,7 @@ TEST_CASE(
     TempFile tmp{"save_e2e"};
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto sessionLog = std::make_shared<morph::journal::SessionLog>();
     auto fileLog = std::make_shared<FileActionLog>(tmp.path);
@@ -414,7 +414,7 @@ TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvid
     serverConfig.logProvider = [&](std::string_view, std::string_view) { return log; };
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "P2_Model";

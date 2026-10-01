@@ -475,7 +475,7 @@ int run(bool attribute, double budget, double lookupBudget, double idLengthBudge
     Census& state = census();
     GatedWorkerExecutor pool;
     InlineCallbackExecutor callbackExec;
-    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
+    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool), callbackExec};
     ::morph::bridge::BridgeHandler<BenchAllocModel> handler{bridge, &callbackExec};
     // Only `executeJsonCensus` uses these two; they exist so that census can
     // be taken on both sides of the SSO boundary rather than on whichever

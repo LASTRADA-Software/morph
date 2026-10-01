@@ -403,12 +403,12 @@ themselves" presenter rule requires.
   `linux-all-features` job now enables `MORPH_BUILD_LADDER` alongside
   `MORPH_BUILD_FORMS_QML` (it already installs Qt 6.8), so that is where those
   targets are built and that test runs.
-- **Registration timing.** `PasteBridge` exposes a `bound` signal
-  (`Presenter::trackBound()`, backed by `Bridge::whenBound()`) that settles
-  once the registration round trip lands; both clients' `Main.qml` gates its
-  bootstrap `refresh()` on it instead of retrying on a timer. `Remote` mode
-  still has no connect timeout, so a server that never answers leaves `bound`
-  simply never firing and the list pane empty with no terminal error.
+- **Registration timing.** Both clients' `Main.qml` request the first
+  listing on `Component.onCompleted`. A call made before the handler's
+  registration round trip lands waits for it and is dispatched once it does,
+  or is rejected if registration fails. `Remote` mode still has no connect
+  timeout, so a server that never answers leaves that first call pending and
+  the list pane empty with no terminal error.
 - Deferred by design: the convergence assertion (needs rung 3's
   `poll()`/`lastEventId()`), the full hostile-content corpus (a representative
   subset ships), file attachments. Reply-frame loss is deferred for a

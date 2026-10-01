@@ -40,12 +40,12 @@
 #include <utility>
 #include <vector>
 
+#include "bind_support.hpp"
 #include "test_support.hpp"
 
 using morph::backend::SynchronousBackendAdapter;
 using morph::backend::detail::BindRequest;
 using morph::backend::detail::IBackend;
-using morph::backend::detail::InstanceIdentity;
 using morph::backend::detail::PromoteRequest;
 using morph::exec::detail::ModelId;
 using ModelCompletion = morph::async::Completion<ModelId>;
@@ -63,7 +63,7 @@ struct morph::model::ModelTraits<RegistrationSurfaceModel> {
 
 namespace {
 
-/// @brief Records which legacy verb the default `bindModel` reached for.
+/// @brief Records which verb the default `bindModel` reached for.
 ///
 /// Every verb returns a distinct `ModelId`, so the resolved value alone
 /// identifies the branch taken even without reading `calls`.
@@ -81,20 +81,6 @@ struct RecordingBackend : IBackend {
                                      std::string_view contextKey) override {
         calls.emplace_back("registerModelWithContext:" + std::string{contextKey});
         return ModelId{2};
-    }
-
-    ModelId registerModelShared(const std::string& /*typeId*/,
-                                std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
-                                InstanceIdentity identity) override {
-        calls.emplace_back("registerModelShared:" + std::string{identity.primary});
-        return ModelId{3};
-    }
-
-    ModelId attachModel(const std::string& /*typeId*/,
-                        std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> /*factory*/,
-                        InstanceIdentity identity, ModelId current) override {
-        calls.emplace_back("attachModel:" + std::string{identity.primary} + ":" + std::to_string(current.v));
-        return ModelId{4};
     }
 
     void assignPrimary(ModelId mid, const std::string& /*typeId*/, std::string_view primary) override {
@@ -118,7 +104,7 @@ struct RecordingBackend : IBackend {
 
     void cancelPending(const std::exception_ptr& /*exc*/) override { calls.emplace_back("cancelPending"); }
 
-    void setReconnectHandler(const std::function<void()>& /*handler*/) override {
+    void setReconnectHandler(std::function<void()> /*handler*/, morph::exec::IExecutor* /*exec*/) override {
         calls.emplace_back("setReconnectHandler");
     }
 
@@ -193,7 +179,7 @@ bool drainUntil(morph::exec::MainThreadExecutor& exec, const std::atomic<bool>& 
 
 // ── The surface's shape: one verb where there were three ─────────────────────
 
-TEST_CASE("morph::backend::IBackend: bindModel's default routes each request shape to the verb it replaces",
+TEST_CASE("morph::backend::IBackend: bindModel's default binds privately for every request shape",
           "[backend][registration-surface]") {
     RecordingBackend backend;
     morph::exec::MainThreadExecutor callerExec;
@@ -215,17 +201,17 @@ TEST_CASE("morph::backend::IBackend: bindModel's default routes each request sha
         REQUIRE(backend.calls == std::vector<std::string>{"registerModelWithContext:acct-7"});
     }
 
-    SECTION("non-empty primary, no current instance -> registerModelShared") {
+    SECTION("non-empty primary, no current instance -> registerModelWithContext: no directory to share in") {
         auto completion = backend.bindModel(
             BindRequest{.typeId = std::string{kTypeId}, .factory = makeHolder, .contextKey = "k-1", .primary = "k-1"},
             callerExec);
         completion.thenDetached(observe);
         REQUIRE(drainUntil(callerExec, done));
-        REQUIRE(bound == ModelId{3});
-        REQUIRE(backend.calls == std::vector<std::string>{"registerModelShared:k-1"});
+        REQUIRE(bound == ModelId{2});
+        REQUIRE(backend.calls == std::vector<std::string>{"registerModelWithContext:k-1"});
     }
 
-    SECTION("non-empty primary plus a current instance -> attachModel") {
+    SECTION("a current instance is released once the replacement is acquired") {
         auto completion = backend.bindModel(BindRequest{.typeId = std::string{kTypeId},
                                                         .factory = makeHolder,
                                                         .contextKey = "k-2",
@@ -234,8 +220,8 @@ TEST_CASE("morph::backend::IBackend: bindModel's default routes each request sha
                                             callerExec);
         completion.thenDetached(observe);
         REQUIRE(drainUntil(callerExec, done));
-        REQUIRE(bound == ModelId{4});
-        REQUIRE(backend.calls == std::vector<std::string>{"attachModel:k-2:9"});
+        REQUIRE(bound == ModelId{2});
+        REQUIRE(backend.calls == std::vector<std::string>{"registerModelWithContext:k-2", "deregisterModel:9"});
     }
 
     SECTION("promoteModel reaches assignPrimary and echoes the id back") {
@@ -486,8 +472,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "morph::backend::SynchronousBackendAdapter: rejects a null backend and forwards the legacy verbs it does "
-    "not reshape",
+    "morph::backend::SynchronousBackendAdapter: rejects a null backend and runs every verb on its strand, in "
+    "order",
     "[backend][registration-surface]") {
     morph::exec::ThreadPoolExecutor pool{1};
     auto recording = std::make_shared<RecordingBackend>();
@@ -498,63 +484,42 @@ TEST_CASE(
     REQUIRE(&adapter.wrapped() == recording.get());
     REQUIRE(adapter.registerModel(std::string{kTypeId}, makeHolder) == ModelId{1});
     REQUIRE(adapter.registerModelWithContext(std::string{kTypeId}, makeHolder, "ck") == ModelId{2});
-    REQUIRE(adapter.registerModelShared(std::string{kTypeId}, makeHolder, {.contextKey = "ck", .primary = "pk"}) ==
-            ModelId{3});
-    REQUIRE(adapter.attachModel(std::string{kTypeId}, makeHolder, {.contextKey = "ck", .primary = "pk"}, ModelId{5}) ==
-            ModelId{4});
 
     adapter.assignPrimary(ModelId{6}, std::string{kTypeId}, "pk");
-    REQUIRE(adapter.listInstances(std::string{kTypeId}) == std::vector<std::string>{"listed"});
     adapter.deregisterModel(ModelId{7});
     (void)adapter.execute(ModelId{8}, morph::backend::detail::ActionCall{}, nullptr);
     adapter.notifyBackendChanged();
     adapter.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled"}));
-    adapter.setReconnectHandler(nullptr);
+    adapter.setReconnectHandler(nullptr, nullptr);
     adapter.setConnectHandler(nullptr);
     adapter.setDisconnectHandler(nullptr);
     adapter.setSession(morph::session::Context{.principal = "pal"});
+    // A synchronous verb waits for the strand, so everything queued before it
+    // has run by the time it returns.
+    REQUIRE(adapter.listInstances(std::string{kTypeId}) == std::vector<std::string>{"listed"});
 
-    REQUIRE(recording->calls ==
-            std::vector<std::string>{"registerModel", "registerModelWithContext:ck", "registerModelShared:pk",
-                                     "attachModel:pk:5", "assignPrimary:6:pk", "listInstances", "deregisterModel:7",
-                                     "execute:8", "notifyBackendChanged", "cancelPending", "setReconnectHandler",
-                                     "setConnectHandler", "setDisconnectHandler", "setSession:pal"});
+    REQUIRE(recording->calls == std::vector<std::string>{"registerModel", "registerModelWithContext:ck",
+                                                         "assignPrimary:6:pk", "deregisterModel:7", "execute:8",
+                                                         "notifyBackendChanged", "cancelPending",
+                                                         "setReconnectHandler", "setConnectHandler",
+                                                         "setDisconnectHandler", "setSession:pal", "listInstances"});
 }
 
-// ── `bindWaitPolicy`: the one bit `Completion` cannot carry ────────────────
+// ── A bind that settles on a transport thread ──────────────────────────────
 //
-// Two backends both return an unsettled `Completion` from `bindModel`, and
-// `Bridge::registerHandler` — a synchronous entry point whose caller uses the
-// handler on the next line — must wait for one and must not wait for the other.
-// The pair of cases below pins both answers at the one call site that asks.
-//
-// The 200 ms reply delay is deliberate and is what makes each case *fail* under
-// the opposite policy: it is far longer than the microseconds a non-waiting
-// `registerHandler` takes to return, so "bound on return" cannot happen by luck
-// and "unbound on return" cannot be a lost race. Neither assertion's passing
-// direction depends on the exact value — the waiting case waits however long the
-// reply takes, and the non-waiting case polls until it arrives.
+// `Bridge::registerHandler` never waits: the bind is issued with the owner as
+// its delivery executor, and a reply that arrives from a thread the caller
+// does not own -- `morph::net::SocketBackend`'s shape -- is applied as a task
+// on the owner.
 
 namespace {
 
-constexpr auto kBindReplyDelay = std::chrono::milliseconds{200};
-
-/// @brief A backend whose bind reply arrives, later, from a thread the caller
-///        does not own — `morph::net::SocketBackend`'s shape.
-///
-/// Derives from `RecordingBackend` for the verbs `Bridge` needs it to have,
-/// and overrides `bindModel` so that `Bridge::registerHandlerImpl` gets an
-/// unsettled `Completion` instead of `RecordingBackend`'s inherited default,
-/// which settles inline off the synchronous verbs.
+/// @brief A backend whose bind reply arrives from a thread the caller does not own.
 struct TransportThreadBackend : RecordingBackend {
-    /// @brief Policy this double reports; the thing under test.
-    morph::backend::detail::BindWait policy = morph::backend::detail::BindWait::kCallerMayBlock;
-    /// @brief The "transport" that settles the bind, asserted to be another thread.
+    /// @brief The "transport" that settles the bind; joined on destruction.
     std::thread transport;
-    /// @brief Thread `bindModel` was called on.
-    std::thread::id callerThread;
-    /// @brief `true` if the completion settled somewhere other than `callerThread`.
-    std::atomic<bool> settledOffCallerThread{false};
+    /// @brief Released by the test to let the transport reply.
+    std::atomic<bool> reply{false};
 
     TransportThreadBackend() = default;
     TransportThreadBackend(const TransportThreadBackend&) = delete;
@@ -563,6 +528,7 @@ struct TransportThreadBackend : RecordingBackend {
     TransportThreadBackend& operator=(TransportThreadBackend&&) = delete;
 
     ~TransportThreadBackend() override {
+        reply.store(true);
         if (transport.joinable()) {
             transport.join();
         }
@@ -570,57 +536,36 @@ struct TransportThreadBackend : RecordingBackend {
 
     ModelCompletion bindModel(BindRequest /*request*/, morph::exec::IExecutor& cbExec) override {
         auto [completion, promise] = ModelCompletion::makeSettleable(&cbExec);
-        callerThread = std::this_thread::get_id();
         transport = std::thread{[this, kept = std::make_shared<ModelCompletion::Promise>(std::move(promise))] {
-            std::this_thread::sleep_for(kBindReplyDelay);
-            settledOffCallerThread.store(std::this_thread::get_id() != callerThread);
+            while (!reply.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds{1});
+            }
             kept->resolve(ModelId{99});
         }};
         return std::move(completion);
     }
-
-    [[nodiscard]] morph::backend::detail::BindWait bindWaitPolicy() const noexcept override { return policy; }
 };
 
 }  // namespace
 
-TEST_CASE("morph::bridge::Bridge: registerHandler waits out a kCallerMayBlock backend's bind and returns bound",
-          "[backend][registration-surface][bridge]") {
+TEST_CASE(
+    "morph::bridge::Bridge: registerHandler returns at once, and a bind settled on a transport thread is "
+    "applied on the owner",
+    "[backend][registration-surface][bridge]") {
     auto owned = std::make_unique<TransportThreadBackend>();
     auto* backend = owned.get();
-    backend->policy = morph::backend::detail::BindWait::kCallerMayBlock;
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::move(owned), owner};
 
-    morph::bridge::Bridge bridge{std::move(owned)};
     auto binding = bridge.registerHandler<RegistrationSurfaceModel>();
-
-    // No polling, no drain: the constructor did not return until the reply
-    // landed. This is the contract every non-Qt embedder relies on, and what
-    // `kCallerMayBlock` preserves for a natively non-blocking `SocketBackend`.
-    REQUIRE(morph::bridge::Bridge::isBound(binding));
-    REQUIRE(binding->currentId.load() == 99U);
-    // ...and it was a *wait*, not a synchronous backend: the value was produced
-    // on a thread `registerHandler` does not own.
-    REQUIRE(backend->settledOffCallerThread.load());
-}
-
-TEST_CASE("morph::bridge::Bridge: registerHandler does not wait for a kCallerMustNotBlock backend",
-          "[backend][registration-surface][bridge]") {
-    auto owned = std::make_unique<TransportThreadBackend>();
-    auto* backend = owned.get();
-    backend->policy = morph::backend::detail::BindWait::kCallerMustNotBlock;
-
-    morph::bridge::Bridge bridge{std::move(owned)};
-    auto binding = bridge.registerHandler<RegistrationSurfaceModel>();
-
-    // Returned while the reply is still 200 ms away. For `QtWebSocketBackend`
-    // under `asyncRegistrationEnabled` this is not a preference: the reply is
-    // delivered by the Qt event loop of this very thread, so a `registerHandler`
-    // that waited here would never return -- on WASM, a page abort.
     REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
 
-    REQUIRE(morph::testing::waitUntil([&] { return morph::bridge::Bridge::isBound(binding); }));
+    backend->reply.store(true);
+    backend->transport.join();
+    // Settled, but not applied: that is a task on the owner.
+    REQUIRE_FALSE(morph::bridge::Bridge::isBound(binding));
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return morph::bridge::Bridge::isBound(binding); }));
     REQUIRE(binding->currentId.load() == 99U);
-    REQUIRE(backend->settledOffCallerThread.load());
 }
 
 // ── cancelPending and the completions the adapter itself produced ──────────
@@ -738,8 +683,6 @@ TEST_CASE("morph::backend::SynchronousBackendAdapter: cancelPending rejects the 
     REQUIRE(inner->finished.load() == 0);
     REQUIRE(okRan.load() == 0);
     REQUIRE(message == std::string{morph::backend::BridgeDestroyedError{}.what()});
-    // ...and the wrapped backend still saw the cancellation it always saw.
-    REQUIRE(inner->cancels.load() == 1);
 
     // Letting the wrapped call finish must not resurrect the cancelled
     // completion: its `resolve` finds the state already ready.
@@ -751,6 +694,9 @@ TEST_CASE("morph::backend::SynchronousBackendAdapter: cancelPending rejects the 
     callerExec.runOnce();
     REQUIRE(okRan.load() == 0);
     REQUIRE(errRan.load() == 1);
+    // ...and the wrapped backend saw the cancellation too, on the strand, after
+    // the call that was running there.
+    REQUIRE(morph::testing::waitUntil([&] { return inner->cancels.load() == 1; }));
 }
 
 // ── cancelPending and the control call the strand has not started yet ──────

@@ -65,7 +65,7 @@ BRIDGE_REGISTER_ACTION(PCModel, PCSlowAction, "Test_PCSlowAction")
 TEST_CASE("Bridge: pendingCalls() is zero before any dispatch", "[bridge][pending-calls]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
 
     REQUIRE(bridge.pendingCalls() == 0);
@@ -77,7 +77,7 @@ TEST_CASE("Bridge: pendingCalls() increments on dispatch and decrements on succe
 
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
 
     std::atomic<bool> done{false};
@@ -103,7 +103,7 @@ TEST_CASE("Bridge: pendingCalls() increments on dispatch and decrements on succe
 TEST_CASE("Bridge: pendingCalls() decrements on error resolution too", "[bridge][pending-calls]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
 
     std::atomic<bool> errored{false};
@@ -125,7 +125,7 @@ TEST_CASE("Bridge: pendingCalls() reflects multiple concurrent in-flight calls",
 
     morph::exec::ThreadPoolExecutor pool{4};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler1{bridge, &cbExec};
     morph::bridge::BridgeHandler<PCModel> handler2{bridge, &cbExec};
     morph::bridge::BridgeHandler<PCModel> handler3{bridge, &cbExec};
@@ -161,7 +161,7 @@ TEST_CASE("Bridge: pendingCalls() does not increment for a synchronously-failed 
     // counter incremented (nor decrement below zero).
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
 
     bool errorFired = false;
@@ -200,7 +200,7 @@ struct ThrowingExecuteBackend : morph::backend::LocalBackend {
 TEST_CASE("Bridge: a throwing backend execute() leaves pendingCalls() at zero", "[bridge][pending-calls][morph502]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<ThrowingExecuteBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<ThrowingExecuteBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
 
     REQUIRE(bridge.pendingCalls() == 0);
@@ -237,7 +237,7 @@ TEST_CASE("Bridge: cancelPending followed by the real reply decrements pendingCa
     SyncExecutor cbExec;
     auto owned = std::make_unique<morph::backend::LocalBackend>(pool);
     auto* const backend = owned.get();
-    morph::bridge::Bridge bridge{std::move(owned)};
+    morph::bridge::Bridge bridge{std::move(owned), cbExec};
     morph::bridge::BridgeHandler<PCModel> handler{bridge, &cbExec};
 
     std::atomic<int> errors{0};

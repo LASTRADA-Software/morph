@@ -84,7 +84,7 @@ bool tryPing(const QUrl& url, const QSslConfiguration& tls, const std::string& l
     }
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<PingModel> handler{bridge, &qtExec};
 
     std::atomic<bool> done{false};

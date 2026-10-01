@@ -13,7 +13,6 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/wire.hpp>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -51,12 +50,9 @@ struct QtWebSocketBackendConfig {
     /// a WASM main thread, where Qt refuses to spin a nested loop and the
     /// attempt aborts the page outright. `bindModel` then sends the request and
     /// returns an unsettled `Completion`, which the reply settles later. That is
-    /// a deliberate trade, not a free improvement: the caller must wait for the
-    /// continuation (gate the UI on `BridgeHandler::whenBound()`, or dispatch
-    /// through `BridgeHandler::executeWhenBound()`, which holds the action
-    /// until the bind settles) before firing an action through that handler,
-    /// since `execute()` fails fast with "handler not bound" for an unbound
-    /// binding rather than queuing or blocking.
+    /// what makes the handler over it unbound when its constructor returns: a
+    /// call made through it before the reply is held by the `Bridge` and
+    /// dispatched when the bind settles.
     ///
     /// This flag chooses *whether the transport blocks*, nothing more: the
     /// continuation exists on both paths, because `bindModel` returns a
@@ -78,12 +74,17 @@ struct QtWebSocketBackendConfig {
 /// passed to `bindModel`/`promoteModel`, so a caller that needs the
 /// continuation on its own thread names its own executor and gets it.
 ///
-/// The synchronous verbs (`registerModel()`, `registerModelShared()`,
-/// `attachModel()`, `assignPrimary()`) remain, and still block the calling
-/// thread in a nested `QEventLoop` until the server replies — unusable on a
-/// WASM main thread, which Qt refuses to spin a nested loop on at all. They are
-/// what the default (`asyncRegistrationEnabled == false`) `bindModel` runs, and
-/// what `Bridge::switchBackend()` re-registers through.
+/// The synchronous verbs (`registerModel()`, `registerModelWithContext()`,
+/// `assignPrimary()`, `listInstances()`) remain, and block the calling thread
+/// in a nested `QEventLoop` until the server replies — unusable on a WASM main
+/// thread, which Qt refuses to spin a nested loop on at all. The default
+/// (`asyncRegistrationEnabled == false`) `bindModel` runs the same blocking
+/// round trip for every request shape.
+///
+/// Everything this backend keeps — the socket, the pending tables — belongs to
+/// the thread the socket lives on, as Qt's own objects do: every verb is called
+/// there (the `Bridge`'s owner is that thread) and every reply slot runs there,
+/// so none of it takes a lock. A debug build asserts it at each site.
 /// `deregisterModel()` is fire-and-forget (it sends the message without
 /// waiting, avoiding a nested event loop during destruction). `execute()` is
 /// asynchronous: it assigns a call-id, sends the message, and resolves the
@@ -231,11 +232,8 @@ public:
     /// registration is audited.
     ///
     /// This is also the verb the *blocking* `bindModel` path reaches for an
-    /// empty-`primary`, zero-`current` request, and the one
-    /// `Bridge::switchBackend` calls directly when it re-registers a handler
-    /// after a reconnect — so it carries the key on a backend swap and on every
-    /// private registration, whatever `Config::asyncRegistrationEnabled` is set
-    /// to.
+    /// empty-`primary` request, so it carries the key on every private
+    /// registration, whatever `Config::asyncRegistrationEnabled` is set to.
     ///
     /// `registerModel` forwards here with an empty key, so there is one place
     /// that builds this envelope rather than two that can drift apart.
@@ -258,14 +256,13 @@ public:
     /// `Completion` when the server's reply arrives instead of blocking a
     /// thread until then.
     ///
-    /// With `Config::asyncRegistrationEnabled` unset (the default) this defers
-    /// to `IBackend::bindModel`, which runs the synchronous verb the request's
-    /// shape names and **blocks the Qt thread** in a nested `QEventLoop` for the
-    /// round trip. That is the desktop behaviour every existing embedder
-    /// relies on; see `QtWebSocketBackendConfig::asyncRegistrationEnabled`.
+    /// With `Config::asyncRegistrationEnabled` unset (the default) the envelope
+    /// the request's shape names is sent synchronously, **blocking the Qt
+    /// thread** in a nested `QEventLoop` for the round trip, and the
+    /// `Completion` is settled before this returns. That is the desktop
+    /// behaviour; see `QtWebSocketBackendConfig::asyncRegistrationEnabled`.
     ///
-    /// With it set, the request's shape selects the envelope, mirroring
-    /// `IBackend::bindModelBlocking`'s routing of the same three shapes:
+    /// Either way the request's shape selects the envelope:
     ///
     /// | `primary` | `current` | Envelope sent |
     /// |---|---|---|
@@ -300,56 +297,6 @@ public:
     ///         with the failure. Already settled on the blocking path.
     ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(::morph::backend::detail::BindRequest request,
                                                                          ::morph::exec::IExecutor& cbExec) override;
-
-    /// @brief Whether a caller may block waiting for this backend's
-    ///        `bindModel`/`promoteModel` completions.
-    ///
-    /// `kCallerMustNotBlock` exactly when `Config::asyncRegistrationEnabled` is
-    /// set, because that is exactly when a completion is settled by
-    /// `onTextMessage` — a Qt slot, delivered by the event loop of the thread
-    /// that called `bindModel`. A caller blocked in a wait is not running that
-    /// event loop, so the reply it is waiting for can never arrive — a deadlock,
-    /// which on a WASM main thread aborts the page outright.
-    ///
-    /// With the flag unset this backend's `bindModel` is `IBackend`'s default,
-    /// which settles inside the call, so `kCallerMayBlock` is both true and
-    /// free: the caller's wait finds the outcome already parked and returns
-    /// without sleeping.
-    ///
-    /// Note which way round this reads. It does not say "registration is
-    /// asynchronous" — `SocketBackend`'s is too, and it answers
-    /// `kCallerMayBlock` because a separate I/O thread settles its completions.
-    /// It says only that *this* thread must not stop and wait.
-    ///
-    /// @return `kCallerMustNotBlock` when `Config::asyncRegistrationEnabled` is
-    ///         set, `kCallerMayBlock` otherwise.
-    [[nodiscard]] ::morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
-        return _cfg.asyncRegistrationEnabled ? ::morph::backend::detail::BindWait::kCallerMustNotBlock
-                                             : ::morph::backend::detail::BindWait::kCallerMayBlock;
-    }
-
-    /// @brief Sends a shared (register-or-attach) `register` and blocks for the reply.
-    ///
-    /// An empty primary degrades to the private path.
-    /// @param typeId   String type-id of the model.
-    /// @param factory  Ignored — model construction is delegated to the server.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @return `ModelId` of the shared (or newly created) instance.
-    /// @throws std::runtime_error if the server errors or the socket is not connected.
-    ::morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        ::morph::backend::detail::InstanceIdentity identity) override;
-
-    /// @brief Sends an `attach` and blocks for the reply, re-pointing from @p current.
-    /// @param typeId   String type-id of the model.
-    /// @param factory  Ignored — model construction is delegated to the server.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @param current  Instance currently held, or `ModelId{0}` if none.
-    /// @return `ModelId` of the instance now attached to.
-    /// @throws std::runtime_error if the server errors or the socket is not connected.
-    ::morph::exec::detail::ModelId attachModel(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override;
 
     /// @brief Files a live server-side instance under @p primary.
     /// @param mid     Live instance to promote.
@@ -438,9 +385,11 @@ public:
     void cancelPending(const std::exception_ptr& exc) override;
 
     /// @brief Installs the handler `Bridge` uses to re-register handlers after a reconnect.
-    /// @param handler Callable invoked on the Qt thread after every successful reconnect.
-    ///                Pass `nullptr` to clear.
-    void setReconnectHandler(const std::function<void()>& handler) override;
+    /// @param handler Callable posted to @p exec after every successful
+    ///                reconnect. Pass `nullptr` to clear.
+    /// @param exec    Executor the handler runs on. Borrowed: it must outlive
+    ///                the installation.
+    void setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* exec) override;
 
     /// @brief Installs a handler invoked on every successful connect, including the first.
     /// @param handler Callable invoked on the Qt thread after every successful connect
@@ -522,6 +471,18 @@ private:
     ///        before the reconnect handler fires.
     void flushQueuedRegistrations();
 
+    /// @brief `bindModel`'s blocking path: sends the envelope @p request's
+    ///        shape names and waits for its reply in a nested `QEventLoop`.
+    /// @param request The bind request.
+    /// @return The bound id.
+    /// @throws std::runtime_error if the server errors or the socket is down.
+    ::morph::exec::detail::ModelId bindBlocking(const ::morph::backend::detail::BindRequest& request);
+
+    /// @brief Asserts, in a debug build, that @p site runs on the socket's
+    ///        thread — where every table this backend keeps belongs.
+    /// @param site Name of the calling body.
+    void checkThread(char const* site) const noexcept;
+
     QUrl _serverUrl;
 #ifndef QT_NO_SSL
     std::optional<QSslConfiguration> _tls;
@@ -534,6 +495,7 @@ private:
     bool _everConnected{false};
     bool _shuttingDown{false};
     std::function<void()> _reconnectHandler;
+    ::morph::exec::IExecutor* _reconnectExec{nullptr};
     std::function<void()> _connectHandler;
     std::function<void()> _disconnectHandler;
     ::morph::session::Context _session;
@@ -547,8 +509,9 @@ private:
         ::morph::exec::IExecutor* cbExec{nullptr};
     };
     uint64_t _nextCallId{0};
+    // Every table below is touched only on the socket's thread: by the verbs,
+    // called there, and by the reply slots, which run there.
     std::unordered_map<uint64_t, PendingExecute> _pending;
-    std::mutex _pendingMtx;
 
     /// @brief In-flight `bindModel`/`promoteModel` calls, keyed by `callId`.
     ///

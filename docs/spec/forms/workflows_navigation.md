@@ -232,15 +232,19 @@ public:
   cancelled by `Bridge::switchBackend` surfaces `BackendChangedError` on
   `FlowSession`'s `onError` callback exactly as bridge.md documents for any
   other caller. The draft survives the switch because `FlowSession` owns it.
+- **One owner.** A `FlowSession` belongs to its handler's owner — the
+  bridge's — and is built, used and destroyed there; its draft, position and
+  captured values are touched only there, without a lock, and each member
+  checks it in a debug build. The handler's `guiExec` delivers every step's
+  continuation on the owner, so capture and destruction run on one thread.
 - **A late step callback cannot touch a destroyed session.** Every step's
   `.then` / `.onError` is attached through a `morph::async::CallbackScope`
   member ([callback_scope.md](../core/callback_scope.md)) declared last, so a
   completion resolving after the session is gone is refused rather than
   dereferencing freed memory. `~FlowSession` calls `requestStop()` as its first
   statement rather than relying on member destruction alone: members are
-  destroyed only *after* the destructor body, and that body can pump an event
-  loop (a blocking, `sendSync`-style call) and deliver into a half-dead
-  session. This is the "teardown that pumps" escape hatch callback_scope.md
+  destroyed only *after* the destructor body, and a body that pumped an event
+  loop could deliver into a half-dead session. This is the "teardown that pumps" escape hatch callback_scope.md
   documents, and `FlowSession` is its worked example.
 
 ## The Qt/QML reference renderer
