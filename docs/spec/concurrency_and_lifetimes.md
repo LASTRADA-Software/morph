@@ -388,9 +388,7 @@ about how it sits in *this* threading model:
   teach as an incantation.
 - **A destructor that can pump must `requestStop()` first.** Members are
   destroyed *after* the destructor body, so a body that blocks on a nested event
-  loop (`sendSync`-style, see
-  [`QtWebSocketBackend::sendSync`](#qtwebsocketbackendsendsync--a-disconnect-must-not-freeze-the-qt-thread))
-  can still deliver into a half-destroyed receiver.
+  loop can still deliver into a half-destroyed receiver.
   `morph::flows::FlowSession` does exactly this.
 - **The guarantee is executor-affine; cross-thread stop is advisory.** When the
   scope is destroyed or stopped on the delivery executor's own thread — the
@@ -459,27 +457,12 @@ cover a backend that outlives its `Bridge`:
   runs there too. It then ignores a reconnect of a backend the bridge has since
   switched away from.
 
-### `QtWebSocketBackend::sendSync` — a disconnect must not freeze the Qt thread
+### `QtWebSocketBackend` — every reply settles from the socket's slot
 
-`registerModel` is synchronous: `sendSync` sends the envelope and pumps a
-**nested `QEventLoop`** on the Qt thread until the reply arrives. Everything runs
-on the single Qt thread, so the parked loop is unblocked only by a slot on that
-same thread. The rules that keep it from hanging:
-
-- **The `disconnected` slot quits a parked sync loop.** If `_syncLoop` is
-  non-null when the socket drops, the slot clears `_pendingReply` and calls
-  `_syncLoop->quit()`. Without this, a disconnect while a register reply is
-  outstanding would leave the nested loop running forever — freezing the Qt
-  thread. On return `sendSync` sees an empty `_pendingReply` and throws
-  `"disconnected"`, which `registerModel` reports as
-  `"register failed: disconnected"`.
-- **`sendSync` fails fast if already disconnected** — it checks `_connected`
-  before parking and throws rather than waiting for a reply that will never come.
-- **`sendSync` is non-reentrant.** `_syncLoop` is a single pointer; a second sync
-  send while one is parked would clobber it and cross the two replies. Register
-  calls run on the Qt thread and never re-enter `sendSync` from within a parked
-  loop, but the guard throws on reentry rather than corrupting state if that
-  assumption is ever violated.
+Every request `QtWebSocketBackend` sends is settled from its
+`textMessageReceived` slot on the Qt thread, matched by `callId`, and delivered
+on the executor the caller named; nothing waits for a reply inside a call, and a
+disconnect rejects whatever is still pending through `cancelPending`.
 
 ### `NetworkMonitor` — callbacks run on the I/O loop and must not block it
 

@@ -112,14 +112,11 @@
 /// non-empty value.
 ///
 /// @par Note what is *not* here, and why this is the first WASM binary that can say so honestly
-/// No `asyncRegistrationEnabled` flag, no `setConnectHandler`, no
-/// hand-rolled wait-for-binding timer — `AppContext`
-/// (`examples/common/gui/app_context.hpp`) owns the first two generically,
-/// confirmed still true by reading `examples/common/gui/app_context.cpp:37`,
-/// which builds this client's `QtWebSocketBackend` with
-/// `Config{.asyncRegistrationEnabled = true}` for every ladder GUI/WASM app,
-/// polls included, unconditionally. No new wiring was needed here beyond
-/// what `AppContext` already provides.
+/// No `setConnectHandler` and no hand-rolled wait-for-binding timer —
+/// `AppContext` (`examples/common/gui/app_context.hpp`) owns the first
+/// generically for every ladder GUI/WASM app, polls included, and
+/// `QtWebSocketBackend` registers without blocking. No new wiring was needed
+/// here beyond what `AppContext` already provides.
 ///
 /// Its QML dispatches on `Component.onCompleted` unconditionally:
 /// `gui/qml/VoteView.qml` fires `pollBridge.openPoll(pollId)` exactly once.
@@ -208,9 +205,8 @@ int main(int argc, char** argv) {
     QGuiApplication qtApp{argc, argv};
 
     // Always Remote — see this file's header comment. `AppContext` builds the
-    // QtWebSocketBackend with asyncRegistrationEnabled=true, which is what
-    // makes registration WASM-safe at all (the synchronous path nests a
-    // QEventLoop and aborts the page — examples/TESTING.md, "WASM reality").
+    // QtWebSocketBackend, whose registration never nests a QEventLoop (which
+    // would abort the page — examples/TESTING.md, "WASM reality").
     ::morph::ladder::gui::AppContext ctx{
         ::morph::ladder::gui::Remote{.url = QUrl{QString::fromUtf8(MORPH_LADDER_POLLS_WASM_SERVER_URL)}}};
 

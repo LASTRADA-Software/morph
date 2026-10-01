@@ -363,9 +363,8 @@ No wire change: the three requests above are unchanged. Every keyed acquire
 | `primary` empty, `current` zero | a result-keyed action's first, anonymous bind |
 
 A backend that can settles the bind before returning (`LocalBackend`,
-`SimulatedRemoteBackend`, a blocking-configured `QtWebSocketBackend`);
-`QtWebSocketBackend` with `asyncRegistrationEnabled` and `SocketBackend` settle
-it when the reply arrives. Replies route through the existing `callId`-keyed
+`SimulatedRemoteBackend`); `QtWebSocketBackend` and `SocketBackend` settle it
+when the reply arrives. Replies route through the existing `callId`-keyed
 pending map, which is verb-agnostic: `register` (shared or not) and `attach`
 all reply `ok` with a `modelId`, or `err`. An empty `primary` with a live
 `current` degrades to a private bind.

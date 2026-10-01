@@ -492,14 +492,13 @@ TEST_CASE("Presenter: a dispatch made before registration settles is rejected wh
     // track()'s error branch brings busy() back to false.
     //
     // ws://127.0.0.1:1 is a reserved, never-listening port, so the
-    // connection deterministically never comes up. With
-    // asyncRegistrationEnabled set the handler's bind is queued until the
-    // socket connects; the failed connection rejects it with a
-    // DisconnectedError, and the held dispatch with it.
+    // connection deterministically never comes up. The handler's private bind
+    // is queued until the socket connects; the failed connection rejects it
+    // with a DisconnectedError, and the held dispatch with it.
     morph::qt::QtExecutor qtExec;
     QUrl const url{QStringLiteral("ws://127.0.0.1:1")};
-    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, std::nullopt, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    auto backendPtr =
+        std::make_unique<morph::qt::QtWebSocketBackend>(url, std::nullopt, morph::qt::QtWebSocketBackend::Config{});
     morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
 
     ProbePresenter presenter{bridge, &qtExec};

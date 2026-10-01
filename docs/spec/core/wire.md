@@ -398,11 +398,11 @@ the request's `protocolVersion` against that range:
   `ProtocolRange{min, max}`.
 - Outside the range → `"err"` reply, `message = "protocol version unsupported"`.
 
-`SimulatedRemoteBackend::negotiateProtocolVersion()` and
-`QtWebSocketBackend::negotiateProtocolVersion()` send a `"hello"` — over the
-same synchronous control path as `registerModel` (`handleInline` for the
-simulated backend, `sendSync` for the Qt backend) — and classify the decoded
-reply through `interpretHelloReply`:
+`SimulatedRemoteBackend::negotiateProtocolVersion()` sends a `"hello"`
+synchronously over `handleInline`, and
+`QtWebSocketBackend::negotiateProtocolVersion(replyExec)` sends one and settles
+a `Completion` from the reply; both classify the decoded reply through
+`interpretHelloReply`:
 
 - The peer's `"ok"` → `ProtocolNegotiationResult::Negotiated`.
 - An `"err"` whose `message` is exactly `"unknown envelope kind: hello"` (the

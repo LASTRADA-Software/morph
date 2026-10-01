@@ -221,6 +221,10 @@ TEST_CASE("FaultProxy::duplicateReply delivers the reply twice on the wire but r
     ProxyRig rig;
     ::morph::bridge::BridgeHandler<FaultProbeCounter> handler{*rig.bridge, &rig.qtExec};
 
+    // The handler's bind is a round trip too: let its reply land before the
+    // reply count is read below.
+    REQUIRE(::morph::ladder::testkit::pumpUntil([&] { return handler.isBound(); }));
+
     rig.proxy->setRequestObserver([&](std::uint64_t callId, ::morph::ladder::testkit::FaultProxy& self) {
         if (++requestsSeen == 1) {
             self.duplicateReply(callId);
@@ -332,6 +336,10 @@ TEST_CASE("FaultProxy::killAfter drops the connection instead of the targeted re
     // notification (the [issue29] pattern in tests/qt/test_qt_websocket.cpp) —
     // not by inspecting the proxy's or the server's side of the socket.
     rig.backend->setDisconnectHandler([&] { disconnected.store(true); });
+
+    // The handler's bind is a round trip too: let its reply land before the
+    // reply count is read below.
+    REQUIRE(::morph::ladder::testkit::pumpUntil([&] { return handler.isBound(); }));
 
     rig.proxy->setRequestObserver([&](std::uint64_t callId, ::morph::ladder::testkit::FaultProxy& self) {
         if (++requestsSeen == 1) {

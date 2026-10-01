@@ -46,8 +46,8 @@ infrastructure is now **rung 0**, delivered *before* the pastebin app: the
 testkit subset (`pump.hpp`, `backend_rig.hpp`, `db_fixture.hpp`, Qt-owning
 test main), `examples/common/gui` (AppContext + Presenter base), the
 `ladder-tests` CI job, and the **WASM-remote spike** — the first-ever
-WASM + `QtWebSocketBackend` run, which requires `asyncRegistrationEnabled =
-true` (opt-in, off by default) and the `setConnectHandler` pattern instead
+WASM + `QtWebSocketBackend` run, which requires registration that never
+blocks and the `setConnectHandler` pattern instead
 of `waitForConnected()` (which hangs the page on WASM), with a written
 fallback plan if it bounces off framework work. Rung 1 proper is the app
 below plus its design records. Deferred from rung 1: the convergence

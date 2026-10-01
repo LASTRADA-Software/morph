@@ -1739,14 +1739,14 @@ TEST_CASE("Fail-open default: an unauthenticated client registers and reads a pa
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("hello negotiates the protocol version the server is built against", "[pastebin][security][socket-only]") {
-    // No example exercised the `hello` handshake before this rung (README's
-    // "Required tests"). `negotiateProtocolVersion()` is transport-level and
-    // blocks on a nested QEventLoop, which is exactly what a native Catch2
-    // test wants; `BackendRig::socketBackend()` exists to reach it.
+    // `negotiateProtocolVersion()` is transport-level, so
+    // `BackendRig::socketBackend()` exists to reach it.
     DbFixture fixture;
     BackendRig rig{Mode::Socket, 1};
+    morph::qt::QtExecutor qtExec;
 
-    REQUIRE(rig.socketBackend(0).negotiateProtocolVersion() == morph::wire::ProtocolNegotiationResult::Negotiated);
+    REQUIRE(awaitQt(rig.socketBackend(0).negotiateProtocolVersion(qtExec)) ==
+            morph::wire::ProtocolNegotiationResult::Negotiated);
 
     // Negotiation is not a one-way door: the same connection goes on to serve
     // ordinary traffic.
@@ -1757,7 +1757,8 @@ TEST_CASE("hello negotiates the protocol version the server is built against", "
 
     // Idempotent — a second handshake over a live connection negotiates the
     // same version rather than failing.
-    REQUIRE(rig.socketBackend(0).negotiateProtocolVersion() == morph::wire::ProtocolNegotiationResult::Negotiated);
+    REQUIRE(awaitQt(rig.socketBackend(0).negotiateProtocolVersion(qtExec)) ==
+            morph::wire::ProtocolNegotiationResult::Negotiated);
 }
 
 // ═════════════════════════════════════════════════════════════════════════

@@ -204,8 +204,11 @@ TEST_CASE("BackendRig::socketBackend() hands out the live backend, usable for he
 
     // negotiateProtocolVersion() is transport-level and has no Bridge-level
     // equivalent — reaching it at all is the reason this accessor exists.
-    REQUIRE(rig.socketBackend(0).negotiateProtocolVersion() == morph::wire::ProtocolNegotiationResult::Negotiated);
-    REQUIRE(rig.socketBackend(1).negotiateProtocolVersion() == morph::wire::ProtocolNegotiationResult::Negotiated);
+    morph::qt::QtExecutor qtExec;
+    REQUIRE(morph::ladder::testkit::awaitQt(rig.socketBackend(0).negotiateProtocolVersion(qtExec)) ==
+            morph::wire::ProtocolNegotiationResult::Negotiated);
+    REQUIRE(morph::ladder::testkit::awaitQt(rig.socketBackend(1).negotiateProtocolVersion(qtExec)) ==
+            morph::wire::ProtocolNegotiationResult::Negotiated);
 
     // Still a working backend afterwards: negotiation is not a one-way door.
     auto handler = rig.client<RigProbeModel>(0);

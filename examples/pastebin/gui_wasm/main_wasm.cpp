@@ -29,11 +29,10 @@
 /// * **No database bootstrap.** `gui/main.cpp` calls `pastebin::db::setup()`
 ///   in `Local` mode; there is nothing to set up here.
 ///
-/// Note what is *not* here: no `asyncRegistrationEnabled` flag, no
-/// `setConnectHandler`, no hand-rolled wait-for-binding timer. The spike had
-/// to hand-roll all three; `AppContext` (`examples/common/gui/app_context.hpp`)
-/// now owns the first two generically for every client, native or browser,
-/// and the third is not needed: a call made through a handler whose
+/// Note what is *not* here: no `setConnectHandler` and no hand-rolled
+/// wait-for-binding timer. `AppContext` (`examples/common/gui/app_context.hpp`)
+/// owns the first generically for every client, native or browser, and the
+/// second is not needed: a call made through a handler whose
 /// registration round trip is still in flight waits for it and is dispatched
 /// once it lands, so `Main.qml` requests its first listing on
 /// `Component.onCompleted` here exactly as the desktop client does.
@@ -59,9 +58,8 @@ int main(int argc, char** argv) {
     QGuiApplication qtApp{argc, argv};
 
     // Always Remote — see this file's header comment. `AppContext` builds the
-    // QtWebSocketBackend with asyncRegistrationEnabled=true, which is what
-    // makes registration WASM-safe at all (the synchronous path nests a
-    // QEventLoop and aborts the page — examples/TESTING.md, "WASM reality").
+    // QtWebSocketBackend, whose registration never nests a QEventLoop (which
+    // would abort the page — examples/TESTING.md, "WASM reality").
     ::morph::ladder::gui::AppContext ctx{
         ::morph::ladder::gui::Remote{.url = QUrl{QString::fromUtf8(MORPH_LADDER_PASTEBIN_WASM_SERVER_URL)}}};
 
@@ -71,7 +69,6 @@ int main(int argc, char** argv) {
 
     // Every handler is built from inside onReady(), never before it. A
     // registration issued before the socket is up no longer fails permanently:
-    // `Remote` mode sets `asyncRegistrationEnabled`, and
     // `QtWebSocketBackend::bindModel()` queues such a private bind and sends
     // it once the connection comes up (`docs/spec/core/backend.md`, "The
     // structural registration surface"). Deferring to onReady() is kept because it

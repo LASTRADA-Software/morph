@@ -3,9 +3,9 @@
 // WASM-remote spike: proves a WASM-compiled QtWebSocketBackend client can
 // register a model and execute one action against a real remote server,
 // using the two WASM-mandatory patterns documented in examples/TESTING.md,
-// "WASM reality": asyncRegistrationEnabled=true (the plain synchronous
-// registerModel aborts the page) and setConnectHandler (waitForConnected()
-// hangs the page on WASM).
+// "WASM reality": registration through the Bridge (QtWebSocketBackend never
+// spins a nested event loop to register) and setConnectHandler
+// (waitForConnected() hangs the page on WASM).
 //
 // This binary is the client half only — point MORPH_LADDER_WASM_SPIKE_SERVER_URL
 // (baked in at build time via a CMake compile definition, since a browser
@@ -53,11 +53,10 @@ int main(int argc, char* argv[]) {
     // that never surfaces on a native build, where `QT_NO_SSL` is unset --
     // mirrors backend_rig.hpp's identical split for QtWebSocketServer.
 #ifdef QT_NO_SSL
-    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::qt::QtWebSocketBackend::Config{});
 #else
-    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, std::nullopt, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    auto backendPtr =
+        std::make_unique<morph::qt::QtWebSocketBackend>(url, std::nullopt, morph::qt::QtWebSocketBackend::Config{});
 #endif
     auto* rawBackend = backendPtr.get();  // stays valid: Bridge below co-owns the same object
 

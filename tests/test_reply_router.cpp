@@ -135,9 +135,8 @@ TEST_CASE("classifyExecuteReply: an unrecognised kind with no message is an Erro
 // ── PendingCallTable ────────────────────────────────────────────────────────
 
 TEST_CASE("PendingCallTable: call ids start at 1 and never repeat", "[backend][reply_router][pending_table]") {
-    // 0 is reserved on the wire for "synchronous control reply", so an execute
-    // must never be issued under it -- dispatchIncomingEnvelope routes callId 0
-    // to the parked sendSync caller instead of to the pending table.
+    // A reply with callId 0 names no request, so no execute is ever issued
+    // under it.
     PendingCallTable<FakePending> table;
     std::uint64_t const first = table.nextCallId();
     CHECK(first == 1U);

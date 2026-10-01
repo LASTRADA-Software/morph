@@ -102,8 +102,8 @@ public:
 
     /// @brief Allocates the next call id.
     ///
-    /// Starts at 1: `callId == 0` is reserved on the wire for "this is a
-    /// synchronous control reply, not an execute reply".
+    /// Starts at 1: a reply with `callId == 0` names no request, so no
+    /// request is ever filed under it.
     /// @return A call id not previously returned by this table.
     [[nodiscard]] std::uint64_t nextCallId() noexcept { return ++_nextCallId; }
 

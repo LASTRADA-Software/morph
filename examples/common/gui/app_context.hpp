@@ -55,11 +55,8 @@ struct Remote {
 /// `Local` mode has no network dependency: `ready()` is `true` the moment the
 /// constructor returns and `onReady()` invokes its callback synchronously.
 ///
-/// `Remote` mode builds its `QtWebSocketBackend` with
-/// `Config{.asyncRegistrationEnabled = true}` (the plain synchronous
-/// `registerModel` nests a `QEventLoop` and aborts a WASM page —
-/// examples/TESTING.md, "WASM reality").
-/// `QtWebSocketBackend::bindModel()` queues a *private* bind issued before
+/// `Remote` mode builds a `QtWebSocketBackend`, which registers without
+/// blocking. `QtWebSocketBackend::bindModel()` queues a *private* bind issued before
 /// the socket has finished connecting and sends it once the connection
 /// comes up (`docs/spec/core/backend.md`, "The structural registration
 /// surface"), so building a `BridgeHandler` immediately after this

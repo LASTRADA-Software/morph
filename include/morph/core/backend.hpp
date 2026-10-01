@@ -363,15 +363,40 @@ struct IBackend {
     /// instance is invisible to the directory by construction. The result is a
     /// snapshot and is stale the moment it is returned.
     ///
-    /// Synchronous. The asynchronous surface users see is
-    /// `BridgeHandler::instances()`, which wraps this in a `Completion` so the
-    /// call site reads identically local and remote.
+    /// Synchronous. `instances()` is the same question answered through a
+    /// `Completion`, which is what `Bridge` asks.
     ///
     /// @param typeId String type-id to enumerate.
     /// @return Canonical key strings of the live shared instances; empty by default.
     virtual std::vector<std::string> listInstances(const std::string& typeId) {
         (void)typeId;
         return {};
+    }
+
+    /// @brief Lists the primary keys of live shared instances of @p typeId,
+    ///        answered through a `Completion` delivered on @p cbExec.
+    ///
+    /// What `BridgeHandler::instances()` reaches. The default answers from
+    /// `listInstances` and settles before returning, so a backend whose
+    /// directory is local needs nothing more. A backend whose directory is
+    /// across a round trip overrides it and settles when the reply arrives.
+    /// A throw from `listInstances` rejects the `Completion` rather than
+    /// propagating, so a caller has one failure channel.
+    ///
+    /// @param typeId String type-id to enumerate.
+    /// @param cbExec Executor the answer is delivered on. Borrowed: it must
+    ///        outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the canonical key strings of the
+    ///         live shared instances, or rejected with the failure.
+    virtual ::morph::async::Completion<std::vector<std::string>> instances(const std::string& typeId,
+                                                                           ::morph::exec::IExecutor& cbExec) {
+        auto [completion, promise] = ::morph::async::Completion<std::vector<std::string>>::makeSettleable(&cbExec);
+        try {
+            promise.resolve(listInstances(typeId));
+        } catch (...) {
+            promise.reject(std::current_exception());
+        }
+        return std::move(completion);
     }
 
     /// @brief Removes the model identified by @p mid from the backend.

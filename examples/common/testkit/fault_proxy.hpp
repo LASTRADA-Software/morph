@@ -83,6 +83,19 @@ inline void throwIfFaultProxyListenFailed(bool listenSucceeded) {
     }
 }
 
+/// @brief Decodes a request frame's `callId` if it is an `execute`, or `0`.
+/// @param message The raw text frame, as received from the client.
+/// @return The `execute` request's `callId`, or `0` for any other request or
+///         an undecodable frame.
+[[nodiscard]] inline std::uint64_t executeCallIdOrZero(const QString& message) noexcept {
+    try {
+        auto const env = ::morph::wire::decode(message.toStdString());
+        return env.kind == "execute" ? env.callId : 0;
+    } catch (const std::exception&) {
+        return 0;
+    }
+}
+
 }  // namespace detail
 
 /// @brief One client<->server relay leg with scriptable server->client reply
@@ -101,7 +114,7 @@ inline void throwIfFaultProxyListenFailed(bool listenSucceeded) {
 /// `QtWebSocketBackend`'s automatic reconnect does after a `killAfter`. The
 /// proxy opens its own upstream socket lazily, on the first client connection,
 /// and buffers client frames until that upstream handshake completes — without
-/// that buffer the very first frame a client sends (a synchronous `register`,
+/// that buffer the very first frame a client sends (a handler's `register`,
 /// emitted the moment `waitForConnected()` returns) would be written to a
 /// still-opening socket and silently lost.
 ///
@@ -184,10 +197,9 @@ public:
     /// is guaranteed installed before the request — and therefore before any
     /// possible reply to it — ever reaches the upstream server.
     ///
-    /// Only requests carrying a non-zero `callId` are reported: `callId == 0`
-    /// is the wire's marker for a synchronous control call
-    /// (`register`/`deregister`/`hello`), which has no asynchronous reply to
-    /// fault. A request this proxy cannot decode is forwarded unreported.
+    /// Only `execute` requests are reported, so "call k" counts the actions a
+    /// test dispatches and not the handler's `register` or a `deregister`. A
+    /// request this proxy cannot decode is forwarded unreported.
     ///
     /// @param observer Callback receiving the forwarded request's `callId` and
     ///        this proxy (so it can call `dropReply`/`delayReply`/

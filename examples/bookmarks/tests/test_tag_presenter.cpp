@@ -155,37 +155,8 @@ TEST_CASE(
     CAPTURE(mode);
     DbFixture fixture;
     auto rig = makeAuthedRig(mode, "tag-presenter-merge-secret", "alice");
-    // One handler reused for both seed calls -- not just for the list test's
-    // reason above, but because this test is where the underlying bug was
-    // actually caught: `Bridge::registerHandler()`'s only synchronous path
-    // (`BackendRig::Socket` never opts into `asyncRegistrationEnabled`) blocks
-    // in `QtWebSocketBackend::sendSync` via a nested `QEventLoop`, waiting for
-    // a reply whose wire envelope carries `callId == 0` -- the same `callId`
-    // every fire-and-forget `deregister` reply also carries (`onTextMessage`
-    // has no other way to tell "the sync reply I'm parked for" from "an
-    // unrelated deregister ack") from `QtWebSocketBackend::deregisterModel`.
-    // Two short-lived handlers back to back -- construct, dispatch, destruct
-    // (deregister), construct again -- let a fresh registration's `sendSync`
-    // park its nested loop while the *previous* handler's still-in-flight
-    // deregister ack is loose on the wire; if that ack's "ok" reply (with no
-    // `modelId` field) lands first, `onTextMessage` hands it to the parked
-    // loop instead of the real register reply, and the new binding's
-    // `currentId` is stored as 0 -- permanently, since the actual register
-    // reply that arrives afterward has nowhere left to go (`_syncLoop` was
-    // already reset). Every later dispatch on that binding then fails fast
-    // with "handler not bound" (`Bridge::executeVia`), forever, not just
-    // transiently -- confirmed by instrumented reruns: a bounded retry loop
-    // (an earlier version of this fix) burned its full deadline every time
-    // rather than ever recovering, exactly what a permanently-zeroed
-    // `currentId` predicts, not what a merely slow round trip would. Keeping
-    // one handler alive across both bookmarks removes the *deregister* from
-    // between the two registrations entirely -- there is no longer a stray
-    // reply in flight for a later `sendSync` to catch. This is a real
-    // `QtWebSocketBackend`/`Bridge` protocol-correlation bug (`include/morph/
-    // qt/qt_websocket_backend.hpp`'s `deregisterModel` vs. `sendSync`'s
-    // shared `callId == 0` bucket), not a `Presenter`/`TagPresenter` defect;
-    // fixing it there is out of scope here (framework code, not this rung's
-    // testkit) -- see this task's report for the finding writeup.
+    // One handler reused for both seed calls, for the list test's reason
+    // above: both bookmarks land on the same instance.
     auto bookmarkHandler = rig->client<bookmarks::BookmarkModel>(0);
     seedTaggedBookmark(bookmarkHandler, "https://one.example", {"cpp"});
     seedTaggedBookmark(bookmarkHandler, "https://two.example", {"cpp", "c++"});

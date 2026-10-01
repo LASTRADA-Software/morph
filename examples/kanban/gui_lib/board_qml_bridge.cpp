@@ -551,16 +551,13 @@ bool BoardBridge::replayMoveTaskPosition(const std::string& payload) {
     const MoveTaskPosition& action = *decoded;
 
     // Nested QEventLoop, parked until moveTaskForReplay()'s own Completion
-    // settles -- the same idiom QtWebSocketBackend::sendSync uses for its
-    // own synchronous contract (qt_websocket_backend.cpp), needed here
-    // because SyncWorker::run() calls this function synchronously and wants
+    // settles, needed here because SyncWorker::run() calls this function synchronously and wants
     // an immediate bool back (sync_worker.hpp's documented ReplayFunction
     // contract), while BoardPresenter's own Completion-based API is
     // fundamentally asynchronous. SyncWorker::run() drains and replays one
     // item at a time on whichever thread called run() (here, the Qt thread,
     // via enableOfflineQueue()'s posted onOnline() below) -- never two
-    // replays in flight together -- so there is no reentrant-parking hazard
-    // the way a second concurrent sendSync() would have.
+    // replays in flight together -- so no two loops are ever parked at once.
     QEventLoop loop;
     bool succeeded = false;
     // No `alive`/weak_ptr guard here, unlike every async callback elsewhere

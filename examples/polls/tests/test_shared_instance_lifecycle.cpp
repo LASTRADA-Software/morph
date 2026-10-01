@@ -128,26 +128,10 @@ TEST_CASE(
     "[polls][model][shared-instances]") {
     DbFixture fixture;
     // 5 clients, not 4: the fifth connection is reserved for the fresh
-    // "prober" handler below. Reusing one of the four attached connections
-    // for it would race a fire-and-forget deregister's unsolicited (callId
-    // 0) "ok" reply -- sent by BridgeHandler::~BridgeHandler on connection
-    // teardown, per QtWebSocketBackend::deregisterModel's own doc comment --
-    // against the prober's own synchronous instances() call on that same
-    // connection: QtWebSocketBackend::onTextMessage matches *any* callId-0
-    // reply to whichever sendSync happens to be parked, so a still-in-flight
-    // deregister ack can be misdelivered as the instances() reply, corrupting
-    // it. A genuinely fresh connection never had a deregister in flight, so
-    // it cannot race one. This is the exact mechanism a since-fixed finding
-    // was filed against -- a sync *register* racing a deregister; a sync
-    // *instances()* call is the identical hazard, since both are ordinary
-    // sendSync callers competing for the same callId-0 bucket -- a third
-    // independent reproduction site, after rung 2's own Task 17 discovery
-    // and QtWebSocketBackend::bindModel's empty-key path hitting it too.
-    // QtWebSocketBackend::deregisterModel now assigns a real, tracked callId
-    // rather than sharing the zero sentinel, closing the race framework-side;
-    // this test's own connection-isolation setup (5 clients, not 4) is kept
-    // regardless, since it costs nothing and this test still exercises the
-    // same call shape.
+    // "prober" handler below, so its instances() request shares a connection
+    // with no deregister issued by the four attached handlers' teardown. Every
+    // request carries its own callId, so the two could not be confused anyway;
+    // the separate connection keeps the prober's view independent of theirs.
     BackendRig rig{Mode::Socket, 5, std::make_shared<polls::auth::PollsAuthorizer>()};
 
     // Client 0's plain handler creates the poll -- CreatePoll carries no key.

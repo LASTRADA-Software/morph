@@ -22,20 +22,17 @@ AppContext::AppContext(Mode mode) {
     }
 
     auto& remote = std::get<Remote>(mode);
-    // asyncRegistrationEnabled: the synchronous registerModel path nests a
-    // QEventLoop, which aborts a WASM page outright (`examples/TESTING.md`,
-    // "WASM reality"). A private bind issued before the socket connects is
-    // queued and sent once it does (`docs/spec/core/backend.md`,
-    // "Why registration needs a non-blocking path"), but this class still defers via
-    // setConnectHandler below rather than registering immediately — simpler
-    // to reason about than relying on the queue, and what makes the
-    // readiness contract in this class's doc comment necessary.
-    auto backend = std::make_unique<::morph::qt::QtWebSocketBackend>(
-        remote.url,
+    // A private bind issued before the socket connects is queued and sent
+    // once it does (`docs/spec/core/backend.md`, "Why registration needs a
+    // non-blocking path"), but this class still defers via setConnectHandler
+    // below rather than registering immediately — simpler to reason about
+    // than relying on the queue, and what makes the readiness contract in
+    // this class's doc comment necessary.
+    auto backend = std::make_unique<::morph::qt::QtWebSocketBackend>(remote.url,
 #ifndef QT_NO_SSL
-        std::nullopt,
+                                                                     std::nullopt,
 #endif
-        ::morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+                                                                     ::morph::qt::QtWebSocketBackend::Config{});
     auto* rawBackend = backend.get();  // stays valid: the Bridge below co-owns the same object
     _bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_qtExecutor);
 

@@ -913,11 +913,15 @@ public:
 
     /// @brief Lists the live shared primary keys of `Model` on the active backend.
     /// @tparam Model Concrete model type.
-    /// @return Canonical key strings, in unspecified order.
+    /// @param cbExec Executor the answer is delivered on. Borrowed: it must
+    ///        outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the canonical key strings, in
+    ///         unspecified order, or rejected with the backend's failure.
     template <typename Model>
-    [[nodiscard]] std::vector<std::string> listInstancesOf() {
-        note("Bridge::listInstancesOf");
-        return _backend->listInstances(std::string{::morph::model::ModelTraits<Model>::typeId()});
+    [[nodiscard]] ::morph::async::Completion<std::vector<std::string>> instancesOf(
+        ::morph::exec::IExecutor& cbExec MORPH_LIFETIMEBOUND) {
+        note("Bridge::instancesOf");
+        return _backend->instances(std::string{::morph::model::ModelTraits<Model>::typeId()}, cbExec);
     }
 
     /// @brief Registers a result-type subscription for @p binding.
@@ -2239,18 +2243,26 @@ public:
         requires kShared
     {
         using Key = ::morph::model::PrimaryKeyOf<M>;
-        auto state = std::make_shared<::morph::async::detail::CompletionState<std::vector<Key>>>();
-        ::morph::async::Completion<std::vector<Key>> comp{state, _guiExec};
-        try {
-            std::vector<Key> keys;
-            for (const auto& raw : _bridge.template listInstancesOf<Model>()) {
-                keys.push_back(::morph::model::keyFromString<Key>(raw));
-            }
-            state->setValue(std::move(keys));
-        } catch (...) {
-            state->setException(std::current_exception());
-        }
-        return comp;
+        auto [comp, promise] = ::morph::async::Completion<std::vector<Key>>::makeSettleable(_guiExec);
+        auto answer =
+            std::make_shared<typename ::morph::async::Completion<std::vector<Key>>::Promise>(std::move(promise));
+        // The backend's answer is delivered on the bridge's owner, which is
+        // where this runs, so attaching to it here is attaching on its owner.
+        _bridge.template instancesOf<Model>(_bridge.owner())
+            .thenDetached([answer](const std::vector<std::string>& raws) {
+                try {
+                    std::vector<Key> keys;
+                    keys.reserve(raws.size());
+                    for (const auto& raw : raws) {
+                        keys.push_back(::morph::model::keyFromString<Key>(raw));
+                    }
+                    answer->resolve(std::move(keys));
+                } catch (...) {
+                    answer->reject(std::current_exception());
+                }
+            })
+            .onErrorDetached([answer](const std::exception_ptr& error) { answer->reject(error); });
+        return std::move(comp);
     }
 
     /// @brief Type-erased execute: looks up the action by its registered

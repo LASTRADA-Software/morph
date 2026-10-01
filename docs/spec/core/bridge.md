@@ -893,7 +893,7 @@ is tolerated, as above.
 | `unsubscribe<R>` | `void unsubscribe()` | Drops this handler's callback for `R`. |
 | `attach(key)` | `void attach(const PrimaryKeyOf<Model>&)` | Attaches/re-points a shared handler: the same posted bind, issued after any bind in flight. Never throws; a refusal is logged and leaves the handler on the instance it held (a call held behind it is rejected with the refusal only when there is none). |
 | `primary()` | `optional<PrimaryKeyOf<Model>> primary()` | The handler's current primary, or empty. |
-| `instances()` | `Completion<vector<PrimaryKeyOf<Model>>> instances()` | Snapshot of live shared keys. |
+| `instances()` | `Completion<vector<PrimaryKeyOf<Model>>> instances()` | Snapshot of live shared keys, asked of the backend through `Bridge::instancesOf` (`IBackend::instances`) and delivered on the handler's `guiExec`. |
 | `isBound` | `[[nodiscard]] bool isBound() const noexcept` | Forwards to `Bridge::isBound(binding())`. `false` while the first bind is in flight. |
 | `guiExecutor` | `IExecutor* guiExecutor() const noexcept` | Returns the callback executor. |
 | `binding` | `const shared_ptr<HandlerBinding>& binding() const` | Returns the underlying binding. |

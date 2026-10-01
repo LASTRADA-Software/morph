@@ -554,9 +554,7 @@ private:
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief `_syncWorker`'s `ReplayFunction`: deserialises @p payload and
     ///        replays it via `BoardPresenter::moveTaskForReplay`, blocking
-    ///        (via a nested `QEventLoop`, the same idiom
-    ///        `QtWebSocketBackend::sendSync` uses for its own synchronous
-    ///        contract — `qt_websocket_backend.cpp`) until that call's own
+    ///        (via a nested `QEventLoop`) until that call's own
     ///        `Completion` settles, since `SyncWorker::run()` calls this
     ///        function synchronously and needs an immediate `bool` back
     ///        (`sync_worker.hpp`'s documented `ReplayFunction` contract).

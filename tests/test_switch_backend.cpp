@@ -860,8 +860,8 @@ TEST_CASE(
 
 namespace {
 
-/// @brief A backend with a genuinely non-blocking bind -- `QtWebSocketBackend`
-///        under `asyncRegistrationEnabled`, as far as `Bridge` can tell -- and
+/// @brief A backend with a genuinely non-blocking bind -- `QtWebSocketBackend`,
+///        as far as `Bridge` can tell -- and
 ///        a reconnect it fires from a thread standing in for its transport.
 class DeferredBindBackend : public morph::backend::LocalBackend {
 public:

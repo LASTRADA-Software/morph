@@ -93,7 +93,7 @@ void FaultProxy::onClientTextMessage(const QString& message) {
     // race-free way to name "call k" from outside the wire layer (see
     // setRequestObserver).
     if (_requestObserver) {
-        const std::uint64_t callId = detail::decodeCallIdOrZero(message);
+        const std::uint64_t callId = detail::executeCallIdOrZero(message);
         if (callId != 0) {
             _requestObserver(callId, *this);
         }
@@ -107,7 +107,7 @@ void FaultProxy::onClientTextMessage(const QString& message) {
     } else {
         // The upstream handshake is still in flight; a write now would be
         // dropped on the floor. Buffer instead — the very first client frame
-        // (a synchronous `register`) reliably lands in this window.
+        // (a handler's `register`) reliably lands in this window.
         _upstreamBacklog.push_back(message);
     }
 }

@@ -380,14 +380,13 @@ struct EscapingWriteOpts : glz::opts {
 /// - **`kind`** is the discriminator; an envelope without one is malformed.
 ///   Keeping it unconditional also means the first key of every message is
 ///   still `"kind"`.
-/// - **`callId` is a correlation field, and `0` is a live routing instruction
-///   rather than an absence.** Both transports discriminate on it: a reply with
-///   a non-zero `callId` is matched against the pending-execute map, and one
-///   with `callId == 0` is handed to whichever synchronous control call is
-///   parked (`QtWebSocketBackend::onTextMessage`,
+/// - **`callId` is a correlation field, and `0` is a value rather than an
+///   absence.** Both transports route on it: a reply is matched against the
+///   pending request filed under its `callId`, and `0` names none, so such a
+///   reply is dropped (`QtWebSocketBackend::onTextMessage`,
 ///   `SocketBackend::dispatchIncomingEnvelope`). A peer therefore cannot treat
 ///   an absent `callId` as "no information"; it has to *reconstruct* the
-///   sentinel before it can route the frame at all. morph's own `decode` does
+///   value before it can route the frame at all. morph's own `decode` does
 ///   that for free by default-initialising, so omitting it round-trips cleanly
 ///   in C++ and still breaks the scenario driver, a second decoder that reads
 ///   absence as `None`. Emitting correlation

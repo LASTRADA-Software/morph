@@ -47,8 +47,8 @@ TEST_CASE(
     REQUIRE(wsServer.listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
-    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, std::nullopt, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    auto backendPtr =
+        std::make_unique<morph::qt::QtWebSocketBackend>(url, std::nullopt, morph::qt::QtWebSocketBackend::Config{});
 
     morph::qt::QtExecutor qtExec;
     morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
@@ -71,7 +71,7 @@ TEST_CASE(
 // must still exist afterward to `execute()` against.
 TEST_CASE(
     "The WASM spike's registration call sequence resolves natively when registerHandler() is deferred to "
-    "setConnectHandler's callback (asyncRegistrationEnabled + setConnectHandler)",
+    "setConnectHandler's callback",
     "[ladder][testkit][wasm-spike]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -79,8 +79,8 @@ TEST_CASE(
     REQUIRE(wsServer.listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
-    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, std::nullopt, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    auto backendPtr =
+        std::make_unique<morph::qt::QtWebSocketBackend>(url, std::nullopt, morph::qt::QtWebSocketBackend::Config{});
     auto* rawBackend = backendPtr.get();  // stays valid: bridge below co-owns the same object
 
     morph::qt::QtExecutor qtExec;

@@ -540,14 +540,14 @@ Open framework facts every rung must respect (verified):
   clients" job builds the spike and rungs 1–3's clients by name under
   `-DMORPH_LADDER_RUNGS=all`, and runs green. So "does it build" is answered;
   "does it work in a browser" is still not.
-- The plain registration path is only WASM-safe with
-  **`asyncRegistrationEnabled = true`, which is opt-in and off by
-  default**; with defaults, the first `registerModel` aborts the page.
+- `QtWebSocketBackend` registers only through `bindModel`, which never
+  blocks; its synchronous `registerModel` refuses rather than spin a nested
+  event loop, so the registration path is WASM-safe by construction.
 - **`waitForConnected()` hangs the page on WASM** — the WASM client must
   use the `setConnectHandler` pattern instead; the Socket rig's
   `waitForConnected()` recipe is for *native* tests only.
-- A **blocking keyed acquire nests an event loop that aborts the page on
-  WASM**, so a WASM client sets `asyncRegistrationEnabled`; async attach is
+- A **blocking keyed acquire would nest an event loop that aborts the page on
+  WASM**; `QtWebSocketBackend` has none, and async attach is
   **not a missing framework prerequisite**. `IBackend::bindModel`
   (`include/morph/core/backend.hpp`) is the one non-blocking acquire verb —
   a request with a non-empty `primary` is the register-or-attach case, one

@@ -139,7 +139,7 @@ runs on.
 
    The struck claim was: `Bridge::assignHandlerPrimary`'s promote step has
    no non-blocking path (`IBackend::assignPrimary` being a synchronous
-   `sendSync` on `QtWebSocketBackend`, with nothing beside it), so a WASM tab
+   round trip on `QtWebSocketBackend`, with nothing beside it), so a WASM tab
    dispatching `CreatePoll` would abort the page at the promote step. Both
    premises are false against the tree as it stands:
 
@@ -222,11 +222,9 @@ each now lives:
 - **Async shared/keyed attach.** *Shipped:* `IBackend::bindModel`
   (`include/morph/core/backend.hpp`), dispatched to by
   every keyed `BridgeHandler::execute` and implemented natively by
-  `QtWebSocketBackend`. The blocking `sendSync` path a wire backend used to
-  take for a keyed acquire nests a `QEventLoop` and aborts the page on the
-  WASM main thread, so a WASM client must not reach it — and with
-  `Config::asyncRegistrationEnabled` set it does not, so the very first
-  `OpenPoll` a WASM tab makes is no longer blocked on the framework. Built as
+  `QtWebSocketBackend`, which has no blocking acquire path at all (one would
+  nest a `QEventLoop` and abort the page on the WASM main thread), so the very
+  first `OpenPoll` a WASM tab makes is not blocked on the framework. Built as
   this rung's first framework-level task. Not a pair of optional non-blocking
   twins a backend returns `true` or `false` from with the caller falling back to
   the synchronous verb on `false`: there is one verb, so there is no opt-in to
