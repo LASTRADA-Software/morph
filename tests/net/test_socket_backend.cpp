@@ -7,7 +7,6 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
-#include <cerrno>
 #include <chrono>
 #include <functional>
 #include <future>
@@ -248,19 +247,14 @@ private:
             if (auto accepted = _listener.tryAccept()) {
                 return std::move(*accepted);
             }
-            auto const remaining =
-                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-            if (remaining <= std::chrono::milliseconds::zero()) {
+            auto const waited = morph::net::detail::pollUntil(_listener.nativeHandle(), POLLIN, deadline);
+            if (waited.outcome == morph::net::detail::PollOutcome::kTimedOut) {
                 throw std::runtime_error("FakeWsServer::acceptAndHandshake: no client connected within " +
                                          std::to_string(timeout.count()) + "ms");
             }
-            pollfd pfd{};
-            pfd.fd = _listener.nativeHandle();
-            pfd.events = POLLIN;
-            int const ready = ::poll(&pfd, 1, static_cast<int>(remaining.count()));
-            if (ready < 0 && errno != EINTR) {
+            if (waited.outcome == morph::net::detail::PollOutcome::kFailed) {
                 throw std::runtime_error("FakeWsServer::acceptAndHandshake: poll() failed: " +
-                                         std::system_category().message(errno));
+                                         std::system_category().message(waited.error));
             }
         }
     }

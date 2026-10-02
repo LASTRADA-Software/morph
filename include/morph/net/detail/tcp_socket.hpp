@@ -31,6 +31,72 @@
 
 namespace morph::net::detail {
 
+/// @brief How a `pollUntil()` wait ended.
+enum class PollOutcome : std::uint8_t {
+    kReady,     ///< `poll()` reported the descriptor (readiness, hang-up or error bits alike).
+    kTimedOut,  ///< The deadline passed first.
+    kFailed,    ///< `poll()` failed with something other than `EINTR`; see `PollResult::error`.
+};
+
+/// @brief The result of a `pollUntil()` wait.
+struct PollResult {
+    /// @brief How the wait ended.
+    PollOutcome outcome = PollOutcome::kTimedOut;
+    /// @brief The `errno` of the failing `poll()` when `outcome` is `kFailed`; `0` otherwise.
+    int error = 0;
+};
+
+/// @brief Waits for @p events on @p fd until @p deadline, with one budget for the whole wait.
+///
+/// A signal that interrupts `poll()` (`EINTR`) does not end the wait and does
+/// not re-arm the full timeout: the loop recomputes what is left of the budget
+/// and polls again, so a host delivering signals steadily (a profiler's timer,
+/// `SIGCHLD`) cannot stretch the wait past @p deadline. The per-call timeout is
+/// clamped to `int` milliseconds, which is what `poll()` takes; an unclamped
+/// multi-week budget would truncate to garbage, possibly negative, meaning
+/// "wait forever".
+///
+/// Reports rather than throws, so each caller keeps its own policy for a
+/// timeout or a failure (a connect moves on to the next address candidate; a
+/// handshake read gives up).
+///
+/// @param descriptor Descriptor to wait on.
+/// @param events     `poll()` event mask, e.g. `POLLIN` or `POLLOUT`.
+/// @param deadline   Point after which the wait reports `kTimedOut`. A deadline
+///                   already passed reports it without polling.
+/// @return The outcome, plus the failing `errno` for `kFailed`.
+// A descriptor and an event mask are different things that happen to convert; the
+// parameter names carry the distinction.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+inline PollResult pollUntil(int descriptor, short events, std::chrono::steady_clock::time_point deadline) {
+    pollfd pfd{};
+    pfd.fd = descriptor;
+    pfd.events = events;
+    for (;;) {
+        // Rounded up: poll() takes whole milliseconds, and truncating would wake
+        // it up to a millisecond before the deadline and report a timeout early.
+        auto const remaining =
+            std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+        if (remaining.count() <= 0) {
+            return {.outcome = PollOutcome::kTimedOut};
+        }
+        auto const waitMs = static_cast<int>(
+            std::min<std::chrono::milliseconds::rep>(remaining.count(), std::numeric_limits<int>::max()));
+        int const ready = ::poll(&pfd, 1, waitMs);
+        if (ready > 0) {
+            return {.outcome = PollOutcome::kReady};
+        }
+        if (ready < 0) {
+            int const err = errno;
+            if (err != EINTR) {
+                return {.outcome = PollOutcome::kFailed, .error = err};
+            }
+        }
+        // EINTR, or a poll that returned early with nothing ready (the
+        // millisecond rounding above): recompute what is left and go again.
+    }
+}
+
 /// @brief RAII wrapper around a POSIX (BSD sockets) TCP file descriptor.
 ///
 /// Linux/macOS only today — see `docs/spec/core/backend.md`'s `morph::net`
@@ -168,34 +234,10 @@ public:
                 ::close(fd);
                 continue;
             }
-            pollfd pfd{};
-            pfd.fd = fd;
-            pfd.events = POLLOUT;
-            // Retry on EINTR rather than treating a delivered signal as a
-            // connect failure. Every other blocking syscall in this file already
-            // does (accept, tryAccept, recvSome, sendAll), and the accept loop's
-            // own comment makes the case: "any signal the host happens to
-            // deliver (a profiler's timer, SIGCHLD, SIGWINCH)" must not tear the
-            // operation down. This poll was the one that did not honour it.
-            int pollRc = 0;
-            for (;;) {
-                auto const remaining =
-                    std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-                if (remaining.count() <= 0) {
-                    pollRc = 0;  // deadline reached: treat as timeout
-                    break;
-                }
-                // Clamped: poll takes int milliseconds, and a multi-week timeout
-                // would otherwise truncate to a garbage (possibly negative,
-                // i.e. infinite) value.
-                auto const waitMs = static_cast<int>(
-                    std::min<std::chrono::milliseconds::rep>(remaining.count(), std::numeric_limits<int>::max()));
-                pollRc = ::poll(&pfd, 1, waitMs);
-                if (pollRc >= 0 || errno != EINTR) {
-                    break;
-                }
-            }
-            if (pollRc <= 0) {
+            // A timeout or a poll failure on this candidate moves on to the
+            // next; only running out of candidates is an error. A delivered
+            // signal is neither (pollUntil retries across EINTR).
+            if (pollUntil(fd, POLLOUT, deadline).outcome != PollOutcome::kReady) {
                 ::close(fd);
                 continue;
             }

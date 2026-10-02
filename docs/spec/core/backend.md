@@ -582,7 +582,11 @@ would silently change `registerHandler`'s contract. See
 [Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy).
 
 `executeVia` fails fast with `"handler not bound"` for a call issued before the
-reply arrives; it does not queue.
+reply arrives; it does not queue. A caller that wants the call held instead
+names that at the call site with `BridgeHandler::executeWhenBound()`, which
+chains the dispatch on `whenBound()` ([bridge.md](bridge.md#registration-readiness--isbound--whenbound)).
+The default stays fail-fast so that `execute()` means the same thing whichever
+backend the handler was built over.
 
 Consequences:
 

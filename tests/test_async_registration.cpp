@@ -227,6 +227,7 @@ public:
                                                             morph::exec::IExecutor* cbExec) override {
         auto state = std::make_shared<morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         morph::async::Completion<std::shared_ptr<void>> comp{state, cbExec};
+        _executeCount.fetch_add(1);
         std::scoped_lock const lock{_regMtx};
         auto iter = _models.find(mid.v);
         if (iter == _models.end()) {
@@ -294,6 +295,8 @@ public:
         std::scoped_lock const lock{_pendingMtx};
         return _pending.size();
     }
+    /// The number of actions that reached execute(), whatever their outcome.
+    [[nodiscard]] int executeCount() const { return _executeCount.load(); }
 
 protected:
     /// @brief Parks one bind request until completeNext()/failNext() settles it.
@@ -326,6 +329,7 @@ private:
     std::unordered_map<uint64_t, std::unique_ptr<morph::model::detail::IModelHolder>> _models;
     std::vector<std::pair<uint64_t, std::string>> _assigned;
     uint64_t _nextId{100};
+    std::atomic<int> _executeCount{0};
 };
 
 // Settles its bind *inline* -- synchronously, from inside bindModel itself,
@@ -1172,6 +1176,134 @@ TEST_CASE("Bridge::whenBound: multiple waiters on the same in-flight registratio
 
     rawBackend->completeNext();
     CHECK(resolvedCount == 3);
+}
+
+// ── executeWhenBound: dispatch held until the registration settles ─────────
+
+TEST_CASE("BridgeHandler::executeWhenBound: an action issued before the bind dispatches once it lands",
+          "[bridge][registration][executeWhenBound]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+    REQUIRE_FALSE(handler.isBound());
+
+    std::atomic<int> result{-1};
+    std::atomic<bool> errored{false};
+    handler.executeWhenBound(ARCount{.x = 5})
+        .then([&](int v) { result.store(v); })
+        .onError([&](const std::exception_ptr&) { errored.store(true); });
+
+    // Held, not failed and not dispatched: nothing is bound to dispatch to.
+    CHECK(result.load() == -1);
+    CHECK_FALSE(errored.load());
+    CHECK(rawBackend->executeCount() == 0);
+
+    rawBackend->completeNext();
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1 || errored.load(); }));
+    CHECK(result.load() == 5);
+    CHECK_FALSE(errored.load());
+    CHECK(rawBackend->executeCount() == 1);
+}
+
+TEST_CASE("BridgeHandler::executeWhenBound: a failed registration rejects with the registration's error",
+          "[bridge][registration][executeWhenBound]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+
+    bool resolved = false;
+    std::string message;
+    handler.executeWhenBound(ARCount{.x = 5})
+        .then([&](int) { resolved = true; })
+        .onError([&](const std::exception_ptr& err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const std::exception& exc) {
+                message = exc.what();
+            }
+        });
+    CHECK(message.empty());
+
+    rawBackend->failNext("simulated registration failure");
+    CHECK_FALSE(resolved);
+    CHECK(message.contains("simulated registration failure"));
+    CHECK(rawBackend->executeCount() == 0);
+}
+
+TEST_CASE("BridgeHandler::executeWhenBound: a handler destroyed before the bind drops the held action",
+          "[bridge][registration][executeWhenBound]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    bool resolved = false;
+    bool errored = false;
+    {
+        morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+        handler.executeWhenBound(ARCount{.x = 5})
+            .then([&](int) { resolved = true; })
+            .onError([&](const std::exception_ptr&) { errored = true; });
+    }
+
+    REQUIRE_NOTHROW(rawBackend->completeNext());
+    CHECK_FALSE(resolved);
+    CHECK_FALSE(errored);
+    CHECK(rawBackend->executeCount() == 0);
+}
+
+TEST_CASE("BridgeHandler::executeWhenBound: a handler destroyed after the bind but before the dispatch runs drops it",
+          "[bridge][registration][executeWhenBound]") {
+    // The bind lands and the dispatch is queued on the GUI executor; the handler
+    // goes before that queue is drained. The deferred dispatch must not reach
+    // the backend through a binding it kept alive on its own.
+    morph::testing::DeterministicExecutor guiExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    bool resolved = false;
+    bool errored = false;
+    {
+        morph::bridge::BridgeHandler<ARModel> handler{bridge, &guiExec};
+        handler.executeWhenBound(ARCount{.x = 5})
+            .then([&](int) { resolved = true; })
+            .onError([&](const std::exception_ptr&) { errored = true; });
+        rawBackend->completeNext();
+        REQUIRE(handler.isBound());
+        REQUIRE(guiExec.pending() > 0);
+    }
+
+    while (guiExec.pending() > 0) {
+        guiExec.step();
+    }
+    CHECK_FALSE(resolved);
+    CHECK_FALSE(errored);
+    CHECK(rawBackend->executeCount() == 0);
+}
+
+TEST_CASE("BridgeHandler::executeWhenBound: an already-bound handler dispatches immediately",
+          "[bridge][registration][executeWhenBound]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+    rawBackend->completeNext();
+    REQUIRE(handler.isBound());
+
+    std::atomic<int> result{-1};
+    handler.executeWhenBound(ARCount{.x = 9})
+        .then([&](int v) { result.store(v); })
+        .onError([](const std::exception_ptr&) {});
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    CHECK(result.load() == 9);
+    CHECK(rawBackend->executeCount() == 1);
+    CHECK(rawBackend->pendingCount() == 0);
 }
 
 // ── assignHandlerPrimary goes through IBackend::promoteModel ──────────────

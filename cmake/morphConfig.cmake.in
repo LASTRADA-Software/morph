@@ -29,10 +29,11 @@ endif()
 find_dependency(glaze @MORPH_GLAZE_VERSION@ CONFIG)
 
 # morph::morph links core-cpp's modules (core::base, core::async, core::net and,
-# natively, core::platform), which morph's install puts next to it. 0.3 is the
-# minor version morph was built against; core-cpp's package accepts only that
-# minor version while core-cpp is 0.x.
-find_dependency(core-cpp 0.5 CONFIG)
+# natively, core::platform): the core-cpp morph was built against, either
+# installed by morph's own install next to it or already installed when the
+# build found it. The bound is the minor version morph was built against;
+# core-cpp's package accepts only that minor version while core-cpp is 0.x.
+find_dependency(core-cpp @MORPH_CORE_CPP_VERSION@ CONFIG)
 
 if(NOT WIN32 AND NOT EMSCRIPTEN)
     find_dependency(Threads)
