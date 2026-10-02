@@ -304,11 +304,11 @@ TEST_CASE("FileActionLog: an append posted from another thread that fails is rep
     morph::exec::ThreadPoolExecutor pool{1};
     morph::core::FileIoOps ioOps;
     std::atomic<bool> failWrites{false};
-    ioOps.fwrite = [&failWrites](const void* data, std::size_t size, std::FILE* file) -> std::size_t {
+    ioOps.fwrite = [&failWrites](const void* data, std::size_t size, std::FILE* stream) -> std::size_t {
         if (failWrites.load()) {
             return 0;
         }
-        return std::fwrite(data, 1, size, file);
+        return std::fwrite(data, 1, size, stream);
     };
     auto log = buildOnOwner<morph::journal::FileActionLog>(owner, file.path, ioOps);
 
