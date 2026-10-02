@@ -104,7 +104,7 @@ inline ::core::async::Task<void> writerFlow(std::shared_ptr<LoopConnection> conn
                     conn->loop.addTimer(conn->loop.clock().now() + conn->sendTimeout, &closeOnDeadline, conn.get());
             }
             auto const written =
-                co_await conn->socket->write(std::as_bytes(std::span<char const>{frame.data() + offset, length}));
+                co_await conn->socket->write(std::as_bytes(std::span<char const>{frame}.subspan(offset, length)));
             static_cast<void>(conn->loop.cancelTimer(timer));
             if (!written || *written == 0) {
                 closeConnection(*conn);
@@ -177,6 +177,7 @@ inline ::core::async::Task<std::optional<HandshakeReadResult>> readHeaderBlockAs
         if (!got || *got == 0) {
             break;
         }
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the socket yields bytes, the buffer holds text; same object representation.
         buf.append(reinterpret_cast<char const*>(chunk.data()), *got);
     }
     static_cast<void>(conn->loop.cancelTimer(timer));

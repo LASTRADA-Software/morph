@@ -150,6 +150,7 @@ public:
     /// @return False to continue at once (an unusable completion, or a stop
     ///         already requested); true once the await is attached.
     template <typename Promise>
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the whole attach decision lives here by design (see await_ready); each branch is one way the await ends or suspends.
     bool await_suspend(std::coroutine_handle<Promise> awaiting) {
         auto shared = _shared;
         auto state = _state;

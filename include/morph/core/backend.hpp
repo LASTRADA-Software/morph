@@ -495,6 +495,7 @@ struct IBackend {
     /// @param exec    Executor the handler is posted to. Borrowed: it must
     ///                outlive the installation. May be null only when
     ///                @p handler is.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): the base discards it; overrides take it by value and move it in.
     virtual void setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* exec) {
         (void)handler;
         (void)exec;

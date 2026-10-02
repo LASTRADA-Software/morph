@@ -85,8 +85,8 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
     // The thread an attach outside every executor's task presumed to be the
     // owner's own, and the thread `deliver()` ran on: compared, in both
     // orders, so that presumption is checked rather than trusted.
-    std::atomic<std::thread::id> presumedOwnerThread{};
-    std::atomic<std::thread::id> deliveredOn{};
+    std::atomic<std::thread::id> presumedOwnerThread;
+    std::atomic<std::thread::id> deliveredOn;
     ::morph::exec::IExecutor* cbExec = nullptr;
     // The stop source of the call this state reports on, or null for a call
     // that cannot be stopped. Set by the producer before the state is handed

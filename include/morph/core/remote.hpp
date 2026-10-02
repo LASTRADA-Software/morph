@@ -219,7 +219,7 @@ struct ServerConfig {
     /// `RemoteServer` owns the model instances of every remote client, so it is
     /// the only place that can attach an action log to them. Null: no instance
     /// gets a log. Runs on the server's strand.
-    LogProvider logProvider{};
+    LogProvider logProvider;
 
     /// @brief Called with the server's health: once from the constructor, and
     ///        again, on the server's strand, whenever readiness changes
@@ -227,7 +227,7 @@ struct ServerConfig {
     ///
     /// A deployment's transport can expose it over a probe endpoint; morph does
     /// not embed an HTTP server.
-    std::function<void(const HealthStatus&)> healthHandler{};
+    std::function<void(const HealthStatus&)> healthHandler;
 
     /// @brief Oldest protocol version this server accepts in reply to
     ///        `"hello"`. Must not exceed `maxProtocolVersion`.
@@ -1355,6 +1355,7 @@ private:
             Reservation& operator=(const Reservation&) = delete;
             Reservation(Reservation&&) = delete;
             Reservation& operator=(Reservation&&) = delete;
+            // NOLINTNEXTLINE(bugprone-exception-escape): executeFinished runs the server's drain bookkeeping on its owner; a failure there has no recovery in a destructor.
             ~Reservation() {
                 if (!handedOff && !finished->test_and_set()) {
                     server.executeFinished();

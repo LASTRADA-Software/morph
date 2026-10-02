@@ -108,6 +108,7 @@ public:
     /// Closes on the loop and waits for it (inline when already there), then
     /// cuts the loop's tie to `RemoteServer`, so a connection's flow that
     /// resumes later touches neither this object nor the server.
+    // NOLINTNEXTLINE(bugprone-exception-escape): teardown has no recovery if handing the close to the loop fails, so terminating is the outcome.
     ~SocketServer() {
         if (_core) {
             _loop->runAndWait([core = _core] {
@@ -228,7 +229,7 @@ private:
         }
 
         /// Reclaims @p client's models and closes its socket. Idempotent.
-        void finish(Client& client, bool flush) {
+        void finish(Client& client, bool flush) const {
             if (client.done) {
                 return;
             }
@@ -321,6 +322,7 @@ private:
                     if (client->done || !got || *got == 0) {
                         break;
                     }
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the socket yields bytes, the reader takes text; same object representation.
                     reader.feed(std::string_view{reinterpret_cast<char const*>(buf.data()), *got});
                 }
             }

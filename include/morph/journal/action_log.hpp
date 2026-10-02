@@ -254,7 +254,9 @@ protected:
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
     /// @return The matching entries.
     [[nodiscard]] virtual ::morph::async::Completion<std::vector<LogEntry>> askEntries(
-        ::morph::exec::IExecutor& replyExec, std::string entityKey) const {
+        ::morph::exec::IExecutor& replyExec,
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): the base only reads it; overrides take it by value and move it.
+        std::string entityKey) const {
         auto settleable = ::morph::async::Completion<std::vector<LogEntry>>::makeSettleable(&replyExec);
         try {
             settleable.second.resolve(entries(entityKey));

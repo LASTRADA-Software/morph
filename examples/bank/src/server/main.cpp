@@ -174,6 +174,7 @@ constexpr std::size_t kMaxLiveModels = 256;
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an example server; an uncaught failure at startup ends the process, which is the right outcome.
 int main(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 

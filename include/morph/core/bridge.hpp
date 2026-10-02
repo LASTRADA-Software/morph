@@ -1108,6 +1108,7 @@ public:
     /// can be re-installed later without reconstructing it.
     ///
     /// @param newBackend Replacement backend, shared with the caller.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one ordered sequence -- pin, rebind, then reject what the old backend left waiting -- that reads worse split.
     void switchBackend(std::shared_ptr<::morph::backend::detail::IBackend> newBackend) {
         note("Bridge::switchBackend");
         auto next = std::move(newBackend);
@@ -1501,7 +1502,7 @@ private:
 
     /// @brief Rejects an operation's continuation that a newer bind replaced.
     /// @param superseded The continuation, or empty.
-    static void runSuperseded(Resume superseded) {
+    static void runSuperseded(const Resume& superseded) {
         if (superseded) {
             superseded(std::make_exception_ptr(std::runtime_error{"bind superseded by a newer one"}));
         }
@@ -1606,7 +1607,7 @@ private:
     void awaitBind(const std::shared_ptr<detail::HandlerBinding>& binding,
                    const std::shared_ptr<::morph::backend::detail::IBackend>& backend, std::uint64_t generation,
                    ::morph::async::Completion<::morph::exec::detail::ModelId> completion,
-                   std::optional<std::string> identity) {
+                   const std::optional<std::string>& identity) {
         std::weak_ptr<detail::HandlerBinding> const weak{binding};
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         auto const token = _callbacks.token();
@@ -2020,7 +2021,6 @@ private:
             return;
         }
         std::vector<Resume> superseded;
-        std::vector<std::shared_ptr<detail::HandlerBinding>> rebound;
         for (auto const& entry : _handlers) {
             auto binding = entry.lock();
             if (!binding || (binding->shared && binding->primary.empty())) {

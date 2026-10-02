@@ -214,6 +214,7 @@ private:
             }
         }
 
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members): bound to one loop at construction and never rebound; the state is neither copied nor assigned.
         ::morph::exec::IoLoop& loop;
         Pending pending;
         bool closed{false};

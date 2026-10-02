@@ -129,7 +129,7 @@ inline void detail::CoreExecutorOver::submit(::core::async::ParkedWork work) {
 /// @param executor The executor asked about.
 /// @return True while a task of @p executor is running on the calling thread.
 [[nodiscard]] inline bool runningOn(IExecutor& executor) noexcept {
-    ::core::async::IExecutor* const identity = &executor.coreExecutor();
+    auto const* const identity = &executor.coreExecutor();
     return ::core::async::ExecutorScope::anyInForce(
         [identity](::core::async::ExecutorScope const& scope) { return &scope.executor() == identity; });
 }

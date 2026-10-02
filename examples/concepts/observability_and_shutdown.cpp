@@ -53,7 +53,7 @@ T answeredNow(morph::async::Completion<T> completion) {
     std::optional<T> answer;
     completion.then([&answer](const T& value) { answer = value; });
     REQUIRE(answer.has_value());
-    return *answer;
+    return answer.value();
 }
 
 }  // namespace

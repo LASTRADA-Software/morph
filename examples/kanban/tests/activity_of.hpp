@@ -20,14 +20,14 @@ namespace kanban::testing {
 
 namespace detail {
 
-inline ::core::async::DetachedTask runActivity(BoardModel& model, std::optional<GetActivityResult>& result,
-                                               std::exception_ptr& error, bool& done) {
+inline ::core::async::DetachedTask runActivity(BoardModel* model, std::optional<GetActivityResult>* result,
+                                               std::exception_ptr* error, bool* done) {
     try {
-        result = co_await model.execute(GetActivity{});
+        *result = co_await model->execute(GetActivity{});
     } catch (...) {
-        error = std::current_exception();
+        *error = std::current_exception();
     }
-    done = true;
+    *done = true;
 }
 
 }  // namespace detail
@@ -40,7 +40,7 @@ inline GetActivityResult activityOf(BoardModel& model) {
     std::optional<GetActivityResult> result;
     std::exception_ptr error;
     bool done = false;
-    detail::runActivity(model, result, error, done);
+    detail::runActivity(&model, &result, &error, &done);
     while (!done && ::morph::ladder::testkit::storageOwner().runOnce()) {
     }
     if (error) {

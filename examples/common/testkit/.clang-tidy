@@ -60,4 +60,11 @@
 # presence, so a new rung needs this file added by hand.
 Checks: '-bugprone-chained-comparison'
 
+# readability-function-cognitive-complexity stays on; only the increments that
+# come from inside a Catch2 assertion macro are not counted, as in the sibling
+# test directories.
+CheckOptions:
+  - key:   readability-function-cognitive-complexity.IgnoreMacros
+    value: "true"
+
 InheritParentConfig: true

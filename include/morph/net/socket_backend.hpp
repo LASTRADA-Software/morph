@@ -134,6 +134,7 @@ public:
     /// thread (from a callback), posted and waited for otherwise. It never
     /// waits for a connect in progress: a dial that completes afterwards finds
     /// the backend closed and drops its socket.
+    // NOLINTNEXTLINE(bugprone-exception-escape): teardown has no recovery if handing the close to the loop fails, so terminating is the outcome.
     ~SocketBackend() override {
         _loop->runAndWait([core = _core] { core->close(); });
     }
@@ -881,6 +882,7 @@ private:
                             if (self->closed || !got || *got == 0) {
                                 break;
                             }
+                            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the socket yields bytes, the reader takes text; same object representation.
                             reader.feed(std::string_view{reinterpret_cast<char const*>(buf.data()), *got});
                         }
                     }
