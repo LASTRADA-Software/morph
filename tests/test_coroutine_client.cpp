@@ -317,13 +317,11 @@ TEST_CASE("a coroutine started inside an executor's task resumes there, not on t
     auto [completion, promise] = Completion<int>::makeSettleable(&callbacks);
     auto seen = std::make_shared<ResumeObserved>();
 
-    // Started by hand, inside a task of `owner`, so the only thing that says
-    // where it runs is the scope `owner` states around that task.
-    std::optional<core::async::Task<void>> task;
-    owner.post([&] {
-        task.emplace(awaitThenObserve(std::move(completion), seen, owner));
-        task->handle().resume();
-    });
+    // Created suspended, then started by hand inside a task of `owner`, so the
+    // only thing that says where it runs is the scope `owner` states around
+    // that task.
+    auto task = awaitThenObserve(std::move(completion), seen, owner);
+    owner.post([&] { task.handle().resume(); });
     REQUIRE(owner.runOnce());
     REQUIRE(seen->reachedAwait.load());
     promise.resolve(12);
@@ -337,7 +335,6 @@ TEST_CASE("a coroutine started inside an executor's task resumes there, not on t
     std::atomic<bool> drained{false};
     callbacks.post([&] { drained = true; });
     REQUIRE(morph::testing::waitUntil([&] { return drained.load(); }));
-    task.reset();
 }
 
 namespace {
