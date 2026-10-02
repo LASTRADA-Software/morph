@@ -17,6 +17,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <future>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -122,7 +123,11 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
         const std::scoped_lock lock{replayMtx};
         REQUIRE(replayed.size() == 3);
     }
-    REQUIRE(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return queue.drain(reply); }).empty());
+    // Read on the queue's strand, so it runs after the replay's last markDone
+    // rather than beside it: the replay is still finishing on the monitor's thread.
+    std::promise<std::size_t> pending;
+    morph::testing::inlineOwner().post([&] { pending.set_value(queue.drain().size()); });
+    REQUIRE(pending.get_future().get() == 0);
 
     // Wait for the backend switch itself, which runs on the owner this test pumps.
     REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return backendSwitched.load(); }));

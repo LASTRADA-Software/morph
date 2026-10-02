@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <functional>
+#include <future>
 #include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -173,16 +174,31 @@ static bool waitForQueueDrained(morph::offline::InMemoryOfflineQueue& queue) {
     return morph::testing::waitUntil([&] { return pendingIn(queue) == 0; });
 }
 
+// Builds the queue, and seeds it, inside a task of @p owner. A component built
+// on a plain thread takes that thread for its owner; here the owner is a pool
+// thread, so the test thread must not be mistaken for it.
+static std::unique_ptr<morph::offline::InMemoryOfflineQueue> makeQueueOn(morph::exec::ThreadPoolExecutor& owner,
+                                                                         std::vector<std::string> items = {}) {
+    std::unique_ptr<morph::offline::InMemoryOfflineQueue> queue;
+    std::promise<void> built;
+    owner.post([&] {
+        queue = std::make_unique<morph::offline::InMemoryOfflineQueue>(owner);
+        for (auto& item : items) {
+            (void)queue->enqueue(std::move(item));
+        }
+        built.set_value();
+    });
+    built.get_future().wait();
+    return queue;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBackend", "[conflict]") {
     morph::exec::ThreadPoolExecutor modelThread{1};
     morph::exec::MainThreadExecutor cbExec;
-    morph::offline::InMemoryOfflineQueue queue{modelThread};
-
-    (void)queue.enqueue(R"({"amount":10})");
-    (void)queue.enqueue(R"({"amount":20})");
-    (void)queue.enqueue(R"({"amount":30})");
+    auto queuePtr = makeQueueOn(modelThread, {R"({"amount":10})", R"({"amount":20})", R"({"amount":30})"});
+    auto& queue = *queuePtr;
 
     auto binding = makeOrderBinding(
         queue, [](const std::string&) { return false; },      // no conflicts
@@ -204,11 +220,8 @@ TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBack
 TEST_CASE("ConflictResolution: conflicting items discarded  -  resolver returns empty", "[conflict]") {
     morph::exec::ThreadPoolExecutor modelThread{1};
     SyncExec cbExec;
-    morph::offline::InMemoryOfflineQueue queue{modelThread};
-
-    (void)queue.enqueue("clean");
-    (void)queue.enqueue("CONFLICT");
-    (void)queue.enqueue("clean2");
+    auto queuePtr = makeQueueOn(modelThread, {"clean", "CONFLICT", "clean2"});
+    auto& queue = *queuePtr;
 
     auto binding = makeOrderBinding(
         queue, [](const std::string& payload) { return payload.contains("CONFLICT"); },
@@ -227,11 +240,8 @@ TEST_CASE("ConflictResolution: conflicting items discarded  -  resolver returns 
 TEST_CASE("ConflictResolution: conflicting items merged  -  resolver returns non-empty", "[conflict]") {
     morph::exec::ThreadPoolExecutor modelThread{1};
     SyncExec cbExec;
-    morph::offline::InMemoryOfflineQueue queue{modelThread};
-
-    (void)queue.enqueue("CONFLICT_A");
-    (void)queue.enqueue("CONFLICT_B");
-    (void)queue.enqueue("clean");
+    auto queuePtr = makeQueueOn(modelThread, {"CONFLICT_A", "CONFLICT_B", "clean"});
+    auto& queue = *queuePtr;
 
     auto binding = makeOrderBinding(
         queue, [](const std::string& payload) { return payload.contains("CONFLICT"); },
@@ -255,7 +265,8 @@ TEST_CASE("ConflictResolution: framework fires onBackendChanged exactly once per
 
     morph::exec::ThreadPoolExecutor modelThread{1};
     morph::exec::MainThreadExecutor cbExec;
-    morph::offline::InMemoryOfflineQueue queue{modelThread};
+    auto queuePtr = makeQueueOn(modelThread);
+    auto& queue = *queuePtr;
 
     auto binding = makeOrderBinding(
         queue, [](const std::string&) { return false; }, [](const std::string& payload) { return payload; });
@@ -291,12 +302,10 @@ TEST_CASE("ConflictResolution: full offline scenario  -  accumulate offline, syn
 
     morph::exec::ThreadPoolExecutor modelThread{1};
     morph::exec::MainThreadExecutor cbExec;
-    morph::offline::InMemoryOfflineQueue queue{modelThread};
-
-    // Simulate three offline writes.
-    (void)queue.enqueue(R"({"item":"order_A"})");        // clean
-    (void)queue.enqueue(R"({"item":"order_B_stale"})");  // stale  -  conflicts with server
-    (void)queue.enqueue(R"({"item":"order_C"})");        // clean
+    // Three offline writes: order_B_stale conflicts with the server, the others are clean.
+    auto queuePtr =
+        makeQueueOn(modelThread, {R"({"item":"order_A"})", R"({"item":"order_B_stale"})", R"({"item":"order_C"})"});
+    auto& queue = *queuePtr;
 
     auto binding = makeOrderBinding(
         queue,
