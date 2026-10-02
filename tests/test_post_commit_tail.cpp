@@ -30,8 +30,9 @@ using morph::model::runPostCommitTail;
 class CapturedLog {
 public:
     CapturedLog()
-        : _guard{
-              [this](LogLevel level, std::string_view message) { _lines.emplace_back(level, std::string{message}); }} {}
+        : _guard{[this](LogLevel level, std::string_view message) {
+              _lines.emplace_back(level, std::string{message});
+          }} {}
 
     [[nodiscard]] const std::vector<std::pair<LogLevel, std::string>>& lines() const noexcept { return _lines; }
 

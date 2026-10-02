@@ -109,7 +109,8 @@ TEST_CASE("OpenAccount and StoreTransaction report success when only their journ
     ledger::LedgerModel reader;
     const auto state = reader.execute(ledger::GetLedger{.ledgerId = ledgerId});
     const auto balanceOf = [&](ledger::AccountId accountId) {
-        const auto found = std::ranges::find_if(state.accounts, [&](const auto& account) { return account.id == accountId; });
+        const auto found =
+            std::ranges::find_if(state.accounts, [&](const auto& account) { return account.id == accountId; });
         REQUIRE(found != state.accounts.end());
         return found->balance.numerator;
     };
