@@ -409,6 +409,8 @@ target_sources(morph
         include/morph/core/detail/completion_awaiter.hpp
         include/morph/core/detail/task_handler.hpp
         include/morph/core/detail/instance_directory.hpp
+        include/morph/core/detail/owned_state.hpp
+        include/morph/core/detail/owner_affinity.hpp
         include/morph/core/detail/owner_probe.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
