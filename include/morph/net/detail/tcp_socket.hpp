@@ -75,7 +75,8 @@ inline PollResult pollUntil(int descriptor, short events, std::chrono::steady_cl
     for (;;) {
         // Rounded up: poll() takes whole milliseconds, and truncating would wake
         // it up to a millisecond before the deadline and report a timeout early.
-        auto const remaining = std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+        auto const remaining =
+            std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
         if (remaining.count() <= 0) {
             return {.outcome = PollOutcome::kTimedOut};
         }
