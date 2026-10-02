@@ -133,8 +133,18 @@ Public Types</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
+<tr class="memitem:a18c432dc219249cf53c828723e49f77e" id="r_a18c432dc219249cf53c828723e49f77e"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a18c432dc219249cf53c828723e49f77e">SocketServer</a> (<a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">::morph::exec::IoLoop</a> &amp;loop, <a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">::morph::backend::RemoteServer</a> &amp;server, std::uint16_t port, <a class="el" href="#a6e68ace78449e4090392a28fa8c86ca1">Config</a> cfg={})</td></tr>
+<tr class="memdesc:a18c432dc219249cf53c828723e49f77e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the server on <code class="param">loop</code>; does not start listening.  <br /></td></tr>
 <tr class="memitem:a442da28eb4702d7da4490a1379c83ed3" id="r_a442da28eb4702d7da4490a1379c83ed3"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a442da28eb4702d7da4490a1379c83ed3">SocketServer</a> (<a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">::morph::backend::RemoteServer</a> &amp;server, std::uint16_t port, <a class="el" href="#a6e68ace78449e4090392a28fa8c86ca1">Config</a> cfg={})</td></tr>
-<tr class="memdesc:a442da28eb4702d7da4490a1379c83ed3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the server; does not start listening.  <br /></td></tr>
+<tr class="memdesc:a442da28eb4702d7da4490a1379c83ed3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the server on a loop of its own, created by the first <span class="tt"><a class="el" href="#a301440fb07aa2382ab0fffae6798db3a" title="Starts listening for incoming WebSocket connections.">listen()</a></span>; does not start listening.  <br /></td></tr>
+<tr class="memitem:ab46708b7f92e338e5a0f16df7fa9f1e0" id="r_ab46708b7f92e338e5a0f16df7fa9f1e0"><td class="memItemLeft"><a id="ab46708b7f92e338e5a0f16df7fa9f1e0" name="ab46708b7f92e338e5a0f16df7fa9f1e0"></a>
+&#160;</td><td class="memItemRight"><b>SocketServer</b> (const SocketServer &amp;)=delete</td></tr>
+<tr class="memitem:a570710acf0ec61d74b3aee0bf5994619" id="r_a570710acf0ec61d74b3aee0bf5994619"><td class="memItemLeft"><a id="a570710acf0ec61d74b3aee0bf5994619" name="a570710acf0ec61d74b3aee0bf5994619"></a>
+<a class="el" href="#a18c432dc219249cf53c828723e49f77e">SocketServer</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#a18c432dc219249cf53c828723e49f77e">SocketServer</a> &amp;)=delete</td></tr>
+<tr class="memitem:aae67ceb5ab68fb2dc3e21ccbbb398ced" id="r_aae67ceb5ab68fb2dc3e21ccbbb398ced"><td class="memItemLeft"><a id="aae67ceb5ab68fb2dc3e21ccbbb398ced" name="aae67ceb5ab68fb2dc3e21ccbbb398ced"></a>
+&#160;</td><td class="memItemRight"><b>SocketServer</b> (SocketServer &amp;&amp;)=delete</td></tr>
+<tr class="memitem:a3d6b6033fb7a18f16e875f6e41701cd8" id="r_a3d6b6033fb7a18f16e875f6e41701cd8"><td class="memItemLeft"><a id="a3d6b6033fb7a18f16e875f6e41701cd8" name="a3d6b6033fb7a18f16e875f6e41701cd8"></a>
+<a class="el" href="#a18c432dc219249cf53c828723e49f77e">SocketServer</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a18c432dc219249cf53c828723e49f77e">SocketServer</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a120e0fa0fd4691bf8d3b957c1357888d" id="r_a120e0fa0fd4691bf8d3b957c1357888d"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a120e0fa0fd4691bf8d3b957c1357888d">~SocketServer</a> ()</td></tr>
 <tr class="memdesc:a120e0fa0fd4691bf8d3b957c1357888d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stops accepting and closes every client connection.  <br /></td></tr>
 <tr class="memitem:a301440fb07aa2382ab0fffae6798db3a" id="r_a301440fb07aa2382ab0fffae6798db3a"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a301440fb07aa2382ab0fffae6798db3a">listen</a> ()</td></tr>
@@ -147,10 +157,11 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Raw-socket WebSocket server front for <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">morph::backend::RemoteServer</a></span>. </p>
 <p>Mirrors <span class="tt"><a class="el" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html" title="Qt WebSocket server that bridges incoming connections to a RemoteServer.">morph::qt::QtWebSocketServer</a></span>'s behavior without Qt: for each accepted connection it performs the RFC 6455 handshake, then reads framed text messages and forwards each to <span class="tt">RemoteServer::handle()</span>; the reply is written back to the originating socket, or dropped if the connection is gone by the time the reply is ready.</p>
-<dl class="section user"><dt>Threading</dt><dd>Owns one accept thread plus one thread per accepted connection — there is no shared event loop. <span class="tt">RemoteServer::handle()</span> replies arrive on the server's worker-pool thread and are written back on that same thread, over the owning connection's socket, serialized by a per-connection write mutex. Nothing is handed to the connection's own reader thread.</dd></dl>
+<dl class="section user"><dt>Threading</dt><dd>Owns no thread. The listener, every accepted connection and every reply write live on an <span class="tt"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html" title="Owns a core::net::PlatformLoop and, natively, the one thread that runs it.">exec::IoLoop</a></span> — the application's one loop, shared with every other socket and timer built on it. <span class="tt">RemoteServer::handle()</span> replies arrive on the server's worker pool and are posted to the loop, which queues them on the connection's writer.</dd></dl>
+<p>Cross-thread surface: <span class="tt"><a class="el" href="#a301440fb07aa2382ab0fffae6798db3a" title="Starts listening for incoming WebSocket connections.">listen()</a></span> and <span class="tt"><a class="el" href="#a926d9b7b2f18c76b5070f696a1ef43b2" title="Stops accepting new connections and closes every client connection.">close()</a></span>, which run on the loop and wait for it (inline when already there), and <span class="tt"><a class="el" href="#a63cf6271f02c0a166bd37efa222deee4" title="Returns the port the server is currently bound to.">port()</a></span>, an atomic read.</p>
 <dl class="section user"><dt>Lifetime</dt><dd>Holds <span class="tt">RemoteServer&amp; _server</span> by reference, exactly like <span class="tt">QtWebSocketServer</span> — the server's owning <span class="tt">shared_ptr</span> must outlive this object (see <span class="tt">docs/spec/core/backend.md</span>'s Lifetime &amp; ownership section). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a6e68ace78449e4090392a28fa8c86ca1" name="a6e68ace78449e4090392a28fa8c86ca1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6e68ace78449e4090392a28fa8c86ca1">&#9670;&#160;</a></span>Config</h2>
@@ -166,13 +177,66 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the config struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
+<a id="a18c432dc219249cf53c828723e49f77e" name="a18c432dc219249cf53c828723e49f77e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a18c432dc219249cf53c828723e49f77e">&#9670;&#160;</a></span>SocketServer() <span class="overload">[1/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::net::SocketServer::SocketServer </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">::morph::exec::IoLoop</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>loop</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">::morph::backend::RemoteServer</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>server</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::uint16_t</td>          <td class="paramname"><span class="paramname"><em>port</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#a6e68ace78449e4090392a28fa8c86ca1">Config</a></td>          <td class="paramname"><span class="paramname"><em>cfg</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs the server on <code class="param">loop</code>; does not start listening. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">loop</td><td>The application's I/O loop. Borrowed: it must outlive this server. </td></tr>
+    <tr><td class="paramname">server</td><td><span class="tt">RemoteServer</span> instance that processes incoming messages. Borrowed, not owned: it must outlive this server (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
+              ordering"). </td></tr>
+    <tr><td class="paramname">port</td><td>TCP port to listen on. Pass 0 to let the OS pick a free port. </td></tr>
+    <tr><td class="paramname">cfg</td><td>Backlog and timeout tuning. Default: 64-connection backlog, 10s handshake timeout, 30s send timeout. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a442da28eb4702d7da4490a1379c83ed3" name="a442da28eb4702d7da4490a1379c83ed3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a442da28eb4702d7da4490a1379c83ed3">&#9670;&#160;</a></span>SocketServer()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a442da28eb4702d7da4490a1379c83ed3">&#9670;&#160;</a></span>SocketServer() <span class="overload">[2/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -203,18 +267,17 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs the server; does not start listening. </p>
+<p>Constructs the server on a loop of its own, created by the first <span class="tt"><a class="el" href="#a301440fb07aa2382ab0fffae6798db3a" title="Starts listening for incoming WebSocket connections.">listen()</a></span>; does not start listening. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">server</td><td><span class="tt">RemoteServer</span> instance that processes incoming messages. Borrowed, not owned: it must outlive this server (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
-              ordering"). </td></tr>
+    <tr><td class="paramname">server</td><td><span class="tt">RemoteServer</span> instance that processes incoming messages. Borrowed, not owned: it must outlive this server. </td></tr>
     <tr><td class="paramname">port</td><td>TCP port to listen on. Pass 0 to let the OS pick a free port. </td></tr>
-    <tr><td class="paramname">cfg</td><td>Backlog and timeout tuning. Default: 64-connection backlog, 10s handshake timeout, 30s send timeout. </td></tr>
+    <tr><td class="paramname">cfg</td><td>Backlog and timeout tuning. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -242,8 +305,9 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Stops accepting and closes every client connection. </p>
+<p>Closes on the loop and waits for it (inline when already there), then cuts the loop's tie to <span class="tt">RemoteServer</span>, so a connection's flow that resumes later touches neither this object nor the server. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,9 +336,9 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Starts listening for incoming WebSocket connections. </p>
-<p>Fails closed: the accept loop's only way to stop waiting is its wakeup (see <span class="tt">acceptLoop()</span>), so if that cannot be created — the kernel out of descriptors — this reports failure and spawns no thread rather than starting a loop nothing could ever interrupt. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the server bound the requested port <em>and</em> armed its wakeup. </dd></dl>
+<p>Binds <span class="tt">127.0.0.1:<a class="el" href="#a63cf6271f02c0a166bd37efa222deee4" title="Returns the port the server is currently bound to.">port</a></span> and starts the accept flow, on the loop. With no loop of its own yet, creates one first; a process out of descriptors cannot, and gets <span class="tt">false</span>. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the server bound the requested port and is accepting. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -302,9 +366,9 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Returns the port the server is currently bound to. </p>
-<dl class="section return"><dt>Returns</dt><dd>Bound TCP port (OS-assigned when constructed with port 0), or <span class="tt">0</span> before <span class="tt"><a class="el" href="#a301440fb07aa2382ab0fffae6798db3a" title="Starts listening for incoming WebSocket connections.">listen()</a></span> succeeds. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Bound TCP port (OS-assigned when constructed with port 0), or <span class="tt">0</span> when not listening. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00119">119</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -332,11 +396,11 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Stops accepting new connections and closes every client connection. </p>
-<p>Releases the listening socket once the accept thread has joined, so <span class="tt"><a class="el" href="#a63cf6271f02c0a166bd37efa222deee4" title="Returns the port the server is currently bound to.">port()</a></span> reads <span class="tt">0</span> afterwards and the bound port is free to rebind — the same post-close observation <span class="tt">QtWebSocketServer</span> makes.</p>
-<p>Idempotent: safe to call more than once (including implicitly, via the destructor, after an explicit call), and safe to call from several threads at once <b>on a live object</b> — concurrent callers are serialized, and every one of them returns only once the teardown is complete. Racing a call against the <em>destructor</em> is still the caller's problem (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
-ordering"): no lock inside this object can outlive the object holding it. </p>
+<p>Releases the listening socket, so <span class="tt"><a class="el" href="#a63cf6271f02c0a166bd37efa222deee4" title="Returns the port the server is currently bound to.">port()</a></span> reads <span class="tt">0</span> afterwards and the bound port is free to rebind — the same post-close observation <span class="tt">QtWebSocketServer</span> makes. Reclaims every connection's models (<span class="tt">RemoteServer::closeConnection</span>) before it returns.</p>
+<p>Runs on the loop and waits for it, inline when already there. Idempotent, and safe to call from several threads at once on a live object: each call is one loop task, and the loop runs them one at a time. Racing a call against the <em>destructor</em> is still the caller's problem (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
+ordering"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d69/socket__server_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../db/d69/socket__server_8hpp_source.html">socket_server.hpp</a>.</p>
 
 </div>
 </div>

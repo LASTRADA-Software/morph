@@ -137,16 +137,16 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a86d877007461559a660f5e0183a76e75" id="r_a86d877007461559a660f5e0183a76e75"><td class="memItemLeft">double&#160;</td><td class="memItemRight"><a class="el" href="#a86d877007461559a660f5e0183a76e75">backoffMultiplier</a> = 2.0</td></tr>
 <tr class="memdesc:a86d877007461559a660f5e0183a76e75"><td class="mdescLeft">&#160;</td><td class="mdescRight">Multiplier applied to the delay after each failed attempt.  <br /></td></tr>
 <tr class="memitem:acd8e19b0807613d9c4d494b407115e1e" id="r_acd8e19b0807613d9c4d494b407115e1e"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#acd8e19b0807613d9c4d494b407115e1e">connectTimeout</a> {5000}</td></tr>
-<tr class="memdesc:acd8e19b0807613d9c4d494b407115e1e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Maximum time to wait for the initial TCP connect to complete.  <br /></td></tr>
+<tr class="memdesc:acd8e19b0807613d9c4d494b407115e1e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Maximum time for the whole connect: name resolution and every resolved address.  <br /></td></tr>
 <tr class="memitem:a981e0b8e3f410980b8f22671c7f1f8ec" id="r_a981e0b8e3f410980b8f22671c7f1f8ec"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a981e0b8e3f410980b8f22671c7f1f8ec">sendTimeout</a> {30000}</td></tr>
-<tr class="memdesc:a981e0b8e3f410980b8f22671c7f1f8ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">Bound on a single <span class="tt">::send</span> that is making no progress.  <br /></td></tr>
+<tr class="memdesc:a981e0b8e3f410980b8f22671c7f1f8ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">Bound on writing one chunk (up to 64 KiB) of an outgoing frame.  <br /></td></tr>
 <tr class="memitem:a85f335e13eccd319bd13eb3d58fc3854" id="r_a85f335e13eccd319bd13eb3d58fc3854"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a85f335e13eccd319bd13eb3d58fc3854">handshakeTimeout</a> {10000}</td></tr>
-<tr class="memdesc:a85f335e13eccd319bd13eb3d58fc3854"><td class="mdescLeft">&#160;</td><td class="mdescRight">Bound on the handshake response read that follows a successful TCP connect.  <br /></td></tr>
+<tr class="memdesc:a85f335e13eccd319bd13eb3d58fc3854"><td class="mdescLeft">&#160;</td><td class="mdescRight">Bound on the whole handshake response read that follows a successful TCP connect, from its first byte to the header's end.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Reconnect tuning for <span class="tt"><a class="el" href="../../d5/d98/classmorph_1_1net_1_1SocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over a raw-socket RFC 6455 WebSocket co...">SocketBackend</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ae502aa3027e50788b13def4e14136fb9" name="ae502aa3027e50788b13def4e14136fb9"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae502aa3027e50788b13def4e14136fb9">&#9670;&#160;</a></span>reconnectEnabled</h2>
@@ -162,7 +162,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether to attempt automatic reconnect after an unsolicited disconnect. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -180,7 +180,7 @@ Public Attributes</h2></td></tr>
 
 <p>Delay before the first reconnect attempt after a disconnect. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -198,7 +198,7 @@ Public Attributes</h2></td></tr>
 
 <p>Upper bound on the exponential backoff between reconnect attempts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00034">34</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -216,7 +216,7 @@ Public Attributes</h2></td></tr>
 
 <p>Multiplier applied to the delay after each failed attempt. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,9 +232,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Maximum time to wait for the initial TCP connect to complete. </p>
+<p>Maximum time for the whole connect: name resolution and every resolved address. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,10 +250,10 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Bound on a single <span class="tt">::send</span> that is making no progress. </p>
-<p>Applied as <span class="tt">SO_SNDTIMEO</span>. Without it, a peer that stops reading fills the kernel send buffer and parks <span class="tt">sendFrame</span> inside <span class="tt">sendAll</span> <b>while holding <span class="tt">_socketMtx</span></b> &ndash; which parks <span class="tt">~SocketBackend</span> behind the same lock, with nothing able to release it. Generous on purpose: it bounds a send making <em>no</em> progress, not a slow one. Zero disables it. </p>
+<p>Bound on writing one chunk (up to 64 KiB) of an outgoing frame. </p>
+<p>A loop timer armed around each chunk's write closes the connection when it runs out, so a peer that stops reading ends in a disconnect (and the usual reconnect) rather than in a queue of unsent frames that grows forever. Generous on purpose: it bounds a write making no progress, not a slow one. Zero disables it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -269,11 +269,10 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Bound on the handshake response read that follows a successful TCP connect. </p>
-<p>Applied as <span class="tt">SO_RCVTIMEO</span> for the duration of the handshake read only &ndash; cleared once the handshake completes, since the normal read loop is meant to block indefinitely waiting for the next frame. Without this, a peer that accepts the TCP connection and then never writes (a listener that never completes the WS upgrade &ndash; a TCP load balancer connecting lazily to its backend would do this) leaves the io thread parked in a blocking <span class="tt">recv</span> with nothing to unblock it, which in turn wedges <span class="tt">~SocketBackend</span> forever: the destructor's escape hatch only reaches a socket already published to <span class="tt">_socket</span>, and that publish happens only <em>after</em> the handshake. Zero disables it (the kernel default, block forever).</p>
-<dl class="section warning"><dt>Warning</dt><dd><span class="tt">SO_RCVTIMEO</span> restarts on every <span class="tt">recv</span>, so this bounds each individual read rather than the handshake as a whole. It closes the "silent peer" hole it was added for; a peer that dribbles a byte just inside each interval can still stretch the handshake to roughly this value times <span class="tt">readHttpHeaderBlock</span>'s 64 KiB header cap before that cap (not this timeout) ends it. </dd></dl>
+<p>Bound on the whole handshake response read that follows a successful TCP connect, from its first byte to the header's end. </p>
+<p>A peer that accepts the TCP connection and then never completes the WebSocket upgrade — a TCP load balancer connecting lazily to its backend would — is dropped after this long, and counts as a failed connect. Zero disables it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>

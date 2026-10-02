@@ -1,7 +1,7 @@
 var searchData=
 [
   ['waitforconnected_0',['waitForConnected',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a870c4edbdf1b6d0e9bfdceab0eeba2ac',1,'morph::net::SocketBackend::waitForConnected()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a72f35dfcfcfb007b05d14185d8ed2f2f',1,'morph::qt::QtWebSocketBackend::waitForConnected()']]],
-  ['whenbound_1',['whenBound',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a8fadc389b6e62034cbb02c642c0076d8',1,'morph::bridge::Bridge::whenBound()'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ad28c2d2bf1f14ac08f51340fb7f3f07c',1,'morph::bridge::BridgeHandler::whenBound()']]],
+  ['weak_1',['weak',['../dd/d10/classmorph_1_1exec_1_1IoLoop.html#ab121dc0cd51dabc9f178903af472bfdf',1,'morph::exec::IoLoop']]],
   ['widget_2',['widget',['../dc/df3/structmorph_1_1forms_1_1Multiline.html#a3325ab8ce49bd941d5e1f5f5606d6a87',1,'morph::forms::Multiline::widget()'],['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#aab4c85d9cd74b6e892887e724576ddae',1,'morph::forms::Ranged::widget()']]],
   ['wireclampscope_3',['WireClampScope',['../d3/d68/classmorph_1_1math_1_1WireClampScope.html#aa5b2591743ee0e3f174346b0aadb97c2',1,'morph::math::WireClampScope']]],
   ['withblankas_4',['withBlankAs',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#ab040fdb740d0c22091a8bc57a3eba452',1,'morph::forms::FieldMeta']]],

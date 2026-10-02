@@ -19,10 +19,12 @@ var annotated_dup =
         [ "BridgeDestroyedError", "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html", "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError" ],
         [ "ClientTimeoutError", "d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html", "d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError" ],
         [ "DisconnectedError", "d3/d73/structmorph_1_1backend_1_1DisconnectedError.html", "d3/d73/structmorph_1_1backend_1_1DisconnectedError" ],
+        [ "HandlerDestroyedError", "db/de0/structmorph_1_1backend_1_1HandlerDestroyedError.html", "db/de0/structmorph_1_1backend_1_1HandlerDestroyedError" ],
         [ "HealthStatus", "d1/d59/structmorph_1_1backend_1_1HealthStatus.html", "d1/d59/structmorph_1_1backend_1_1HealthStatus" ],
         [ "LimitPolicy", "de/dc7/structmorph_1_1backend_1_1LimitPolicy.html", "de/dc7/structmorph_1_1backend_1_1LimitPolicy" ],
         [ "LocalBackend", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html", "d8/dfd/classmorph_1_1backend_1_1LocalBackend" ],
         [ "RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html", "d4/dc1/classmorph_1_1backend_1_1RemoteServer" ],
+        [ "ServerConfig", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html", "dd/d0c/structmorph_1_1backend_1_1ServerConfig" ],
         [ "SimulatedRemoteBackend", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend" ],
         [ "SynchronousBackendAdapter", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html", "df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter" ],
         [ "TimeoutError", "d5/d80/structmorph_1_1backend_1_1TimeoutError.html", "d5/d80/structmorph_1_1backend_1_1TimeoutError" ]
@@ -42,8 +44,10 @@ var annotated_dup =
       ] ],
       [ "exec", null, [
         [ "IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", "d4/d49/structmorph_1_1exec_1_1IExecutor" ],
-        [ "ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor" ],
-        [ "MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor" ]
+        [ "IoLoop", "dd/d10/classmorph_1_1exec_1_1IoLoop.html", "dd/d10/classmorph_1_1exec_1_1IoLoop" ],
+        [ "MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor" ],
+        [ "OwnerStrand", "dc/db1/classmorph_1_1exec_1_1OwnerStrand.html", "dc/db1/classmorph_1_1exec_1_1OwnerStrand" ],
+        [ "ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor" ]
       ] ],
       [ "flows", null, [
         [ "WizardStep", "d8/d94/structmorph_1_1flows_1_1WizardStep.html", "d8/d94/structmorph_1_1flows_1_1WizardStep" ],

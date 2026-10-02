@@ -128,78 +128,82 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/dc1/classmo
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-types" class="groupheader"><a id="pub-types" name="pub-types"></a>
 Public Types</h2></td></tr>
-<tr class="memitem:a7a5bff8cb318d46f4347cc5211b92e81" id="r_a7a5bff8cb318d46f4347cc5211b92e81"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a7a5bff8cb318d46f4347cc5211b92e81">LogProvider</a></td></tr>
-<tr class="memdesc:a7a5bff8cb318d46f4347cc5211b92e81"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callable that supplies the action log to attach to a newly registered instance, given its model type and <span class="tt">contextKey</span>.  <br /></td></tr>
+<tr class="memitem:aa1967f685b6df4553d93c5d3efd448b7" id="r_aa1967f685b6df4553d93c5d3efd448b7"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#aa1967f685b6df4553d93c5d3efd448b7">LogProvider</a> = ::morph::backend::LogProvider</td></tr>
+<tr class="memdesc:aa1967f685b6df4553d93c5d3efd448b7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Alias of <span class="tt">morph::backend::LogProvider</span>, the type of <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#aae24a77897333f0291cb44547383843a" title="Consulted whenever an instance is constructed with a non-empty contextKey — every register envelope,...">ServerConfig::logProvider</a></span>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:af8a6235cbbe77ead17ea779d99d6011a" id="r_af8a6235cbbe77ead17ea779d99d6011a"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#af8a6235cbbe77ead17ea779d99d6011a">RemoteServer</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;workerPool, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry())</td></tr>
-<tr class="memdesc:af8a6235cbbe77ead17ea779d99d6011a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a server backed by <code class="param">workerPool</code> with allow-all authorization.  <br /></td></tr>
+<tr class="memdesc:af8a6235cbbe77ead17ea779d99d6011a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a server backed by <code class="param">workerPool</code> with allow-all authorization and a default <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html" title="Everything about a RemoteServer that is configured rather than learned: given once,...">ServerConfig</a></span>.  <br /></td></tr>
 <tr class="memitem:a3125da15823891abf6a3bf4fc6355bb3" id="r_a3125da15823891abf6a3bf4fc6355bb3"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a3125da15823891abf6a3bf4fc6355bb3">RemoteServer</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;workerPool, std::shared_ptr&lt;<a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> &gt; authorizer, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry())</td></tr>
-<tr class="memdesc:a3125da15823891abf6a3bf4fc6355bb3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a server with a custom authorizer.  <br /></td></tr>
+<tr class="memdesc:a3125da15823891abf6a3bf4fc6355bb3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a server with a custom authorizer and a default <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html" title="Everything about a RemoteServer that is configured rather than learned: given once,...">ServerConfig</a></span>.  <br /></td></tr>
+<tr class="memitem:adac4d38778b9c7358267f185b86f0068" id="r_adac4d38778b9c7358267f185b86f0068"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#adac4d38778b9c7358267f185b86f0068">RemoteServer</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;workerPool, <a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html">ServerConfig</a> config, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry())</td></tr>
+<tr class="memdesc:adac4d38778b9c7358267f185b86f0068"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a server with allow-all authorization and <code class="param">config</code>.  <br /></td></tr>
+<tr class="memitem:aaf7920ac29285053e0b065dceb7fd44e" id="r_aaf7920ac29285053e0b065dceb7fd44e"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#aaf7920ac29285053e0b065dceb7fd44e">RemoteServer</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;workerPool, std::shared_ptr&lt;<a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> &gt; authorizer, <a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html">ServerConfig</a> config, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry())</td></tr>
+<tr class="memdesc:aaf7920ac29285053e0b065dceb7fd44e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a server with a custom authorizer and <code class="param">config</code>.  <br /></td></tr>
+<tr class="memitem:a11f50db8a34bc266f5dbaaf57d4cfe83" id="r_a11f50db8a34bc266f5dbaaf57d4cfe83"><td class="memItemLeft"><a id="a11f50db8a34bc266f5dbaaf57d4cfe83" name="a11f50db8a34bc266f5dbaaf57d4cfe83"></a>
+&#160;</td><td class="memItemRight"><b>RemoteServer</b> (const RemoteServer &amp;)=delete</td></tr>
+<tr class="memitem:a98f60ea5b81794c0aaedfb123b245961" id="r_a98f60ea5b81794c0aaedfb123b245961"><td class="memItemLeft"><a id="a98f60ea5b81794c0aaedfb123b245961" name="a98f60ea5b81794c0aaedfb123b245961"></a>
+<a class="el" href="#af8a6235cbbe77ead17ea779d99d6011a">RemoteServer</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#af8a6235cbbe77ead17ea779d99d6011a">RemoteServer</a> &amp;)=delete</td></tr>
+<tr class="memitem:af96ea8dfe53abf9f67a3666e9e92c24a" id="r_af96ea8dfe53abf9f67a3666e9e92c24a"><td class="memItemLeft"><a id="af96ea8dfe53abf9f67a3666e9e92c24a" name="af96ea8dfe53abf9f67a3666e9e92c24a"></a>
+&#160;</td><td class="memItemRight"><b>RemoteServer</b> (RemoteServer &amp;&amp;)=delete</td></tr>
+<tr class="memitem:abdf462707b71012a0708c178f24cee61" id="r_abdf462707b71012a0708c178f24cee61"><td class="memItemLeft"><a id="abdf462707b71012a0708c178f24cee61" name="abdf462707b71012a0708c178f24cee61"></a>
+<a class="el" href="#af8a6235cbbe77ead17ea779d99d6011a">RemoteServer</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#af8a6235cbbe77ead17ea779d99d6011a">RemoteServer</a> &amp;&amp;)=delete</td></tr>
+<tr class="memitem:a6dc3cbe98d90ff6a39f298f66708310a" id="r_a6dc3cbe98d90ff6a39f298f66708310a"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a6dc3cbe98d90ff6a39f298f66708310a">~RemoteServer</a> ()</td></tr>
+<tr class="memdesc:a6dc3cbe98d90ff6a39f298f66708310a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the server strand before any other member goes.  <br /></td></tr>
 <tr class="memitem:ae0a8a4b505069b41f9005705e93d4701" id="r_ae0a8a4b505069b41f9005705e93d4701"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701">handle</a> (std::string msg, std::function&lt; void(std::string)&gt; reply)</td></tr>
 <tr class="memdesc:ae0a8a4b505069b41f9005705e93d4701"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asynchronously processes a JSON <span class="tt">Envelope</span> and calls <code class="param">reply</code> with the response.  <br /></td></tr>
 <tr class="memitem:a73dbbbc8a19d6df1e2d1a8c7353fdb1a" id="r_a73dbbbc8a19d6df1e2d1a8c7353fdb1a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a73dbbbc8a19d6df1e2d1a8c7353fdb1a">handle</a> (std::string msg, std::function&lt; void(std::string)&gt; reply, ConnectionId cid)</td></tr>
 <tr class="memdesc:a73dbbbc8a19d6df1e2d1a8c7353fdb1a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Like <span class="tt">handle(msg, reply)</span>, but additionally attributes any <span class="tt">register</span> decoded from <code class="param">msg</code> to a connection scope.  <br /></td></tr>
 <tr class="memitem:abcdee5e1504ebcbef2415b029eec8818" id="r_abcdee5e1504ebcbef2415b029eec8818"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#abcdee5e1504ebcbef2415b029eec8818">handleInline</a> (const std::string &amp;msg)</td></tr>
-<tr class="memdesc:abcdee5e1504ebcbef2415b029eec8818"><td class="mdescLeft">&#160;</td><td class="mdescRight">Synchronously processes a JSON <span class="tt">Envelope</span> on the calling thread and returns the reply.  <br /></td></tr>
+<tr class="memdesc:abcdee5e1504ebcbef2415b029eec8818"><td class="mdescLeft">&#160;</td><td class="mdescRight">Processes a control <span class="tt">Envelope</span> on the server strand and returns its reply, blocking the caller until it has one.  <br /></td></tr>
 <tr class="memitem:a70db4922eb76217cb1126bd54493f745" id="r_a70db4922eb76217cb1126bd54493f745"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a70db4922eb76217cb1126bd54493f745">handleInline</a> (const std::string &amp;msg, ConnectionId cid)</td></tr>
 <tr class="memdesc:a70db4922eb76217cb1126bd54493f745"><td class="mdescLeft">&#160;</td><td class="mdescRight">Like <span class="tt">handleInline(msg)</span>, but additionally attributes any <span class="tt">register</span> decoded from <code class="param">msg</code> to a connection scope.  <br /></td></tr>
 <tr class="memitem:adfa3bd5a86b06e05a374be4433bcad0d" id="r_adfa3bd5a86b06e05a374be4433bcad0d"><td class="memItemLeft">ConnectionId&#160;</td><td class="memItemRight"><a class="el" href="#adfa3bd5a86b06e05a374be4433bcad0d">openConnection</a> ()</td></tr>
 <tr class="memdesc:adfa3bd5a86b06e05a374be4433bcad0d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a new connection scope and returns its id.  <br /></td></tr>
 <tr class="memitem:a9c30776adb059a937a151eceeccc5875" id="r_a9c30776adb059a937a151eceeccc5875"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9c30776adb059a937a151eceeccc5875">closeConnection</a> (ConnectionId cid)</td></tr>
 <tr class="memdesc:a9c30776adb059a937a151eceeccc5875"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reclaims every model still registered under <code class="param">cid</code>, then drops the scope.  <br /></td></tr>
-<tr class="memitem:a99f2c685f538d7cbdbdc8f762c9cca47" id="r_a99f2c685f538d7cbdbdc8f762c9cca47"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a99f2c685f538d7cbdbdc8f762c9cca47">setLogProvider</a> (<a class="el" href="#a7a5bff8cb318d46f4347cc5211b92e81">LogProvider</a> provider)</td></tr>
-<tr class="memdesc:a99f2c685f538d7cbdbdc8f762c9cca47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code class="param">provider</code>, consulted whenever an instance is constructed with a non-empty <span class="tt">contextKey</span> — every <span class="tt">register</span> envelope, and every <span class="tt">attach</span> that misses the shared directory and therefore creates the instance (both reach <span class="tt">attachLogIfConfigured</span>).  <br /></td></tr>
-<tr class="memitem:ad6812db7373f28d3f34df893d2f1fb20" id="r_ad6812db7373f28d3f34df893d2f1fb20"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad6812db7373f28d3f34df893d2f1fb20">setLimitPolicy</a> (<a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html">LimitPolicy</a> policy)</td></tr>
-<tr class="memdesc:ad6812db7373f28d3f34df893d2f1fb20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code class="param">policy</code>, consulted by every subsequent <span class="tt">register</span> and <span class="tt">execute</span>. Thread-safe.  <br /></td></tr>
-<tr class="memitem:aea98b941e48b910baee37e617393e50f" id="r_aea98b941e48b910baee37e617393e50f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aea98b941e48b910baee37e617393e50f">setSupportedVersionRange</a> (std::uint32_t min, std::uint32_t max)</td></tr>
-<tr class="memdesc:aea98b941e48b910baee37e617393e50f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the inclusive protocol-version range this server advertises in reply to a <span class="tt">"hello"</span> envelope.  <br /></td></tr>
-<tr class="memitem:a2c186d00caa73e6d141c20316081ccee" id="r_a2c186d00caa73e6d141c20316081ccee"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2c186d00caa73e6d141c20316081ccee">setPayloadCompleteness</a> (PayloadCompleteness mode) noexcept</td></tr>
-<tr class="memdesc:a2c186d00caa73e6d141c20316081ccee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Chooses whether an <span class="tt">execute</span> body must carry every field the action's served schema marks <span class="tt">required</span>.  <br /></td></tr>
+<tr class="memitem:ad197c37d0a3bd9bf562b04419021514d" id="r_ad197c37d0a3bd9bf562b04419021514d"><td class="memItemLeft"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ad197c37d0a3bd9bf562b04419021514d">strand</a> () noexcept</td></tr>
+<tr class="memdesc:ad197c37d0a3bd9bf562b04419021514d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The server strand, as an executor.  <br /></td></tr>
 <tr class="memitem:ac422a872a1276a141e0354a27ad31618" id="r_ac422a872a1276a141e0354a27ad31618"><td class="memItemLeft">PayloadCompleteness&#160;</td><td class="memItemRight"><a class="el" href="#ac422a872a1276a141e0354a27ad31618">payloadCompleteness</a> () const noexcept</td></tr>
 <tr class="memdesc:ac422a872a1276a141e0354a27ad31618"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the configured payload-completeness rule.  <br /></td></tr>
-<tr class="memitem:a66af4191998e07b569e5800c10c68315" id="r_a66af4191998e07b569e5800c10c68315"><td class="memItemLeft"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html">HealthStatus</a>&#160;</td><td class="memItemRight"><a class="el" href="#a66af4191998e07b569e5800c10c68315">health</a> () const</td></tr>
-<tr class="memdesc:a66af4191998e07b569e5800c10c68315"><td class="mdescLeft">&#160;</td><td class="mdescRight">Snapshots the server's current health. Cheap; safe from any thread.  <br /></td></tr>
-<tr class="memitem:a5cff8e36190c13564e05bb05fb35bcbe" id="r_a5cff8e36190c13564e05bb05fb35bcbe"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5cff8e36190c13564e05bb05fb35bcbe">setHealthHandler</a> (std::function&lt; void(const <a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html">HealthStatus</a> &amp;)&gt; handler)</td></tr>
-<tr class="memdesc:a5cff8e36190c13564e05bb05fb35bcbe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code class="param">handler</code>, invoked immediately with the current <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span> snapshot, and again whenever readiness changes.  <br /></td></tr>
+<tr class="memitem:a4e56d64c5c9a9044920337bb9b27a092" id="r_a4e56d64c5c9a9044920337bb9b27a092"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; <a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html">HealthStatus</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4e56d64c5c9a9044920337bb9b27a092">health</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
+<tr class="memdesc:a4e56d64c5c9a9044920337bb9b27a092"><td class="mdescLeft">&#160;</td><td class="mdescRight">The server's health, answered on the server strand.  <br /></td></tr>
 <tr class="memitem:a9ea8ed30f49ff089f677e09210ffc486" id="r_a9ea8ed30f49ff089f677e09210ffc486"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486">beginShutdown</a> ()</td></tr>
-<tr class="memdesc:a9ea8ed30f49ff089f677e09210ffc486"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enters shutdown: from now on, <span class="tt">register</span>, <span class="tt">attach</span> and <span class="tt">execute</span> envelopes are rejected with <span class="tt">err "server shutting down"</span>. <span class="tt">deregister</span> is still served so clients can tear down cleanly. Note <span class="tt">attach</span> is refused too, so a client cannot re-attach to a shared instance during the drain window.  <br /></td></tr>
-<tr class="memitem:aa3de29a47fe56d091889756e7e1faadd" id="r_aa3de29a47fe56d091889756e7e1faadd"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa3de29a47fe56d091889756e7e1faadd">drainedWithin</a> (std::chrono::milliseconds deadline)</td></tr>
-<tr class="memdesc:aa3de29a47fe56d091889756e7e1faadd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Blocks until every in-flight <span class="tt">execute</span> has delivered its reply, or <code class="param">deadline</code> elapses.  <br /></td></tr>
+<tr class="memdesc:a9ea8ed30f49ff089f677e09210ffc486"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enters shutdown: from now on, <span class="tt">register</span>, <span class="tt">attach</span> and <span class="tt">execute</span> envelopes are rejected with <span class="tt">err "server shutting down"</span>. <span class="tt">deregister</span> is still served so clients can tear down cleanly. <span class="tt">attach</span> is refused too, so a client cannot re-attach to a shared instance during the drain window.  <br /></td></tr>
+<tr class="memitem:ad6574a0055fb8bf539dc525e68bac88e" id="r_ad6574a0055fb8bf539dc525e68bac88e"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad6574a0055fb8bf539dc525e68bac88e">drainedWithin</a> (std::chrono::milliseconds deadline, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
+<tr class="memdesc:ad6574a0055fb8bf539dc525e68bac88e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Answers whether every in-flight <span class="tt">execute</span> delivers its reply within <code class="param">deadline</code>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Server-side message handler that owns model instances and dispatches actions. </p>
 <p><span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> receives JSON envelopes (<span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span>) from any transport (WebSocket, in-process simulation, …) and executes the corresponding model operations via an <span class="tt">ActionDispatcher</span>. Authorization is delegated to an <span class="tt">IAuthorizer</span> that defaults to allow-all.</p>
-<dl class="section user"><dt>Heap allocation requirement</dt><dd><span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> <b>must</b> be heap-allocated via <span class="tt">std::make_shared</span>. <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> captures <span class="tt">shared_from_this()</span> to prevent use-after-free when the worker pool outlives the server object.</dd></dl>
+<dl class="section user"><dt>One owner</dt><dd>The server's state — the instance registry, the connection scopes, the in-flight count, readiness — belongs to one strand over the worker pool, the <em>server strand</em>, and is touched only in its tasks. Every public verb posts to it. An <span class="tt">execute</span> is admitted there and then posted to its model's own strand, so for one model the order <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> was called in is the order the model runs them: both hops are strands, and a strand runs in post order. Configuration is a <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html" title="Everything about a RemoteServer that is configured rather than learned: given once,...">ServerConfig</a></span>, fixed at construction.</dd></dl>
+<dl class="section user"><dt>Heap allocation requirement</dt><dd><span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> <b>must</b> be heap-allocated via <span class="tt">std::make_shared</span>. Every task it posts captures <span class="tt">shared_from_this()</span>, so the server outlives its queued work however the last external reference is dropped.</dd></dl>
 <dl class="section user"><dt>Wire format</dt><dd>All requests and replies are encoded as <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span> JSON. See <span class="tt"><a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a></span> for the field semantics. The <span class="tt">kind</span> field is the discriminator. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00272">272</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
-<a id="a7a5bff8cb318d46f4347cc5211b92e81" name="a7a5bff8cb318d46f4347cc5211b92e81"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7a5bff8cb318d46f4347cc5211b92e81">&#9670;&#160;</a></span>LogProvider</h2>
+<a id="aa1967f685b6df4553d93c5d3efd448b7" name="aa1967f685b6df4553d93c5d3efd448b7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa1967f685b6df4553d93c5d3efd448b7">&#9670;&#160;</a></span>LogProvider</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">using <a class="el" href="#a7a5bff8cb318d46f4347cc5211b92e81">morph::backend::RemoteServer::LogProvider</a></td>
+          <td class="memname">using <a class="el" href="#aa1967f685b6df4553d93c5d3efd448b7">morph::backend::RemoteServer::LogProvider</a> = ::morph::backend::LogProvider</td>
         </tr>
       </table>
 </div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">std::function&lt;std::shared_ptr&lt;::morph::journal::IActionLog&gt;(std::string_view modelType,</div>
-<div class="line">                                                                                   std::string_view contextKey)&gt;</div>
-</div><!-- fragment -->
-<p>Callable that supplies the action log to attach to a newly registered instance, given its model type and <span class="tt">contextKey</span>. </p>
-<p>Return <span class="tt">nullptr</span> to register the instance with no log attached (e.g. for model types or context keys the host app doesn't want journaled). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p>Alias of <span class="tt">morph::backend::LogProvider</span>, the type of <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#aae24a77897333f0291cb44547383843a" title="Consulted whenever an instance is constructed with a non-empty contextKey — every register envelope,...">ServerConfig::logProvider</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="af8a6235cbbe77ead17ea779d99d6011a" name="af8a6235cbbe77ead17ea779d99d6011a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af8a6235cbbe77ead17ea779d99d6011a">&#9670;&#160;</a></span>RemoteServer() <span class="overload">[1/2]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#af8a6235cbbe77ead17ea779d99d6011a">&#9670;&#160;</a></span>RemoteServer() <span class="overload">[1/4]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -230,10 +234,10 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs a server backed by <code class="param">workerPool</code> with allow-all authorization. </p>
+<p>Constructs a server backed by <code class="param">workerPool</code> with allow-all authorization and a default <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html" title="Everything about a RemoteServer that is configured rather than learned: given once,...">ServerConfig</a></span>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">workerPool</td><td>Pool used to process messages asynchronously. Borrowed, not owned: it must outlive this server — and, because the server's strands run on it, keep running until teardown completes (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
+    <tr><td class="paramname">workerPool</td><td>Pool the server strand and every model strand run on. Borrowed, not owned: it must outlive this server and keep running until teardown completes (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
                   ordering"). </td></tr>
     <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
     <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
@@ -241,12 +245,12 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00290">290</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a3125da15823891abf6a3bf4fc6355bb3" name="a3125da15823891abf6a3bf4fc6355bb3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a3125da15823891abf6a3bf4fc6355bb3">&#9670;&#160;</a></span>RemoteServer() <span class="overload">[2/2]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a3125da15823891abf6a3bf4fc6355bb3">&#9670;&#160;</a></span>RemoteServer() <span class="overload">[2/4]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -282,18 +286,171 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs a server with a custom authorizer. </p>
+<p>Constructs a server with a custom authorizer and a default <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html" title="Everything about a RemoteServer that is configured rather than learned: given once,...">ServerConfig</a></span>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">workerPool</td><td>Pool used to process messages asynchronously. Borrowed, on the same terms as the constructor above. </td></tr>
-    <tr><td class="paramname">authorizer</td><td>Authorizer consulted for every <span class="tt">execute</span> envelope. </td></tr>
+    <tr><td class="paramname">workerPool</td><td>Pool the server's strands run on. Borrowed, on the same terms as the constructor above. </td></tr>
+    <tr><td class="paramname">authorizer</td><td>Authorizer consulted for every envelope that makes an authorization decision; null means allow-all. </td></tr>
     <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
     <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00242">242</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adac4d38778b9c7358267f185b86f0068" name="adac4d38778b9c7358267f185b86f0068"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adac4d38778b9c7358267f185b86f0068">&#9670;&#160;</a></span>RemoteServer() <span class="overload">[3/4]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::backend::RemoteServer::RemoteServer </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>workerPool</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html">ServerConfig</a></td>          <td class="paramname"><span class="paramname"><em>config</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::model::detail::ActionDispatcher &amp;</td>          <td class="paramname"><span class="paramname"><em>dispatcher</em></span><span class="paramdefsep"> = </span><span class="paramdefval">::morph::model::detail::defaultDispatcher()</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::model::detail::ModelRegistryFactory &amp;</td>          <td class="paramname"><span class="paramname"><em>registry</em></span><span class="paramdefsep"> = </span><span class="paramdefval">::morph::model::detail::defaultRegistry()</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs a server with allow-all authorization and <code class="param">config</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">workerPool</td><td>Pool the server's strands run on. Borrowed, on the same terms as the first constructor. </td></tr>
+    <tr><td class="paramname">config</td><td>Limits, log provider, health handler, protocol range and payload rule, fixed for the server's life. </td></tr>
+    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
+    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::invalid_argument</td><td>if <span class="tt">config.minProtocolVersion</span> exceeds <span class="tt">config.maxProtocolVersion</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00328">328</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaf7920ac29285053e0b065dceb7fd44e" name="aaf7920ac29285053e0b065dceb7fd44e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaf7920ac29285053e0b065dceb7fd44e">&#9670;&#160;</a></span>RemoteServer() <span class="overload">[4/4]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::backend::RemoteServer::RemoteServer </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>workerPool</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::shared_ptr&lt;<a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> &gt;</td>          <td class="paramname"><span class="paramname"><em>authorizer</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html">ServerConfig</a></td>          <td class="paramname"><span class="paramname"><em>config</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::model::detail::ActionDispatcher &amp;</td>          <td class="paramname"><span class="paramname"><em>dispatcher</em></span><span class="paramdefsep"> = </span><span class="paramdefval">::morph::model::detail::defaultDispatcher()</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::model::detail::ModelRegistryFactory &amp;</td>          <td class="paramname"><span class="paramname"><em>registry</em></span><span class="paramdefsep"> = </span><span class="paramdefval">::morph::model::detail::defaultRegistry()</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs a server with a custom authorizer and <code class="param">config</code>. </p>
+<p>Calls <span class="tt">config.healthHandler</span>, if set, once, before returning, with the initial status (ready, nothing registered, nothing in flight).</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">workerPool</td><td>Pool the server's strands run on. Borrowed, on the same terms as the first constructor. </td></tr>
+    <tr><td class="paramname">authorizer</td><td>Authorizer consulted for every envelope that makes an authorization decision; null means allow-all. </td></tr>
+    <tr><td class="paramname">config</td><td>Limits, log provider, health handler, protocol range and payload rule, fixed for the server's life. </td></tr>
+    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
+    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::invalid_argument</td><td>if <span class="tt">config.minProtocolVersion</span> exceeds <span class="tt">config.maxProtocolVersion</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6dc3cbe98d90ff6a39f298f66708310a" name="a6dc3cbe98d90ff6a39f298f66708310a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6dc3cbe98d90ff6a39f298f66708310a">&#9670;&#160;</a></span>~RemoteServer()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::backend::RemoteServer::~RemoteServer </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Closes the server strand before any other member goes. </p>
+<p>Every task the server posts holds the server, so nothing of it is still queued here; closing waits for a task still running on another thread and returns at once from inside the server's own last task. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00382">382</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -326,8 +483,8 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Asynchronously processes a JSON <span class="tt">Envelope</span> and calls <code class="param">reply</code> with the response. </p>
-<p>The message is dispatched to the worker pool. <code class="param">reply</code> is called exactly once from the pool thread when processing completes.</p>
-<p>Thread-safe. Safe to call before the previous call's reply has been delivered.</p>
+<p>Decodes on the calling thread and posts the envelope to the server strand. <code class="param">reply</code> is called exactly once, from a pool thread: the server strand's, or, for an <span class="tt">execute</span>, the model strand's (or the I/O loop's, when a <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c" title="Max wall-clock time a single execute may take before the server sends an err &quot;timeout&quot; reply and disc...">LimitPolicy::executeTimeout</a></span> answers first).</p>
+<p>Callable from any thread. For one connection, calls made one after the other on one thread are handled in that order.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">msg</td><td>JSON-encoded <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span> (via <span class="tt">wire::encode</span>). </td></tr>
@@ -336,7 +493,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00267">267</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00399">399</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -374,7 +531,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Like <span class="tt">handle(msg, reply)</span>, but additionally attributes any <span class="tt">register</span> decoded from <code class="param">msg</code> to a connection scope. </p>
 <p>A <span class="tt">register</span> processed under a non-zero <code class="param">cid</code> records the new model in that connection's scope, so a later <span class="tt">closeConnection(cid)</span> reclaims it. Passing <span class="tt">cid == 0</span> is exactly the unscoped, two-argument <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> — nothing is recorded and nothing is ever cleaned up automatically.</p>
-<p>Thread-safe. Safe to call before the previous call's reply has been delivered.</p>
+<p>Callable from any thread, on the same terms as <span class="tt">handle(msg, reply)</span>.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">msg</td><td>JSON-encoded <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span> (via <span class="tt">wire::encode</span>). </td></tr>
@@ -384,7 +541,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -411,9 +568,9 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Synchronously processes a JSON <span class="tt">Envelope</span> on the calling thread and returns the reply. </p>
-<p>Equivalent to <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> but never posts to the worker pool, so it is safe to call from a thread that <em>is</em> the worker pool — for example, from a <span class="tt">BridgeHandler</span> constructor invoked from inside an action handler.</p>
-<p>Safe for every kind except <span class="tt">execute</span> — <span class="tt">register</span>, <span class="tt">deregister</span>, <span class="tt">attach</span>, <span class="tt">assign</span>, <span class="tt">instances</span>, <span class="tt">schemas</span> and <span class="tt">hello</span> all route through here (see <span class="tt"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages.">SimulatedRemoteBackend</a></span> below, which uses all seven). An <span class="tt">execute</span> envelope posts to the strand and produces its reply asynchronously, after this synchronous call has already returned and destroyed the local reply buffer the deferred callback would write into. To keep that from becoming a dangling write, <span class="tt">execute</span> is rejected up front with an <span class="tt">err</span> reply.</p>
+<p>Processes a control <span class="tt">Envelope</span> on the server strand and returns its reply, blocking the caller until it has one. </p>
+<p>For <span class="tt">register</span>, <span class="tt">deregister</span>, <span class="tt">attach</span>, <span class="tt">assign</span>, <span class="tt">instances</span>, <span class="tt">schemas</span> and <span class="tt">hello</span> — the synchronous control path <span class="tt"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages.">SimulatedRemoteBackend</a></span> uses. Runs inline when the caller is already on the server strand; otherwise posts and waits. <span class="tt">execute</span> is rejected up front with an <span class="tt">err</span> reply: its reply is produced later, on the model's strand.</p>
+<p>Callable from a pool thread, including one inside a running action (a handler registered from an action handler): the server strand then runs on another pool thread while this one waits. So the pool needs a thread free for it — a one-thread pool calling this from inside its own task, or every pool thread blocked here at once, never gets its reply. See docs/spec/concurrency_and_lifetimes.md, "Synchronous re-entry".</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">msg</td><td>JSON-encoded <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span> (via <span class="tt">wire::encode</span>). </td></tr>
@@ -422,7 +579,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -454,7 +611,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Like <span class="tt">handleInline(msg)</span>, but additionally attributes any <span class="tt">register</span> decoded from <code class="param">msg</code> to a connection scope. </p>
-<p>The synchronous counterpart to the scoped <span class="tt">handle(msg, reply, cid)</span> overload — same "processed inline, safe from the worker pool itself" contract as the two-argument <span class="tt"><a class="el" href="#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">handleInline</a></span>, with <span class="tt">register</span>/<span class="tt">attach</span> additionally recorded in <span class="tt">cid</span>'s scope so a later <span class="tt">closeConnection(cid)</span> reclaims it. Passing <span class="tt">cid == 0</span> is exactly the unscoped overload above.</p>
+<p>The synchronous counterpart to the scoped <span class="tt">handle(msg, reply, cid)</span> overload, on the same terms as the one-argument <span class="tt"><a class="el" href="#abcdee5e1504ebcbef2415b029eec8818" title="Processes a control Envelope on the server strand and returns its reply, blocking the caller until it...">handleInline</a></span>. Passing <span class="tt">cid == 0</span> is exactly the unscoped overload above.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">msg</td><td>JSON-encoded <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></span> (via <span class="tt">wire::encode</span>). </td></tr>
@@ -464,7 +621,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00452">452</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -493,9 +650,9 @@ Public Member Functions</h2></td></tr>
 
 <p>Opens a new connection scope and returns its id. </p>
 <p>Call once per accepted transport connection (e.g. from a WebSocket server's "new connection" callback). The returned id is never <span class="tt">0</span>, so it can always be distinguished from the reserved "unscoped" value. Pass it to the scoped <span class="tt">handle(msg, reply, cid)</span> overload for every message received on that connection, and to <span class="tt">closeConnection(cid)</span> once the connection is gone.</p>
-<p>Thread-safe. </p><dl class="section return"><dt>Returns</dt><dd>A fresh, non-zero <span class="tt">ConnectionId</span>. </dd></dl>
+<p>Callable from any thread. The id is drawn at once; the scope is opened on the server strand, before any <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> the same thread makes next. </p><dl class="section return"><dt>Returns</dt><dd>A fresh, non-zero <span class="tt">ConnectionId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00492">492</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -525,20 +682,20 @@ Public Member Functions</h2></td></tr>
 <p>Reclaims every model still registered under <code class="param">cid</code>, then drops the scope. </p>
 <p>Call once the transport observes the connection is gone (disconnect, close, error). Releases exactly as many references as this connection held, exactly as an explicit <span class="tt">deregister</span> would, then drops the scope itself. A <em>private</em> instance (count 1, no directory entry) is erased outright, so a later <span class="tt">execute</span> against its id replies <span class="tt">err "model not found"</span>; a <em>shared</em> instance another connection is still attached to survives, and an <span class="tt">execute</span> against it still succeeds — see <span class="tt">InstanceDirectory::release</span>'s <span class="tt">retained</span> outcome.</p>
 <p>Idempotent: <span class="tt">cid == 0</span>, an unknown <span class="tt">cid</span>, or a <span class="tt">cid</span> already closed is a no-op. Deliberately does <b>not</b> consult <span class="tt">IAuthorizer</span> — this is the server's own housekeeping in reaction to a transport-level event, not an action attributable to any caller (see docs/spec/core/backend.md).</p>
-<p>Safe to call while a model in the scope has an <span class="tt">execute</span> in flight: the strand task already holds its own <span class="tt">shared_ptr</span> to the model holder, so erasing the registry entry here only prevents <em>new</em> lookups (see docs/spec/concurrency_and_lifetimes.md).</p>
-<p>Thread-safe. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Safe while a model in the scope has an <span class="tt">execute</span> in flight: the model strand's task holds its own <span class="tt">shared_ptr</span> to the model holder, so erasing the registry entry here only prevents <em>new</em> lookups (see docs/spec/concurrency_and_lifetimes.md).</p>
+<p>Callable from any thread; runs on the server strand, before any <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> the same thread makes next. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">cid</td><td>Connection scope to close, as returned by <span class="tt"><a class="el" href="#adfa3bd5a86b06e05a374be4433bcad0d" title="Opens a new connection scope and returns its id.">openConnection()</a></span>. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00441">441</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00525">525</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a99f2c685f538d7cbdbdc8f762c9cca47" name="a99f2c685f538d7cbdbdc8f762c9cca47"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a99f2c685f538d7cbdbdc8f762c9cca47">&#9670;&#160;</a></span>setLogProvider()</h2>
+<a id="ad197c37d0a3bd9bf562b04419021514d" name="ad197c37d0a3bd9bf562b04419021514d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad197c37d0a3bd9bf562b04419021514d">&#9670;&#160;</a></span>strand()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -547,146 +704,23 @@ Public Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void morph::backend::RemoteServer::setLogProvider </td>
+          <td class="memname"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp; morph::backend::RemoteServer::strand </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="#a7a5bff8cb318d46f4347cc5211b92e81">LogProvider</a></td>          <td class="paramname"><span class="paramname"><em>provider</em></span></td><td>)</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
-<p>Installs <code class="param">provider</code>, consulted whenever an instance is constructed with a non-empty <span class="tt">contextKey</span> — every <span class="tt">register</span> envelope, and every <span class="tt">attach</span> that misses the shared directory and therefore creates the instance (both reach <span class="tt">attachLogIfConfigured</span>). </p>
-<p>This is what closes the gap <span class="tt">IModelHolder::attachActionLog</span> leaves open for remote topologies: <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> owns the actual model instances for every remote/simulated-remote client, so it is the only place that can attach a log to them. Pass <span class="tt">nullptr</span> to remove a previously installed provider (new registrations get no log). Thread-safe. </p><dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">provider</td><td>Callable invoked synchronously while handling <span class="tt">register</span>. </td></tr>
-  </table>
-  </dd>
-</dl>
+<p>The server strand, as an executor. </p>
+<p>What <span class="tt">runningOn(server.strand())</span> asks about: true inside every task the server runs on its own state, false elsewhere. A task posted to it runs in order with the server's own, never beside one. </p><dl class="section return"><dt>Returns</dt><dd>The strand every envelope, verb and <span class="tt">execute</span> admission runs on. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00482">482</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ad6812db7373f28d3f34df893d2f1fb20" name="ad6812db7373f28d3f34df893d2f1fb20"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad6812db7373f28d3f34df893d2f1fb20">&#9670;&#160;</a></span>setLimitPolicy()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::backend::RemoteServer::setLimitPolicy </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html">LimitPolicy</a></td>          <td class="paramname"><span class="paramname"><em>policy</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Installs <code class="param">policy</code>, consulted by every subsequent <span class="tt">register</span> and <span class="tt">execute</span>. Thread-safe. </p>
-<p>All-zero fields (the default-constructed value) mean "unbounded" — an unconfigured server never applies any of the limits below. </p><dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">policy</td><td>Resource limits to apply from this call onward. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00493">493</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aea98b941e48b910baee37e617393e50f" name="aea98b941e48b910baee37e617393e50f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aea98b941e48b910baee37e617393e50f">&#9670;&#160;</a></span>setSupportedVersionRange()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::backend::RemoteServer::setSupportedVersionRange </td>
-          <td>(</td>
-          <td class="paramtype">std::uint32_t</td>          <td class="paramname"><span class="paramname"><em>min</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::uint32_t</td>          <td class="paramname"><span class="paramname"><em>max</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Sets the inclusive protocol-version range this server advertises in reply to a <span class="tt">"hello"</span> envelope. </p>
-<p>Defaults to <span class="tt">{morph::wire::kProtocolVersion, morph::wire::kProtocolVersion}</span> — this build's single supported version. Widen the range when a future <span class="tt">kProtocolVersion</span> bump must keep serving older clients through their deprecation window (see docs/spec/core/wire.md, "Action-evolution policy"). Thread-safe.</p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">min</td><td>Oldest protocol version this server accepts. </td></tr>
-    <tr><td class="paramname">max</td><td>Newest protocol version this server accepts. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="exception"><dt>Exceptions</dt><dd>
-  <table class="exception">
-    <tr><td class="paramname">std::invalid_argument</td><td>if <span class="tt">min &gt; max</span>. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00513">513</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a2c186d00caa73e6d141c20316081ccee" name="a2c186d00caa73e6d141c20316081ccee"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2c186d00caa73e6d141c20316081ccee">&#9670;&#160;</a></span>setPayloadCompleteness()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::backend::RemoteServer::setPayloadCompleteness </td>
-          <td>(</td>
-          <td class="paramtype">PayloadCompleteness</td>          <td class="paramname"><span class="paramname"><em>mode</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel noexcept">noexcept</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Chooses whether an <span class="tt">execute</span> body must carry every field the action's served schema marks <span class="tt">required</span>. </p>
-<p>Opt-in, and settable at any time (the flag is read once per <span class="tt">execute</span>). Defaults to <span class="tt">PayloadCompleteness::Lenient</span> — byte-for-byte today's behaviour — for the reason spelled out on <span class="tt">PayloadCompleteness</span> itself: making the check mandatory would be the non-additive wire change the policy it enforces forbids without a <span class="tt">kProtocolVersion</span> bump.</p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">mode</td><td>The completeness rule to apply from the next <span class="tt">execute</span> on. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00531">531</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00538">538</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -714,14 +748,14 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Returns the configured payload-completeness rule. </p>
-<dl class="section return"><dt>Returns</dt><dd>The current <span class="tt">PayloadCompleteness</span>. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a0d1204bec80cf0bc0d0cd96c59c28597" title="Whether an execute body must carry every field the action&#39;s served schema marks required....">ServerConfig::payloadCompleteness</a></span>, as given at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00542">542</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a66af4191998e07b569e5800c10c68315" name="a66af4191998e07b569e5800c10c68315"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a66af4191998e07b569e5800c10c68315">&#9670;&#160;</a></span>health()</h2>
+<a id="a4e56d64c5c9a9044920337bb9b27a092" name="a4e56d64c5c9a9044920337bb9b27a092"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4e56d64c5c9a9044920337bb9b27a092">&#9670;&#160;</a></span>health()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -730,10 +764,10 @@ Public Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html">HealthStatus</a> morph::backend::RemoteServer::health </td>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; <a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html">HealthStatus</a> &gt; morph::backend::RemoteServer::health </td>
           <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td> const</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
+          <td></td>
         </tr>
       </table>
   </td>
@@ -743,45 +777,16 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Snapshots the server's current health. Cheap; safe from any thread. </p>
-<dl class="section return"><dt>Returns</dt><dd>Current <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html" title="Snapshot of a RemoteServer&#39;s current health.">HealthStatus</a></span> (<span class="tt">liveModels</span> from the registry, <span class="tt">inFlight</span> from the same counter the <span class="tt">executeInFlight</span> metric reads). </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00540">540</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a5cff8e36190c13564e05bb05fb35bcbe" name="a5cff8e36190c13564e05bb05fb35bcbe"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5cff8e36190c13564e05bb05fb35bcbe">&#9670;&#160;</a></span>setHealthHandler()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::backend::RemoteServer::setHealthHandler </td>
-          <td>(</td>
-          <td class="paramtype">std::function&lt; void(const <a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html">HealthStatus</a> &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Installs <code class="param">handler</code>, invoked immediately with the current <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span> snapshot, and again whenever readiness changes. </p>
-<p>Thread-safe. Pass <span class="tt">nullptr</span> to remove a previously installed handler (clearing does not itself invoke anything). <span class="tt"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486" title="Enters shutdown: from now on, register, attach and execute envelopes are rejected with err &quot;server sh...">beginShutdown()</a></span> is currently the only internal path that flips <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html#a1ad58997d6bb39d5bcfb32a4abc244e9" title="true if the server currently accepts and dispatches new work.">HealthStatus::ready</a></span> to <span class="tt">false</span>; it re-invokes this handler (if installed) with the post-shutdown snapshot. A deployment's transport (e.g. <span class="tt">QtWebSocketServer</span>) can expose <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span>/this handler over an HTTP/probe endpoint; <span class="tt">morph</span> does not embed an HTTP server. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>The server's health, answered on the server strand. </p>
+<p>Posted, so the answer reflects every envelope and verb this thread handed the server before calling. Callable from any thread; the caller attaches to the answer on <code class="param">replyExec</code>, the owner it names. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">handler</td><td>Callback invoked with the current <span class="tt"><a class="el" href="../../d1/d59/structmorph_1_1backend_1_1HealthStatus.html" title="Snapshot of a RemoteServer&#39;s current health.">HealthStatus</a></span>. </td></tr>
+    <tr><td class="paramname">replyExec</td><td>Executor the answer is delivered on, and the one the caller attaches its callbacks from. Borrowed: it must outlive the returned <span class="tt">Completion</span>'s delivery. </td></tr>
   </table>
   </dd>
 </dl>
+<dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the server strand with <span class="tt">ready</span>, the live model count and the in-flight execute count; its callbacks run on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00564">564</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00555">555</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -808,16 +813,16 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Enters shutdown: from now on, <span class="tt">register</span>, <span class="tt">attach</span> and <span class="tt">execute</span> envelopes are rejected with <span class="tt">err "server shutting down"</span>. <span class="tt">deregister</span> is still served so clients can tear down cleanly. Note <span class="tt">attach</span> is refused too, so a client cannot re-attach to a shared instance during the drain window. </p>
-<p>Idempotent — safe to call more than once, and safe to call while <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span>/<span class="tt"><a class="el" href="#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">handleInline()</a></span> calls are concurrently in flight on other threads. There is no way back: a restarted service constructs a fresh <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> rather than un-shutting-down this one.</p>
-<p>Also flips <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a>.ready</span> to <span class="tt">false</span> and, if a handler is installed via <span class="tt"><a class="el" href="#a5cff8e36190c13564e05bb05fb35bcbe" title="Installs handler, invoked immediately with the current health() snapshot, and again whenever readines...">setHealthHandler()</a></span>, re-invokes it with the post-shutdown snapshot — the same "invoked again whenever readiness changes" contract <span class="tt"><a class="el" href="#a5cff8e36190c13564e05bb05fb35bcbe" title="Installs handler, invoked immediately with the current health() snapshot, and again whenever readines...">setHealthHandler</a></span> documents. This is what lets an orchestrator stop routing to this server while <span class="tt"><a class="el" href="#aa3de29a47fe56d091889756e7e1faadd" title="Blocks until every in-flight execute has delivered its reply, or deadline elapses.">drainedWithin()</a></span>'s drain runs. </p>
+<p>Enters shutdown: from now on, <span class="tt">register</span>, <span class="tt">attach</span> and <span class="tt">execute</span> envelopes are rejected with <span class="tt">err "server shutting down"</span>. <span class="tt">deregister</span> is still served so clients can tear down cleanly. <span class="tt">attach</span> is refused too, so a client cannot re-attach to a shared instance during the drain window. </p>
+<p>Posted to the server strand: an envelope this thread hands <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> after this call returns is refused. Idempotent. There is no way back: a restarted service constructs a fresh <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>.</p>
+<p>Also flips <span class="tt"><a class="el" href="#a4e56d64c5c9a9044920337bb9b27a092" title="The server&#39;s health, answered on the server strand.">health()</a></span>'s <span class="tt">ready</span> to <span class="tt">false</span> and calls <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a1ce5548f3f49f5349bdeede99ccb300b" title="Called with the server&#39;s health: once from the constructor, and again, on the server&#39;s strand,...">ServerConfig::healthHandler</a></span>, if set, with the post-shutdown status, on the server strand — what lets an orchestrator stop routing to this server while <span class="tt"><a class="el" href="#ad6574a0055fb8bf539dc525e68bac88e" title="Answers whether every in-flight execute delivers its reply within deadline.">drainedWithin()</a></span>'s drain runs. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00593">593</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00578">578</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
-<a id="aa3de29a47fe56d091889756e7e1faadd" name="aa3de29a47fe56d091889756e7e1faadd"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa3de29a47fe56d091889756e7e1faadd">&#9670;&#160;</a></span>drainedWithin()</h2>
+<a id="ad6574a0055fb8bf539dc525e68bac88e" name="ad6574a0055fb8bf539dc525e68bac88e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad6574a0055fb8bf539dc525e68bac88e">&#9670;&#160;</a></span>drainedWithin()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -826,10 +831,14 @@ Public Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">bool morph::backend::RemoteServer::drainedWithin </td>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt; morph::backend::RemoteServer::drainedWithin </td>
           <td>(</td>
-          <td class="paramtype">std::chrono::milliseconds</td>          <td class="paramname"><span class="paramname"><em>deadline</em></span></td><td>)</td>
+          <td class="paramtype">std::chrono::milliseconds</td>          <td class="paramname"><span class="paramname"><em>deadline</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -839,16 +848,17 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Blocks until every in-flight <span class="tt">execute</span> has delivered its reply, or <code class="param">deadline</code> elapses. </p>
-<p>"In-flight" is one counter (<span class="tt">_inFlightExecutes</span>), incremented when <span class="tt">dispatchExecute</span> admits a call for dispatch (right before posting to the model's strand) and decremented right before its reply is sent, on every resolving path (<span class="tt">ok</span>, <span class="tt">err</span>, or a <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c" title="Max wall-clock time a single execute may take before the server sends an err &quot;timeout&quot; reply and disc...">LimitPolicy::executeTimeout</a></span> firing first) — the same state <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#afc681a5bc09275d4c4b1ffd91bea794b" title="Max concurrent in-flight execute calls this server will accept before replying err &quot;server busy&quot; inst...">LimitPolicy::maxInFlightExecutes</a></span> (if configured) gates and <span class="tt"><a class="el" href="#a66af4191998e07b569e5800c10c68315" title="Snapshots the server&#39;s current health. Cheap; safe from any thread.">health()</a></span>'s <span class="tt">inFlight</span> field reads, shared rather than double-counted. Waits on a condition variable signalled when the counter reaches zero — not a busy poll. Safe to call from any thread, independently of <span class="tt"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486" title="Enters shutdown: from now on, register, attach and execute envelopes are rejected with err &quot;server sh...">beginShutdown()</a></span> (it only observes the counter; it does not itself stop new work from arriving). </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Answers whether every in-flight <span class="tt">execute</span> delivers its reply within <code class="param">deadline</code>. </p>
+<p>"In-flight" is one count, kept on the server strand: incremented when an <span class="tt">execute</span> is admitted for dispatch and decremented, on the strand, when its reply is sent — on every resolving path (<span class="tt">ok</span>, <span class="tt">err</span>, or a <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c" title="Max wall-clock time a single execute may take before the server sends an err &quot;timeout&quot; reply and disc...">LimitPolicy::executeTimeout</a></span> firing first). The same count <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#afc681a5bc09275d4c4b1ffd91bea794b" title="Max concurrent in-flight execute calls this server will accept before replying err &quot;server busy&quot; inst...">LimitPolicy::maxInFlightExecutes</a></span> gates and <span class="tt"><a class="el" href="#a4e56d64c5c9a9044920337bb9b27a092" title="The server&#39;s health, answered on the server strand.">health()</a></span>'s <span class="tt">inFlight</span> reads. Independent of <span class="tt"><a class="el" href="#a9ea8ed30f49ff089f677e09210ffc486" title="Enters shutdown: from now on, register, attach and execute envelopes are rejected with err &quot;server sh...">beginShutdown()</a></span>: it observes, it does not stop new work from arriving. Callable from any thread; nothing blocks. The caller attaches to the answer on <code class="param">replyExec</code>, the owner it names. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">deadline</td><td>Maximum time to wait. </td></tr>
+    <tr><td class="paramname">deadline</td><td>Longest time to wait; <span class="tt">0</span> answers from the count as it stands. </td></tr>
+    <tr><td class="paramname">replyExec</td><td>Executor the answer is delivered on, and the one the caller attaches its callbacks from. Borrowed: it must outlive the returned <span class="tt">Completion</span>'s delivery. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the in-flight count reached zero before <code class="param">deadline</code> elapsed; <span class="tt">false</span> on timeout. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the server strand: <span class="tt">true</span> once the count is zero, <span class="tt">false</span> if <code class="param">deadline</code> elapses first. Its callbacks run on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00622">622</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00609">609</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

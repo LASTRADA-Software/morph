@@ -17,7 +17,7 @@ var searchData=
   ['clamped_14',['clamped',['../d3/d68/classmorph_1_1math_1_1WireClampScope.html#ab07096909467f8d092cc4f700a2cd16b',1,'morph::math::WireClampScope']]],
   ['clear_15',['clear',['../dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#af8b7568011a79f3634fab4f96f38c457',1,'morph::journal::PayloadMigrationRegistry']]],
   ['clienttimeouterror_16',['ClientTimeoutError',['../d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html#abd73770a167aec770cfd56664e615114',1,'morph::backend::ClientTimeoutError']]],
-  ['close_17',['close',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a926d9b7b2f18c76b5070f696a1ef43b2',1,'morph::net::SocketServer::close()'],['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aaa1c8ceb2b58f6e6de7c950ddede71a1',1,'morph::qt::QtWebSocketServer::close()']]],
+  ['close_17',['close',['../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html#a3050812c211e7f6c08ebc27b996e32ed',1,'morph::exec::OwnerStrand::close()'],['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a926d9b7b2f18c76b5070f696a1ef43b2',1,'morph::net::SocketServer::close()'],['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aaa1c8ceb2b58f6e6de7c950ddede71a1',1,'morph::qt::QtWebSocketServer::close()']]],
   ['closeconnection_18',['closeConnection',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9c30776adb059a937a151eceeccc5875',1,'morph::backend::RemoteServer']]],
   ['closegracefully_19',['closeGracefully',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a546e51a6654a4c664685b301e820b5aa',1,'morph::qt::QtWebSocketServer']]],
   ['completion_20',['Completion',['../dd/de7/classmorph_1_1async_1_1Completion.html#ac3564b8c749d5672ec98acc3aa7d445e',1,'morph::async::Completion::Completion()=default'],['../dd/de7/classmorph_1_1async_1_1Completion.html#ac7fe8818f9e79746106a776255a9a47d',1,'morph::async::Completion::Completion(std::shared_ptr&lt; detail::CompletionState&lt; T &gt; &gt; statePtr, ::morph::exec::IExecutor *execPtr)'],['../dd/de7/classmorph_1_1async_1_1Completion.html#acfdbfbb36eadf4b95ae49c52037f6a30',1,'morph::async::Completion::Completion(Completion &amp;&amp;) noexcept=default']]],
@@ -26,7 +26,8 @@ var searchData=
   ['constanttimeequals_23',['constantTimeEquals',['../d3/d6a/session__auth_8hpp.html#a7a780077f5cd635319ac6966c436e41b',1,'morph::session::detail']]],
   ['contains_24',['contains',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a52eddf64a40e42cb6402cb2788f748df',1,'morph::bridge::ActionExecuteRegistry']]],
   ['convert_25',['convert',['../d9/db8/quantity_8hpp.html#ac6333f923fa45288c3385091318bca26',1,'morph::units']]],
-  ['currentactiontype_26',['currentActionType',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a61cdd8f30ca4894ac6c3904762ab596e',1,'morph::flows::FlowSession']]],
-  ['currentindex_27',['currentIndex',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a73caf65d6cf6436d6fbc35faa4bc008e',1,'morph::flows::FlowSession']]],
-  ['currentprincipal_28',['currentPrincipal',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6316aa3aa3f91f1e09449f42e68ca0ac',1,'morph::bridge::Bridge']]]
+  ['coreexecutor_26',['coreExecutor',['../d4/d49/structmorph_1_1exec_1_1IExecutor.html#a3ae4fce1feb932392828af7438e23067',1,'morph::exec::IExecutor']]],
+  ['currentactiontype_27',['currentActionType',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a61cdd8f30ca4894ac6c3904762ab596e',1,'morph::flows::FlowSession']]],
+  ['currentindex_28',['currentIndex',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a73caf65d6cf6436d6fbc35faa4bc008e',1,'morph::flows::FlowSession']]],
+  ['currentprincipal_29',['currentPrincipal',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6316aa3aa3f91f1e09449f42e68ca0ac',1,'morph::bridge::Bridge']]]
 ];

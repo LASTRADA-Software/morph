@@ -123,10 +123,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d41/reply__
 
 <p>The callId-multiplexed <span class="tt">execute</span> reply router, shared by every backend that talks to a <span class="tt">RemoteServer</span> over a real (or simulated) connection.  
 <a href="#details">More...</a></p>
-<div class="textblock"><code>#include &lt;atomic&gt;</code><br />
-<code>#include &lt;cstddef&gt;</code><br />
+<div class="textblock"><code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
-<code>#include &lt;mutex&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;unordered_map&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
@@ -139,7 +137,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d41/reply__
 <ul>
 <li><span class="tt">classifyExecuteReply</span> — the ok/timeout/err triage. It had been open-coded three times (<span class="tt"><a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">net/socket_backend.hpp</a></span>, <span class="tt"><a class="el" href="../../d0/dfc/remote_8hpp_source.html">core/remote.hpp</a></span>'s <span class="tt">SimulatedRemoteBackend</span>, <span class="tt">src/qt/
     qt_websocket_backend.cpp</span>) and the Qt copy had already drifted to a hand-typed <span class="tt">"timeout"</span> literal, which is exactly the drift <span class="tt">wire::kExecuteTimeoutMessage</span> exists to prevent.</li>
-<li><span class="tt">PendingCallTable</span> — call-id allocation plus the pending-completion map, with the admit-under-lock insert that closes the insert/disconnect-sweep race.</li>
+<li><span class="tt">PendingCallTable</span> — call-id allocation plus the pending-completion map, owned by the backend's I/O loop.</li>
 </ul>
 <dl class="section user"><dt>Why <span class="tt">core/detail/</span> and not <span class="tt">net/detail/</span></dt><dd><span class="tt"><a class="el" href="../../d0/dfc/remote_8hpp_source.html">core/remote.hpp</a></span> is one of the consumers and ships in the base <span class="tt">morph</span> target's installed header set, whereas everything under <span class="tt">include/morph/
 net/</span> belongs to the optional <span class="tt">morph_net</span> target (<span class="tt">MORPH_BUILD_NET</span>, default <span class="tt">OFF</span>). A <span class="tt">core/</span> header including a <span class="tt">net/</span> one would therefore install a <span class="tt"><a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a></span> that cannot find its own include whenever net is off. Living under <span class="tt">core/detail/</span> keeps the dependency pointing the one direction it already points (<span class="tt">net</span> → <span class="tt">core</span>). </dd></dl>

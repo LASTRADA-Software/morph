@@ -148,32 +148,43 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a567cf64f346792ca897d326b55b21685"><td class="mdescLeft">&#160;</td><td class="mdescRight">SQLite's numeric <span class="tt">PRAGMA synchronous</span> level for this connection, as read back at construction.  <br /></td></tr>
 <tr class="memitem:acf2c06305a38052b962b7fdd6d66b901" id="r_acf2c06305a38052b962b7fdd6d66b901"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#acf2c06305a38052b962b7fdd6d66b901">journalMode</a> () const noexcept</td></tr>
 <tr class="memdesc:acf2c06305a38052b962b7fdd6d66b901"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">journal_mode</span> this database actually ended up in.  <br /></td></tr>
-<tr class="memitem:a24c0200c1dba601e1f63f891d2313b44" id="r_a24c0200c1dba601e1f63f891d2313b44"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a24c0200c1dba601e1f63f891d2313b44">SqliteOfflineQueue</a> (std::filesystem::path path, std::optional&lt; std::size_t &gt; maxDepth=std::nullopt, <a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html">::morph::core::FileIoOps</a> ioOps={}, <a class="el" href="#ac68ad977c09782cdd23d3072b0389542">Synchronous</a> synchronous=<a class="el" href="#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555">Synchronous::normal</a>, std::chrono::milliseconds busyTimeout=std::chrono::milliseconds{<a class="el" href="#a6fb30c6097f183febd73b4809415c40c">kBusyTimeoutMillis</a>}, ::core::platform::WallClockRef wallClock=::core::platform::defaultSystemWallClock())</td></tr>
-<tr class="memdesc:a24c0200c1dba601e1f63f891d2313b44"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens (or creates) the queue database at <code class="param">path</code>, creating the schema if it does not already exist.  <br /></td></tr>
-<tr class="memitem:aa793d4340bf8da09261b51613389ca4b" id="r_aa793d4340bf8da09261b51613389ca4b"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#aa793d4340bf8da09261b51613389ca4b">~SqliteOfflineQueue</a> () override</td></tr>
-<tr class="memdesc:aa793d4340bf8da09261b51613389ca4b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the underlying SQLite connection.  <br /></td></tr>
+<tr class="memitem:a3326d12ccddab49db55ed597ba754b6b" id="r_a3326d12ccddab49db55ed597ba754b6b"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a3326d12ccddab49db55ed597ba754b6b">SqliteOfflineQueue</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;owner, std::filesystem::path path, std::optional&lt; std::size_t &gt; maxDepth=std::nullopt, <a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html">::morph::core::FileIoOps</a> ioOps={}, <a class="el" href="#ac68ad977c09782cdd23d3072b0389542">Synchronous</a> synchronous=<a class="el" href="#ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555">Synchronous::normal</a>, std::chrono::milliseconds busyTimeout=std::chrono::milliseconds{<a class="el" href="#a6fb30c6097f183febd73b4809415c40c">kBusyTimeoutMillis</a>}, ::core::platform::WallClockRef wallClock=::core::platform::defaultSystemWallClock())</td></tr>
+<tr class="memdesc:a3326d12ccddab49db55ed597ba754b6b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens (or creates) the queue database at <code class="param">path</code>, creating the schema if it does not already exist; the queue belongs to <code class="param">owner</code>.  <br /></td></tr>
 <tr class="memitem:ac6f8b21871f330fb28f16739269e14db" id="r_ac6f8b21871f330fb28f16739269e14db"><td class="memItemLeft"><a id="ac6f8b21871f330fb28f16739269e14db" name="ac6f8b21871f330fb28f16739269e14db"></a>
 &#160;</td><td class="memItemRight"><b>SqliteOfflineQueue</b> (const SqliteOfflineQueue &amp;)=delete</td></tr>
 <tr class="memitem:a57e37afd4cb22f3651774b757e95622d" id="r_a57e37afd4cb22f3651774b757e95622d"><td class="memItemLeft"><a id="a57e37afd4cb22f3651774b757e95622d" name="a57e37afd4cb22f3651774b757e95622d"></a>
-<a class="el" href="#a24c0200c1dba601e1f63f891d2313b44">SqliteOfflineQueue</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#a24c0200c1dba601e1f63f891d2313b44">SqliteOfflineQueue</a> &amp;)=delete</td></tr>
+<a class="el" href="#a3326d12ccddab49db55ed597ba754b6b">SqliteOfflineQueue</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#a3326d12ccddab49db55ed597ba754b6b">SqliteOfflineQueue</a> &amp;)=delete</td></tr>
 <tr class="memitem:a97a488640d722c172c415f718833cde5" id="r_a97a488640d722c172c415f718833cde5"><td class="memItemLeft"><a id="a97a488640d722c172c415f718833cde5" name="a97a488640d722c172c415f718833cde5"></a>
 &#160;</td><td class="memItemRight"><b>SqliteOfflineQueue</b> (SqliteOfflineQueue &amp;&amp;)=delete</td></tr>
 <tr class="memitem:afda00da55fcd0f5f8d762b0f499b4309" id="r_afda00da55fcd0f5f8d762b0f499b4309"><td class="memItemLeft"><a id="afda00da55fcd0f5f8d762b0f499b4309" name="afda00da55fcd0f5f8d762b0f499b4309"></a>
-<a class="el" href="#a24c0200c1dba601e1f63f891d2313b44">SqliteOfflineQueue</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a24c0200c1dba601e1f63f891d2313b44">SqliteOfflineQueue</a> &amp;&amp;)=delete</td></tr>
+<a class="el" href="#a3326d12ccddab49db55ed597ba754b6b">SqliteOfflineQueue</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a3326d12ccddab49db55ed597ba754b6b">SqliteOfflineQueue</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a88bbf14621e61b7a11c6d390b80922e2" id="r_a88bbf14621e61b7a11c6d390b80922e2"><td class="memItemLeft">uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2">enqueue</a> (std::string payload) override</td></tr>
-<tr class="memdesc:a88bbf14621e61b7a11c6d390b80922e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Inserts <code class="param">payload</code> with an empty idempotency key.  <br /></td></tr>
+<tr class="memdesc:a88bbf14621e61b7a11c6d390b80922e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Inserts <code class="param">payload</code> with an empty idempotency key. On the owner.  <br /></td></tr>
 <tr class="memitem:aa3342ce935ef2cae8b2c7390c00d9175" id="r_aa3342ce935ef2cae8b2c7390c00d9175"><td class="memItemLeft">uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#aa3342ce935ef2cae8b2c7390c00d9175">enqueue</a> (std::string payload, std::string idempotencyKey) override</td></tr>
-<tr class="memdesc:aa3342ce935ef2cae8b2c7390c00d9175"><td class="mdescLeft">&#160;</td><td class="mdescRight">Inserts <code class="param">payload</code> carrying <code class="param">idempotencyKey</code> in one write. A non-empty key already present on a row is deduplicated: the existing row's id is returned and nothing new is inserted.  <br /></td></tr>
+<tr class="memdesc:aa3342ce935ef2cae8b2c7390c00d9175"><td class="mdescLeft">&#160;</td><td class="mdescRight">Inserts <code class="param">payload</code> carrying <code class="param">idempotencyKey</code> in one write. On the owner. A non-empty key already present on a row is deduplicated: the existing row's id is returned and nothing new is inserted.  <br /></td></tr>
 <tr class="memitem:a7d84c59b8a7487daff9ae3d10b8ae868" id="r_a7d84c59b8a7487daff9ae3d10b8ae868"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7d84c59b8a7487daff9ae3d10b8ae868">drain</a> () const override</td></tr>
-<tr class="memdesc:a7d84c59b8a7487daff9ae3d10b8ae868"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns all pending rows in ascending-id (enqueue) order.  <br /></td></tr>
+<tr class="memdesc:a7d84c59b8a7487daff9ae3d10b8ae868"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns all pending rows in ascending-id (enqueue) order. On the owner.  <br /></td></tr>
 <tr class="memitem:af7af4a3bd277014c911b0e3d4652a398" id="r_af7af4a3bd277014c911b0e3d4652a398"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af7af4a3bd277014c911b0e3d4652a398">markDone</a> (uint64_t itemId) override</td></tr>
-<tr class="memdesc:af7af4a3bd277014c911b0e3d4652a398"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deletes the row identified by <code class="param">itemId</code>. No-op if absent.  <br /></td></tr>
+<tr class="memdesc:af7af4a3bd277014c911b0e3d4652a398"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deletes the row identified by <code class="param">itemId</code>, on the owner. No-op if absent.  <br /></td></tr>
 <tr class="memitem:a75a81df376f6ce54a8acc5e076881912" id="r_a75a81df376f6ce54a8acc5e076881912"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a75a81df376f6ce54a8acc5e076881912">setAttempts</a> (uint64_t itemId, <a class="el" href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html">Attempts</a> attempts) override</td></tr>
-<tr class="memdesc:a75a81df376f6ce54a8acc5e076881912"><td class="mdescLeft">&#160;</td><td class="mdescRight">Persists an updated attempt count for <code class="param">itemId</code>. No-op if absent.  <br /></td></tr>
+<tr class="memdesc:a75a81df376f6ce54a8acc5e076881912"><td class="mdescLeft">&#160;</td><td class="mdescRight">Persists an updated attempt count for <code class="param">itemId</code>, on the owner. No-op if absent.  <br /></td></tr>
 <tr class="memitem:a6ba81485a0911150f8aa9919869fa67c" id="r_a6ba81485a0911150f8aa9919869fa67c"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a6ba81485a0911150f8aa9919869fa67c">size</a> () const override</td></tr>
-<tr class="memdesc:a6ba81485a0911150f8aa9919869fa67c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of pending rows. Thread-safe.  <br /></td></tr>
+<tr class="memdesc:a6ba81485a0911150f8aa9919869fa67c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of pending rows. On the owner.  <br /></td></tr>
 <tr class="memitem:a502fb36fc3b6d06d0b71562886764d70" id="r_a502fb36fc3b6d06d0b71562886764d70"><td class="memItemLeft">std::optional&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a502fb36fc3b6d06d0b71562886764d70">maxDepth</a> () const override</td></tr>
-<tr class="memdesc:a502fb36fc3b6d06d0b71562886764d70"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded.  <br /></td></tr>
+<tr class="memdesc:a502fb36fc3b6d06d0b71562886764d70"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded. Callable anywhere: fixed at construction.  <br /></td></tr>
+<tr class="memitem:a55faaa7f001960c33a8d4af650432c08" id="r_a55faaa7f001960c33a8d4af650432c08"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a55faaa7f001960c33a8d4af650432c08">drain</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec) const</td></tr>
+<tr class="memdesc:a55faaa7f001960c33a8d4af650432c08"><td class="mdescLeft">&#160;</td><td class="mdescRight">Snapshots the pending items on the queue's owner; delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a764e65ca68cb0ab108d6e7bc83e8eaff" id="r_a764e65ca68cb0ab108d6e7bc83e8eaff"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; uint64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a764e65ca68cb0ab108d6e7bc83e8eaff">enqueue</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec, std::string payload, std::string idempotencyKey={})</td></tr>
+<tr class="memdesc:a764e65ca68cb0ab108d6e7bc83e8eaff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">payload</code> carrying <code class="param">idempotencyKey</code> on the queue's owner; the new item's id is delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a8b6c7be58b3abd7d5a92d9059d481e19" id="r_a8b6c7be58b3abd7d5a92d9059d481e19"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8b6c7be58b3abd7d5a92d9059d481e19">size</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec) const</td></tr>
+<tr class="memdesc:a8b6c7be58b3abd7d5a92d9059d481e19"><td class="mdescLeft">&#160;</td><td class="mdescRight">Counts the pending items on the queue's owner; delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="inherit_header pub_methods_structmorph_1_1offline_1_1IOfflineQueue"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">morph::offline::IOfflineQueue</a></td></tr>
+<tr class="memitem:a764e65ca68cb0ab108d6e7bc83e8eaff pub_methods_structmorph_1_1offline_1_1IOfflineQueue" id="r_a764e65ca68cb0ab108d6e7bc83e8eaff"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; uint64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a764e65ca68cb0ab108d6e7bc83e8eaff">enqueue</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec, std::string payload, std::string idempotencyKey={})</td></tr>
+<tr class="memdesc:a764e65ca68cb0ab108d6e7bc83e8eaff pub_methods_structmorph_1_1offline_1_1IOfflineQueue"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">payload</code> carrying <code class="param">idempotencyKey</code> on the queue's owner; the new item's id is delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a55faaa7f001960c33a8d4af650432c08 pub_methods_structmorph_1_1offline_1_1IOfflineQueue" id="r_a55faaa7f001960c33a8d4af650432c08"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a55faaa7f001960c33a8d4af650432c08">drain</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec) const</td></tr>
+<tr class="memdesc:a55faaa7f001960c33a8d4af650432c08 pub_methods_structmorph_1_1offline_1_1IOfflineQueue"><td class="mdescLeft">&#160;</td><td class="mdescRight">Snapshots the pending items on the queue's owner; delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a8b6c7be58b3abd7d5a92d9059d481e19 pub_methods_structmorph_1_1offline_1_1IOfflineQueue" id="r_a8b6c7be58b3abd7d5a92d9059d481e19"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a8b6c7be58b3abd7d5a92d9059d481e19">size</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec) const</td></tr>
+<tr class="memdesc:a8b6c7be58b3abd7d5a92d9059d481e19 pub_methods_structmorph_1_1offline_1_1IOfflineQueue"><td class="mdescLeft">&#160;</td><td class="mdescRight">Counts the pending items on the queue's owner; delivered on <code class="param">replyExec</code>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-attribs" class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
@@ -183,7 +194,13 @@ Static Public Attributes</h2></td></tr>
 <tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
 <tr class="memitem:a158cd872caa3d353fd4a7a04e0327b5c" id="r_a158cd872caa3d353fd4a7a04e0327b5c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a158cd872caa3d353fd4a7a04e0327b5c">setIdempotencyKey</a> (uint64_t itemId, std::string idempotencyKey) override</td></tr>
-<tr class="memdesc:a158cd872caa3d353fd4a7a04e0327b5c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stamps an idempotency key onto an already-inserted row. No-op if <code class="param">itemId</code> is absent. Reachable only if a caller invokes the base <span class="tt">IOfflineQueue::enqueue(payload, key)</span> default through an <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a>&amp;</span> &ndash; this class's own <span class="tt">enqueue(payload, key)</span> override above stamps the key inline in the same INSERT instead.  <br /></td></tr>
+<tr class="memdesc:a158cd872caa3d353fd4a7a04e0327b5c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stamps an idempotency key onto an already-inserted row, on the owner. No-op if <code class="param">itemId</code> is absent. Reachable only if a caller invokes the base <span class="tt">IOfflineQueue::enqueue(payload, key)</span> default through an <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a>&amp;</span> &ndash; this class's own <span class="tt">enqueue(payload, key)</span> override above stamps the key inline in the same INSERT instead.  <br /></td></tr>
+<tr class="memitem:a205034e2a82b8f881cf8ede9d49932d2" id="r_a205034e2a82b8f881cf8ede9d49932d2"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; uint64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a205034e2a82b8f881cf8ede9d49932d2">askEnqueue</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec, std::string payload, std::string idempotencyKey) override</td></tr>
+<tr class="memdesc:a205034e2a82b8f881cf8ede9d49932d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enqueues on the owner, answered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a207537ea6c74d508d26fea3b4290064b" id="r_a207537ea6c74d508d26fea3b4290064b"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a207537ea6c74d508d26fea3b4290064b">askDrain</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec) const override</td></tr>
+<tr class="memdesc:a207537ea6c74d508d26fea3b4290064b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads every pending row on the owner, answered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a8886f60a053e48edebb040e260d947a8" id="r_a8886f60a053e48edebb040e260d947a8"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8886f60a053e48edebb040e260d947a8">askSize</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec) const override</td></tr>
+<tr class="memdesc:a8886f60a053e48edebb040e260d947a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Counts the rows on the owner, answered on <code class="param">replyExec</code>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Reference SQLite-backed <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span>: persists <span class="tt">payload</span>, <span class="tt">idempotencyKey</span>, and <span class="tt">attempts</span> across process restarts. </p>
@@ -198,12 +215,12 @@ Protected Member Functions</h2></td></tr>
 <div class="line"><span class="keyword">CREATE</span> <span class="keyword">UNIQUE</span> INDEX <span class="keywordflow">IF</span> <span class="keyword">NOT</span> <span class="keyword">EXISTS</span> ix_queue_idem</div>
 <div class="line">    <span class="keyword">ON</span> morph_offline_queue(idempotency_key) <span class="keyword">WHERE</span> idempotency_key &lt;&gt; <span class="stringliteral">&#39;&#39;</span>;</div>
 </div><!-- fragment --><p><span class="tt">id</span> is <span class="tt">AUTOINCREMENT</span>, so ids are never reused and a re-opened queue re-presents each row under its <b>stored</b> id — stable across restarts. <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84" title="Stable identifier assigned at enqueue time.">QueueItem::id</a></span> remains queue-local (per <span class="tt">docs/spec/offline/offline.md</span>); cross-restart identity is carried by <span class="tt">idempotencyKey</span>, not <span class="tt">id</span>.</p>
-<p>The partial unique index gives insert-time dedup for a non-empty <span class="tt">idempotencyKey</span>: a re-enqueue of the same key is a no-op that returns the existing row's id (<span class="tt">INSERT ... ON CONFLICT ... DO NOTHING</span>, then a lookup on a no-op conflict). Empty keys (the default) are exempt, so keyless items behave exactly as <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">InMemoryOfflineQueue</a></span> does — never deduplicated.</p>
-<dl class="section user"><dt>Crash safety</dt><dd><span class="tt"><a class="el" href="#a7d84c59b8a7487daff9ae3d10b8ae868" title="Returns all pending rows in ascending-id (enqueue) order.">drain()</a></span> never deletes, so a crash between <span class="tt"><a class="el" href="#a7d84c59b8a7487daff9ae3d10b8ae868" title="Returns all pending rows in ascending-id (enqueue) order.">drain()</a></span> and <span class="tt"><a class="el" href="#af7af4a3bd277014c911b0e3d4652a398" title="Deletes the row identified by itemId. No-op if absent.">markDone()</a></span> loses nothing. Each write (<span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue</a></span>, <span class="tt"><a class="el" href="#af7af4a3bd277014c911b0e3d4652a398" title="Deletes the row identified by itemId. No-op if absent.">markDone</a></span>, <span class="tt"><a class="el" href="#a75a81df376f6ce54a8acc5e076881912" title="Persists an updated attempt count for itemId. No-op if absent.">setAttempts</a></span>, <span class="tt"><a class="el" href="#a158cd872caa3d353fd4a7a04e0327b5c" title="Stamps an idempotency key onto an already-inserted row. No-op if itemId is absent....">setIdempotencyKey</a></span>) is its own committed statement; <span class="tt">PRAGMA
-    journal_mode=WAL</span> and <span class="tt">PRAGMA synchronous=FULL</span> (both set once, at construction, and <span class="tt">journal_mode</span> read back and verified rather than trusted &ndash; some filesystems, e.g. NFS, silently fall back to <span class="tt">delete</span> mode) give the durability. <span class="tt">PRAGMA busy_timeout</span> is also set at construction: this class's own mutex makes <span class="tt">SQLITE_BUSY</span> unreachable for a single instance, but the class documents no single-opener restriction. Construction also fsyncs the containing directory once, after <span class="tt">sqlite3_open()</span> and every schema-setup <span class="tt">PRAGMA</span>/<span class="tt">CREATE</span> succeed, closing the same fresh-file-creation directory-durability gap <span class="tt">FileIoOps::syncPath</span> closes for <span class="tt">FileActionLog</span>/<span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span>.</dd></dl>
-<dl class="section user"><dt>Thread safety</dt><dd>All operations serialise on an internal mutex around the connection, so this is safe to share between the application's enqueue-on-failure write path and <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s drain/replay read path. </dd></dl>
+<p>The partial unique index gives insert-time dedup for a non-empty <span class="tt">idempotencyKey</span>: a re-enqueue of the same key is a no-op that returns the existing row's id (<span class="tt">INSERT ... ON CONFLICT ... DO NOTHING</span>, then a lookup on a no-op conflict). Empty keys (the default) are exempt, so keyless items behave exactly as <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="In-memory implementation of IOfflineQueue, owned by one executor.">InMemoryOfflineQueue</a></span> does — never deduplicated.</p>
+<dl class="section user"><dt>Crash safety</dt><dd><span class="tt"><a class="el" href="#a7d84c59b8a7487daff9ae3d10b8ae868" title="Returns all pending rows in ascending-id (enqueue) order. On the owner.">drain()</a></span> never deletes, so a crash between <span class="tt"><a class="el" href="#a7d84c59b8a7487daff9ae3d10b8ae868" title="Returns all pending rows in ascending-id (enqueue) order. On the owner.">drain()</a></span> and <span class="tt"><a class="el" href="#af7af4a3bd277014c911b0e3d4652a398" title="Deletes the row identified by itemId, on the owner. No-op if absent.">markDone()</a></span> loses nothing. Each write (<span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key. On the owner.">enqueue</a></span>, <span class="tt"><a class="el" href="#af7af4a3bd277014c911b0e3d4652a398" title="Deletes the row identified by itemId, on the owner. No-op if absent.">markDone</a></span>, <span class="tt"><a class="el" href="#a75a81df376f6ce54a8acc5e076881912" title="Persists an updated attempt count for itemId, on the owner. No-op if absent.">setAttempts</a></span>, <span class="tt"><a class="el" href="#a158cd872caa3d353fd4a7a04e0327b5c" title="Stamps an idempotency key onto an already-inserted row, on the owner. No-op if itemId is absent....">setIdempotencyKey</a></span>) is its own committed statement; <span class="tt">PRAGMA
+    journal_mode=WAL</span> and <span class="tt">PRAGMA synchronous=FULL</span> (both set once, at construction, and <span class="tt">journal_mode</span> read back and verified rather than trusted &ndash; some filesystems, e.g. NFS, silently fall back to <span class="tt">delete</span> mode) give the durability. <span class="tt">PRAGMA busy_timeout</span> is also set at construction: running every statement on one owner makes <span class="tt">SQLITE_BUSY</span> unreachable for a single instance, but the class documents no single-opener restriction. Construction also fsyncs the containing directory once, after <span class="tt">sqlite3_open()</span> and every schema-setup <span class="tt">PRAGMA</span>/<span class="tt">CREATE</span> succeed, closing the same fresh-file-creation directory-durability gap <span class="tt">FileIoOps::syncPath</span> closes for <span class="tt">FileActionLog</span>/<span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span>.</dd></dl>
+<dl class="section user"><dt>One owner</dt><dd>The connection belongs to the executor given at construction (see <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span>, "One owner"): every statement runs there, one at a time. The application's enqueue-on-failure path and <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s drain share the queue by sharing that owner. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 </div><a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Member Enumeration Documentation</h2>
 <a id="ac68ad977c09782cdd23d3072b0389542" name="ac68ad977c09782cdd23d3072b0389542"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac68ad977c09782cdd23d3072b0389542">&#9670;&#160;</a></span>Synchronous</h2>
@@ -229,17 +246,17 @@ Protected Member Functions</h2></td></tr>
 <table class="fieldtable">
 <tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555" name="ac68ad977c09782cdd23d3072b0389542afea087517c26fadd409bd4b9dc642555"></a>normal&#160;</td><td class="fielddoc"><p><span class="tt">PRAGMA synchronous=NORMAL</span> — the default, and SQLite's own recommendation under WAL. A crash or power loss can lose the most recent commits, which this queue's at-least-once delivery plus <span class="tt">idempotencyKey</span> dedup already absorb. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0" name="ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0"></a>full&#160;</td><td class="fielddoc"><p><span class="tt">PRAGMA synchronous=FULL</span> — fsync on every committed statement. Measured ~18x slower per mutation (~0.08ms to ~1.44ms on NVMe/btrfs, sqlite 3.53.4), and every mutation here is its own commit, so a 200-item <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> drain goes from ~16ms to ~290ms — all of it under this class's mutex, where it blocks the producer's <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue()</a></span> too. Opt in when losing the last few commits is genuinely unacceptable. </p>
+<tr><td class="fieldname"><a id="ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0" name="ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0"></a>full&#160;</td><td class="fielddoc"><p><span class="tt">PRAGMA synchronous=FULL</span> — fsync on every committed statement. Measured ~18x slower per mutation (~0.08ms to ~1.44ms on NVMe/btrfs, sqlite 3.53.4), and every mutation here is its own commit, so a 200-item <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> drain goes from ~16ms to ~290ms — all of it on the queue's owner, where it holds up the producer's <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key. On the owner.">enqueue()</a></span> too. Opt in when losing the last few commits is genuinely unacceptable. </p>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a24c0200c1dba601e1f63f891d2313b44" name="a24c0200c1dba601e1f63f891d2313b44"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a24c0200c1dba601e1f63f891d2313b44">&#9670;&#160;</a></span>SqliteOfflineQueue()</h2>
+<a id="a3326d12ccddab49db55ed597ba754b6b" name="a3326d12ccddab49db55ed597ba754b6b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3326d12ccddab49db55ed597ba754b6b">&#9670;&#160;</a></span>SqliteOfflineQueue()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -250,6 +267,11 @@ Protected Member Functions</h2></td></tr>
         <tr>
           <td class="memname">morph::offline::SqliteOfflineQueue::SqliteOfflineQueue </td>
           <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>owner</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
           <td class="paramtype">std::filesystem::path</td>          <td class="paramname"><span class="paramname"><em>path</em></span>, </td>
         </tr>
         <tr>
@@ -285,14 +307,15 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Opens (or creates) the queue database at <code class="param">path</code>, creating the schema if it does not already exist. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Opens (or creates) the queue database at <code class="param">path</code>, creating the schema if it does not already exist; the queue belongs to <code class="param">owner</code>. </p>
+<p>Runs on the constructing thread, before anything else can reach the queue. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">owner</td><td>The executor every statement runs on; must run one task at a time. Borrowed: it must outlive this queue and run what it posts. </td></tr>
     <tr><td class="paramname">path</td><td>SQLite database file. </td></tr>
-    <tr><td class="paramname">maxDepth</td><td>Maximum number of pending rows <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue()</a></span> will admit before throwing <span class="tt"><a class="el" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html" title="Thrown by enqueue() when the queue is at its configured maxDepth().">OfflineQueueFullError</a></span>; <span class="tt">std::nullopt</span> (the default) means unbounded. Not persisted in the database itself — a per-construction parameter, so a reopen must pass it again to keep the same cap enforced. </td></tr>
+    <tr><td class="paramname">maxDepth</td><td>Maximum number of pending rows <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key. On the owner.">enqueue()</a></span> will admit before throwing <span class="tt"><a class="el" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html" title="Thrown by enqueue() when the queue is at its configured maxDepth().">OfflineQueueFullError</a></span>; <span class="tt">std::nullopt</span> (the default) means unbounded. Not persisted in the database itself — a per-construction parameter, so a reopen must pass it again to keep the same cap enforced. </td></tr>
     <tr><td class="paramname">ioOps</td><td>Injectable directory-fsync primitive (<span class="tt">FileIoOps::syncPath</span> only &ndash; the rest of this class talks to SQLite directly, never through <span class="tt">FileIoOps</span>); defaults to the real syscall. Test-only seam, mirroring <span class="tt">FileActionLog</span>/<span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span>'s own <span class="tt">FileIoOps</span> parameter, for forcing the directory-fsync failure branch below without needing a real OS-level failure. </td></tr>
     <tr><td class="paramname">synchronous</td><td><span class="tt">PRAGMA synchronous</span> level; see <span class="tt"><a class="el" href="#ac68ad977c09782cdd23d3072b0389542" title="How hard each committed statement is pushed onto the platter.">Synchronous</a></span>. Defaults to <span class="tt">normal</span>. </td></tr>
-    <tr><td class="paramname">busyTimeout</td><td>How long a statement waits out a lock another connection holds before returning <span class="tt">SQLITE_BUSY</span>. Defaults to <span class="tt"><a class="el" href="#a6fb30c6097f183febd73b4809415c40c" title="PRAGMA busy_timeout set at construction: how long a statement blocks on SQLITE_BUSY before giving up,...">kBusyTimeoutMillis</a></span>. This class's own mutex makes <span class="tt">SQLITE_BUSY</span> unreachable for a single instance, so the timeout only matters when something else has the database open — but when it does, the wait happens under that mutex and blocks every other caller of this instance, a Qt GUI thread included. Pass <span class="tt">0</span> to restore fail-fast. </td></tr>
+    <tr><td class="paramname">busyTimeout</td><td>How long a statement waits out a lock another connection holds before returning <span class="tt">SQLITE_BUSY</span>. Defaults to <span class="tt"><a class="el" href="#a6fb30c6097f183febd73b4809415c40c" title="PRAGMA busy_timeout set at construction: how long a statement blocks on SQLITE_BUSY before giving up,...">kBusyTimeoutMillis</a></span>. One owner running every statement makes <span class="tt">SQLITE_BUSY</span> unreachable for a single instance, so the timeout only matters when something else has the database open — but when it does, the wait happens on the owner and holds up every other caller of this instance, a Qt GUI thread included. Pass <span class="tt">0</span> to restore fail-fast. </td></tr>
     <tr><td class="paramname">wallClock</td><td>Clock the <span class="tt">enqueued_at</span> column is stamped from; the system clock by default. Borrowed, so it must outlive the queue. </td></tr>
   </table>
   </dd>
@@ -304,36 +327,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aa793d4340bf8da09261b51613389ca4b" name="aa793d4340bf8da09261b51613389ca4b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa793d4340bf8da09261b51613389ca4b">&#9670;&#160;</a></span>~SqliteOfflineQueue()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">morph::offline::SqliteOfflineQueue::~SqliteOfflineQueue </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Closes the underlying SQLite connection. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -364,7 +358,7 @@ Protected Member Functions</h2></td></tr>
 <p>SQLite's numeric <span class="tt">PRAGMA synchronous</span> level for this connection, as read back at construction. </p>
 <p><span class="tt">0</span> OFF, <span class="tt">1</span> NORMAL, <span class="tt">2</span> FULL, <span class="tt">3</span> EXTRA. Reported rather than inferred from the constructor argument: the argument is what was asked for, this is what SQLite confirmed. </p><dl class="section return"><dt>Returns</dt><dd>The level in force on this queue's own connection. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -394,12 +388,12 @@ Protected Member Functions</h2></td></tr>
 <p>The <span class="tt">journal_mode</span> this database actually ended up in. </p>
 <p>Normally <span class="tt">"wal"</span>. A filesystem without the shared-memory support WAL needs reports <span class="tt">"delete"</span>; <span class="tt">:memory:</span> and the temp spellings report <span class="tt">"memory"</span>. Construction warns rather than throws on anything but <span class="tt">"wal"</span> (durability is carried by <span class="tt">PRAGMA synchronous</span>), so this is how a caller that cares can tell which mode it got. </p><dl class="section return"><dt>Returns</dt><dd>The mode string as SQLite reported it at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a88bbf14621e61b7a11c6d390b80922e2" name="a88bbf14621e61b7a11c6d390b80922e2"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a88bbf14621e61b7a11c6d390b80922e2">&#9670;&#160;</a></span>enqueue() <span class="overload">[1/2]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a88bbf14621e61b7a11c6d390b80922e2">&#9670;&#160;</a></span>enqueue() <span class="overload">[1/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -421,7 +415,7 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Inserts <code class="param">payload</code> with an empty idempotency key. </p>
+<p>Inserts <code class="param">payload</code> with an empty idempotency key. On the owner. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">payload</td><td>Serialised action to persist. </td></tr>
@@ -431,19 +425,19 @@ Protected Member Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The new row's id (<span class="tt">SELECT last_insert_rowid()</span>). </dd></dl>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
-    <tr><td class="paramname">OfflineQueueFullError</td><td>if the queue is already at <span class="tt"><a class="el" href="#a502fb36fc3b6d06d0b71562886764d70" title="Returns the configured maximum depth, or std::nullopt if unbounded.">maxDepth()</a></span>. </td></tr>
+    <tr><td class="paramname">OfflineQueueFullError</td><td>if the queue is already at <span class="tt"><a class="el" href="#a502fb36fc3b6d06d0b71562886764d70" title="Returns the configured maximum depth, or std::nullopt if unbounded. Callable anywhere: fixed at const...">maxDepth()</a></span>. </td></tr>
   </table>
   </dd>
 </dl>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
 <a id="aa3342ce935ef2cae8b2c7390c00d9175" name="aa3342ce935ef2cae8b2c7390c00d9175"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa3342ce935ef2cae8b2c7390c00d9175">&#9670;&#160;</a></span>enqueue() <span class="overload">[2/2]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#aa3342ce935ef2cae8b2c7390c00d9175">&#9670;&#160;</a></span>enqueue() <span class="overload">[2/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -469,7 +463,7 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Inserts <code class="param">payload</code> carrying <code class="param">idempotencyKey</code> in one write. A non-empty key already present on a row is deduplicated: the existing row's id is returned and nothing new is inserted. </p>
+<p>Inserts <code class="param">payload</code> carrying <code class="param">idempotencyKey</code> in one write. On the owner. A non-empty key already present on a row is deduplicated: the existing row's id is returned and nothing new is inserted. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">payload</td><td>Serialised action to persist. </td></tr>
@@ -480,19 +474,19 @@ Protected Member Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The new row's id, or the existing row's id on a dedup hit. </dd></dl>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
-    <tr><td class="paramname">OfflineQueueFullError</td><td>if the queue is already at <span class="tt"><a class="el" href="#a502fb36fc3b6d06d0b71562886764d70" title="Returns the configured maximum depth, or std::nullopt if unbounded.">maxDepth()</a></span>. Checked before the insert is attempted, so a call that would have resolved to a dedup hit (inserting nothing) can also be rejected when the queue happens to be full at the same time — a documented, accepted conservatism rather than an extra round trip to special-case it. </td></tr>
+    <tr><td class="paramname">OfflineQueueFullError</td><td>if the queue is already at <span class="tt"><a class="el" href="#a502fb36fc3b6d06d0b71562886764d70" title="Returns the configured maximum depth, or std::nullopt if unbounded. Callable anywhere: fixed at const...">maxDepth()</a></span>. Checked before the insert is attempted, so a call that would have resolved to a dedup hit (inserting nothing) can also be rejected when the queue happens to be full at the same time — a documented, accepted conservatism rather than an extra round trip to special-case it. </td></tr>
   </table>
   </dd>
 </dl>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00371">371</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a7d84c59b8a7487daff9ae3d10b8ae868" name="a7d84c59b8a7487daff9ae3d10b8ae868"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7d84c59b8a7487daff9ae3d10b8ae868">&#9670;&#160;</a></span>drain()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a7d84c59b8a7487daff9ae3d10b8ae868">&#9670;&#160;</a></span>drain() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -514,12 +508,12 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Returns all pending rows in ascending-id (enqueue) order. </p>
+<p>Returns all pending rows in ascending-id (enqueue) order. On the owner. </p>
 <dl class="section return"><dt>Returns</dt><dd>Snapshot of all pending items; the table is unchanged. </dd></dl>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ad11f945b889e1f6d582a6bbd4fdfeaa5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -546,17 +540,17 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Deletes the row identified by <code class="param">itemId</code>. No-op if absent. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Deletes the row identified by <code class="param">itemId</code>, on the owner. No-op if absent. </p>
+<p>Called off the owner, the delete is posted there and this returns at once; a statement that fails there is logged, and the row stays queued. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">itemId</td><td>Id returned by the corresponding <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue()</a></span> call. </td></tr>
+    <tr><td class="paramname">itemId</td><td>Id returned by the corresponding <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key. On the owner.">enqueue()</a></span> call. </td></tr>
   </table>
   </dd>
 </dl>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00462">462</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00250">250</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -587,7 +581,7 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Persists an updated attempt count for <code class="param">itemId</code>. No-op if absent. </p>
+<p>Persists an updated attempt count for <code class="param">itemId</code>, on the owner. No-op if absent. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">itemId</td><td>Id of the item whose count changed. </td></tr>
@@ -598,12 +592,12 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#afe70e6b66397727a5e84b9235f64d1da">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00472">472</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a6ba81485a0911150f8aa9919869fa67c" name="a6ba81485a0911150f8aa9919869fa67c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6ba81485a0911150f8aa9919869fa67c">&#9670;&#160;</a></span>size()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a6ba81485a0911150f8aa9919869fa67c">&#9670;&#160;</a></span>size() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -625,12 +619,12 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Returns the number of pending rows. Thread-safe. </p>
+<p>Returns the number of pending rows. On the owner. </p>
 <dl class="section return"><dt>Returns</dt><dd>Current pending item count (<span class="tt">COUNT(*)</span> against the table). </dd></dl>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ac534551aa850902cd9b8fd45e134ade3">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00482">482</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00265">265</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -657,12 +651,12 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded. </p>
-<dl class="section return"><dt>Returns</dt><dd>The capacity <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key.">enqueue()</a></span> enforces, or <span class="tt">std::nullopt</span> if none. </dd></dl>
+<p>Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded. Callable anywhere: fixed at construction. </p>
+<dl class="section return"><dt>Returns</dt><dd>The capacity <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key. On the owner.">enqueue()</a></span> enforces, or <span class="tt">std::nullopt</span> if none. </dd></dl>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a5fd0dc329f73f72e5d64689c5956058d">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00489">489</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -693,7 +687,7 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Stamps an idempotency key onto an already-inserted row. No-op if <code class="param">itemId</code> is absent. Reachable only if a caller invokes the base <span class="tt">IOfflineQueue::enqueue(payload, key)</span> default through an <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a>&amp;</span> &ndash; this class's own <span class="tt">enqueue(payload, key)</span> override above stamps the key inline in the same INSERT instead. </p>
+<p>Stamps an idempotency key onto an already-inserted row, on the owner. No-op if <code class="param">itemId</code> is absent. Reachable only if a caller invokes the base <span class="tt">IOfflineQueue::enqueue(payload, key)</span> default through an <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a>&amp;</span> &ndash; this class's own <span class="tt">enqueue(payload, key)</span> override above stamps the key inline in the same INSERT instead. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">itemId</td><td>Id of the row to stamp. </td></tr>
@@ -704,7 +698,251 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ab3e24454f2625fcd447f76d9ed0fd820">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00499">499</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00281">281</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a205034e2a82b8f881cf8ede9d49932d2" name="a205034e2a82b8f881cf8ede9d49932d2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a205034e2a82b8f881cf8ede9d49932d2">&#9670;&#160;</a></span>askEnqueue()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; uint64_t &gt; morph::offline::SqliteOfflineQueue::askEnqueue </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>payload</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>idempotencyKey</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel protected">protected</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Enqueues on the owner, answered on <code class="param">replyExec</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. </td></tr>
+    <tr><td class="paramname">payload</td><td>Serialised action to persist. </td></tr>
+    <tr><td class="paramname">idempotencyKey</td><td>Stable dedup token; may be empty. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The row's id, or the enqueue's error. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#aac34cf641011fd31f9e922e3a3afdf62">morph::offline::IOfflineQueue</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a207537ea6c74d508d26fea3b4290064b" name="a207537ea6c74d508d26fea3b4290064b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a207537ea6c74d508d26fea3b4290064b">&#9670;&#160;</a></span>askDrain()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt; &gt; morph::offline::SqliteOfflineQueue::askDrain </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel protected">protected</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reads every pending row on the owner, answered on <code class="param">replyExec</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The pending items, or the read's error. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a4943540734b4f4bc2863e8e752d744b4">morph::offline::IOfflineQueue</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8886f60a053e48edebb040e260d947a8" name="a8886f60a053e48edebb040e260d947a8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8886f60a053e48edebb040e260d947a8">&#9670;&#160;</a></span>askSize()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::size_t &gt; morph::offline::SqliteOfflineQueue::askSize </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel protected">protected</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Counts the rows on the owner, answered on <code class="param">replyExec</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The pending item count. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#aa7112d017a6b08a715a410d3dc03931d">morph::offline::IOfflineQueue</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a55faaa7f001960c33a8d4af650432c08" name="a55faaa7f001960c33a8d4af650432c08"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a55faaa7f001960c33a8d4af650432c08">&#9670;&#160;</a></span>drain() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt; &gt; <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ad11f945b889e1f6d582a6bbd4fdfeaa5">morph::offline::IOfflineQueue::drain</a> </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Snapshots the pending items on the queue's owner; delivered on <code class="param">replyExec</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. Borrowed: it must outlive the completion. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>What <span class="tt"><a class="el" href="#a7d84c59b8a7487daff9ae3d10b8ae868" title="Returns all pending rows in ascending-id (enqueue) order. On the owner.">drain()</a></span> would have returned. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a764e65ca68cb0ab108d6e7bc83e8eaff" name="a764e65ca68cb0ab108d6e7bc83e8eaff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a764e65ca68cb0ab108d6e7bc83e8eaff">&#9670;&#160;</a></span>enqueue() <span class="overload">[3/3]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; uint64_t &gt; <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue::enqueue</a> </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>payload</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>idempotencyKey</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends <code class="param">payload</code> carrying <code class="param">idempotencyKey</code> on the queue's owner; the new item's id is delivered on <code class="param">replyExec</code>. </p>
+<p>The form of <span class="tt"><a class="el" href="#a88bbf14621e61b7a11c6d390b80922e2" title="Inserts payload with an empty idempotency key. On the owner.">enqueue()</a></span> for a caller that is not on the queue's owner. A full queue rejects the completion with <span class="tt"><a class="el" href="../../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html" title="Thrown by enqueue() when the queue is at its configured maxDepth().">OfflineQueueFullError</a></span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered, and where the caller attaches to it. Borrowed: it must outlive the completion. </td></tr>
+    <tr><td class="paramname">payload</td><td>Serialised action to persist. </td></tr>
+    <tr><td class="paramname">idempotencyKey</td><td>Stable dedup token for the logical op; may be empty. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The id <span class="tt">enqueue(payload, idempotencyKey)</span> would have returned, or the error it would have thrown. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00324">324</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8b6c7be58b3abd7d5a92d9059d481e19" name="a8b6c7be58b3abd7d5a92d9059d481e19"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8b6c7be58b3abd7d5a92d9059d481e19">&#9670;&#160;</a></span>size() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::size_t &gt; <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ac534551aa850902cd9b8fd45e134ade3">morph::offline::IOfflineQueue::size</a> </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Counts the pending items on the queue's owner; delivered on <code class="param">replyExec</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. Borrowed: it must outlive the completion. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>What <span class="tt"><a class="el" href="#a6ba81485a0911150f8aa9919869fa67c" title="Returns the number of pending rows. On the owner.">size()</a></span> would have returned. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00344">344</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -731,7 +969,7 @@ Protected Member Functions</h2></td></tr>
 
 <p><span class="tt">PRAGMA busy_timeout</span> set at construction: how long a statement blocks on <span class="tt">SQLITE_BUSY</span> before giving up, in milliseconds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../d8/d2f/sqlite__offline__queue_8hpp_source.html">sqlite_offline_queue.hpp</a>.</p>
 
 </div>
 </div>

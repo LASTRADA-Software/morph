@@ -254,178 +254,179 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/de0/corouti
 <div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">///        entry fires, or until a stop withdraws it.</span></div>
 <div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">///</span></div>
 <div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="comment">/// Resumes on the executor the awaiting coroutine was running on (core-cpp&#39;s</span></div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="comment">/// current executor), or on the scheduler&#39;s thread if there was none. With a</span></div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span><span class="comment">/// stoppable token on the awaiting promise, a stop cancels the scheduler entry</span></div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment">/// -- releasing its capture at once -- and resumes the coroutine with</span></div>
-<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment">/// `core::async::OperationCancelled` on the same executor, or, with none,</span></div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">/// inline on the thread that requested the stop. Exactly one of the timer and the stop resumes it.</span></div>
-<div class="foldopen" id="foldopen00138" data-start="{" data-end="};">
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">  138</a></span><span class="keyword">class </span><a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">DelayAwaiter</a> {</div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>    <span class="keyword">enum class</span> Outcome : std::uint8_t { Pending, Fired, Cancelled };</div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span> </div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>    <span class="keyword">struct </span>Shared;</div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span> </div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span>    <span class="keyword">struct </span>OnStop {</div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>        Shared* shared;</div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>        <span class="keywordtype">void</span> operator()() <span class="keyword">const</span> <span class="keyword">noexcept</span> { shared-&gt;onStop(); }</div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span>    };</div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span> </div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span>    <span class="keyword">struct </span>Shared : std::enable_shared_from_this&lt;Shared&gt; {</div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span>        std::atomic&lt;Outcome&gt; outcome{Outcome::Pending};</div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>        std::atomic&lt;bool&gt; armed{<span class="keyword">false</span>};</div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span>        std::atomic&lt;bool&gt; claimed{<span class="keyword">false</span>};</div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span>        std::atomic&lt;detail::TimeoutScheduler::Handle&gt; timer{0};</div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>        std::coroutine_handle&lt;&gt; continuation;</div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span>        ::core::async::ResumeTarget context;</div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>        detail::TimeoutScheduler* scheduler = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>        std::optional&lt;::core::async::StopCallback&lt;OnStop&gt;&gt; stopCallback;</div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span> </div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>        <span class="comment">// seq_cst, as `armed` is: whoever decides and then reads `armed` must</span></div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>        <span class="comment">// not miss the other side&#39;s store (a store-buffering pattern).</span></div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>        <span class="keywordtype">bool</span> decide(Outcome outcome_) <span class="keyword">noexcept</span> {</div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>            <span class="keyword">auto</span> expected = Outcome::Pending;</div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>            <span class="keywordflow">return</span> outcome.compare_exchange_strong(expected, outcome_, std::memory_order_seq_cst);</div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>        }</div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span> </div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>        <span class="keywordtype">void</span> resume()<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>            <span class="keywordflow">if</span> (context) {</div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>                context.submit(::core::async::ParkedWork{.resume = continuation});</div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>                continuation.resume();</div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>            }</div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>        }</div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span> </div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>        <span class="keywordtype">void</span> onStop() <span class="keyword">noexcept</span> {</div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>            <span class="keywordflow">if</span> (!decide(Outcome::Cancelled)) {</div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>                <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>            }</div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>            <span class="keywordflow">try</span> {</div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>                <span class="comment">// The coroutine may be resumed below and free the awaiter;</span></div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>                <span class="comment">// this keeps the state alive until the callback has returned.</span></div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>                <span class="keyword">auto</span> <span class="keyword">const</span> keep = shared_from_this();</div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>                scheduler-&gt;cancel(timer.load());</div>
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span>                <span class="keywordflow">if</span> (armed.load(std::memory_order_seq_cst) &amp;&amp; !claimed.exchange(<span class="keyword">true</span>, std::memory_order_acq_rel)) {</div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>                    resume();</div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>                }</div>
-<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>            } <span class="keywordflow">catch</span> (...) {  <span class="comment">// NOLINT(bugprone-empty-catch): a stop callback must not throw</span></div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>                <span class="comment">// No executor to resume through: the coroutine stays</span></div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>                <span class="comment">// suspended until its owner destroys it.</span></div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>            }</div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>        }</div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>    };</div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span> </div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment">    /// @param scheduler The scheduler whose entry times the wait; must outlive it.</span></div>
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment">    /// @param duration  How long to wait at least.</span></div>
-<div class="foldopen" id="foldopen00195" data-start="{" data-end="}">
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">  195</a></span>    <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">DelayAwaiter</a>(detail::TimeoutScheduler&amp; scheduler MORPH_LIFETIMEBOUND, std::chrono::milliseconds duration)</div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>        : _shared{std::make_shared&lt;Shared&gt;()}, _duration{duration} {</div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>        _shared-&gt;scheduler = &amp;scheduler;</div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>    }</div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="comment">/// current executor), or on the scheduler&#39;s loop thread if there was none.</span></div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span><span class="comment">/// With a stoppable token on the awaiting promise, a stop cancels the scheduler</span></div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment">/// entry -- its capture is released on the scheduler&#39;s loop -- and resumes the</span></div>
+<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment">/// coroutine with</span></div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">/// `core::async::OperationCancelled` on the same executor, or, with none,</span></div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span><span class="comment">/// inline on the thread that requested the stop. Exactly one of the timer and the stop resumes it.</span></div>
+<div class="foldopen" id="foldopen00139" data-start="{" data-end="};">
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">  139</a></span><span class="keyword">class </span><a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">DelayAwaiter</a> {</div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>    <span class="keyword">enum class</span> Outcome : std::uint8_t { Pending, Fired, Cancelled };</div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span> </div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>    <span class="keyword">struct </span>Shared;</div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span> </div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>    <span class="keyword">struct </span>OnStop {</div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>        Shared* shared;</div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span>        <span class="keywordtype">void</span> operator()() <span class="keyword">const</span> <span class="keyword">noexcept</span> { shared-&gt;onStop(); }</div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span>    };</div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span> </div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span>    <span class="keyword">struct </span>Shared : std::enable_shared_from_this&lt;Shared&gt; {</div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>        std::atomic&lt;Outcome&gt; outcome{Outcome::Pending};</div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span>        std::atomic&lt;bool&gt; armed{<span class="keyword">false</span>};</div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span>        std::atomic&lt;bool&gt; claimed{<span class="keyword">false</span>};</div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>        std::atomic&lt;detail::TimeoutScheduler::Handle&gt; timer{0};</div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span>        std::coroutine_handle&lt;&gt; continuation;</div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>        ::core::async::ResumeTarget context;</div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>        detail::TimeoutScheduler* scheduler = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span>        std::optional&lt;::core::async::StopCallback&lt;OnStop&gt;&gt; stopCallback;</div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span> </div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>        <span class="comment">// seq_cst, as `armed` is: whoever decides and then reads `armed` must</span></div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>        <span class="comment">// not miss the other side&#39;s store (a store-buffering pattern).</span></div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>        <span class="keywordtype">bool</span> decide(Outcome outcome_) <span class="keyword">noexcept</span> {</div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>            <span class="keyword">auto</span> expected = Outcome::Pending;</div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>            <span class="keywordflow">return</span> outcome.compare_exchange_strong(expected, outcome_, std::memory_order_seq_cst);</div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>        }</div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span> </div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>        <span class="keywordtype">void</span> resume()<span class="keyword"> const </span>{</div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>            <span class="keywordflow">if</span> (context) {</div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>                context.submit(::core::async::ParkedWork{.resume = continuation});</div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>            } <span class="keywordflow">else</span> {</div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>                continuation.resume();</div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>            }</div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>        }</div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span> </div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>        <span class="keywordtype">void</span> onStop() <span class="keyword">noexcept</span> {</div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>            <span class="keywordflow">if</span> (!decide(Outcome::Cancelled)) {</div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>                <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>            }</div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>            <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>                <span class="comment">// The coroutine may be resumed below and free the awaiter;</span></div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>                <span class="comment">// this keeps the state alive until the callback has returned.</span></div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>                <span class="keyword">auto</span> <span class="keyword">const</span> keep = shared_from_this();</div>
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span>                scheduler-&gt;cancel(timer.load());</div>
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>                <span class="keywordflow">if</span> (armed.load(std::memory_order_seq_cst) &amp;&amp; !claimed.exchange(<span class="keyword">true</span>, std::memory_order_acq_rel)) {</div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>                    resume();</div>
+<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>                }</div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>            } <span class="keywordflow">catch</span> (...) {  <span class="comment">// NOLINT(bugprone-empty-catch): a stop callback must not throw</span></div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>                <span class="comment">// No executor to resume through: the coroutine stays</span></div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>                <span class="comment">// suspended until its owner destroys it.</span></div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>            }</div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>        }</div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span>    };</div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span> </div>
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment">    /// @param scheduler The scheduler whose entry times the wait; must outlive it.</span></div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="comment">    /// @param duration  How long to wait at least.</span></div>
+<div class="foldopen" id="foldopen00196" data-start="{" data-end="}">
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">  196</a></span>    <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">DelayAwaiter</a>(detail::TimeoutScheduler&amp; scheduler MORPH_LIFETIMEBOUND, std::chrono::milliseconds duration)</div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>        : _shared{std::make_shared&lt;Shared&gt;()}, _duration{duration} {</div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>        _shared-&gt;scheduler = &amp;scheduler;</div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span>    }</div>
 </div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment"></span> </div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment">    /// @brief Withdraws the wait if the frame is destroyed while suspended.</span></div>
-<div class="foldopen" id="foldopen00201" data-start="{" data-end="}">
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a502a54189dc1c7bb9ebcafbe2d7d53e1">  201</a></span>    <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a502a54189dc1c7bb9ebcafbe2d7d53e1">~DelayAwaiter</a>() {</div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span>        _shared-&gt;stopCallback.reset();</div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>        <span class="keywordflow">if</span> (_shared-&gt;decide(Outcome::Cancelled)) {</div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>            _shared-&gt;scheduler-&gt;cancel(_shared-&gt;timer.load());</div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>        }</div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>    }</div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment"></span> </div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment">    /// @brief Withdraws the wait if the frame is destroyed while suspended.</span></div>
+<div class="foldopen" id="foldopen00202" data-start="{" data-end="}">
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a502a54189dc1c7bb9ebcafbe2d7d53e1">  202</a></span>    <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a502a54189dc1c7bb9ebcafbe2d7d53e1">~DelayAwaiter</a>() {</div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>        _shared-&gt;stopCallback.reset();</div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>        <span class="keywordflow">if</span> (_shared-&gt;decide(Outcome::Cancelled)) {</div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>            _shared-&gt;scheduler-&gt;cancel(_shared-&gt;timer.load());</div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>        }</div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span>    }</div>
 </div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span> </div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>    <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">DelayAwaiter</a>(<span class="keyword">const</span> <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span>    <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span>    <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">DelayAwaiter</a>(<a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>    <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp; operator=(<a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span><span class="comment"></span> </div>
-<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment">    /// @return Always false: every decision is `await_suspend`&#39;s.</span></div>
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>    <span class="comment">// Called through the awaiter by the compiler, so not static.</span></div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>    <span class="comment">// NOLINTNEXTLINE(readability-convert-member-functions-to-static)</span></div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#aecc9e2a65087c9fc9d3bd8cf6b6fdec2">  216</a></span>    [[nodiscard]] <span class="keyword">constexpr</span> <span class="keywordtype">bool</span> <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#aecc9e2a65087c9fc9d3bd8cf6b6fdec2">await_ready</a>() const noexcept { <span class="keywordflow">return</span> <span class="keyword">false</span>; }</div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span><span class="comment"></span> </div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment">    /// @tparam Promise The awaiting coroutine&#39;s promise type.</span></div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment">    /// @param awaiting The coroutine performing the `co_await`.</span></div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// @return False to continue at once, when a stop was already requested;</span></div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    ///         true once the timer is armed.</span></div>
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Promise&gt;</div>
-<div class="foldopen" id="foldopen00223" data-start="{" data-end="}">
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a4b2223d2445a7d8eb0ca55c1059f3d4e">  223</a></span>    <span class="keywordtype">bool</span> <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a4b2223d2445a7d8eb0ca55c1059f3d4e">await_suspend</a>(std::coroutine_handle&lt;Promise&gt; awaiting) {</div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span>        <span class="comment">// Copied before `armed` is published: from then on a stop may resume</span></div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>        <span class="comment">// the coroutine and free this awaiter with its frame.</span></div>
-<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span>        <span class="keyword">auto</span> shared = _shared;</div>
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span>        <span class="keyword">auto</span> <span class="keyword">const</span> duration = _duration;</div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>        shared-&gt;continuation = awaiting;</div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>        shared-&gt;context = ::core::async::ResumeTarget::current();</div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (::core::async::HasStopToken&lt;Promise&gt;) {</div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span>            ::core::async::StopToken <span class="keyword">const</span> token = awaiting.promise().stopToken();</div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>            <span class="keywordflow">if</span> (token.stop_requested()) {</div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>                shared-&gt;outcome.store(Outcome::Cancelled);</div>
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>                <span class="keywordflow">return</span> <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>            }</div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>            <span class="keywordflow">if</span> (token.stop_possible()) {</div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>                shared-&gt;stopCallback.emplace(token, OnStop{shared.get()});</div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>            }</div>
-<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>        }</div>
-<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>        shared-&gt;armed.store(<span class="keyword">true</span>, std::memory_order_seq_cst);</div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>        <span class="keywordflow">if</span> (shared-&gt;outcome.load(std::memory_order_seq_cst) == Outcome::Cancelled) {</div>
-<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>            <span class="keywordflow">return</span> shared-&gt;claimed.exchange(<span class="keyword">true</span>, std::memory_order_acq_rel);</div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>        }</div>
-<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>        <span class="keyword">auto</span> <span class="keyword">const</span> handle = shared-&gt;scheduler-&gt;schedule(duration, [shared] {</div>
-<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>            <span class="keywordflow">if</span> (shared-&gt;decide(Outcome::Fired)) {</div>
-<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>                shared-&gt;resume();</div>
-<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>            }</div>
-<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>        });</div>
-<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>        shared-&gt;timer.store(handle);</div>
-<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span>        <span class="comment">// A stop that won between arming and here found no timer to cancel.</span></div>
-<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span>        <span class="keywordflow">if</span> (shared-&gt;outcome.load() == Outcome::Cancelled) {</div>
-<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span>            shared-&gt;scheduler-&gt;cancel(handle);</div>
-<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span>        }</div>
-<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span>        <span class="keywordflow">return</span> <span class="keyword">true</span>;</div>
-<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>    }</div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span> </div>
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span>    <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">DelayAwaiter</a>(<span class="keyword">const</span> <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span>    <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>    <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">DelayAwaiter</a>(<a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>    <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp; operator=(<a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment"></span> </div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span><span class="comment">    /// @return Always false: every decision is `await_suspend`&#39;s.</span></div>
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>    <span class="comment">// Called through the awaiter by the compiler, so not static.</span></div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>    <span class="comment">// NOLINTNEXTLINE(readability-convert-member-functions-to-static)</span></div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#aecc9e2a65087c9fc9d3bd8cf6b6fdec2">  217</a></span>    [[nodiscard]] <span class="keyword">constexpr</span> <span class="keywordtype">bool</span> <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#aecc9e2a65087c9fc9d3bd8cf6b6fdec2">await_ready</a>() const noexcept { <span class="keywordflow">return</span> <span class="keyword">false</span>; }</div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment"></span> </div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment">    /// @tparam Promise The awaiting coroutine&#39;s promise type.</span></div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// @param awaiting The coroutine performing the `co_await`.</span></div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    /// @return False to continue at once, when a stop was already requested;</span></div>
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">    ///         true once the timer is armed.</span></div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Promise&gt;</div>
+<div class="foldopen" id="foldopen00224" data-start="{" data-end="}">
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a4b2223d2445a7d8eb0ca55c1059f3d4e">  224</a></span>    <span class="keywordtype">bool</span> <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a4b2223d2445a7d8eb0ca55c1059f3d4e">await_suspend</a>(std::coroutine_handle&lt;Promise&gt; awaiting) {</div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>        <span class="comment">// Copied before `armed` is published: from then on a stop may resume</span></div>
+<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span>        <span class="comment">// the coroutine and free this awaiter with its frame.</span></div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span>        <span class="keyword">auto</span> shared = _shared;</div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>        <span class="keyword">auto</span> <span class="keyword">const</span> duration = _duration;</div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>        shared-&gt;continuation = awaiting;</div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span>        shared-&gt;context = ::core::async::ResumeTarget::current();</div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (::core::async::HasStopToken&lt;Promise&gt;) {</div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>            ::core::async::StopToken <span class="keyword">const</span> token = awaiting.promise().stopToken();</div>
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>            <span class="keywordflow">if</span> (token.stop_requested()) {</div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>                shared-&gt;outcome.store(Outcome::Cancelled);</div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>                <span class="keywordflow">return</span> <span class="keyword">false</span>;</div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>            }</div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>            <span class="keywordflow">if</span> (token.stop_possible()) {</div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>                shared-&gt;stopCallback.emplace(token, OnStop{shared.get()});</div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>            }</div>
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>        }</div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>        shared-&gt;armed.store(<span class="keyword">true</span>, std::memory_order_seq_cst);</div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>        <span class="keywordflow">if</span> (shared-&gt;outcome.load(std::memory_order_seq_cst) == Outcome::Cancelled) {</div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            <span class="keywordflow">return</span> shared-&gt;claimed.exchange(<span class="keyword">true</span>, std::memory_order_acq_rel);</div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>        }</div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>        <span class="keyword">auto</span> <span class="keyword">const</span> handle = shared-&gt;scheduler-&gt;schedule(duration, [shared] {</div>
+<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>            <span class="keywordflow">if</span> (shared-&gt;decide(Outcome::Fired)) {</div>
+<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>                shared-&gt;resume();</div>
+<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>            }</div>
+<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>        });</div>
+<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span>        shared-&gt;timer.store(handle);</div>
+<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span>        <span class="comment">// A stop that won between arming and here found no timer to cancel.</span></div>
+<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span>        <span class="keywordflow">if</span> (shared-&gt;outcome.load() == Outcome::Cancelled) {</div>
+<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span>            shared-&gt;scheduler-&gt;cancel(handle);</div>
+<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span>        }</div>
+<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>        <span class="keywordflow">return</span> <span class="keyword">true</span>;</div>
+<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span>    }</div>
 </div>
-<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span><span class="comment"></span> </div>
-<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span><span class="comment">    /// @throws core::async::OperationCancelled if a stop withdrew the wait.</span></div>
-<div class="foldopen" id="foldopen00258" data-start="{" data-end="}">
-<div class="line"><a id="l00258" name="l00258"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a0bfa653c2445caaef6af8f0f8d821f47">  258</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a0bfa653c2445caaef6af8f0f8d821f47">await_resume</a>() {</div>
-<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span>        _shared-&gt;stopCallback.reset();</div>
-<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span>        <span class="keywordflow">if</span> (_shared-&gt;outcome.load() == Outcome::Cancelled) {</div>
-<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span>            throw ::core::async::OperationCancelled{};</div>
-<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span>        }</div>
-<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span>    }</div>
+<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span><span class="comment"></span> </div>
+<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span><span class="comment">    /// @throws core::async::OperationCancelled if a stop withdrew the wait.</span></div>
+<div class="foldopen" id="foldopen00259" data-start="{" data-end="}">
+<div class="line"><a id="l00259" name="l00259"></a><span class="lineno"><a class="line" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a0bfa653c2445caaef6af8f0f8d821f47">  259</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a0bfa653c2445caaef6af8f0f8d821f47">await_resume</a>() {</div>
+<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span>        _shared-&gt;stopCallback.reset();</div>
+<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span>        <span class="keywordflow">if</span> (_shared-&gt;outcome.load() == Outcome::Cancelled) {</div>
+<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span>            throw ::core::async::OperationCancelled{};</div>
+<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span>        }</div>
+<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span>    }</div>
 </div>
-<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span> </div>
-<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span><span class="keyword">private</span>:</div>
-<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span>    std::shared_ptr&lt;Shared&gt; _shared;</div>
-<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span>    std::chrono::milliseconds _duration;</div>
-<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span>};</div>
+<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span> </div>
+<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span>    std::shared_ptr&lt;Shared&gt; _shared;</div>
+<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span>    std::chrono::milliseconds _duration;</div>
+<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span>};</div>
 </div>
-<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span><span class="comment"></span> </div>
-<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">/// @brief Suspends the awaiting coroutine for at least @p duration.</span></div>
-<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">///</span></div>
-<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">/// `co_await morph::async::delay(scheduler, 50ms)`. Stop-aware; see</span></div>
-<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">/// `DelayAwaiter`.</span></div>
-<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span><span class="comment">/// @param scheduler The scheduler whose entry times the wait; must outlive it.</span></div>
-<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span><span class="comment">/// @param duration  How long to wait at least.</span></div>
-<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span><span class="comment">/// @return The awaiter.</span></div>
-<div class="foldopen" id="foldopen00277" data-start="{" data-end="}">
-<div class="line"><a id="l00277" name="l00277"></a><span class="lineno"><a class="line" href="../../de/de0/coroutine_8hpp.html#a9b97fa15363e0367f889e83b17777cb9">  277</a></span>[[nodiscard]] <span class="keyword">inline</span> <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a> <a class="code hl_function" href="../../de/de0/coroutine_8hpp.html#a9b97fa15363e0367f889e83b17777cb9">delay</a>(detail::TimeoutScheduler&amp; scheduler MORPH_LIFETIMEBOUND,</div>
-<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>                                        std::chrono::milliseconds duration) {</div>
-<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>    <span class="keywordflow">return</span> <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>{scheduler, duration};</div>
-<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>}</div>
+<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment"></span> </div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">/// @brief Suspends the awaiting coroutine for at least @p duration.</span></div>
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment">///</span></div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">/// `co_await morph::async::delay(scheduler, 50ms)`. Stop-aware; see</span></div>
+<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span><span class="comment">/// `DelayAwaiter`.</span></div>
+<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span><span class="comment">/// @param scheduler The scheduler whose entry times the wait; must outlive it.</span></div>
+<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span><span class="comment">/// @param duration  How long to wait at least.</span></div>
+<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span><span class="comment">/// @return The awaiter.</span></div>
+<div class="foldopen" id="foldopen00278" data-start="{" data-end="}">
+<div class="line"><a id="l00278" name="l00278"></a><span class="lineno"><a class="line" href="../../de/de0/coroutine_8hpp.html#a9b97fa15363e0367f889e83b17777cb9">  278</a></span>[[nodiscard]] <span class="keyword">inline</span> <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a> <a class="code hl_function" href="../../de/de0/coroutine_8hpp.html#a9b97fa15363e0367f889e83b17777cb9">delay</a>(detail::TimeoutScheduler&amp; scheduler MORPH_LIFETIMEBOUND,</div>
+<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>                                        std::chrono::milliseconds duration) {</div>
+<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>    <span class="keywordflow">return</span> <a class="code hl_class" href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">DelayAwaiter</a>{scheduler, duration};</div>
+<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>}</div>
 </div>
-<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span> </div>
-<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>}  <span class="comment">// namespace morph::async</span></div>
-<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">morph::async::DelayAwaiter</a></div><div class="ttdoc">The awaiter delay() returns: suspends until a TimeoutScheduler entry fires, or until a stop withdraws...</div><div class="ttdef"><b>Definition</b> <a href="#l00138">coroutine.hpp:138</a></div></div>
-<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_a0bfa653c2445caaef6af8f0f8d821f47"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a0bfa653c2445caaef6af8f0f8d821f47">morph::async::DelayAwaiter::await_resume</a></div><div class="ttdeci">void await_resume()</div><div class="ttdef"><b>Definition</b> <a href="#l00258">coroutine.hpp:258</a></div></div>
-<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_a4b2223d2445a7d8eb0ca55c1059f3d4e"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a4b2223d2445a7d8eb0ca55c1059f3d4e">morph::async::DelayAwaiter::await_suspend</a></div><div class="ttdeci">bool await_suspend(std::coroutine_handle&lt; Promise &gt; awaiting)</div><div class="ttdef"><b>Definition</b> <a href="#l00223">coroutine.hpp:223</a></div></div>
-<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_a502a54189dc1c7bb9ebcafbe2d7d53e1"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a502a54189dc1c7bb9ebcafbe2d7d53e1">morph::async::DelayAwaiter::~DelayAwaiter</a></div><div class="ttdeci">~DelayAwaiter()</div><div class="ttdoc">Withdraws the wait if the frame is destroyed while suspended.</div><div class="ttdef"><b>Definition</b> <a href="#l00201">coroutine.hpp:201</a></div></div>
-<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_ab9e9f93f068acb799ed176e40a19b5ff"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">morph::async::DelayAwaiter::DelayAwaiter</a></div><div class="ttdeci">DelayAwaiter(detail::TimeoutScheduler &amp;scheduler, std::chrono::milliseconds duration)</div><div class="ttdef"><b>Definition</b> <a href="#l00195">coroutine.hpp:195</a></div></div>
-<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_aecc9e2a65087c9fc9d3bd8cf6b6fdec2"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#aecc9e2a65087c9fc9d3bd8cf6b6fdec2">morph::async::DelayAwaiter::await_ready</a></div><div class="ttdeci">constexpr bool await_ready() const noexcept</div><div class="ttdef"><b>Definition</b> <a href="#l00216">coroutine.hpp:216</a></div></div>
+<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span> </div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>}  <span class="comment">// namespace morph::async</span></div>
+<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html">morph::async::DelayAwaiter</a></div><div class="ttdoc">The awaiter delay() returns: suspends until a TimeoutScheduler entry fires, or until a stop withdraws...</div><div class="ttdef"><b>Definition</b> <a href="#l00139">coroutine.hpp:139</a></div></div>
+<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_a0bfa653c2445caaef6af8f0f8d821f47"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a0bfa653c2445caaef6af8f0f8d821f47">morph::async::DelayAwaiter::await_resume</a></div><div class="ttdeci">void await_resume()</div><div class="ttdef"><b>Definition</b> <a href="#l00259">coroutine.hpp:259</a></div></div>
+<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_a4b2223d2445a7d8eb0ca55c1059f3d4e"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a4b2223d2445a7d8eb0ca55c1059f3d4e">morph::async::DelayAwaiter::await_suspend</a></div><div class="ttdeci">bool await_suspend(std::coroutine_handle&lt; Promise &gt; awaiting)</div><div class="ttdef"><b>Definition</b> <a href="#l00224">coroutine.hpp:224</a></div></div>
+<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_a502a54189dc1c7bb9ebcafbe2d7d53e1"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#a502a54189dc1c7bb9ebcafbe2d7d53e1">morph::async::DelayAwaiter::~DelayAwaiter</a></div><div class="ttdeci">~DelayAwaiter()</div><div class="ttdoc">Withdraws the wait if the frame is destroyed while suspended.</div><div class="ttdef"><b>Definition</b> <a href="#l00202">coroutine.hpp:202</a></div></div>
+<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_ab9e9f93f068acb799ed176e40a19b5ff"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#ab9e9f93f068acb799ed176e40a19b5ff">morph::async::DelayAwaiter::DelayAwaiter</a></div><div class="ttdeci">DelayAwaiter(detail::TimeoutScheduler &amp;scheduler, std::chrono::milliseconds duration)</div><div class="ttdef"><b>Definition</b> <a href="#l00196">coroutine.hpp:196</a></div></div>
+<div class="ttc" id="aclassmorph_1_1async_1_1DelayAwaiter_html_aecc9e2a65087c9fc9d3bd8cf6b6fdec2"><div class="ttname"><a href="../../dc/d3b/classmorph_1_1async_1_1DelayAwaiter.html#aecc9e2a65087c9fc9d3bd8cf6b6fdec2">morph::async::DelayAwaiter::await_ready</a></div><div class="ttdeci">constexpr bool await_ready() const noexcept</div><div class="ttdef"><b>Definition</b> <a href="#l00217">coroutine.hpp:217</a></div></div>
 <div class="ttc" id="acompletion__awaiter_8hpp_html"><div class="ttname"><a href="../../d0/d96/completion__awaiter_8hpp.html">completion_awaiter.hpp</a></div><div class="ttdoc">The awaiter behind Completion&lt;T&gt;::operator co_await.</div></div>
-<div class="ttc" id="acoroutine_8hpp_html_a9b97fa15363e0367f889e83b17777cb9"><div class="ttname"><a href="../../de/de0/coroutine_8hpp.html#a9b97fa15363e0367f889e83b17777cb9">morph::async::delay</a></div><div class="ttdeci">DelayAwaiter delay(detail::TimeoutScheduler &amp;scheduler, std::chrono::milliseconds duration)</div><div class="ttdoc">Suspends the awaiting coroutine for at least duration.</div><div class="ttdef"><b>Definition</b> <a href="#l00277">coroutine.hpp:277</a></div></div>
+<div class="ttc" id="acoroutine_8hpp_html_a9b97fa15363e0367f889e83b17777cb9"><div class="ttname"><a href="../../de/de0/coroutine_8hpp.html#a9b97fa15363e0367f889e83b17777cb9">morph::async::delay</a></div><div class="ttdeci">DelayAwaiter delay(detail::TimeoutScheduler &amp;scheduler, std::chrono::milliseconds duration)</div><div class="ttdoc">Suspends the awaiting coroutine for at least duration.</div><div class="ttdef"><b>Definition</b> <a href="#l00278">coroutine.hpp:278</a></div></div>
 <div class="ttc" id="acoroutine_8hpp_html_af6b5841e8c8bc8b2e06b896be4540fbb"><div class="ttname"><a href="../../de/de0/coroutine_8hpp.html#af6b5841e8c8bc8b2e06b896be4540fbb">morph::async::spawn</a></div><div class="ttdeci">void spawn(::morph::exec::IExecutor &amp;executor, ::core::async::Task&lt; void &gt; task)</div><div class="ttdoc">Starts task detached, with every resumption – its first step included – posted to executor.</div><div class="ttdef"><b>Definition</b> <a href="#l00125">coroutine.hpp:125</a></div></div>
-<div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00023">executor.hpp:23</a></div></div>
+<div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00069">executor.hpp:69</a></div></div>
 <div class="ttc" id="atask__handler_8hpp_html"><div class="ttname"><a href="../../d9/d37/task__handler_8hpp.html">task_handler.hpp</a></div><div class="ttdoc">What drives a model&#39;s Task handler: the driver coroutine that starts and finishes it,...</div></div>
 <div class="ttc" id="atimeout__scheduler_8hpp_html"><div class="ttname"><a href="../../db/ddb/timeout__scheduler_8hpp.html">timeout_scheduler.hpp</a></div></div>
 </div><!-- fragment --></div><!-- contents -->

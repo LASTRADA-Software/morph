@@ -120,39 +120,31 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/ddb/timeout
   <div class="headertitle"><div class="title">timeout_scheduler.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><code>#include &lt;chrono&gt;</code><br />
+<div class="textblock"><code>#include &lt;atomic&gt;</code><br />
+<code>#include &lt;chrono&gt;</code><br />
 <code>#include &lt;core/net/EventLoop.hpp&gt;</code><br />
-<code>#include &lt;core/net/PlatformLoop.hpp&gt;</code><br />
 <code>#include &lt;core/platform/Clock.hpp&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;exception&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
-<code>#include &lt;mutex&gt;</code><br />
-<code>#include &lt;optional&gt;</code><br />
+<code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;unordered_map&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
-<code>#include &lt;thread&gt;</code><br />
-<code>#include &lt;vector&gt;</code><br />
+<code>#include &quot;../attributes.hpp&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d1/d3e/owner__probe_8hpp_source.html">detail/owner_probe.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>&quot;</code><br />
 <code>#include &quot;logger.hpp&quot;</code><br />
 </div>
 <p><a href="../../db/ddb/timeout__scheduler_8hpp_source.html">Go to the source code of this file.</a></p>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">TimeoutScheduler</span> — "run this callback once, in N milliseconds, unless
-cancelled first" — over core-cpp's event-loop timers.</p>
-<dl class="section user"><dt>One class, two ways of driving its loop</dt><dd>The deadlines live in a <span class="tt">core::net::PlatformLoop</span>, and the one thing that differs between builds is who turns it:<ul>
-<li><b>Native:</b> the scheduler owns a <span class="tt">std::thread</span> that runs the loop. <span class="tt">schedule()</span> and <span class="tt">cancel()</span> may be called from any thread; they record the request under a mutex and hand the loop a batch to arm or disarm. Callbacks run on that thread, so a callback must be prepared to run concurrently with the caller.</li>
-<li><b>Single-threaded WebAssembly</b> (<span class="tt">__EMSCRIPTEN__</span> without <span class="tt">__EMSCRIPTEN_PTHREADS__</span>): there is no thread to start — Qt for WebAssembly is <span class="tt">wasm_singlethread</span> here and no <span class="tt">-pthread</span> is passed, so <span class="tt">std::thread</span>'s constructor would throw. The loop is host-driven: the browser's own timer pumps it, and <span class="tt">schedule()</span> and <span class="tt">cancel()</span> arm and retire the timer directly. Callbacks run on the main thread, the one the Qt event loop and every <span class="tt">QtExecutor</span>-posted completion already run on.</li>
-</ul>
-</dd></dl>
-<dl class="section user"><dt>What the two builds share</dt><dd><ul>
-<li><span class="tt">cancel()</span> releases the callback, and everything it captured, before it returns — the entry lives in this class's own <span class="tt">pending</span> map, not in the loop — and retires the loop's timer as well.</li>
-<li>The destructor drops every pending callback without firing it.</li>
-<li>A callback that throws is logged through <span class="tt">morph::log</span> and swallowed.</li>
-</ul>
-</dd></dl>
-<dl class="section user"><dt>What differs</dt><dd><ul>
-<li><b>Cancelling a callback that has already started.</b> Native: <span class="tt">cancel()</span> cannot stop it and does not wait for it — the entry is taken out of <span class="tt">pending</span> before the callback is invoked, so a racing <span class="tt">cancel()</span> finds nothing and returns while the callback is still running. WebAssembly: the case cannot arise, because the callback and <span class="tt">cancel()</span> run on the same thread. A caller that must work in both builds cannot rely on the second.</li>
-<li><b>Destruction.</b> Native: the destructor stops the loop and joins its thread, so no callback is in flight afterwards. WebAssembly: nothing to join; the timers are retired and the loop is destroyed. A browser timer already scheduled to pump it finds it gone and runs nothing: from core-cpp 0.3.0 each pump carries a weak reference to the loop, where 0.2.1's wrote into the freed loop. </li>
+cancelled first" — as timers on an <span class="tt">exec::IoLoop</span>.</p>
+<dl class="section user"><dt>One owner</dt><dd>Every pending callback, and the loop timer that fires it, lives on the loop and is touched only in the loop's own tasks. <span class="tt">schedule()</span> and <span class="tt">cancel()</span> post to the loop and return; callbacks run on the loop's thread (the main thread under single-threaded WebAssembly, where the browser's timer pumps the loop). A callback therefore runs concurrently with any caller that is not on the loop, and must not block the loop: every socket and every other timer built on the same <span class="tt">IoLoop</span> waits while it runs.</dd></dl>
+<dl class="section user"><dt>What a caller can rely on</dt><dd><ul>
+<li><span class="tt">cancel()</span> stops a callback that has not started. The callback, and everything it captured, is released on the loop, shortly after <span class="tt">cancel()</span> returns — not before.</li>
+<li><span class="tt">cancel()</span> does not wait for a callback that has already started.</li>
+<li>The destructor drops every pending callback without firing it, and returns only once no callback of this scheduler is running.</li>
+<li>A callback that throws is logged through <span class="tt">morph::log</span> and swallowed. </li>
 </ul>
 </dd></dl>
 

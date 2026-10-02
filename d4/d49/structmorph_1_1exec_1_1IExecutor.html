@@ -132,21 +132,35 @@ Inheritance diagram for morph::exec::IExecutor:</div>
   <img src="../../d4/d49/structmorph_1_1exec_1_1IExecutor.png" usemap="#morph_3A_3Aexec_3A_3AIExecutor_map" alt=""/>
   <map id="morph_3A_3Aexec_3A_3AIExecutor_map" name="morph_3A_3Aexec_3A_3AIExecutor_map">
 <area href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html" title="Single-thread executor intended for use on the calling (main) thread." alt="morph::exec::MainThreadExecutor" shape="rect" coords="0,56,204,80"/>
-<area href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html" title="Multi-threaded executor backed by a fixed-size thread pool." alt="morph::exec::ThreadPoolExecutor" shape="rect" coords="214,56,418,80"/>
-<area href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop." alt="morph::qt::QtExecutor" shape="rect" coords="428,56,632,80"/>
+<area href="../../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html" title="One strand over a morph executor, usable wherever a morph executor is: the owner a component&#39;s state ..." alt="morph::exec::OwnerStrand" shape="rect" coords="214,56,418,80"/>
+<area href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html" title="Multi-threaded executor backed by a fixed-size thread pool." alt="morph::exec::ThreadPoolExecutor" shape="rect" coords="428,56,632,80"/>
+<area href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop." alt="morph::qt::QtExecutor" shape="rect" coords="642,56,846,80"/>
   </map>
 </div></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
+<tr class="memitem:adc818de0e03052746bc854faaa32e826" id="r_adc818de0e03052746bc854faaa32e826"><td class="memItemLeft"><a id="adc818de0e03052746bc854faaa32e826" name="adc818de0e03052746bc854faaa32e826"></a>
+&#160;</td><td class="memItemRight"><b>IExecutor</b> (const IExecutor &amp;)=delete</td></tr>
+<tr class="memitem:a89fa4ea6280fb548fa9f1475f844ae6c" id="r_a89fa4ea6280fb548fa9f1475f844ae6c"><td class="memItemLeft"><a id="a89fa4ea6280fb548fa9f1475f844ae6c" name="a89fa4ea6280fb548fa9f1475f844ae6c"></a>
+IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const IExecutor &amp;)=delete</td></tr>
+<tr class="memitem:a6bd7569c7f892299af917d96e27cbe9f" id="r_a6bd7569c7f892299af917d96e27cbe9f"><td class="memItemLeft"><a id="a6bd7569c7f892299af917d96e27cbe9f" name="a6bd7569c7f892299af917d96e27cbe9f"></a>
+&#160;</td><td class="memItemRight"><b>IExecutor</b> (IExecutor &amp;&amp;)=delete</td></tr>
+<tr class="memitem:ab120e3261bd0ad938f4628180a104ccb" id="r_ab120e3261bd0ad938f4628180a104ccb"><td class="memItemLeft"><a id="ab120e3261bd0ad938f4628180a104ccb" name="ab120e3261bd0ad938f4628180a104ccb"></a>
+IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &amp;&amp;)=delete</td></tr>
 <tr class="memitem:aba07ebeefeb8222821085e766887f4a5" id="r_aba07ebeefeb8222821085e766887f4a5"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aba07ebeefeb8222821085e766887f4a5">post</a> (std::function&lt; void()&gt; task)=0</td></tr>
 <tr class="memdesc:aba07ebeefeb8222821085e766887f4a5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Schedules <code class="param">task</code> for asynchronous execution.  <br /></td></tr>
+<tr class="memitem:a40e82378c8523f0274f810f3800ce5ce" id="r_a40e82378c8523f0274f810f3800ce5ce"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#a40e82378c8523f0274f810f3800ce5ce">isSerial</a> () const noexcept</td></tr>
+<tr class="memdesc:a40e82378c8523f0274f810f3800ce5ce"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether this executor runs one task at a time, each after the tasks posted before it: a strand, a GUI loop, a pumped <span class="tt"><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html" title="Single-thread executor intended for use on the calling (main) thread.">MainThreadExecutor</a></span>.  <br /></td></tr>
+<tr class="memitem:a3ae4fce1feb932392828af7438e23067" id="r_a3ae4fce1feb932392828af7438e23067"><td class="memItemLeft">::core::async::IExecutor &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a3ae4fce1feb932392828af7438e23067">coreExecutor</a> () noexcept</td></tr>
+<tr class="memdesc:a3ae4fce1feb932392828af7438e23067"><td class="mdescLeft">&#160;</td><td class="mdescRight">This executor as a core-cpp executor: the identity an <span class="tt">core::async::ExecutorScope</span> names.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Abstract executor interface. </p>
-<p>Concrete implementations decide <em>where</em> and <em>when</em> posted tasks run (thread pool, main thread, Qt event loop, …). </p>
+<p>Concrete implementations decide <em>where</em> and <em>when</em> posted tasks run (thread pool, main thread, Qt event loop, …).</p>
+<p>An executor is an identity, so it is neither copyable nor movable: it owns the core-cpp adapter (<span class="tt"><a class="el" href="#a3ae4fce1feb932392828af7438e23067" title="This executor as a core-cpp executor: the identity an core::async::ExecutorScope names.">coreExecutor()</a></span>) that holds a pointer back to it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00023">23</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aba07ebeefeb8222821085e766887f4a5" name="aba07ebeefeb8222821085e766887f4a5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aba07ebeefeb8222821085e766887f4a5">&#9670;&#160;</a></span>post()</h2>
@@ -179,7 +193,69 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p>Implemented in <a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a75c70e9c83fbda739ad5f3d93a820e85">morph::exec::MainThreadExecutor</a>, <a class="el" href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#afead0a3262f89b24d880c22c416911d6">morph::exec::ThreadPoolExecutor</a>, and <a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f">morph::qt::QtExecutor</a>.</p>
+<p>Implemented in <a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a75c70e9c83fbda739ad5f3d93a820e85">morph::exec::MainThreadExecutor</a>, <a class="el" href="../../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html#a2557a19d00134348a550820c53c62aee">morph::exec::OwnerStrand</a>, <a class="el" href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#afead0a3262f89b24d880c22c416911d6">morph::exec::ThreadPoolExecutor</a>, and <a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f">morph::qt::QtExecutor</a>.</p>
+
+</div>
+</div>
+<a id="a40e82378c8523f0274f810f3800ce5ce" name="a40e82378c8523f0274f810f3800ce5ce"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a40e82378c8523f0274f810f3800ce5ce">&#9670;&#160;</a></span>isSerial()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool morph::exec::IExecutor::isSerial </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether this executor runs one task at a time, each after the tasks posted before it: a strand, a GUI loop, a pumped <span class="tt"><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html" title="Single-thread executor intended for use on the calling (main) thread.">MainThreadExecutor</a></span>. </p>
+<p>What an owner must be: a component whose state is touched only in its owner's tasks needs those tasks never to overlap. A pool runs several at once, and the inline executor runs each wherever it is posted from. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> unless an override says otherwise. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a8cc0d37645e4c7e0e7a3f0d2725cc351">morph::exec::ThreadPoolExecutor</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3ae4fce1feb932392828af7438e23067" name="a3ae4fce1feb932392828af7438e23067"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3ae4fce1feb932392828af7438e23067">&#9670;&#160;</a></span>coreExecutor()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">::core::async::IExecutor &amp; morph::exec::IExecutor::coreExecutor </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>This executor as a core-cpp executor: the identity an <span class="tt">core::async::ExecutorScope</span> names. </p>
+<dl class="section return"><dt>Returns</dt><dd>The adapter that posts every resumption through <span class="tt"><a class="el" href="#aba07ebeefeb8222821085e766887f4a5" title="Schedules task for asynchronous execution.">post()</a></span>. The same object for the executor's whole life. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

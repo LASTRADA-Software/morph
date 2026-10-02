@@ -129,15 +129,15 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d70/structm
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:acf09649cad9bc34a43e815279d3f1ebf" id="r_acf09649cad9bc34a43e815279d3f1ebf"><td class="memItemLeft"><a class="el" href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html">::morph::exec::ThreadPoolExecutor</a>&#160;</td><td class="memItemRight"><a class="el" href="#acf09649cad9bc34a43e815279d3f1ebf">pool</a> {2}</td></tr>
-<tr class="memdesc:acf09649cad9bc34a43e815279d3f1ebf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Backs <span class="tt"><a class="el" href="#abcbca1f1a4eeac47622ef500ef79d471" title="The always-local Bridge every composed handler registers on.">bridge</a></span>'s <span class="tt">LocalBackend</span>.  <br /></td></tr>
+<tr class="memdesc:acf09649cad9bc34a43e815279d3f1ebf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Backs <span class="tt"><a class="el" href="#abcbca1f1a4eeac47622ef500ef79d471" title="The always-local Bridge every composed handler registers on, owned by gui.">bridge</a></span>'s <span class="tt">LocalBackend</span>.  <br /></td></tr>
 <tr class="memitem:a832183563d63b62471c66ad54b07bd32" id="r_a832183563d63b62471c66ad54b07bd32"><td class="memItemLeft"><a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html">::morph::qt::QtExecutor</a>&#160;</td><td class="memItemRight"><a class="el" href="#a832183563d63b62471c66ad54b07bd32">gui</a></td></tr>
-<tr class="memdesc:a832183563d63b62471c66ad54b07bd32"><td class="mdescLeft">&#160;</td><td class="mdescRight">Delivers <span class="tt">Completion</span> callbacks on the GUI thread.  <br /></td></tr>
-<tr class="memitem:abcbca1f1a4eeac47622ef500ef79d471" id="r_abcbca1f1a4eeac47622ef500ef79d471"><td class="memItemLeft"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">::morph::bridge::Bridge</a>&#160;</td><td class="memItemRight"><a class="el" href="#abcbca1f1a4eeac47622ef500ef79d471">bridge</a> {std::make_unique&lt;<a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html">::morph::backend::LocalBackend</a>&gt;(<a class="el" href="#acf09649cad9bc34a43e815279d3f1ebf">pool</a>)}</td></tr>
-<tr class="memdesc:abcbca1f1a4eeac47622ef500ef79d471"><td class="mdescLeft">&#160;</td><td class="mdescRight">The always-local <span class="tt">Bridge</span> every composed handler registers on.  <br /></td></tr>
+<tr class="memdesc:a832183563d63b62471c66ad54b07bd32"><td class="mdescLeft">&#160;</td><td class="mdescRight">The GUI thread's executor: the bridge's owner, and where <span class="tt">Completion</span> callbacks are delivered.  <br /></td></tr>
+<tr class="memitem:abcbca1f1a4eeac47622ef500ef79d471" id="r_abcbca1f1a4eeac47622ef500ef79d471"><td class="memItemLeft"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">::morph::bridge::Bridge</a>&#160;</td><td class="memItemRight"><a class="el" href="#abcbca1f1a4eeac47622ef500ef79d471">bridge</a> {std::make_unique&lt;<a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html">::morph::backend::LocalBackend</a>&gt;(<a class="el" href="#acf09649cad9bc34a43e815279d3f1ebf">pool</a>), <a class="el" href="#a832183563d63b62471c66ad54b07bd32">gui</a>}</td></tr>
+<tr class="memdesc:abcbca1f1a4eeac47622ef500ef79d471"><td class="mdescLeft">&#160;</td><td class="mdescRight">The always-local <span class="tt">Bridge</span> every composed handler registers on, owned by <span class="tt"><a class="el" href="#a832183563d63b62471c66ad54b07bd32" title="The GUI thread&#39;s executor: the bridge&#39;s owner, and where Completion callbacks are delivered.">gui</a></span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The private pool/executor/backend bundle an owning bridge-core constructor builds and owns, so it never has to duplicate this shape per core. </p>
-<p>Declaration order matters for destruction: <span class="tt"><a class="el" href="#abcbca1f1a4eeac47622ef500ef79d471" title="The always-local Bridge every composed handler registers on.">bridge</a></span> must tear down before <span class="tt"><a class="el" href="#acf09649cad9bc34a43e815279d3f1ebf" title="Backs bridge&#39;s LocalBackend.">pool</a></span>/<span class="tt"><a class="el" href="#a832183563d63b62471c66ad54b07bd32" title="Delivers Completion callbacks on the GUI thread.">gui</a></span>, so it is declared last. </p>
+<p>Declaration order matters for destruction: <span class="tt"><a class="el" href="#abcbca1f1a4eeac47622ef500ef79d471" title="The always-local Bridge every composed handler registers on, owned by gui.">bridge</a></span> must tear down before <span class="tt"><a class="el" href="#acf09649cad9bc34a43e815279d3f1ebf" title="Backs bridge&#39;s LocalBackend.">pool</a></span>/<span class="tt"><a class="el" href="#a832183563d63b62471c66ad54b07bd32" title="The GUI thread&#39;s executor: the bridge&#39;s owner, and where Completion callbacks are delivered.">gui</a></span>, so it is declared last. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html#l00025">25</a> of file <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html">owned_local_bridge.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
@@ -153,7 +153,7 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Backs <span class="tt"><a class="el" href="#abcbca1f1a4eeac47622ef500ef79d471" title="The always-local Bridge every composed handler registers on.">bridge</a></span>'s <span class="tt">LocalBackend</span>. </p>
+<p>Backs <span class="tt"><a class="el" href="#abcbca1f1a4eeac47622ef500ef79d471" title="The always-local Bridge every composed handler registers on, owned by gui.">bridge</a></span>'s <span class="tt">LocalBackend</span>. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html#l00027">27</a> of file <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html">owned_local_bridge.hpp</a>.</p>
 
@@ -171,9 +171,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Delivers <span class="tt">Completion</span> callbacks on the GUI thread. </p>
+<p>The GUI thread's executor: the bridge's owner, and where <span class="tt">Completion</span> callbacks are delivered. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html#l00029">29</a> of file <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html">owned_local_bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html">owned_local_bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -184,14 +184,14 @@ Public Attributes</h2></td></tr>
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">::morph::bridge::Bridge</a> morph::qt::bridge::detail::OwnedLocalBridge::bridge {std::make_unique&lt;<a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html">::morph::backend::LocalBackend</a>&gt;(<a class="el" href="#acf09649cad9bc34a43e815279d3f1ebf">pool</a>)}</td>
+          <td class="memname"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">::morph::bridge::Bridge</a> morph::qt::bridge::detail::OwnedLocalBridge::bridge {std::make_unique&lt;<a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html">::morph::backend::LocalBackend</a>&gt;(<a class="el" href="#acf09649cad9bc34a43e815279d3f1ebf">pool</a>), <a class="el" href="#a832183563d63b62471c66ad54b07bd32">gui</a>}</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>The always-local <span class="tt">Bridge</span> every composed handler registers on. </p>
+<p>The always-local <span class="tt">Bridge</span> every composed handler registers on, owned by <span class="tt"><a class="el" href="#a832183563d63b62471c66ad54b07bd32" title="The GUI thread&#39;s executor: the bridge&#39;s owner, and where Completion callbacks are delivered.">gui</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html#l00031">31</a> of file <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html">owned_local_bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../dd/d81/owned__local__bridge_8hpp_source.html">owned_local_bridge.hpp</a>.</p>
 
 </div>
 </div>

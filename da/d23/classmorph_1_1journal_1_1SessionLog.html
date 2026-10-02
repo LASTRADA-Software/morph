@@ -137,24 +137,81 @@ Inheritance diagram for morph::journal::SessionLog:</div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
+<tr class="memitem:a9ad9e5de29db7de80fdfc8cf1df6a7dc" id="r_a9ad9e5de29db7de80fdfc8cf1df6a7dc"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a9ad9e5de29db7de80fdfc8cf1df6a7dc">SessionLog</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;owner)</td></tr>
+<tr class="memdesc:a9ad9e5de29db7de80fdfc8cf1df6a7dc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs an empty session log belonging to <code class="param">owner</code>.  <br /></td></tr>
 <tr class="memitem:ad7fb2e3940c88d02d4d0fc0c29434e90" id="r_ad7fb2e3940c88d02d4d0fc0c29434e90"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90">append</a> (<a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> entry) override</td></tr>
-<tr class="memdesc:ad7fb2e3940c88d02d4d0fc0c29434e90"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">entry</code>, assigning a monotonically increasing <span class="tt">seq</span>.  <br /></td></tr>
+<tr class="memdesc:ad7fb2e3940c88d02d4d0fc0c29434e90"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">entry</code>, assigning a monotonically increasing <span class="tt">seq</span>, on the owner.  <br /></td></tr>
 <tr class="memitem:aeff64f58add6666d429a581a485c4b65" id="r_aeff64f58add6666d429a581a485c4b65"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aeff64f58add6666d429a581a485c4b65">flush</a> () override</td></tr>
-<tr class="memdesc:aeff64f58add6666d429a581a485c4b65"><td class="mdescLeft">&#160;</td><td class="mdescRight">No-op — <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> is this class's real commit point.  <br /></td></tr>
+<tr class="memdesc:aeff64f58add6666d429a581a485c4b65"><td class="mdescLeft">&#160;</td><td class="mdescRight">No-op — <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> is this class's real commit point. Callable anywhere.  <br /></td></tr>
 <tr class="memitem:a1582b1dab2f48f9e3f9f84b54b425d0b" id="r_a1582b1dab2f48f9e3f9f84b54b425d0b"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1582b1dab2f48f9e3f9f84b54b425d0b">entries</a> (std::string_view entityKey={}) const override</td></tr>
-<tr class="memdesc:a1582b1dab2f48f9e3f9f84b54b425d0b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the full history (or one entity's slice of it) in append order.  <br /></td></tr>
+<tr class="memdesc:a1582b1dab2f48f9e3f9f84b54b425d0b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the full history (or one entity's slice of it) in append order. On the owner.  <br /></td></tr>
+<tr class="memitem:a37f8577c8cefe2048ea2e8b3ded867ed" id="r_a37f8577c8cefe2048ea2e8b3ded867ed"><td class="memItemLeft"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a37f8577c8cefe2048ea2e8b3ded867ed">owner</a> () const noexcept override</td></tr>
+<tr class="memdesc:a37f8577c8cefe2048ea2e8b3ded867ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">The executor given at construction.  <br /></td></tr>
 <tr class="memitem:a8a0a9e604a71fe05ce39de064e298333" id="r_a8a0a9e604a71fe05ce39de064e298333"><td class="memItemLeft">std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8a0a9e604a71fe05ce39de064e298333">undoLast</a> (std::string_view modelTypeId, ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry(), ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</td></tr>
-<tr class="memdesc:a8a0a9e604a71fe05ce39de064e298333"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drops the most recently appended entry and replays everything that remains against a fresh model instance, reconstructing the state the model was in immediately before that entry executed.  <br /></td></tr>
+<tr class="memdesc:a8a0a9e604a71fe05ce39de064e298333"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drops the most recently appended entry and replays everything that remains against a fresh model instance, reconstructing the state the model was in immediately before that entry executed. On the owner.  <br /></td></tr>
 <tr class="memitem:a9d1dab7c6941547a60111c39393fcbfa" id="r_a9d1dab7c6941547a60111c39393fcbfa"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa">checkpoint</a> (<a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">IActionLog</a> &amp;durableSink, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</td></tr>
-<tr class="memdesc:a9d1dab7c6941547a60111c39393fcbfa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Coalesces entries appended since the last checkpoint and forwards the reduced set, in order, to <code class="param">durableSink</code>; then flushes it.  <br /></td></tr>
+<tr class="memdesc:a9d1dab7c6941547a60111c39393fcbfa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Coalesces entries appended since the last checkpoint and forwards the reduced set, in order, to <code class="param">durableSink</code>; then flushes it. On the owner.  <br /></td></tr>
+<tr class="memitem:a39f31b62756c4daacd3f2e77a76222d2" id="r_a39f31b62756c4daacd3f2e77a76222d2"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a39f31b62756c4daacd3f2e77a76222d2">entries</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec, std::string entityKey={}) const</td></tr>
+<tr class="memdesc:a39f31b62756c4daacd3f2e77a76222d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns recorded entries in append order, read on the log's owner and delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a811c70fdf05382cd721f1764ab10ed4d" id="r_a811c70fdf05382cd721f1764ab10ed4d"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a811c70fdf05382cd721f1764ab10ed4d">flush</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
+<tr class="memdesc:a811c70fdf05382cd721f1764ab10ed4d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pushes buffered entries to the durable backend on the log's owner; the answer is delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="inherit_header pub_methods_structmorph_1_1journal_1_1IActionLog"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">morph::journal::IActionLog</a></td></tr>
+<tr class="memitem:a39f31b62756c4daacd3f2e77a76222d2 pub_methods_structmorph_1_1journal_1_1IActionLog" id="r_a39f31b62756c4daacd3f2e77a76222d2"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a39f31b62756c4daacd3f2e77a76222d2">entries</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec, std::string entityKey={}) const</td></tr>
+<tr class="memdesc:a39f31b62756c4daacd3f2e77a76222d2 pub_methods_structmorph_1_1journal_1_1IActionLog"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns recorded entries in append order, read on the log's owner and delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a811c70fdf05382cd721f1764ab10ed4d pub_methods_structmorph_1_1journal_1_1IActionLog" id="r_a811c70fdf05382cd721f1764ab10ed4d"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a811c70fdf05382cd721f1764ab10ed4d">flush</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
+<tr class="memdesc:a811c70fdf05382cd721f1764ab10ed4d pub_methods_structmorph_1_1journal_1_1IActionLog"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pushes buffered entries to the durable backend on the log's owner; the answer is delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
+Protected Member Functions</h2></td></tr>
+<tr class="memitem:a157f597e944435efca863cdf3babf477" id="r_a157f597e944435efca863cdf3babf477"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a157f597e944435efca863cdf3babf477">askEntries</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec, std::string entityKey) const override</td></tr>
+<tr class="memdesc:a157f597e944435efca863cdf3babf477"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads the history on the owner, delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="inherit_header pro_methods_structmorph_1_1journal_1_1IActionLog"><td colspan="2">Protected Member Functions inherited from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">morph::journal::IActionLog</a></td></tr>
+<tr class="memitem:a3f493205ab439c0aa15f37e3e4332e7c pro_methods_structmorph_1_1journal_1_1IActionLog" id="r_a3f493205ab439c0aa15f37e3e4332e7c"><td class="memItemLeft">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a3f493205ab439c0aa15f37e3e4332e7c">askFlush</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
+<tr class="memdesc:a3f493205ab439c0aa15f37e3e4332e7c pro_methods_structmorph_1_1journal_1_1IActionLog"><td class="mdescLeft">&#160;</td><td class="mdescRight">What <span class="tt">flush(replyExec)</span> asks. The default flushes where it is called, for an implementation with no owner; one with an owner flushes there.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Full-fidelity, in-memory log of one model instance's executed actions. </p>
 <p>Attach directly via <span class="tt">IModelHolder::attachActionLog</span> — every successfully executed loggable action is appended here in order, regardless of any <span class="tt">ActionLogPolicy::coalesce</span> setting. This full history is the raw material for <span class="tt"><a class="el" href="#a8a0a9e604a71fe05ce39de064e298333" title="Drops the most recently appended entry and replays everything that remains against a fresh model inst...">undoLast()</a></span>. <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> is the one place coalescing actually happens: entries accumulated since the last checkpoint are reduced by <span class="tt">(modelType, entityKey, actionType)</span> — keeping only the latest occurrence where the action's policy says <span class="tt">coalesce == true</span>, keeping every occurrence otherwise — and only that reduced set reaches the durable sink.</p>
-<dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe. A history mutex guards <span class="tt">_all</span> and the watermark; a separate forwarding mutex serializes <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> bodies end to end so concurrent checkpoints forward to the durable sink in append order without blocking ordinary <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></span> calls during the sink's I/O. </dd></dl>
+<dl class="section user"><dt>One owner</dt><dd>The history and the checkpoint watermark belong to the executor given at construction, which must run one task at a time. <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq, on the owner.">append()</a></span> runs there — at once when called on it, posted from a model's strand. <span class="tt"><a class="el" href="#a1582b1dab2f48f9e3f9f84b54b425d0b" title="Returns the full history (or one entity&#39;s slice of it) in append order. On the owner.">entries()</a></span>, <span class="tt"><a class="el" href="#a8a0a9e604a71fe05ce39de064e298333" title="Drops the most recently appended entry and replays everything that remains against a fresh model inst...">undoLast()</a></span> and <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> run only there; a caller elsewhere reads through <span class="tt">entries(replyExec, entityKey)</span>. Because a checkpoint and every append are tasks of the one owner, a checkpoint's slice-and-forward is never interleaved with an append or with another checkpoint. See <span class="tt">docs/spec/journal/journal.md</span>, "One owner". </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
-</div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+</div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
+<a id="a9ad9e5de29db7de80fdfc8cf1df6a7dc" name="a9ad9e5de29db7de80fdfc8cf1df6a7dc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9ad9e5de29db7de80fdfc8cf1df6a7dc">&#9670;&#160;</a></span>SessionLog()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::journal::SessionLog::SessionLog </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>owner</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs an empty session log belonging to <code class="param">owner</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">owner</td><td>The executor every access runs on; must run one task at a time. Borrowed: it must outlive this log and run what it posts. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00346">346</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ad7fb2e3940c88d02d4d0fc0c29434e90" name="ad7fb2e3940c88d02d4d0fc0c29434e90"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad7fb2e3940c88d02d4d0fc0c29434e90">&#9670;&#160;</a></span>append()</h2>
 
@@ -178,7 +235,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Appends <code class="param">entry</code>, assigning a monotonically increasing <span class="tt">seq</span>. </p>
+<p>Appends <code class="param">entry</code>, assigning a monotonically increasing <span class="tt">seq</span>, on the owner. </p>
 <p>Always full fidelity: this is what <span class="tt"><a class="el" href="#a8a0a9e604a71fe05ce39de064e298333" title="Drops the most recently appended entry and replays everything that remains against a fresh model inst...">undoLast()</a></span> walks back through, so nothing is coalesced or dropped here. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">entry</td><td>Entry to append; <span class="tt">seq</span> is overwritten regardless of the input value. </td></tr>
@@ -188,12 +245,12 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00340">340</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00355">355</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
 <a id="aeff64f58add6666d429a581a485c4b65" name="aeff64f58add6666d429a581a485c4b65"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aeff64f58add6666d429a581a485c4b65">&#9670;&#160;</a></span>flush()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#aeff64f58add6666d429a581a485c4b65">&#9670;&#160;</a></span>flush() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -215,16 +272,16 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>No-op — <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> is this class's real commit point. </p>
+<p>No-op — <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> is this class's real commit point. Callable anywhere. </p>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00363">363</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a1582b1dab2f48f9e3f9f84b54b425d0b" name="a1582b1dab2f48f9e3f9f84b54b425d0b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1582b1dab2f48f9e3f9f84b54b425d0b">&#9670;&#160;</a></span>entries()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a1582b1dab2f48f9e3f9f84b54b425d0b">&#9670;&#160;</a></span>entries() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -246,7 +303,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Returns the full history (or one entity's slice of it) in append order. </p>
+<p>Returns the full history (or one entity's slice of it) in append order. On the owner. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">entityKey</td><td>If non-empty, restricts the result to that entity's entries. </td></tr>
@@ -257,7 +314,39 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a37f8577c8cefe2048ea2e8b3ded867ed" name="a37f8577c8cefe2048ea2e8b3ded867ed"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a37f8577c8cefe2048ea2e8b3ded867ed">&#9670;&#160;</a></span>owner()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> * morph::journal::SessionLog::owner </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The executor given at construction. </p>
+<dl class="section return"><dt>Returns</dt><dd>The owner. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#aa86b40cd5de2e717ad5f1545d79bbd8e">morph::journal::IActionLog</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -293,10 +382,11 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Drops the most recently appended entry and replays everything that remains against a fresh model instance, reconstructing the state the model was in immediately before that entry executed. </p>
+<p>Drops the most recently appended entry and replays everything that remains against a fresh model instance, reconstructing the state the model was in immediately before that entry executed. On the owner. </p>
 <p>No inverse/undo operations are needed on the action types themselves — this reuses <span class="tt">replay()</span> over a shorter prefix of the same log. A no-op (returns a freshly created, un-replayed holder) if the log is empty.</p>
 <p>Undo only rewinds this in-memory history; it never moves the checkpoint watermark, which is keyed by entry <span class="tt">seq</span> (see <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span>). Undoing an entry a prior <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> already forwarded does <b>not</b> un-forward it: the durable sink is append-only, so that entry stays durable while the reconstructed history diverges from it. A later <span class="tt"><a class="el" href="#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></span> never re-forwards a coalesced-away, already-committed entry. Applications that need to durably reverse a checkpointed action must record a compensating action, not rely on <span class="tt"><a class="el" href="#a8a0a9e604a71fe05ce39de064e298333" title="Drops the most recently appended entry and replays everything that remains against a fresh model inst...">undoLast()</a></span>.</p>
 <p>Replays through <span class="tt">replay()</span> with its default payload-schema settings. That gate cannot fire here in practice: the entries being replayed were appended by this same process, so their fingerprints are this build's by construction. Undo is not a cross-version path.</p>
+<p>Synchronous: it returns the reconstructed holder, and its caller — the application — is the owner.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">modelTypeId</td><td>String type-id of the model to reconstruct. </td></tr>
@@ -307,7 +397,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A freshly created holder with the pre-undo state replayed onto it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00392">392</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -338,18 +428,138 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Coalesces entries appended since the last checkpoint and forwards the reduced set, in order, to <code class="param">durableSink</code>; then flushes it. </p>
-<p>Advances the checkpoint watermark (the <span class="tt">seq</span> of the last committed entry) <em>before</em> forwarding, so the batch is consumed even if <code class="param">durableSink's</code> <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></span> or <span class="tt"><a class="el" href="#aeff64f58add6666d429a581a485c4b65" title="No-op — checkpoint() is this class&#39;s real commit point.">flush()</a></span> throws: a checkpoint is a forward-only commit point (at-most-once), not a transaction to retry. A no-op if nothing has been appended since the last checkpoint.</p>
-<dl class="section user"><dt>Concurrency and ordering</dt><dd>The whole checkpoint body runs under a dedicated forwarding mutex, so concurrent checkpoints are fully serialized: the batch whose watermark is taken first is also forwarded to <code class="param">durableSink</code> first, and no two checkpoints ever interleave their <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></span> calls. This preserves the append-order identity the sink relies on. The forwarding mutex is <em>not</em> the mutex that guards <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></span>, which is held only briefly to select the pending entries and advance the watermark — never across the sink's I/O — so ordinary <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></span> calls keep making progress during a checkpoint.</dd></dl>
+<p>Coalesces entries appended since the last checkpoint and forwards the reduced set, in order, to <code class="param">durableSink</code>; then flushes it. On the owner. </p>
+<p>Advances the checkpoint watermark (the <span class="tt">seq</span> of the last committed entry) <em>before</em> forwarding, so the batch is consumed even if <code class="param">durableSink's</code> <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq, on the owner.">append()</a></span> or <span class="tt"><a class="el" href="#aeff64f58add6666d429a581a485c4b65" title="No-op — checkpoint() is this class&#39;s real commit point. Callable anywhere.">flush()</a></span> throws: a checkpoint is a forward-only commit point (at-most-once), not a transaction to retry. A no-op if nothing has been appended since the last checkpoint.</p>
+<dl class="section user"><dt>Ordering</dt><dd>The whole body is one task of the owner, where every <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq, on the owner.">append()</a></span> runs too, so no append lands between taking the slice and forwarding it, and two checkpoints forward their batches in the order they ran. That is the append-order identity the sink relies on.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">durableSink</td><td>Receives only the coalesced entries — never the raw stream. </td></tr>
+    <tr><td class="paramname">durableSink</td><td>Receives only the coalesced entries — never the raw stream. Driven from this log's owner, so it must share it: its <span class="tt"><a class="el" href="#aeff64f58add6666d429a581a485c4b65" title="No-op — checkpoint() is this class&#39;s real commit point. Callable anywhere.">flush()</a></span> answers only on its own owner. </td></tr>
     <tr><td class="paramname">dispatcher</td><td>Supplies each action's <span class="tt">coalesce</span> policy; defaults to the process-level singleton (the same one actions were registered against via <span class="tt">BRIDGE_REGISTER_ACTION</span>). </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00442">442</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00443">443</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a157f597e944435efca863cdf3babf477" name="a157f597e944435efca863cdf3babf477"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a157f597e944435efca863cdf3babf477">&#9670;&#160;</a></span>askEntries()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt; morph::journal::SessionLog::askEntries </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>entityKey</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel protected">protected</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reads the history on the owner, delivered on <code class="param">replyExec</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. </td></tr>
+    <tr><td class="paramname">entityKey</td><td>If non-empty, restricts the result to that entity's entries. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The matching entries. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#af9aad4a907dc5a79613a57c01c12615a">morph::journal::IActionLog</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00473">473</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a39f31b62756c4daacd3f2e77a76222d2" name="a39f31b62756c4daacd3f2e77a76222d2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39f31b62756c4daacd3f2e77a76222d2">&#9670;&#160;</a></span>entries() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt; <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog::entries</a> </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>entityKey</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns recorded entries in append order, read on the log's owner and delivered on <code class="param">replyExec</code>. </p>
+<p>The form for a caller that is not on the owner: a model's strand, an application thread the log does not belong to. The read is ordered after every <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq, on the owner.">append()</a></span> posted to the owner before it. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered, and where the caller attaches to it. Borrowed: it must outlive the completion. </td></tr>
+    <tr><td class="paramname">entityKey</td><td>If non-empty, restricts the result to that entity's entries. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The matching entries, in append order. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a811c70fdf05382cd721f1764ab10ed4d" name="a811c70fdf05382cd721f1764ab10ed4d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a811c70fdf05382cd721f1764ab10ed4d">&#9670;&#160;</a></span>flush() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt; <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog::flush</a> </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Pushes buffered entries to the durable backend on the log's owner; the answer is delivered on <code class="param">replyExec</code>. </p>
+<p>The form of <span class="tt"><a class="el" href="#aeff64f58add6666d429a581a485c4b65" title="No-op — checkpoint() is this class&#39;s real commit point. Callable anywhere.">flush()</a></span> for a caller that is not on the owner. It is ordered after every <span class="tt"><a class="el" href="#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq, on the owner.">append()</a></span> posted to the owner before it. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. Borrowed: it must outlive the completion. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once the entries are durable; rejected with the error <span class="tt"><a class="el" href="#aeff64f58add6666d429a581a485c4b65" title="No-op — checkpoint() is this class&#39;s real commit point. Callable anywhere.">flush()</a></span> would have thrown. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>

@@ -164,7 +164,7 @@ class morph::forms::SectionSet&lt; Model, Sections &gt;</div><p>Drives N indepen
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab8617782308337f358d695144de8c262" name="ab8617782308337f358d695144de8c262"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab8617782308337f358d695144de8c262">&#9670;&#160;</a></span>SectionSet()</h2>
@@ -198,13 +198,13 @@ template&lt;typename Model, typename... Sections&gt; </div>
 <p>Constructs a section set dispatching through <code class="param">handler</code>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">handler</td><td>Handler every section dispatches through. Must outlive this <span class="tt"><a class="el" href="../../d4/ddc/classmorph_1_1forms_1_1SectionSet.html" title="Drives N independently editable action drafts on one screen.">SectionSet</a></span>. </td></tr>
+    <tr><td class="paramname">handler</td><td>Handler every section dispatches through. Must outlive this <span class="tt"><a class="el" href="../../d4/ddc/classmorph_1_1forms_1_1SectionSet.html" title="Drives N independently editable action drafts on one screen.">SectionSet</a></span>, which belongs to the handler's owner: it is built, used and destroyed there, and the handler's <span class="tt">guiExec</span> delivers its continuations there. </td></tr>
     <tr><td class="paramname">onError</td><td>Optional callback invoked when a section's dispatch fails. When absent, the error is logged via <span class="tt">morph::log::logError</span>. Stored and invoked for this object's whole lifetime, so anything the callable refers to must outlive it. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,9 +236,9 @@ template&lt;typename Model, typename... Sections&gt; </div>
 <p>Stops every callback this set installed from being delivered. </p>
 <p>There is nothing to detach: a section's continuations are owned by the in-flight dispatch, not held in a map this object could remove itself from. <span class="tt">_callbacks</span> gates each one on a token it checks before touching <span class="tt">this</span>, so a completion resolving after this object is gone finds the token stopped and returns without dereferencing anything.</p>
 <p><span class="tt">requestStop()</span> is called explicitly rather than left to the member's own destruction, even though <span class="tt">_callbacks</span> is declared last: members are destroyed only <em>after</em> the destructor body runs, so a body that later grew a call pumping an event loop would otherwise deliver into a half-dead object. The body does not do that today; stopping first keeps it correct if one is ever added.</p>
-<p>How strong the gate is depends on which thread destroys this object, exactly as <span class="tt">CallbackScope</span>'s "Boundary of the guarantee" describes. Destroying it off the delivery thread is advisory only, and that caller owns its own synchronisation. </p>
+<p>Destroyed on the handler's owner, where its continuations run, so the check a continuation makes and this destructor cannot interleave. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00175">175</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +271,7 @@ template&lt;auto FieldPtr&gt; </div>
 </div><div class="memdoc">
 
 <p>Sets one field of its section's draft, dispatching that section if the draft is now ready. </p>
-<p>Unlike <span class="tt">FlowSession::set&lt;&gt;</span> this imposes no ordering: the field's action need only be one of the declared sections. Readiness is evaluated on a copy taken under the lock, so the dispatch happens with the lock released and a concurrent edit to another section cannot block on it. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+<p>Unlike <span class="tt">FlowSession::set&lt;&gt;</span> this imposes no ordering: the field's action need only be one of the declared sections. On the handler's owner. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">FieldPtr</td><td>Pointer-to-data-member of a declared section's action struct. </td></tr>
   </table>
@@ -323,7 +323,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00210">210</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
 
 </div>
 </div>
@@ -355,7 +355,7 @@ template&lt;typename A&gt; </div>
 </div><div class="memdoc">
 
 <p>Snapshots one section's current draft. </p>
-<p>A copy taken under the lock, not a reference into live state, so a renderer can read one section while another thread edits a different one. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+<p>A copy, not a reference into live state. On the handler's owner. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">A</td><td>The section's action type. </td></tr>
   </table>
@@ -363,7 +363,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The draft as it stands. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
 
 </div>
 </div>
@@ -401,7 +401,7 @@ template&lt;typename Model, typename... Sections&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The field's JSON-encoded value, or <span class="tt">std::nullopt</span> if <code class="param">path</code> was never captured — the section never fired successfully, or has no such field. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d29/sections_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d0/d29/sections_8hpp_source.html">sections.hpp</a>.</p>
 
 </div>
 </div>

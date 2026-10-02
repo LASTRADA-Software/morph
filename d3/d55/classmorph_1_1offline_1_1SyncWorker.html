@@ -137,14 +137,14 @@ Public Types</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a78d2ec58a641c51dbb4c3e8ff3263cbd" id="r_a78d2ec58a641c51dbb4c3e8ff3263cbd"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a78d2ec58a641c51dbb4c3e8ff3263cbd">SyncWorker</a> (<a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;queue, <a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996">ReplayFunction</a> replay, <a class="el" href="#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink=nullptr)</td></tr>
-<tr class="memdesc:a78d2ec58a641c51dbb4c3e8ff3263cbd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>.  <br /></td></tr>
-<tr class="memitem:ac2ecea3bdc67a9e065c252cfbb7db554" id="r_ac2ecea3bdc67a9e065c252cfbb7db554"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ac2ecea3bdc67a9e065c252cfbb7db554">SyncWorker</a> (<a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;queue, <a class="el" href="#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a> replay, <a class="el" href="#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink=nullptr)</td></tr>
-<tr class="memdesc:ac2ecea3bdc67a9e065c252cfbb7db554"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>, which distinguishes an undelivered replay from a rejected one.  <br /></td></tr>
-<tr class="memitem:a44f773b7cdbf93315cfd070e35eaf24b" id="r_a44f773b7cdbf93315cfd070e35eaf24b"><td class="memItemLeft"><a class="el" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a>&#160;</td><td class="memItemRight"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b">run</a> ()</td></tr>
-<tr class="memdesc:a44f773b7cdbf93315cfd070e35eaf24b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the queue, replaying each item via the replay function.  <br /></td></tr>
+<tr class="memitem:ae09db9a922cc21d5940ebf23b80ae9db" id="r_ae09db9a922cc21d5940ebf23b80ae9db"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ae09db9a922cc21d5940ebf23b80ae9db">SyncWorker</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;owner, <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;queue, <a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996">ReplayFunction</a> replay, <a class="el" href="#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink=nullptr)</td></tr>
+<tr class="memdesc:ae09db9a922cc21d5940ebf23b80ae9db"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>, on <code class="param">owner</code>.  <br /></td></tr>
+<tr class="memitem:a4297a4dceef75bf1c79fdc8f6f1ab500" id="r_a4297a4dceef75bf1c79fdc8f6f1ab500"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a4297a4dceef75bf1c79fdc8f6f1ab500">SyncWorker</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;owner, <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;queue, <a class="el" href="#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a> replay, <a class="el" href="#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink=nullptr)</td></tr>
+<tr class="memdesc:a4297a4dceef75bf1c79fdc8f6f1ab500"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>, which distinguishes an undelivered replay from a rejected one.  <br /></td></tr>
+<tr class="memitem:a655f4426286e89a5e6ec61546a3dcdd3" id="r_a655f4426286e89a5e6ec61546a3dcdd3"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; <a class="el" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a655f4426286e89a5e6ec61546a3dcdd3">run</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
+<tr class="memdesc:a655f4426286e89a5e6ec61546a3dcdd3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the queue, replaying each item via the replay function, on the owner.  <br /></td></tr>
 <tr class="memitem:abacf4b05a156d5e2664a4fd25bc2cf68" id="r_abacf4b05a156d5e2664a4fd25bc2cf68"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68">stop</a> ()</td></tr>
-<tr class="memdesc:abacf4b05a156d5e2664a4fd25bc2cf68"><td class="mdescLeft">&#160;</td><td class="mdescRight">Signals an in-progress <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> to stop after the current item.  <br /></td></tr>
+<tr class="memdesc:abacf4b05a156d5e2664a4fd25bc2cf68"><td class="mdescLeft">&#160;</td><td class="mdescRight">Signals an in-progress drain to stop after the current item.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Replays queued actions from an <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span> on reconnect. </p>
@@ -171,9 +171,10 @@ Public Member Functions</h2></td></tr>
 <p>Either form:</p><ul>
 <li>Throw → treated as <span class="tt">Rejected</span>. A throw reports failure but not delivery, and an unknown failure has to be charged for the same reason.</li>
 </ul>
-<dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> is safe to call from any thread. Concurrent calls are serialised by an internal mutex — the second caller blocks until the first <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> completes. </dd></dl>
+<dl class="section user"><dt>One owner</dt><dd>A worker belongs to the executor it is given, which must run one task at a time: the coordinator's offline strand (<span class="tt"><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#af79ee6a2c6badc5f6f2df20661052b40" title="The offline strand, as an executor: what a SyncWorker that replays for this coordinator is given as i...">ReconnectCoordinator::strand()</a></span>), or any other strand. Its queue drain, attempt counts and dead-lettering run only in that owner's tasks. <span class="tt"><a class="el" href="#a655f4426286e89a5e6ec61546a3dcdd3" title="Drains the queue, replaying each item via the replay function, on the owner.">run()</a></span> is callable from any thread: on the owner it drains at once; elsewhere it posts the drain to the owner, so two runs never overlap. Its answer is delivered on the executor the caller names, so a caller attaches to it where it already runs. <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress drain to stop after the current item.">stop()</a></span> is the one cross-thread signal, an atomic.</dd></dl>
+<p>The drain calls the queue's synchronous verbs, which answer only on the queue's own owner (see <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span>, "One owner"): give the queue the worker's owner, or the executor that strand runs over. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a31349dc8d4338512a2ffc2a8fda90996" name="a31349dc8d4338512a2ffc2a8fda90996"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a31349dc8d4338512a2ffc2a8fda90996">&#9670;&#160;</a></span>ReplayFunction</h2>
@@ -190,7 +191,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable that attempts to replay a single queued item, reporting only success or failure. </p>
 <p>Retained unchanged for existing callers, and <span class="tt">false</span> keeps meaning exactly what it always did — <span class="tt">ReplayOutcome::Rejected</span>, i.e. one attempt spent. A caller that can tell an undelivered replay from a refused one should use <span class="tt"><a class="el" href="#a4d41de24c5846fda06cb404e46e71970" title="Callable that attempts to replay a single queued item and reports what it achieved.">DetailedReplayFunction</a></span> instead; this overload cannot express the difference and so cannot avoid the dead-lettering it causes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -209,7 +210,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable that attempts to replay a single queued item and reports what it achieved. </p>
 <p>The three-outcome counterpart of <span class="tt"><a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996" title="Callable that attempts to replay a single queued item, reporting only success or failure.">ReplayFunction</a></span>: it is the only form that can report <span class="tt">ReplayOutcome::Undelivered</span> and so keep a reconnect flap from spending the item's retry budget. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -228,13 +229,13 @@ Public Member Functions</h2></td></tr>
 <p>Callable invoked when an item exhausts its retry budget, just before it is removed from the queue. </p>
 <p>Receives the exhausted item (payload, idempotencyKey, and its final cumulative attempt count). If unset, <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> keeps the default behavior: log at <span class="tt">morph::log::LogLevel::error</span> and drop. A throwing sink is caught and logged — the item is still removed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00151">151</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00165">165</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a78d2ec58a641c51dbb4c3e8ff3263cbd" name="a78d2ec58a641c51dbb4c3e8ff3263cbd"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a78d2ec58a641c51dbb4c3e8ff3263cbd">&#9670;&#160;</a></span>SyncWorker() <span class="overload">[1/2]</span></h2>
+<a id="ae09db9a922cc21d5940ebf23b80ae9db" name="ae09db9a922cc21d5940ebf23b80ae9db"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae09db9a922cc21d5940ebf23b80ae9db">&#9670;&#160;</a></span>SyncWorker() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -245,6 +246,11 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="memname">morph::offline::SyncWorker::SyncWorker </td>
           <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>owner</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
           <td class="paramtype"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>queue</em></span>, </td>
         </tr>
         <tr>
@@ -265,22 +271,23 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>. </p>
+<p>Constructs a worker that drains <code class="param">queue</code> using <code class="param">replay</code>, on <code class="param">owner</code>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">queue</td><td>Queue to drain on each <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> call. Borrowed, not owned: it must outlive this worker. </td></tr>
+    <tr><td class="paramname">owner</td><td>The executor every drain runs on; must run one task at a time (a strand). Borrowed: it must outlive this worker and keep running tasks until it is destroyed. </td></tr>
+    <tr><td class="paramname">queue</td><td>Queue to drain on each <span class="tt"><a class="el" href="#a655f4426286e89a5e6ec61546a3dcdd3" title="Drains the queue, replaying each item via the replay function, on the owner.">run()</a></span> call, belonging to <code class="param">owner</code> (or to the executor it runs over). Borrowed, not owned: it must outlive this worker. </td></tr>
     <tr><td class="paramname">replay</td><td>Function called for each pending item. Stored and invoked for this worker's whole lifetime, so anything the callable refers to must outlive it. </td></tr>
     <tr><td class="paramname">deadLetterSink</td><td>Optional hook invoked with the exhausted item instead of the default log-and-drop path when an item exhausts its retry budget. Default: unset. Retained on the same terms as <code class="param">replay</code>. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00182">182</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ac2ecea3bdc67a9e065c252cfbb7db554" name="ac2ecea3bdc67a9e065c252cfbb7db554"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac2ecea3bdc67a9e065c252cfbb7db554">&#9670;&#160;</a></span>SyncWorker() <span class="overload">[2/2]</span></h2>
+<a id="a4297a4dceef75bf1c79fdc8f6f1ab500" name="a4297a4dceef75bf1c79fdc8f6f1ab500"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4297a4dceef75bf1c79fdc8f6f1ab500">&#9670;&#160;</a></span>SyncWorker() <span class="overload">[2/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -291,6 +298,11 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="memname">morph::offline::SyncWorker::SyncWorker </td>
           <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>owner</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
           <td class="paramtype"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>queue</em></span>, </td>
         </tr>
         <tr>
@@ -316,20 +328,21 @@ Public Member Functions</h2></td></tr>
 <p>The two overloads are unambiguous: <span class="tt">ReplayOutcome</span> is a scoped enum, so neither return type implicitly converts to the other.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">queue</td><td>Queue to drain on each <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> call. Borrowed, not owned: it must outlive this worker. </td></tr>
+    <tr><td class="paramname">owner</td><td>The executor every drain runs on; must run one task at a time (a strand). Borrowed: it must outlive this worker and keep running tasks until it is destroyed. </td></tr>
+    <tr><td class="paramname">queue</td><td>Queue to drain on each <span class="tt"><a class="el" href="#a655f4426286e89a5e6ec61546a3dcdd3" title="Drains the queue, replaying each item via the replay function, on the owner.">run()</a></span> call, belonging to <code class="param">owner</code> (or to the executor it runs over). Borrowed, not owned: it must outlive this worker. </td></tr>
     <tr><td class="paramname">replay</td><td>Function called for each pending item. Stored and invoked for this worker's whole lifetime, so anything the callable refers to must outlive it. </td></tr>
     <tr><td class="paramname">deadLetterSink</td><td>Optional hook invoked with the exhausted item instead of the default log-and-drop path when an item exhausts its retry budget. Default: unset. Retained on the same terms as <code class="param">replay</code>. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
-<a id="a44f773b7cdbf93315cfd070e35eaf24b" name="a44f773b7cdbf93315cfd070e35eaf24b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a44f773b7cdbf93315cfd070e35eaf24b">&#9670;&#160;</a></span>run()</h2>
+<a id="a655f4426286e89a5e6ec61546a3dcdd3" name="a655f4426286e89a5e6ec61546a3dcdd3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a655f4426286e89a5e6ec61546a3dcdd3">&#9670;&#160;</a></span>run()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -338,9 +351,9 @@ Public Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> morph::offline::SyncWorker::run </td>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; <a class="el" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> &gt; morph::offline::SyncWorker::run </td>
           <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -351,12 +364,19 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Drains the queue, replaying each item via the replay function. </p>
-<p>Concurrent calls are serialised. The call blocks until all pending items have been processed or <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress run() to stop after the current item.">stop()</a></span> is signalled.</p>
-<p>If <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress run() to stop after the current item.">stop()</a></span> was called before <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> acquired the lock, <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> returns immediately with an empty result and resets the stop flag.</p>
-<dl class="section return"><dt>Returns</dt><dd>Counts of successful / failed / dead-lettered replays. </dd></dl>
+<p>Drains the queue, replaying each item via the replay function, on the owner. </p>
+<p>On the owner the drain runs before this returns; from any other thread it is posted there, after any drain posted before it. It processes every pending item, or stops early once <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress drain to stop after the current item.">stop()</a></span> is signalled.</p>
+<p>If <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress drain to stop after the current item.">stop()</a></span> was called before the drain starts, the drain does nothing, resets the stop flag and answers an empty result.</p>
+<p>A posted drain refers to this worker, so the worker must outlive every drain it has posted: destroy it once every <span class="tt"><a class="el" href="#a655f4426286e89a5e6ec61546a3dcdd3" title="Drains the queue, replaying each item via the replay function, on the owner.">run()</a></span> has settled, or after its owner is closed.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Executor the answer is delivered on and the caller attaches its callbacks on: the caller's own. Borrowed: it must outlive the returned <span class="tt">Completion</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the owner with the counts of successful / failed / dead-lettered replays, delivered on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00204">204</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -383,10 +403,10 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Signals an in-progress <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> to stop after the current item. </p>
-<p>Thread-safe. <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> clears the flag at its start, so stopping is one-shot — but note a <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress run() to stop after the current item.">stop()</a></span> that lands <em>during</em> a run leaves the flag set on return, so the next <span class="tt"><a class="el" href="#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></span> takes its early-out and drains nothing; work resumes only on the run after that. </p>
+<p>Signals an in-progress drain to stop after the current item. </p>
+<p>Callable from any thread. The drain clears the flag at its start, so stopping is one-shot — but a <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress drain to stop after the current item.">stop()</a></span> that lands <em>during</em> a drain leaves the flag set on return, so the next drain takes its early-out and drains nothing; work resumes only on the drain after that. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>

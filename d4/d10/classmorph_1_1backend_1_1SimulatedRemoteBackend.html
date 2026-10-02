@@ -141,17 +141,17 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:ae2e0de3d0e1107efca7f5c86a8c4e295" id="r_ae2e0de3d0e1107efca7f5c86a8c4e295"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295">registerModel</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;) override</td></tr>
 <tr class="memdesc:ae2e0de3d0e1107efca7f5c86a8c4e295"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the model type on the server and returns its assigned id.  <br /></td></tr>
 <tr class="memitem:ae1668b44851b9b9455891a2ad39a1b79" id="r_ae1668b44851b9b9455891a2ad39a1b79"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#ae1668b44851b9b9455891a2ad39a1b79">registerModelWithContext</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;, std::string_view contextKey) override</td></tr>
-<tr class="memdesc:ae1668b44851b9b9455891a2ad39a1b79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the model type on the server, carrying <code class="param">contextKey</code> across the wire so the server's <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a7a5bff8cb318d46f4347cc5211b92e81" title="Callable that supplies the action log to attach to a newly registered instance, given its model type ...">RemoteServer::LogProvider</a></span> (if configured) can attach an action log to the instance it creates.  <br /></td></tr>
-<tr class="memitem:ac2aa45be410d85143c810d373b716e86" id="r_ac2aa45be410d85143c810d373b716e86"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#ac2aa45be410d85143c810d373b716e86">registerModelShared</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, detail::InstanceIdentity identity) override</td></tr>
-<tr class="memdesc:ac2aa45be410d85143c810d373b716e86"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers or attaches to the server's shared instance for <code class="param">identity</code>.  <br /></td></tr>
-<tr class="memitem:a6f570de3a4633c1f8ec73cdb4f74b22b" id="r_a6f570de3a4633c1f8ec73cdb4f74b22b"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#a6f570de3a4633c1f8ec73cdb4f74b22b">attachModel</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override</td></tr>
-<tr class="memdesc:a6f570de3a4633c1f8ec73cdb4f74b22b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Re-points from <code class="param">current</code> to the server's shared instance for <code class="param">identity</code>.  <br /></td></tr>
+<tr class="memdesc:ae1668b44851b9b9455891a2ad39a1b79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the model type on the server, carrying <code class="param">contextKey</code> across the wire so the server's <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aa1967f685b6df4553d93c5d3efd448b7" title="Alias of morph::backend::LogProvider, the type of ServerConfig::logProvider.">RemoteServer::LogProvider</a></span> (if configured) can attach an action log to the instance it creates.  <br /></td></tr>
+<tr class="memitem:a412fe9e2d1a6d8cc4198321a8fd987f6" id="r_a412fe9e2d1a6d8cc4198321a8fd987f6"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::exec::detail::ModelId &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a412fe9e2d1a6d8cc4198321a8fd987f6">bindModel</a> (detail::BindRequest request, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;cbExec) override</td></tr>
+<tr class="memdesc:a412fe9e2d1a6d8cc4198321a8fd987f6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Acquires an instance on the server for <code class="param">request</code> and settles the returned <span class="tt">Completion</span> before returning.  <br /></td></tr>
+<tr class="memitem:a01b49f58989cb01a7093618dc9e7d577" id="r_a01b49f58989cb01a7093618dc9e7d577"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a01b49f58989cb01a7093618dc9e7d577">setOwner</a> (const ::morph::exec::detail::OwnerAffinity &amp;owner) override</td></tr>
+<tr class="memdesc:a01b49f58989cb01a7093618dc9e7d577"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the owner every verb is called from.  <br /></td></tr>
 <tr class="memitem:a7c7ecc21696c030b29f487291b37d83e" id="r_a7c7ecc21696c030b29f487291b37d83e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a7c7ecc21696c030b29f487291b37d83e">assignPrimary</a> (::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary) override</td></tr>
 <tr class="memdesc:a7c7ecc21696c030b29f487291b37d83e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Files a live server-side instance under <code class="param">primary</code>.  <br /></td></tr>
 <tr class="memitem:ac4b30b19f91a79a0b6cf640b6cc01165" id="r_ac4b30b19f91a79a0b6cf640b6cc01165"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac4b30b19f91a79a0b6cf640b6cc01165">listInstances</a> (const std::string &amp;typeId) override</td></tr>
 <tr class="memdesc:ac4b30b19f91a79a0b6cf640b6cc01165"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the server for the live shared primary keys of <code class="param">typeId</code>.  <br /></td></tr>
 <tr class="memitem:ae05332b7c26d6617e468f1c750431404" id="r_ae05332b7c26d6617e468f1c750431404"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae05332b7c26d6617e468f1c750431404">deregisterModel</a> (::morph::exec::detail::ModelId mid) override</td></tr>
-<tr class="memdesc:ae05332b7c26d6617e468f1c750431404"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deregisters the model on the server. Processed inline; safe from any thread.  <br /></td></tr>
+<tr class="memdesc:ae05332b7c26d6617e468f1c750431404"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deregisters the model on the server. Processed inline.  <br /></td></tr>
 <tr class="memitem:adcfb2aa99aecc7f5a0972f4794fd4ecd" id="r_adcfb2aa99aecc7f5a0972f4794fd4ecd"><td class="memItemLeft">::morph::wire::ProtocolNegotiationResult&#160;</td><td class="memItemRight"><a class="el" href="#adcfb2aa99aecc7f5a0972f4794fd4ecd">negotiateProtocolVersion</a> ()</td></tr>
 <tr class="memdesc:adcfb2aa99aecc7f5a0972f4794fd4ecd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <span class="tt">"hello"</span> envelope to the server and classifies its reply.  <br /></td></tr>
 <tr class="memitem:a2910ac9542018e16c88c25e91ff1080a" id="r_a2910ac9542018e16c88c25e91ff1080a"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a2910ac9542018e16c88c25e91ff1080a">fetchActionSchemas</a> (std::string typeId)</td></tr>
@@ -167,9 +167,10 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">IBackend</span> adapter that routes all calls through a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> as wire <span class="tt">Envelope</span> messages. </p>
-<p>Intended for testing and in-process simulation of remote execution. <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel()</a></span> and <span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline; safe from any thread.">deregisterModel()</a></span> are processed inline on the calling thread via <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">RemoteServer::handleInline</a></span>. <span class="tt"><a class="el" href="#af575c96f8350bdf7745cf45662314bc4" title="Serialises the action, sends it to the server, and returns a Completion.">execute()</a></span> is asynchronous: it sends the message through <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">RemoteServer::handle</a></span> and resolves the returned <span class="tt">Completion</span> when the reply arrives (there is no <span class="tt">std::promise</span> and no blocking wait). </p>
+<p>Intended for testing and in-process simulation of remote execution. Control envelopes (<span class="tt"><a class="el" href="#a412fe9e2d1a6d8cc4198321a8fd987f6" title="Acquires an instance on the server for request and settles the returned Completion before returning.">bindModel</a></span>, <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel</a></span>, <span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline.">deregisterModel</a></span>, ...) are processed through <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Processes a control Envelope on the server strand and returns its reply, blocking the caller until it...">RemoteServer::handleInline</a></span>, which answers before it returns, so a bind settles inside the call. <span class="tt"><a class="el" href="#af575c96f8350bdf7745cf45662314bc4" title="Serialises the action, sends it to the server, and returns a Completion.">execute()</a></span> is asynchronous: it sends the message through <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">RemoteServer::handle</a></span> and resolves the returned <span class="tt">Completion</span> when the reply arrives.</p>
+<p>Its pending list and session belong to the caller's owner (<span class="tt"><a class="el" href="#a01b49f58989cb01a7093618dc9e7d577" title="Records the owner every verb is called from.">setOwner</a></span>) and are touched only there, without a lock; the server's reply callback touches only the completion it settles. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01892">1892</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01659">1659</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a978cad0db6efd8ccd3f33c1bf15be188" name="a978cad0db6efd8ccd3f33c1bf15be188"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a978cad0db6efd8ccd3f33c1bf15be188">&#9670;&#160;</a></span>SimulatedRemoteBackend() <span class="overload">[1/2]</span></h2>
@@ -203,7 +204,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01909">1909</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01676">1676</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +236,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Constructs the backend targeting <code class="param">server</code>, scoped to <code class="param">cid</code>. </p>
-<p><code class="param">cid</code> must have been obtained from <span class="tt">server.openConnection()</span> — the same connection-scope mechanism <span class="tt">QtWebSocketServer</span>/<span class="tt"><a class="el" href="../../dc/d9a/classmorph_1_1net_1_1SocketServer.html" title="Raw-socket WebSocket server front for morph::backend::RemoteServer.">morph::net::SocketServer</a></span> use for a real transport, made available for in-process simulation. Every <span class="tt">register</span>/<span class="tt">attach</span>/<span class="tt">assign</span>/<span class="tt">instances</span> call this backend makes is attributed to <code class="param">cid's</code> scope (via the three-argument <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">RemoteServer::handle</a></span>/ <span class="tt">handleInline</span> overloads), so a <span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline; safe from any thread.">deregisterModel</a></span>/destructor-driven <span class="tt">closeConnection</span> reclaims exactly what this backend registered — the same reclamation guarantee a dropped socket gives a real client.</p>
+<p><code class="param">cid</code> must have been obtained from <span class="tt">server.openConnection()</span> — the same connection-scope mechanism <span class="tt">QtWebSocketServer</span>/<span class="tt"><a class="el" href="../../dc/d9a/classmorph_1_1net_1_1SocketServer.html" title="Raw-socket WebSocket server front for morph::backend::RemoteServer.">morph::net::SocketServer</a></span> use for a real transport, made available for in-process simulation. Every <span class="tt">register</span>/<span class="tt">attach</span>/<span class="tt">assign</span>/<span class="tt">instances</span> call this backend makes is attributed to <code class="param">cid's</code> scope (via the three-argument <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">RemoteServer::handle</a></span>/ <span class="tt">handleInline</span> overloads), so a <span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline.">deregisterModel</a></span>/destructor-driven <span class="tt">closeConnection</span> reclaims exactly what this backend registered — the same reclamation guarantee a dropped socket gives a real client.</p>
 <p>The backend does <b>not</b> call <span class="tt">closeConnection</span> itself on destruction: unlike a real transport, there is no single well-defined "this
 connection is gone" moment to hook here (the caller may want to keep the scope open past this object's lifetime, e.g. to construct a second <span class="tt"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages.">SimulatedRemoteBackend</a></span> against the same scope). Call <span class="tt">closeConnection(cid)</span> explicitly, or destroy <span class="tt">server</span> itself, when the simulated connection should be reclaimed. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -245,7 +246,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01932">1932</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01699">1699</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -278,7 +279,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </div><div class="memdoc">
 
 <p>Registers the model type on the server and returns its assigned id. </p>
-<p>Processed inline on the calling thread (no pool round-trip), so it is safe to call from any thread including a worker in the same pool that backs the <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>. The <code class="param">factory</code> argument is ignored — model construction is delegated to the server's <span class="tt">ModelRegistryFactory</span>.</p>
+<p>Processed through <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Processes a control Envelope on the server strand and returns its reply, blocking the caller until it...">RemoteServer::handleInline</a></span>, which answers before it returns. The <code class="param">factory</code> argument is ignored — model construction is delegated to the server's <span class="tt">ModelRegistryFactory</span>.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">typeId</td><td>String type-id sent in the <span class="tt">register</span> message. </td></tr>
@@ -293,7 +294,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01944">1944</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01710">1710</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -329,7 +330,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </table>
 </div><div class="memdoc">
 
-<p>Registers the model type on the server, carrying <code class="param">contextKey</code> across the wire so the server's <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a7a5bff8cb318d46f4347cc5211b92e81" title="Callable that supplies the action log to attach to a newly registered instance, given its model type ...">RemoteServer::LogProvider</a></span> (if configured) can attach an action log to the instance it creates. </p>
+<p>Registers the model type on the server, carrying <code class="param">contextKey</code> across the wire so the server's <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aa1967f685b6df4553d93c5d3efd448b7" title="Alias of morph::backend::LogProvider, the type of ServerConfig::logProvider.">RemoteServer::LogProvider</a></span> (if configured) can attach an action log to the instance it creates. </p>
 <p><code class="param">factory</code> is still ignored — model construction is delegated to the server's <span class="tt">ModelRegistryFactory</span>, same as <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel()</a></span>. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">typeId</td><td>String type-id sent in the <span class="tt">register</span> message. </td></tr>
@@ -345,12 +346,12 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01960">1960</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01726">1726</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ac2aa45be410d85143c810d373b716e86" name="ac2aa45be410d85143c810d373b716e86"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac2aa45be410d85143c810d373b716e86">&#9670;&#160;</a></span>registerModelShared()</h2>
+<a id="a412fe9e2d1a6d8cc4198321a8fd987f6" name="a412fe9e2d1a6d8cc4198321a8fd987f6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a412fe9e2d1a6d8cc4198321a8fd987f6">&#9670;&#160;</a></span>bindModel()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -359,19 +360,14 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">::morph::exec::detail::ModelId morph::backend::SimulatedRemoteBackend::registerModelShared </td>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt;::morph::exec::detail::ModelId &gt; morph::backend::SimulatedRemoteBackend::bindModel </td>
           <td>(</td>
-          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+          <td class="paramtype">detail::BindRequest</td>          <td class="paramname"><span class="paramname"><em>request</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>factory</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">detail::InstanceIdentity</td>          <td class="paramname"><span class="paramname"><em>identity</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -381,29 +377,22 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </table>
 </div><div class="memdoc">
 
-<p>Registers or attaches to the server's shared instance for <code class="param">identity</code>. </p>
-<p>Sends a <span class="tt">shared</span> register, so the server returns the live instance for <span class="tt">(typeId, primary)</span> when one exists rather than creating a second. An empty primary degrades to the private path. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Acquires an instance on the server for <code class="param">request</code> and settles the returned <span class="tt">Completion</span> before returning. </p>
+<p>Each shape of <span class="tt">BindRequest</span> is one envelope, processed through <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Processes a control Envelope on the server strand and returns its reply, blocking the caller until it...">RemoteServer::handleInline</a></span> on the calling thread: a private <span class="tt">register</span>, a shared <span class="tt">register</span> (register-or-attach), or an <span class="tt">attach</span> that re-points from <span class="tt">current</span> in one request, so a re-pointing client cannot lose its slot to <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#a09c8fbe13521ee7cb17c7c42923a7641" title="Max models this RemoteServer will hold live at once, across all callers. A register beyond this cap r...">LimitPolicy::maxLiveModels</a></span> between releasing the old instance and acquiring the new one. An empty <span class="tt">primary</span> with a live <span class="tt">current</span> releases it first and binds a private instance. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">typeId</td><td>String type-id sent in the <span class="tt">register</span> message. </td></tr>
-    <tr><td class="paramname">factory</td><td>Ignored — the server constructs via its own registry. </td></tr>
-    <tr><td class="paramname">identity</td><td>Entity key for the action log plus the directory primary key. </td></tr>
+    <tr><td class="paramname">request</td><td>Owning bind request; moved from. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>Executor the continuation is delivered on. Borrowed: it must outlive the returned <span class="tt">Completion</span>. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">ModelId</span> of the shared (or newly created) instance. </dd></dl>
-<dl class="exception"><dt>Exceptions</dt><dd>
-  <table class="exception">
-    <tr><td class="paramname">std::runtime_error</td><td>if the server replies with an error. </td></tr>
-  </table>
-  </dd>
-</dl>
+<dl class="section return"><dt>Returns</dt><dd>A settled <span class="tt">Completion</span>: the bound id, or the server's refusal as a <span class="tt">std::runtime_error</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01982">1982</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01754">1754</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a6f570de3a4633c1f8ec73cdb4f74b22b" name="a6f570de3a4633c1f8ec73cdb4f74b22b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6f570de3a4633c1f8ec73cdb4f74b22b">&#9670;&#160;</a></span>attachModel()</h2>
+<a id="a01b49f58989cb01a7093618dc9e7d577" name="a01b49f58989cb01a7093618dc9e7d577"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a01b49f58989cb01a7093618dc9e7d577">&#9670;&#160;</a></span>setOwner()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -412,24 +401,10 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">::morph::exec::detail::ModelId morph::backend::SimulatedRemoteBackend::attachModel </td>
+          <td class="memname">void morph::backend::SimulatedRemoteBackend::setOwner </td>
           <td>(</td>
-          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
+          <td class="paramtype">const ::morph::exec::detail::OwnerAffinity &amp;</td>          <td class="paramname"><span class="paramname"><em>owner</em></span></td><td>)</td>
           <td></td>
-          <td class="paramtype">std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>factory</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">detail::InstanceIdentity</td>          <td class="paramname"><span class="paramname"><em>identity</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">::morph::exec::detail::ModelId</td>          <td class="paramname"><span class="paramname"><em>current</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -439,25 +414,15 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </table>
 </div><div class="memdoc">
 
-<p>Re-points from <code class="param">current</code> to the server's shared instance for <code class="param">identity</code>. </p>
-<p>One <span class="tt">attach</span> request rather than a deregister/register pair, so the re-pointing client cannot lose its slot to <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#a09c8fbe13521ee7cb17c7c42923a7641" title="Max models this RemoteServer will hold live at once, across all callers. A register beyond this cap r...">LimitPolicy::maxLiveModels</a></span> between releasing the old instance and acquiring the new one. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Records the owner every verb is called from. </p>
+<dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">typeId</td><td>String type-id sent in the <span class="tt">attach</span> message. </td></tr>
-    <tr><td class="paramname">factory</td><td>Ignored — the server constructs via its own registry. </td></tr>
-    <tr><td class="paramname">identity</td><td>Entity key for the action log plus the directory primary key. </td></tr>
-    <tr><td class="paramname">current</td><td>Instance currently held, or <span class="tt">ModelId{0}</span> if none. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">ModelId</span> of the instance now attached to. </dd></dl>
-<dl class="exception"><dt>Exceptions</dt><dd>
-  <table class="exception">
-    <tr><td class="paramname">std::runtime_error</td><td>if the server replies with an error. </td></tr>
+    <tr><td class="paramname">owner</td><td>The caller's owner. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02009">2009</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01769">1769</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -503,7 +468,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02032">2032</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01775">1775</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -545,7 +510,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02046">2046</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01790">1790</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -572,7 +537,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </table>
 </div><div class="memdoc">
 
-<p>Deregisters the model on the server. Processed inline; safe from any thread. </p>
+<p>Deregisters the model on the server. Processed inline. </p>
 <p>Carries this backend's own <span class="tt">ConnectionId</span>, so a shared instance's attach count is decremented against <em>this</em> backend's scope entry — never a different connection's — exactly as a real transport's <span class="tt">deregister</span> does (<span class="tt">backend.md</span>, "Connection scopes"). </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">mid</td><td>Id of the model to deregister. </td></tr>
@@ -580,7 +545,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02083">2083</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01828">1828</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -608,7 +573,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </div><div class="memdoc">
 
 <p>Sends a <span class="tt">"hello"</span> envelope to the server and classifies its reply. </p>
-<p>Processed inline on the calling thread via <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">RemoteServer::handleInline</a></span>, same as <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel</a></span>/<span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline; safe from any thread.">deregisterModel</a></span>. Intended to be called once, typically right after construction and before any <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel</a></span>/<span class="tt"><a class="el" href="#af575c96f8350bdf7745cf45662314bc4" title="Serialises the action, sends it to the server, and returns a Completion.">execute</a></span> call — nothing enforces that ordering.</p>
+<p>Processed inline on the calling thread via <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Processes a control Envelope on the server strand and returns its reply, blocking the caller until it...">RemoteServer::handleInline</a></span>, same as <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel</a></span>/<span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline.">deregisterModel</a></span>. Intended to be called once, typically right after construction and before any <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel</a></span>/<span class="tt"><a class="el" href="#af575c96f8350bdf7745cf45662314bc4" title="Serialises the action, sends it to the server, and returns a Completion.">execute</a></span> call — nothing enforces that ordering.</p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">Negotiated</span> if the server accepted <span class="tt">kProtocolVersion</span>; <span class="tt">LegacyPeer</span> if the server does not understand <span class="tt">"hello"</span> (an un-upgraded <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>). </dd></dl>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
@@ -617,7 +582,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02101">2101</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01847">1847</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -661,7 +626,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02124">2124</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01870">1870</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -709,7 +674,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the deserialized result or an error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02146">2146</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01892">1892</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -738,7 +703,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
 
 <p>No-op — models live in <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>, not locally. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02194">2194</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01941">1941</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -773,7 +738,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02198">2198</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01945">1945</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -808,7 +773,7 @@ connection is gone" moment to hook here (the caller may want to keep the scope o
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l02215">2215</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01959">1959</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

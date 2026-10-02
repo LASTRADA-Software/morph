@@ -177,7 +177,7 @@ Static Public Member Functions</h2></td></tr>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename T&gt;<br />
 class morph::async::Completion&lt; T &gt;</div><p>Move-only handle representing the eventual result of an asynchronous operation. </p>
 <p>Callbacks are posted to the <span class="tt">IExecutor</span> supplied at construction time, so they always run on the intended thread (e.g. the GUI thread).</p>
-<dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span> and <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> may be called from any thread. The registered callbacks are invoked via the executor, never directly from the producing thread.</dd></dl>
+<dl class="section user"><dt>Thread safety</dt><dd>A completion belongs to the executor supplied at construction, its owner. It may be settled from any thread: the first settle wins, and its delivery is posted to the owner, where every registered callback runs. <span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span> and <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> must be called on the owner &ndash; inside one of its tasks, or on its own thread outside them (a Qt slot, a test body). Calling them from another executor's task is a contract violation, asserted in a debug build. <span class="tt">co_await</span> may be used from any coroutine: it posts its attach to the owner when it is not running there.</dd></dl>
 <dl class="section user"><dt>Orphan detection</dt><dd>If a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span> is destroyed before an <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> handler is attached and the operation has already failed, the exception is logged as an orphan error.</dd></dl>
 <dl class="section user"><dt>Lifetime and stop gating</dt><dd>Because delivery always goes through an executor, the receiver can be destroyed — or simply lose interest — before the handler runs. Pass a <span class="tt"><a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html" title="Owned lifetime-and-stop gate for asynchronous callbacks — a data member, not a base class.">morph::async::CallbackScope</a></span> (or one of its <span class="tt"><a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html" title="Weak, copyable observer of a CallbackScope — the half a callback captures.">CallbackToken</a></span>s) as the first argument to <span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span> / <span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> and the handler is refused unless the scope is still alive and un-stopped at delivery time. <span class="tt"><a class="el" href="#a27fcb0841f4763225331bd5405ed94c9" title="Registers a success callback whose lifetime is deliberately unmanaged.">thenDetached()</a></span> / <span class="tt"><a class="el" href="#adb478319b8a269982c2d4dc2e2a1fb2b" title="Registers an error callback whose lifetime is deliberately unmanaged.">onErrorDetached()</a></span> are the same ungated attachments as <span class="tt">then(fn)</span> / <span class="tt">onError(fn)</span>, spelled so a deliberately unmanaged callback says so. See <span class="tt"><a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a></span> and docs/spec/core/callback_scope.md.</dd></dl>
 <dl class="section user"><dt>Value-handling contract</dt><dd><span class="tt">T</span> need only be <b>move-constructible</b>; that is the whole type requirement. Copyability is a <em>per-handler</em> obligation, reported where the handler is written rather than imposed on the whole instantiation:<ul>
@@ -193,7 +193,7 @@ class morph::async::Completion&lt; T &gt;</div><p>Move-only handle representing 
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00383">383</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00427">427</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac7fe8818f9e79746106a776255a9a47d" name="ac7fe8818f9e79746106a776255a9a47d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac7fe8818f9e79746106a776255a9a47d">&#9670;&#160;</a></span>Completion()</h2>
@@ -228,12 +228,12 @@ template&lt;typename T&gt; </div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">statePtr</td><td>Shared state produced by the backend. </td></tr>
-    <tr><td class="paramname">execPtr</td><td>Executor on which callbacks are posted. If <span class="tt">nullptr</span>, callbacks are never delivered — they are silently dropped (see <span class="tt">setValue</span>/<span class="tt">setException</span>, which post only when <span class="tt">cbExec != nullptr</span>). </td></tr>
+    <tr><td class="paramname">execPtr</td><td>The completion's owner: settling posts the delivery there, and callbacks are attached and run there. It must be serial (<span class="tt">IExecutor::isSerial</span>): a pool or the inline executor is refused, asserted in a debug build. If <span class="tt">nullptr</span>, callbacks are never delivered — attaching one is a no-op. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +294,7 @@ template&lt;typename T&gt; </div>
 </div><div class="memdoc">
 
 <p>Registers a success callback. </p>
-<p><code class="param">handler</code> is posted to the executor with the result value when the operation completes successfully. If the operation has already completed, the callback is posted immediately.</p>
+<p><code class="param">handler</code> runs on the executor with the result value when the operation completes successfully. If the result has already been delivered, the callback is posted on its own. Call on the owner (see the class's thread-safety note).</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handler</td><td>Callable receiving the result. Take <span class="tt">const T&amp;</span> to observe it for free; take <span class="tt">T</span> by value to get your own copy, at the cost of exactly one copy. </td></tr>
@@ -303,7 +303,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00418">418</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00473">473</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -333,7 +333,7 @@ template&lt;typename T&gt; </div>
 </div><div class="memdoc">
 
 <p>Registers an error callback. </p>
-<p><code class="param">handler</code> is posted to the executor with the <span class="tt">std::exception_ptr</span> when the operation fails. If the operation has already failed, the callback is posted immediately. Attaching this handler suppresses orphan logging.</p>
+<p><code class="param">handler</code> runs on the executor with the <span class="tt">std::exception_ptr</span> when the operation fails. If the failure has already been delivered, the callback is posted on its own. Attaching this handler suppresses orphan logging. Call on the owner (see the class's thread-safety note).</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handler</td><td>Callable receiving the exception pointer. </td></tr>
@@ -342,7 +342,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00434">434</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00490">490</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -377,6 +377,7 @@ template&lt;typename T&gt; </div>
 
 <p>Registers a success callback gated on <code class="param">scope's</code> lifetime and stop state. </p>
 <p>Identical to <span class="tt">then(handler)</span> except that <code class="param">handler</code> is wrapped in a <span class="tt"><a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html" title="Weak, copyable observer of a CallbackScope — the half a callback captures.">CallbackToken</a></span> gate at attach time: when the result is delivered, the handler runs only if <code class="param">scope</code> is still alive and has not been stopped or <span class="tt">reset()</span>. Nothing else changes — the gate lives inside the stored handler, so fan-out, the attach-after-ready fire-now path and executor marshalling all behave exactly as they do for the ungated form.</p>
+<p>Attaching also makes the call this completion reports on one the scope owns: when the call carries a stop source (a <span class="tt">Bridge</span> call whose handler returns a <span class="tt">Task</span>), stopping, resetting or destroying the scope before it settles requests stop on it.</p>
 <p>The scope is observed weakly; attaching does <b>not</b> extend its lifetime.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -387,7 +388,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00520">520</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -431,7 +432,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00475">475</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -476,7 +477,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00493">493</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00557">557</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -520,7 +521,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00507">507</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00571">571</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -559,7 +560,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00522">522</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00589">589</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -598,7 +599,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining — a reference into this <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span>, valid only for as long as it is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00533">533</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00600">600</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -630,7 +631,7 @@ template&lt;typename T&gt; </div>
 <p>Awaits this completion from a coroutine, consuming it. </p>
 <p><span class="tt">co_await std::move(completion)</span> yields a copy of the settled value or rethrows the stored exception. The coroutine resumes in the resumption context it suspended in &ndash; a <span class="tt"><a class="el" href="../../de/de0/coroutine_8hpp.html#af6b5841e8c8bc8b2e06b896be4540fbb" title="Starts task detached, with every resumption – its first step included – posted to executor.">spawn</a></span>ed task's executor, a Task handler's strand &ndash; or, with none, on this completion's executor, where <span class="tt"><a class="el" href="#a1f7255483840e4f83c5d26403b62a68e" title="Registers a success callback.">then()</a></span> handlers run. A stop requested on the awaiting coroutine's token withdraws the await and resumes it with <span class="tt">core::async::OperationCancelled</span>. Rvalue only: awaiting moves the state out, so an lvalue <span class="tt">co_await</span> would hide that the completion is empty afterwards. See <span class="tt">docs/spec/core/coroutines.md</span>. </p><dl class="section return"><dt>Returns</dt><dd>The awaiter; not for direct use. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00549">549</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00616">616</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -662,7 +663,7 @@ template&lt;typename T&gt; </div>
 <p>Returns the underlying shared state (for advanced / internal use). </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the completion state, or <span class="tt">nullptr</span> for empty completions. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00558">558</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00625">625</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -701,7 +702,7 @@ executor)</span> already provided by hand is available through this factory inst
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">{<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;, <a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a>}</span> pair sharing one <span class="tt">CompletionState&lt;T&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00630">630</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00699">699</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>

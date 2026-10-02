@@ -141,7 +141,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a396a84bde87dc09eb12ee8e26a6862f3" id="r_a396a84bde87dc09eb12ee8e26a6862f3"><td class="memItemLeft"><a id="a396a84bde87dc09eb12ee8e26a6862f3" name="a396a84bde87dc09eb12ee8e26a6862f3"></a>
 <a class="el" href="#aaf2d4181e3e700c9e308e1a2e7959699">CallbackScope</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#aaf2d4181e3e700c9e308e1a2e7959699">CallbackScope</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:ae3ca5a6a24d6a2e6ac6e307cef1c18d6" id="r_ae3ca5a6a24d6a2e6ac6e307cef1c18d6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6">requestStop</a> () const noexcept</td></tr>
-<tr class="memdesc:ae3ca5a6a24d6a2e6ac6e307cef1c18d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks this generation stopped: gated callbacks stop being delivered.  <br /></td></tr>
+<tr class="memdesc:ae3ca5a6a24d6a2e6ac6e307cef1c18d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is asked to stop.  <br /></td></tr>
 <tr class="memitem:ae4d395565beddf294a3c60ab71ee7a37" id="r_ae4d395565beddf294a3c60ab71ee7a37"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37">reset</a> ()</td></tr>
 <tr class="memdesc:ae4d395565beddf294a3c60ab71ee7a37"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retires every token issued so far and starts a fresh, live generation.  <br /></td></tr>
 <tr class="memitem:ae36f1a1d24f3f19f7624a5319a475065" id="r_ae36f1a1d24f3f19f7624a5319a475065"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ae36f1a1d24f3f19f7624a5319a475065">stopRequested</a> () const noexcept</td></tr>
@@ -166,26 +166,26 @@ Public Member Functions</h2></td></tr>
 <div class="line">    morph::async::CallbackScope _callbacks;  <span class="comment">// declared LAST — see below</span></div>
 <div class="line">};</div>
 </div><!-- fragment --><dl class="section user"><dt>Three verbs, two states</dt><dd><ul>
-<li><span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span> — "I no longer care". The owner is still here; pending and future callbacks on this generation are refused. Idempotent.</li>
+<li><span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span> — "I no longer care". The owner is still here; pending and future callbacks on this generation are refused. Idempotent.</li>
 <li><span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> — "supersede". Every token issued so far goes permanently dead and the scope becomes deliverable again under a fresh generation, so "a new query cancels the old one" needs no heap-reallocated scope.</li>
-<li>destruction — the same refusal as <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span>, plus the owner is gone.</li>
+<li>destruction — the same refusal as <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span>, plus the owner is gone.</li>
 </ul>
 </dd></dl>
-<p>Destruction and <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span> are indistinguishable <em>to a callback</em>; they differ only in whether the owner still exists, which <span class="tt"><a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html#a44b61f0a77b70af44a8ee5d27b7722c8" title="Reports whether the issuing scope is alive, stopped, or gone.">CallbackToken::status()</a></span> reports as <span class="tt">Expired</span> versus <span class="tt">Stopped</span>.</p>
+<p>Destruction and <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span> are indistinguishable <em>to a callback</em>; they differ only in whether the owner still exists, which <span class="tt"><a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html#a44b61f0a77b70af44a8ee5d27b7722c8" title="Reports whether the issuing scope is alive, stopped, or gone.">CallbackToken::status()</a></span> reports as <span class="tt">Expired</span> versus <span class="tt">Stopped</span>.</p>
 <dl class="section user"><dt>Declared last, destroyed first</dt><dd>Put the member <b>after</b> (below) everything its callbacks touch. Members are destroyed in reverse declaration order, so a last-declared scope is the first thing to die and every gated callback is already refused before the fields it would have touched are torn down. This replaces the per-class "token must
 stay last-declared" convention that used to be re-derived and re-documented in every class that hand-rolled the pattern.</dd></dl>
-<dl class="section user"><dt>Teardown that pumps</dt><dd>Members are destroyed <em>after</em> the destructor body runs. A destructor body that can pump a nested event loop (a <span class="tt">sendSync</span>-style blocking call) can therefore still deliver into a half-destroyed receiver. Such a destructor must call <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span> as its first statement.</dd></dl>
+<dl class="section user"><dt>Teardown that pumps</dt><dd>Members are destroyed <em>after</em> the destructor body runs. A destructor body that can pump a nested event loop (a blocking call that spins a <span class="tt">QEventLoop</span>) can therefore still deliver into a half-destroyed receiver. Such a destructor must call <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span> as its first statement.</dd></dl>
 <dl class="section user"><dt>Boundary of the guarantee</dt><dd><ul>
 <li><b>Executor-affine use gets the full guarantee.</b> When the scope is destroyed / stopped / reset on the <em>same</em> thread the delivery executor runs on — the normal case, where receiver and callbacks both live on the GUI thread — check-then-run is atomic with respect to those operations, and a gated callback never touches a dead or stopped receiver.</li>
 <li><b>Cross-thread stop is advisory.</b> A scope torn down on a different thread from the delivery executor can turn inactive between the token's check and the callback body. That is exactly the boundary of the hand-rolled <span class="tt">weak_ptr</span> idiom this type replaces — locking the token pins the <em>token</em>, never the receiver — and external synchronisation there remains the caller's job.</li>
-<li><b>Deliberately no block-until-drained.</b> Neither <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span> nor the destructor waits for an in-flight callback to finish, <span class="tt">QObject::disconnect</span> style. A GUI-thread destructor blocking on a pool-thread callback that is itself blocked posting back to the GUI executor is a deadlock by construction.</li>
+<li><b>Deliberately no block-until-drained.</b> Neither <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span> nor the destructor waits for an in-flight callback to finish, <span class="tt">QObject::disconnect</span> style. A GUI-thread destructor blocking on a pool-thread callback that is itself blocked posting back to the GUI executor is a deadlock by construction.</li>
 </ul>
 </dd></dl>
-<dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="#aa51de17f42ee6ebe1f0fa27250d5a1bc" title="Issues a weak token for the current generation.">token()</a></span>, <span class="tt"><a class="el" href="#a5d4df9c68ae850b74193f9c4f060ae90" title="Wraps fn so it runs only while this scope is alive and un-stopped.">guard()</a></span>, <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span>, <span class="tt"><a class="el" href="#ae36f1a1d24f3f19f7624a5319a475065" title="Whether this generation has been stopped.">stopRequested()</a></span> and the destructor are safe to call concurrently from any thread; <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span> and <span class="tt"><a class="el" href="#ae36f1a1d24f3f19f7624a5319a475065" title="Whether this generation has been stopped.">stopRequested()</a></span> are lock-free atomic operations on the current generation.</dd></dl>
+<dl class="section user"><dt>Thread safety</dt><dd><span class="tt"><a class="el" href="#aa51de17f42ee6ebe1f0fa27250d5a1bc" title="Issues a weak token for the current generation.">token()</a></span>, <span class="tt"><a class="el" href="#a5d4df9c68ae850b74193f9c4f060ae90" title="Wraps fn so it runs only while this scope is alive and un-stopped.">guard()</a></span>, <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span>, <span class="tt"><a class="el" href="#ae36f1a1d24f3f19f7624a5319a475065" title="Whether this generation has been stopped.">stopRequested()</a></span> and the destructor are safe to call concurrently from any thread. <span class="tt"><a class="el" href="#ae36f1a1d24f3f19f7624a5319a475065" title="Whether this generation has been stopped.">stopRequested()</a></span> is a lock-free atomic load; <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span> stores the same atomic and then requests stop on the generation's <span class="tt">core::async::StopSource</span>, which runs the stop of every call the scope owns on the calling thread.</dd></dl>
 <p><b><span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> is the exception and must be externally synchronised</b> against the others — call it from the thread that owns the scope. It replaces the <span class="tt">_state</span> handle itself, and reading a <span class="tt">shared_ptr</span> while another thread assigns it is a data race on the handle: the control block's refcount is atomic, the pointer object is not. That narrowing is a portability constraint, not taste — see <span class="tt">_state</span>'s own comment. In the usage <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> exists for (<span class="tt">void onNewQuery() { _callbacks.reset(); }</span>, the supersede verb) the owning thread is the caller anyway. Within a single generation the guarantee is unconditional: <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> stops the outgoing generation before releasing it, so a token holder that pinned it still observes refusal.</p>
 <p>Identity, not a value: neither copyable nor movable. A moved-from scope would have to either strand or silently retarget tokens already captured in flight; <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span> covers the one case (regeneration) that motivates a move at all. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aaf2d4181e3e700c9e308e1a2e7959699" name="aaf2d4181e3e700c9e308e1a2e7959699"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aaf2d4181e3e700c9e308e1a2e7959699">&#9670;&#160;</a></span>CallbackScope()</h2>
@@ -212,7 +212,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 
 <p>Constructs a live, un-stopped scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00238">238</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -240,9 +240,9 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 </div><div class="memdoc">
 
 <p>Refuses every outstanding token, then releases the state. </p>
-<p>Equivalent, from a pending callback's point of view, to <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span>. Does not wait for in-flight callbacks — see "Boundary of the guarantee". </p>
+<p>Equivalent, from a pending callback's point of view, to <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span>. Does not wait for in-flight callbacks — see "Boundary of the guarantee". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -270,10 +270,10 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 </table>
 </div><div class="memdoc">
 
-<p>Marks this generation stopped: gated callbacks stop being delivered. </p>
-<p>Idempotent and safe from any thread. The owner remains alive, so tokens report <span class="tt">CallbackStatus::Stopped</span> rather than <span class="tt">Expired</span>. Undone only by <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span>, which starts a new generation. </p>
+<p>Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is asked to stop. </p>
+<p>A call is owned by the scope once a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span> carrying a stop source (a <span class="tt">Bridge</span> call whose handler returns a <span class="tt">Task</span>) has a callback attached through one of its tokens; its stop is requested here, on this thread, before this returns. Idempotent and safe from any thread. The owner remains alive, so tokens report <span class="tt">CallbackStatus::Stopped</span> rather than <span class="tt">Expired</span>. Undone only by <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span>, which starts a new generation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,9 +301,9 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 </div><div class="memdoc">
 
 <p>Retires every token issued so far and starts a fresh, live generation. </p>
-<p>The supersede verb: an old in-flight reply can no longer be delivered (its token reports <span class="tt">Expired</span>), while callbacks attached <em>after</em> this call are deliverable again even if <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span> had been called before it. The outgoing generation is stopped before it is released, so a token holder that pinned it while racing this call still observes refusal. </p>
+<p>The supersede verb: an old in-flight reply can no longer be delivered (its token reports <span class="tt">Expired</span>), while callbacks attached <em>after</em> this call are deliverable again even if <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span> had been called before it. The outgoing generation is stopped before it is released, so a token holder that pinned it while racing this call still observes refusal. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00250">250</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -331,9 +331,9 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 </div><div class="memdoc">
 
 <p>Whether this generation has been stopped. </p>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> after <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered.">requestStop()</a></span>, until the next <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span>. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> after <span class="tt"><a class="el" href="#ae3ca5a6a24d6a2e6ac6e307cef1c18d6" title="Marks this generation stopped: gated callbacks stop being delivered, and every call the scope owns is...">requestStop()</a></span>, until the next <span class="tt"><a class="el" href="#ae4d395565beddf294a3c60ab71ee7a37" title="Retires every token issued so far and starts a fresh, live generation.">reset()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -363,7 +363,7 @@ stay last-declared" convention that used to be re-derived and re-documented in e
 <p>Issues a weak token for the current generation. </p>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt"><a class="el" href="../../de/d0d/classmorph_1_1async_1_1CallbackToken.html" title="Weak, copyable observer of a CallbackScope — the half a callback captures.">CallbackToken</a></span> observing this scope; keeps nothing alive. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -408,7 +408,7 @@ template&lt;typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A callable with <code class="param">fn's</code> argument list and a <span class="tt">void</span> return. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>

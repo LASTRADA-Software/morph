@@ -20,6 +20,7 @@ var hierarchy =
     [ "morph::backend::HealthStatus", "d1/d59/structmorph_1_1backend_1_1HealthStatus.html", null ],
     [ "morph::backend::LimitPolicy", "de/dc7/structmorph_1_1backend_1_1LimitPolicy.html", null ],
     [ "morph::backend::RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html", null ],
+    [ "morph::backend::ServerConfig", "dd/d0c/structmorph_1_1backend_1_1ServerConfig.html", null ],
     [ "morph::bridge::ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", null ],
     [ "morph::bridge::AllowShared", "dd/dfb/structmorph_1_1bridge_1_1AllowShared.html", null ],
     [ "morph::bridge::Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html", null ],
@@ -29,9 +30,12 @@ var hierarchy =
     [ "morph::detail::FixedString&lt; N &gt;", "df/d52/structmorph_1_1detail_1_1FixedString.html", null ],
     [ "morph::exec::IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", [
       [ "morph::exec::MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", null ],
+      [ "morph::exec::OwnerStrand", "dc/db1/classmorph_1_1exec_1_1OwnerStrand.html", null ],
       [ "morph::exec::ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", null ],
       [ "morph::qt::QtExecutor", "d4/d30/classmorph_1_1qt_1_1QtExecutor.html", null ]
     ] ],
+    [ "morph::exec::IoLoop", "dd/d10/classmorph_1_1exec_1_1IoLoop.html", null ],
+    [ "morph::exec::IoLoop::Weak", "d2/d75/classmorph_1_1exec_1_1IoLoop_1_1Weak.html", null ],
     [ "morph::flows::FlowSession&lt; Model, Steps &gt;", "d1/d5c/classmorph_1_1flows_1_1FlowSession.html", null ],
     [ "morph::flows::Wizard&lt; Title, Steps &gt;", "d6/d94/structmorph_1_1flows_1_1Wizard.html", null ],
     [ "morph::flows::WizardStep&lt; Action, Title, Binds &gt;", "d8/d94/structmorph_1_1flows_1_1WizardStep.html", null ],
@@ -180,6 +184,7 @@ var hierarchy =
         [ "morph::backend::BridgeDestroyedError", "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html", null ],
         [ "morph::backend::ClientTimeoutError", "d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html", null ],
         [ "morph::backend::DisconnectedError", "d3/d73/structmorph_1_1backend_1_1DisconnectedError.html", null ],
+        [ "morph::backend::HandlerDestroyedError", "db/de0/structmorph_1_1backend_1_1HandlerDestroyedError.html", null ],
         [ "morph::backend::TimeoutError", "d5/d80/structmorph_1_1backend_1_1TimeoutError.html", null ],
         [ "morph::forms::QuantityDecodeError", "d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html", null ],
         [ "morph::journal::NullSinkError", "d6/d55/structmorph_1_1journal_1_1NullSinkError.html", null ],

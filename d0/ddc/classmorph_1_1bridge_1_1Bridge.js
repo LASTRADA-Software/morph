@@ -1,19 +1,16 @@
 var classmorph_1_1bridge_1_1Bridge =
 [
-    [ "Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a5ea19b6acd4cd85ad798b776694624d7", null ],
+    [ "Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aa2702f61353012e04fd5f4ec2ab3cfb2", null ],
     [ "~Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7045f7c97ea552add8cfbfc1868daba3", null ],
+    [ "owner", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a1151d2ae46dc02a5b5f7d9768584cfd7", null ],
+    [ "onOwner", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a9ea2870ebc0058d52f11fd9eac5d30b7", null ],
     [ "registerHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a4075023106e7be2251049ca4be569410", null ],
     [ "registerHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7c18a6f7785c958a7d2e3ea2df97c107", null ],
     [ "registerSharedHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a3bf4ad2334d1085e4db591164770f2c6", null ],
     [ "attachHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aa1760de87cd33a1a1559c7a72b213efd", null ],
-    [ "publishLateBindReply", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ae2e156bc6eff882ef94131bb7129c146", null ],
-    [ "attachHandlerAsync", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a34fd4c7cc73e25a431fd4b9a87dee739", null ],
-    [ "ensureBound", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a691f5af6e6a8b92301d5b209db7760d2", null ],
-    [ "ensureBoundAsync", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7e80e650360509ce9d2cc5109a599908", null ],
     [ "assignHandlerPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a22e009f482dd20475ab4baa1e7a1cb3f", null ],
-    [ "bindingPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac2b6aa45af15dd71a4d513edf1f9ddd6", null ],
-    [ "whenBound", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a8fadc389b6e62034cbb02c642c0076d8", null ],
-    [ "listInstancesOf", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7bc25d126522f0419addd7fe0bda46c5", null ],
+    [ "bindingPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a783a5885f3041a222751ef842ef0118e", null ],
+    [ "instancesOf", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#acbbf603ff757456fff44d058e3236c24", null ],
     [ "addSubscription", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a4bd239575a908e19fdc953200496ff14", null ],
     [ "removeSubscription", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ad61a7a7ab7a4fe215761fc0f71380144", null ],
     [ "hasSubscribers", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#adf85d1d8abbe32df6c02ce186dfbbecd", null ],
@@ -28,5 +25,7 @@ var classmorph_1_1bridge_1_1Bridge =
     [ "switchBackend", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a743d9a146b92a58adfd4f993a655a3db", null ],
     [ "switchBackend", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a583733e2db78c8315b672e0f59a37bbe", null ],
     [ "deregisterHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a73ac9d12273ad9a5fbf34f999f796b8c", null ],
-    [ "executeVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a3e4ee91931517750f483a3bd0a6a0b1f", null ]
+    [ "executeVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a3e4ee91931517750f483a3bd0a6a0b1f", null ],
+    [ "executeAttachedVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a130636713844cd8e33f15e668d3696bc", null ],
+    [ "executeCreatingVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aceae04f5b2096e2535b6279afba5a586", null ]
 ];

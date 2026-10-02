@@ -30,7 +30,7 @@ var searchData=
   ['clear_27',['clear',['../dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#af8b7568011a79f3634fab4f96f38c457',1,'morph::journal::PayloadMigrationRegistry']]],
   ['clienttimeouterror_28',['ClientTimeoutError',['../d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html',1,'morph::backend::ClientTimeoutError'],['../d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html#abd73770a167aec770cfd56664e615114',1,'morph::backend::ClientTimeoutError::ClientTimeoutError()']]],
   ['clock_29',['Clock',['../d3/d6a/session__auth_8hpp.html#a3aad616b0a69657f29d669f1d7dacc9a',1,'morph::session']]],
-  ['close_30',['close',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a926d9b7b2f18c76b5070f696a1ef43b2',1,'morph::net::SocketServer::close()'],['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aaa1c8ceb2b58f6e6de7c950ddede71a1',1,'morph::qt::QtWebSocketServer::close()']]],
+  ['close_30',['close',['../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html#a3050812c211e7f6c08ebc27b996e32ed',1,'morph::exec::OwnerStrand::close()'],['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a926d9b7b2f18c76b5070f696a1ef43b2',1,'morph::net::SocketServer::close()'],['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#aaa1c8ceb2b58f6e6de7c950ddede71a1',1,'morph::qt::QtWebSocketServer::close()']]],
   ['closeconnection_31',['closeConnection',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9c30776adb059a937a151eceeccc5875',1,'morph::backend::RemoteServer']]],
   ['closegracefully_32',['closeGracefully',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a546e51a6654a4c664685b301e820b5aa',1,'morph::qt::QtWebSocketServer']]],
   ['coalesce_33',['coalesce',['../da/dba/structmorph_1_1model_1_1ActionLogPolicy.html#a2da3306697c2b77909bef7eea39ee668',1,'morph::model::ActionLogPolicy']]],
@@ -69,9 +69,10 @@ var searchData=
   ['convertible_66',['Convertible',['../d3/deb/conceptmorph_1_1units_1_1Convertible.html',1,'morph::units']]],
   ['core_20—_20async_20core_20registry_20bridge_20backends_20wire_67',['&lt;span class=&quot;tt&quot;&gt;core/&lt;/span&gt; — async core, registry, bridge, backends, wire',['../index.html#core--async-core-registry-bridge-backends-wire',1,'']]],
   ['core_20registry_20bridge_20backends_20wire_68',['&lt;span class=&quot;tt&quot;&gt;core/&lt;/span&gt; — async core, registry, bridge, backends, wire',['../index.html#core--async-core-registry-bridge-backends-wire',1,'']]],
-  ['coroutine_2ehpp_69',['coroutine.hpp',['../de/de0/coroutine_8hpp.html',1,'']]],
-  ['currentactiontype_70',['currentActionType',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a61cdd8f30ca4894ac6c3904762ab596e',1,'morph::flows::FlowSession']]],
-  ['currentindex_71',['currentIndex',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a73caf65d6cf6436d6fbc35faa4bc008e',1,'morph::flows::FlowSession']]],
-  ['currentprincipal_72',['currentPrincipal',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6316aa3aa3f91f1e09449f42e68ca0ac',1,'morph::bridge::Bridge']]],
-  ['currentsize_73',['currentSize',['../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a60c641ccf2f22727411075649e34bdc0',1,'morph::offline::OfflineQueueFullError']]]
+  ['coreexecutor_69',['coreExecutor',['../d4/d49/structmorph_1_1exec_1_1IExecutor.html#a3ae4fce1feb932392828af7438e23067',1,'morph::exec::IExecutor']]],
+  ['coroutine_2ehpp_70',['coroutine.hpp',['../de/de0/coroutine_8hpp.html',1,'']]],
+  ['currentactiontype_71',['currentActionType',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a61cdd8f30ca4894ac6c3904762ab596e',1,'morph::flows::FlowSession']]],
+  ['currentindex_72',['currentIndex',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a73caf65d6cf6436d6fbc35faa4bc008e',1,'morph::flows::FlowSession']]],
+  ['currentprincipal_73',['currentPrincipal',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6316aa3aa3f91f1e09449f42e68ca0ac',1,'morph::bridge::Bridge']]],
+  ['currentsize_74',['currentSize',['../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a60c641ccf2f22727411075649e34bdc0',1,'morph::offline::OfflineQueueFullError']]]
 ];

@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph/core/detail/execute_order_gate.hpp File Reference</title>
+<title>morph: Member List</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d4b/execute__order__gate_8hpp.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d10/classmorph_1_1exec_1_1IoLoop.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,45 +117,29 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d4b/execute
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">execute_order_gate.hpp File Reference</div></div>
+  <div class="headertitle"><div class="title">morph::exec::IoLoop Member List</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Per-model execute-ordering gate, extracted out of <span class="tt">RemoteServer</span>.  
-<a href="#details">More...</a></p>
-<div class="textblock"><code>#include &lt;atomic&gt;</code><br />
-<code>#include &lt;condition_variable&gt;</code><br />
-<code>#include &lt;cstddef&gt;</code><br />
-<code>#include &lt;cstdint&gt;</code><br />
-<code>#include &lt;memory&gt;</code><br />
-<code>#include &lt;mutex&gt;</code><br />
-<code>#include &lt;set&gt;</code><br />
-<code>#include &lt;unordered_map&gt;</code><br />
-<code>#include &lt;utility&gt;</code><br />
-<code>#include &quot;../../attributes.hpp&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../de/dc1/strand_8hpp_source.html">../strand.hpp</a>&quot;</code><br />
-</div>
-<p><a href="../../d1/d4b/execute__order__gate_8hpp_source.html">Go to the source code of this file.</a></p>
-<a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Per-model execute-ordering gate, extracted out of <span class="tt">RemoteServer</span>. </p>
-<p>The per-model execute-ordering gate <span class="tt">RemoteServer</span> dispatches through. Its contract — hand out monotonic tickets per <span class="tt">ModelId</span>; block a ticket until its predecessor releases; tolerate releases arriving out of order; erase the gate when drained; tolerate a gate already erased — touches no wire format, no authorizer, no model, no executor and no strand, so it lives here rather than inside the server.</p>
-<p><span class="tt">takeAndPost</span> takes a ticket and enqueues the work in one atomic step, the <span class="tt">Ticket</span> it returns is bound to the exact <span class="tt">Gate</span> it was issued from (so a drain-and-recreate cannot redirect a later <span class="tt">awaitTurn</span>), and a gate-wide <span class="tt">std::recursive_mutex</span> is held across the caller's <span class="tt">postFn</span>. Read <span class="tt">takeAndPost</span>'s doc before reasoning about lock order here: it is <span class="tt">_enqueueMtx</span> then <span class="tt">_mtx</span>, never the reverse. One mutex <em>per model</em> instead deadlocks two threads against each other. </p>
-
-<p class="definition">Definition in file <a class="el" href="../../d1/d4b/execute__order__gate_8hpp_source.html">execute_order_gate.hpp</a>.</p>
-</div></div><!-- contents -->
+<p>This is the complete list of members for <a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a>, including all inherited members.</p>
+<table class="directory">
+  <tr class="even"><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#a4756e030c1ce0bdae2eccba1b54314f4">IoLoop</a>()</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr bgcolor="#f0f0f0" class="odd"><td class="entry"><b>IoLoop</b>(const IoLoop &amp;)=delete (defined in <a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a>)</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"></td></tr>
+  <tr bgcolor="#f0f0f0" class="even"><td class="entry"><b>IoLoop</b>(IoLoop &amp;&amp;)=delete (defined in <a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a>)</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#a251b1113b7ee6a05a5eb3a50946babeb">loop</a>() noexcept</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr bgcolor="#f0f0f0" class="even"><td class="entry"><b>operator=</b>(const IoLoop &amp;)=delete (defined in <a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a>)</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"></td></tr>
+  <tr bgcolor="#f0f0f0" class="odd"><td class="entry"><b>operator=</b>(IoLoop &amp;&amp;)=delete (defined in <a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a>)</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#a379935ed8b83aa12760352f5c2ed91f2">post</a>(F &amp;&amp;task)</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#a23bb50515cb350ed430fc99063500853">runAndWait</a>(F &amp;&amp;task)</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#aa324f8ed446c4bef6138604259f16845">runningHere</a>() const noexcept</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#ab121dc0cd51dabc9f178903af472bfdf">weak</a>() const</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#aaf3ba04264b876d99e1c6222d002dfc5">~IoLoop</a>()</td><td class="entry"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+</table></div><!-- contents -->
 </div><!-- doc-content -->
-<div id="page-nav" class="page-nav-panel">
-<div id="page-nav-resize-handle"></div>
-<div id="page-nav-tree">
-<div id="page-nav-contents">
-</div><!-- page-nav-contents -->
-</div><!-- page-nav-tree -->
-</div><!-- page-nav -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>core</b></li><li class="navelem"><b>detail</b></li><li class="navelem"><a href="../../d1/d4b/execute__order__gate_8hpp.html">execute_order_gate.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

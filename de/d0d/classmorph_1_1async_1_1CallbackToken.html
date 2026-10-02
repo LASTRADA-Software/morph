@@ -137,6 +137,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a5518b43eb2a35dcb8bd3d0d68170efb9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a callback gated on this token may run right now.  <br /></td></tr>
 <tr class="memitem:a474ac1ae42d4788f6e027667bdcb00b3" id="r_a474ac1ae42d4788f6e027667bdcb00b3"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a474ac1ae42d4788f6e027667bdcb00b3">expired</a> () const noexcept</td></tr>
 <tr class="memdesc:a474ac1ae42d4788f6e027667bdcb00b3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the issuing scope generation is gone (destroyed or <span class="tt">reset()</span>).  <br /></td></tr>
+<tr class="memitem:a5295684e7d7d6a090a43f6397979c342" id="r_a5295684e7d7d6a090a43f6397979c342"><td class="memItemLeft">::core::async::StopToken&#160;</td><td class="memItemRight"><a class="el" href="#a5295684e7d7d6a090a43f6397979c342">stopToken</a> () const noexcept</td></tr>
+<tr class="memdesc:a5295684e7d7d6a090a43f6397979c342"><td class="mdescLeft">&#160;</td><td class="mdescRight">The stop token of the issuing scope's generation: stop is requested on it when the scope is stopped, reset or destroyed.  <br /></td></tr>
 <tr class="memitem:a4ac17ad8d956cc7df909f482f2c737da" id="r_a4ac17ad8d956cc7df909f482f2c737da"><td class="memTemplParams" colspan="2">template&lt;typename F&gt; </td></tr>
 <tr class="memitem:a4ac17ad8d956cc7df909f482f2c737da template"><td class="memItemLeft">auto&#160;</td><td class="memItemRight"><a class="el" href="#a4ac17ad8d956cc7df909f482f2c737da">guard</a> (F &amp;&amp;fn) const</td></tr>
 <tr class="memdesc:a4ac17ad8d956cc7df909f482f2c737da"><td class="mdescLeft">&#160;</td><td class="mdescRight">Wraps <code class="param">fn</code> so it runs only while this token is <span class="tt">Active</span>.  <br /></td></tr>
@@ -147,7 +149,7 @@ Public Member Functions</h2></td></tr>
 <p>A default-constructed token is permanently <span class="tt">CallbackStatus::Expired</span>: gating is fail-closed, so a token that was never bound to a scope suppresses rather than admits. That trades a silently-dropped callback for never dereferencing a freed receiver, which is the trade this whole type exists to make.</p>
 <dl class="section user"><dt>Thread safety</dt><dd>Every member is safe to call from any thread, concurrently with the scope's <span class="tt">requestStop()</span> / <span class="tt">reset()</span> / destruction. What the <em>result</em> is worth across threads is a separate question — see <span class="tt"><a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html" title="Owned lifetime-and-stop gate for asynchronous callbacks — a data member, not a base class.">CallbackScope</a></span>'s "Boundary of the guarantee". </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a44b61f0a77b70af44a8ee5d27b7722c8" name="a44b61f0a77b70af44a8ee5d27b7722c8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a44b61f0a77b70af44a8ee5d27b7722c8">&#9670;&#160;</a></span>status()</h2>
@@ -175,7 +177,7 @@ Public Member Functions</h2></td></tr>
 <p>Reports whether the issuing scope is alive, stopped, or gone. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">Active</span>, <span class="tt">Stopped</span> or <span class="tt">Expired</span> — see <span class="tt">CallbackStatus</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -206,7 +208,7 @@ Public Member Functions</h2></td></tr>
 <p>Advisory across threads: true here means "was active at the moment of
 the check". See <span class="tt"><a class="el" href="../../d7/d9f/classmorph_1_1async_1_1CallbackScope.html" title="Owned lifetime-and-stop gate for asynchronous callbacks — a data member, not a base class.">CallbackScope</a></span>'s "Boundary of the guarantee". </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> iff <span class="tt"><a class="el" href="#a44b61f0a77b70af44a8ee5d27b7722c8" title="Reports whether the issuing scope is alive, stopped, or gone.">status()</a> == CallbackStatus::Active</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +238,38 @@ the check". See <span class="tt"><a class="el" href="../../d7/d9f/classmorph_1_1
 <p>Whether the issuing scope generation is gone (destroyed or <span class="tt">reset()</span>). </p>
 <p>Cheaper than <span class="tt"><a class="el" href="#a44b61f0a77b70af44a8ee5d27b7722c8" title="Reports whether the issuing scope is alive, stopped, or gone.">status()</a></span> — no strong reference is taken — and unlike <span class="tt"><a class="el" href="#a5518b43eb2a35dcb8bd3d0d68170efb9" title="Whether a callback gated on this token may run right now.">active()</a></span> it does not conflate "gone" with "stopped". </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> iff the issuing generation no longer exists. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5295684e7d7d6a090a43f6397979c342" name="a5295684e7d7d6a090a43f6397979c342"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5295684e7d7d6a090a43f6397979c342">&#9670;&#160;</a></span>stopToken()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">::core::async::StopToken morph::async::CallbackToken::stopToken </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The stop token of the issuing scope's generation: stop is requested on it when the scope is stopped, reset or destroyed. </p>
+<p>What a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></span> attached through this token links its call's stop source to, so stopping the scope stops the call as well as refusing its callbacks. See <span class="tt">docs/spec/core/callback_scope.md</span>, "Stopping the calls a
+scope owns". </p><dl class="section return"><dt>Returns</dt><dd>The generation's token, or a token with no stop state once the generation is gone. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +315,7 @@ template&lt;typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A callable with <code class="param">fn's</code> argument list and a <span class="tt">void</span> return. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../de/d2a/callback__scope_8hpp_source.html">callback_scope.hpp</a>.</p>
 
 </div>
 </div>

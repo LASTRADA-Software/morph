@@ -146,9 +146,9 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The awaiter <span class="tt"><a class="el" href="../../de/de0/coroutine_8hpp.html#a9b97fa15363e0367f889e83b17777cb9" title="Suspends the awaiting coroutine for at least duration.">delay()</a></span> returns: suspends until a <span class="tt">TimeoutScheduler</span> entry fires, or until a stop withdraws it. </p>
-<p>Resumes on the executor the awaiting coroutine was running on (core-cpp's current executor), or on the scheduler's thread if there was none. With a stoppable token on the awaiting promise, a stop cancels the scheduler entry &ndash; releasing its capture at once &ndash; and resumes the coroutine with <span class="tt">core::async::OperationCancelled</span> on the same executor, or, with none, inline on the thread that requested the stop. Exactly one of the timer and the stop resumes it. </p>
+<p>Resumes on the executor the awaiting coroutine was running on (core-cpp's current executor), or on the scheduler's loop thread if there was none. With a stoppable token on the awaiting promise, a stop cancels the scheduler entry &ndash; its capture is released on the scheduler's loop &ndash; and resumes the coroutine with <span class="tt">core::async::OperationCancelled</span> on the same executor, or, with none, inline on the thread that requested the stop. Exactly one of the timer and the stop resumes it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab9e9f93f068acb799ed176e40a19b5ff" name="ab9e9f93f068acb799ed176e40a19b5ff"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab9e9f93f068acb799ed176e40a19b5ff">&#9670;&#160;</a></span>DelayAwaiter()</h2>
@@ -184,7 +184,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00196">196</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
 
 </div>
 </div>
@@ -213,7 +213,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Withdraws the wait if the frame is destroyed while suspended. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
 
 </div>
 </div>
@@ -242,7 +242,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 <dl class="section return"><dt>Returns</dt><dd>Always false: every decision is <span class="tt"><a class="el" href="#a4b2223d2445a7d8eb0ca55c1059f3d4e">await_suspend</a></span>'s. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
 
 </div>
 </div>
@@ -284,7 +284,7 @@ template&lt;typename Promise&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>False to continue at once, when a stop was already requested; true once the timer is armed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +317,7 @@ template&lt;typename Promise&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/de0/coroutine_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../de/de0/coroutine_8hpp_source.html">coroutine.hpp</a>.</p>
 
 </div>
 </div>

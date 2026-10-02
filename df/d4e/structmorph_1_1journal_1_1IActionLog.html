@@ -132,7 +132,7 @@ Inheritance diagram for morph::journal::IActionLog:</div>
   <img src="../../df/d4e/structmorph_1_1journal_1_1IActionLog.png" usemap="#morph_3A_3Ajournal_3A_3AIActionLog_map" alt=""/>
   <map id="morph_3A_3Ajournal_3A_3AIActionLog_map" name="morph_3A_3Ajournal_3A_3AIActionLog_map">
 <area href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html" title="Append-only, newline-delimited-JSON IActionLog backed by a local file." alt="morph::journal::FileActionLog" shape="rect" coords="0,56,211,80"/>
-<area href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="Thread-safe in-memory implementation of IActionLog." alt="morph::journal::InMemoryActionLog" shape="rect" coords="221,56,432,80"/>
+<area href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="In-memory implementation of IActionLog, owned by one executor." alt="morph::journal::InMemoryActionLog" shape="rect" coords="221,56,432,80"/>
 <area href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html" title="Full-fidelity, in-memory log of one model instance&#39;s executed actions." alt="morph::journal::SessionLog" shape="rect" coords="442,56,653,80"/>
   </map>
 </div></div>
@@ -142,16 +142,29 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:ac49e1e4a818057762c752994295549db" id="r_ac49e1e4a818057762c752994295549db"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ac49e1e4a818057762c752994295549db">append</a> (<a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> entry)=0</td></tr>
 <tr class="memdesc:ac49e1e4a818057762c752994295549db"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">entry</code>. Implementations assign <span class="tt">entry.seq</span>.  <br /></td></tr>
 <tr class="memitem:a1166c1f704607f315395a209c27e2bf9" id="r_a1166c1f704607f315395a209c27e2bf9"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a1166c1f704607f315395a209c27e2bf9">flush</a> ()=0</td></tr>
-<tr class="memdesc:a1166c1f704607f315395a209c27e2bf9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e.g. <span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="Thread-safe in-memory implementation of IActionLog.">InMemoryActionLog</a></span>).  <br /></td></tr>
+<tr class="memdesc:a1166c1f704607f315395a209c27e2bf9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e.g. <span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="In-memory implementation of IActionLog, owned by one executor.">InMemoryActionLog</a></span>).  <br /></td></tr>
 <tr class="memitem:ac13399c56e34fdd944a9a75cd8df4cda" id="r_ac13399c56e34fdd944a9a75cd8df4cda"><td class="memItemLeft">virtual std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac13399c56e34fdd944a9a75cd8df4cda">entries</a> (std::string_view entityKey={}) const =0</td></tr>
 <tr class="memdesc:ac13399c56e34fdd944a9a75cd8df4cda"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns recorded entries in append order.  <br /></td></tr>
+<tr class="memitem:aa86b40cd5de2e717ad5f1545d79bbd8e" id="r_aa86b40cd5de2e717ad5f1545d79bbd8e"><td class="memItemLeft">virtual <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *&#160;</td><td class="memItemRight"><a class="el" href="#aa86b40cd5de2e717ad5f1545d79bbd8e">owner</a> () const noexcept</td></tr>
+<tr class="memdesc:aa86b40cd5de2e717ad5f1545d79bbd8e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The executor this log's state belongs to, or null for an implementation that has none.  <br /></td></tr>
+<tr class="memitem:a39f31b62756c4daacd3f2e77a76222d2" id="r_a39f31b62756c4daacd3f2e77a76222d2"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a39f31b62756c4daacd3f2e77a76222d2">entries</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec, std::string entityKey={}) const</td></tr>
+<tr class="memdesc:a39f31b62756c4daacd3f2e77a76222d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns recorded entries in append order, read on the log's owner and delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+<tr class="memitem:a811c70fdf05382cd721f1764ab10ed4d" id="r_a811c70fdf05382cd721f1764ab10ed4d"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a811c70fdf05382cd721f1764ab10ed4d">flush</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
+<tr class="memdesc:a811c70fdf05382cd721f1764ab10ed4d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pushes buffered entries to the durable backend on the log's owner; the answer is delivered on <code class="param">replyExec</code>.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
+Protected Member Functions</h2></td></tr>
+<tr class="memitem:af9aad4a907dc5a79613a57c01c12615a" id="r_af9aad4a907dc5a79613a57c01c12615a"><td class="memItemLeft">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af9aad4a907dc5a79613a57c01c12615a">askEntries</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec, std::string entityKey) const</td></tr>
+<tr class="memdesc:af9aad4a907dc5a79613a57c01c12615a"><td class="mdescLeft">&#160;</td><td class="mdescRight">What <span class="tt">entries(replyExec, entityKey)</span> asks. The default reads <span class="tt">entries(entityKey)</span> where it is called, for an implementation with no owner; one with an owner reads there.  <br /></td></tr>
+<tr class="memitem:a3f493205ab439c0aa15f37e3e4332e7c" id="r_a3f493205ab439c0aa15f37e3e4332e7c"><td class="memItemLeft">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3f493205ab439c0aa15f37e3e4332e7c">askFlush</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;replyExec)</td></tr>
+<tr class="memdesc:a3f493205ab439c0aa15f37e3e4332e7c"><td class="mdescLeft">&#160;</td><td class="mdescRight">What <span class="tt">flush(replyExec)</span> asks. The default flushes where it is called, for an implementation with no owner; one with an owner flushes there.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Interface for durable storage of executed-action entries. </p>
-<p>Entries are never removed by the framework — this is a permanent, append-only record, unlike <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">morph::offline::IOfflineQueue</a></span> (whose <span class="tt">markDone()</span> deletes items once retried successfully). Implementations range from in-memory (<span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="Thread-safe in-memory implementation of IActionLog.">InMemoryActionLog</a></span>) to file, SQL, or network-backed stores supplied by the host application.</p>
-<dl class="section user"><dt>Idempotency-key dedup (optional)</dt><dd>An implementation MAY treat a non-empty <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span> as a dedup key on <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span>: if an entry with the same key was already recorded, treat the call as a no-op. This is not required by the interface, but <span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="Thread-safe in-memory implementation of IActionLog.">InMemoryActionLog</a></span> and <span class="tt"><a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html" title="Append-only, newline-delimited-JSON IActionLog backed by a local file.">FileActionLog</a></span> both do it, which is what makes them safe choices for <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570" title="Durable audit sink rows are forwarded to.">journal::OutboxRelay::sink</a></span> (see <span class="tt"><a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a></span>) — a re-relayed row after a crash between <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span> and marking it relayed lands here twice but is stored once. An entry with an empty <span class="tt">idempotencyKey</span> is never deduped. </dd></dl>
+<p>Entries are never removed by the framework — this is a permanent, append-only record, unlike <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">morph::offline::IOfflineQueue</a></span> (whose <span class="tt">markDone()</span> deletes items once retried successfully). Implementations range from in-memory (<span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="In-memory implementation of IActionLog, owned by one executor.">InMemoryActionLog</a></span>) to file, SQL, or network-backed stores supplied by the host application.</p>
+<dl class="section user"><dt>Idempotency-key dedup (optional)</dt><dd>An implementation MAY treat a non-empty <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span> as a dedup key on <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span>: if an entry with the same key was already recorded, treat the call as a no-op. This is not required by the interface, but <span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="In-memory implementation of IActionLog, owned by one executor.">InMemoryActionLog</a></span> and <span class="tt"><a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html" title="Append-only, newline-delimited-JSON IActionLog backed by a local file.">FileActionLog</a></span> both do it, which is what makes them safe choices for <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570" title="Durable audit sink rows are forwarded to.">journal::OutboxRelay::sink</a></span> (see <span class="tt"><a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a></span>) — a re-relayed row after a crash between <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span> and marking it relayed lands here twice but is stored once. An entry with an empty <span class="tt">idempotencyKey</span> is never deduped. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ac49e1e4a818057762c752994295549db" name="ac49e1e4a818057762c752994295549db"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac49e1e4a818057762c752994295549db">&#9670;&#160;</a></span>append()</h2>
@@ -196,7 +209,7 @@ Public Member Functions</h2></td></tr>
 </div>
 </div>
 <a id="a1166c1f704607f315395a209c27e2bf9" name="a1166c1f704607f315395a209c27e2bf9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1166c1f704607f315395a209c27e2bf9">&#9670;&#160;</a></span>flush()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a1166c1f704607f315395a209c27e2bf9">&#9670;&#160;</a></span>flush() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -218,7 +231,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e.g. <span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="Thread-safe in-memory implementation of IActionLog.">InMemoryActionLog</a></span>). </p>
+<p>Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e.g. <span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="In-memory implementation of IActionLog, owned by one executor.">InMemoryActionLog</a></span>). </p>
 <p><b>Must throw if the data did not reach the backend.</b> The return type is <span class="tt">void</span>, so throwing is the only channel an implementation has, and callers rely on it: <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a1248cb453951d71a0c28c7b3e5babf9c" title="Moves every row drainOutbox() currently reports to sink, then marks the whole batch relayed via markR...">OutboxRelay::relay()</a></span> calls <span class="tt">markRelayed()</span> directly after this, and a silently-failed flush would mark rows relayed in the model's own store while nothing was durably written — dropping them from the outbox <em>and</em> from the log, with no error anywhere. An implementation that cannot fail (nothing to buffer) simply never throws.</p>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
@@ -232,7 +245,7 @@ Public Member Functions</h2></td></tr>
 </div>
 </div>
 <a id="ac13399c56e34fdd944a9a75cd8df4cda" name="ac13399c56e34fdd944a9a75cd8df4cda"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac13399c56e34fdd944a9a75cd8df4cda">&#9670;&#160;</a></span>entries()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#ac13399c56e34fdd944a9a75cd8df4cda">&#9670;&#160;</a></span>entries() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -255,7 +268,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Returns recorded entries in append order. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>An implementation with an owner answers only there (see <span class="tt"><a class="el" href="#aa86b40cd5de2e717ad5f1545d79bbd8e" title="The executor this log&#39;s state belongs to, or null for an implementation that has none.">owner()</a></span>); a caller elsewhere asks through <span class="tt">entries(replyExec, entityKey)</span>. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">entityKey</td><td>If non-empty, restricts the result to that entity's entries. </td></tr>
   </table>
@@ -264,6 +277,196 @@ Public Member Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>Matching entries, in append order. </dd></dl>
 
 <p>Implemented in <a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3">morph::journal::FileActionLog</a>, <a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html#aa0f4b5543fa43c475f6974451f99250d">morph::journal::InMemoryActionLog</a>, and <a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">morph::journal::SessionLog</a>.</p>
+
+</div>
+</div>
+<a id="aa86b40cd5de2e717ad5f1545d79bbd8e" name="aa86b40cd5de2e717ad5f1545d79bbd8e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa86b40cd5de2e717ad5f1545d79bbd8e">&#9670;&#160;</a></span>owner()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> * morph::journal::IActionLog::owner </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The executor this log's state belongs to, or null for an implementation that has none. </p>
+<p>Every log morph ships has one: its <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span> runs there (posted from anywhere else), and its <span class="tt"><a class="el" href="#ac13399c56e34fdd944a9a75cd8df4cda" title="Returns recorded entries in append order.">entries()</a></span>/<span class="tt"><a class="el" href="#a1166c1f704607f315395a209c27e2bf9" title="Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e....">flush()</a></span> answer only there. What a caller on a model's strand names as the reply executor of <span class="tt"><a class="el" href="#ac13399c56e34fdd944a9a75cd8df4cda" title="Returns recorded entries in append order.">entries</a>(replyExec, …)</span> or <span class="tt">flush(replyExec)</span>. </p><dl class="section return"><dt>Returns</dt><dd>The owner, or <span class="tt">nullptr</span>. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a2a5fc9bd4b961a1570a54c217014dcbe">morph::journal::FileActionLog</a>, <a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html#a8dfd097bc4ae1cfc762dfd7705116386">morph::journal::InMemoryActionLog</a>, and <a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a37f8577c8cefe2048ea2e8b3ded867ed">morph::journal::SessionLog</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a39f31b62756c4daacd3f2e77a76222d2" name="a39f31b62756c4daacd3f2e77a76222d2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39f31b62756c4daacd3f2e77a76222d2">&#9670;&#160;</a></span>entries() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt; morph::journal::IActionLog::entries </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>entityKey</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns recorded entries in append order, read on the log's owner and delivered on <code class="param">replyExec</code>. </p>
+<p>The form for a caller that is not on the owner: a model's strand, an application thread the log does not belong to. The read is ordered after every <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span> posted to the owner before it. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered, and where the caller attaches to it. Borrowed: it must outlive the completion. </td></tr>
+    <tr><td class="paramname">entityKey</td><td>If non-empty, restricts the result to that entity's entries. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The matching entries, in append order. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a811c70fdf05382cd721f1764ab10ed4d" name="a811c70fdf05382cd721f1764ab10ed4d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a811c70fdf05382cd721f1764ab10ed4d">&#9670;&#160;</a></span>flush() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt; morph::journal::IActionLog::flush </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Pushes buffered entries to the durable backend on the log's owner; the answer is delivered on <code class="param">replyExec</code>. </p>
+<p>The form of <span class="tt"><a class="el" href="#a1166c1f704607f315395a209c27e2bf9" title="Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e....">flush()</a></span> for a caller that is not on the owner. It is ordered after every <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span> posted to the owner before it. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. Borrowed: it must outlive the completion. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once the entries are durable; rejected with the error <span class="tt"><a class="el" href="#a1166c1f704607f315395a209c27e2bf9" title="Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e....">flush()</a></span> would have thrown. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af9aad4a907dc5a79613a57c01c12615a" name="af9aad4a907dc5a79613a57c01c12615a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af9aad4a907dc5a79613a57c01c12615a">&#9670;&#160;</a></span>askEntries()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> &gt; &gt; morph::journal::IActionLog::askEntries </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>entityKey</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel protected">protected</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What <span class="tt">entries(replyExec, entityKey)</span> asks. The default reads <span class="tt">entries(entityKey)</span> where it is called, for an implementation with no owner; one with an owner reads there. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. </td></tr>
+    <tr><td class="paramname">entityKey</td><td>If non-empty, restricts the result to that entity's entries. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The matching entries. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ad709c7f542b1f9aac8910997a279d1dd">morph::journal::FileActionLog</a>, <a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html#af47e595f05ef8d0302c55b92eb40c6fd">morph::journal::InMemoryActionLog</a>, and <a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a157f597e944435efca863cdf3babf477">morph::journal::SessionLog</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3f493205ab439c0aa15f37e3e4332e7c" name="a3f493205ab439c0aa15f37e3e4332e7c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3f493205ab439c0aa15f37e3e4332e7c">&#9670;&#160;</a></span>askFlush()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; bool &gt; morph::journal::IActionLog::askFlush </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>replyExec</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel protected">protected</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What <span class="tt">flush(replyExec)</span> asks. The default flushes where it is called, for an implementation with no owner; one with an owner flushes there. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">replyExec</td><td>Where the answer is delivered. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once durable, or the flush's error. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a29dbcf90124891eebc6bfd9eb38db20c">morph::journal::FileActionLog</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
