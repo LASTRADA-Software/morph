@@ -18,10 +18,10 @@ namespace bankgui {
 // (`_gui`) and persist to the in-memory store (see gui_wasm/). The connection
 // string and worker count are ignored.
 BankClient::BankClient(const std::string& /*connectionString*/, std::size_t /*workers*/)
-    : _bridge{std::make_unique<morph::backend::LocalBackend>(_gui)} {}
+    : _bridge{std::make_unique<morph::backend::LocalBackend>(_gui), _gui} {}
 #else
 BankClient::BankClient(const std::string& connectionString, std::size_t workers)
-    : _pool{workers}, _bridge{std::make_unique<morph::backend::LocalBackend>(_pool)} {
+    : _pool{workers}, _bridge{std::make_unique<morph::backend::LocalBackend>(_pool), _gui} {
     bank::db::setup(connectionString);
 }
 #endif
