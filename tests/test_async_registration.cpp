@@ -1230,7 +1230,7 @@ TEST_CASE("BridgeHandler::executeWhenBound: a failed registration rejects with t
 
     rawBackend->failNext("simulated registration failure");
     CHECK_FALSE(resolved);
-    CHECK(message.find("simulated registration failure") != std::string::npos);
+    CHECK(message.contains("simulated registration failure"));
     CHECK(rawBackend->executeCount() == 0);
 }
 

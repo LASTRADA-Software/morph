@@ -60,28 +60,32 @@ struct PollResult {
 /// timeout or a failure (a connect moves on to the next address candidate; a
 /// handshake read gives up).
 ///
-/// @param fd       Descriptor to wait on.
-/// @param events   `poll()` event mask, e.g. `POLLIN` or `POLLOUT`.
-/// @param deadline Point after which the wait reports `kTimedOut`. A deadline
-///                 already passed reports it without polling.
+/// @param descriptor Descriptor to wait on.
+/// @param events     `poll()` event mask, e.g. `POLLIN` or `POLLOUT`.
+/// @param deadline   Point after which the wait reports `kTimedOut`. A deadline
+///                   already passed reports it without polling.
 /// @return The outcome, plus the failing `errno` for `kFailed`.
-inline PollResult pollUntil(int fd, short events, std::chrono::steady_clock::time_point deadline) {
+// A descriptor and an event mask are different things that happen to convert; the
+// parameter names carry the distinction.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+inline PollResult pollUntil(int descriptor, short events, std::chrono::steady_clock::time_point deadline) {
     pollfd pfd{};
-    pfd.fd = fd;
+    pfd.fd = descriptor;
     pfd.events = events;
     for (;;) {
-        auto const remaining =
-            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+        // Rounded up: poll() takes whole milliseconds, and truncating would wake
+        // it up to a millisecond before the deadline and report a timeout early.
+        auto const remaining = std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
         if (remaining.count() <= 0) {
             return {.outcome = PollOutcome::kTimedOut};
         }
         auto const waitMs = static_cast<int>(
             std::min<std::chrono::milliseconds::rep>(remaining.count(), std::numeric_limits<int>::max()));
-        int const rc = ::poll(&pfd, 1, waitMs);
-        if (rc > 0) {
+        int const ready = ::poll(&pfd, 1, waitMs);
+        if (ready > 0) {
             return {.outcome = PollOutcome::kReady};
         }
-        if (rc < 0) {
+        if (ready < 0) {
             int const err = errno;
             if (err != EINTR) {
                 return {.outcome = PollOutcome::kFailed, .error = err};
