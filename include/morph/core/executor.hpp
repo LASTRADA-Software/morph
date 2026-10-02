@@ -255,10 +255,12 @@ public:
     /// Thread-safe. The task is *not* executed immediately.
     /// @param task Callable to execute.
     void post(std::function<void()> task) override {
-        {
-            std::scoped_lock const lock{_m};
-            _q.push(std::move(task));
-        }
+        std::scoped_lock const lock{_m};
+        _q.push(std::move(task));
+        // Notified with the lock held: a consumer that polls (`runOnce()`) can
+        // take the task the moment the lock is released and destroy this
+        // executor, and a notify after that would touch a destroyed condition
+        // variable.
         _cv.notify_all();
     }
 
