@@ -17,6 +17,9 @@
 //   - pastebin::CreatePaste  (Visibility, Editability) -- a rung whose GUI
 //     binds DynamicForm { actionType: "CreatePaste" } today
 //
+// plus glaze's own output for an optional enum member (`optionalEnumSchema`),
+// which no shipped action carries yet but any `std::optional<E>` produces.
+//
 // The `enum` keyword and the "not a closed set" fallbacks are hand-written:
 // glaze emits neither, and the point of both is what a renderer does with a
 // schema it did not generate.
@@ -118,6 +121,42 @@ TestCase {
         "required": []
     })
 
+    // glaze's schema for `struct S { Grade req{}; std::optional<Grade> grade; }`
+    // with `Grade` a `glz::enumerate`d `enum class { Low, High }`, verbatim.
+    // The optional member reaches its set only through a `$ref` inside a
+    // nullable `anyOf`, one level below the property.
+    property var optionalEnumSchema: ({
+        "type": "object",
+        "properties": {
+            "grade": { "anyOf": [{ "$ref": "#/$defs/Grade" }, { "type": "null" }] },
+            "req": { "$ref": "#/$defs/Grade" }
+        },
+        "$defs": {
+            "Grade": { "type": "string",
+                       "oneOf": [{ "title": "Low", "const": "Low" },
+                                 { "title": "High", "const": "High" }] }
+        },
+        "required": ["req"]
+    })
+
+    // Hand-written nestings of the same set:
+    //   `inlined` -- the set written in place of glaze's `$ref`.
+    //   `deeper`  -- the set two levels down. No generator produces it, so it
+    //                stays "not a closed set" rather than being guessed at.
+    property var nestedEnumSchema: ({
+        "properties": {
+            "inlined": { "anyOf": [{ "oneOf": [{ "title": "Low", "const": "Low" },
+                                               { "title": "High", "const": "High" }] },
+                                   { "type": "null" }],
+                         "x-order": 0 },
+            "deeper": { "anyOf": [{ "anyOf": [{ "oneOf": [{ "title": "Low", "const": "Low" },
+                                                          { "title": "High", "const": "High" }] }] },
+                                  { "type": "null" }],
+                        "x-order": 1 }
+        },
+        "required": []
+    })
+
     // A server-fetched Choice, unchanged by any of this: its options are not
     // in the schema, so it must still fetch and must still not be gated on a
     // membership check this renderer cannot make.
@@ -142,6 +181,16 @@ TestCase {
     Component {
         id: handWrittenForm
         DynamicForm { actionType: "HandWritten"; schema: testCase.handWrittenSchema; controller: null }
+    }
+
+    Component {
+        id: optionalEnumForm
+        DynamicForm { actionType: "OptionalEnum"; schema: testCase.optionalEnumSchema; controller: null }
+    }
+
+    Component {
+        id: nestedEnumForm
+        DynamicForm { actionType: "NestedEnum"; schema: testCase.nestedEnumSchema; controller: null }
     }
 
     Component {
@@ -204,6 +253,69 @@ TestCase {
         var nullable = meta(form, "nullable")
         compare(nullable.isEnum, true)
         compare(nullable.enumOptions.map(function (r) { return r.label }), ["On", "Off"])
+    }
+
+    // ── an optional enum: the set one level down ─────────────────────────────
+
+    function test_glazes_optional_enum_is_a_closed_set_of_kind_enum() {
+        var form = createTemporaryObject(optionalEnumForm, testCase)
+        verify(form !== null)
+        var grade = meta(form, "grade")
+        compare(grade.isEnum, true)
+        compare(grade.kind, "enum")
+        compare(grade.enumOptions.map(function (r) { return r.label }), ["Low", "High"])
+        compare(grade.enumOptions.map(function (r) { return r.valueJson }), ['"Low"', '"High"'])
+        // The required sibling reaches the same set through a bare `$ref`.
+        compare(meta(form, "req").kind, "enum")
+    }
+
+    function test_glazes_optional_enum_renders_a_selection_control() {
+        var form = createTemporaryObject(optionalEnumForm, testCase)
+        var control = findChild(form, "field_grade")
+        verify(control !== null)
+        verify(control.currentIndex !== undefined)
+        verify(control.placeholderText === undefined)
+        compare(control.count, 2)
+        compare(control.textAt(1), "High")
+    }
+
+    function test_glazes_optional_enum_encodes_the_name_and_blank_is_omitted() {
+        var form = createTemporaryObject(optionalEnumForm, testCase)
+        var req = findChild(form, "field_req")
+        req.currentIndex = 0
+        req.activated(0)
+        // `grade` is optional and untouched: no value, not an invalid one.
+        compare(form.ready, true)
+        compare(form.previewLine.indexOf("grade"), -1)
+
+        var grade = findChild(form, "field_grade")
+        grade.currentIndex = 1
+        grade.activated(1)
+        compare(form.ready, true)
+        verify(form.previewLine.indexOf('"grade":"High"') !== -1)
+    }
+
+    function test_glazes_optional_enum_refuses_a_value_outside_the_set() {
+        var form = createTemporaryObject(optionalEnumForm, testCase)
+        var req = findChild(form, "field_req")
+        req.currentIndex = 0
+        req.activated(0)
+        form.setFieldValue("grade", '"Medium"')
+        compare(form.ready, false)
+    }
+
+    function test_an_inlined_nested_set_is_a_closed_set_too() {
+        var form = createTemporaryObject(nestedEnumForm, testCase)
+        var inlined = meta(form, "inlined")
+        compare(inlined.isEnum, true)
+        compare(inlined.kind, "enum")
+        compare(inlined.enumOptions.map(function (r) { return r.valueJson }), ['"Low"', '"High"'])
+    }
+
+    function test_a_set_nested_two_levels_down_is_not_a_closed_set() {
+        var form = createTemporaryObject(nestedEnumForm, testCase)
+        compare(meta(form, "deeper").isEnum, false)
+        compare(meta(form, "deeper").enumOptions.length, 0)
     }
 
     // ── what is *not* a closed set keeps its old behaviour ───────────────────

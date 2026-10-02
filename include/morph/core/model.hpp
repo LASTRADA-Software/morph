@@ -4,10 +4,15 @@
 #include <chrono>
 #include <concepts>
 #include <core/platform/Clock.hpp>
+#include <exception>
+#include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
+#include <type_traits>
 #include <typeindex>
 #include <typeinfo>
+#include <utility>
 
 // strand.hpp defines no symbol this header uses. It is kept deliberately:
 // consumers (tests/test_model.cpp among them) reach
@@ -18,7 +23,74 @@
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
 #include "detail/task_handler.hpp"
+#include "logger.hpp"
 #include "strand.hpp"
+
+namespace morph::model {
+
+// ── Post-commit tail ──────────────────────────────────────────────────────────
+
+/// @brief Runs @p tail, an action handler's work *after* its commit, and
+///        contains any exception it throws.
+///
+/// Once a handler has committed, its mutation is durable. What it does next --
+/// journalling, a rule cascade, rebuilding cached state -- can still fail, and
+/// if that failure leaves `execute()` the caller is told the action failed
+/// while the write it made stands. This is the seam that keeps the two apart:
+/// the tail's exception is logged through `morph::log::logError` and goes no
+/// further. Only work that follows the commit belongs in @p tail; an exception
+/// from before it still means the mutation did not happen and must still reach
+/// the caller.
+///
+/// Anything the caller's return value depends on is best computed before the
+/// commit, where a failure rolls the write back. A handler that cannot do that
+/// uses the value-returning overload instead.
+///
+/// @tparam Tail Nullary callable returning `void`.
+/// @param tail The post-commit work to run.
+/// @param what Names the handler in the log line, e.g. `"[kanban::BoardModel] CreateColumn"`.
+template <typename Tail>
+    requires std::invocable<Tail> && std::is_void_v<std::invoke_result_t<Tail>>
+void runPostCommitTail(Tail&& tail, std::string_view what) noexcept {
+    try {
+        std::invoke(std::forward<Tail>(tail));
+    } catch (const std::exception& error) {
+        ::morph::log::logError("{} committed, but its post-commit tail failed: {}", what, error.what());
+    } catch (...) {
+        ::morph::log::logError("{} committed, but its post-commit tail threw a non-std::exception", what);
+    }
+}
+
+/// @brief The same containment for a tail that produces the handler's result,
+///        falling back to the state the handler committed if the tail throws.
+///
+/// For a handler whose return value is refreshed by its post-commit work --
+/// a state rebuilt after a rule cascade, say -- and which already holds a
+/// truthful answer from before the tail began. If the tail throws, that answer
+/// is returned instead: it describes what the commit made durable, which is
+/// the one thing the caller must not be misinformed about.
+///
+/// @tparam Result The handler's result type; deduced from @p committed.
+/// @tparam Tail Nullary callable whose result converts to @p Result.
+/// @param tail The post-commit work to run.
+/// @param committed The result to return if @p tail throws.
+/// @param what Names the handler in the log line.
+/// @return @p tail's result, or @p committed if it threw.
+template <typename Result, typename Tail>
+    requires std::invocable<Tail> && std::convertible_to<std::invoke_result_t<Tail>, Result>
+[[nodiscard]] Result runPostCommitTail(Tail&& tail, Result committed,
+                                       std::string_view what) noexcept(std::is_nothrow_move_constructible_v<Result>) {
+    try {
+        return std::invoke(std::forward<Tail>(tail));
+    } catch (const std::exception& error) {
+        ::morph::log::logError("{} committed, but its post-commit tail failed: {}", what, error.what());
+    } catch (...) {
+        ::morph::log::logError("{} committed, but its post-commit tail threw a non-std::exception", what);
+    }
+    return committed;
+}
+
+}  // namespace morph::model
 
 namespace morph::model::detail {
 

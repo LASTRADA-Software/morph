@@ -31,6 +31,7 @@ add_executable(morph_tests
     test_coroutine_model.cpp
     test_async_delay.cpp
     test_model.cpp
+    test_post_commit_tail.cpp
     test_logger.cpp
     test_observability.cpp
     test_backend_extra.cpp

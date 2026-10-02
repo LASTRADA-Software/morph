@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <morph/core/logger.hpp>
+#include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
@@ -683,7 +684,7 @@ CreateLedgerResult LedgerModel::execute(const CreateLedger& action) {
         ledgerRow.owner = Light::SqlAnsiString<64>{ctx->principal};
         mapper.Create(ledgerRow);
         auto result = CreateLedgerResult{.id = LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())}};
-        logAction(action, result);
+        ::morph::model::runPostCommitTail([&] { logAction(action, result); }, "[ledger::LedgerModel] CreateLedger");
         return result;
     } catch (const LedgerError& error) {
         logFailure(action, error.what());
@@ -734,7 +735,7 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
                                                                           // precision (0 for JPY/KRW, 2 for
                                                                           // USD/EUR), not a hardcoded 2
         };
-        logAction(action, result);
+        ::morph::model::runPostCommitTail([&] { logAction(action, result); }, "[ledger::LedgerModel] OpenAccount");
         return result;
     } catch (const LedgerError& error) {
         logFailure(action, error.what());
@@ -841,6 +842,10 @@ ListTransactionsResult LedgerModel::execute(const ListTransactions& action) {
     return result;
 }
 
+// One handler runs the whole transaction, its trigger cascade and the post-commit
+// journalling; the branching is the transaction's, and splitting it would scatter
+// one atomic unit across helpers.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
     try {
         const auto* ctx = morph::session::current();
@@ -1051,19 +1056,27 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
 
         sqlTxn.Commit();
 
-        logAction(action, result);
+        // The transaction and its cascades are durable from the line above.
+        // Journalling them can still throw, and that must not tell the caller
+        // the StoreTransaction failed.
+        ::morph::model::runPostCommitTail(
+            [&] {
+                logAction(action, result);
 
-        // Logged only now, after the trigger's own entry above, so the cascade
-        // always lands strictly after its trigger in the log's seq order.
-        // logAction is the *only* logger for each of these entries --
-        // setCategoryImpl holds no logging of its own, and the public
-        // execute(SetCategory) overload (which also calls setCategoryImpl, then
-        // logs unconditionally with an empty causalParentId) is deliberately not
-        // called from here, to avoid double-logging the same firing.
-        const std::string triggerCausalId = "transactionJournal:" + std::to_string(journalRow.id.Value());
-        for (const auto& cascadeAction : cascadesToLog) {
-            logAction(cascadeAction, SetCategoryResult{}, triggerCausalId);
-        }
+                // Logged only now, after the trigger's own entry above, so the
+                // cascade always lands strictly after its trigger in the log's
+                // seq order. logAction is the *only* logger for each of these
+                // entries -- setCategoryImpl holds no logging of its own, and
+                // the public execute(SetCategory) overload (which also calls
+                // setCategoryImpl, then logs unconditionally with an empty
+                // causalParentId) is deliberately not called from here, to
+                // avoid double-logging the same firing.
+                const std::string triggerCausalId = "transactionJournal:" + std::to_string(journalRow.id.Value());
+                for (const auto& cascadeAction : cascadesToLog) {
+                    logAction(cascadeAction, SetCategoryResult{}, triggerCausalId);
+                }
+            },
+            "[ledger::LedgerModel] StoreTransaction");
 
         return result;
     } catch (const LedgerError& error) {
@@ -1165,7 +1178,8 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
                              "Reversal of: " + std::string{originalJournalRow.description.Value().ToStringView()},
                              morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts, reversalCausalParentId);
 
-        logAction(action, result, reversalCausalParentId);
+        ::morph::model::runPostCommitTail([&] { logAction(action, result, reversalCausalParentId); },
+                                          "[ledger::LedgerModel] UndoTransaction");
         return result;
     } catch (const LedgerError& error) {
         logFailure(action, error.what());
@@ -1323,7 +1337,8 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
         }
 
         auto result = ImportResult{.imported = imported, .duplicates = duplicates};
-        logAction(action, result);
+        ::morph::model::runPostCommitTail([&] { logAction(action, result); },
+                                          "[ledger::LedgerModel] ImportLedgerChunk");
         return result;
     } catch (const LedgerError& error) {
         logFailure(action, error.what());
@@ -1532,7 +1547,7 @@ RunReportJobResult LedgerModel::execute(const RunReportJob& action) {
     }
 
     auto result = RunReportJobResult{.status = ReportStatus::Done};
-    logAction(action, result);
+    ::morph::model::runPostCommitTail([&] { logAction(action, result); }, "[ledger::LedgerModel] RunReportJob");
     return result;
 }
 
@@ -1573,7 +1588,8 @@ SetCategoryResult LedgerModel::execute(const SetCategory& action) {
         Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
         setCategoryImpl(mapper, action);
         sqlTxn.Commit();
-        logAction(action, SetCategoryResult{});
+        ::morph::model::runPostCommitTail([&] { logAction(action, SetCategoryResult{}); },
+                                          "[ledger::LedgerModel] SetCategory");
         return SetCategoryResult{};
     } catch (const LedgerError& error) {
         logFailure(action, error.what());
