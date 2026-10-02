@@ -212,6 +212,32 @@ TEST_CASE("RemoteServer::drainedWithin blocks until a slow in-flight execute del
     REQUIRE(execReply.env.kind == "ok");
 }
 
+TEST_CASE("RemoteServer::drainedWithin with no time to wait answers false while an execute is in flight",
+          "[shutdown][graceful][drain]") {
+    gGSSlowStarted.store(0, std::memory_order_relaxed);
+    morph::exec::ThreadPoolExecutor pool{4};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    morph::testing::WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("GS_SlowModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 1;
+    req.modelId = regReply.env.modelId;
+    req.modelType = "GS_SlowModel";
+    req.actionType = "GS_SlowAction";
+    req.body = R"({"ms":150})";
+
+    morph::testing::WaitReply execReply;
+    server->handle(morph::wire::encode(req), std::ref(execReply));
+    REQUIRE(morph::testing::waitUntil([] { return gGSSlowStarted.load(std::memory_order_relaxed) >= 1; }));
+
+    REQUIRE_FALSE(morph::testing::awaitAnswer([&](auto& owner) { return server->drainedWithin(0ms, owner); }));
+    REQUIRE(execReply.await(2s));
+}
+
 TEST_CASE("RemoteServer::drainedWithin times out while a slower-than-deadline execute is still running",
           "[shutdown][graceful][drain]") {
     gGSSlowStarted.store(0, std::memory_order_relaxed);
