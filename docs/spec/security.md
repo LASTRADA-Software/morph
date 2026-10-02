@@ -602,7 +602,7 @@ transport above is not a matter of degree:
   applies (it sits above the transport), so `executeTimeout`, `maxLiveModels`
   and `maxInFlightExecutes` are available here; the connection-level limits are
   not. `SocketBackendConfig`'s `connectTimeout`/`handshakeTimeout`/`sendTimeout`
-  are not a counter-example: they bound the *client's* own I/O thread against a
+  are not a counter-example: they bound the *client's* own I/O loop against a
   stalled server, and give a `SocketServer` nothing against a stalled client.
 - **The server is loopback-only, and not by configuration.**
   `SocketServer::listen()` binds `127.0.0.1` unconditionally — there is no
@@ -622,11 +622,10 @@ transport above is not a matter of degree:
   two transports are comparable; it is also the only one.
 - **Socket errors are rendered with a thread-safe formatter.** Every throw
   site in `net/detail/tcp_socket.hpp` builds its message on whichever thread
-  hit the error, and this transport owns several of them: `SocketServer` runs
-  an accept loop thread plus one `clientLoop` thread per accepted connection,
-  and `SocketBackend` runs an I/O thread and a handler thread. A peer that
-  provokes socket errors on several connections at once therefore has several
-  threads rendering an `errno` at the same moment. They go through
+  hit the error. This transport's sockets run on an `exec::IoLoop`'s thread,
+  but an application may run several loops, and the socket helpers can be
+  called from the caller's own thread, so more than one thread can be
+  rendering an `errno` at the same moment. They go through
   `std::system_category().message()`, which returns an owned `std::string` and
   carries the library's ordinary "shall not introduce a data race" guarantee,
   rather than `std::strerror`, which is permitted to hand every caller a

@@ -1162,7 +1162,7 @@ in the reply (see wire.md).
 
 The state machine:
 - On **`connected`**: sets `_connected`, resets the backoff delay to
-  `initialReconnectDelay`, quits any parked sync loop. Fires `_connectHandler`
+  `initialReconnectDelay`, releases a parked `waitForConnected()`. Fires `_connectHandler`
   (if installed) unconditionally — every successful connect, first included.
   It then fires the `_reconnectHandler` **only on subsequent connects**
   (`_everConnected` was already true) — never on the first connect, because
@@ -1642,7 +1642,7 @@ apply, plus transport-level failures the in-process backends cannot hit:
 | Socket drops with execute calls in flight | The loop's disconnect handling sweeps both pending tables, resolving every pending completion with `DisconnectedError`. |
 | Reply arrives for an unknown/cancelled `callId` | Dropped silently. |
 | `register` reply is `err` (e.g. unknown model type) | `registerModel` throws `std::runtime_error("register failed: " + message)`. |
-| `register` reply never arrives (never connected, or disconnects mid-call) | The parked `sendSync` wait wakes on disconnect and throws `"disconnected"`, wrapped as `"register failed: disconnected"` — never hangs. |
+| `register` reply never arrives (never connected, or disconnects mid-call) | The posted request is rejected with `DisconnectedError` when the connection drops or the backend closes; the waiting verb rethrows it as `std::runtime_error("register failed: disconnected")` — never hangs. Called on the loop's own thread, or after the loop has stopped, it throws at once instead of waiting. |
 
 There is **no typed "model not found" exception** on either path — callers that
 need to distinguish it from any other `std::runtime_error` have only the message
@@ -2030,7 +2030,7 @@ implementation to absorb — see
 | `SynchronousBackendAdapter` is a decorator, not a base class or a CRTP mixin | Wraps `shared_ptr<IBackend>` and forwards every verb | It must work on `LocalBackend` and eleven test doubles *without modifying them*, which rules out anything they would have to derive from. Cost is one forwarding method per unchanged verb; benefit is that an unmodified blocking backend reaches the new surface at all. |
 | The adapter's blocking executor is required, not defaulted | Constructor parameter with no default; null `inner` throws | "Where does the blocking happen" is the only question the class exists to answer. An adapter that silently ran the call inline when handed nothing would block on some configurations and not others — contract by configuration, which is the thing being removed. |
 | `SocketBackend` runs reconnect handlers on a dedicated thread | Not on the I/O loop that completes the connection | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the loop's read flow can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. Still load-bearing even though `bindModel` cannot deadlock this way: the blocking verbs can, and a caller may still reach them. |
-| `SocketBackend` implements `bindModel`/`promoteModel` natively | Not wrapped in `SynchronousBackendAdapter`, although it overrides none of the four `*Async` verbs | The I/O loop already demultiplexes replies by `callId` for `execute` and `RemoteServer` echoes `callId` on every control reply, so the non-blocking path costs a second `PendingCallTable` and no protocol change. Wrapping instead would park a thread per bind for a round trip this transport need not park for, and would keep every bind inside `sendSync`'s one-synchronous-call token — which `listInstances` and the legacy `registerModel` share, and which is the one global restriction on a backend otherwise callable from any thread. The adapter's reconnect-handler property, the other reason to consider it, does not apply: it forwards `setReconnectHandler` and the blocking verbs straight through, so a wrapped `SocketBackend` would run reconnect control calls exactly where it does today. |
+| `SocketBackend` implements `bindModel`/`promoteModel` natively | Not wrapped in `SynchronousBackendAdapter`, although it overrides none of the four `*Async` verbs | The I/O loop already demultiplexes replies by `callId` for `execute` and `RemoteServer` echoes `callId` on every control reply, so the non-blocking path costs a second `PendingCallTable` and no protocol change. Wrapping instead would park a thread per bind for a round trip this transport need not park for. The adapter's reconnect-handler property, the other reason to consider it, does not apply: it forwards `setReconnectHandler` and the blocking verbs straight through, so a wrapped `SocketBackend` would run reconnect control calls exactly where it does today. |
 
 ## Lifetime annotations
 

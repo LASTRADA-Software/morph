@@ -61,7 +61,7 @@ single **default session** — a `Context` set once via
 `Bridge::setDefaultSession(session)` (typically at startup, or after login once a
 `token` is available) and read back with `Bridge::defaultSession()`. Every
 outbound `executeVia` stamps that default onto the `ActionCall`
-(`call.session = _defaultSession`) under the bridge's session mutex, so callers
+(`call.session = _defaultSession`) on the bridge's owner, so callers
 never construct a `Context` per call. **There is no per-call session override**:
 changing the session for one call means calling `setDefaultSession` again.
 `setDefaultSession({})` clears it back to an empty (unauthenticated) `Context`.
@@ -131,9 +131,10 @@ deleteButton.setEnabled(bridge.currentPrincipal().hasRole("editor"));
 lives on the specific `Bridge` whose backend it came from — the same object
 that already holds the default `Context` (`setDefaultSession`/`defaultSession`)
 — rather than one ambient value shared by every backend a process happens to
-hold. Guarded by its own mutex (`_principalMtx`, separate from the session
-mutex), since it is expected to be read far more frequently — by UI code on
-every relevant repaint/state check — than the per-call session snapshot.
+hold. Like the default `Context`, it is owner-confined, so it needs no lock:
+`setPrincipal` and `currentPrincipal` run on the `Bridge`'s owner (see
+[bridge.md](../core/bridge.md#thread-safety--one-owner)), which is the thread UI
+code reads it from on every relevant repaint/state check.
 
 **Trust: a read-only cache of what the server last said, never a second
 authority.** Populate it only from data the server actually returned, never
