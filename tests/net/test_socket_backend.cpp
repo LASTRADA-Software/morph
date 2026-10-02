@@ -2219,12 +2219,15 @@ morph::backend::detail::ActionCall echoCall() {
     return call;
 }
 
-/// Waits for @p comp to settle, either way.
+/// Waits for @p comp to settle, either way. The handlers are attached by a task
+/// of @p owner, the completion's owner, which is where they run.
 template <class T>
-bool settles(morph::async::Completion<T>& comp) {
+bool settles(morph::async::Completion<T>& comp, morph::exec::IExecutor& owner) {
     auto done = std::make_shared<std::atomic<bool>>(false);
-    comp.then([done](const T&) { done->store(true); }).onError([done](const std::exception_ptr&) {
-        done->store(true);
+    owner.post([&comp, done] {
+        comp.then([done](const T&) { done->store(true); }).onError([done](const std::exception_ptr&) {
+            done->store(true);
+        });
     });
     return morph::testing::waitUntil([done] { return done->load(); });
 }
@@ -2243,7 +2246,7 @@ TEST_CASE("SocketBackend: every socket write is made on the loop, whichever thre
     REQUIRE(mid.v != 0U);
     morph::exec::ThreadPoolExecutor cbPool{1};
     auto comp = stack.backend->execute(mid, echoCall(), &cbPool);
-    REQUIRE(settles(comp));
+    REQUIRE(settles(comp, cbPool));
     stack.backend->deregisterModel(mid);
     stack.loop.runAndWait([] {});
 
@@ -2261,9 +2264,9 @@ TEST_CASE("SocketBackend: pending calls are filed, matched and swept on the loop
 
     auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
     auto comp = stack.backend->execute(mid, echoCall(), &cbPool);
-    REQUIRE(settles(comp));
+    REQUIRE(settles(comp, cbPool));
     auto bound = stack.backend->bindModel(privateBind("SbEchoModel"), cbPool);
-    REQUIRE(settles(bound));
+    REQUIRE(settles(bound, cbPool));
     stack.backend->cancelPending(std::make_exception_ptr(std::runtime_error{"swept"}));
     stack.loop.runAndWait([] {});
 
