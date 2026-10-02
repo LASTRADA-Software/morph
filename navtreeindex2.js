@@ -1,5 +1,6 @@
 var NAVTREEINDEX2 =
 {
+"d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a60f482c2c96bcedf88298b9f4357d9f0":[2,0,0,15,3,4],
 "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#aa95d031d5173014fe54d1052744828e4":[2,0,0,15,3,7],
 "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#acf32c7e9f21fcd15b45be6cc41ea1c4a":[2,0,0,15,3,6],
 "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#add838e99c2cec5205ae9a6e754f862b7":[2,0,0,15,3,1],
@@ -248,6 +249,5 @@ var NAVTREEINDEX2 =
 "db/d00/structmorph_1_1core_1_1FileIoOps.html#a3c5a72a799fadf837c40a17b87da6fd4":[2,0,0,4,0,5],
 "db/d00/structmorph_1_1core_1_1FileIoOps.html#a71d292fdf71d8d58a6595e239475e122":[2,0,0,4,0,0],
 "db/d00/structmorph_1_1core_1_1FileIoOps.html#a8f449d6b2bb7b518b9a528d5e66ed691":[2,0,0,4,0,6],
-"db/d00/structmorph_1_1core_1_1FileIoOps.html#acd327ebb97e9083cd5e322fc14a2aed9":[2,0,0,4,0,3],
-"db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html":[2,0,0,2,1]
+"db/d00/structmorph_1_1core_1_1FileIoOps.html#acd327ebb97e9083cd5e322fc14a2aed9":[2,0,0,4,0,3]
 };

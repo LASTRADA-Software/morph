@@ -1,5 +1,6 @@
 var NAVTREEINDEX4 =
 {
+"de/dce/structmorph_1_1observe_1_1MetricEvent.html#a6b9ec62a4a6a02803abe856579350ad9":[2,0,0,14,0,0],
 "de/dce/structmorph_1_1observe_1_1MetricEvent.html#ac1971434ee76f16975316a9616498949":[2,0,0,14,0,2],
 "de/de0/coroutine_8hpp.html":[3,0,0,0,6],
 "de/de0/coroutine_8hpp_source.html":[3,0,0,0,6],
@@ -248,6 +249,5 @@ var NAVTREEINDEX4 =
 "index.html#strands":[0,5,1],
 "index.html#syncworker":[0,5,10],
 "index.html#thread-safety":[0,6],
-"index.html#util--exact-values-units-time":[0,12,0,5],
-"index.html#versioning--compatibility":[0,14]
+"index.html#util--exact-values-units-time":[0,12,0,5]
 };

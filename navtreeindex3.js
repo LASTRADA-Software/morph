@@ -1,5 +1,6 @@
 var NAVTREEINDEX3 =
 {
+"db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html":[2,0,0,2,1],
 "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html#aabf7d3a6f7279e3ae5b62efd9d890421":[2,0,0,2,1,0],
 "db/d1e/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1Timestamp_01_4.html":[2,0,0,12,12],
 "db/d4f/classmorph_1_1views_1_1ViewRegistry.html":[2,0,0,22,6],
@@ -248,6 +249,5 @@ var NAVTREEINDEX3 =
 "de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c":[2,0,0,2,5,0],
 "de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#afc681a5bc09275d4c4b1ffd91bea794b":[2,0,0,2,5,2],
 "de/dce/structmorph_1_1observe_1_1MetricEvent.html":[2,0,0,14,0],
-"de/dce/structmorph_1_1observe_1_1MetricEvent.html#a46bf00962150f7233ec414616b026207":[2,0,0,14,0,1],
-"de/dce/structmorph_1_1observe_1_1MetricEvent.html#a6b9ec62a4a6a02803abe856579350ad9":[2,0,0,14,0,0]
+"de/dce/structmorph_1_1observe_1_1MetricEvent.html#a46bf00962150f7233ec414616b026207":[2,0,0,14,0,1]
 };

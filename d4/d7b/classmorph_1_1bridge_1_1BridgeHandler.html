@@ -141,6 +141,9 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a08411eb2c1621f941b5a8fab45f29646" id="r_a08411eb2c1621f941b5a8fab45f29646"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
 <tr class="memitem:a08411eb2c1621f941b5a8fab45f29646 template"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646">execute</a> (Action action)</td></tr>
 <tr class="memdesc:a08411eb2c1621f941b5a8fab45f29646"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">action</code> via the underlying <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> and returns a <span class="tt">Completion</span>.  <br /></td></tr>
+<tr class="memitem:ab9a09b5a5253026d3574cc4a9ffb95ff" id="r_ab9a09b5a5253026d3574cc4a9ffb95ff"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
+<tr class="memitem:ab9a09b5a5253026d3574cc4a9ffb95ff template"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab9a09b5a5253026d3574cc4a9ffb95ff">executeWhenBound</a> (Action action)</td></tr>
+<tr class="memdesc:ab9a09b5a5253026d3574cc4a9ffb95ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">action</code> once this handler's in-flight registration settles, instead of failing fast with "handler not bound".  <br /></td></tr>
 <tr class="memitem:a421fba9e2f183185c0f05f8b43c66d78" id="r_a421fba9e2f183185c0f05f8b43c66d78"><td class="memTemplParams" colspan="2">template&lt;typename M = Model&gt; <br />
 requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></td></tr>
 <tr class="memitem:a421fba9e2f183185c0f05f8b43c66d78 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a421fba9e2f183185c0f05f8b43c66d78">attach</a> (const <a class="el" href="../../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d">::morph::model::PrimaryKeyOf</a>&lt; M &gt; &amp;key)</td></tr>
@@ -377,6 +380,60 @@ template&lt;typename Action&gt; </div>
 
 </div>
 </div>
+<a id="ab9a09b5a5253026d3574cc4a9ffb95ff" name="ab9a09b5a5253026d3574cc4a9ffb95ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab9a09b5a5253026d3574cc4a9ffb95ff">&#9670;&#160;</a></span>executeWhenBound()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
+<div class="memtemplate">
+template&lt;typename Action&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::executeWhenBound </td>
+          <td>(</td>
+          <td class="paramtype">Action</td>          <td class="paramname"><span class="paramname"><em>action</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Dispatches <code class="param">action</code> once this handler's in-flight registration settles, instead of failing fast with "handler not bound". </p>
+<p>The waiting counterpart of <span class="tt"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">execute()</a></span> for a handler built over a backend that answers <span class="tt">BindWait::kCallerMustNotBlock</span>, where a handler is constructed unbound and the first dispatch commonly follows on the next line. <span class="tt"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">execute()</a></span> itself never waits; the wait is named at the call site.</p>
+<ul>
+<li>Already bound: dispatches exactly as <span class="tt"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">execute()</a></span> does.</li>
+<li>A registration in flight: the action is held until <span class="tt"><a class="el" href="#ad28c2d2bf1f14ac08f51340fb7f3f07c" title="Resolves once this handler&#39;s initial registration settles.">whenBound()</a></span> settles, then dispatched on this handler's GUI executor. A failed registration rejects the returned <span class="tt">Completion</span> with the registration's error; a registration that turns out to have nothing in flight rejects it with "handler not bound".</li>
+<li>Handler destroyed before the registration settles: the held action is dropped, never dispatched, and the returned <span class="tt">Completion</span> never settles. The deferred dispatch holds the binding weakly and does not capture the handler, so destroying the handler is always safe.</li>
+</ul>
+<p>The <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> must outlive the deferred dispatch on the same terms as any other call made on this handler. A bridge already retired when the dispatch comes due rejects it with "bridge destroyed" rather than calling into it.</p>
+<p>Only <span class="tt"><a class="el" href="../../d8/d38/structmorph_1_1bridge_1_1NoSharing.html" title="BridgeHandler sharing policy: private, one instance per handler.">NoSharing</a></span> handlers: a shared handler's initial binding goes through the attach path, which <span class="tt"><a class="el" href="#ad28c2d2bf1f14ac08f51340fb7f3f07c" title="Resolves once this handler&#39;s initial registration settles.">whenBound()</a></span> does not track, so a wait there would resolve <span class="tt">false</span> at once. A shared handler waits through the <span class="tt">Completion</span> its keyed <span class="tt"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">execute()</a></span> returns instead.</p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">Action</td><td>Concrete action type registered with <span class="tt">BRIDGE_REGISTER_ACTION</span>. Its result type must be copy-constructible, because the deferred path forwards the value from one <span class="tt">Completion</span> to another. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">action</td><td>Action to execute (moved into the dispatch, or held until the registration settles). </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Completion that resolves on the GUI executor with the action's result, or rejects with the dispatch's error, the registration's error, or "handler not bound" as described above. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03274">3274</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a421fba9e2f183185c0f05f8b43c66d78" name="a421fba9e2f183185c0f05f8b43c66d78"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a421fba9e2f183185c0f05f8b43c66d78">&#9670;&#160;</a></span>attach()</h2>
 
@@ -427,7 +484,7 @@ requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></di
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03258">3258</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03341">3341</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -468,7 +525,7 @@ requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></di
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The attached key, or <span class="tt">nullopt</span> before the first attach. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03268">3268</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03351">3351</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -512,7 +569,7 @@ live recently", never as a guarantee that a later <span class="tt"><a class="el"
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion resolving on the GUI executor with the live keys. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03293">3293</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03376">3376</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -562,7 +619,7 @@ template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03323">3323</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03406">3406</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -600,7 +657,7 @@ template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <span class="tt">executeJson(actionId, ...)</span> would find a registered action. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03350">3350</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03433">3433</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -638,7 +695,7 @@ template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The new binding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03358">3358</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03441">3441</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -670,7 +727,7 @@ template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <p>The executor used to deliver this handler's <span class="tt">Completion</span> callbacks. </p>
 <dl class="section return"><dt>Returns</dt><dd>The GUI/callback executor passed at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03368">3368</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03451">3451</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -703,7 +760,7 @@ template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <p>A handler constructed against a backend that answers <span class="tt">BindWait::kCallerMustNotBlock</span> (see <span class="tt">backend.md</span>, "Waiting for a
 bind") starts unbound and only becomes bound once the deferred <span class="tt">onRegistered</span> fires; <span class="tt"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">execute()</a></span> fails fast with "handler not bound" for any call issued before that. This is the synchronous, point-in-time check; <span class="tt"><a class="el" href="#ad28c2d2bf1f14ac08f51340fb7f3f07c" title="Resolves once this handler&#39;s initial registration settles.">whenBound()</a></span> below is the awaitable counterpart for a caller that wants to dispatch the moment registration settles rather than poll this in a loop. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the handler is currently bound to a <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03381">3381</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03464">3464</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -735,7 +792,7 @@ template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <p>Resolves once this handler's initial registration settles. </p>
 <p>See <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a8fadc389b6e62034cbb02c642c0076d8" title="Resolves once binding&#39;s initial registration settles.">Bridge::whenBound()</a></span> for the full semantics: resolves immediately with <span class="tt">true</span> if already bound, waits for the in-flight async registration to settle (<span class="tt">true</span> on success, an error via <span class="tt">.onError(...)</span> on failure) if one is outstanding, or resolves immediately with <span class="tt">false</span> if nothing is in flight and the handler is still unbound. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">Completion&lt;bool&gt;</span> delivered on this handler's GUI executor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03392">3392</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03475">3475</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -782,7 +839,7 @@ template&lt;typename R&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03409">3409</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03492">3492</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -835,7 +892,7 @@ R)</span>, delivered on this handler's executor — except that <code class="par
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03433">3433</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03516">3516</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -886,7 +943,7 @@ template&lt;typename R&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03446">3446</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03529">3529</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -925,7 +982,7 @@ template&lt;typename R&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03453">3453</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03536">3536</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -957,7 +1014,7 @@ template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <p>Returns the underlying <span class="tt">HandlerBinding</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the binding owned by this handler — a reference into the handler, valid only for as long as it is. Copy it to keep the binding past that point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03462">3462</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03545">3545</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

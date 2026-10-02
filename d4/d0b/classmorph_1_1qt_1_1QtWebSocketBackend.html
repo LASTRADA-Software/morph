@@ -204,7 +204,7 @@ structural registration surface"). This is the one backend in the tree that impl
 <dl class="section user"><dt>SSL-less Qt builds (<span class="tt">QT_NO_SSL</span>, including the standard Qt-for-WebAssembly build)</dt><dd>The constructor's <span class="tt">tls</span> parameter (and the <span class="tt">_tls</span> member) does not exist at all when Qt itself was configured without SSL — <span class="tt">QSslConfiguration</span> isn't a type Qt provides in that configuration, so there is no value to accept or ignore. <span class="tt">wss://</span> still works on such a build regardless: in a WASM/browser deployment the browser terminates TLS before Qt's <span class="tt">QWebSocket</span> ever sees the connection, so the only thing genuinely unavailable is the ability to <em>configure</em> TLS from C++ (client certificates, pinning, etc.) — plain <span class="tt">wss://</span> and <span class="tt">ws://</span> both still connect normally.</dd></dl>
 <dl class="section user"><dt>Threading</dt><dd>Must be used from the Qt event loop thread. <span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></span> and the internal message handler are both called on that thread. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="abb613465047676a5ca37e4c1962efc7c" name="abb613465047676a5ca37e4c1962efc7c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abb613465047676a5ca37e4c1962efc7c">&#9670;&#160;</a></span>Config</h2>
@@ -220,7 +220,7 @@ structural registration surface"). This is the one backend in the tree that impl
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -323,7 +323,7 @@ structural registration surface"). This is the one backend in the tree that impl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -363,7 +363,7 @@ structural registration surface"). This is the one backend in the tree that impl
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00167">167</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -607,7 +607,7 @@ structural registration surface"). This is the one backend in the tree that impl
 asynchronous" — <span class="tt">SocketBackend</span>'s is too, and it answers <span class="tt">kCallerMayBlock</span> because a separate I/O thread settles its completions. It says only that <em>this</em> thread must not stop and wait.</p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">kCallerMustNotBlock</span> when <span class="tt"><a class="el" href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a6c56987caa7c301720c589d6de8ec7ac" title="Whether bindModel/promoteModel may return before the reply.">Config::asyncRegistrationEnabled</a></span> is set, <span class="tt">kCallerMayBlock</span> otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00326">326</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -951,7 +951,7 @@ asynchronous" — <span class="tt">SocketBackend</span>'s is too, and it answers
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00427">427</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00428">428</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

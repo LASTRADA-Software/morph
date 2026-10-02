@@ -37,13 +37,14 @@ var searchData=
   ['executejson_34',['executeJson',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a71c17b7c7473dcbef2bc19cebd6ba337',1,'morph::bridge::BridgeHandler']]],
   ['executetimeout_35',['executeTimeout',['../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c',1,'morph::backend::LimitPolicy']]],
   ['executevia_36',['executeVia',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a3e4ee91931517750f483a3bd0a6a0b1f',1,'morph::bridge::Bridge']]],
-  ['execution_20history_37',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
-  ['executor_38',['Executor',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a053dc5bfc617902b5a2debb208be722d',1,'morph::bridge::ActionExecuteRegistry']]],
-  ['executor_20drops_20the_20callback_20but_20not_20the_20orphan_20log_39',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
-  ['executors_40',['Executors',['../index.html#executors',1,'']]],
-  ['exists_41',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
-  ['expired_42',['Expired',['../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8',1,'morph::session']]],
-  ['expired_43',['expired',['../de/d0d/classmorph_1_1async_1_1CallbackToken.html#a474ac1ae42d4788f6e027667bdcb00b3',1,'morph::async::CallbackToken']]],
-  ['expiresatms_44',['expiresAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ac236bda69845ab2d93db16f42e8557c1',1,'morph::session::SessionToken']]],
-  ['explicitfieldkey_45',['explicitFieldKey',['../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec',1,'morph::forms::i18n']]]
+  ['executewhenbound_37',['executeWhenBound',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ab9a09b5a5253026d3574cc4a9ffb95ff',1,'morph::bridge::BridgeHandler']]],
+  ['execution_20history_38',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['executor_39',['Executor',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a053dc5bfc617902b5a2debb208be722d',1,'morph::bridge::ActionExecuteRegistry']]],
+  ['executor_20drops_20the_20callback_20but_20not_20the_20orphan_20log_40',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
+  ['executors_41',['Executors',['../index.html#executors',1,'']]],
+  ['exists_42',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
+  ['expired_43',['Expired',['../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8',1,'morph::session']]],
+  ['expired_44',['expired',['../de/d0d/classmorph_1_1async_1_1CallbackToken.html#a474ac1ae42d4788f6e027667bdcb00b3',1,'morph::async::CallbackToken']]],
+  ['expiresatms_45',['expiresAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ac236bda69845ab2d93db16f42e8557c1',1,'morph::session::SessionToken']]],
+  ['explicitfieldkey_46',['explicitFieldKey',['../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec',1,'morph::forms::i18n']]]
 ];
