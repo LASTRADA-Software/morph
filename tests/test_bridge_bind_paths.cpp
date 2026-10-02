@@ -147,10 +147,10 @@ public:
     /// Settles the oldest held bind with its instance.
     void resolveBind() { resolveFirst(*_binds); }
     /// Settles the oldest held bind with a failure.
-    void rejectBind(std::string what = "bind refused") {
+    void rejectBind(const std::string& what = "bind refused") {
         auto held = std::move(_binds->front());
         _binds->erase(_binds->begin());
-        held.promise.reject(std::make_exception_ptr(std::runtime_error{std::move(what)}));
+        held.promise.reject(std::make_exception_ptr(std::runtime_error{what}));
     }
     /// Settles the oldest held promote with its instance.
     void resolvePromote() {
@@ -277,7 +277,7 @@ TEST_CASE("Bridge::switchBackend skips a binding whose handler is already gone",
         auto dropped = rig.bridge->registerHandler<BbpModel>();
         REQUIRE_FALSE(Bridge::isBound(dropped));
     }
-    BridgeHandler<BbpModel> handler{*rig.bridge, &rig.owner};
+    BridgeHandler<BbpModel> const handler{*rig.bridge, &rig.owner};
 
     auto next = std::make_unique<GateBackend>(rig.pool);
     next->bindMode = Reply::Inline;
@@ -288,10 +288,10 @@ TEST_CASE("Bridge::switchBackend skips a binding whose handler is already gone",
 TEST_CASE("Bridge::switchBackend rolls back an in-flight bind that settles after the failure",
           "[bridge][bind][switch]") {
     Rig rig;
-    BridgeHandler<BbpModel> first{*rig.bridge, &rig.owner};
-    BridgeHandler<BbpModel> second{*rig.bridge, &rig.owner};
+    BridgeHandler<BbpModel> const first{*rig.bridge, &rig.owner};
+    BridgeHandler<BbpModel> const second{*rig.bridge, &rig.owner};
     rig.gate->bindMode = Reply::Inline;
-    BridgeHandler<BbpModel> bound{*rig.bridge, &rig.owner};
+    BridgeHandler<BbpModel> const bound{*rig.bridge, &rig.owner};
     REQUIRE(bound.isBound());
 
     // The new backend holds the first bind's reply and refuses the second
@@ -317,7 +317,7 @@ TEST_CASE("Bridge::switchBackend rolls back an in-flight bind that settles after
 
 // ── The bridge's destruction ─────────────────────────────────────────────────
 
-TEST_CASE("~Bridge rejects a call still waiting for its bind", "[bridge][bind][teardown]") {
+TEST_CASE("Bridge destruction rejects a call still waiting for its bind", "[bridge][bind][teardown]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor owner;
     auto backend = std::make_unique<GateBackend>(pool);
@@ -381,7 +381,7 @@ TEST_CASE("A bind reply from a backend the bridge has switched away from release
     auto old = std::make_shared<GateBackend>(pool);
     Bridge bridge{std::make_unique<GateBackend>(pool), owner};
     bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(old));
-    BridgeHandler<BbpModel> handler{bridge, &owner};
+    BridgeHandler<BbpModel> const handler{bridge, &owner};
     REQUIRE(old->heldBinds() == 1);
 
     auto next = std::make_unique<GateBackend>(pool);
@@ -675,7 +675,7 @@ TEST_CASE("A bind reply from a backend destroyed by a switch binds nothing and r
     auto first = std::make_unique<GateBackend>(pool);
     auto stash = first->bindStash();
     Bridge bridge{std::move(first), owner};
-    BridgeHandler<BbpModel> handler{bridge, &owner};
+    BridgeHandler<BbpModel> const handler{bridge, &owner};
     REQUIRE(stash->size() == 1);
 
     auto next = std::make_unique<GateBackend>(pool);
@@ -694,8 +694,8 @@ TEST_CASE("A rolled-back switch's held bind reply, landing after the backend is 
     morph::exec::MainThreadExecutor owner;
     Bridge bridge{std::make_unique<GateBackend>(pool), owner};
     bridge.switchBackend(std::make_unique<GateBackend>(pool));
-    BridgeHandler<BbpModel> first{bridge, &owner};
-    BridgeHandler<BbpModel> second{bridge, &owner};
+    BridgeHandler<BbpModel> const first{bridge, &owner};
+    BridgeHandler<BbpModel> const second{bridge, &owner};
 
     struct HoldThenRefuse : GateBackend {
         using GateBackend::GateBackend;
@@ -741,7 +741,7 @@ TEST_CASE("A superseded bind that replies with no instance releases nothing", "[
     auto old = std::make_shared<GateBackend>(pool);
     Bridge bridge{std::make_unique<GateBackend>(pool), owner};
     bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(old));
-    BridgeHandler<BbpModel> handler{bridge, &owner};
+    BridgeHandler<BbpModel> const handler{bridge, &owner};
     REQUIRE(old->heldBinds() == 1);
 
     auto next = std::make_unique<GateBackend>(pool);

@@ -63,7 +63,7 @@ TEST_CASE("Completion: a gated handler on an empty completion does nothing", "[c
 
 TEST_CASE("CompletionState::linkStop declines when it has nothing to link", "[completion][token]") {
     morph::exec::MainThreadExecutor owner;
-    ::core::async::StopSource scope;
+    ::core::async::StopSource const scope;
 
     SECTION("no executor to deliver on") {
         auto state = stoppableState(nullptr);
@@ -91,6 +91,7 @@ TEST_CASE("CompletionState::linkStop declines when it has nothing to link", "[co
 TEST_CASE("CompletionState: a scope's stop reaching a call whose stop source is gone stops nothing",
           "[completion][token]") {
     morph::exec::MainThreadExecutor owner;
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is a non-const member.
     ::core::async::StopSource scope;
     auto state = stoppableState(&owner);
     state->linkStop(scope.get_token());
