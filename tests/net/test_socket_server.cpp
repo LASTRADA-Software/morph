@@ -865,8 +865,8 @@ TEST_CASE("SocketServer: a reply written after the peer reset retires the connec
     // must retire the connection and leave the server serving other clients.
     morph::testing::StepExecutor pool;
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    morph::net::SocketServer wsServer{*server, 0};
-    REQUIRE(wsServer.listen());
+    auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
 
     // Opening and closing a connection post to `pool` too (the server strand
     // runs there), so a pending task does not say which request it carries;
@@ -881,7 +881,7 @@ TEST_CASE("SocketServer: a reply written after the peer reset retires the connec
 
     constexpr int kAttempts = 10;
     for (int i = 0; i < kAttempts; ++i) {
-        auto client = std::make_unique<RawWsClient>(wsServer.port());
+        auto client = std::make_unique<RawWsClient>(wsServer->port());
         client->send(morph::wire::makeRegister("NetEchoModel"));
         auto reg = receiveRunning(*client);
         REQUIRE(reg.kind == "ok");
@@ -912,10 +912,18 @@ TEST_CASE("SocketServer: a reply written after the peer reset retires the connec
     // The server must still be usable afterward: no RST'd peer may wedge the
     // accept flow or any other connection. `pool` is a StepExecutor, so this
     // reply needs pumping too, exactly like the registers above.
-    RawWsClient probe{wsServer.port()};
-    probe.send(morph::wire::makeRegister("NetEchoModel"));
-    auto probeReg = receiveRunning(probe);
-    REQUIRE(probeReg.kind == "ok");
+    {
+        RawWsClient probe{wsServer->port()};
+        probe.send(morph::wire::makeRegister("NetEchoModel"));
+        auto probeReg = receiveRunning(probe);
+        REQUIRE(probeReg.kind == "ok");
+    }
+
+    // Closing the probe and stopping the server post their teardown to `pool`,
+    // which holds it until run. Run it, or the work queued on the server's
+    // strand keeps the server alive and the two hold each other.
+    wsServer.reset();
+    pool.runAll();
 }
 
 TEST_CASE("SocketServer: a malformed handshake is caught, the accept flow keeps serving other clients",
