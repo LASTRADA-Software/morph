@@ -277,10 +277,10 @@ struct ResumeObserved {
 /// Awaits @p completion, then records whether it is running inside a task of
 /// @p owner.
 core::async::Task<void> awaitThenObserve(Completion<int> completion, std::shared_ptr<ResumeObserved> seen,
-                                         morph::exec::IExecutor& owner) {
+                                         morph::exec::IExecutor* owner) {
     seen->reachedAwait = true;
     seen->value = co_await std::move(completion);
-    seen->ranOnOwner = morph::exec::runningOn(owner);
+    seen->ranOnOwner = morph::exec::runningOn(*owner);
     seen->resumedOn = std::this_thread::get_id();
     seen->finished = true;
 }
@@ -297,7 +297,7 @@ TEST_CASE("a spawned coroutine that awaits a Completion of another executor resu
     auto [completion, promise] = Completion<int>::makeSettleable(&callbacks);
     auto seen = std::make_shared<ResumeObserved>();
 
-    morph::async::spawn(owner, awaitThenObserve(std::move(completion), seen, owner));
+    morph::async::spawn(owner, awaitThenObserve(std::move(completion), seen, &owner));
     REQUIRE(pumpUntil(owner, [&] { return seen->reachedAwait.load(); }));
     promise.resolve(11);
 
@@ -320,7 +320,7 @@ TEST_CASE("a coroutine started inside an executor's task resumes there, not on t
     // Created suspended, then started by hand inside a task of `owner`, so the
     // only thing that says where it runs is the scope `owner` states around
     // that task.
-    auto task = awaitThenObserve(std::move(completion), seen, owner);
+    auto task = awaitThenObserve(std::move(completion), seen, &owner);
     owner.post([&] { task.handle().resume(); });
     REQUIRE(owner.runOnce());
     REQUIRE(seen->reachedAwait.load());

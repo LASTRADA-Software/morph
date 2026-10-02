@@ -235,7 +235,7 @@ private:
 
         /// @brief The whole `onOnline()` sequence. On the offline strand.
         /// @return How it ended.
-        ReconnectOutcome runOnline() {
+        [[nodiscard]] ReconnectOutcome runOnline() const {
             for (int attempt = 1; attempt <= cfg.maxAttempts; ++attempt) {
                 if (!callShouldContinue()) {
                     return emitOutcome(ReconnectOutcome::Aborted);

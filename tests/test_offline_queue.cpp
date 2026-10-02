@@ -37,7 +37,7 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: drain returns items in enqueue 
 }
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: drain on empty queue returns empty vector", "[queue]") {
-    morph::offline::InMemoryOfflineQueue queue{morph::testing::storageOwner()};
+    morph::offline::InMemoryOfflineQueue const queue{morph::testing::storageOwner()};
     REQUIRE(queue.drain().empty());
 }
 

@@ -28,6 +28,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -52,8 +53,10 @@ template <typename T>
 T answeredNow(morph::async::Completion<T> completion) {
     std::optional<T> answer;
     completion.then([&answer](const T& value) { answer = value; });
-    REQUIRE(answer.has_value());
-    return answer.value();
+    if (!answer) {
+        throw std::logic_error{"the completion did not settle on this thread"};
+    }
+    return *answer;
 }
 
 }  // namespace

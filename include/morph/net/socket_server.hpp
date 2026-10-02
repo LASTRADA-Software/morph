@@ -339,7 +339,7 @@ private:
             Failed,  ///< A protocol error, or the connection is done.
         };
 
-        Drain drainFrames(std::shared_ptr<Client> const& client, ::morph::net::detail::WsFrameReader& reader) {
+        Drain drainFrames(std::shared_ptr<Client> const& client, ::morph::net::detail::WsFrameReader& reader) const {
             using ::morph::net::detail::WsOpcode;
             for (;;) {
                 std::optional<::morph::net::detail::WsFrame> frame;
@@ -373,8 +373,8 @@ private:
         /// Hands one request to the server. Its reply comes back on whichever
         /// thread produces it — the server's pool, usually — and is posted
         /// here, to be queued on this connection if it is still open.
-        void dispatch(std::shared_ptr<Client> const& client, std::string const& payload) {
-            std::weak_ptr<Client> weak = client;
+        void dispatch(std::shared_ptr<Client> const& client, std::string const& payload) const {
+            std::weak_ptr<Client> const weak = client;
             server->handle(
                 payload,
                 [loopHandle = loop.weak(), weak](const std::string& reply) {

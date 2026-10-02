@@ -92,6 +92,9 @@ inline SpawnSlot& spawnSlot() {
 
 int PingModel::execute(const Spawn& action) {
     auto& slot = spawnSlot();
+    if (slot.bridge == nullptr) {
+        throw std::logic_error{"Spawn executed before the test set spawnSlot().bridge"};
+    }
     slot.handler = std::make_unique<morph::bridge::BridgeHandler<SubModel>>(*slot.bridge, slot.gui);
     slot.constructed.store(true);
     return action.value;
@@ -112,7 +115,6 @@ BRIDGE_REGISTER_ACTION(owner_test::FormModel, owner_test::FormStep, "Owner_FormS
 namespace {
 
 using morph::backend::detail::BindRequest;
-using morph::backend::detail::IBackend;
 using morph::exec::detail::ModelId;
 using morph::testing::OwnerProbeRecorder;
 using morph::testing::pumpOwnerUntil;
@@ -141,7 +143,7 @@ public:
     }
 
     /// Settles every held bind from a thread that is not the owner.
-    void settleFromAnotherThread(std::exception_ptr failure = nullptr) {
+    void settleFromAnotherThread(const std::exception_ptr& failure = nullptr) {
         auto held = std::exchange(_held, {});
         std::thread settler{[&held, failure] {
             for (auto& entry : held) {
@@ -155,7 +157,9 @@ public:
         settler.join();
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): a test double the test reads directly.
     int binds = 0;
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): a test double the test reads directly.
     std::vector<std::uint64_t> released;
 
 private:

@@ -815,7 +815,7 @@ TEST_CASE("requestStop on the scope a Task handler's continuation is gated by st
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
-    morph::async::CallbackScope scope;
+    morph::async::CallbackScope const scope;
     bool delivered = false;
     handler.execute(CoroSleep{.ms = 60'000}).then(scope.token(), [&](const int&) { delivered = true; });
     REQUIRE(pumpUntil(exec, [&] {

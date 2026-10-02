@@ -216,7 +216,7 @@ public:
     /// @return The new row's id (`SELECT last_insert_rowid()`).
     /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.
     [[nodiscard]] uint64_t enqueue(std::string payload) override {
-        return _owned.read("SqliteOfflineQueue::enqueue").enqueue(std::move(payload));
+        return _owned.read("SqliteOfflineQueue::enqueue").enqueue(payload);
     }
 
     /// @brief Inserts @p payload carrying @p idempotencyKey in one write. On
@@ -233,7 +233,7 @@ public:
     ///         a documented, accepted conservatism rather than an extra
     ///         round trip to special-case it.
     [[nodiscard]] uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
-        return _owned.read("SqliteOfflineQueue::enqueue").enqueue(std::move(payload), std::move(idempotencyKey));
+        return _owned.read("SqliteOfflineQueue::enqueue").enqueue(payload, idempotencyKey);
     }
 
     /// @brief Returns all pending rows in ascending-id (enqueue) order. On the owner.
@@ -281,7 +281,7 @@ protected:
     void setIdempotencyKey(uint64_t itemId, std::string idempotencyKey) override {
         _owned.apply("SqliteOfflineQueue::setIdempotencyKey",
                      [itemId, idempotencyKey = std::move(idempotencyKey)](State& state) mutable {
-                         state.setIdempotencyKey(itemId, std::move(idempotencyKey));
+                         state.setIdempotencyKey(itemId, idempotencyKey);
                      });
     }
 
@@ -293,11 +293,9 @@ protected:
     [[nodiscard]] ::morph::async::Completion<uint64_t> askEnqueue(::morph::exec::IExecutor& replyExec,
                                                                   std::string payload,
                                                                   std::string idempotencyKey) override {
-        return _owned.ask<uint64_t>(
-            "SqliteOfflineQueue::enqueue", replyExec,
-            [payload = std::move(payload), idempotencyKey = std::move(idempotencyKey)](State& state) mutable {
-                return state.enqueue(std::move(payload), std::move(idempotencyKey));
-            });
+        return _owned.ask<uint64_t>("SqliteOfflineQueue::enqueue", replyExec,
+                                    [payload = std::move(payload), idempotencyKey = std::move(idempotencyKey)](
+                                        State& state) mutable { return state.enqueue(payload, idempotencyKey); });
     }
 
     /// @brief Reads every pending row on the owner, answered on @p replyExec.
@@ -340,8 +338,8 @@ private:
               _busyTimeout{busyTimeout},
               _wallClock{wallClock} {
             if (sqlite3_open(_path.string().c_str(), &_db) != SQLITE_OK) {
-                std::string msg = "SqliteOfflineQueue: failed to open " + _path.string() + ": " +
-                                  (_db != nullptr ? sqlite3_errmsg(_db) : "unknown error");
+                std::string const msg = "SqliteOfflineQueue: failed to open " + _path.string() + ": " +
+                                        (_db != nullptr ? sqlite3_errmsg(_db) : "unknown error");
                 if (_db != nullptr) {
                     sqlite3_close(_db);
                     _db = nullptr;
@@ -491,9 +489,9 @@ private:
         /// @param payload Serialised action to persist.
         /// @return The new row's id (`SELECT last_insert_rowid()`).
         /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.
-        [[nodiscard]] uint64_t enqueue(std::string payload) {
+        [[nodiscard]] uint64_t enqueue(const std::string& payload) const {
             checkCapacity();
-            detail::StatementGuard guard{
+            detail::StatementGuard const guard{
                 prepare("INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) "
                         "VALUES (?, '', 0, ?);")};
             bindText(guard.get(), 1, payload);
@@ -514,10 +512,10 @@ private:
         ///         rejected when the queue happens to be full at the same time —
         ///         a documented, accepted conservatism rather than an extra
         ///         round trip to special-case it.
-        [[nodiscard]] uint64_t enqueue(std::string payload, std::string idempotencyKey) {
+        [[nodiscard]] uint64_t enqueue(const std::string& payload, const std::string& idempotencyKey) const {
             if (idempotencyKey.empty()) {
                 checkCapacity();
-                detail::StatementGuard guard{
+                detail::StatementGuard const guard{
                     prepare("INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) "
                             "VALUES (?, '', 0, ?);")};
                 bindText(guard.get(), 1, payload);
@@ -527,7 +525,7 @@ private:
             }
 
             checkCapacity();
-            detail::StatementGuard insertGuard{
+            detail::StatementGuard const insertGuard{
                 prepare("INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) "
                         "VALUES (?, ?, 0, ?) "
                         "ON CONFLICT(idempotency_key) WHERE idempotency_key <> '' DO NOTHING;")};
@@ -540,7 +538,7 @@ private:
             }
 
             // Conflict fired (DO NOTHING) -- a row for this key already exists.
-            detail::StatementGuard lookupGuard{
+            detail::StatementGuard const lookupGuard{
                 prepare("SELECT id FROM morph_offline_queue WHERE idempotency_key = ?;")};
             bindText(lookupGuard.get(), 1, idempotencyKey);
             int const lookupResult = sqlite3_step(lookupGuard.get());
@@ -576,7 +574,7 @@ private:
         /// @brief Returns all pending rows in ascending-id (enqueue) order.
         /// @return Snapshot of all pending items; the table is unchanged.
         [[nodiscard]] std::vector<QueueItem> drain() const {
-            detail::StatementGuard guard{
+            detail::StatementGuard const guard{
                 prepare("SELECT id, payload, idempotency_key, attempts FROM morph_offline_queue ORDER BY id;")};
             std::vector<QueueItem> out;
             for (;;) {
@@ -606,8 +604,8 @@ private:
 
         /// @brief Deletes the row identified by @p itemId. No-op if absent.
         /// @param itemId Id returned by the corresponding `enqueue()` call.
-        void markDone(uint64_t itemId) {
-            detail::StatementGuard guard{prepare("DELETE FROM morph_offline_queue WHERE id = ?;")};
+        void markDone(uint64_t itemId) const {
+            detail::StatementGuard const guard{prepare("DELETE FROM morph_offline_queue WHERE id = ?;")};
             bindInt64(guard.get(), 1, static_cast<std::int64_t>(itemId));
             stepOrThrow(guard.get(), "markDone");
         }
@@ -615,7 +613,7 @@ private:
         /// @brief Persists an updated attempt count for @p itemId. No-op if absent.
         /// @param itemId   Id of the item whose count changed.
         /// @param attempts New cumulative attempt count to store.
-        void setAttempts(uint64_t itemId, Attempts attempts) {
+        void setAttempts(uint64_t itemId, Attempts attempts) const {
             detail::StatementGuard const guard{prepare("UPDATE morph_offline_queue SET attempts = ? WHERE id = ?;")};
             bindInt64(guard.get(), 1, static_cast<std::int64_t>(attempts.value()));
             bindInt64(guard.get(), 2, static_cast<std::int64_t>(itemId));
@@ -641,7 +639,7 @@ private:
         ///        override above stamps the key inline in the same INSERT instead.
         /// @param itemId         Id of the row to stamp.
         /// @param idempotencyKey Key to store.
-        void setIdempotencyKey(uint64_t itemId, std::string idempotencyKey) {
+        void setIdempotencyKey(uint64_t itemId, const std::string& idempotencyKey) const {
             // `WHERE NOT EXISTS (...)` rather than a bare UPDATE: the partial
             // unique index `ix_queue_idem` rejects stamping a non-empty key a
             // pending row already holds, and a bare UPDATE would turn that into a
@@ -664,10 +662,10 @@ private:
             stepOrThrow(guard.get(), "setIdempotencyKey");
         }
 
-        void execOrThrow(const char* sql) {
+        void execOrThrow(const char* sql) const {
             char* errMsg = nullptr;
             if (sqlite3_exec(_db, sql, nullptr, nullptr, &errMsg) != SQLITE_OK) {
-                std::string msg = errMsg != nullptr ? errMsg : "unknown sqlite error";
+                std::string const msg = errMsg != nullptr ? errMsg : "unknown sqlite error";
                 sqlite3_free(errMsg);
                 throw SqliteOfflineQueueError{"SqliteOfflineQueue: " + msg};
             }
@@ -732,6 +730,7 @@ private:
             // first NUL and silently truncate a NUL-bearing payload or
             // idempotency key on the way back out -- the read-side half of the
             // same truncation bindText() above prevents on the write side.
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): sqlite returns UTF-8 text as unsigned char; same object representation.
             const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, index));
             return text != nullptr ? std::string{text, static_cast<std::size_t>(sqlite3_column_bytes(stmt, index))}
                                    : std::string{};
@@ -744,7 +743,7 @@ private:
         /// @brief Returns the current row count. On the owner.
         /// @return `COUNT(*)` against `morph_offline_queue`.
         std::size_t countRows() const {
-            detail::StatementGuard guard{prepare("SELECT COUNT(*) FROM morph_offline_queue;")};
+            detail::StatementGuard const guard{prepare("SELECT COUNT(*) FROM morph_offline_queue;")};
             sqlite3_step(guard.get());
             return static_cast<std::size_t>(sqlite3_column_int64(guard.get(), 0));
         }
@@ -763,6 +762,7 @@ private:
             }
         }
 
+    private:
         std::filesystem::path _path;
         mutable sqlite3* _db = nullptr;
         std::optional<std::size_t> _maxDepth;

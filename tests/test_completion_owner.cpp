@@ -202,7 +202,7 @@ TEST_CASE("Completion: an error settled with nothing attached is logged as an or
     REQUIRE(logged.empty());
     drainCounting(owner);
     REQUIRE(logged.size() == 1);
-    REQUIRE(logged.front().find("nobody listens") != std::string::npos);
+    REQUIRE(logged.front().contains("nobody listens"));
 }
 
 namespace {
@@ -215,13 +215,13 @@ struct AwaitSeen {
 };
 
 core::async::Task<void> awaitOn(Completion<int> completion, std::shared_ptr<AwaitSeen> seen,
-                                morph::exec::MainThreadExecutor& awaiter) {
+                                morph::exec::MainThreadExecutor* awaiter) {
     try {
         seen->value = co_await std::move(completion);
     } catch (const std::exception& exc) {
         seen->error = exc.what();
     }
-    seen->resumedOnAwaiter = morph::exec::runningOn(awaiter);
+    seen->resumedOnAwaiter = morph::exec::runningOn(*awaiter);
     seen->finished = true;
 }
 
@@ -235,7 +235,7 @@ TEST_CASE("Completion: co_await from a coroutine on another executor posts its a
     morph::testing::OwnerProbeRecorder const recorder{owner.coreExecutor()};
     auto seen = std::make_shared<AwaitSeen>();
 
-    morph::async::spawn(awaiter, awaitOn(std::move(completion), seen, awaiter));
+    morph::async::spawn(awaiter, awaitOn(std::move(completion), seen, &awaiter));
     drainCounting(awaiter);  // runs to the co_await and suspends
     REQUIRE_FALSE(seen->finished.load());
 

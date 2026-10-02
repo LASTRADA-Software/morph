@@ -255,7 +255,7 @@ public:
     void post(std::function<void()> task) override {
         std::scoped_lock const lock{_mtx};
         if (_count == _slots.size()) {
-            std::fputs("PumpedCallbackExecutor: more tasks queued than it has slots\n", stderr);
+            static_cast<void>(std::fputs("PumpedCallbackExecutor: more tasks queued than it has slots\n", stderr));
             std::abort();
         }
         _slots.at((_head + _count) % _slots.size()) = std::move(task);

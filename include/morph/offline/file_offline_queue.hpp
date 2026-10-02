@@ -349,8 +349,8 @@ private:
         [[nodiscard]] std::vector<QueueItem> drain() const {
             std::vector<QueueItem> out;
             out.reserve(_items.size());
-            for (const auto& [id, item] : _items) {
-                out.push_back(item);
+            for (const auto& entry : _items) {
+                out.push_back(entry.second);
             }
             return out;
         }
@@ -497,8 +497,8 @@ private:
             if (!std::filesystem::exists(_path)) {
                 return;
             }
-            std::ifstream in{_path};
-            if (!in) {
+            std::ifstream input{_path};
+            if (!input) {
                 // The file exists (checked above) but cannot be read. Returning an
                 // empty `_items` here is not "an empty queue": the constructor calls
                 // compact() straight after load(), which would rewrite `_path` from
@@ -509,13 +509,13 @@ private:
             }
             std::vector<std::string> lines;
             std::string line;
-            while (std::getline(in, line)) {
+            while (std::getline(input, line)) {
                 if (!line.empty()) {
                     lines.push_back(line);
                 }
             }
             uint64_t highestId = 0;
-            if (in.bad()) {
+            if (input.bad()) {
                 // A read error mid-file, not end-of-file: `lines` is a prefix of the
                 // queue, and compact() would commit that prefix over the whole file.
                 throw std::runtime_error("FileOfflineQueue: read error on " + _path.string());
@@ -523,7 +523,7 @@ private:
             for (std::size_t i = 0; i < lines.size(); ++i) {
                 detail::FileQueueRecord record;
                 try {
-                    record = detail::fromJson(lines[i]);
+                    record = detail::fromJson(lines.at(i));
                 } catch (const std::exception& exc) {
                     if (i + 1 == lines.size()) {
                         ::morph::log::logWarn("FileOfflineQueue: skipping malformed trailing line in " +

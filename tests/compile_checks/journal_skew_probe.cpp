@@ -193,6 +193,7 @@ struct SkewFixture {
 
 #ifdef MORPH_SKEW_ROLE_OLD
 
+// NOLINTNEXTLINE(bugprone-exception-escape): a probe; an uncaught failure ends the process, which the harness reads as a failure.
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: journal_skew_old <directory>\n");
@@ -262,6 +263,7 @@ bool throwsMismatch(SkewFixture& fixture, const morph::journal::LogEntry& entry)
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): a probe; an uncaught failure ends the process, which the harness reads as a failure.
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: journal_skew_new <directory>\n");

@@ -1576,8 +1576,8 @@ private:
     /// @return A continuation this bind superseded, for the caller to reject
     ///         once its own state is consistent; usually empty.
     [[nodiscard]] Resume startBind(const std::shared_ptr<detail::HandlerBinding>& binding,
-                                   ::morph::backend::detail::BindRequest request, std::optional<std::string> identity,
-                                   Resume afterBind) {
+                                   ::morph::backend::detail::BindRequest request,
+                                   const std::optional<std::string>& identity, Resume afterBind) {
         auto superseded = std::exchange(binding->afterBind, std::move(afterBind));
         auto const generation = ++binding->bindGeneration;
         binding->bindInFlight = true;
@@ -1594,7 +1594,7 @@ private:
             applyBind(binding, backend, generation, settled->id, settled->failure, identity);
             return superseded;
         }
-        awaitBind(binding, backend, generation, std::move(completion), std::move(identity));
+        awaitBind(binding, backend, generation, std::move(completion), identity);
         return superseded;
     }
 

@@ -165,7 +165,9 @@ protected:
     /// @return The payload recorded with @p opId, or `std::nullopt`.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
     [[nodiscard]] virtual ::morph::async::Completion<std::optional<std::string>> askLookup(
-        ::morph::exec::IExecutor& replyExec, std::string scope, std::string opId) const {
+        ::morph::exec::IExecutor& replyExec,
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): the base only reads them; overrides take them by value and move them.
+        std::string scope, std::string opId) const {
         auto settleable = ::morph::async::Completion<std::optional<std::string>>::makeSettleable(&replyExec);
         try {
             settleable.second.resolve(doLookup(scope, opId));

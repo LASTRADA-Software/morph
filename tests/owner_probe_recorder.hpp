@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <atomic>
 #include <core/async/ExecutorContext.hpp>
 #include <core/async/IExecutor.hpp>
@@ -69,12 +70,7 @@ public:
         if (seen.empty()) {
             return false;
         }
-        for (auto const& one : seen) {
-            if (!one.onOwner || !one.expectedOwner) {
-                return false;
-            }
-        }
-        return true;
+        return std::ranges::all_of(seen, [](auto const& one) { return one.onOwner && one.expectedOwner; });
     }
 
 private:

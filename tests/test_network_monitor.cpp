@@ -265,7 +265,7 @@ TEST_CASE("morph::offline::NetworkMonitor: callbacks run on the IoLoop it was gi
     morph::exec::IoLoop loop;
     std::atomic<bool> offlineOnLoop{false};
     std::atomic<bool> fired{false};
-    morph::offline::NetworkMonitor mon{
+    morph::offline::NetworkMonitor const mon{
         loop, [] { return false; },
         [&] {
             offlineOnLoop = morph::exec::runningOn(static_cast<core::async::IExecutor const&>(loop.loop()));

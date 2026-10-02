@@ -35,8 +35,10 @@ struct RssAddAction {
 struct RssHoldAction {};
 
 /// Set while an `RssHoldAction` is running; cleared by the test.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): a flag shared between the test thread and the running action.
 inline std::atomic<bool> gRssHoldStarted{false};
 /// Lets a running `RssHoldAction` return.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): a flag shared between the test thread and the running action.
 inline std::atomic<bool> gRssHoldRelease{false};
 
 struct RssCounterModel {
@@ -45,7 +47,7 @@ struct RssCounterModel {
         value += action.by;
         return value;
     }
-    int execute(RssHoldAction /*action*/) {
+    [[nodiscard]] int execute(RssHoldAction /*action*/) const {
         gRssHoldStarted.store(true);
         (void)morph::testing::waitUntil([] { return gRssHoldRelease.load(); },
                                         morph::testing::WaitBudget{std::chrono::milliseconds{10000}});
@@ -106,6 +108,7 @@ morph::model::detail::ModelRegistryFactory& rssRegistry() {
     return registry;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the three are a model id, a call id and an increment.
 morph::wire::Envelope executeEnvelope(std::uint64_t modelId, std::uint64_t callId, int by) {
     morph::wire::Envelope env;
     env.kind = "execute";

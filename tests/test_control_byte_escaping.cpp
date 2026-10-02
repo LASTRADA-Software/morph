@@ -122,7 +122,7 @@ TEST_CASE("FileOfflineQueue: a control byte in payload survives being written an
 
     std::vector<morph::offline::QueueItem> items;
     {
-        morph::offline::FileOfflineQueue reopened{morph::testing::storageOwner(), path};
+        morph::offline::FileOfflineQueue const reopened{morph::testing::storageOwner(), path};
         items = reopened.drain();
     }  // close the file handle before removing -- required on Windows
     REQUIRE(items.size() == 2);

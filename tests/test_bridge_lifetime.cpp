@@ -346,6 +346,7 @@ TEST_CASE("Bridge: onResult does not run once the bridge is destroyed", "[bridge
     auto pending = backendPtr->state;
     REQUIRE(pending);
 
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the test controls exactly when ~Bridge runs.
     delete bridge;  // ~Bridge runs here; `bridge` is now a dangling pointer.
     bridge = nullptr;
 

@@ -59,7 +59,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: items survive destroying and reop
         queue.setAttempts(id2, 2);
     }
     {
-        morph::offline::SqliteOfflineQueue queue{morph::testing::storageOwner(), dbPath};
+        morph::offline::SqliteOfflineQueue const queue{morph::testing::storageOwner(), dbPath};
         auto items = queue.drain();
         REQUIRE(items.size() == 2);
         REQUIRE(items[0].id == id1);

@@ -39,7 +39,7 @@ TEST_CASE("morph::session::Principal::hasRole: true for a present role, false fo
 TEST_CASE("morph::bridge::Bridge::currentPrincipal: empty before any setPrincipal call", "[bridge][principal]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::testing::InlineExecutor bridgeOwner;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), bridgeOwner};
+    morph::bridge::Bridge const bridge{std::make_unique<morph::backend::LocalBackend>(pool), bridgeOwner};
 
     auto principal = bridge.currentPrincipal();
     REQUIRE(principal.id.empty());

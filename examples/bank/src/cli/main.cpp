@@ -182,6 +182,7 @@ void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor&
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an example CLI; an uncaught failure ends the process, which is the right outcome.
 int main() {
     const auto dbPath = std::filesystem::temp_directory_path() / "morph_bank_cli.db";
     std::error_code ec;

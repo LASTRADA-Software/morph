@@ -117,9 +117,11 @@ struct morph::model::ActionTraits<OrderQueryAction> {
 
 // queue must outlive the returned binding and all model instances created from it
 // (captured by reference in the factory lambda).
-static std::shared_ptr<morph::bridge::detail::HandlerBinding> makeOrderBinding(morph::offline::IOfflineQueue& queue,
-                                                                               OrderModel::ConflictChecker check,
-                                                                               OrderModel::ConflictResolver resolve) {
+namespace {
+
+std::shared_ptr<morph::bridge::detail::HandlerBinding> makeOrderBinding(morph::offline::IOfflineQueue& queue,
+                                                                        OrderModel::ConflictChecker check,
+                                                                        OrderModel::ConflictResolver resolve) {
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = std::string{morph::model::ModelTraits<OrderModel>::typeId()};
     binding->modelFactory = [&queue, check = std::move(check),
@@ -144,7 +146,7 @@ static std::shared_ptr<morph::bridge::detail::HandlerBinding> makeOrderBinding(m
 
 // The result is delivered on the bridge's owner, so this thread pumps it while
 // it waits.
-static int waitInt(morph::exec::MainThreadExecutor& owner, auto completion) {
+int waitInt(morph::exec::MainThreadExecutor& owner, auto completion) {
     std::atomic<int> result{-999};
     std::move(completion).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
     morph::testing::pumpOwnerUntil(owner, [&] { return result.load() != -999; });
@@ -166,19 +168,19 @@ static int waitInt(morph::exec::MainThreadExecutor& owner, auto completion) {
 // it is answered between the model's tasks, and it reaches zero once every
 // item has been handled and markDone'd. Bounded, not unbounded: returns false
 // (rather than hanging) if it never empties.
-static std::size_t pendingIn(morph::offline::InMemoryOfflineQueue& queue) {
+std::size_t pendingIn(morph::offline::InMemoryOfflineQueue& queue) {
     return morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return queue.size(reply); });
 }
 
-static bool waitForQueueDrained(morph::offline::InMemoryOfflineQueue& queue) {
+bool waitForQueueDrained(morph::offline::InMemoryOfflineQueue& queue) {
     return morph::testing::waitUntil([&] { return pendingIn(queue) == 0; });
 }
 
 // Builds the queue, and seeds it, inside a task of @p owner. A component built
 // on a plain thread takes that thread for its owner; here the owner is a pool
 // thread, so the test thread must not be mistaken for it.
-static std::unique_ptr<morph::offline::InMemoryOfflineQueue> makeQueueOn(morph::exec::ThreadPoolExecutor& owner,
-                                                                         std::vector<std::string> items = {}) {
+std::unique_ptr<morph::offline::InMemoryOfflineQueue> makeQueueOn(morph::exec::ThreadPoolExecutor& owner,
+                                                                  std::vector<std::string> items = {}) {
     std::unique_ptr<morph::offline::InMemoryOfflineQueue> queue;
     std::promise<void> built;
     owner.post([&] {
@@ -191,6 +193,8 @@ static std::unique_ptr<morph::offline::InMemoryOfflineQueue> makeQueueOn(morph::
     built.get_future().wait();
     return queue;
 }
+
+}  // namespace
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

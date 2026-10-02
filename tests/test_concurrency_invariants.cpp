@@ -161,7 +161,7 @@ TEST_CASE("morph::async::Completion: callback runs on cbExec thread, not the set
     cbPool.post([&] {
         comp.then([&](int) {
             {
-                std::scoped_lock lock{idMtx};
+                std::scoped_lock const lock{idMtx};
                 cbThread = std::this_thread::get_id();
             }
             fired.store(true);

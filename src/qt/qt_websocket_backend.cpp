@@ -330,8 +330,7 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     env.session = std::move(call.session);
 
     checkThread("QtWebSocketBackend::execute");
-    _pending[callId] =
-        PendingExecute{.state = compState, .deserialize = std::move(call.deserializeResult), .cbExec = cbExec};
+    _pending[callId] = PendingExecute{.state = compState, .deserialize = call.deserializeResult, .cbExec = cbExec};
 
     _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
     return comp;
@@ -409,7 +408,7 @@ bool QtWebSocketBackend::tryRouteExecuteReply(const ::morph::wire::Envelope& env
     if (iter == _pending.end()) {
         return false;
     }
-    PendingExecute execPending = std::move(iter->second);
+    PendingExecute const execPending = std::move(iter->second);
     _pending.erase(iter);
 
     // Triage shared with net::SocketBackend and SimulatedRemoteBackend
@@ -445,7 +444,7 @@ bool QtWebSocketBackend::tryRouteControlReply(const ::morph::wire::Envelope& env
     if (iter == _pendingControl.end()) {
         return false;
     }
-    PendingControl pending = std::move(iter->second);
+    PendingControl const pending = std::move(iter->second);
     // Erased before the settle: a continuation delivered inline may re-enter
     // this backend.
     _pendingControl.erase(iter);

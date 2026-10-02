@@ -169,7 +169,7 @@ TEST_CASE("morph::bridge::Bridge: constructed with a null backend and destroyed"
     // A null backend is tolerated at construction and at destruction.
     morph::testing::InlineExecutor bridgeOwner;
     REQUIRE_NOTHROW([&bridgeOwner] {
-        ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}, bridgeOwner};
+        ::morph::bridge::Bridge const bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}, bridgeOwner};
     }());
 }
 
@@ -466,7 +466,7 @@ TEST_CASE("morph::offline::ReconnectCoordinator: null Deps member is logged at c
     deps.replay = [] {};
     deps.shouldContinue = [] { return true; };
     // deps.sleep intentionally left null → assertDepsNonNull logs it (162 true arm).
-    ::morph::offline::ReconnectCoordinator coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
+    ::morph::offline::ReconnectCoordinator const coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
     (void)coordinator;
 
     REQUIRE(sawNull.load());

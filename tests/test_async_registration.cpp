@@ -627,7 +627,7 @@ TEST_CASE("Bridge::registerHandler: a failed bind rejects the held call with the
 TEST_CASE("Bridge::registerHandler: a backend that settles before returning binds at once", "[bridge][registration]") {
     Owner owner;
     morph::bridge::Bridge bridge{std::make_unique<InlineCompletingBackend>(), owner};
-    morph::bridge::BridgeHandler<ARModel> handler{bridge, &owner};
+    morph::bridge::BridgeHandler<ARModel> const handler{bridge, &owner};
     REQUIRE(handler.isBound());
 }
 
@@ -637,7 +637,7 @@ TEST_CASE("Bridge::registerHandler: a bind reply superseded by switchBackend() i
     auto shared = std::make_shared<AsyncRegisterBackend>();
     morph::exec::ThreadPoolExecutor pool{2};
     morph::bridge::Bridge bridge{std::make_unique<AsyncBackendShim>(shared), owner};
-    morph::bridge::BridgeHandler<ARModel> handler{bridge, &owner};
+    morph::bridge::BridgeHandler<ARModel> const handler{bridge, &owner};
     REQUIRE(shared->pendingCount() == 1);
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool));
@@ -675,7 +675,7 @@ TEST_CASE("Bridge::registerHandler: a reply for a handler destroyed mid-bind is 
     Outcome<int> held;
     {
         morph::bridge::BridgeHandler<ARModel> first{bridge, &owner};
-        morph::bridge::BridgeHandler<ARModel> second{bridge, &owner};
+        morph::bridge::BridgeHandler<ARModel> const second{bridge, &owner};
         track(held, first.execute(ARCount{.x = 3}));
     }
     // The held call is rejected as the handler goes.

@@ -1196,7 +1196,7 @@ TEST_CASE("Bridge: an in-flight shared attach does not block unrelated handler r
     REQUIRE(backendPtr->held.size() == 1);
     REQUIRE_FALSE(attacher.isBound());
 
-    BridgeHandler<ShiCounterModel> unrelated{bridge, &exec};
+    BridgeHandler<ShiCounterModel> const unrelated{bridge, &exec};
     REQUIRE(unrelated.isBound());
 
     backendPtr->held.front().resolve(morph::exec::detail::ModelId{99});

@@ -64,7 +64,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: items and attempts survive destroyi
         queue.setAttempts(id2, 3);
     }
     {
-        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
+        morph::offline::FileOfflineQueue const queue{morph::testing::storageOwner(), path};
         auto items = queue.drain();
         REQUIRE(items.size() == 2);
         REQUIRE(items[0].id == id1);
@@ -87,7 +87,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: markDone persists across a reopen",
         queue.markDone(id1);
     }
     {
-        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
+        morph::offline::FileOfflineQueue const queue{morph::testing::storageOwner(), path};
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
         REQUIRE(items[0].payload == "stays");
@@ -161,7 +161,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: tolerates a torn trailing line on o
         out << R"({"op":"put","id":2,"payload":"cut-o)";  // no closing brace/newline
     }
     {
-        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
+        morph::offline::FileOfflineQueue const queue{morph::testing::storageOwner(), path};
         auto items = queue.drain();
         REQUIRE(items.size() == 1);
         REQUIRE(items[0].id == id1);
@@ -208,8 +208,8 @@ TEST_CASE("morph::offline::FileOfflineQueue: ids are never reissued across repea
     REQUIRE(firstId != doneId);
 
     {
-        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(),
-                                               path};  // first restart: compacts away the tombstone
+        morph::offline::FileOfflineQueue const queue{morph::testing::storageOwner(),
+                                                     path};  // first restart: compacts away the tombstone
         REQUIRE(queue.drain().size() == 1);
     }
 
@@ -259,7 +259,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: surviving items are intact after re
         queue.markDone(gone);
     }
     for (int restart = 0; restart < 3; ++restart) {
-        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
+        morph::offline::FileOfflineQueue const queue{morph::testing::storageOwner(), path};
         auto const pending = queue.drain();
         REQUIRE(pending.size() == 2);
         CHECK(pending.at(0).payload == "keep-a");
@@ -716,7 +716,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: maxDepth() is std::nullopt when unb
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
-        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
+        morph::offline::FileOfflineQueue const queue{morph::testing::storageOwner(), path};
         REQUIRE(queue.maxDepth() == std::nullopt);
     }
     std::filesystem::remove(path);

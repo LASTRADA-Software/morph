@@ -121,6 +121,7 @@ struct ScratchFile {
     std::filesystem::path path;
     explicit ScratchFile(std::string const& name)
         : path{std::filesystem::temp_directory_path() /
+               // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the address only makes the name unique.
                ("morph_storage_owner_" + name + "_" + std::to_string(reinterpret_cast<std::uintptr_t>(this)))} {
         std::filesystem::remove(path);
     }
@@ -374,7 +375,7 @@ void checkQueueOwner(char const* name, Args&&... args) {
 
     // enqueue from the app: answered on the owner, the id delivered on the app.
     auto enqueued = deliverOn(owner, app, queue->enqueue(app, "payload", "key-1"));
-    CHECK(recorder.allPosted((prefix + "::enqueue").c_str()));
+    CHECK(recorder.allPosted(prefix + "::enqueue"));
     REQUIRE(enqueued.value.has_value());
     CHECK(enqueued.onReplyExec);
     uint64_t const itemId = *enqueued.value;
@@ -382,11 +383,11 @@ void checkQueueOwner(char const* name, Args&&... args) {
     // setAttempts from a pool thread: posted to the owner.
     onPool(pool, [&] { queue->setAttempts(itemId, 2); });
     owner.drain();
-    CHECK(recorder.allPosted((prefix + "::setAttempts").c_str()));
+    CHECK(recorder.allPosted(prefix + "::setAttempts"));
 
     // drain and size from the app: answered on the owner.
     auto drained = deliverOn(owner, app, queue->drain(app));
-    CHECK(recorder.allPosted((prefix + "::drain").c_str()));
+    CHECK(recorder.allPosted(prefix + "::drain"));
     REQUIRE(drained.value.has_value());
     REQUIRE(drained.value->size() == 1U);
     CHECK(drained.value->front().attempts == 2U);
@@ -395,10 +396,10 @@ void checkQueueOwner(char const* name, Args&&... args) {
     // markDone from a pool thread: posted to the owner.
     onPool(pool, [&] { queue->markDone(itemId); });
     owner.drain();
-    CHECK(recorder.allPosted((prefix + "::markDone").c_str()));
+    CHECK(recorder.allPosted(prefix + "::markDone"));
 
     auto counted = deliverOn(owner, app, queue->size(app));
-    CHECK(recorder.allPosted((prefix + "::size").c_str()));
+    CHECK(recorder.allPosted(prefix + "::size"));
     CHECK(counted.value == std::size_t{0});
     CHECK(counted.onReplyExec);
 }
@@ -426,7 +427,7 @@ TEST_CASE("InMemoryOfflineQueue: a full queue rejects an enqueue asked from the 
     auto two = queue->enqueue(app, "b");
     app.post([&] {
         one.then([&](uint64_t itemId) { first = itemId; });
-        two.onError([&](std::exception_ptr error) {
+        two.onError([&](const std::exception_ptr& error) {
             try {
                 std::rethrow_exception(error);
             } catch (const morph::offline::OfflineQueueFullError&) {
