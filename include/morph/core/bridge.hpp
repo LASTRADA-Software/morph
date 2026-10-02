@@ -1276,6 +1276,7 @@ public:
         note("Bridge::executeVia");
         auto sink = makeSink<Model, Action>(std::move(onResult));
         ::morph::async::Completion<R> typed{sink, cbExec};
+        armDeadline(sink);
         if (!binding->bindInFlight) {
             dispatchNow<Model, Action>(*binding, sink, std::move(action), cbExec, /*held=*/false);
             return typed;
@@ -1315,6 +1316,7 @@ public:
         note("Bridge::executeVia");
         auto sink = makeSink<Model, Action>({});
         ::morph::async::Completion<R> typed{sink, cbExec};
+        armDeadline(sink);
         auto held = std::make_shared<Action>(std::move(action));
         std::weak_ptr<detail::HandlerBinding> const weak{binding};
         whenIdle(*binding, [this, weak, sink, cbExec, held, key = std::move(key)](const std::exception_ptr& failure) {
@@ -1365,6 +1367,7 @@ public:
             }
         });
         ::morph::async::Completion<R> typed{sink, cbExec};
+        armDeadline(sink);
         auto held = std::make_shared<Action>(std::move(action));
         whenIdle(*binding, [this, weak, sink, cbExec, held](const std::exception_ptr& failure) {
             auto strong = weak.lock();
@@ -1724,8 +1727,9 @@ private:
         }
     }
 
-    /// @brief Builds the sink for one call: counts it pending, arms the
-    ///        deadline, and gives a Task-handler call its stop source.
+    /// @brief Builds the sink for one call: counts it pending and gives a
+    ///        Task-handler call its stop source. The deadline is armed
+    ///        separately, by `armDeadline`, once the call's `Completion` exists.
     /// @tparam Model  Model type.
     /// @tparam Action Action type.
     /// @param onResult Optional owner-side observer of the result.
@@ -1742,21 +1746,34 @@ private:
             stopSource = std::make_shared<::core::async::StopSource>();
             sink->stopSource = stopSource;
         }
-        if (_executeDeadline.count() > 0 && _timeoutScheduler) {
-            // The callback settles the *state*, not the sink: a deadline is not
-            // one of the two resolution paths and must not decrement
-            // `_pendingCalls`, which stays counted until the real reply lands
-            // (or `dispatchNow` abandons a call the deadline settled while it
-            // waited for its bind). It captures the sink alone, never `this`.
-            auto const handle = _timeoutScheduler->schedule(_executeDeadline, [sink, stopSource] {
-                sink->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
-                if (stopSource) {
-                    static_cast<void>(stopSource->request_stop());
-                }
-            });
-            sink->armDeadline(handle, _timeoutScheduler);
-        }
         return sink;
+    }
+
+    /// @brief Arms the execute deadline on @p sink, when one is set.
+    ///
+    /// Called after the call's `Completion` is constructed: that constructor
+    /// writes the state's callback executor, and a short deadline firing first
+    /// would read it from the timeout thread while it is still being written.
+    /// @tparam R Result type of the call.
+    /// @param sink The call's sink; its stop source, if any, is requested on
+    ///             expiry.
+    template <typename R>
+    void armDeadline(const std::shared_ptr<detail::BridgeSink<R>>& sink) {
+        if (_executeDeadline.count() <= 0 || !_timeoutScheduler) {
+            return;
+        }
+        // The callback settles the *state*, not the sink: a deadline is not
+        // one of the two resolution paths and must not decrement
+        // `_pendingCalls`, which stays counted until the real reply lands
+        // (or `dispatchNow` abandons a call the deadline settled while it
+        // waited for its bind). It captures the sink alone, never `this`.
+        auto const handle = _timeoutScheduler->schedule(_executeDeadline, [sink, stopSource = sink->stopSource] {
+            sink->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
+            if (stopSource) {
+                static_cast<void>(stopSource->request_stop());
+            }
+        });
+        sink->armDeadline(handle, _timeoutScheduler);
     }
 
     /// @brief Whether `Model`'s handler for `Action` returns a `Task`.
