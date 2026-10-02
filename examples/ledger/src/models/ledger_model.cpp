@@ -842,6 +842,10 @@ ListTransactionsResult LedgerModel::execute(const ListTransactions& action) {
     return result;
 }
 
+// One handler runs the whole transaction, its trigger cascade and the post-commit
+// journalling; the branching is the transaction's, and splitting it would scatter
+// one atomic unit across helpers.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
     try {
         const auto* ctx = morph::session::current();

@@ -31,11 +31,12 @@ class CapturedLog {
 public:
     CapturedLog()
         : _guard{
-              [this](LogLevel level, std::string_view message) { lines.emplace_back(level, std::string{message}); }} {}
+              [this](LogLevel level, std::string_view message) { _lines.emplace_back(level, std::string{message}); }} {}
 
-    std::vector<std::pair<LogLevel, std::string>> lines;
+    [[nodiscard]] const std::vector<std::pair<LogLevel, std::string>>& lines() const noexcept { return _lines; }
 
 private:
+    std::vector<std::pair<LogLevel, std::string>> _lines;
     morph::log::ScopedLoggerOverride _guard;
 };
 
@@ -106,7 +107,7 @@ TEST_CASE("runPostCommitTail runs a tail that succeeds and logs nothing", "[mode
     int runs = 0;
     runPostCommitTail([&] { ++runs; }, "Handler");
     CHECK(runs == 1);
-    CHECK(captured.lines.empty());
+    CHECK(captured.lines().empty());
 }
 
 TEST_CASE("runPostCommitTail contains a std::exception and logs it as an error", "[model][post_commit_tail]") {
@@ -119,9 +120,9 @@ TEST_CASE("runPostCommitTail contains a std::exception and logs it as an error",
         },
         "[demo::Model] Create"));
     CHECK(reached);
-    REQUIRE(captured.lines.size() == 1);
-    CHECK(captured.lines.front().first == LogLevel::error);
-    CHECK(captured.lines.front().second ==
+    REQUIRE(captured.lines().size() == 1);
+    CHECK(captured.lines().front().first == LogLevel::error);
+    CHECK(captured.lines().front().second ==
           "[demo::Model] Create committed, but its post-commit tail failed: disk full");
 }
 
@@ -135,9 +136,9 @@ TEST_CASE("runPostCommitTail contains an exception of any type", "[model][post_c
         },
         "Handler"));
     CHECK(reached);
-    REQUIRE(captured.lines.size() == 1);
-    CHECK(captured.lines.front().first == LogLevel::error);
-    CHECK(captured.lines.front().second == "Handler committed, but its post-commit tail threw a non-std::exception");
+    REQUIRE(captured.lines().size() == 1);
+    CHECK(captured.lines().front().first == LogLevel::error);
+    CHECK(captured.lines().front().second == "Handler committed, but its post-commit tail threw a non-std::exception");
 }
 
 // ── value-returning overload ──────────────────────────────────────────────────
@@ -147,7 +148,7 @@ TEST_CASE("runPostCommitTail returns the tail's result when the tail succeeds", 
     const std::string result =
         runPostCommitTail([] { return std::string{"refreshed"}; }, std::string{"committed"}, "Handler");
     CHECK(result == "refreshed");
-    CHECK(captured.lines.empty());
+    CHECK(captured.lines().empty());
 }
 
 TEST_CASE("runPostCommitTail returns the committed result when the tail throws", "[model][post_commit_tail]") {
@@ -161,8 +162,8 @@ TEST_CASE("runPostCommitTail returns the committed result when the tail throws",
         std::string{"committed"}, "Handler");
     CHECK(reached);
     CHECK(result == "committed");
-    REQUIRE(captured.lines.size() == 1);
-    CHECK(captured.lines.front().second == "Handler committed, but its post-commit tail failed: re-read failed");
+    REQUIRE(captured.lines().size() == 1);
+    CHECK(captured.lines().front().second == "Handler committed, but its post-commit tail failed: re-read failed");
 }
 
 TEST_CASE("runPostCommitTail converts the tail's result to the committed result's type", "[model][post_commit_tail]") {
@@ -199,8 +200,8 @@ TEST_CASE("A handler whose journal refuses after the commit reports the committe
     CHECK(log->appendAttempts == 1);  // the tail really did fail
     CHECK(returned == 3);
     CHECK(model.committed == 3);
-    REQUIRE(captured.lines.size() == 1);
-    CHECK(captured.lines.front().second ==
+    REQUIRE(captured.lines().size() == 1);
+    CHECK(captured.lines().front().second ==
           "CounterModel::increment committed, but its post-commit tail failed: journal sink unavailable");
 }
 
@@ -225,5 +226,5 @@ TEST_CASE("A value-returning handler falls back to its committed state when the 
     CHECK(log->appendAttempts == 1);
     CHECK(returned == 7);  // the state at commit, not a stale or partial refresh
     CHECK(model.committed == 7);
-    CHECK(captured.lines.size() == 1);
+    CHECK(captured.lines().size() == 1);
 }
