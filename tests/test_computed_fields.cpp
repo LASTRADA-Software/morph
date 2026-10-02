@@ -262,9 +262,9 @@ using SyncExecutor = morph::testing::InlineExecutor;
 
 TEST_CASE("BridgeHandler::execute recomputes total before dispatching", "[bridge][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<CFModel> handler{bridge, &owner};
 
     std::mutex totalMtx;
     std::atomic<bool> haveTotal{false};
@@ -283,15 +283,16 @@ TEST_CASE("BridgeHandler::execute recomputes total before dispatching", "[bridge
                                .price = Rational{Numerator{2}, Denominator{1}, dp2},
                                .total = {}});
 
-    REQUIRE(morph::testing::waitUntil([&] { return haveTotal.load(); }));
+    // The subscription fan-out runs on the owner, which this test pumps.
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return haveTotal.load(); }));
     std::scoped_lock lock{totalMtx};
     CHECK(lastTotal == Rational{6, dp2});
 }
 
 TEST_CASE("an action with a computed input missing fails its validator", "[bridge][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     std::atomic<bool> fired{false};
@@ -305,7 +306,7 @@ TEST_CASE("an action with a computed input missing fails its validator", "[bridg
     handler.execute(CFLineItem{.qty = Rational{Numerator{3}, Denominator{1}, dp2}, .price = {}, .total = {}})
         .onError([&](const std::exception_ptr&) { failed.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return failed.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return failed.load(); }));
     CHECK_FALSE(fired.load());
 }
 
@@ -361,8 +362,8 @@ TEST_CASE("ActionDispatcher's runner dispatches an action with no computedFields
 TEST_CASE("Bridge::executeVia's localOp overwrites a tampered computed field on LocalBackend",
           "[bridge][local][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     CFLineItem tampered{};
@@ -381,14 +382,14 @@ TEST_CASE("Bridge::executeVia's localOp overwrites a tampered computed field on 
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     CHECK(observedTotal == Rational{6, dp2});
 }
 
 TEST_CASE("BridgeHandler::executeJson overwrites a tampered computed field before dispatch", "[bridge][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     std::atomic<bool> done{false};
@@ -402,7 +403,7 @@ TEST_CASE("BridgeHandler::executeJson overwrites a tampered computed field befor
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     auto const result = morph::model::ActionTraits<CFLineItem>::resultFromJson(resultJson);
     REQUIRE(result.total.hasValue());
     CHECK(*result.total == Rational{6, dp2});
@@ -412,8 +413,8 @@ TEST_CASE("SimulatedRemoteBackend overwrites a tampered computed field before Mo
           "[bridge][remote][computed]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     CFLineItem tampered{};
@@ -432,7 +433,7 @@ TEST_CASE("SimulatedRemoteBackend overwrites a tampered computed field before Mo
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); },
-                                      morph::testing::WaitBudget{std::chrono::milliseconds{4000}}));
+    REQUIRE(morph::testing::pumpOwnerUntil(
+        cbExec, [&] { return done.load(); }, morph::testing::WaitBudget{std::chrono::milliseconds{4000}}));
     CHECK(observedTotal == Rational{20, dp2});
 }

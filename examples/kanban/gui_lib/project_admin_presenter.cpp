@@ -12,9 +12,7 @@ namespace kanban::gui {
 
 ProjectAdminPresenter::ProjectAdminPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
                                              QObject* parent)
-    : Presenter{parent}, _bridge{bridge}, _authHandler{bridge, executor}, _projectHandler{bridge, executor} {
-    trackBound(_projectHandler.whenBound());
-}
+    : Presenter{parent}, _bridge{bridge}, _authHandler{bridge, executor}, _projectHandler{bridge, executor} {}
 
 void ProjectAdminPresenter::reportError(const std::exception_ptr& err) {
     emit failed(::morph::ladder::gui::errorText(err));

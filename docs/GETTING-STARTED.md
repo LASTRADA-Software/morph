@@ -641,10 +641,10 @@ ctx.onReady([&] {
 
 `onReady` matters in remote mode: the socket connects asynchronously, so a
 remote context is not usable the line after its constructor returns. In local
-mode the callback fires synchronously. Related, and worth knowing: a handler's
-registration round trip settles asynchronously too, and
-`Bridge::whenBound()` is the seam that tells you when — pastebin's `Main.qml`
-gates its first `refresh()` on it rather than retrying on a timer.
+mode the callback fires synchronously. A handler's registration round trip
+settles asynchronously too, and nothing has to wait for it: a call made through
+a handler whose bind is still in flight is held and dispatched when the bind
+settles, so pastebin's `Main.qml` calls `refresh()` straight away.
 
 ## 10. Forms from the compiled action type
 
@@ -801,8 +801,8 @@ the same `ListPastes`, executed in-process.
 **What actually differs**, and is worth knowing before you rely on it:
 
 - **Registration timing.** Remote mode's registration is a round trip. Build
-  your handlers inside a readiness callback (section 9) and gate first fetches
-  on `Bridge::whenBound()`.
+  your handlers inside a readiness callback (section 9); a first fetch made
+  before the handler's bind settles is held until it does.
 - **Authorization exists only remotely.** `RemoteServer` runs every request
   through an `IAuthorizer`; `LocalBackend` does not authorize at all. The
   default authorizer allows everything (section 13).

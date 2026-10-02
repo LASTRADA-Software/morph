@@ -15,6 +15,7 @@ inventing another per-class liveness token.
 - [Shape: a member, not a base class](#shape-a-member-not-a-base-class)
 - [Two states, three verbs](#two-states-three-verbs)
 - [API surface](#api-surface)
+- [Stopping the calls a scope owns](#stopping-the-calls-a-scope-owns)
 - [Where the gate lives](#where-the-gate-lives)
 - [Thread safety and the boundary of the guarantee](#thread-safety-and-the-boundary-of-the-guarantee)
 - [Declared last, destroyed first](#declared-last-destroyed-first)
@@ -81,9 +82,9 @@ class BoardPresenter {
 
 | Verb | Effect on pending callbacks | Owner still exists? | Token reports |
 |---|---|---|---|
-| `requestStop()` | refused | yes | `CallbackStatus::Stopped` |
-| `reset()` | refused (permanently, for tokens issued before the call) | yes | `CallbackStatus::Expired` |
-| `~CallbackScope()` | refused | no | `CallbackStatus::Expired` |
+| `requestStop()` | refused; the calls the scope owns are asked to stop | yes | `CallbackStatus::Stopped` |
+| `reset()` | refused (permanently, for tokens issued before the call); the outgoing generation's calls are asked to stop | yes | `CallbackStatus::Expired` |
+| `~CallbackScope()` | refused; the calls the scope owns are asked to stop | no | `CallbackStatus::Expired` |
 
 **Liveness and stop are kept distinguishable.** They have the same effect on
 delivery, so a callback never needs to tell them apart — but a caller,
@@ -113,7 +114,7 @@ generation — `reset()` does not revive it.
 |---|---|
 | `CallbackScope()` | Constructs a live, un-stopped scope. |
 | `~CallbackScope()` | Stops the current generation, then releases it. Does not wait for in-flight callbacks. |
-| `requestStop() noexcept` | Marks this generation stopped. Idempotent. |
+| `requestStop() noexcept` | Marks this generation stopped and requests stop on every call it owns, on the calling thread, before returning. Idempotent. |
 | `reset()` | Retires every outstanding token and starts a fresh, live generation. |
 | `stopRequested() const noexcept` | Whether this generation is stopped. |
 | `token() const noexcept` | Issues a weak `CallbackToken` for the current generation. |
@@ -132,6 +133,7 @@ a move.
 | `status() const noexcept` | `Active` / `Stopped` / `Expired`. |
 | `active() const noexcept` | `status() == Active`. |
 | `expired() const noexcept` | Whether the issuing generation is gone; does not take a strong reference. |
+| `stopToken() const noexcept` | The generation's `core::async::StopToken`, requested when the scope is stopped, reset or destroyed; a token with no stop state once the generation is gone. What a `Completion` links its call's stop source to. |
 | `guard(F&& fn) const` | The gate itself — see below. |
 
 Copyable and weak: a token keeps nothing alive, including the scope.
@@ -170,6 +172,36 @@ unconditional; that has not been done.
 byte-for-byte the ungated `then(fn)` / `onError(fn)`, spelled so that a
 deliberately unmanaged callback says so and stays greppable in review. Both
 spellings remain available; the ungated forms are **not** deprecated.
+
+## Stopping the calls a scope owns
+
+A gated callback refuses delivery of a result nobody wants; the scope also stops
+the work producing it. Each generation carries a `core::async::StopSource`
+beside its stop flag. A call is **owned** by the scope once a callback is
+attached to its `Completion` through one of the scope's tokens
+(`then(token, fn)`, `onError(token, fn)`, or the `scope` forms) and the call
+carries a stop source of its own — today, a `Bridge` call whose handler returns
+a `core::async::Task` ([coroutines.md](coroutines.md)). Attaching links the
+scope's stop token to the call's source with a `StopCallback` that lives in the
+call's `CompletionState` until it settles; a settled call has nothing left to
+stop and drops the link.
+
+So `requestStop()`, `reset()` and destruction request stop on every unsettled
+call the scope owns, on the calling thread, before returning. A Task handler
+suspended in a stop-aware await (`morph::async::delay`, a core-cpp queue pop)
+resumes with `OperationCancelled` on its model's strand; its rejection is then
+refused by the stopped gate like any other callback. A scope already stopped
+when the callback is attached stops the call at once. The link holds the call's
+source weakly, so a link outliving its call keeps nothing alive.
+
+What is **not** stopped: a call whose handler is synchronous (it has no stop
+source; it runs to completion and its result is refused), a call on a remote
+backend (the wire carries no cancellation), and a call none of whose callbacks
+was attached through the scope.
+
+`tests/test_coroutine_model.cpp` pins it: a `Task` handler suspended on a
+60-second delay, whose `.then` was attached through a scope, records
+`sleep-cancelled` after `scope.requestStop()` and its continuation never runs.
 
 ## Where the gate lives
 
@@ -220,9 +252,8 @@ cannot. It is normative.
   `~BridgeHandler` is the call site where that applies. Where a call has to be
   gated, the caller
   needs something that *holds* the answer for the duration of the call — see
-  `bridge::detail::BridgeLifetime` in [bridge.md](bridge.md), which pairs a
-  `shared_mutex` with the flag so check-then-call is one step and the destructor
-  waits the caller out.
+  [bridge.md](bridge.md#thread-safety--one-owner), where the check and the
+  destructor run on one owner thread and so cannot interleave.
 - **The gate is monotone within a generation.** Once a token has been observed
   non-`Active`, it never returns to `Active`. Only `reset()` (which issues a
   *different* generation's tokens) produces a live token again.
@@ -250,8 +281,8 @@ re-documented in at least six places in this repository. It is now stated once,
 here and in the type's own doc comment.
 
 **Teardown that pumps.** Members are destroyed *after* the destructor body runs.
-A destructor body that can pump a nested event loop (a `sendSync`-style blocking
-call) can therefore still deliver into a half-destroyed receiver. The escape
+A destructor body that can pump a nested event loop (a blocking call that spins
+a `QEventLoop`) can therefore still deliver into a half-destroyed receiver. The escape
 hatch is explicit: such a destructor calls `requestStop()` as its first
 statement. `morph::flows::FlowSession` does exactly this.
 
@@ -282,18 +313,18 @@ statement. `morph::flows::FlowSession` does exactly this.
 
 ## Out of scope
 
-- **Cancelling the work.** This gates *delivery* of a result nobody wants; it
-  does nothing to the work still in flight producing it. Nothing in the
-  framework offers work-side cancellation; if it ever does, `requestStop()` is
-  its natural upstream trigger and the two should share one vocabulary.
+- **Cancelling work that has no stop source.** A synchronous handler, or a
+  call on a remote backend, runs to completion; only its delivery is refused.
+  See [Stopping the calls a scope owns](#stopping-the-calls-a-scope-owns).
 - **Interop with `std::stop_token`.** Constructing a `CallbackToken` from an
   externally supplied `std::stop_token` (so callbacks tie into an existing
   cancellation tree) is a deliberate future extension, not present today.
 - **Pruning dead subscription sinks.** A subscription whose scope has gone
   inactive stops being delivered to but is not removed from the subscriber list.
-- **Debug-build affinity assertions.** Asserting that scope operations happen on
-  the delivery executor's thread needs a cheap "am I on your thread?" query on
-  `IExecutor`, which does not exist yet.
+- **Debug-build affinity assertions.** `requestStop()`, `reset()` and `token()`
+  are not asserted to run on the delivery executor. The query exists
+  (`morph::exec::runningOn(executor)`), but a scope is not told which executor
+  delivers to it, so it has nothing to ask about.
 
 ## Cross-references
 

@@ -177,7 +177,7 @@ TEST_CASE(
     "stays pending, matching pre-existing behavior",
     "[core][bridge][client-deadline]") {
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<NeverRepliesBackend>()};
+    morph::bridge::Bridge bridge{std::make_unique<NeverRepliesBackend>(), exec};
     CHECK(bridge.executeDeadline() == std::chrono::milliseconds{0});
     morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &exec};
 
@@ -192,7 +192,7 @@ TEST_CASE(
 TEST_CASE("Bridge::setExecuteDeadline fires ClientTimeoutError when no reply arrives in time",
           "[core][bridge][client-deadline]") {
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<NeverRepliesBackend>()};
+    morph::bridge::Bridge bridge{std::make_unique<NeverRepliesBackend>(), exec};
     bridge.setExecuteDeadline(std::chrono::milliseconds{50});
     CHECK(bridge.executeDeadline() == std::chrono::milliseconds{50});
     morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &exec};
@@ -232,7 +232,7 @@ TEST_CASE("A deadline that is cancelled by a real, on-time reply does not also f
     // ("An on-time reply releases the deadline's scheduler entry") covers.
     morph::exec::ThreadPoolExecutor workerPool{2};
     morph::exec::MainThreadExecutor guiExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), guiExec};
     bridge.setExecuteDeadline(std::chrono::milliseconds{2000});  // generous; must not fire
     morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &guiExec};
 
@@ -260,7 +260,7 @@ TEST_CASE("An on-time reply releases the deadline's scheduler entry (and the sta
     // completed state it keeps alive -- would be pinned for the full deadline.
     morph::exec::ThreadPoolExecutor workerPool{2};
     morph::exec::MainThreadExecutor guiExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), guiExec};
     bridge.setExecuteDeadline(std::chrono::milliseconds{5000});             // long enough that only
     morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &guiExec};  // an actual cancel frees it
 
@@ -287,7 +287,7 @@ TEST_CASE("A real reply that arrives after the deadline already fired is silentl
     morph::exec::MainThreadExecutor exec;
     auto backendOwner = std::make_unique<LateReplyBackend>();
     auto* const backend = backendOwner.get();
-    morph::bridge::Bridge bridge{std::move(backendOwner)};
+    morph::bridge::Bridge bridge{std::move(backendOwner), exec};
     bridge.setExecuteDeadline(std::chrono::milliseconds{50});
     morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &exec};
 
@@ -334,7 +334,7 @@ TEST_CASE("Bridge::setExecuteDeadline: calling it again with a second positive v
     // still resolve normally through whatever scheduler ends up installed.
     morph::exec::ThreadPoolExecutor workerPool{2};
     morph::exec::MainThreadExecutor guiExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), guiExec};
     bridge.setExecuteDeadline(std::chrono::milliseconds{2000});
     REQUIRE_NOTHROW(bridge.setExecuteDeadline(std::chrono::milliseconds{3000}));
     CHECK(bridge.executeDeadline() == std::chrono::milliseconds{3000});
@@ -363,7 +363,7 @@ TEST_CASE(
     // all before the client-side deadline itself fires.
     morph::exec::ThreadPoolExecutor workerPool{2};
     morph::exec::MainThreadExecutor guiExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), guiExec};
     bridge.setExecuteDeadline(std::chrono::milliseconds{5000});  // generous; must not fire itself
     morph::bridge::BridgeHandler<DeadlineFailModel> handler{bridge, &guiExec};
 

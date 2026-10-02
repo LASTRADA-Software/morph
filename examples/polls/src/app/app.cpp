@@ -48,17 +48,22 @@ namespace {
 /// one shared poll, `examples/polls/README.md`) ever exercises at once.
 constexpr std::size_t kMaxLiveModels = 256;
 
+/// @brief The server's configuration: the live-model cap above.
+/// @return A `ServerConfig` whose `limits.maxLiveModels` is `kMaxLiveModels`.
+::morph::backend::ServerConfig serverConfig() {
+    ::morph::backend::ServerConfig config;
+    config.limits.maxLiveModels = kMaxLiveModels;
+    return config;
+}
+
 }  // namespace
 
 App::App(std::filesystem::path actionLogPath, std::size_t workers)
-    : _actionLog{std::make_shared<::morph::journal::FileActionLog>(std::move(actionLogPath))},
-      _pool{workers},
-      _server{std::make_shared<::morph::backend::RemoteServer>(_pool, std::make_shared<auth::PollsAuthorizer>())} {
+    : _pool{workers},
+      _actionLog{std::make_shared<::morph::journal::FileActionLog>(_journalOwner, std::move(actionLogPath))},
+      _server{std::make_shared<::morph::backend::RemoteServer>(_pool, std::make_shared<auth::PollsAuthorizer>(),
+                                                               serverConfig())} {
     ::morph::journal::setActionLog(_actionLog);
-
-    ::morph::backend::LimitPolicy limits;
-    limits.maxLiveModels = kMaxLiveModels;
-    _server->setLimitPolicy(limits);
 }
 
 App::~App() {

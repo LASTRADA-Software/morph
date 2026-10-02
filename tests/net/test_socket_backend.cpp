@@ -8,14 +8,18 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <future>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/io_loop.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
+#include <morph/core/timeout_scheduler.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/net/detail/tcp_socket.hpp>
@@ -32,6 +36,10 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include "../bind_support.hpp"
+#include "../owner_probe_recorder.hpp"
+#include "../test_support.hpp"
 
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based
 // get_name() needs these types to have external linkage (see
@@ -100,13 +108,21 @@ void spinUntil(const std::function<bool()>& done, int maxIterations = 200) {
     }
 }
 
+// The same wait, pumping a bridge's owner meanwhile: a `Bridge` delivers its
+// bind replies and its handlers' continuations there.
+void spinUntil(morph::exec::MainThreadExecutor& owner, const std::function<bool()>& done, int maxIterations = 200) {
+    for (int i = 0; i < maxIterations && !done(); ++i) {
+        owner.runFor(std::chrono::milliseconds{10});
+    }
+}
+
 // Polls until `backend` reports disconnected, or `maxIterations` * spinUntil's
 // own 10ms step elapses (200 -> ~2s; 25 -> ~250ms for the tighter
 // abortive-close races below, which already run inside their own 40-iteration
 // outer loop). waitForConnected()'s own wait_for predicate is already
 // satisfied while _connected is still true, so polling it with a zero timeout
 // alone would spin through every iteration in a few microseconds, never
-// giving the io thread a chance to notice the disconnect -- spinUntil's real
+// giving the I/O loop a chance to notice the disconnect -- spinUntil's real
 // wall-clock sleep between checks is what actually gives it that chance.
 bool waitForDisconnect(morph::net::SocketBackend& backend, int maxIterations = 200) {
     spinUntil([&] { return !backend.waitForConnected(std::chrono::milliseconds{0}); }, maxIterations);
@@ -166,7 +182,7 @@ public:
     // Accepts the pending connection and completes a real WS handshake.
     //
     // The client (a SocketBackend under test) is already connecting
-    // concurrently on its own io thread by the time this is called, so this
+    // concurrently on its I/O loop by the time this is called, so this
     // normally returns promptly -- but "normally" is not a bound. A blocking
     // `accept()` here parks the *main test thread* with nothing else in the
     // process able to satisfy it if the client never connects, which is how a
@@ -275,16 +291,15 @@ TEST_CASE("SocketBackend: action result delivered via then", "[net][socket_backe
     std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
-
-    morph::exec::ThreadPoolExecutor cbPool{1};
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
-    morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &cbPool};
+    morph::exec::MainThreadExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::move(backendPtr), bridgeOwner};
+    morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &bridgeOwner};
 
     std::atomic<int> result{-1};
     handler.execute(SbEchoAction{99}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
     });
 
-    spinUntil([&] { return result.load() != -1; });
+    spinUntil(bridgeOwner, [&] { return result.load() != -1; });
     REQUIRE(result.load() == 99);
 }
 
@@ -297,10 +312,9 @@ TEST_CASE("SocketBackend: exception delivered via onError", "[net][socket_backen
     std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
-
-    morph::exec::ThreadPoolExecutor cbPool{1};
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
-    morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &cbPool};
+    morph::exec::MainThreadExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::move(backendPtr), bridgeOwner};
+    morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &bridgeOwner};
 
     std::atomic<bool> errorFired{false};
     handler.execute(SbEchoFail{}).then([](int) {}).onError([&](const std::exception_ptr& exc) {
@@ -311,7 +325,7 @@ TEST_CASE("SocketBackend: exception delivered via onError", "[net][socket_backen
         }
     });
 
-    spinUntil([&] { return errorFired.load(); });
+    spinUntil(bridgeOwner, [&] { return errorFired.load(); });
     REQUIRE(errorFired.load());
 }
 
@@ -325,10 +339,9 @@ TEST_CASE("SocketBackend: many concurrent in-flight executes all resolve, matche
     std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
-
-    morph::exec::ThreadPoolExecutor cbPool{2};
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
-    morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &cbPool};
+    morph::exec::MainThreadExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::move(backendPtr), bridgeOwner};
+    morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &bridgeOwner};
 
     constexpr int numCalls = 40;
     std::atomic<int> resolved{0};
@@ -341,7 +354,7 @@ TEST_CASE("SocketBackend: many concurrent in-flight executes all resolve, matche
             })
             .onError([](const std::exception_ptr&) {});
     }
-    spinUntil([&] { return resolved.load() == numCalls; }, 500);
+    spinUntil(bridgeOwner, [&] { return resolved.load() == numCalls; }, 500);
     REQUIRE(resolved.load() == numCalls);
     REQUIRE(sum.load() == (numCalls * (numCalls + 1)) / 2);
 }
@@ -357,19 +370,18 @@ TEST_CASE("SocketBackend: two backends share one server with isolated model stat
     auto backendB = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendA->waitForConnected());
     REQUIRE(backendB->waitForConnected());
-
-    morph::exec::ThreadPoolExecutor cbPool{2};
-    morph::bridge::Bridge bridgeA{std::move(backendA)};
-    morph::bridge::Bridge bridgeB{std::move(backendB)};
-    morph::bridge::BridgeHandler<SbEchoModel> handlerA{bridgeA, &cbPool};
-    morph::bridge::BridgeHandler<SbEchoModel> handlerB{bridgeB, &cbPool};
+    morph::exec::MainThreadExecutor bridgeOwner;
+    morph::bridge::Bridge bridgeA{std::move(backendA), bridgeOwner};
+    morph::bridge::Bridge bridgeB{std::move(backendB), bridgeOwner};
+    morph::bridge::BridgeHandler<SbEchoModel> handlerA{bridgeA, &bridgeOwner};
+    morph::bridge::BridgeHandler<SbEchoModel> handlerB{bridgeB, &bridgeOwner};
 
     std::atomic<int> lastA{-1};
     std::atomic<int> lastB{-1};
     handlerA.execute(SbEchoAction{11}).then([&](int v) { lastA.store(v); }).onError([](const std::exception_ptr&) {});
     handlerB.execute(SbEchoAction{22}).then([&](int v) { lastB.store(v); }).onError([](const std::exception_ptr&) {});
 
-    spinUntil([&] { return lastA.load() != -1 && lastB.load() != -1; });
+    spinUntil(bridgeOwner, [&] { return lastA.load() != -1 && lastB.load() != -1; });
     REQUIRE(lastA.load() == 11);
     REQUIRE(lastB.load() == 22);
 }
@@ -386,26 +398,25 @@ TEST_CASE("SocketBackend: two clients sharing a key reach one instance over the 
     auto backendB = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendA->waitForConnected());
     REQUIRE(backendB->waitForConnected());
-
-    morph::exec::ThreadPoolExecutor cbPool{2};
-    morph::bridge::Bridge bridgeA{std::move(backendA)};
-    morph::bridge::Bridge bridgeB{std::move(backendB)};
-    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> fromA{bridgeA, &cbPool};
-    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> fromB{bridgeB, &cbPool};
+    morph::exec::MainThreadExecutor bridgeOwner;
+    morph::bridge::Bridge bridgeA{std::move(backendA), bridgeOwner};
+    morph::bridge::Bridge bridgeB{std::move(backendB), bridgeOwner};
+    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> fromA{bridgeA, &bridgeOwner};
+    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> fromB{bridgeB, &bridgeOwner};
 
     // Two genuinely separate clients, two sockets, one server-side directory.
     std::atomic<int> lastA{-1};
     fromA.execute(SbBump{.id = 77, .by = 10})
         .then([&](const SbTotal& res) { lastA.store(res.value); })
         .onError([](const std::exception_ptr&) {});
-    spinUntil([&] { return lastA.load() != -1; });
+    spinUntil(bridgeOwner, [&] { return lastA.load() != -1; });
     REQUIRE(lastA.load() == 10);
 
     std::atomic<int> lastB{-1};
     fromB.execute(SbBump{.id = 77, .by = 5})
         .then([&](const SbTotal& res) { lastB.store(res.value); })
         .onError([](const std::exception_ptr&) {});
-    spinUntil([&] { return lastB.load() != -1; });
+    spinUntil(bridgeOwner, [&] { return lastB.load() != -1; });
     // 15, not 5: the second client attached to the first client's instance.
     REQUIRE(lastB.load() == 15);
 
@@ -413,7 +424,7 @@ TEST_CASE("SocketBackend: two clients sharing a key reach one instance over the 
     fromB.instances()
         .then([&](const std::vector<std::int64_t>& keys) { keyCount.store(static_cast<int>(keys.size())); })
         .onError([](const std::exception_ptr&) {});
-    spinUntil([&] { return keyCount.load() != -1; });
+    spinUntil(bridgeOwner, [&] { return keyCount.load() != -1; });
     REQUIRE(keyCount.load() == 1);
 }
 
@@ -428,52 +439,41 @@ TEST_CASE("SocketBackend: a plain handler keeps its own instance over the wire",
     auto priv = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(shared->waitForConnected());
     REQUIRE(priv->waitForConnected());
-
-    morph::exec::ThreadPoolExecutor cbPool{2};
-    morph::bridge::Bridge sharedBridge{std::move(shared)};
-    morph::bridge::Bridge privBridge{std::move(priv)};
-    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> joined{sharedBridge, &cbPool};
-    morph::bridge::BridgeHandler<SbCounterModel> alone{privBridge, &cbPool};
+    morph::exec::MainThreadExecutor bridgeOwner;
+    morph::bridge::Bridge sharedBridge{std::move(shared), bridgeOwner};
+    morph::bridge::Bridge privBridge{std::move(priv), bridgeOwner};
+    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> joined{sharedBridge, &bridgeOwner};
+    morph::bridge::BridgeHandler<SbCounterModel> alone{privBridge, &bridgeOwner};
 
     std::atomic<int> lastShared{-1};
     joined.execute(SbBump{.id = 88, .by = 30})
         .then([&](const SbTotal& res) { lastShared.store(res.value); })
         .onError([](const std::exception_ptr&) {});
-    spinUntil([&] { return lastShared.load() != -1; });
+    spinUntil(bridgeOwner, [&] { return lastShared.load() != -1; });
     REQUIRE(lastShared.load() == 30);
 
     std::atomic<int> lastPriv{-1};
     alone.execute(SbBump{.id = 88, .by = 1})
         .then([&](const SbTotal& res) { lastPriv.store(res.value); })
         .onError([](const std::exception_ptr&) {});
-    spinUntil([&] { return lastPriv.load() != -1; });
+    spinUntil(bridgeOwner, [&] { return lastPriv.load() != -1; });
     // Opted out, so it registered its own instance and counts from zero.
     REQUIRE(lastPriv.load() == 1);
 }
 
-TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed by a parked sync call",
-          "[net][socket_backend]") {
-    // Regression coverage for reply cross-talk in this
-    // transport. `deregisterModel` sends fire-and-forget, but the server still
-    // answers it with an `ok` (remote.hpp's deregister branch), and that reply
-    // carries whatever `callId` the request had. With `callId == 0` -- the
-    // sentinel `dispatchIncomingEnvelope` reads as "hand this payload to
-    // whichever sendSync() is parked" -- the deregister's own stray `ok` was
-    // handed to the *next* synchronous control call instead of that call's
-    // real reply.
+TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not taken for a bind's", "[net][socket_backend]") {
+    // `deregisterModel` sends fire-and-forget, but the server still answers
+    // it with an `ok` carrying the request's `callId`. A bind that follows it
+    // must match its own reply, not the deregister's.
     //
-    // `attachModel`'s private-handoff branch is the shortest path to the
-    // collision: with an empty primary it deregisters `current` and then
-    // immediately registers a fresh instance over the same connection, so the
-    // register parks on `_syncCv` with the deregister's reply already in
-    // flight ahead of its own. An `ok` for a deregister carries `modelId ==
-    // 0`, so the register returned `ModelId{0}` -- while the server had in
-    // fact created the instance, which then leaked until the connection
-    // closed.
+    // A private re-point is the shortest path to the collision: with an
+    // empty primary it deregisters `current` and then immediately registers a
+    // fresh instance over the same connection, with the deregister's reply in
+    // flight ahead of the register's own.
     //
     // The assertion has to be that the returned id is a *real, different* id:
-    // "attachModel did not throw" holds with the bug present, and so does "an
-    // id came back" if 0 is allowed to count as one.
+    // "the bind did not throw" holds with the bug present, and so does "an id
+    // came back" if 0 is allowed to count as one.
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::net::SocketServer wsServer{*server, 0};
@@ -488,7 +488,7 @@ TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed b
 
     // Empty primary => the private-handoff branch: deregister(mid1) then
     // register, back to back on one connection.
-    auto const mid2 = backend.attachModel("SbEchoModel", nullptr, {}, mid1);
+    auto const mid2 = morph::testing::bindAttach(backend, "SbEchoModel", nullptr, "", mid1);
     REQUIRE(mid2.v != 0U);
     REQUIRE(mid2.v != mid1.v);
 
@@ -496,7 +496,7 @@ TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed b
     // is what proves the reply that woke the register was the register's own
     // rather than some other message's that happened to carry an id.
     // Hand-built ActionCall (rather than a BridgeHandler) so the backend's
-    // own attachModel result is the thing under test; the raw reply body is
+    // own bind result is the thing under test; the raw reply body is
     // kept as a string so this test needs no JSON dependency of its own.
     morph::backend::detail::ActionCall call{
         .modelTypeId = "SbEchoModel",
@@ -508,23 +508,23 @@ TEST_CASE("SocketBackend: a fire-and-forget deregister's reply is not consumed b
         .session = {},
     };
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     std::atomic<bool> settled{false};
     std::string echoed;
-    backend.execute(mid2, std::move(call), &cbPool)
+    backend.execute(mid2, std::move(call), &cbOwner)
         .then([&](const std::shared_ptr<void>& res) {
             echoed = *std::static_pointer_cast<std::string>(res);
             settled.store(true);
         })
         .onError([&](const std::exception_ptr&) { settled.store(true); });
-    spinUntil([&] { return settled.load(); });
+    spinUntil(cbOwner, [&] { return settled.load(); });
     REQUIRE(echoed == "7");
 }
 
 TEST_CASE("SocketBackend: registerModel on a never-connected socket throws, does not hang",
           "[net][socket_backend][disconnect]") {
     // Port 1 is reserved (root-only) on Linux/macOS and never listening — the
-    // socket never connects, so the io thread exits without retrying.
+    // socket never connects, so the I/O loop exits without retrying.
     morph::net::SocketBackend backend{"ws://127.0.0.1:1"};
     REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{200}));
 
@@ -590,7 +590,7 @@ TEST_CASE("SocketBackend: registerModel surfaces the server's error reply for an
                         Catch::Matchers::ContainsSubstring("register failed"));
 }
 
-TEST_CASE("SocketBackend: registerModelShared with an empty primary degrades to a private register",
+TEST_CASE("SocketBackend: a shared bind with an empty primary degrades to a private register",
           "[net][socket_backend]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -601,11 +601,11 @@ TEST_CASE("SocketBackend: registerModelShared with an empty primary degrades to 
     morph::net::SocketBackend backend{url};
     REQUIRE(backend.waitForConnected());
 
-    auto mid = backend.registerModelShared("SbEchoModel", nullptr, morph::backend::detail::InstanceIdentity{});
+    auto mid = morph::testing::bindShared(backend, "SbEchoModel", nullptr, "");
     REQUIRE(mid.v != 0U);
 }
 
-TEST_CASE("SocketBackend: registerModelShared with a primary reaches the server's register-or-attach directory",
+TEST_CASE("SocketBackend: a shared bind with a primary reaches the server's register-or-attach directory",
           "[net][socket_backend][shared-instances]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -618,18 +618,16 @@ TEST_CASE("SocketBackend: registerModelShared with a primary reaches the server'
     REQUIRE(backendA.waitForConnected());
     REQUIRE(backendB.waitForConnected());
 
-    auto midA = backendA.registerModelShared("SbCounterModel", nullptr,
-                                             morph::backend::detail::InstanceIdentity{.primary = "sb-shared-key-1"});
+    auto midA = morph::testing::bindShared(backendA, "SbCounterModel", nullptr, "sb-shared-key-1");
     REQUIRE(midA.v != 0U);
     // The second caller naming the same primary reaches the same instance
     // rather than creating a new one -- confirms this actually went through
     // the server's shared directory, not just that some instance came back.
-    auto midB = backendB.registerModelShared("SbCounterModel", nullptr,
-                                             morph::backend::detail::InstanceIdentity{.primary = "sb-shared-key-1"});
+    auto midB = morph::testing::bindShared(backendB, "SbCounterModel", nullptr, "sb-shared-key-1");
     REQUIRE(midB.v == midA.v);
 }
 
-TEST_CASE("SocketBackend: attachModel with an empty primary and current==0 registers a private instance",
+TEST_CASE("SocketBackend: a re-point with an empty primary and current==0 registers a private instance",
           "[net][socket_backend]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -641,25 +639,13 @@ TEST_CASE("SocketBackend: attachModel with an empty primary and current==0 regis
     REQUIRE(backend.waitForConnected());
 
     // current == 0: no prior instance to give up, so this is just a private
-    // register via registerModelWithContext.
-    auto mid = backend.attachModel("SbEchoModel", nullptr, morph::backend::detail::InstanceIdentity{},
-                                   morph::exec::detail::ModelId{0});
+    // register.
+    auto mid = morph::testing::bindAttach(backend, "SbEchoModel", nullptr, "", morph::exec::detail::ModelId{0});
     REQUIRE(mid.v != 0U);
 }
 
-TEST_CASE("SocketBackend: attachModel's empty-primary path deregisters the instance being given up",
+TEST_CASE("SocketBackend: a re-point to an empty primary deregisters the instance being given up",
           "[net][socket_backend]") {
-    // Also exercises (and documents) a known cross-talk hazard:
-    // deregisterModel()'s fire-and-forget server acknowledgment
-    // and a synchronous control call's reply both travel as callId == 0, so
-    // a synchronous call issued immediately after a deregister -- exactly
-    // what this branch does (`deregisterModel(current)` followed immediately
-    // by `registerModelWithContext(...)`) -- can observe the deregister's own
-    // stray "ok" instead of its own reply. That corrupts the *client-side
-    // return value* of the private re-register below on this machine most
-    // runs, which is why it is deliberately not asserted on here. What *is*
-    // asserted -- the server-side release of the instance being given up --
-    // is unaffected by which reply the client happened to decode.
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::net::SocketServer wsServer{*server, 0};
@@ -671,25 +657,14 @@ TEST_CASE("SocketBackend: attachModel's empty-primary path deregisters the insta
 
     // A *shared* instance, so its release is externally observable via
     // listInstances -- unlike a private one, which never enters the directory.
-    auto shared = backend.registerModelShared("SbCounterModel", nullptr,
-                                              morph::backend::detail::InstanceIdentity{.primary = "handoff-key"});
+    auto shared = morph::testing::bindShared(backend, "SbCounterModel", nullptr, "handoff-key");
     REQUIRE(shared.v != 0U);
 
-    // current != 0, empty primary: the private-handoff path -- give up the
-    // shared instance for a fresh private one. Must not throw or hang even
-    // though the reply it decodes may be the deregister's stray ack.
-    REQUIRE_NOTHROW(
-        backend.attachModel("SbCounterModel", nullptr, morph::backend::detail::InstanceIdentity{}, shared));
+    // current != 0, empty primary: give up the shared instance for a fresh
+    // private one.
+    REQUIRE_NOTHROW(morph::testing::bindAttach(backend, "SbCounterModel", nullptr, "", shared));
 
-    // Let the real (now-orphaned) register reply this call's sendSync did not
-    // consume finish draining before starting a fresh synchronous call below
-    // -- otherwise it could itself be misdelivered to that call by the same
-    // cross-talk hazard, corrupting *this* test's own verification step.
-    std::this_thread::sleep_for(std::chrono::milliseconds{100});
-
-    // The instance held under "handoff-key" must be released -- confirms
-    // deregisterModel(current) genuinely ran (the server-side effect, which
-    // the cross-talk hazard does not touch).
+    // The instance held under "handoff-key" must be released.
     bool released = false;
     for (int i = 0; i < 100 && !released; ++i) {
         auto keys = backend.listInstances("SbCounterModel");
@@ -734,9 +709,8 @@ TEST_CASE("SocketBackend: assignPrimary files a live instance a second client ca
     REQUIRE(midA.v != 0U);
     REQUIRE_NOTHROW(backendA.assignPrimary(midA, "SbCounterModel", "sb-assigned-key-1"));
 
-    auto midB = backendB.attachModel("SbCounterModel", nullptr,
-                                     morph::backend::detail::InstanceIdentity{.primary = "sb-assigned-key-1"},
-                                     morph::exec::detail::ModelId{0});
+    auto midB = morph::testing::bindAttach(backendB, "SbCounterModel", nullptr, "sb-assigned-key-1",
+                                           morph::exec::detail::ModelId{0});
     REQUIRE(midB.v == midA.v);
 }
 
@@ -781,7 +755,7 @@ TEST_CASE("SocketBackend: listInstances on a disconnected socket throws instead 
     REQUIRE_THROWS_WITH(backend.listInstances("SbEchoModel"), Catch::Matchers::ContainsSubstring("instances failed"));
 }
 
-TEST_CASE("SocketBackend: attachModel surfaces the server's error reply when registration is unauthorized",
+TEST_CASE("SocketBackend: a shared bind surfaces the server's error reply when registration is unauthorized",
           "[net][socket_backend]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto authz = std::make_shared<DenyAllAuthorizer>();
@@ -794,19 +768,17 @@ TEST_CASE("SocketBackend: attachModel surfaces the server's error reply when reg
     REQUIRE(backend.waitForConnected());
 
     REQUIRE_THROWS_WITH(
-        backend.attachModel("SbEchoModel", nullptr, morph::backend::detail::InstanceIdentity{.primary = "k1"},
-                            morph::exec::detail::ModelId{0}),
-        Catch::Matchers::ContainsSubstring("attach failed"));
+        morph::testing::bindAttach(backend, "SbEchoModel", nullptr, "k1", morph::exec::detail::ModelId{0}),
+        Catch::Matchers::ContainsSubstring("register failed"));
 }
 
-TEST_CASE("SocketBackend: attachModel on a disconnected socket throws instead of hanging",
+TEST_CASE("SocketBackend: a bind on a disconnected socket rejects instead of hanging",
           "[net][socket_backend][disconnect]") {
     morph::net::SocketBackend backend{"ws://127.0.0.1:1"};
     REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{200}));
-    REQUIRE_THROWS_WITH(
-        backend.attachModel("SbEchoModel", nullptr, morph::backend::detail::InstanceIdentity{.primary = "k1"},
-                            morph::exec::detail::ModelId{0}),
-        Catch::Matchers::ContainsSubstring("attach failed"));
+    REQUIRE_THROWS_AS(
+        morph::testing::bindAttach(backend, "SbEchoModel", nullptr, "k1", morph::exec::detail::ModelId{0}),
+        morph::backend::DisconnectedError);
 }
 
 TEST_CASE("SocketBackend: ~SocketBackend does not hang against a peer that stalls the handshake",
@@ -827,7 +799,7 @@ TEST_CASE("SocketBackend: ~SocketBackend does not hang against a peer that stall
 
     auto backend = std::make_unique<morph::net::SocketBackend>(
         "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg);
-    std::this_thread::sleep_for(std::chrono::milliseconds{100});  // let the io thread's connect() land
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});  // let the I/O loop's connect() land
 
     // Both the backend and the promise are *owned* by the thread rather than
     // captured by reference. The backend, because if the destructor never
@@ -865,8 +837,10 @@ TEST_CASE("morph::net::SocketBackend::notifyBackendChanged is a documented no-op
     REQUIRE_NOTHROW(backend.notifyBackendChanged());
 }
 
-TEST_CASE("SocketBackend: a second synchronous call while one is in flight throws the reentrant-use error",
-          "[net][socket_backend]") {
+TEST_CASE("SocketBackend: two synchronous calls in flight at once both get their own reply", "[net][socket_backend]") {
+    // Each synchronous verb is the posted request a bind makes, waited for on
+    // its caller's thread and matched by callId, so two callers never share
+    // one reply slot and neither is refused.
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto authz = std::make_shared<SlowAuthorizer>(std::chrono::milliseconds{150});
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, authz);
@@ -877,26 +851,25 @@ TEST_CASE("SocketBackend: a second synchronous call while one is in flight throw
     morph::net::SocketBackend backend{url};
     REQUIRE(backend.waitForConnected());
 
-    std::atomic<int> reentrantErrors{0};
-    std::atomic<int> succeeded{0};
-    auto attempt = [&] {
+    std::atomic<int> failed{0};
+    std::vector<std::uint64_t> ids(2, 0);
+    auto attempt = [&](std::size_t slot) {
         try {
-            (void)backend.registerModel("SbEchoModel", nullptr);
-            succeeded.fetch_add(1);
-        } catch (const std::exception& exc) {
-            if (std::string{exc.what()}.contains("reentrant")) {
-                reentrantErrors.fetch_add(1);
-            }
+            ids[slot] = backend.registerModel("SbEchoModel", nullptr).v;
+        } catch (const std::exception&) {
+            failed.fetch_add(1);
         }
     };
-    std::thread t1{attempt};
+    std::thread t1{attempt, 0};
     std::this_thread::sleep_for(std::chrono::milliseconds{20});
-    std::thread t2{attempt};
+    std::thread t2{attempt, 1};
     t1.join();
     t2.join();
 
-    REQUIRE(reentrantErrors.load() == 1);
-    REQUIRE(succeeded.load() == 1);
+    REQUIRE(failed.load() == 0);
+    REQUIRE(ids[0] != 0);
+    REQUIRE(ids[1] != 0);
+    REQUIRE(ids[0] != ids[1]);
 }
 
 TEST_CASE("SocketBackend: server dropping while a synchronous call is genuinely in flight throws disconnected",
@@ -922,8 +895,8 @@ TEST_CASE("SocketBackend: server dropping while a synchronous call is genuinely 
         }
     }};
     // authorizeRegister() is parked mid-sleep on the server's worker pool at
-    // this point -- the client is genuinely blocked in sendSync's _syncCv.wait,
-    // not merely about to call it.
+    // this point -- the client is genuinely waiting for the reply, not merely
+    // about to ask.
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     wsServer->close();
     wsServer.reset();
@@ -951,8 +924,8 @@ TEST_CASE("SocketBackend: an undecodable message from the server with no sync ca
     // Drain the outgoing "execute" request off the wire first, so the pending
     // entry genuinely exists server-side before the garbage reply lands.
     std::thread serverThread{[&] { (void)fake.receiveEnvelope(); }};
-    morph::exec::ThreadPoolExecutor cbPool{1};
-    auto comp = backendPtr->execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    morph::exec::MainThreadExecutor cbOwner;
+    auto comp = backendPtr->execute(morph::exec::detail::ModelId{1}, std::move(call), &cbOwner);
     serverThread.join();
 
     std::atomic<bool> gotProtocolError{false};
@@ -968,12 +941,12 @@ TEST_CASE("SocketBackend: an undecodable message from the server with no sync ca
 
     fake.sendFrame(morph::net::detail::WsOpcode::kText, "this is not a valid envelope");
 
-    spinUntil([&] { return gotProtocolError.load(); });
+    spinUntil(cbOwner, [&] { return gotProtocolError.load(); });
     REQUIRE(gotProtocolError.load());
 }
 
 TEST_CASE(
-    "SocketBackend: an undecodable message from the server while a synchronous call is in flight is handed to it",
+    "SocketBackend: an undecodable message from the server while a synchronous call is in flight fails that call",
     "[net][socket_backend][fault-injection]") {
     FakeWsServer fake;
     morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port()))};
@@ -985,10 +958,9 @@ TEST_CASE(
         fake.sendFrame(morph::net::detail::WsOpcode::kText, "this is not a valid envelope either");
     }};
 
-    // registerModel's own wire::decode(replyJson) throws on the garbage handed
-    // back by dispatchIncomingEnvelope's _syncInFlight branch -- any exception
-    // confirms the parked sendSync woke with that payload instead of hanging
-    // or (incorrectly) routing it through cancelPending.
+    // The reply cannot be matched to any call, so every pending call -- the
+    // register this thread waits on included -- fails with a protocol error
+    // instead of hanging.
     REQUIRE_THROWS(backend.registerModel("SbEchoModel", nullptr));
     serverThread.join();
 }
@@ -1018,13 +990,13 @@ TEST_CASE("SocketBackend: an execute reply with an unrecognized callId from the 
         fake.sendFrame(morph::net::detail::WsOpcode::kText, morph::wire::encode(morph::wire::makeOk(env.callId, "7")));
     }};
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     std::atomic<int> result{-1};
-    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbOwner);
     comp.then([&](const std::shared_ptr<void>& v) { result.store(*std::static_pointer_cast<int>(v)); })
         .onError([](const std::exception_ptr&) {});
 
-    spinUntil([&] { return result.load() != -1; });
+    spinUntil(cbOwner, [&] { return result.load() != -1; });
     REQUIRE(result.load() == 7);
     serverThread.join();
 }
@@ -1050,12 +1022,12 @@ TEST_CASE("SocketBackend: execute resolves with an exception when the server's o
                        morph::wire::encode(morph::wire::makeOk(env.callId, "not-a-number")));
     }};
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     std::atomic<bool> gotError{false};
-    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbOwner);
     comp.then([](const std::shared_ptr<void>&) {}).onError([&](const std::exception_ptr&) { gotError.store(true); });
 
-    spinUntil([&] { return gotError.load(); });
+    spinUntil(cbOwner, [&] { return gotError.load(); });
     REQUIRE(gotError.load());
     serverThread.join();
 }
@@ -1142,17 +1114,17 @@ TEST_CASE("SocketBackend: a Ping frame from the server is answered with a matchi
     REQUIRE(pong2.payload == "ping-payload-2");
 }
 
-TEST_CASE("SocketBackend: a Ping frame followed by an abortive close does not hang the io thread",
+TEST_CASE("SocketBackend: a Ping frame followed by an abortive close does not hang the loop",
           "[net][socket_backend][disconnect]") {
     // Aims at drainFrames()'s own Ping-echo `sendFrame(kPong, ...)` catch
     // (distinct from -- and narrower than -- the general sendFrame-races-a-
-    // disconnect family closed above): here the *same* io thread reads the
+    // disconnect family closed above): here the *same* I/O loop reads the
     // Ping and then, moments later, tries to write the Pong back on a socket
     // an abortive RST may have already torn down. The RST and the read+echo
     // sequence race each other with no synchronization, so whether this
     // specific catch fires depends on exactly how fast the RST lands versus
-    // how fast the io thread turns the Ping around -- not reliably won on
-    // every run. What *is* guaranteed regardless of who wins: the io thread
+    // how fast the I/O loop turns the Ping around -- not reliably won on
+    // every run. What *is* guaranteed regardless of who wins: the I/O loop
     // does not hang, and the backend ends up disconnected either way.
     for (int iter = 0; iter < 40; ++iter) {
         FakeWsServer fake;
@@ -1167,7 +1139,7 @@ TEST_CASE("SocketBackend: a Ping frame followed by an abortive close does not ha
     }
 }
 
-TEST_CASE("SocketBackend: a Close frame followed by an abortive close does not hang the io thread",
+TEST_CASE("SocketBackend: a Close frame followed by an abortive close does not hang the loop",
           "[net][socket_backend][disconnect]") {
     // Same race as the Ping case above, aimed at drainFrames()'s Close-echo
     // `sendFrame(kClose, "")` catch instead of the Ping one.
@@ -1222,7 +1194,7 @@ TEST_CASE("SocketBackend: with reconnectEnabled=false, the backend does not retr
     REQUIRE(waitForDisconnect(backend));
 
     // A fresh listener on the same port must not bring the backend back --
-    // with reconnectEnabled=false, the io thread already returned for good.
+    // with reconnectEnabled=false, the I/O loop already returned for good.
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
     auto wsServer2 = std::make_unique<morph::net::SocketServer>(*server, port);
     REQUIRE(wsServer2->listen());
@@ -1235,7 +1207,7 @@ TEST_CASE("SocketBackend: execute while disconnected resolves immediately with D
     morph::net::SocketBackend backend{"ws://127.0.0.1:1"};
     REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{200}));
 
-    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::exec::MainThreadExecutor cbOwner;
     morph::backend::detail::ActionCall call;
     call.modelTypeId = "SbEchoModel";
     call.actionTypeId = "SbEchoAction";
@@ -1243,7 +1215,7 @@ TEST_CASE("SocketBackend: execute while disconnected resolves immediately with D
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
 
     std::atomic<bool> gotDisconnected{false};
-    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbOwner);
     comp.onError([&](const std::exception_ptr& exc) {
         try {
             std::rethrow_exception(exc);
@@ -1251,7 +1223,7 @@ TEST_CASE("SocketBackend: execute while disconnected resolves immediately with D
             gotDisconnected.store(true);
         }
     });
-    spinUntil([&] { return gotDisconnected.load(); });
+    spinUntil(cbOwner, [&] { return gotDisconnected.load(); });
     REQUIRE(gotDisconnected.load());
 }
 
@@ -1265,10 +1237,9 @@ TEST_CASE("SocketBackend: server dropping mid-call resolves the pending completi
     std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer->port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
-
-    morph::exec::ThreadPoolExecutor cbPool{1};
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
-    morph::bridge::BridgeHandler<SbSlowModel> handler{bridge, &cbPool};
+    morph::exec::MainThreadExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::move(backendPtr), bridgeOwner};
+    morph::bridge::BridgeHandler<SbSlowModel> handler{bridge, &bridgeOwner};
 
     std::atomic<bool> gotDisconnected{false};
     handler.execute(SbSlowAction{5}).then([](int) {}).onError([&](const std::exception_ptr& exc) {
@@ -1285,20 +1256,19 @@ TEST_CASE("SocketBackend: server dropping mid-call resolves the pending completi
     wsServer->close();
     wsServer.reset();
 
-    spinUntil([&] { return gotDisconnected.load(); }, 200);
+    spinUntil(bridgeOwner, [&] { return gotDisconnected.load(); }, 200);
     REQUIRE(gotDisconnected.load());
 }
 
 TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completion unresolved",
           "[net][socket_backend][disconnect]") {
-    // Targets the exact TOCTOU window execute()'s _pendingMtx re-check of
-    // _connected closes (see that function's own comment): onDisconnected()
-    // sets _connected = false and then sweeps _pending, both under
-    // _pendingMtx. Before the fix, execute() checked _connected once, *before*
-    // taking that lock; a disconnect's sweep landing strictly between that
-    // check and the _pending insert drained a table the about-to-be-inserted
-    // entry had not joined yet, leaving that one Completion permanently
-    // unresolved -- a silent hang, not a crash.
+    // Targets the window between execute()'s caller-side `connected` check
+    // and the I/O loop filing the call: execute() reads `connected` on the
+    // calling thread and posts to the loop, and a disconnect handled on the
+    // loop in between has already swept the pending table the call is about
+    // to join. The loop re-checks `connected` when it files the call and
+    // rejects it with DisconnectedError instead; without that re-check the
+    // Completion would stay unresolved -- a silent hang, not a crash.
     //
     // The window is a handful of instructions wide and cannot be hit
     // deterministically without a test-only hook this header does not have.
@@ -1311,16 +1281,11 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
     // would also produce.
     //
     // Deliberately NOT a heavier stress shape (many threads x many calls).
-    // That shape belongs to the stranded-execute-ticket case -- a connection
-    // with several executes in flight dropping -- whose own
-    // hang would masquerade as a failure of *this* fix instead of the
-    // ticket-ordering problem it actually is. That case is covered (see
-    // `ExecuteOrderGate::release` in core/detail/execute_order_gate.hpp,
-    // extracted out of remote.hpp's own `releaseExecuteTicket` after this
-    // fix landed), and its own stress-shaped regression test is "many
-    // concurrent executes racing a disconnect leave no stranded execute
-    // ticket" below; the two are kept separate so a regression in either one
-    // fails where it is diagnosed.
+    // That shape belongs to "many concurrent executes racing a disconnect
+    // leave the server able to drain" below -- a connection with several
+    // executes in flight dropping -- whose own hang would masquerade as a
+    // failure of *this* fix; the two are kept separate so a regression in
+    // either one fails where it is diagnosed.
     for (int iter = 0; iter < 3; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{2};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1330,10 +1295,9 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
         std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer->port()));
         auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
         REQUIRE(backendPtr->waitForConnected());
-
-        morph::exec::ThreadPoolExecutor cbPool{2};
-        morph::bridge::Bridge bridge{std::move(backendPtr)};
-        morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &cbPool};
+        morph::exec::MainThreadExecutor bridgeOwner;
+        morph::bridge::Bridge bridge{std::move(backendPtr), bridgeOwner};
+        morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &bridgeOwner};
 
         constexpr int callsPerThread = 3;
         constexpr int producerThreads = 2;
@@ -1343,9 +1307,13 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
         for (int t = 0; t < producerThreads; ++t) {
             producers.emplace_back([&] {
                 for (int i = 0; i < callsPerThread; ++i) {
-                    handler.execute(SbEchoAction{i})
-                        .then([&](int) { settled.fetch_add(1); })
-                        .onError([&](const std::exception_ptr&) { settled.fetch_add(1); });
+                    // A handler is called on its bridge's owner: a producer
+                    // thread posts the call there.
+                    bridgeOwner.post([&handler, &settled, i] {
+                        handler.execute(SbEchoAction{i})
+                            .then([&settled](int) { settled.fetch_add(1); })
+                            .onError([&settled](const std::exception_ptr&) { settled.fetch_add(1); });
+                    });
                 }
             });
         }
@@ -1353,7 +1321,8 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
         // Drop the connection while calls are still being issued and in
         // flight, aiming squarely at the window between "still connected"
         // and "the entry is in _pending".
-        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+        // The owner runs the calls posted so far while the connection drops.
+        bridgeOwner.runFor(std::chrono::milliseconds{2});
         wsServer->close();
         wsServer.reset();
 
@@ -1366,7 +1335,7 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
         // bounded retry count (200 * 10ms = 2s) is what turns a genuine
         // regression into a REQUIRE failure instead of an indefinite hang.
         int const totalCalls = producerThreads * callsPerThread;
-        spinUntil([&] { return settled.load() == totalCalls; }, 200);
+        spinUntil(bridgeOwner, [&] { return settled.load() == totalCalls; }, 200);
         REQUIRE(settled.load() == totalCalls);
 
         // Let the OS release this iteration's port and the thread pools
@@ -1379,20 +1348,16 @@ TEST_CASE("SocketBackend: execute() racing a disconnect never leaves a Completio
 
 TEST_CASE("SocketBackend: sendFrame-triggering calls racing a hard disconnect never hang or corrupt state",
           "[net][socket_backend][disconnect]") {
-    // Targets the narrow TOCTOU windows between a caller-side "am I
-    // connected" check (deregisterModel()'s _connected.load(), execute()'s
-    // insertIf admit predicate, sendSync()'s own _connected.load()) and
-    // sendFrame()'s separately-locked `_socket.valid()` check a moment later:
-    // onDisconnected() sets `_connected = false` and only *then* resets
-    // `_socket`, under `_socketMtx` (see that function's own comment), so a
-    // concurrent caller can pass its own check and still lose the race to the
-    // socket being torn down by the time it actually writes. Same statistical
-    // technique already proven above ("execute() racing a disconnect never
-    // leaves a Completion unresolved") and in socket_server.hpp's own
-    // TOCTOU-window tests (findings #9/#11 there, which needed ~200
-    // iterations) -- broadened across every sendFrame() call site at once,
-    // since it is the same underlying window regardless of which caller hits
-    // it.
+    // Targets the windows between a caller-side "am I connected" check
+    // (deregisterModel()'s `connected` load, execute()'s) and the write that
+    // follows on the I/O loop: the caller's check passes, the loop handles
+    // the disconnect, and only then runs the posted write. Every write runs
+    // on the loop and checks the connection there, so it finds it gone rather
+    // than writing to a closed one; registerModel() meanwhile waits for a
+    // reply the disconnect rejects. Same statistical technique as
+    // "execute() racing a disconnect never leaves a Completion unresolved"
+    // above, across every caller that ends in a write, since it is the same
+    // window whichever caller hits it.
     for (int iter = 0; iter < 80; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{2};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1422,9 +1387,8 @@ TEST_CASE("SocketBackend: sendFrame-triggering calls racing a hard disconnect ne
                     try {
                         (void)backend.registerModel("SbEchoModel", nullptr);
                     } catch (const std::exception&) {
-                        // "reentrant" (racing a sibling for the single-flight
-                        // sendSync slot), "disconnected", or success are all
-                        // fine here -- only a hang or crash would be a failure.
+                        // "disconnected" or success are both fine here --
+                        // only a hang or crash would be a failure.
                         continue;
                     }
                 }
@@ -1453,23 +1417,23 @@ TEST_CASE("SocketBackend: executeTimeout surfaces as backend::TimeoutError, not 
     // tests/test_limit_policy.cpp's SimulatedRemoteBackend analog of this same
     // scenario, over the real WebSocket transport instead.
     morph::exec::ThreadPoolExecutor serverPool{4};
-    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
     morph::backend::LimitPolicy policy;
     policy.executeTimeout = std::chrono::milliseconds{50};
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, serverConfig);
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
     std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
-
-    morph::exec::ThreadPoolExecutor cbPool{1};
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::exec::MainThreadExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::move(backendPtr), bridgeOwner};
     // SbSlowModel's execute() sleeps 300ms unconditionally -- well past the
     // 50ms executeTimeout above, so the server's timeout scheduler fires
     // before the strand result ever comes back.
-    morph::bridge::BridgeHandler<SbSlowModel> handler{bridge, &cbPool};
+    morph::bridge::BridgeHandler<SbSlowModel> handler{bridge, &bridgeOwner};
 
     std::atomic<bool> gotTimeoutError{false};
     std::atomic<bool> gotSomethingElse{false};
@@ -1483,7 +1447,7 @@ TEST_CASE("SocketBackend: executeTimeout surfaces as backend::TimeoutError, not 
         }
     });
 
-    spinUntil([&] { return gotTimeoutError.load() || gotSomethingElse.load(); });
+    spinUntil(bridgeOwner, [&] { return gotTimeoutError.load() || gotSomethingElse.load(); });
     CHECK_FALSE(gotSomethingElse.load());
     REQUIRE(gotTimeoutError.load());
 }
@@ -1519,7 +1483,7 @@ TEST_CASE("SocketBackend: reconnects to a fresh server on the same port", "[net]
     REQUIRE(wsServer2->listen());
 
     // _connected is a level-triggered flag, so polling waitForConnected
-    // repeatedly is correct: it returns true as soon as the io thread's
+    // repeatedly is correct: it returns true as soon as the I/O loop's
     // backoff loop reconnects (50ms initial delay, 200ms cap).
     bool reconnected = false;
     for (int i = 0; i < 100 && !reconnected; ++i) {
@@ -1542,6 +1506,12 @@ namespace {
 struct ReconnectFixture {
     morph::exec::ThreadPoolExecutor serverPool{2};
     std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    // Where the reconnect handler is posted: a thread of its own, never the
+    // backend's I/O loop.
+    // Serial, so it can own the completions the handler issues: a strand
+    // over a one-thread pool.
+    morph::exec::ThreadPoolExecutor handlerPool{1};
+    morph::exec::OwnerStrand handlerExec{handlerPool};
     std::unique_ptr<morph::net::SocketBackend> backend;
     std::unique_ptr<morph::net::SocketServer> restarted;
     std::uint16_t port = 0;
@@ -1561,7 +1531,7 @@ struct ReconnectFixture {
             if (!backend->waitForConnected()) {
                 throw std::runtime_error("ReconnectFixture: initial connect failed");
             }
-            backend->setReconnectHandler(onReconnect);
+            backend->setReconnectHandler(onReconnect, &handlerExec);
         }  // first server destroyed -> the backend observes the drop and retries
 
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
@@ -1574,40 +1544,30 @@ struct ReconnectFixture {
 
 }  // namespace
 
-TEST_CASE("SocketBackend: a reconnect handler that re-registers does not deadlock the transport",
-          "[net][socket_backend][disconnect]") {
-    // The handler used to run inline on the I/O thread from onConnected(),
-    // *before* readLoop() started. Any handler doing what a reconnect handler
-    // exists to do -- re-registering its models, which Bridge does via sendSync
-    // -- then blocked on _syncCv waiting for a reply only readLoop could
-    // deliver, on the very thread that was supposed to start readLoop. The wait
-    // has no timeout, so the transport wedged permanently.
-    //
-    // This test therefore fails by *hanging* on the old code, which ctest's
-    // per-test TIMEOUT turns into a failure.
+TEST_CASE("SocketBackend: the reconnect handler is posted to the executor it was installed with",
+          "[net][socket_backend][disconnect][owner]") {
+    // The handler never runs on the I/O loop: after a reconnect the loop posts
+    // it to its executor and goes on, so a handler that re-registers --
+    // waiting for a reply only the loop can deliver -- cannot wait on itself.
     ReconnectFixture fixture;
-    std::atomic<bool> handlerRan{false};
+    std::atomic<bool> onItsExecutor{false};
     std::atomic<bool> handlerSucceeded{false};
 
     fixture.bounce([&] {
-        handlerRan.store(true);
-        // The synchronous control call that used to deadlock here.
+        onItsExecutor.store(morph::exec::runningOn(fixture.handlerExec));
         handlerSucceeded.store(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
     });
 
     spinUntil([&] { return handlerSucceeded.load(); }, 500);
-    CHECK(handlerRan.load());
+    CHECK(onItsExecutor.load());
     CHECK(handlerSucceeded.load());
-
-    // The transport is still fully usable afterwards -- the handler's sendSync
-    // resolved rather than leaving _syncInFlight stuck set.
     CHECK(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
 }
 
 TEST_CASE("SocketBackend: a throwing reconnect handler leaves the transport usable",
           "[net][socket_backend][disconnect]") {
-    // The handler now runs on its own thread; an exception escaping it must not
-    // terminate that thread, or the *next* reconnect would silently never fire.
+    // An exception escaping the handler is its executor's to log; the
+    // transport goes on.
     ReconnectFixture fixture;
     std::atomic<int> handlerCalls{0};
 
@@ -1623,9 +1583,8 @@ TEST_CASE("SocketBackend: a throwing reconnect handler leaves the transport usab
 
 TEST_CASE("SocketBackend: a reconnect handler throwing a non-std::exception leaves the transport usable",
           "[net][socket_backend][disconnect]") {
-    // Same shape as the std::exception case above, but the handler throws a
-    // non-std::exception value (an int) instead, targeting
-    // handlerThreadMain()'s separate `catch (...)` clause.
+    // Same shape as the std::exception case above, with a non-std::exception
+    // value.
     ReconnectFixture fixture;
     std::atomic<int> handlerCalls{0};
 
@@ -1642,46 +1601,25 @@ TEST_CASE("SocketBackend: a reconnect handler throwing a non-std::exception leav
 // The Catch2 assertion macros, not branching logic, are what push this over the
 // cognitive-complexity threshold -- as in the sibling disconnect cases above.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no stranded execute ticket",
+TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave the server able to drain",
           "[net][socket_backend][disconnect]") {
-    // Regression coverage for a stranded execute ticket at the transport
-    // level; the mechanism
-    // itself is pinned deterministically by
-    // tests/test_remote_execute_ordering.cpp's "an execute rejected out of
-    // ticket order..." case. This is the shape that actually found it, kept
-    // because it is the one that exercises the real teardown ordering:
-    // dropping the connection reclaims that connection's models, so the
-    // executes still in flight for one model split into some that find the
-    // model and some that reject with "model not found" -- and a rejection
-    // releases its execute-ordering ticket immediately, without waiting for
-    // its turn. `ExecuteOrderGate::release` (formerly `RemoteServer`'s own
-    // `releaseExecuteTicket`, before it was extracted into
-    // core/detail/execute_order_gate.hpp) used to advance `nextToRun` past
-    // any earlier ticket when that happened, leaving that ticket's waiter
-    // parked in `awaitTurn` (formerly `awaitExecuteTurn`) on a predicate that
-    // could never come true again.
+    // The real disconnect teardown at the transport level: dropping the
+    // connection reclaims that connection's models, so the executes still in
+    // flight for one model split into some that find the model and some that
+    // reject with "model not found". Every one must be answered and the
+    // server must drain; per-model order across such a split is pinned
+    // deterministically by tests/test_remote_execute_ordering.cpp.
     //
     // The visible failure is not this test's assertions: it is the teardown
-    // below it. A stranded ticket holds a `serverPool` worker forever, so
-    // `~ThreadPoolExecutor` hangs in join() at end of scope and the whole
-    // binary stops -- turned into a failure by ctest's per-test TIMEOUT.
+    // below it. An execute that is never answered leaves the in-flight count
+    // above zero, and a pool worker that never returns hangs
+    // `~ThreadPoolExecutor` in join() -- turned into a failure by ctest's
+    // per-test TIMEOUT.
     //
-    // Honest about what this test is and is not. It is a *probabilistic*
-    // shape, and a shallow one: measured on Linux/clang 22 against the
-    // pre-fix code it hung 4 times in 145 runs at these thread and call
-    // counts (and 0 times in 20 at the lighter 3x15 shape the issue reports,
-    // which is why the counts here are higher than the issue's). It is
-    // therefore not the control for the fix -- the deterministic case named
-    // above is, and it fails 100% of runs without it. This one is kept
-    // because it is the only test that drives the real disconnect teardown
-    // that produces the out-of-order release in the first place, and because
-    // it costs ~0.2s.
-    //
-    // It is deliberately the "heavier stress shape" the sibling
-    // "execute() racing a disconnect never leaves a Completion unresolved"
-    // case above avoids: kept separate so a ticket-ordering regression fails
-    // here, where it is diagnosed, rather than masquerading as a failure of that
-    // test's own TOCTOU fix.
+    // A *probabilistic* shape, kept because it is the only test that drives
+    // the real disconnect teardown, and because it costs ~0.2s. It is
+    // deliberately the "heavier stress shape" the sibling "execute() racing a
+    // disconnect never leaves a Completion unresolved" case above avoids.
     for (int iter = 0; iter < 3; ++iter) {
         morph::exec::ThreadPoolExecutor serverPool{4};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
@@ -1691,14 +1629,13 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
         std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer->port()));
         auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
         REQUIRE(backendPtr->waitForConnected());
-
-        morph::exec::ThreadPoolExecutor cbPool{2};
-        morph::bridge::Bridge bridge{std::move(backendPtr)};
+        morph::exec::MainThreadExecutor bridgeOwner;
+        morph::bridge::Bridge bridge{std::move(backendPtr), bridgeOwner};
         // One shared handler, so every call targets the *same* model id and
         // therefore the same execute-ordering gate -- the gate is per-model,
         // so calls spread across instances would not queue behind each other
         // at all.
-        morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &cbPool};
+        morph::bridge::BridgeHandler<SbEchoModel> handler{bridge, &bridgeOwner};
 
         constexpr int callsPerThread = 60;
         constexpr int producerThreads = 8;
@@ -1708,14 +1645,19 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
         for (int producer = 0; producer < producerThreads; ++producer) {
             producers.emplace_back([&] {
                 for (int i = 0; i < callsPerThread; ++i) {
-                    handler.execute(SbEchoAction{i})
-                        .then([&](int) { settled.fetch_add(1); })
-                        .onError([&](const std::exception_ptr&) { settled.fetch_add(1); });
+                    // A handler is called on its bridge's owner: a producer
+                    // thread posts the call there.
+                    bridgeOwner.post([&handler, &settled, i] {
+                        handler.execute(SbEchoAction{i})
+                            .then([&settled](int) { settled.fetch_add(1); })
+                            .onError([&settled](const std::exception_ptr&) { settled.fetch_add(1); });
+                    });
                 }
             });
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+        // The owner runs the calls posted so far while the connection drops.
+        bridgeOwner.runFor(std::chrono::milliseconds{2});
         wsServer->close();
         wsServer.reset();
 
@@ -1724,13 +1666,13 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
         }
 
         int const totalCalls = producerThreads * callsPerThread;
-        spinUntil([&] { return settled.load() == totalCalls; }, 300);
+        spinUntil(bridgeOwner, [&] { return settled.load() == totalCalls; }, 300);
         REQUIRE(settled.load() == totalCalls);
 
-        // The server must be able to drain: a stranded ticket also pins
-        // `_inFlightExecutes` above zero for good, so this is the same
-        // regression seen from the graceful-shutdown side.
-        REQUIRE(server->drainedWithin(std::chrono::milliseconds{5000}));
+        // The server must be able to drain: an execute never answered pins
+        // the in-flight count above zero for good.
+        REQUIRE(morph::testing::awaitAnswer(
+            [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{5000}, owner); }));
 
         // Same port-reuse pause as the sibling disconnect tests.
         std::this_thread::sleep_for(std::chrono::milliseconds{50});
@@ -1739,13 +1681,10 @@ TEST_CASE("SocketBackend: many concurrent executes racing a disconnect leave no 
 
 // ── The structural registration surface ─────────────────────────────────────
 //
-// `SocketBackend` overrides `bindModel`/`promoteModel` natively rather than
-// being wrapped in `SynchronousBackendAdapter`. The property that decides that
-// choice, and that the deadlock argument in docs/spec/core/backend.md rests on,
-// is that a native control call never enters `sendSync`: it goes out on the
-// same callId-multiplexed path `execute` uses and is settled by the I/O
-// thread's read loop. The tests below pin that property, not just the
-// functional result.
+// `SocketBackend` overrides `bindModel`/`promoteModel` natively: a control call
+// goes out on the same callId-multiplexed path `execute` uses and is settled by
+// the I/O loop's read loop, and the synchronous verbs wait on that same path.
+// The tests below pin that property, not just the functional result.
 
 namespace {
 
@@ -1777,7 +1716,7 @@ TEST_CASE(
     REQUIRE(wsServer.listen());
 
     // Declared before `backend`, so it is destroyed *after* it: `~SocketBackend`
-    // joins the I/O thread, which can call `post()` on this executor right up
+    // joins the I/O loop, which can call `post()` on this executor right up
     // until that join completes. With the reverse order, TSan caught the I/O
     // thread still running -- and still able to call `post()` -- while this
     // executor's own destructor was tearing down its condition variable on the
@@ -1893,7 +1832,7 @@ TEST_CASE("SocketBackend: a bindModel continuation does not run until the caller
         ran.store(true);
     });
 
-    // Give the round trip more than enough time to complete on the io thread.
+    // Give the round trip more than enough time to complete on the I/O loop.
     std::this_thread::sleep_for(std::chrono::milliseconds{200});
     CHECK_FALSE(ran.load());
 
@@ -1904,28 +1843,11 @@ TEST_CASE("SocketBackend: a bindModel continuation does not run until the caller
 // The Catch2 assertion macros, not branching logic, push this over the
 // cognitive-complexity threshold -- as in the sibling fault-injection cases.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("SocketBackend: a bind settles while the synchronous control channel is still parked",
+TEST_CASE("SocketBackend: a bind settles while a synchronous register is still waiting for its reply",
           "[net][socket_backend][registration-surface]") {
-    // This is the evidence behind the choice of a native override over
-    // `SynchronousBackendAdapter`, and behind the deadlock claim in
-    // docs/spec/core/backend.md.
-    //
-    // The documented reconnect hazard is that a control call parks on `_syncCv`
-    // waiting for a reply only the I/O thread's read loop can deliver -- so
-    // running one on that thread wedges the transport. A control call that
-    // never parks cannot have that hazard, whichever thread issues it. Two
-    // observable consequences prove it does not park:
-    //
-    //   1. It is accepted while `sendSync`'s single-call token is held by
-    //      someone else. A blocking bind (the default `bindModel`, or one
-    //      routed through a wrapper's strand) would instead come back with
-    //      `"a synchronous call is already in flight (reentrant use)"`.
-    //   2. Its reply is delivered, and its `Completion` settles, while that
-    //      other call is *still* parked -- so the bind's settlement does not
-    //      depend on the synchronous channel draining first.
-    //
-    // Mutation check: removing `SocketBackend::bindModel` (falling back to the
-    // default blocking implementation) makes this fail on assertion 1.
+    // A synchronous verb waits on the multiplexed path too, so it holds no
+    // channel a bind needs: the bind is accepted, sent with its own callId,
+    // and settled while the synchronous call is still waiting.
     FakeWsServer fake;
     morph::net::SocketBackend::Config cfg;
     cfg.reconnectEnabled = false;
@@ -1937,9 +1859,6 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
     fake.acceptAndHandshake();
     REQUIRE(backend.waitForConnected());
 
-    // Park a legacy synchronous control call: it holds the sendSync token and
-    // waits on `_syncCv` for a `callId == 0` reply that is deliberately not
-    // sent until the very end of this test.
     std::atomic<bool> syncReturned{false};
     std::string syncOutcome;
     std::thread syncThread{[&] {
@@ -1947,68 +1866,36 @@ TEST_CASE("SocketBackend: a bind settles while the synchronous control channel i
             (void)backend.registerModel("SbEchoModel", nullptr);
             syncOutcome = "returned";
         } catch (const std::exception& exc) {
-            // Recorded rather than swallowed: how the parked call ended is not
-            // what this test asserts, but it is what explains a failure below.
             syncOutcome = exc.what();
         }
         syncReturned.store(true);
     }};
     auto syncEnv = fake.receiveEnvelope();
     REQUIRE(syncEnv.kind == "register");
-    REQUIRE(syncEnv.callId == 0U);  // the synchronous channel's sentinel
+    REQUIRE(syncEnv.callId != 0U);
 
-    // (1) The bind is accepted with the token held.
     morph::exec::detail::ModelId bound{};
-    std::string error;
     std::atomic<bool> done{false};
     auto completion = backend.bindModel(privateBind("SbEchoModel"), callerExec);
-    completion
-        .thenDetached([&](morph::exec::detail::ModelId mid) {
-            bound = mid;
-            done.store(true);
-        })
-        .onErrorDetached([&](const std::exception_ptr& exc) {
-            try {
-                std::rethrow_exception(exc);
-            } catch (const std::exception& err) {
-                error = err.what();
-            }
-            done.store(true);
-        });
-
-    // Nothing can settle this bind yet: its reply is only sent below. A
-    // *blocking* bind, by contrast, has already failed by this point with
-    // sendSync's reentrant-use error, so pumping the caller's executor here is
-    // what turns the mutation into an immediate, readable failure rather than
-    // a hang on the `receiveEnvelope` that follows.
-    for (int i = 0; i < 20; ++i) {
-        (void)callerExec.runOnce();
-        std::this_thread::sleep_for(std::chrono::milliseconds{5});
-    }
-    bool const accepted = !done.load();
-    if (!accepted) {
-        // Release the parked call and join before failing, so the diagnosis is
-        // the message below rather than a terminate() on an unjoined thread.
-        fake.sendFrame(morph::net::detail::WsOpcode::kText, morph::wire::encode(morph::wire::makeOk(0, {}, 7)));
-        syncThread.join();
-    }
-    INFO("the bind was rejected instead of accepted: " << error);
-    REQUIRE(accepted);
+    completion.thenDetached([&](morph::exec::detail::ModelId mid) {
+        bound = mid;
+        done.store(true);
+    });
 
     auto bindEnv = fake.receiveEnvelope();
     REQUIRE(bindEnv.kind == "register");
-    REQUIRE(bindEnv.callId != 0U);  // multiplexed, not the synchronous sentinel
+    REQUIRE(bindEnv.callId != 0U);
+    REQUIRE(bindEnv.callId != syncEnv.callId);
 
-    // (2) Answering only the bind settles it, with the sync call still parked.
+    // Answering only the bind settles it, with the synchronous call still waiting.
     fake.sendFrame(morph::net::detail::WsOpcode::kText,
                    morph::wire::encode(morph::wire::makeOk(bindEnv.callId, {}, 4242)));
     REQUIRE(drainUntil(callerExec, done));
-    CHECK(error.empty());
     CHECK(bound == morph::exec::detail::ModelId{4242});
     CHECK_FALSE(syncReturned.load());
 
-    // Release the parked call so the thread can be joined.
-    fake.sendFrame(morph::net::detail::WsOpcode::kText, morph::wire::encode(morph::wire::makeOk(0, {}, 7)));
+    fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                   morph::wire::encode(morph::wire::makeOk(syncEnv.callId, {}, 7)));
     syncThread.join();
     CHECK(syncOutcome == "returned");
 }
@@ -2149,19 +2036,15 @@ TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural
     // surface: issue the bind, attach a continuation, return. The
     // handler parks on nothing, so it has no reply to wait for and cannot hold
     // up whichever thread runs it.
-    //
-    // Note what this test does *not* claim: it does not show the dedicated
-    // handler thread has become unnecessary. `Bridge`'s reconnect handler still
-    // calls the blocking verbs, and that is what keeps the thread load-bearing
-    // -- see docs/spec/core/backend.md.
+    // The handler's own executor is the bind's owner: the reply is delivered
+    // where the continuation was attached.
     ReconnectFixture fixture;
-    morph::exec::ThreadPoolExecutor callerPool{1};
     std::atomic<bool> handlerRan{false};
     std::atomic<bool> reboundOk{false};
 
     fixture.bounce([&] {
         handlerRan.store(true);
-        fixture.backend->bindModel(privateBind("SbEchoModel"), callerPool)
+        fixture.backend->bindModel(privateBind("SbEchoModel"), fixture.handlerExec)
             .thenDetached([&](morph::exec::detail::ModelId mid) { reboundOk.store(mid.v != 0U); });
     });
 
@@ -2193,19 +2076,19 @@ TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural
 TEST_CASE("SocketBackend: a private registration carries contextKey to the server's log provider",
           "[net][socket_backend][registration-surface][action_log]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
-    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-
     // The provider runs on the server's own strand, the assertions on this
     // thread; the mutex is what makes that handoff a data race TSan will not
     // flag rather than one it will.
     std::mutex providerMtx;
     std::vector<std::string> requestedFor;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
-    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::testing::storageOwner());
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.logProvider = [&](std::string_view modelType, std::string_view contextKey) {
         std::scoped_lock const lock{providerMtx};
         requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
         return log;
-    });
+    };
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, serverConfig);
 
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
@@ -2239,8 +2122,8 @@ TEST_CASE("SocketBackend: a private registration carries contextKey to the serve
 
         // …and the log the provider handed over is really attached to that
         // instance: an action executed against it lands in the journal under
-        // the same key. Hand-built `ActionCall` for the reason the
-        // attachModel test above gives.
+        // the same key. Hand-built `ActionCall`, so the call reaches the
+        // instance without a `Bridge` in between.
         morph::backend::detail::ActionCall call{
             .modelTypeId = "SbEchoModel",
             .actionTypeId = "SbEchoAction",
@@ -2252,14 +2135,17 @@ TEST_CASE("SocketBackend: a private registration carries contextKey to the serve
             .localOp = nullptr,
             .session = {},
         };
-        morph::exec::ThreadPoolExecutor cbPool{1};
+        morph::exec::MainThreadExecutor cbOwner;
         std::atomic<bool> settled{false};
-        backend.execute(bound, std::move(call), &cbPool)
+        backend.execute(bound, std::move(call), &cbOwner)
             .then([&](const std::shared_ptr<void>&) { settled.store(true); })
             .onError([&](const std::exception_ptr&) { settled.store(true); });
-        spinUntil([&] { return settled.load(); });
+        spinUntil(cbOwner, [&] { return settled.load(); });
         REQUIRE(settled.load());
 
+        // The append was posted from the model's strand to the log's owner,
+        // this thread, before the reply went out.
+        morph::testing::storageOwner().drain();
         auto entries = log->entries();
         REQUIRE(entries.size() == 1);
         CHECK(entries[0].entityKey == "acct-587");
@@ -2279,4 +2165,264 @@ TEST_CASE("SocketBackend: a private registration carries contextKey to the serve
         std::scoped_lock const lock{providerMtx};
         CHECK(requestedFor.empty());
     }
+}
+
+// ── One I/O loop owns the transport ─────────────────────────────────────────
+//
+// Every piece of `SocketBackend` state lives on the `IoLoop` it was built on.
+// Each case below calls verbs from this test's own thread -- never the loop's
+// -- and reads, from inside the body each verb posts, whether that body runs
+// as a task of the loop (`OwnerProbeRecorder`). A body run inline on the
+// calling thread reports `onOwner == false`, and the case fails.
+
+namespace {
+
+bool onLoop(morph::exec::IoLoop& loop) {
+    return morph::exec::runningOn(static_cast<core::async::IExecutor const&>(loop.loop()));
+}
+
+/// A `RemoteServer` behind a `SocketServer`, and one backend connected to it,
+/// all on one `IoLoop`. Members in teardown order: backend, then server, then
+/// the loop last.
+struct SharedLoopStack {
+    morph::exec::IoLoop loop;
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{loop, *server, 0};
+    std::unique_ptr<morph::net::SocketBackend> backend;
+
+    explicit SharedLoopStack(morph::net::SocketBackend::Config cfg = {}) {
+        if (!wsServer.listen()) {
+            throw std::runtime_error("SharedLoopStack: listen failed");
+        }
+        backend = std::make_unique<morph::net::SocketBackend>(loop, url(), cfg);
+        if (!backend->waitForConnected()) {
+            throw std::runtime_error("SharedLoopStack: connect failed");
+        }
+    }
+
+    [[nodiscard]] std::string url() const {
+        return "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
+    }
+};
+
+/// An `SbEchoAction{7}` call, serialised by hand: these cases need a wire
+/// round trip, not a typed handler.
+morph::backend::detail::ActionCall echoCall() {
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "SbEchoModel";
+    call.actionTypeId = "SbEchoAction";
+    call.serializeAction = [](const void*) { return std::string{R"({"value":7})"}; };
+    call.deserializeResult = [](std::string_view json) -> std::shared_ptr<void> {
+        return std::make_shared<std::string>(json);
+    };
+    return call;
+}
+
+/// Waits for @p comp to settle, either way. The handlers are attached by a task
+/// of @p owner, the completion's owner, which is where they run.
+template <class T>
+bool settles(morph::async::Completion<T>& comp, morph::exec::IExecutor& owner) {
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    owner.post([&comp, done] {
+        comp.then([done](const T&) { done->store(true); }).onError([done](const std::exception_ptr&) {
+            done->store(true);
+        });
+    });
+    return morph::testing::waitUntil([done] { return done->load(); });
+}
+
+}  // namespace
+
+TEST_CASE("SocketBackend: every socket write is made on the loop, whichever thread asked",
+          "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::testing::OwnerProbeRecorder const recorder{stack.loop.loop()};
+    REQUIRE_FALSE(onLoop(stack.loop));
+
+    // A synchronous control call, a fire-and-forget one and an execute, all
+    // from this thread.
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    REQUIRE(mid.v != 0U);
+    morph::exec::ThreadPoolExecutor cbPool{1};
+    auto comp = stack.backend->execute(mid, echoCall(), &cbPool);
+    REQUIRE(settles(comp, cbPool));
+    stack.backend->deregisterModel(mid);
+    stack.loop.runAndWait([] {});
+
+    CHECK(recorder.allPosted("SocketBackend::bindModel"));
+    CHECK(recorder.allPosted("SocketBackend::execute"));
+    CHECK(recorder.allPosted("SocketBackend::deregisterModel"));
+    CHECK(recorder.count("SocketBackend::send") >= 3U);
+    CHECK(recorder.allPosted("SocketBackend::send"));
+}
+
+TEST_CASE("SocketBackend: pending calls are filed, matched and swept on the loop", "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::testing::OwnerProbeRecorder const recorder{stack.loop.loop()};
+    morph::exec::ThreadPoolExecutor cbPool{1};
+
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    auto comp = stack.backend->execute(mid, echoCall(), &cbPool);
+    REQUIRE(settles(comp, cbPool));
+    auto bound = stack.backend->bindModel(privateBind("SbEchoModel"), cbPool);
+    REQUIRE(settles(bound, cbPool));
+    stack.backend->cancelPending(std::make_exception_ptr(std::runtime_error{"swept"}));
+    stack.loop.runAndWait([] {});
+
+    CHECK(recorder.allPosted("SocketBackend::execute"));
+    CHECK(recorder.allPosted("SocketBackend::bindModel"));
+    CHECK(recorder.allPosted("SocketBackend::reply"));
+    CHECK(recorder.allPosted("SocketBackend::cancelPending"));
+}
+
+TEST_CASE("SocketBackend: waitForConnected registers its waiter on the loop", "[net][socket_backend][owner]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    FakeWsServer fake;
+    morph::net::SocketBackend backend{loop, "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port()))};
+
+    // Nothing has accepted yet, so this waits: its waiter is filed on the loop
+    // and released by the timeout.
+    CHECK_FALSE(backend.waitForConnected(std::chrono::milliseconds{50}));
+    fake.acceptAndHandshake();
+    CHECK(backend.waitForConnected());
+
+    CHECK(recorder.allPosted("SocketBackend::waitForConnected"));
+}
+
+TEST_CASE("SocketBackend: the reconnect backoff is armed on the loop", "[net][socket_backend][owner][disconnect]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketBackend::Config cfg;
+    cfg.initialReconnectDelay = std::chrono::milliseconds{20};
+    cfg.maxReconnectDelay = std::chrono::milliseconds{50};
+
+    auto wsServer = std::make_unique<morph::net::SocketServer>(loop, *server, 0);
+    REQUIRE(wsServer->listen());
+    auto const port = wsServer->port();
+    morph::net::SocketBackend backend{loop, "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg};
+    REQUIRE(backend.waitForConnected());
+
+    wsServer.reset();  // the backend sees the drop and backs off
+    REQUIRE(morph::testing::waitUntil([&] { return recorder.count("SocketBackend::reconnect") >= 1U; }));
+    wsServer = std::make_unique<morph::net::SocketServer>(loop, *server, port);
+    REQUIRE(wsServer->listen());
+    REQUIRE(morph::testing::waitUntil([&] { return backend.waitForConnected(std::chrono::milliseconds{50}); }));
+
+    CHECK(recorder.allPosted("SocketBackend::reconnect"));
+}
+
+TEST_CASE("SocketBackend: a timer and a connected socket share one loop, and the timer fires",
+          "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::async::detail::TimeoutScheduler scheduler{stack.loop};
+    std::atomic<bool> timerOnLoop{false};
+    std::atomic<bool> fired{false};
+    std::atomic<bool> connectedWhenFired{false};
+
+    scheduler.schedule(std::chrono::milliseconds{20}, [&] {
+        timerOnLoop = onLoop(stack.loop);
+        connectedWhenFired = stack.backend->waitForConnected(std::chrono::milliseconds{0});
+        fired = true;
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return fired.load(); }));
+    CHECK(timerOnLoop.load());
+    CHECK(connectedWhenFired.load());
+
+    // And the socket still carries a round trip on the same loop.
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    morph::exec::MainThreadExecutor cbOwner;
+    std::atomic<bool> replied{false};
+    auto comp = stack.backend->execute(mid, echoCall(), &cbOwner);
+    comp.then([&](const std::shared_ptr<void>&) { replied = true; }).onError([](const std::exception_ptr&) {});
+    CHECK(morph::testing::pumpOwnerUntil(cbOwner, [&] { return replied.load(); }));
+}
+
+TEST_CASE("SocketBackend: destroyed on the loop thread, from a timer callback, it does not deadlock",
+          "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::async::detail::TimeoutScheduler scheduler{stack.loop};
+    std::atomic<bool> destroyed{false};
+    std::atomic<bool> destroyedOnLoop{false};
+
+    scheduler.schedule(std::chrono::milliseconds{1}, [&] {
+        destroyedOnLoop = onLoop(stack.loop);
+        stack.backend.reset();
+        destroyed = true;
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return destroyed.load(); },
+                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+    CHECK(destroyedOnLoop.load());
+}
+
+TEST_CASE("SocketBackend: destroyed inside its own reply's continuation, on the loop, it does not deadlock",
+          "[net][socket_backend][owner]") {
+    // The continuation is delivered on an executor whose tasks run on the
+    // loop, so the destructor closes the backend from a loop task, after the
+    // reply flow that settled it.
+    SharedLoopStack stack;
+    auto const mid = stack.backend->registerModel("SbEchoModel", nullptr);
+    std::atomic<bool> destroyed{false};
+    std::atomic<bool> destroyedOnLoop{false};
+
+    struct OnLoop final : morph::exec::IExecutor {
+        explicit OnLoop(morph::exec::IoLoop& ioLoop) : loop{&ioLoop} {}
+        void post(std::function<void()> task) override {
+            loop->post([this, task = std::move(task)] {
+                core::async::ExecutorScope const scope{coreExecutor()};
+                task();
+            });
+        }
+        morph::exec::IoLoop* loop;
+    } onLoopExec{stack.loop};
+
+    auto comp = std::make_shared<morph::async::Completion<std::shared_ptr<void>>>(
+        stack.backend->execute(mid, echoCall(), &onLoopExec));
+    onLoopExec.post([&, comp] {
+        comp->then([&](const std::shared_ptr<void>&) {
+                destroyedOnLoop = onLoop(stack.loop);
+                stack.backend.reset();
+                destroyed = true;
+            })
+            .onError([](const std::exception_ptr&) {});
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return destroyed.load(); },
+                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+    CHECK(destroyedOnLoop.load());
+}
+
+TEST_CASE("SocketBackend: the session and the reconnect handler are stored on the loop, whichever thread set them",
+          "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    morph::testing::OwnerProbeRecorder const recorder{stack.loop.loop()};
+    morph::exec::ThreadPoolExecutor handlerExec{1};
+
+    stack.backend->setSession(morph::session::Context{.principal = "alice"});
+    stack.backend->setReconnectHandler([] {}, &handlerExec);
+    // A synchronous verb issues the loop request its asynchronous twin does and
+    // waits: the waiting is on this thread, the work on the loop.
+    REQUIRE(stack.backend->registerModel("SbEchoModel", nullptr).v != 0U);
+    stack.backend->setReconnectHandler(nullptr, nullptr);
+    stack.loop.runAndWait([] {});
+
+    CHECK(recorder.allPosted("SocketBackend::setSession"));
+    CHECK(recorder.allPosted("SocketBackend::setReconnectHandler"));
+    CHECK(recorder.allPosted("SocketBackend::bindModel"));
+}
+
+TEST_CASE("SocketBackend: a synchronous verb called on the loop's own thread fails instead of waiting on itself",
+          "[net][socket_backend][owner]") {
+    SharedLoopStack stack;
+    std::string message;
+    stack.loop.runAndWait([&] {
+        try {
+            static_cast<void>(stack.backend->registerModel("SbEchoModel", nullptr));
+        } catch (const std::exception& exc) {
+            message = exc.what();
+        }
+    });
+    CHECK_THAT(message, Catch::Matchers::ContainsSubstring("cannot wait on the I/O loop's own thread"));
 }

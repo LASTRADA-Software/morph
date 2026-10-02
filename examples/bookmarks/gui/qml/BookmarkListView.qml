@@ -90,22 +90,20 @@ Item {
         page.selectedIds = next
     }
 
-    // The first listing cannot simply be requested once on completion. In
-    // Remote mode AppContext::onReady() fires when the *socket* connects,
-    // which is when gui/main.cpp builds the adapters — but a BridgeHandler's
-    // registration is a round trip, and until its reply lands every dispatch
-    // through it fails fast with "handler not bound" (morph/core/bridge.hpp).
-    // `bound` (backed by `Bridge::whenBound()`) is each controller's own
-    // settlement signal for that round trip — Local mode's handlers are
-    // already bound by construction, so all three fire synchronously there.
-    // This is the identical mitigation pastebin's own Main.qml carries, for
-    // the identical reason.
+    // The first listings are requested on completion in both modes: a
+    // dispatch made while a handler's registration round trip is still in
+    // flight waits for it and is sent once it lands.
+    Component.onCompleted: {
+        if (page.bookmarkController !== null)
+            page.refreshBookmarks()
+        if (page.tagController !== null)
+            page.tagController.refresh()
+        if (page.feedController !== null)
+            page.feedController.refresh()
+    }
+
     Connections {
         target: page.bookmarkController
-
-        function onBound() {
-            page.refreshBookmarks()
-        }
 
         function onListed(rows) {
             page.rows = rows
@@ -147,10 +145,6 @@ Item {
     Connections {
         target: page.tagController
 
-        function onBound() {
-            page.tagController.refresh()
-        }
-
         function onListed(rows) {
             page.tagRows = rows
         }
@@ -162,10 +156,6 @@ Item {
 
     Connections {
         target: page.feedController
-
-        function onBound() {
-            page.feedController.refresh()
-        }
 
         function onListed(rows) {
             page.feedRows = rows

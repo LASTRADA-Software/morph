@@ -263,7 +263,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: execute error reply is delive
     // Exercises the err-prefixed reply branch (line 234) and confirms the
     // catch(...) -> setException path is wired up end-to-end.
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cb;
+    morph::exec::MainThreadExecutor cb;
     auto& env = covRemoteEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     morph::backend::SimulatedRemoteBackend backend{*server};
@@ -289,7 +289,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: execute error reply is delive
         }
         errored.store(true);
     });
-    REQUIRE(waitFor([&] { return errored.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cb, [&] { return errored.load(); }));
     REQUIRE(errMsg.contains("remote action failed"));
 
     backend.deregisterModel(mid);
@@ -407,7 +407,7 @@ TEST_CASE("morph::offline::NetworkMonitor: stop() from inside probe detaches and
 // 489-490, 518-519 and 532-533, and named a type to go with it. By the time
 // anyone checked, that name matched nothing anywhere in the tree and all three
 // ranges had drifted onto unrelated code — mid-sentence in a doc comment, a
-// ModelId load, a parkIfInFrame guard -- three separate times, in the same
+// ModelId load, a registration guard -- three separate times, in the same
 // shape. The dead name is not repeated here on purpose: a grep for
 // it must come back empty, or the comment reads as a live reference to whoever
 // runs that grep next. Nothing verifies either half of such a citation, so when
@@ -517,7 +517,7 @@ TEST_CASE("registry.hpp R5: a validator-accepted action still propagates a non-s
 TEST_CASE("morph::bridge::BridgeHandler: unsubscribe with no entry is a no-op", "[coverage][bridge]") {
     morph::exec::ThreadPoolExecutor pool{1};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
 
     REQUIRE_NOTHROW(handler.unsubscribe<int>());
@@ -526,7 +526,7 @@ TEST_CASE("morph::bridge::BridgeHandler: unsubscribe with no entry is a no-op", 
 TEST_CASE("morph::bridge::Bridge: publishResult with no subscribers is a no-op", "[coverage][bridge]") {
     morph::exec::ThreadPoolExecutor pool{1};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
 
     // Nothing is subscribed, so the fan-out loop finds no matching entry.
@@ -540,7 +540,7 @@ TEST_CASE("morph::bridge::Bridge: deregisterHandler skips other bindings", "[cov
     // exercising the false arm of `sptr.get() == binding.get()`.
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<SubModel> handlerA{bridge, &cbExec};
     morph::bridge::BridgeHandler<SubModel> handlerB{bridge, &cbExec};
     (void)handlerA;
@@ -573,7 +573,8 @@ TEST_CASE("morph::bridge::Bridge: deregisterHandler skips an expired weak_ptr in
     // different binding — the find_if predicate locks the stale weak first,
     // gets nullptr, exercises the `sptr` false arm at line 163.
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), bridgeOwner};
 
     {
         auto stale = std::make_shared<morph::bridge::detail::HandlerBinding>();
@@ -648,7 +649,8 @@ TEST_CASE("morph::bridge::Bridge: switchBackend purges weak_ptr bindings whose o
     // switchBackend runs. The weak_ptr in _handlers cannot be locked, so the
     // `continue` arm fires (lines 126-128).
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::testing::InlineExecutor bridgeOwner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), bridgeOwner};
 
     {
         auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();

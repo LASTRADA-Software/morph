@@ -46,6 +46,7 @@
 #include <filesystem>
 #include <memory>
 #include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/payload_schema.hpp>
 #include <morph/core/registry.hpp>
@@ -192,6 +193,7 @@ struct SkewFixture {
 
 #ifdef MORPH_SKEW_ROLE_OLD
 
+// NOLINTNEXTLINE(bugprone-exception-escape): a probe; an uncaught failure ends the process, which the harness reads as a failure.
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: journal_skew_old <directory>\n");
@@ -202,7 +204,8 @@ int main(int argc, char** argv) {
     std::filesystem::remove(journal, ec);  // a stale file would replay the previous configure's shapes
 
     SkewFixture fixture;
-    auto log = std::make_shared<morph::journal::FileActionLog>(journal);
+    morph::exec::MainThreadExecutor owner;  // this thread, the log's owner, calls every verb
+    auto log = std::make_shared<morph::journal::FileActionLog>(owner, journal);
     auto holder = fixture.registry.create("Skew_Model");
     holder->attachActionLog(log, "skew-1");
 
@@ -260,6 +263,7 @@ bool throwsMismatch(SkewFixture& fixture, const morph::journal::LogEntry& entry)
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): a probe; an uncaught failure ends the process, which the harness reads as a failure.
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: journal_skew_new <directory>\n");
@@ -272,7 +276,8 @@ int main(int argc, char** argv) {
     }
 
     SkewFixture fixture;
-    const auto recorded = morph::journal::FileActionLog{journal}.entries();
+    morph::exec::MainThreadExecutor owner;  // this thread, the log's owner, calls every verb
+    const auto recorded = morph::journal::FileActionLog{owner, journal}.entries();
     check(recorded.size() == 3, "the new build read three entries written by the old one");
 
     // ── 1. Unchanged action: no false positive across two binaries ───────────

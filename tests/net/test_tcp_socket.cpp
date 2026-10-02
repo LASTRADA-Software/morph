@@ -177,7 +177,7 @@ TEST_CASE("TcpSocket: listen on port 0 gets an OS-assigned port", "[net][tcp]") 
 // the process able to satisfy it. The one site in these tests with
 // that shape is bounded: `FakeWsServer::acceptAndHandshake()` in test_socket_backend.cpp,
 // where the *main test thread* blocks in `accept()` while the only thing that
-// could satisfy it is the io thread of the `SocketBackend` under test -- i.e.
+// could satisfy it is the I/O loop of the `SocketBackend` under test -- i.e.
 // the very component whose failure to connect those tests exist to provoke.
 //
 // The six blocking `accept()`s in this file have the opposite shape, and it is
@@ -384,11 +384,10 @@ TEST_CASE("TcpSocket: adopting a non-blocking descriptor clears O_NONBLOCK", "[n
 }
 
 TEST_CASE("TcpSocket: tryAccept hands back a blocking connection", "[net][tcp]") {
-    // The contract SocketServer::clientLoop() depends on: recvSome() treats
-    // EAGAIN as fatal, and the first thing clientLoop() does with an accepted
-    // socket is performServerHandshake(), which reads before the client's
-    // Upgrade bytes have necessarily arrived. A non-blocking accepted socket
-    // therefore fails every connection.
+    // The contract a blocking reader of an accepted socket depends on:
+    // recvSome() treats EAGAIN as fatal, and performServerHandshake() reads
+    // before the client's Upgrade bytes have necessarily arrived. A
+    // non-blocking accepted socket therefore fails every such connection.
     //
     // Stated limit: on Linux this assertion also holds with the fix reverted,
     // because accept() here never produces a non-blocking socket to begin with.

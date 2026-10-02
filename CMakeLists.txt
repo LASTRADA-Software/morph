@@ -326,10 +326,12 @@ target_sources(morph
         include/morph/core/observability.hpp
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
+        include/morph/core/owner_strand.hpp
         include/morph/core/completion.hpp
         include/morph/core/coroutine.hpp
         include/morph/core/callback_scope.hpp
         include/morph/core/async.hpp
+        include/morph/core/io_loop.hpp
         include/morph/core/timeout_scheduler.hpp
         include/morph/core/model.hpp
         include/morph/core/registry.hpp
@@ -405,9 +407,11 @@ target_sources(morph
         include/morph/detail/fixed_string.hpp
         include/morph/detail/quantity_equation.hpp
         include/morph/core/detail/completion_awaiter.hpp
-        include/morph/core/detail/execute_order_gate.hpp
         include/morph/core/detail/task_handler.hpp
         include/morph/core/detail/instance_directory.hpp
+        include/morph/core/detail/owned_state.hpp
+        include/morph/core/detail/owner_affinity.hpp
+        include/morph/core/detail/owner_probe.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
         include/morph/forms/detail/session_common.hpp
@@ -911,6 +915,7 @@ if(MORPH_BUILD_NET)
                 include/morph/net/detail/sha1.hpp
                 include/morph/net/detail/ws_handshake.hpp
                 include/morph/net/detail/tcp_socket.hpp
+                include/morph/net/detail/ws_connection.hpp
                 include/morph/net/detail/ws_frame.hpp
                 include/morph/net/socket_server.hpp
                 include/morph/net/socket_backend.hpp

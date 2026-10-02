@@ -368,7 +368,10 @@ them once delivered, while the journal is a permanent trail the framework never
 prunes. Install one sink in `main()` and every model records automatically:
 
 ```cpp
-morph::journal::setActionLog(std::make_shared<morph::journal::FileActionLog>("audit.ndjson"));
+// The log belongs to one executor, its owner: appends from models' strands are
+// posted there. `journalOwner` runs one task at a time — the GUI executor, or an
+// `OwnerStrand` over the server's pool.
+morph::journal::setActionLog(std::make_shared<morph::journal::FileActionLog>(journalOwner, "audit.ndjson"));
 ```
 
 Each successful, loggable action becomes a `LogEntry` (model type, entity key,

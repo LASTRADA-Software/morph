@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <mutex>
 #include <optional>
 #include <unordered_map>
 #include <utility>
@@ -28,8 +26,7 @@
 ///     hand-typed `"timeout"` literal, which is exactly the drift
 ///     `wire::kExecuteTimeoutMessage` exists to prevent.
 ///   * `PendingCallTable` — call-id allocation plus the pending-completion
-///     map, with the admit-under-lock insert that closes the
-///     insert/disconnect-sweep race.
+///     map, owned by the backend's I/O loop.
 ///
 /// @par Why `core/detail/` and not `net/detail/`
 /// `core/remote.hpp` is one of the consumers and ships in the base `morph`
@@ -84,18 +81,19 @@ enum class ExecuteReplyKind : std::uint8_t {
     return ExecuteReplyKind::Error;
 }
 
-/// @brief Thread-safe map of in-flight `execute` calls, keyed by call id.
+/// @brief The map of in-flight calls, keyed by call id, owned by one executor.
 ///
 /// @tparam PendingT Backend-specific per-call state (the `Completion` state,
-///         the result deserializer, the callback executor). Must be movable
-///         *and* default-constructible: `insertIf` files entries through
-///         `operator[]`, which value-initializes before assigning.
+///         the result deserializer, the callback executor). Must be movable.
 ///
 /// Owns the call-id counter as well as the map, so the two cannot be
-/// allocated and stored by different owners by accident. Note the counter is a
-/// lock-free `std::atomic` read *outside* `_mtx`, on purpose: allocating an id
-/// and inserting its entry are deliberately not one atomic step -- `insertIf`'s
-/// admit predicate is what makes the insert safe, not a shared lock.
+/// allocated and stored by different owners by accident. Neither is
+/// synchronised: the table belongs to its backend's owner — for
+/// `net::SocketBackend`, the I/O loop — and every call is made in a task that
+/// owner runs. Allocating an id, filing the record, writing the request, and
+/// finding the record again when the reply arrives are all loop tasks, so a
+/// disconnect sweep cannot fall between a connected check and an insert: they
+/// are one task, and the sweep is another.
 template <class PendingT>
 class PendingCallTable {
 public:
@@ -104,86 +102,42 @@ public:
 
     /// @brief Allocates the next call id.
     ///
-    /// Starts at 1: `callId == 0` is reserved on the wire for "this is a
-    /// synchronous control reply, not an execute reply".
+    /// Starts at 1: a reply with `callId == 0` names no request, so no
+    /// request is ever filed under it.
     /// @return A call id not previously returned by this table.
-    [[nodiscard]] std::uint64_t nextCallId() { return ++_nextCallId; }
+    [[nodiscard]] std::uint64_t nextCallId() noexcept { return ++_nextCallId; }
 
-    /// @brief Inserts @p pending under @p callId, but only if @p admit — called
-    ///        while this table's mutex is held — approves it.
-    ///
-    /// The admit predicate is the whole point of this overload rather than a
-    /// plain `insert`. Backends check "am I still connected?" before building
-    /// the envelope, but a disconnect sweep (`drain()` + resolve-with-error)
-    /// can run strictly between that check and the insert; the entry would
-    /// then land in the map *after* the sweep already emptied it, and nothing
-    /// would ever resolve its `Completion`. Re-checking under the same mutex
-    /// the sweep takes closes that window: either the insert happens-before
-    /// the sweep (and the sweep cancels it), or it happens-after and the
-    /// predicate observes the disconnect and rejects it here.
-    ///
-    /// @param callId  Id to file @p pending under; overwrites any existing entry.
+    /// @brief Files @p pending under @p callId, replacing any existing entry.
+    /// @param callId  Id to file @p pending under.
     /// @param pending Per-call state to store.
-    /// @param admit   Predicate evaluated under the lock; `false` means "do not insert".
-    /// @return `true` if the entry was stored, `false` if @p admit rejected it.
-    template <class AdmitFn>
-    bool insertIf(std::uint64_t callId, PendingT pending, AdmitFn&& admit) {
-        std::scoped_lock const lock{_mtx};
-        // Forwarded, not called as a plain lvalue: `admit` is a forwarding
-        // reference and is invoked exactly once, so preserving the caller's
-        // value category is both safe and what lets an rvalue-qualified or
-        // move-only predicate be passed.
-        if (!std::forward<AdmitFn>(admit)()) {
-            return false;
-        }
-        _map[callId] = std::move(pending);
-        return true;
-    }
+    void insert(std::uint64_t callId, PendingT pending) { _map.insert_or_assign(callId, std::move(pending)); }
 
     /// @brief Removes the entry for @p callId and returns it.
     /// @param callId Call id carried by an incoming reply.
     /// @return The stored state, or `std::nullopt` if no such call is in flight
     ///         (a late or already-cancelled reply).
     [[nodiscard]] std::optional<PendingT> take(std::uint64_t callId) {
-        std::scoped_lock const lock{_mtx};
-        auto iter = _map.find(callId);
-        if (iter == _map.end()) {
+        auto node = _map.extract(callId);
+        if (node.empty()) {
             return std::nullopt;
         }
-        std::optional<PendingT> taken{std::move(iter->second)};
-        _map.erase(iter);
-        return taken;
+        return std::optional<PendingT>{std::move(node.mapped())};
     }
 
     /// @brief Removes every entry and returns them, leaving the table empty.
     ///
     /// Returns rather than resolves so the caller settles the drained
-    /// completions *outside* this table's lock — a completion callback may
-    /// re-enter the backend.
+    /// completions with the table already empty: settling one may re-enter
+    /// the backend and file a new call.
     /// @return Every entry that was in flight, keyed by call id.
-    [[nodiscard]] Map drain() {
-        Map drained;
-        {
-            std::scoped_lock const lock{_mtx};
-            drained.swap(_map);
-        }
-        return drained;
-    }
+    [[nodiscard]] Map drain() { return std::exchange(_map, {}); }
 
     /// @brief Number of calls currently in flight.
-    ///
-    /// Test-only observability. The count is stale the moment the lock is
-    /// released, so it must not drive a check-then-act decision — use
-    /// `insertIf`'s admit predicate (which runs *inside* the lock) for
-    /// anything that has to be atomic with respect to the table.
-    [[nodiscard]] std::size_t size() const {
-        std::scoped_lock const lock{_mtx};
-        return _map.size();
-    }
+    /// @return The number of filed entries.
+    [[nodiscard]] std::size_t size() const noexcept { return _map.size(); }
 
 private:
-    mutable std::mutex _mtx;
-    std::atomic<std::uint64_t> _nextCallId{0};
+    std::uint64_t _nextCallId{0};
     Map _map;
 };
 

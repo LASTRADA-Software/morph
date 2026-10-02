@@ -242,7 +242,7 @@ future format a reader doesn't understand instead of silently misreading it;
 A lightweight, injectable `morph::observe` seam (metrics + trace spans,
 mirroring the logger's replaceable-sink pattern) is wired into `RemoteServer`,
 `LocalBackend`, `SyncWorker`, and `ReconnectCoordinator`; `RemoteServer::health()`/
-`setHealthHandler()` expose a readiness snapshot, flipped by `beginShutdown()`
+`ServerConfig::healthHandler` expose a readiness snapshot, flipped by `beginShutdown()`
 (see C5). See `spec/core/observability.md`.
 
 ### C2 — Non-Qt transport option · P2 · shipped

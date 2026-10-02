@@ -26,14 +26,12 @@
 #include <atomic>
 #include <chrono>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <stdexcept>
 #include <string>
-#include <thread>
 
 // Forward-declared, never defined anywhere in this translation unit or this
 // link -- the whole point of the probe. A real app's model would instead be
@@ -80,10 +78,6 @@ BRIDGE_REGISTER_ACTION_FOR_CLIENT_4(ClientOnlyFacadeModel2, ClientOnlyFacadeActi
                                     "ClientOnlyFacadeAction2")
 
 namespace {
-
-struct InlineExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
 
 // A minimal, self-contained IModelHolder that carries no Model payload at
 // all -- deliberately NOT morph::model::detail::ModelHolder<ClientOnlyFacadeModel>,
@@ -144,8 +138,8 @@ int main() {
     // BridgeHandler constructor would call Bridge::registerHandler<Model>(),
     // which needs ModelFactory::create<Model>() and therefore Model complete.
     morph::exec::ThreadPoolExecutor pool{1};
-    InlineExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = std::string{morph::model::ModelTraits<ClientOnlyFacadeModel>::typeId()};
@@ -175,8 +169,9 @@ int main() {
             completed.store(true);
         });
 
+    // The reply is delivered on cbExec, which this thread owns and pumps.
     for (int idx = 0; idx < 200 && !completed.load(); ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        cbExec.runFor(std::chrono::milliseconds(10));
     }
     if (!completed.load() || !gotExpectedError.load()) {
         return 1;

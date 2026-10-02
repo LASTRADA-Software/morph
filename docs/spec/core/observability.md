@@ -9,7 +9,7 @@ dispatch/register/deregister, `SyncWorker::run()`, and
 call site rejects behind a single relaxed atomic load and constructs nothing:
 an unconfigured build has zero observability overhead and behaves exactly as
 if the seam did not exist. `RemoteServer` additionally exposes a
-`health()`/`setHealthHandler()` readiness query.
+`health()` readiness query and `ServerConfig::healthHandler`.
 
 ## Contents
 
@@ -81,19 +81,21 @@ struct HealthStatus {
     std::size_t inFlight;
 };
 
-[[nodiscard]] HealthStatus health() const;
-void setHealthHandler(std::function<void(const HealthStatus&)>);
+[[nodiscard]] morph::async::Completion<HealthStatus> health(morph::exec::IExecutor& replyExec);
+// ServerConfig::healthHandler — std::function<void(const HealthStatus&)>
 ```
 
-`health()` reads `liveModels` from the model registry (under the same mutex
-`register`/`deregister`/`execute` use) and `inFlight` from `_inFlightExecutes`
-— the same atomic counter `LimitPolicy::maxInFlightExecutes` enforces, the
-`executeInFlight` metric reports, and `RemoteServer::drainedWithin()` waits on
-(see [Thread safety](#thread-safety) and [backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)):
-one counter, four consumers, never double-counted. `setHealthHandler` installs
-a callback that fires immediately with the current snapshot (so a subscriber
-never has to wait for a transition to see a baseline) and fires again on any
-subsequent readiness change. `ready` starts `true` and is flipped to `false`,
+`health(replyExec)` is answered on the server strand, where the model registry
+and the in-flight count live, and delivered on `replyExec`, the executor the
+caller attaches from: `liveModels` from the registry, `inFlight` from the
+in-flight count — the same count `LimitPolicy::maxInFlightExecutes` enforces,
+the `executeInFlight` metric reports, and `RemoteServer::drainedWithin()` waits
+on (see [Thread safety](#thread-safety) and [backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)):
+one count, four consumers, never double-counted. `ServerConfig::healthHandler`,
+given at construction, is called once from the constructor with the initial
+snapshot (so a subscriber never has to wait for a transition to see a
+baseline) and again, on the server strand, on any subsequent readiness
+change. `ready` starts `true` and is flipped to `false`,
 once and for good, by `RemoteServer::beginShutdown()` — there is no
 un-shutdown, so once a server has begun shutting down `ready` stays `false`
 for the rest of its lifetime. `morph` does not embed an HTTP health endpoint;
@@ -162,11 +164,11 @@ A sink that throws is otherwise ignored (a failed `beginSpan` degrades to the
 `0` sentinel every call site already handles): observability may not change
 program behavior, and reporting the failure through `morph::log` would invite
 the same re-entrancy this tolerates.
-`RemoteServer`'s `_inFlightExecutes` counter (introduced alongside
-`LimitPolicy::maxInFlightExecutes`, see [backend.md](backend.md)) is a plain
-`std::atomic<std::size_t>`, read/written with relaxed ordering (advisory, like
-`morph::log`'s level check — a gauge sample racing a concurrent
-increment/decrement may be observed slightly stale, never torn). This seam
+`RemoteServer`'s in-flight count (the one `LimitPolicy::maxInFlightExecutes`
+gates, see [backend.md](backend.md)) is server-strand state: incremented at
+admission and decremented by a task each reply posts back, so every
+`executeInFlight` sample is emitted on the server strand and none is torn or
+out of order with another. This seam
 reuses that counter for the `executeInFlight` metric and `HealthStatus::inFlight`
 rather than introducing a second, separately-maintained counter for the same
 concept. `LocalBackend`'s in-flight counter is a
@@ -213,7 +215,7 @@ sinks on destruction. Mirrors `morph::log::ScopedLoggerOverride`'s
 snapshot-only constructor; used by tests to avoid leaking a sink across test
 cases. Not copyable or movable.
 
-### `RemoteServer::HealthStatus` / `health()` / `setHealthHandler()`
+### `RemoteServer::HealthStatus` / `health()` / `ServerConfig::healthHandler`
 
 See [backend.md](backend.md)'s `RemoteServer` API reference table.
 
@@ -235,9 +237,9 @@ See [backend.md](backend.md)'s `RemoteServer` API reference table.
 | API surface | Mirrors `morph::log` exactly: public config functions + internal `detail::` emit helpers | Consistency with the framework's one existing observability seam; engineers who know `morph::log` already know this API's shape. |
 | Two independent sinks (metric, trace), each with its own mutex/atomic | No shared state between them | Installing/using one never contends with the other; matches the fact that they observe different things (numbers vs. spans) and can be wired to entirely different backends. |
 | `registerCount`/`deregisterCount` count every call, not just successes | Counts attempts | Gives an accurate load/rate signal on that path (an unauthorized or malformed register still costs the server work); `executeErrors` is the separate counter for outcome-scoped failure signal on the execute path. |
-| `RemoteServer`'s in-flight metric reuses `_inFlightExecutes` | No second counter added | `LimitPolicy::maxInFlightExecutes` already introduced an atomic in-flight counter with exactly this admit/complete lifecycle; adding a parallel `_inFlight` member for the metric alone would require keeping two counters in lockstep for no benefit. `health()`'s `inFlight` field reads the same counter. |
-| `LocalBackend`'s in-flight counter is a `shared_ptr`, not a plain atomic member | Avoids capturing `this` in a strand-posted lambda | `LocalBackend`'s existing strand tasks already avoid `this` captures for lifetime safety (see Limitations); the counter follows the same rule rather than becoming a new dangling-pointer risk. `RemoteServer`'s equivalent counter is a plain atomic member because its strand task already captures `self = shared_from_this()`, keeping the whole object alive. |
-| `setHealthHandler` fires immediately on install | Calls the handler once, synchronously, right after storing it | A subscriber gets a baseline status without waiting for the first transition; also makes the stored handler genuinely used rather than write-only. |
+| `RemoteServer`'s in-flight metric reuses the in-flight count | No second counter added | `LimitPolicy::maxInFlightExecutes` already needs an in-flight count with exactly this admit/complete lifecycle; a parallel one for the metric alone would have to be kept in lockstep for no benefit. `health()`'s `inFlight` field reads the same count. |
+| `LocalBackend`'s in-flight counter is a `shared_ptr`, not a plain atomic member | Avoids capturing `this` in a strand-posted lambda | `LocalBackend`'s existing strand tasks already avoid `this` captures for lifetime safety (see Limitations); the counter follows the same rule rather than becoming a new dangling-pointer risk. `RemoteServer`'s equivalent count is a plain member of its server-strand state, reached through tasks that capture `self = shared_from_this()`, keeping the whole object alive. |
+| `ServerConfig::healthHandler` is called from the constructor | Once, synchronously, with the initial status | A subscriber gets a baseline status without waiting for the first transition; nothing else can reach the server yet, so the call needs no strand. |
 | `ready`'s sole mutator is `beginShutdown()` | `RemoteServer` sets `_ready` to `false` only from `beginShutdown()`, never back to `true` | This seam landed ahead of `beginShutdown()` specifically so that the later change ([backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)) needed no API change — just a store and a handler re-invocation inside the method already documented as the trigger. |
 
 ## Limitations
@@ -270,8 +272,8 @@ See [backend.md](backend.md)'s `RemoteServer` API reference table.
   sink-signature limitation (`(LogLevel, string_view)` carries no structured
   numbers or spans) that makes a separate seam necessary.
 - [backend.md](backend.md) — `RemoteServer`/`LocalBackend` dispatch call sites
-  the metric/trace hooks wrap, `LimitPolicy`'s `_inFlightExecutes` counter this
-  seam reuses, and where `HealthStatus`/`health()`/`setHealthHandler()` live.
+  the metric/trace hooks wrap, the in-flight count this seam reuses, and where
+  `HealthStatus`/`health()`/`ServerConfig::healthHandler` live.
 - [offline.md](../offline/offline.md) — `SyncWorker`/`ReconnectCoordinator` and
   the `IOfflineQueue` depth the `queueDepth`/`reconnectAttempts`/
   `reconnectOutcome` metrics report on.

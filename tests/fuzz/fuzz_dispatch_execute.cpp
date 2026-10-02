@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// libFuzzer harness over morph::backend::RemoteServer::handle / dispatchMessage
+// libFuzzer harness over morph::backend::RemoteServer::handle
 // -- the coverage-guided generalisation of tests/test_server_limits.cpp's
 // hand-picked cases (a fixed 5000-deep nesting, a lone continuation byte,
 // etc.). Built only under -DMORPH_BUILD_FUZZERS=ON; see

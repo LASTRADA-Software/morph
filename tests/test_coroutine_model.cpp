@@ -23,6 +23,7 @@
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/callback_scope.hpp>
 #include <morph/core/coroutine.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
@@ -198,7 +199,9 @@ struct CoroProbe {
     std::vector<std::string> order;
     std::vector<bool> onOwnStrand;
     std::vector<std::thread::id> threads;
-    morph::bridge::BridgeHandler<CoroSourceModel>* source = nullptr;
+    // Reaches another model's handler: a call the bridge's owner makes, so a
+    // handler on a strand asks the owner to make it and awaits the answer.
+    std::function<morph::async::Completion<int>(int)> lookup;
     std::optional<morph::async::Completion<int>::Promise> release;
     std::optional<morph::async::Completion<int>> held;
     std::atomic<bool> holdCancelled{false};
@@ -301,7 +304,7 @@ struct CoroModel {
     core::async::Task<int> execute(CoroAwaitOther action) {
         auto* const strand = strandContext();
         probe().noteStrand(strand != nullptr);
-        auto pending = probe().source->execute(CoroLookup{.x = action.x});
+        auto pending = probe().lookup(action.x);
         int const looked = co_await std::move(pending);
         // The other model's completion is delivered on its handler's executor;
         // this handler must still resume on its own strand.
@@ -507,7 +510,7 @@ TEST_CASE("a Task handler's result reaches the client, and every resumption runs
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -610,13 +613,20 @@ TEST_CASE("TaskResumer resumes a coroutine as one of its strand's tasks, never b
 TEST_CASE("a Task handler can await another model's execute and comes back to its own strand", "[coroutine][model]") {
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::exec::ThreadPoolExecutor otherCallbacks{1};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    morph::bridge::BridgeHandler<CoroSourceModel> source{bridge, &otherCallbacks};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
+    morph::bridge::BridgeHandler<CoroSourceModel> source{bridge, &exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
-    probe().source = &source;
+    probe().lookup = [&exec, &source](int x) {
+        auto [pending, promise] = morph::async::Completion<int>::makeSettleable(&exec);
+        exec.post([&source, x, kept = std::make_shared<morph::async::Completion<int>::Promise>(std::move(promise))] {
+            source.execute(CoroLookup{.x = x})
+                .then([kept](int value) { kept->resolve(value); })
+                .onError([kept](const std::exception_ptr& err) { kept->reject(err); });
+        });
+        return std::move(pending);
+    };
 
     std::optional<int> result;
     handler.execute(CoroAwaitOther{.x = 4})
@@ -633,7 +643,7 @@ TEST_CASE("the next action on a model starts only once a suspended Task handler 
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -671,7 +681,7 @@ TEST_CASE("an execute deadline cancels a suspended Task handler and rejects with
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     bridge.setExecuteDeadline(50ms);
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
@@ -695,24 +705,11 @@ namespace coro_test {
 
 namespace {
 
-/// Switches @p bridge to a fresh LocalBackend over @p pool on a helper thread,
-/// and ends the process with a message if the switch does not return: a
-/// `~LocalBackend` stuck draining its strand would otherwise hold the whole run
-/// until ctest's timeout, with nothing said about why.
+/// Switches @p bridge to a fresh LocalBackend over @p pool, on the owner, as
+/// every Bridge verb is. The outgoing LocalBackend drains its strands before
+/// this returns; a drain that never ends is caught by ctest's timeout.
 void switchWithin(morph::bridge::Bridge& bridge, morph::exec::IExecutor& pool) {
-    std::promise<void> returned;
-    auto finished = returned.get_future();
-    std::thread switcher{[&] {
-        bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool));
-        returned.set_value();
-    }};
-    if (finished.wait_for(morph::testing::kDefaultWaitBudget * 5) != std::future_status::ready) {
-        static_cast<void>(std::fputs(
-            "switchBackend did not return: the outgoing LocalBackend is stuck draining its strand\n", stderr));
-        static_cast<void>(std::fflush(stderr));
-        std::abort();
-    }
-    switcher.join();
+    bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool));
 }
 
 }  // namespace
@@ -740,7 +737,7 @@ TEST_CASE("a backend switch stops a Task handler suspended on a completion", "[c
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -766,7 +763,7 @@ TEST_CASE("a backend switch stops a Task handler suspended on a delay", "[corout
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -787,7 +784,7 @@ TEST_CASE("a backend switch stops a Task handler that loops on delay", "[corouti
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -806,12 +803,65 @@ TEST_CASE("a backend switch stops a Task handler that loops on delay", "[corouti
     REQUIRE(probe().order == std::vector<std::string>{"tick-start", "tick-cancelled"});
 }
 
+// A continuation attached through a CallbackScope links the scope's stop to
+// the call: once the scope stops, nobody is left to receive the result, so
+// the Task handler producing it is stopped as well.
+TEST_CASE("requestStop on the scope a Task handler's continuation is gated by stops the handler",
+          "[coroutine][model][cancel]") {
+    coro_test::SchedulerScope const timers;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor exec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
+    morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
+    armHold(&exec);
+
+    morph::async::CallbackScope const scope;
+    bool delivered = false;
+    handler.execute(CoroSleep{.ms = 60'000}).then(scope.token(), [&](const int&) { delivered = true; });
+    REQUIRE(pumpUntil(exec, [&] {
+        std::scoped_lock const lock{probe().mtx};
+        return !probe().order.empty();
+    }));
+
+    scope.requestStop();
+    REQUIRE(pumpUntil(exec, [&] { return probe().holdFinished.load(); }));
+    REQUIRE_FALSE(delivered);
+    std::scoped_lock const lock{probe().mtx};
+    REQUIRE(probe().order == std::vector<std::string>{"sleep-start", "sleep-cancelled"});
+}
+
+TEST_CASE("cancelPending on a LocalBackend that stays alive stops its running Task handlers",
+          "[coroutine][model][cancel]") {
+    coro_test::SchedulerScope const timers;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor exec;
+    auto backend = std::make_unique<morph::backend::LocalBackend>(pool);
+    auto* local = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend), exec};
+    morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
+    armHold(&exec);
+
+    bool rejected = false;
+    handler.execute(CoroSleep{.ms = 60'000}).then([](int) {}).onError([&](const std::exception_ptr& error) {
+        rejected = holds<morph::backend::DisconnectedError>(error);
+    });
+    REQUIRE(pumpUntil(exec, [&] {
+        std::scoped_lock const lock{probe().mtx};
+        return !probe().order.empty();
+    }));
+
+    local->cancelPending(std::make_exception_ptr(morph::backend::DisconnectedError{}));
+    REQUIRE(pumpUntil(exec, [&] { return rejected && probe().holdFinished.load(); }));
+    std::scoped_lock const lock{probe().mtx};
+    REQUIRE(probe().order == std::vector<std::string>{"sleep-start", "sleep-cancelled"});
+}
+
 TEST_CASE("an action queued behind a suspended Task handler does not run once a backend switch failed it",
           "[coroutine][model][lifetime]") {
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -843,7 +893,7 @@ TEST_CASE("a handler that ignores the stop resumes inline once its backend is go
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
     auto const overlapsBefore = morph::model::detail::ActionGate::overlapsObserved();
@@ -876,7 +926,7 @@ TEST_CASE("an execute deadline stops a handler parked on a core-cpp queue, which
     morph::exec::ThreadPoolExecutor pool{2};
     core::async::ThreadPoolExecutor foreign{1};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     bridge.setExecuteDeadline(50ms);
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
@@ -908,7 +958,7 @@ TEST_CASE("the next action starts on the strand after a handler ended on another
     morph::exec::ThreadPoolExecutor pool{2};
     core::async::ThreadPoolExecutor foreign{1};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
     probe().away = &foreign;
@@ -938,7 +988,7 @@ TEST_CASE("a backend switch stops a handler parked on a core-cpp queue, and skip
     morph::exec::ThreadPoolExecutor pool{2};
     core::async::ThreadPoolExecutor foreign{1};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
     probe().queue = std::make_unique<core::async::AsyncQueue<int>>(foreign, core::async::AsyncQueueOptions{});
@@ -970,7 +1020,7 @@ TEST_CASE("a handler that awaits a core-cpp queue comes back to its own strand",
     morph::exec::ThreadPoolExecutor pool{2};
     core::async::ThreadPoolExecutor foreign{1};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
     probe().queue = std::make_unique<core::async::AsyncQueue<int>>(foreign, core::async::AsyncQueueOptions{});
@@ -1001,7 +1051,7 @@ TEST_CASE("a detached chain a Task handler starts on a core-cpp queue resumes af
     morph::exec::ThreadPoolExecutor pool{2};
     core::async::ThreadPoolExecutor foreign{1};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
     probe().queue = std::make_unique<core::async::AsyncQueue<int>>(foreign, core::async::AsyncQueueOptions{});
@@ -1025,7 +1075,7 @@ TEST_CASE("an exception a Task handler throws after a suspension reaches onError
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -1052,11 +1102,12 @@ TEST_CASE("RemoteServer's executeTimeout stops a suspended Task handler and rele
     registry.registerModel<CoroModel>("Coro_Model");
     dispatcher.registerAction<CoroModel, CoroHold>("Coro_Model", "Coro_Hold");
     dispatcher.registerAction<CoroModel, CoroLog>("Coro_Model", "Coro_Log");
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
     morph::backend::LimitPolicy policy;
     policy.executeTimeout = 50ms;
-    server->setLimitPolicy(policy);
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits = policy;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, dispatcher, registry);
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -1087,7 +1138,7 @@ TEST_CASE("a Task handler behind RemoteServer replies with its result, and its f
     dispatcher.registerAction<CoroModel, CoroDouble>("Coro_Model", "Coro_Double");
     dispatcher.registerAction<CoroModel, CoroThrow>("Coro_Model", "Coro_Throw");
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -1160,7 +1211,7 @@ TEST_CASE("a Task handler whose success the journal refuses reports ActionRecord
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     auto log = std::make_shared<coro_test::SuccessRefusingLog>();
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "Coro_Model";
@@ -1284,7 +1335,7 @@ TEST_CASE("a Task handler's action that fails its validator is rejected before t
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
 
     std::exception_ptr failure;
@@ -1309,7 +1360,7 @@ TEST_CASE("a Task handler that throws is journalled as Outcome::Failed, locally 
     morph::exec::MainThreadExecutor exec;
     auto log = std::make_shared<coro_test::SuccessRefusingLog>();
     {
-        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
         auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
         binding->typeId = "Coro_Model";
         binding->modelFactory = [log] {
@@ -1356,7 +1407,7 @@ TEST_CASE("a Task action queued behind a suspended one does not start once a bac
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 
@@ -1384,7 +1435,7 @@ TEST_CASE("LocalBackend still stops a running Task handler after sweeping many f
     coro_test::SchedulerScope const timers;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
 
     // More finished Task runs than the backend keeps before sweeping them.
@@ -1419,7 +1470,7 @@ TEST_CASE("RemoteServer queues an ordinary action behind a suspended Task handle
     dispatcher.registerAction<CoroModel, CoroHold>("Coro_Model", "Coro_Hold");
     dispatcher.registerAction<CoroModel, CoroLog>("Coro_Model", "Coro_Log");
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), exec};
     morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
     armHold(&exec);
 

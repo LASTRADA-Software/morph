@@ -338,7 +338,7 @@ TEST_CASE("CallbackScope::reset: an old reply is dropped and the new one deliver
 TEST_CASE("BridgeHandler::subscribe(scope, cb): delivery stops when the scope does",
           "[callback-scope][bridge][subscription][issue-138]") {
     morph::testing::InlineExecutor exec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec), exec};
     morph::bridge::BridgeHandler<CbsCounterModel, morph::bridge::AllowShared> handler{bridge, &exec};
 
     auto hits = makeCounter();

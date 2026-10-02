@@ -30,10 +30,11 @@ and react to backend changes.
   - [Lifetime contract](#lifetime-contract)
 - [The abstract interface — `IBackend`](#the-abstract-interface--ibackend)
 - [Connect/disconnect notifications](#connectdisconnect-notifications)
-- [Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy)
 - [Why registration needs a non-blocking path](#why-registration-needs-a-non-blocking-path)
 - [The structural registration surface — `bindModel` and `promoteModel`](#the-structural-registration-surface--bindmodel-and-promotemodel)
-  - [What a natively non-blocking backend does to `registerHandler`](#what-a-natively-non-blocking-backend-does-to-registerhandler)
+  - [The delivery executor is the caller's owner](#the-delivery-executor-is-the-callers-owner)
+  - [`SynchronousBackendAdapter` — a blocking backend behind a strand](#synchronousbackendadapter--a-blocking-backend-behind-a-strand)
+  - [What the bind rule makes of each backend](#what-the-bind-rule-makes-of-each-backend)
 - [Error types](#error-types)
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
@@ -131,15 +132,16 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 | Method | Purpose |
 |---|---|
 | `registerModel(typeId, factory)` | Registers a new model instance, returns its opaque `ModelId`. |
-| `registerModelWithContext(typeId, factory, contextKey)` | Same as `registerModel`, additionally passes a stable identity (e.g. account id). Default implementation drops `contextKey` and forwards to `registerModel` — correct for `LocalBackend` where the factory closure already captures identity. Every backend whose instances live behind a wire protocol overrides it to carry `contextKey` across: `SimulatedRemoteBackend`, `SocketBackend` and `QtWebSocketBackend` all do. Not cosmetic — `RemoteServer::attachLogIfConfigured` skips the `LogProvider` lookup entirely on an empty `contextKey`, so a wire backend that drops the key leaves the instance with **no** action log rather than a log missing a field. |
-| `bindModel(request, cbExec)` | Acquires a model instance and returns a `Completion<ModelId>` delivered on `cbExec`. One verb covering `registerModelWithContext`, `registerModelShared` and `attachModel`, selected by the request's shape. The preferred surface — see [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
+| `registerModelWithContext(typeId, factory, contextKey)` | Same as `registerModel`, additionally passes a stable identity (e.g. account id). Default implementation drops `contextKey` and forwards to `registerModel` — correct for `LocalBackend` where the factory closure already captures identity. Every backend whose instances live behind a wire protocol carries `contextKey` across: `SimulatedRemoteBackend` and `SocketBackend` override it, and `QtWebSocketBackend` carries it on every `bindModel` (its synchronous verbs refuse). Not cosmetic — `RemoteServer::attachLogIfConfigured` skips the `LogProvider` lookup entirely on an empty `contextKey`, so a wire backend that drops the key leaves the instance with **no** action log rather than a log missing a field. |
+| `bindModel(request, cbExec)` | Acquires a model instance and returns a `Completion<ModelId>` delivered on `cbExec`: a private instance, register-or-attach on a key, or a re-point, selected by the request's shape. The only acquire verb `Bridge` calls, with its owner as `cbExec` — see [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
+| `setOwner(affinity)` | Tells the backend the owner its caller (the `Bridge`) runs on; called when the bridge installs it. A backend that keeps state for the bridge's verbs records it and checks, in a debug build, that each verb runs there. Default: ignored. |
 | `promoteModel(request, cbExec)` | Files an already-live instance under a key and returns a `Completion<ModelId>` delivered on `cbExec`. The structural counterpart of `assignPrimary`. |
-| `bindWaitPolicy()` | Whether a caller may block its own thread until a `bindModel`/`promoteModel` completion settles. `BindWait::kCallerMayBlock` by default. The framework callers are `Bridge::registerHandlerImpl`, `Bridge::switchBackend`'s phase 1 and `Bridge::installReconnectHandler`'s handler; see [Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy). |
+| `instances(typeId, cbExec)` | Lists the live shared keys of `typeId` through a `Completion<vector<string>>` delivered on `cbExec`. What `Bridge::instancesOf` (and so `BridgeHandler::instances()`) asks. Default: answers from `listInstances` and settles before returning. |
 | `deregisterModel(mid)` | Removes the model identified by `mid`. |
 | `execute(mid, call, cbExec)` | Dispatches `call` against the model identified by `mid`. Returns a `Completion<std::shared_ptr<void>>`. |
 | `notifyBackendChanged()` | Called by `Bridge::switchBackend()` after all handlers are re-registered. |
 | `cancelPending(exc)` | Resolves every still-pending completion with `exc`. Called on the outgoing backend during `switchBackend()` and in `Bridge`'s destructor. After this call, any later `setValue`/`setException` on those states is a no-op. |
-| `setReconnectHandler(handler)` | Installs a callback invoked when the backend reconnects to its peer. Fires only on the *second and later* connects, never the first — used by `Bridge` to re-register handlers after a drop. Used by backends with transport (e.g. `QtWebSocketBackend`). Default implementation is a no-op. |
+| `setReconnectHandler(handler, exec)` | Installs a callback the backend **posts to `exec`** when it reconnects to its peer — never run on the backend's own thread. Fires only on the *second and later* connects, never the first — used by `Bridge`, which passes its owner, to re-bind its handlers after a drop. Used by backends with transport (`QtWebSocketBackend`, `SocketBackend`). `nullptr` clears it. Default implementation is a no-op. |
 | `setConnectHandler(handler)` | Installs a callback invoked on every successful connect, including the first — the complementary hook `setReconnectHandler` deliberately skips (see [Connect/disconnect notifications](#connectdisconnect-notifications)). Default implementation is a no-op. |
 | `setDisconnectHandler(handler)` | Installs a callback invoked whenever the transport drops, before any reconnect is scheduled. Default implementation is a no-op. |
 | `setSession(session)` | Installs the `session::Context` stamped onto every control envelope (`register`, `registerShared`, `attach`, `assign`, `deregister`) this backend subsequently builds. Pushed by `Bridge::setDefaultSession()` and `Bridge::switchBackend()`. Default implementation is a no-op. See [Session propagation to control envelopes](#session-propagation-to-control-envelopes). |
@@ -170,9 +172,9 @@ transport drops, **before** any reconnect is scheduled, so an observer sees
 the disconnected state even when a retry follows immediately (an instant
 successful reconnect must not look, from the UI's perspective, like nothing
 happened). Both are invoked on the backend's own thread, and `nullptr`
-clears either — matching `setReconnectHandler`'s existing contract exactly.
-Purely additive: `setReconnectHandler` keeps its current semantics, and
-every existing embedder is unaffected.
+clears either. The reconnect handler differs on purpose: it re-binds the
+bridge's handlers, which is owner work, so the backend posts it to the executor
+it was installed with.
 
 `QtWebSocketBackend` is currently the only backend that overrides either:
 its `connected`/`disconnected` `QWebSocket` signal slots invoke
@@ -185,7 +187,7 @@ section below.
 `Bridge::executeVia` stamps `Bridge::defaultSession()` onto the `ActionCall`
 passed to `execute()` (see [bridge.md](bridge.md)), so `execute` envelopes
 always carry the current session. Control messages — `register`,
-`registerShared` (`registerModelShared`), `attach` (`attachModel`), `assign`
+`registerShared` and `attach` (`bindModel` with a key), `assign`
 (`assignPrimary`), and `deregister` (`deregisterModel`) — are different: each
 is built directly inside the concrete backend, which has no other route to
 the `Bridge`'s session except `IBackend::setSession`. Every wire-backed
@@ -199,7 +201,7 @@ ownership check relies on for every instance a `Bridge` registers (see
 `Bridge` calls `IBackend::setSession` in two places: once from its
 constructor (with the just-constructed, typically empty, default session) and
 again every time `setDefaultSession()` installs a new one; `switchBackend()`
-also calls it on the incoming backend, **before** phase 1's
+also calls it on the incoming backend, **before** its
 per-binding re-registration loop runs, so every `register`/`registerShared`
 envelope built while re-registering handlers on the new backend already
 carries the current session. A wire-backed backend that overrides
@@ -211,508 +213,193 @@ envelope, so there is nothing to stamp.
 
 ## Why registration needs a non-blocking path
 
-`registerModel`/`registerModelWithContext`, and the keyed
-`registerModelShared`/`attachModel` beside them, are **synchronous**: a backend
-whose registration requires a round trip can only implement them by blocking
-the calling thread until the reply arrives. `QtWebSocketBackend` does that via
-a nested `QEventLoop` in `sendSync`.
-
-On a WASM main thread Qt refuses to spin a nested loop at all
+`registerModel`/`registerModelWithContext` are **synchronous**: a backend whose
+registration requires a round trip can only implement them by blocking the
+calling thread until the reply arrives. On the Qt thread that means a nested
+`QEventLoop`, and on a WASM main thread Qt refuses to spin one at all
 (`WaitForMoreEvents is not supported on the main thread without asyncify`), so
-that blocking call **aborts the page** — on the very first `registerModel` a
-WASM client makes, and again on the first payload-keyed `execute()` a keyed
-screen makes, which attaches. That is the whole reason a non-blocking
-registration path exists; everything below this heading is a consequence of it.
-
-The path is [`bindModel`/`promoteModel`](#the-structural-registration-surface--bindmodel-and-promotemodel);
-why it is one virtual rather than an optional non-blocking twin per verb is
-[Why one bind virtual and not four](#why-one-bind-virtual-and-not-four) below.
-Two consequences of it are load-bearing and are recorded here rather than left
-to be rediscovered:
-
-**The gate is `asyncRegistrationEnabled`, not the surface.** `bindModel` is
-non-blocking *as a signature* on every backend, but only a backend that
-overrides it is non-blocking *in fact*. `QtWebSocketBackend`'s override is
-gated behind `QtWebSocketBackendConfig::asyncRegistrationEnabled`, which is
-**off by default**: with defaults, its `bindModel` is `IBackend`'s, which runs
-the blocking verb. A WASM client must set the flag. See
-[`QtWebSocketBackend`](#qtwebsocketbackend--client-side-websocket-transport).
+such a blocking call **aborts the page**; `QtWebSocketBackend` therefore refuses
+the synchronous verbs (`std::logic_error`) and registers only through
+`bindModel`. And a
+`BridgeHandler` constructed inside a running action is on a pool thread that is
+not its bridge's owner, so its registration has to be posted rather than made
+there. Both reasons lead to one non-blocking acquire verb, `bindModel`, whose
+reply is a `Completion` delivered on an executor the caller names.
 
 **Queueing before the first connect.** A non-blocking *private* bind made
-before the socket has finished connecting is **queued**, not failed — this is
-exactly the ordering a single-threaded WASM client must use, since it can never
-block waiting for the connection to settle (a `BridgeHandler` constructed the
-moment the backend is wired up, before the first `connected` signal). The
-queued request is sent, in FIFO order, the moment `connected` fires next (the
-first connect included, before the reconnect handler runs) — no protocol
-change: a call-id is assigned only at send time, same as the immediate path. If
-the socket is torn down (destroyed, or disconnects) before ever connecting, the
-queue is drained by `cancelPending`, which still rejects each queued request's
-`Completion` exactly once, exactly like an in-flight registration would. A
-*keyed* bind carries no queue: it is rejected with `"disconnected"`
+before `QtWebSocketBackend`'s socket has finished connecting is **queued**, not
+failed — the ordering a single-threaded WASM client must use, since it can never
+block waiting for the connection to settle. The queued request is sent, in FIFO
+order, the moment `connected` fires next (the first connect included, before
+the reconnect handler is posted); if the socket is torn down before ever
+connecting, `cancelPending` rejects each queued request's `Completion` exactly
+once. A *keyed* bind carries no queue: it is rejected with `"disconnected"`
 immediately. See `QtWebSocketBackend`'s own section below.
-
-**A queued or in-flight bind means an unbound handler.** `registerHandler`
-returns before the reply lands whenever the backend answers
-`BindWait::kCallerMustNotBlock`, and `executeVia` then fails fast with
-`"handler not bound"`. The seams for gating on it without polling are
-`BridgeHandler::isBound()` and `whenBound()` — see
-[bridge.md](bridge.md), "Registration readiness", and
-[Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy)
-below for which backends answer which way.
 
 ## The structural registration surface — `bindModel` and `promoteModel`
 
-Everything above this heading describes the synchronous registration surface.
-It still works and every backend in the tree still implements it; this section
-describes the non-blocking surface that sits beside it, and why it has the
-shape it has.
+Two verbs, on `IBackend`, carry every acquire and promote case:
 
-### Why one bind virtual and not four
-
-The obvious alternative is four optional non-blocking twins on `IBackend` —
-one beside each of `registerModel`, `registerModelShared`, `attachModel` and
-`assignPrimary` — each returning a `bool` meaning "I accepted the request and
-will call exactly one callback later" or "I have no such path, call the
-synchronous verb instead". The objection is not the duplication. It is two
-properties of those *signatures*:
-
-1. **The continuation would be optional.** With `true` meaning "I accepted the
-   request" and `false` meaning "call the synchronous verb instead", every call
-   site carries two paths, no backend can be partially adopted without the
-   caller knowing about it, and each of `Bridge::attachHandlerAsync`,
-   `ensureBoundAsync` and `assignHandlerPrimary` has to carry that second path
-   plus handoff machinery for the case where the "async" verb answers inline.
-
-2. **The delivery thread would be prose.** All four twins would share one
-   requirement: a backend must not deliver `onRegistered`/`onError` on a thread
-   from which `~Bridge` can run concurrently. That is a contract on the
-   *backend* that nothing can check — a backend that replies on its own
-   transport thread compiles, passes, and reopens the use-after-free described
-   in [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md). The
-   reason it matters is on `Bridge`'s side: three of the four continuations
-   (`ensureBoundAsync`, `attachHandlerAsync` and `assignHandlerPrimary`) test
-   `CallbackToken::active()` and then dereference `this`, and a `~Bridge`
-   completing between those two steps is exactly that check-then-act shape.
-   `registerHandlerImpl`'s callback is the exception: it holds
-   `detail::BridgeLifetime` across its whole touch of `this`, which is safe
-   there because nothing inside that span calls into consumer code or a
-   blocking backend path. The other three cannot take that same gate — it makes
-   `~Bridge` *block* for the gated span, and each span acquires `_attachMtx`,
-   which the synchronous `Bridge::attachHandler` holds across a full
-   `attachModel` round trip, unbounded on a wire backend.
-
-### What the surface is instead
-
-Two verbs, on `IBackend`, carrying every case the five acquire/promote verbs
-carry between them:
-
-| Verb | Signature | Replaces |
+| Verb | Signature | Covers |
 |---|---|---|
-| `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | `registerModel`, `registerModelWithContext`, `registerModelShared`, `attachModel` |
-| `promoteModel` | `virtual Completion<ModelId> promoteModel(PromoteRequest, IExecutor& cbExec)` | `assignPrimary` |
+| `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | A private instance, register-or-attach on a key, re-point to a key, give an instance up and bind privately |
+| `promoteModel` | `virtual Completion<ModelId> promoteModel(PromoteRequest, IExecutor& cbExec)` | Filing a live instance under a key (`assignPrimary`) |
 
-`BindRequest` carries the union of the three acquire verbs' parameters, and its
-*shape* — not the verb name — selects the behaviour:
+`BindRequest`'s *shape* — not a verb name — selects the behaviour:
 
-| `primary` | `current` | Meaning | Synchronous verb |
-|---|---|---|---|
-| empty | `ModelId{0}` | Private instance, never enters the shared directory. | `registerModelWithContext` |
-| non-empty | `ModelId{0}` | Register-or-attach on `(typeId, primary)`. | `registerModelShared` |
-| non-empty | non-zero | Re-point from `current` to `(typeId, primary)`. | `attachModel` |
+| `primary` | `current` | Meaning |
+|---|---|---|
+| empty | `ModelId{0}` | Private instance, never enters the shared directory. |
+| non-empty | `ModelId{0}` | Register-or-attach on `(typeId, primary)`. |
+| non-empty | non-zero | Re-point from `current` to `(typeId, primary)`. |
+| empty | non-zero | Give `current` up and bind a private instance instead. |
 
-That collapse is not a simplification imposed on the model: the three verbs
-already degrade into each other exactly this way (`registerModelShared` with an
-empty `primary` *is* `registerModelWithContext`; `attachModel` with a zero
-`current` *is* `registerModelShared`). Naming them separately made the same
-distinction three times.
+One verb rather than one per case, because the cases degrade into each other
+exactly this way (a register-or-attach with an empty key *is* a private
+register; a re-point from nothing *is* a register-or-attach), and because every
+case shares the one property that matters: the reply is a `Completion`, and
+the caller names the executor it is delivered on. Both request types own their
+strings: a bind may outlive the frame that issued it.
 
-Both request types own their strings. `InstanceIdentity` holds `string_view`s,
-which is safe for a synchronous call because the call does not return until the
-backend has finished with them. A request that may outlive the frame that
-issued it cannot rest on that.
-
-### How the threading contract becomes structural
+### The delivery executor is the caller's owner
 
 `Completion<T>` posts its handlers to the executor it was built with
 (`completion.md`). Passing that executor into the verb makes the delivery
-thread an argument:
+thread an argument rather than a property of the backend:
 
-- The continuation runs where `cbExec` says. A backend cannot choose the
-  delivery thread, whatever it does with its own threads or when it settles.
-- `cbExec` is a **reference**, not a pointer. A null executor would make
-  `Completion` drop every handler silently, which is the same class of
-  unobservable failure the surface exists to remove — so "deliver nowhere"
-  cannot be spelled.
+- The continuation runs where `cbExec` says, whatever thread the backend
+  settles on.
+- `cbExec` is a **reference**, not a pointer: "deliver nowhere" cannot be
+  spelled.
 
-What this does **not** do is make the use-after-free impossible by itself. It does not
-add a lock, and it does not know what the caller's teardown looks like. What it
-changes is *who decides*: the choice of delivery thread moves from fifteen
-`IBackend` implementors, none of which knows anything about the caller's
-destructor, to the one caller that does — and it moves from a comment to a
-value that call site has to produce. A caller whose teardown runs on its own
-event-loop thread passes that thread's executor and the two-step
-check-then-dereference can no longer straddle a destructor, by construction
-rather than by the backend author having read a `@note`.
+`Bridge` passes its owner, so every bind and promote reply is a task on the
+owner and touches the bridge's state there — see
+[bridge.md](bridge.md#registration-readiness--the-bind-rule). A backend that
+settles before returning (`LocalBackend`, `SimulatedRemoteBackend`, the
+default) has its outcome read and applied by the call that issued it, so a
+handler over it is bound when its constructor returns.
+`tests/test_backend_registration_surface.cpp` pins the delivery: a backend
+settles from a thread asserted *not* to be the caller's, and the continuation
+runs only when the caller's `MainThreadExecutor` is drained, on the draining
+thread.
 
-**`Bridge` is that caller for half of it.** Its five dispatch
-sites name `exec::detail::inlineExecutor()` on the `bindModel`/
-`promoteModel` call itself, and that is a decision rather than an absence:
-an inline settle has to reach `Bridge::detail::parkIfInFrame` *inside* the
-dispatch frame, because that is what keeps `registerHandler()` synchronous for
-a backend that binds inline and what stops `detail::awaitHandoff` waiting on a
-task only the waiting thread could run. The other case — a reply that arrives
-after the dispatch frame has gone — is the only one with a thread left to
-choose. `Bridge`'s constructor takes an optional `bridgeExec`,
-`detail::deliverLate` routes exactly those replies to it, and a null one (the
-default) runs them inline.
+### The default implementations
 
-So the check-then-dereference window is **closed for an embedder that supplies
-an executor whose thread also runs `~Bridge`** — the continuation and the
-destructor are then two tasks on one thread and cannot interleave — and
-**open for one that does not**, which is every caller that names no executor.
-For
-`QtWebSocketBackend` the safety is the same by-construction safety it always
-had — it must itself be used from the Qt event loop thread and settles every
-reply from `onTextMessage` on that same thread, so the check and the use cannot
-straddle a destructor. Its two non-reply paths do not weaken this either: a
-disconnected or no-op bind settles inline, inside the caller's own frame (which
-`Bridge::detail::parkIfInFrame` exists to handle), and `cancelPending` settles
-the remainder from `~Bridge` itself, which is not a *concurrent* destructor. A
-backend that replies on its own transport thread reopens the use-after-free for
-a `Bridge` constructed without a `bridgeExec`, and does not for one constructed
-with a suitable one. That split is the whole of the claim: the guarantee this
-surface makes structural is a guarantee about *backends*, and for
-`Bridge`-mediated calls the delivery thread is the embedder's choice rather
-than the backend's — a contract one embedder can satisfy, instead of one
-every backend author must remember.
+A backend that overrides nothing gets `IBackend`'s `bindModel`/`promoteModel`.
+The default `bindModel` has no shared directory: every shape binds a private
+instance through `registerModelWithContext`, and a non-zero `current` is
+released once the replacement is acquired, so a throwing acquire never strands
+the caller with neither instance. The default `promoteModel` calls
+`assignPrimary` and echoes `mid` back, including for `assignPrimary`'s
+documented no-op cases, which are not failures. Both settle before returning,
+and an exception from the verb they call rejects the `Completion` rather than
+propagating, so a caller has one failure channel.
 
-`tests/test_backend_registration_surface.cpp` pins this: the backend settles
-from a thread that is asserted to be *not* the caller's, the caller's executor
-is a `MainThreadExecutor` that runs nothing until the test thread drains it, and
-the test asserts the continuation has not run before that drain and runs on the
-draining thread after it. An implementation that delivered inline fails both
-assertions.
+`LocalBackend` and `SimulatedRemoteBackend` override `bindModel` to keep their
+shared directories (register, register-or-attach, re-point), still settling
+before returning. `QtWebSocketBackend` and `SocketBackend` override it with a
+genuinely non-blocking path.
 
-### `SynchronousBackendAdapter` — a blocking backend on the new surface
+### `SynchronousBackendAdapter` — a blocking backend behind a strand
 
 A decorator (`morph::backend::SynchronousBackendAdapter`) that wraps an
-`IBackend`, forwards every verb to it, and implements `bindModel`/`promoteModel`
-by running the wrapped backend's *synchronous* control call on an executor named
-at construction:
+`IBackend` and runs **every** verb of it on one control strand over an executor
+named at construction:
 
 ```cpp
 auto local = std::make_shared<morph::backend::LocalBackend>(pool);
-morph::backend::SynchronousBackendAdapter adapter{local, pool};
+morph::backend::SynchronousBackendAdapter adapter{local, control};
 ```
 
-It is what lets a backend that stays blocking — `LocalBackend`,
-`SimulatedRemoteBackend`, and eleven test doubles — reach this surface without
-being edited at all. Two backends deliberately do not use it, for the same
-reason in two different shapes: `QtWebSocketBackend` and `SocketBackend` both
-have a genuinely non-blocking path of their own, and wrapping either would
-reintroduce the blocking this exists to route around. `SocketBackend`'s case is
-set out under [The structural registration surface,
-natively](#the-structural-registration-surface-natively).
+The control strand is the wrapped backend's one owner, so a backend that keeps
+its state without a lock (`LocalBackend`) stays correct behind it, and the
+caller's thread never pays for a blocking control call.
 
 - **It does not make blocking non-blocking.** The wrapped backend still blocks.
-  What changes is which thread pays: the blocking call runs on the adapter's
-  executor, so the caller returns immediately with an unresolved `Completion`.
-  A single-threaded WASM main thread has no such executor to offer, which is
-  why `QtWebSocketBackend` implements the surface natively instead.
-- **It answers `bindWaitPolicy()` itself rather than forwarding it**, with
-  `kCallerMustNotBlock`. `bindModel`/`promoteModel` are the two verbs it
-  reshapes, so the policy describing them describes the adapter and not what it
-  wraps. A caller that waited would pay back exactly the blocking cost the
-  adapter was interposed to move, and would deadlock outright if it happened to
-  be running on `blockingExec`. This is why a `Bridge` over an adapter returns
-  an unbound handler while a `Bridge` over `SocketBackend` — also non-blocking
-  — does not.
+  What changes is which thread pays: `bindModel`/`promoteModel` run the wrapped
+  backend's own `bindModel`/`promoteModel` on the strand (with
+  `inlineExecutor()`, since the strand is where it settles) and settle the
+  caller's `Completion`, on the caller's executor, from there. A
+  single-threaded WASM main thread has no such executor to offer, which is why
+  `QtWebSocketBackend` implements the surface natively instead.
 - **The executor is required.** An adapter that ran the call inline when handed
   nothing would be a `bindModel` that blocks on some configurations and not
-  others — contract by configuration, which is what is being removed.
-- **It cancels its own pending completions rather than only the wrapped
-  backend's**. `bindModel`/`promoteModel` settle from a task on
-  `_control`, holding a promise the wrapped backend never sees, so a plain
-  `_inner->cancelPending(exc)` reaches none of them: a bind cancelled by
-  `~Bridge` or by `switchBackend` would go on to resolve **successfully**
-  afterwards, against `IBackend::cancelPending`'s "after this call, any later
-  `setValue`/`setException` on those states is a no-op". The
-  adapter therefore keeps a `weak_ptr` to each dispatched promise and rejects
-  the live ones first, on the same snapshot-then-deliver shape and the same
-  amortised compaction as
-  [`LocalBackend`'s pending list](#the-pending-list-and-its-amortised-compaction);
-  an entry expires by itself when its strand task is destroyed, so the success
-  path erases nothing.
-
-  Two limits are deliberate rather than overlooked. A task that settles first
-  wins, because its completion was not still pending — the same race
-  `LocalBackend::cancelPending` has always had. And a task already *inside*
-  `op()` cannot be recalled: the adapter has no way to interrupt a blocking
-  verb it does not implement.
-- **It stops a control call the strand has not started yet.**
-  Settling the promise is only half of the cancellation, because it says
-  nothing about the *work* behind it: a task still queued on `_control` would
-  otherwise reach the head of the strand after `cancelPending` returned and
-  make its blocking control call anyway — an actual `registerModelWithContext` /
-  `registerModelShared` / `attachModel` on the wrapped backend, whose `resolve`
-  then found the state already rejected and did nothing. The caller was told
-  the bind was cancelled while the registration went through, leaving a live
-  instance on a backend whose `Bridge` is gone (`~Bridge`) or which
-  `switchBackend` has just replaced — one nothing will ever `deregisterModel`,
-  because no caller ever learned its id. So each dispatched task carries a
-  `PendingControl` record — its promise plus an `atomic_bool cancelled` — and
-  checks that flag before calling `op()`; `cancelPending` sets it (release)
-  before rejecting. What this closes is exactly the queued-but-not-started
-  window, which is all this adapter *can* close; the preceding bullet's
-  already-running case is unchanged, and a task that reads the flag a few
-  instructions before the store registers exactly as one already inside `op()`
-  would.
-- **Control calls are serialised** onto one strand, so the wrapped backend sees
-  them one at a time, as it did when the blocking call itself serialised
-  callers. `~SynchronousBackendAdapter` waits for every queued and in-flight
-  control call (`ModelStrands::drain`), so the executor must still be running
-  tasks when the adapter is destroyed — the same rule as for any backend's
-  strands. The single-threaded WebAssembly build has no thread to wait for, and
-  drops the control calls still queued.
-- **A control call issued from a reconnect handler runs on the strand**, never
-  on the wrapped backend's transport thread — *provided the handler issues it
-  through `bindModel`/`promoteModel`*. That proviso is load-bearing, and it is
-  why the adapter did **not** settle `SocketBackend`'s documented
-  reconnect-handler deadlock hazard: the adapter forwards
-  `setReconnectHandler` to the wrapped backend unchanged, and
-  `Bridge::installReconnectHandler`'s handler used to call the *blocking*
-  `registerModelShared`/`registerModelWithContext`, which the adapter also
-  forwards unchanged.
-
-  The handler calls `bindModel`, so a wrapped backend's reconnect control calls
-  *do* reach the adapter's strand. What the proviso rules out is the other
-  half — the handler itself is invoked by the wrapped backend, on whatever
-  thread that backend chooses, and the adapter does not move it. See
-  [`SocketBackend`](#socketbackend--socketserver--raw-socket-websocket-transport).
+  others.
+- **It belongs to its caller's owner** (`setOwner`, not forwarded — the wrapped
+  backend's owner is the strand). `bindModel`, `promoteModel` and
+  `cancelPending` keep the list of pending binds there, without a lock.
+- **It cancels its own pending binds rather than only the wrapped backend's.**
+  A bind settles from a task on the strand, holding a promise the wrapped
+  backend never sees, so a plain forward of `cancelPending` would reach none of
+  them, and a bind cancelled by `~Bridge` or `switchBackend` would go on to
+  resolve successfully afterwards. The adapter keeps a `weak_ptr` to each
+  dispatched promise and rejects the live ones first (with the same amortised
+  compaction as [`LocalBackend`'s pending
+  list](#the-pending-list-and-its-amortised-compaction)), then posts the
+  wrapped backend's own `cancelPending` to the strand.
+- **It stops a control call the strand has not started yet.** Each dispatched
+  task carries a `PendingControl` record — its promise plus an
+  `atomic_bool cancelled` — and checks the flag before running; `cancelPending`
+  sets it before rejecting. Otherwise a queued bind would still run after the
+  caller was told it was cancelled, leaving an instance nothing will ever
+  deregister. A task already running cannot be recalled.
+- **The synchronous verbs wait for the strand** (`registerModel`,
+  `registerModelWithContext`, `assignPrimary`, `listInstances`), so they must
+  not be called from the executor's only thread.
+- **Ordering and teardown.** Every verb is queued on the one strand, in the
+  order issued. `~SynchronousBackendAdapter` waits for every queued and
+  in-flight call (`ModelStrands::drain`), so the executor must still be running
+  tasks when the adapter is destroyed. The single-threaded WebAssembly build has
+  no thread to wait for, and drops the calls still queued.
 
 ### Backends with a genuinely non-blocking path
 
-A backend that can register without blocking overrides `bindModel` and settles
-the `Completion` when its reply arrives. There is no `bool`, no fallback verb
-and no inline-completion special case to declare: settling the `Completion`
-inside the dispatch call and settling it a second later from a transport thread
-are the same code at the call site, because delivery goes through `cbExec`
-either way.
+`QtWebSocketBackend` and `SocketBackend` override `bindModel` and settle the
+`Completion` when their reply arrives. The request-shape mapping is the same in
+both — empty `primary` with a zero `current` is a private `register`; empty
+`primary` with a live `current` gives that instance up first and then binds
+privately; a non-empty `primary` with a zero `current` is a shared `register`;
+with a live one it is an `attach`. They differ in transport and in gating:
 
-Two backends in the tree take that route: `QtWebSocketBackend` and
-`SocketBackend`. `SocketBackend`'s case — why it is native rather
-than wrapped, and what that does to its reconnect-handler hazard — is set out
-under [The structural registration surface,
-natively](#the-structural-registration-surface-natively).
-`QtWebSocketBackend`'s follows here.
+- `SocketBackend::bindModel` posts the request to the I/O loop and settles from
+  the loop when the reply arrives — always non-blocking. See [The structural
+  registration surface, natively](#the-structural-registration-surface-natively).
+- `QtWebSocketBackend::bindModel` builds the envelope, assigns a `callId`,
+  sends, and returns an unsettled `Completion` that `onTextMessage` settles —
+  always non-blocking.
 
-Its `bindModel` reads:
+There is one send path per backend (`sendControl` / `sendControlAsync`) and one
+pending map, so the "encode before recording the pending entry" invariant and
+the `env.session` stamp each exist once. `tests/qt/test_qt_websocket.cpp` pins
+the Qt path end to end against a real `RemoteServer` (queue before connect,
+register-or-attach, re-point, degrade-to-private, reject on a dead socket,
+promote), and `examples/common/testkit/test_wasm_registration_path_native.cpp`
+pins it through `Bridge`.
 
-- `asyncRegistrationEnabled` unset → `IBackend::bindModel`, the blocking
-  default. Desktop behaviour, unchanged.
-- set → build the envelope the request's shape names, assign a `callId`, send,
-  and return an unsettled `Completion` that `onTextMessage` settles. A private
-  bind made before the socket has connected is queued instead; a keyed one
-  rejects.
+### What the bind rule makes of each backend
 
-The request-shape mapping is the one `SocketBackend` implements too — empty
-`primary` with a zero `current` is a private `register`; empty `primary` with a
-live `current` gives that instance up first and then binds privately; a
-non-empty `primary` with a zero `current` is a shared `register`; with a live
-one it is an `attach`. The two native implementations differ in transport and
-in gating, not in what a `BindRequest` shape means.
+> **The bind is a `Completion` delivered on the bridge's owner. A backend that
+> can settles it before returning. `execute` dispatches at once when the
+> binding's `currentId` is set, and chains on the bind otherwise.**
 
-**They do differ in gating, and that difference is observable.**
-`SocketBackend::bindModel` is unconditionally non-blocking;
-`QtWebSocketBackend::bindModel` falls back to the blocking default unless
-`asyncRegistrationEnabled` is set. Because `Bridge` dispatches through this
-surface, the gate decides whether `Bridge::registerHandler` returns a
-*bound* handler: a blocking `bindModel` settles inside the dispatch frame, so
-the handler is bound on return, and a non-blocking one does not, so it is not.
-See [What a natively non-blocking backend does to
-`registerHandler`](#what-a-natively-non-blocking-backend-does-to-registerhandler)
-below — that is a property of the surface, not of either transport.
+`registerHandler` never blocks and never waits: it issues `bindModel` with the
+owner as the delivery executor and returns. A failed bind rejects every held
+call with the bind's error; a handler destroyed while its bind is in flight
+rejects every held call with `HandlerDestroyedError`. No caller gates on
+registration.
 
-Two things that were four-way duplicated collapsed with the verbs. There is one
-send path (`sendControl`), so the "encode before recording the pending entry"
-invariant and the `env.session` stamp each exist once rather than
-four times; and there is one pending map, because `register`, shared
-`register`, `attach` and `assign` replies were always matched identically.
-(`SocketBackend` reached the same conclusion independently and calls its own
-`sendControlAsync`/`_pendingControl`; the Qt member keeps its older
-`_pendingRegistrations` name.)
+| Backend | `bindModel` | Bound when `registerHandler` returns |
+|---|---|---|
+| `LocalBackend`, `SimulatedRemoteBackend`, test doubles that override nothing | settles before returning | yes |
+| A backend wrapped in `SynchronousBackendAdapter` | settles from the adapter's control strand | no — `execute` chains on the bind |
+| `QtWebSocketBackend` | native, settles from `onTextMessage` | no — `execute` chains on the bind |
+| `SocketBackend` | native, settles from the I/O loop | no — `execute` chains on the bind |
 
-The single-threaded WASM registration path — the case the four removed
-`*Async` verbs were added for — therefore has **no special case left in the
-interface**. It is
-the ordinary shape of `bindModel` on a backend whose transport is
-non-blocking. `tests/qt/test_qt_websocket.cpp` pins it end to end against a real
-`RemoteServer` (queue before connect, register-or-attach, re-point,
-degrade-to-private, reject on a dead socket, promote), and
-`examples/common/testkit/test_wasm_registration_path_native.cpp` pins the same
-path through `Bridge`, where a fallback to the blocking verb would abort on the
-nested `QEventLoop` `sendSync` needs.
-
-`QtWebSocketBackend` deliberately does **not** go through
-`SynchronousBackendAdapter`: the adapter moves a blocking call to another
-thread, and a WASM main thread has no other thread to move it to.
-
-### What a natively non-blocking backend does to `registerHandler`
-
-`Bridge::registerHandler` is synchronous and returns a `BridgeHandler`. What it
-cannot do is make the *backend* synchronous. There is one acquire verb, so the
-rule is stated once, structurally:
-
-> **`registerHandler` returns a bound handler unless the backend says the
-> caller must not wait.** A backend that has not overridden `bindModel` gets
-> `IBackend`'s default, which runs the legacy blocking verb and settles before
-> returning — bound, with no wait. A backend that overrode `bindModel` natively
-> settles when its reply lands, and `registerHandlerImpl` **waits for it** —
-> still bound — unless that backend answers
-> `BindWait::kCallerMustNotBlock`, in which case the handler is returned
-> **unbound** and the caller must gate on `Bridge::whenBound()` (or on the
-> `onDone` of the async entry points) before issuing a call.
-
-The wait is what keeps the rule about the *policy* rather than about the
-implementation. Stated as "bound exactly when `bindModel` settles inside the
-call", it would make *how a backend is implemented* decide what a synchronous,
-public entry point returns, so a backend gaining a native non-blocking path
-would silently change `registerHandler`'s contract. See
-[Waiting for a bind — `bindWaitPolicy`](#waiting-for-a-bind--bindwaitpolicy).
-
-`executeVia` fails fast with `"handler not bound"` for a call issued before the
-reply arrives; it does not queue. A caller that wants the call held instead
-names that at the call site with `BridgeHandler::executeWhenBound()`, which
-chains the dispatch on `whenBound()` ([bridge.md](bridge.md#registration-readiness--isbound--whenbound)).
-The default stays fail-fast so that `execute()` means the same thing whichever
-backend the handler was built over.
-
-Consequences:
-
-| Backend | `bindModel` | `bindWaitPolicy()` | `registerHandler` returns |
-|---|---|---|---|
-| `LocalBackend`, `SimulatedRemoteBackend`, the eleven test doubles | default (blocking verb) | `kCallerMayBlock` (default) | bound; the wait finds the outcome already there |
-| A backend wrapped in `SynchronousBackendAdapter` | non-blocking, on the adapter's executor | `kCallerMustNotBlock` | **unbound** |
-| `QtWebSocketBackend`, `asyncRegistrationEnabled` unset | default (blocking verb) | `kCallerMayBlock` | bound |
-| `QtWebSocketBackend`, `asyncRegistrationEnabled` set | native, non-blocking | `kCallerMustNotBlock` | **unbound** (the WASM case, which is the whole point) |
-| `SocketBackend` | native, non-blocking | `kCallerMayBlock` (default) | bound, after waiting for the I/O thread's reply |
-
-### Waiting for a bind — `bindWaitPolicy`
-
-`Bridge::registerHandlerImpl` has exactly one call site for acquiring a model,
-and two shipped backends need opposite behaviour from it:
-
-| Backend | What `bindModel` does | What the call site must do | Why |
-|---|---|---|---|
-| `SocketBackend` | returns an unsettled `Completion`; the I/O thread settles it | **wait** | its callers construct a `BridgeHandler` and use it on the next line; `executeVia` fails fast on `currentId == 0` |
-| `QtWebSocketBackend`, `asyncRegistrationEnabled` set | returns an unsettled `Completion` | **not wait** | the reply is delivered by the Qt event loop of the calling thread, so a wait is a deadlock — on WASM, a page abort |
-
-From the `Completion` alone the two are indistinguishable, so the call site
-needs a signal. Measured, not argued: hard-coding "do not wait" fails six
-`tests/net/` cases with `"handler not bound"`, and hard-coding "wait" hangs
-five `tests/qt/` cases on the nested `QEventLoop`. Neither fixed setting of the
-call site is correct.
-
-The same question is asked at all three sites that acquire an instance for a
-binding — `registerHandlerImpl`, `switchBackend`'s phase 1 and the reconnect
-handler — because each of them would otherwise block a thread that a
-`kCallerMustNotBlock` backend needs back before its reply can arrive. The first
-is the only synchronous *entry point*; the other two are worse, because the
-reconnect handler runs on the backend's own transport thread.
-
-`IBackend::bindWaitPolicy()` restores exactly one bit:
-
-- `BindWait::kCallerMayBlock` (the default) — the completion settles without
-  the calling thread's participation, either inside the call or on a thread the
-  caller does not own. A backend that answers this **must** settle every
-  `Completion` it hands out exactly once without any further call from the
-  caller, including on transport failure and on `cancelPending`/destruction.
-- `BindWait::kCallerMustNotBlock` — waiting is either impossible (the reply
-  needs the caller's own event loop) or pointless (`SynchronousBackendAdapter`,
-  which exists to move the blocking elsewhere, and would deadlock if the caller
-  happened to be running on its executor).
-
-It is deliberately not a `bool` choosing *which verb to call*: that shape gives
-every call site two paths and lets a backend be half-adopted. This one chooses
-nothing. There is still exactly one verb, called
-unconditionally, and exactly one continuation — the only question is whether the
-thread that registered that continuation is allowed to stop and wait for it.
-Only a frame that would otherwise stop and wait asks: `registerHandlerImpl`
-(a synchronous entry point that must return a bound instance),
-`switchBackend`'s phase 1 and the reconnect handler's re-registration loop.
-The asynchronous entry points (`attachHandlerAsync`, `ensureBoundAsync`,
-`assignHandlerPrimary`) never wait and never consult it.
-
-The wait is unbounded by design. A timeout would make "is this handler bound
-when `registerHandler` returns" depend on how fast the network was, which is the
-non-determinism the synchronous contract exists to exclude; a backend that
-breaks its own settle-exactly-once contract therefore hangs here rather than
-silently handing back an unbound handler.
-
-`SocketBackend`'s row is the reason the policy exists rather than a rule keyed
-on "is this backend native": it is natively non-blocking *and* answers
-`kCallerMayBlock`, so it returns a bound handler like every synchronous backend
-does. `docs/spec/core/bridge.md`'s `whenBound()` section is the right place for
-a caller that wants to gate anyway, and is required for the two
-`kCallerMustNotBlock` rows.
-
-### The default implementations, and what they cost a backend
-
-A backend that overrides nothing gets `IBackend`'s `bindModel`/`promoteModel`,
-which route to exactly the synchronous verb each request shape names — so
-implementing this surface is optional for a backend that has no non-blocking
-path, and `LocalBackend`, `SimulatedRemoteBackend` and every test double in the
-tree take that route unchanged. A double that wants "dispatch and return
-without waiting" overrides `bindModel`/`promoteModel` and answers
-`BindWait::kCallerMustNotBlock`; `tests/test_async_registration.cpp` has
-several.
-
-One consequence of settling a `Completion` rather than invoking raw callbacks,
-named rather than left to be found: a backend that violates the one-callback
-contract by firing twice cannot be observed doing it from `Bridge`.
-`CompletionState` drops the second settle before any `Bridge` code sees it, so
-`tests/test_async_registration.cpp`'s `DoubleFiringBackend` pins the observable
-contract ("exactly one `onDone`") and `detail::parkIfInFrame`'s own
-double-claim guard is not reachable from a backend at all.
-
-That guard is kept, and why is worth stating because the obvious reason is the
-wrong one: it is **not** that `parkIfInFrame` is also called from the
-dispatching frame — the dispatching frame calls `claimHandoff`/`awaitHandoff`,
-and all eight `parkIfInFrame` call sites are completion callbacks. That the arm
-is unreachable is *measured*, not read: replacing its `return true` with an
-`abort()` and running `morph_tests` (1556 cases) and `morph_net_tests` (191)
-fires it zero times. It is kept because the invariant that makes it dead is a
-property of every current *caller*, not of the function, so a ninth site that
-does not park a single `Completion`'s outcome would resurrect it — and it is
-pinned by a test that calls `parkIfInFrame` directly, twice on one handoff,
-rather than left as an arm whose deletion nothing would detect. The
-neighbouring `try`/`catch (...)` around the dispatch is a separate case and is
-live: it is reachable by any out-of-tree `IBackend` override that throws out of
-`bindModel`, `IBackend` is a public extension point, and
-`ThrowingDispatchBackend` exercises it — covered defensive code, not dead code.
-
-All five `Bridge` dispatch sites have the same shape — dispatch, park an inline
-reply in an `AsyncDispatchHandoff`, then `awaitHandoff` or `claimHandoff`
-according to the policy. `installReconnectHandler` and `switchBackend`'s phase 1
-are the two that do most around the call: `switchBackend` stages for an
-all-or-nothing commit whose rollback keys on a rejected `Completion`, and the
-reconnect handler runs on the transport thread holding both bridge mutexes.
-Both are described in [bridge.md](bridge.md).
-
-`SocketBackend`'s reconnect-handler deadlock hazard is narrowed rather than
-closed by that: the control call it makes is not the blocking verb, but the
-handler is still *invoked* by the backend on whatever thread the backend
-chooses, which is `SocketBackend`'s own half of the problem.
-
-The executor those call sites name is **`exec::detail::inlineExecutor()`**,
-which runs the continuation on the thread that settled it — deliberately, since
-`Bridge` owns no event loop and has no thread of its own to name, and an inline
-settle must be delivered inline or `registerHandler()` stops being synchronous.
-The optional `bridgeExec` covers the replies that arrive *after* the dispatch
-frame instead. See
-[How the threading contract becomes structural](#how-the-threading-contract-becomes-structural)
-and [bridge.md](bridge.md), "The bridge's own executor".
+A backend that violates the one-settle contract by firing twice cannot be
+observed doing it from `Bridge`: `CompletionState` drops the second settle
+before any bridge code sees it. A backend that throws out of `bindModel` —
+`IBackend` is a public extension point — has the throw applied as the bind's
+failure.
 
 ## Error types
 
@@ -739,23 +426,33 @@ Both it and `RemoteServer` keep those instances in one
 `detail::InstanceDirectory` (`core/detail/instance_directory.hpp`): one record
 per instance holding its holder, owner principal, attach count, directory key
 and hydration state, plus a `(typeId, primary)` index and a per-type index for
-`listInstances`. It is caller-locked — the owning backend's `_regMtx` guards it,
-because neighbouring decisions in the same critical section (the `maxLiveModels`
-admission check, the connection-scope update) must not be able to straddle a
-directory change. Register-or-attach, the lazy eviction of an instance whose
+`listInstances`. It holds no lock: it belongs to its backend's owner — the
+bridge's owner for `LocalBackend`, the server strand for `RemoteServer` — and
+the neighbouring decisions (the `maxLiveModels` admission check, the
+connection-scope update) are made in the same owner task, so none can straddle
+a directory change. Register-or-attach, the lazy eviction of an instance whose
 first action failed, and promotion by `assignPrimary` are each written once,
 there, rather than once per backend.
 
+**One owner.** The registry, the pending list and the record of running Task
+handlers belong to the caller's owner (the bridge's, given through `setOwner`)
+and are touched only there, without a lock; each verb checks it in a debug
+build. Only the strand tasks the backend posts run elsewhere, and they reach
+nothing of the backend but what each carries — the holder, the call, and the
+cancel record below.
+
 **Lifecycle:**
-- `registerModel` — atomically increments a counter, locks the registry mutex,
-  calls the factory, records the new id in `_changeAware` if the holder's
+- `bindModel` — overridden to keep the shared directory: register (private),
+  register-or-attach (a key), or re-point (a key and a live `current`), on the
+  owner, settled before returning.
+- `registerModel` — increments a counter, calls the factory, records the new id in `_changeAware` if the holder's
   `isBackendChangeAware()` is `true`, files the holder in the instance
   directory, returns the new `ModelId`.
-- `deregisterModel` — locks the registry mutex and releases one attachment
+- `deregisterModel` — releases one attachment
   through the instance directory, which unfiles and destroys the instance in a
   single step when the last one goes away; `_changeAware` is erased only when
   the instance is actually destroyed.
-- `execute` — looks up the holder under the registry lock; if `mid` is unknown
+- `execute` — looks up the holder; if `mid` is unknown
   it immediately resolves the completion with
   `std::runtime_error("model not found: id=<n>")`. Otherwise it tracks the
   completion in the pending list, posts `localOp` on the model's strand
@@ -764,18 +461,21 @@ there, rather than once per backend.
   `executeLatencyMs`/`executeInFlight`/`executeErrors` and calls
   `beginSpan`/`endSpan` around `localOp` — see [observability.md](observability.md).
   Both `registerModel` and `deregisterModel` emit `registerCount`/`deregisterCount`.
-- `cancelPending` — snapshots the pending list under the pending mutex, delivers
-  `exc` to every still-live state, and re-arms the compaction threshold. See
+- `cancelPending` — takes the pending list, delivers `exc` to every still-live
+  state, requests stop on every Task handler still running (its
+  `LocalRun::stopSource`), and re-arms the compaction threshold. A run that has
+  not started yet reads the cancel record its task carries and fails without
+  starting: the record is an immutable node the owner pushes and publishes with
+  a release store, read by the run on its strand with an acquire load. See
   [The pending list and its amortised compaction](#the-pending-list-and-its-amortised-compaction).
-- `notifyBackendChanged` — under `_regMtx`, looks up only the models recorded in
+- `notifyBackendChanged` — looks up only the models recorded in
   `_changeAware` (populated at registration from
   `IModelHolder::isBackendChangeAware()` — a compile-time answer per model type,
-  no `dynamic_cast`); then, outside the lock, **posts** `holder->onBackendChanged()`
+  no `dynamic_cast`); then **posts** `holder->onBackendChanged()`
   (the `IModelHolder` base virtual) onto each such model's strand (the holder
   captured by `shared_ptr`). Cost is O(change-aware models), not O(all models).
-  Delivery is asynchronous and serialised against that model's `execute` tasks;
-  it never runs under `_regMtx` or `Bridge::_mtx`, so a sink that re-enters the
-  bridge cannot deadlock. It runs without a session, even while a Task
+  Delivery is asynchronous and serialised against that model's `execute` tasks,
+  on a pool thread rather than the owner. It runs without a session, even while a Task
   handler of that model instance is suspended: the strand installs a
   suspended handler's session around the coroutines resumed on its instance
   only, and a posted callable such as this one is not one of them (see
@@ -792,8 +492,8 @@ without a global lock on the pool.
 
 ### The pending list and its amortised compaction
 
-`_pending` is a `vector<weak_ptr<CompletionState<shared_ptr<void>>>>` guarded by
-`_pendingMtx`. It exists for exactly one reader — `cancelPending`, which swaps it
+`_pending` is a `vector<weak_ptr<CompletionState<shared_ptr<void>>>>` owned by
+the backend's owner. It exists for exactly one reader — `cancelPending`, which swaps it
 out and fails everything still live on a backend swap or a `~Bridge`. Nothing
 else consults it, and nothing unlinks from it when a completion settles: an entry
 simply becomes a dead `weak_ptr` that `cancelPending`'s `weak.lock()` skips.
@@ -848,26 +548,60 @@ transport and executes the corresponding model operations via an
 `ActionDispatcher`. Authorization is delegated to an `IAuthorizer` that defaults
 to allow-all. It derives from `std::enable_shared_from_this<RemoteServer>`.
 
-**Must be heap-allocated via `std::make_shared`.** `handle()` captures
-`shared_from_this()` to prevent use-after-free when the worker pool outlives the
-server.
+**One owner: the server strand.** The server owns one strand over its worker
+pool (`exec::OwnerStrand`, reachable as `strand()`). Its state — the instance
+registry and shared-instance directory, the connection scopes, the in-flight
+count, the drain waiters, `ready` and the shutdown flag — is touched only in
+tasks on that strand, so none of it has a lock. Configuration is a
+`ServerConfig`, fixed at construction and read without a lock because nothing
+writes it afterwards. The model instances themselves run on their own strands
+(`ModelStrands`, one per `ModelId`), as on `LocalBackend`.
+
+**Cross-thread surface.** Every public member is callable from any thread:
+
+| Member | What crosses | Answered |
+|---|---|---|
+| `handle(msg, reply[, cid])` | Decodes on the calling thread, posts one task to the server strand | `reply`, once, from a pool thread |
+| `handleInline(msg[, cid])` | Posts a control envelope to the server strand and waits (inline when already on it) | Its return value |
+| `openConnection()` | Draws the id from an atomic, posts the scope's creation | The id, at once |
+| `closeConnection(cid)` | Posts | — |
+| `health(replyExec)` | Posts | A `Completion<HealthStatus>` settled on the strand, delivered on `replyExec` |
+| `beginShutdown()` | Posts | — |
+| `drainedWithin(deadline, replyExec)` | Posts | A `Completion<bool>` settled on the strand, delivered on `replyExec` |
+| `payloadCompleteness()`, `strand()` | Read immutable members | At once |
+
+A task posted to the server strand by one thread runs after every task that
+thread posted before it, so a verb called after another on one thread sees its
+effect: an envelope handed to `handle()` after `beginShutdown()` returned is
+refused; a `health()` asked after `closeConnection()` counts the reclaimed
+models as gone.
+
+**Must be heap-allocated via `std::make_shared`.** Every task the server posts
+— to its own strand, to a model's strand, to its timers — captures
+`shared_from_this()`, so the server outlives its queued work however the last
+external reference is dropped.
 
 **Wire format.** All requests and replies are JSON `morph::wire::Envelope`. The
-`kind` field discriminates three message types:
+`kind` field discriminates the message types:
 
 | `kind` | Request fields | Reply | Notes |
 |---|---|---|---|
-| `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Authenticates the caller (`_authorizer->authenticate(env.session)`), stamping the verified principal onto `env.session.principal` (clearing it when unauthenticated) exactly as `execute` does, then consults `_authorizer->authorizeRegister(env.session, typeId)` — a `false` reply is `err "unauthorized"` and **no instance is created**. Only then creates the model via the `ModelRegistryFactory` and records the (already-verified) principal as its owner. Empty `typeId` → `err "register requires a typeId"` (checked before authorization). If `contextKey` is non-empty, consults the `LogProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. The assigned `modelId` is an **opaque** (non-sequential) value — see below. |
+| `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Authenticates the caller (`_authorizer->authenticate(env.session)`), stamping the verified principal onto `env.session.principal` (clearing it when unauthenticated) exactly as `execute` does, then consults `_authorizer->authorizeRegister(env.session, typeId)` — a `false` reply is `err "unauthorized"` and **no instance is created**. Only then creates the model via the `ModelRegistryFactory` and records the (already-verified) principal as its owner. Empty `typeId` → `err "register requires a typeId"` (checked before authorization). If `contextKey` is non-empty, consults `ServerConfig::logProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. The assigned `modelId` is an **opaque** (non-sequential) value — see below. |
 | `deregister` | `modelId` | `ok` or `err` | Consults `authorizeInstance` against the recorded owner (denied → `err "unauthorized"`); otherwise erases the model and its owner entry from the registry. |
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
 | `hello` | `protocolVersion` | `ok` with `body` = `ProtocolRange`, or `err "protocol version unsupported"` | Protocol-version negotiation, exchanged once per connection before any `register`/`execute`. Carries no `session` and is not authorized — orthogonal to `IAuthorizer`. See [wire.md](wire.md#protocol-version-negotiation). |
 | `schemas` | `typeId`, `session` | `ok` with `body` = `{actionType: schema}`, or `err` | Empty `typeId` → `err "schemas requires a typeId"` (checked before authorization). Authenticates, then consults `_authorizer->authorize(env.session, typeId, {})` — the same type-level read hook `instances` uses; denied → `err "unauthorized"`. Answers from `ActionDispatcher::schemasJson(typeId)`; a type with no registered actions yields `{}`, not an error. See [Serving action schemas](#serving-action-schemas). |
 
-**Execute flow (`dispatchExecute`).** In order:
+**Execute flow.** Admission runs on the server strand (`dispatchExecute`), the
+action on the model's strand. Admission, in order:
 
-1. **Authorize.** `_authorizer->authorize(env.session, env.modelType, env.actionType)`.
+1. **In-flight cap.** With `LimitPolicy::maxInFlightExecutes` set and the
+   in-flight count at it → `err "server busy"`. The count is server-strand
+   state, so the check and the increment in step 7 cannot be separated by
+   another admission: the cap is exact.
+2. **Authorize.** `_authorizer->authorize(env.session, env.modelType, env.actionType)`.
    Denied → `err "unauthorized"` (with the request's `callId`), no dispatch.
-2. **Authenticate / make the principal authoritative.** After `authorize`
+3. **Authenticate / make the principal authoritative.** After `authorize`
    succeeds, the server calls `_authorizer->authenticate(env.session)`. If it
    returns a value, the server **overwrites** `env.session.principal` with that
    verified principal *before* building the `ScopedContext`. So model code that
@@ -879,53 +613,47 @@ server.
    window before `authenticate` — the server **clears** `env.session.principal`
    to the empty string. The client's unverified claim is therefore never
    presented to the model as authoritative: the worst case is an empty
-   principal, never an attacker-chosen one (this closes the TOCTOU divergence
-   and the authorize-only passthrough — see security.md). This is the only place
-   the principal is made authoritative; the verifying implementation lives in
-   `SigningAuthorizer` (`session_auth.hpp`, cross-ref security.md). The rewrite
-   happens on the calling/pool thread, before the strand task is posted.
-3. **Look up the model.** Under `_regMtx`, find `env.modelId` and read its
-   recorded owner. Missing → `err "model not found"` (with `callId`), no dispatch.
-   (Note: the remote message is the bare string `"model not found"`, without the
-   id — unlike the `LocalBackend` path, which resolves the completion with
-   `std::runtime_error("model not found: id=<n>")`.)
-4. **Per-instance authorize.** `authorize` above saw only the model *type*; this
+   principal, never an attacker-chosen one (see security.md). This is the only
+   place the principal is made authoritative; the verifying implementation
+   lives in `SigningAuthorizer` (`session_auth.hpp`, cross-ref security.md).
+4. **Look up the model** in the registry, with its recorded owner and
+   hydration state. Missing → `err "model not found"` (with `callId`), no
+   dispatch. (The remote message is the bare string `"model not found"`,
+   without the id — unlike the `LocalBackend` path, which resolves the
+   completion with `std::runtime_error("model not found: id=<n>")`.)
+5. **Per-instance authorize.** `authorize` above saw only the model *type*; this
    step consults `_authorizer->authorizeInstance(env.session, env.modelType,
    env.actionType, modelId, owner)` with the target instance id and its recorded
    owner. Denied → `err "unauthorized"` (with `callId`), no dispatch. The default
-   hook allows all, so behaviour is unchanged unless an ownership-enforcing
-   authorizer overrides it; `env.session` already carries the verified principal
-   stamped in step 2, so the hook compares the recorded owner against it.
-5. **Await this model's execute turn.** If this request took an execute-ordering
-   ticket (see [Per-model execute ordering](#per-model-execute-ordering) below),
-   block — on this pool thread, never on a strand — until every `execute` for
-   the same `modelId` that the transport handed in earlier has already made its
-   own strand post. Every rejection above this point released its ticket
-   without ever waiting here, so a "model not found"/"unauthorized"/"server
-   busy" reply for one request can never be what a later one is stuck behind.
-6. **Dispatch on the strand.** Posts to the model's strand a task that installs a
-   `ScopedContext` from the (now possibly rewritten) `env.session`, calls
-   `dispatch(modelType, actionType, *holder, body)` on the server's dispatcher,
-   and replies `ok` with the serialised result. Any `std::exception` thrown by
-   the dispatch is caught on the strand and returned as `err exc.what()` with the
-   `callId`. The strand task **captures `shared_from_this()`** so the server
-   (and therefore its `_dispatcher` reference member) stays alive until the task
-   runs and its reply is delivered. `handle()`'s pool task only holds the server
-   alive until it enqueues onto the strand; without the self-capture the last
-   external `shared_ptr` could drop first, leaving the dispatcher dangling (a
-   use-after-free) or the reply lost so a client `Completion` hangs forever. The
-   task reads the dispatcher via `self->_dispatcher`, never a bare reference
-   capture. See concurrency_and_lifetimes.md. The ticket is released as soon as
-   this post has been made, not when the strand task finishes.
+   hook allows all; `env.session` already carries the verified principal
+   stamped in step 3, so the hook compares the recorded owner against it.
+6. **Payload completeness** (opt-in; see
+   [`PayloadCompleteness`](#payloadcompleteness--enforcing-the-action-evolution-policy)).
+7. **Reserve the in-flight slot**, arm `LimitPolicy::executeTimeout` if one is
+   configured, and **post to the model's strand** a task that enters the
+   instance's action gate, installs a `ScopedContext` from the (now possibly
+   rewritten) `env.session`, calls `dispatch(modelType, actionType, *holder,
+   body)` on the server's dispatcher, and replies `ok` with the serialised
+   result. Any `std::exception` thrown by the dispatch is caught on the strand
+   and returned as `err exc.what()` with the `callId`. The task holds the
+   server (`shared_from_this()`) and the model's holder, so neither can go
+   before the reply is delivered; it reads the dispatcher via
+   `self->_dispatcher`, never a bare reference capture.
+
+The reply is sent exactly once, by whichever of the model strand's finish and
+the `executeTimeout` gets there first. Before sending it, that path posts the
+in-flight decrement back to the server strand, so a `health()` or
+`drainedWithin()` asked by someone who has seen the reply already counts it as
+finished.
 
 Any envelope that fails to decode produces `err` carrying the decode
-exception's message. An unrecognised `kind` produces `err "unknown envelope
-kind: <kind>"`. Any `std::exception` thrown while handling a decoded envelope is
-caught and returned as an `err` reply carrying `exc.what()` and the request's
-`callId` — and, for an `execute`, the ordering ticket it took is released as
-that throw unwinds (see [Per-model execute
-ordering](#per-model-execute-ordering)), not only on the explicit rejection
-branches.
+exception's message, and a log line (see [Server-side
+observability](#server-side-observability)). An unrecognised `kind` produces
+`err "unknown envelope kind: <kind>"`. Any `std::exception` thrown while
+handling a decoded envelope — including one out of an `IAuthorizer` hook during
+admission — is caught and returned as an `err` reply carrying `exc.what()` and
+the request's `callId`. Nothing is held across it: the next envelope is simply
+the next task on the server strand.
 
 **Opaque model ids.** `RemoteServer` assigns each new instance's id by running
 an internal monotonic counter through `detail::OpaqueIdGenerator` — a keyed,
@@ -940,298 +668,148 @@ one. `ModelId`'s reserved sentinel `0` ("unbound", see `strand.hpp`) is
 actively skipped: `RemoteServer` draws a fresh counter value and re-permutes
 if the result is ever `0` (a 1-in-2^64 event for a random key). Ids remain
 plain `std::uint64_t` on the wire — the `Envelope` and its `modelId` field are
-unchanged; only the assigned *values* are no longer sequential. This is
+unchanged; only the assigned *values* are not sequential. This is
 defence-in-depth, not a substitute for `authorizeInstance`: a caller who
 independently learns a valid id (from its own register, or a leak) can still
 target it, so per-instance ownership remains the actual authorization
 boundary — see [security.md](../security.md).
 
-**`handle(msg, reply)`** — asynchronous entry point. Posts to the worker pool,
-calls `dispatchMessage` which decodes, dispatches by `kind`, and calls `reply`
-exactly once. A three-argument overload, `handle(msg, reply, cid)`, additionally
-attributes any `register` in `msg` to a connection scope — see "Connection
-scopes" below.
+**`handle(msg, reply)`** — asynchronous entry point. Decodes the envelope once,
+on the calling thread, and posts it to the server strand, which dispatches by
+`kind` and calls `reply` exactly once. A three-argument overload,
+`handle(msg, reply, cid)`, additionally attributes any `register` in `msg` to a
+connection scope — see "Connection scopes" below.
 
-**`handleInline(msg)`** — synchronous entry point intended for control messages
-(`register`, `deregister`) only. It runs `dispatchMessage` directly on the
-calling thread instead of posting the message to the worker pool, so it is safe
-to call from a thread that *is* the worker pool. It **rejects `execute`** up
-front: an `execute` reply is produced asynchronously on the model's strand,
-*after* the synchronous call has returned and destroyed the local reply buffer
-the deferred callback would write into, so `handleInline` decodes the envelope
-first and, if its `kind` is `execute`, returns an `err` reply
+**`handleInline(msg)`** — synchronous entry point for control envelopes
+(`register`, `deregister`, `attach`, `assign`, `instances`, `schemas`,
+`hello`), the path `SimulatedRemoteBackend` uses. It posts the envelope to the
+server strand and blocks until the reply is written; when the caller is
+already on the server strand — host code the strand itself is running, such as
+a model constructor or a `LogProvider` that registers another model — it runs
+inline instead, since waiting there would wait on itself. It **rejects
+`execute`** up front: an `execute` reply is produced later, on the model's
+strand, after `handleInline` would have returned, so `handleInline` decodes
+the envelope first and, if its `kind` is `execute`, returns an `err` reply
 (`"handleInline does not support execute (reply is asynchronous)"`) without
-dispatching. A malformed envelope falls through to `dispatchMessage`, which
-emits the canonical decode-error reply.
+dispatching. A malformed envelope is dispatched like any other and gets the
+canonical decode-error reply.
 
-**`setLogProvider(provider)`** — installs a `LogProvider` callable consulted on
-every `register` envelope whose `contextKey` is non-empty. This is how
-`RemoteServer` attaches action logs to model instances created on behalf of
-remote clients — the factory closure (which lives on the client side) cannot
-capture the server-side log. Thread-safe.
+*Why it waits rather than running inline.* Running a control envelope inline
+on the caller's thread would touch the registry off its owner. The wait is
+safe where the caller is not the thread the server strand needs: the strand
+runs on the pool, so a pool thread inside a running action (a handler
+constructed from an action handler — the "synchronous re-entry" case in
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#synchronous-re-entry-into-a-backend-from-a-pool-thread))
+waits while another pool thread runs the strand's task. It cannot be satisfied
+when no other pool thread is free: a one-thread pool calling `handleInline`
+from inside its own task, or every pool thread blocked in `handleInline` at
+once. That is the price of one owner on a verb that must answer synchronously;
+registration becoming asynchronous removes it.
+
+**`ServerConfig`** — everything configured rather than learned, given to the
+constructor (`RemoteServer(pool[, authorizer], config[, dispatcher,
+registry])`) and fixed for the server's life. No member of `RemoteServer`
+changes it.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `limits` | all `0` | `LimitPolicy`, below. |
+| `logProvider` | null | `LogProvider` consulted, on the server strand, whenever an instance is constructed with a non-empty `contextKey` (every `register`, and every `attach` that creates). How `RemoteServer` attaches action logs to instances it creates on behalf of remote clients — the factory closure, on the client side, cannot capture a server-side log. |
+| `healthHandler` | null | Called with the server's `HealthStatus` once from the constructor (ready, nothing live, nothing in flight), and again on the server strand when readiness changes (`beginShutdown()`). |
+| `minProtocolVersion`, `maxProtocolVersion` | `kProtocolVersion` both | The inclusive range answered to `hello`. `min > max` makes the constructor throw `std::invalid_argument`. |
+| `payloadCompleteness` | `Lenient` | See [`PayloadCompleteness`](#payloadcompleteness--enforcing-the-action-evolution-policy). |
 
 ```cpp
 using LogProvider = std::function<std::shared_ptr<morph::journal::IActionLog>(
     std::string_view modelType, std::string_view contextKey)>;
 ```
 
-**`health()` / `setHealthHandler(handler)`** — a readiness snapshot and an
-optional state-change callback, detailed in [observability.md](observability.md).
-`health()` returns `HealthStatus{ready, liveModels, inFlight}`: `liveModels`
-from the registry (same mutex as `register`/`deregister`/`execute`), `inFlight`
-from `_inFlightExecutes` — the same atomic counter `LimitPolicy::maxInFlightExecutes`
-enforces, `drainedWithin()` (below) waits on, and the `executeInFlight` metric
-reports. `ready` starts `true` and is flipped to `false`, once and for good, by
-`beginShutdown()` (below) — there is no un-shutdown. `setHealthHandler` fires
-immediately with the current snapshot, and again with the post-shutdown
-snapshot when `beginShutdown()` runs.
+A deployment that wants a different configuration constructs a different
+server; nothing in the server needs to reason about a limit or a range changing
+under an admission it is making.
 
-**Metrics and tracing.** `dispatchMessage`'s `register`/`deregister` branches
-emit `registerCount`/`deregisterCount`; `dispatchExecute`'s admit/complete
-points emit `executeInFlight`, and its strand task emits
-`executeLatencyMs`/`executeErrors` and calls `beginSpan`/`endSpan` around the
-`ActionDispatcher::dispatch` call. All are no-ops unless a sink is installed
+**`health()`** — a readiness snapshot, detailed in
+[observability.md](observability.md). Returns a `Completion<HealthStatus>`
+settled on the server strand, `HealthStatus{ready, liveModels, inFlight}`:
+`liveModels` from the registry, `inFlight` from the in-flight count — the same
+count `LimitPolicy::maxInFlightExecutes` gates, `drainedWithin()` waits on and
+the `executeInFlight` metric reports. `ready` starts `true` and is flipped to
+`false`, once and for good, by `beginShutdown()` — there is no un-shutdown.
+The completion is delivered on the `replyExec` the caller passes, the owner it
+attaches its callbacks from: a `Completion`'s handlers are attached and run on
+one executor, and only the caller knows which one it is on.
+
+**Metrics and tracing.** The `register`/`deregister` branches emit
+`registerCount`/`deregisterCount`; admission and the in-flight decrement emit
+`executeInFlight` (both on the server strand), and the model strand's task
+emits `executeLatencyMs`/`executeErrors` and calls `beginSpan`/`endSpan` around
+the `ActionDispatcher::dispatch` call. All are no-ops unless a sink is installed
 via `morph::observe::setMetricSink`/`setTraceSink` — see
 [observability.md](observability.md).
 
 ### Per-model execute ordering
 
-`handle()` posts every envelope to a shared worker pool, so two `execute`
-envelopes for the *same* model, sent back-to-back on one connection, are raced
-by two pool threads through identical pre-strand work
-(decode/authorize/authenticate/registry lookup). Whichever finishes that work
-first reaches `_strands->post(mid, ...)` first. The strand serialises what
-it is given, but it can only serialise it in the order it is given — so with
-more than one pool worker free, the model could observe two actions in the
-opposite order from the one they were sent in. That is a correctness problem
-for any model whose actions are not commutative, and it is invisible in a quiet
-run: it needs two workers genuinely concurrent to appear at all.
+The guarantee:
 
-`RemoteServer` closes it with a per-model ticket gate
-(`morph::backend::detail::ExecuteOrderGate`'s `take`/`awaitTurn`/`release`,
-`include/morph/core/detail/execute_order_gate.hpp` — extracted from `remote.hpp`
-so the gate's own logic has direct unit coverage independent of the server;
-`RemoteServer` holds one as a private `_executeGate` member). The guarantee
-is:
+> For one `modelId`, the order in which `handle()` was called for its
+> `execute` envelopes is the order the model runs them.
 
-> For one `modelId`, the order in which `_strand.post` is called equals the
-> order in which `handle()` was called for those requests.
+It is two strands' order, composed. `handle()` posts each envelope to the
+server strand in the order it is called; the server strand admits them in that
+order and posts each admitted one to its model's strand in that order; the
+model's strand runs its tasks in the order they were posted. Nothing between
+the transport and the model runs concurrently with another request for the
+same model, so there is no window in which two of them could swap.
 
-**Where the order is captured.** A ticket is taken *synchronously inside
-`handle()`*, on whatever thread the transport calls it from, before anything is
-posted to the pool. That thread is where true arrival order still exists;
-everything after the pool post is concurrent by construction, so an ordering
-decided any later would be deciding it from an order that had already been
-lost. To know whether a ticket is needed, `handle()` cheaply peeks at the
-envelope's `kind` and `modelId` and throws the decode away. The peek is
-best-effort and changes nothing else: a message that fails to decode, or is not
-an `execute`, or names no `modelId`, simply takes no ticket, and
-`dispatchMessage` still performs the real decode on the pool thread and
-produces the canonical error reply for malformed input exactly as it would
-otherwise.
+**Why admission is on the server strand, not on the model's strand.** A
+single hop — the transport posting an `execute` straight to its model's strand
+and admitting it there — is shorter, but admission reads the registry, which
+belongs to the server strand. It would also queue a lookup behind the model's
+running action: an `execute` for a model whose connection just closed would not
+learn "model not found" until the action in front of it finished
+(`tests/test_remote_connection_scope.cpp`, "an in-flight execute completes
+safely across a disconnect", holds that it answers at once). The server strand
+never runs a handler, only admissions and control envelopes, so a rejection is
+answered in its own turn and never waits on a busy model.
 
-**Where the order is enforced.** The ticket is waited on at one point only —
-immediately before `_strands->post` — and released immediately after that call
-returns. It deliberately does **not** span the strand task: once the post has
-happened in the right order, the strand owns the sequencing from there,
-and holding the ticket any longer would stall a different request's pre-strand
-work for no ordering benefit. The wait itself happens on a pool thread and
-blocks nothing else; a strand is never blocked by this gate.
-
-**Why the fast-reject path stays fast.** The obvious fix — move the whole
-pre-strand pipeline onto the model's strand — was tried and reverted, per
-`remote.hpp`'s own design notes: it collapses the fast-reject path into the
-same queue as the slow model's in-flight work, breaking the guarantee that a
-lookup against a since-reclaimed `modelId` resolves without waiting on some
-other, still-busy model (`tests/test_remote_connection_scope.cpp`, "an
-in-flight execute completes safely across a disconnect"). Gating only the
-moment of the post leaves a rejection returning at full speed.
-
-That is also why the release discipline matters: **every path that took a
-ticket must release it**, including the ones that never reach the strand (model
-not found, unauthorized, over limit, a validation throw). A ticket taken and
-never released would stall every later ticket for that model permanently,
-because `awaitTurn` waits with no deadline.
-
-**The rule is structural, not a convention.** A ticket is owned by an
-`ExecuteTicketGuard` (`morph::backend::detail`, alongside `ExecuteOrderGate` in
-`execute_order_gate.hpp`; `remote.hpp` keeps a `using` alias so call sites read
-unqualified) from the moment a ticket is issued: `dispatchMessage` adopts the
-ticket into one for the whole of its own frame, `dispatchExecute` included.
-`handleImpl` holds no separate guard across the pool post: the take and the post
-are one `takeAndPost` call, so there is no window between them for a guard to
-cover. The guard releases on destruction, so *every* exit
-path is covered — each explicit `return`, every exception, and any branch a
-later change adds. Two members opt out deliberately:
-
-- `release()`, called by `dispatchExecute`'s `rejectAndRelease` helper, by the
-  shutdown gate, and immediately after the successful `_strand.post`, so those
-  paths free the gate *before* writing their reply instead of at end of scope;
-  and
-- `disarm()`, which hands ownership on rather than releasing. It has **no
-  production caller** — `handleImpl` uses `takeAndPost` — and is retained as
-  part of the guard's API, exercised only by tests. Calling it without taking
-  ownership elsewhere discards the only handle to an outstanding ticket, which
-  can then never be released.
-
-A per-call-site convention is not enough here, because it is missable in two
-places that do not look like exits: the shutdown gate, and every exception
-unwinding out of `dispatchExecute` (below). Both are pinned by regression
-tests, and neither can recur through a hand-written release being forgotten.
-
-**Bookkeeping.** A gate is
-`{nextTicket, nextToRun, releasedOutOfOrder, condition_variable}`, held in a
-map keyed by `ModelId` under a dedicated mutex. The entry is created on demand
-by the first ticket and **erased** once `nextToRun` catches up with
-`nextTicket` — a model with no in-flight `execute` leaves no trace, so the map
-does not grow across the server's lifetime.
-
-A `Ticket` carries the `shared_ptr` to the exact gate it was issued from, so a
-drain-and-recreate of the map entry between issuing a ticket and awaiting its
-turn cannot redirect the wait onto a *different* gate's counters. The
-`ModelId`-keyed `awaitTurn` overload returns immediately when the entry is
-already gone; the `Ticket` overload cannot, since it holds its gate alive by
-construction — it instead returns as soon as `nextToRun` has reached **or
-passed** its number, which is what keeps a ticket released by its other owner
-from parking a worker forever.
-
-**One enqueue mutex, gate-wide.** `takeAndPost` holds an enqueue mutex from
-before it mints a ticket until after `postFn` returns, which is what makes the
-take and the enqueue atomic. That mutex is **one per gate, not one
-per model**, and is acquired *before* the bookkeeping mutex, never the reverse.
-
-`postFn` is opaque: on a `ThreadPoolExecutor` it only enqueues, but on a
-synchronous executor it runs the whole dispatch chain inline, including any
-re-entrant `takeAndPost` that chain triggers. A per-model mutex therefore gave
-two threads two locks to take in opposite orders — one inside model 1's
-callback reaching for model 2, the other the mirror — and they deadlocked.
-One mutex cannot form a cycle with itself. It is recursive because the same
-thread can legitimately re-enter through a synchronous executor.
-
-The cost is stated rather than hidden: `takeAndPost` serialises across every
-model, and on a synchronous executor that serialises the dispatch those
-callbacks perform. It also means a caller that blocks *inside* `postFn` blocks
-every other `takeAndPost`, for every model — which is why a re-entrant
-same-model `awaitTurn` (a ticket waiting on one its own caller has not released
-yet) is a documented misuse rather than a supported pattern.
-
-**Releases are not ordered, and `nextToRun` must survive that.** `nextToRun`
-means *the lowest ticket that has not released yet* — which is exactly what
-`awaitTurn`'s `nextToRun == ticket` predicate needs it to mean. It is
-not "one past the ticket that released last", and the difference is not
-cosmetic: the fast-reject paths above release *without ever waiting for their
-turn*, by design, so a later ticket routinely releases before an earlier one.
-`ExecuteOrderGate::release` therefore records an out-of-order release in
-`releasedOutOfOrder` and advances `nextToRun` only across a contiguous run of
-released tickets, consuming that set as it goes.
-
-Assigning `nextToRun = ticket + 1` unconditionally instead — which is what the
-gate did originally — pushed it straight *past* an earlier ticket's number
-whenever a rejection got there first. That earlier ticket's waiter then held a
-predicate that could never become true again, with the same three costs listed
-for the shutdown gate below: a caller that never receives a reply, a pool
-worker blocked for the process's remaining lifetime, and `drainedWithin()`
-unable to succeed. It is the third distinct way into this same failure, and it
-reproduces under `morph::net` in particular — dropping a connection reclaims that connection's models, so the
-executes still in flight for one model split into some that find it and some
-that reject with `"model not found"`, which manufactures precisely this
-interleaving. Making the *release* unmissable (below) was necessary and not
-sufficient; the release also has to be order-tolerant.
+The cost is that admissions for every model are serial: the authorizer's hooks,
+the registry lookup and (when enabled) the payload-completeness parse run one
+at a time on the server strand. The handlers themselves still run in parallel,
+one strand per model.
 
 **What is not ordered.** Only same-model requests, and only relative to
 `handle()` call order:
 
-- **Across models, nothing is ordered** — that is the point of per-model
-  strands, and the gate is per-`modelId` for the same reason.
+- **Across models, execution is not ordered** — each model's strand runs
+  independently; only their admissions share the server strand.
 - **Across threads, "send order" means "`handle()` call order"**. A single
   transport connection delivers messages on one thread, so for one client the
   two coincide. Two connections calling `handle()` concurrently for the same
-  model have no send order between them to preserve, and get whichever
-  interleaving the gate mutex hands out.
-- **Completion order is not constrained.** The gate orders the *posts*; how
-  long each action then takes on the strand is the strand's business.
-**The release rule binds the shutdown gate too.** An `execute` refused by the
-shutdown gate in `dispatchMessage` (`err "server shutting down"`, see
-[Graceful shutdown](#graceful-shutdown-beginshutdown--drainedwithin)) returns
-before `dispatchExecute` is reached, and so before any `rejectAndRelease`. That
-branch therefore releases the ticket itself, on the way out.
+  model have no send order between them to preserve, and get whichever order
+  their posts reach the server strand in.
+- **Completion order is not constrained** beyond what the model's action gate
+  gives: how long each action takes is the model's business.
 
-This was previously read as a benign exception to the rule — the argument being
-that `beginShutdown()` is irreversible, so every later `execute` is refused at
-the same gate and none of them ever reaches `awaitTurn`. The argument is
-wrong, and the difference is a permanently stranded caller rather than a leaked
-map entry. Tickets are taken in send order *on the transport thread*, but the
-pool is free to run the two posted tasks in either order. So a later ticket can
-pass the gate while the earlier one is still upstream of it, and be parked in
-`awaitTurn` — a `cv.wait` with no deadline — by the time the earlier one
-is refused. Dropping the earlier ticket then costs three things at once:
-
-- the later caller never receives a reply at all (with no `executeTimeout`
-  configured), or a spurious `err "timeout"` for a call that never ran (with
-  one);
-- a pool worker is blocked for the process's remaining lifetime; and
-- `drainedWithin()` can never succeed, because `_inFlightExecutes` is
-  incremented immediately *before* that wait — so the defect breaks the very
-  graceful-shutdown sequence during which it fires.
-
-**The release rule binds every throw, too.** `dispatchExecute` has no
-`try`/`catch` of its own, and `rejectAndRelease` covers only its *explicit*
-early returns. An exception unwinds past all of them, out of `dispatchExecute`
-entirely, into `dispatchMessage`'s outer catch — which replies `err
-exc.what()` and, before the guard existed, released nothing. That is ordinary
-reachability rather than a hypothetical: `IAuthorizer::authorize`,
-`authenticate` and `authorizeInstance` are non-`noexcept` virtuals on a public
-extension point that a host implements, nothing in their contract forbids
-throwing, and `missingRequiredFields` parses the payload under
-`PayloadCompleteness::RequireDeclaredFields`. All four sit between the
-ticket-taking site and the release. The cost was identical to the shutdown
-gate's, item for item — stranded caller, blocked pool worker, `drainedWithin()`
-unable to succeed — and it is why the release is now owned by
-`ExecuteTicketGuard` rather than written out at each exit.
-
-The release rule stated above therefore holds without exception, which is what
-makes the rest of this section true.
-
-`tests/test_execute_order_gate.cpp` pins `ExecuteOrderGate`'s own logic
-directly and synchronously — normal take/await/release ordering, the
-already-drained defensive branches, and the out-of-order-release mechanism
-below, including a threadless case that fails immediately if the gate reverts
-to the pre-#449 `nextToRun = ticket + 1` — with no `RemoteServer`, executor, or
-transport involved. `tests/test_remote_execute_ordering.cpp` pins the
-guarantee at the `RemoteServer` level: that the real dispatch path (`handleImpl`/
-`dispatchMessage`/`dispatchExecute`) actually calls the gate at the right two
-points and in the right order, which no unit test of the gate alone can prove.
-It forces the interleaving deterministically (a two-thread pool plus an
-authorizer that sleeps for one call only) rather than waiting for a loaded
-machine to produce it by chance. Its shutdown-gate case forces the interleaving above the same
-way, holding back one request's pool task through a wrapping executor so the
-"later ticket passed the gate, earlier ticket did not" ordering is decided
-rather than raced; its throwing-hook case reuses that same wrapping executor
-and arms an authorizer only *after* the later request has parked in
-`awaitTurn`, so exactly one request — the held, earlier one — throws,
-from `authorize`, `authenticate` or `authorizeInstance` in turn. Its
-out-of-order-release case extends the same wrapping executor to
-hold three posts at once, so all three tickets exist before any of them runs,
-and then releases the *middle* one first: a rejection skipping over ticket 0
-while ticket 2 is still outstanding, which is the interleaving the two-ticket
-version cannot produce because the gate is erased instead.
-`tests/net/test_socket_backend.cpp` carries the transport-level shape that
-found it (concurrent executes against one shared model, connection dropped
-mid-stream), whose failure mode is the teardown hanging rather than an
-assertion.
+`tests/test_remote_execute_ordering.cpp` pins the guarantee: a first request
+whose admission is held for 200ms on a two-thread pool still runs before the
+request sent after it; a request refused at shutdown or by a throwing
+authorizer hook, or rejected between two others, holds nothing for the ones
+around it; and two threads calling `handle()` for one model against a
+one-thread pool, with one of them stalled inside the pool's `post`, neither
+deadlock nor swap.
 
 ### Protocol-version negotiation
 
-`RemoteServer::setSupportedVersionRange(min, max)` sets the inclusive
-`{min, max}` protocol-version range this server advertises in reply to
-`"hello"` (thread-safe, same pattern as `setLogProvider`/`setLimitPolicy`).
-Defaults to `{kProtocolVersion, kProtocolVersion}` — this build's single
-supported version — so an unconfigured server's behavior only changes for
-clients that opt into sending `"hello"` in the first place. Throws
-`std::invalid_argument` if `min > max`. See [wire.md](wire.md#protocol-version-negotiation)
-for the full negotiation story, including how `SimulatedRemoteBackend` and
-`QtWebSocketBackend` each expose an opt-in `negotiateProtocolVersion()` built
-on their existing synchronous control path.
+`ServerConfig::minProtocolVersion`/`maxProtocolVersion` set the inclusive
+range this server advertises in reply to `"hello"`. Both default to
+`kProtocolVersion` — this build's single supported version — so an
+unconfigured server's behavior only changes for clients that opt into sending
+`"hello"` in the first place. An empty range (`min > max`) makes the
+constructor throw `std::invalid_argument`. See
+[wire.md](wire.md#protocol-version-negotiation) for the full negotiation story,
+including how `SimulatedRemoteBackend` (synchronously, over `handleInline`)
+and `QtWebSocketBackend` (as a `Completion` settled by the reply) each expose
+an opt-in `negotiateProtocolVersion`.
 
 ### Serving action schemas
 
@@ -1254,13 +832,13 @@ accessor, built on the same synchronous `handleInline` path as
 
 ### `PayloadCompleteness` — enforcing the action-evolution policy
 
-`RemoteServer::setPayloadCompleteness(PayloadCompleteness)` chooses whether an
-`execute` body must carry every field the action's served schema marks
-`required`:
+`ServerConfig::payloadCompleteness` chooses whether an `execute` body must
+carry every field the action's served schema marks `required`
+(`payloadCompleteness()` reads it back):
 
 | Value | Behaviour |
 |---|---|
-| `Lenient` (default) | Today's behaviour exactly: the action codec's lenient decode is the only gate, and a missing field is a default-constructed one. |
+| `Lenient` (default) | The action codec's lenient decode is the only gate, and a missing field is a default-constructed one. |
 | `RequireDeclaredFields` | An `execute` whose `body` carries no key for a `required` field is refused with `err "payload missing required field(s): <names>"`, before the in-flight slot is reserved and before `Model::execute` runs. |
 
 The check runs **after** authorization (its diagnostic names the action's own
@@ -1275,30 +853,30 @@ what is *not* mechanically checkable — in
 
 ### `LimitPolicy` — opt-in resource limits
 
-`RemoteServer::setLimitPolicy(LimitPolicy)` installs an optional, connection-agnostic
-resource policy (thread-safe, same pattern as `setLogProvider`). Every field
-defaults to `0` ("unbounded"), so an unconfigured server's behavior is unchanged:
+`ServerConfig::limits` is an optional, connection-agnostic resource policy.
+Every field defaults to `0` ("unbounded"), so an unconfigured server applies no
+limit:
 
 | Field | Default | Enforcement |
 |---|---|---|
-| `executeTimeout` | `0` (disabled) | A timer arms when `execute` dispatches to the model's strand. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
-| `maxLiveModels` | `0` (unbounded) | Checked under `_regMtx` before `register` constructs a new instance; over the cap → `err "too many models"`. The check and the eventual insert are two separate critical sections (to avoid constructing an instance that will be rejected), so a burst of concurrent registers can overshoot the cap by a small, bounded amount — a soft, defense-in-depth limit, not a hard invariant. |
-| `maxInFlightExecutes` | `0` (unbounded) | An atomic counter, incremented when `execute` is admitted for dispatch (before the strand task is posted) and decremented when its reply is sent (success, exception, or timeout — whichever resolves the call first); over the cap → `err "server busy"`, no dispatch. |
+| `executeTimeout` | `0` (disabled) | A timer arms when an `execute` is admitted. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. An ordinary handler keeps running to completion on its strand; morph never interrupts it. A handler returning `core::async::Task` is also asked to stop, through its stop token, and unwinds at its next stop-aware `co_await` (see `docs/spec/core/coroutines.md`, "Execute deadlines"). |
+| `maxLiveModels` | `0` (unbounded) | Checked on the server strand before `register` constructs a new instance, and again after the construction and before the insert (the construction is host code that may itself register through `handleInline`); over the cap → `err "too many models"`. Exact: nothing else inserts between the check and the insert. A shared `register`/`attach` that finds its key already live takes a reference and is not counted against the cap. |
+| `maxInFlightExecutes` | `0` (unbounded) | The in-flight count, server-strand state, incremented when an `execute` is admitted and decremented (posted back to the strand) when its reply is sent — success, exception, or timeout, whichever resolves the call first; at the cap → `err "server busy"`, no dispatch. Exact, for the same reason. |
 
 A server-side execute timeout surfaces to a caller as `morph::backend::TimeoutError`
 (alongside `BackendChangedError`/`BridgeDestroyedError`/`DisconnectedError`) rather
 than a generic `std::runtime_error`, on both `SimulatedRemoteBackend` and
 `QtWebSocketBackend`.
 
-The background timer that enforces `executeTimeout` is
-`morph::async::detail::TimeoutScheduler` (`include/morph/core/timeout_scheduler.hpp`)
-— one per `RemoteServer`, each a thread running a core-cpp
-`core::net::PlatformLoop` whose timers hold the deadlines, lazily created by
-`setLimitPolicy` the first time `executeTimeout` is configured, so a server
-that never uses the feature pays no extra thread. The class lives in `morph::async::detail` rather than
-`morph::backend::detail` because `Bridge` uses the same primitive for the
-*client*-side `setExecuteDeadline` — see [`completion.md`](completion.md),
-"Client-side execute deadline".
+The timer that enforces `executeTimeout` is
+`morph::async::detail::TimeoutScheduler` (`include/morph/core/timeout_scheduler.hpp`),
+one per `RemoteServer`, created by the constructor when `executeTimeout` is
+positive — so a server that does not use the feature pays nothing — on a
+private `exec::IoLoop`. Created once and never replaced, it is cancelled from
+the model strand's finish without a lock. The class lives in
+`morph::async::detail` rather than `morph::backend::detail` because `Bridge`
+uses the same primitive for the *client*-side `setExecuteDeadline` — see
+[`completion.md`](completion.md), "Client-side execute deadline".
 
 ### Connection scopes
 
@@ -1310,16 +888,17 @@ and means *unscoped* — the meaning the two-argument `handle()` and
 `handleInline()` always have. Scoping is strictly opt-in; enabling it changes
 nothing for a caller that never uses it.
 
-- `openConnection()` returns a fresh non-zero `ConnectionId` and opens an empty
-  scope for it. Call once per accepted transport connection.
+- `openConnection()` returns a fresh non-zero `ConnectionId` at once and posts
+  the creation of its empty scope to the server strand, ahead of any `handle()`
+  the same thread makes next. Call once per accepted transport connection.
 - The scoped `handle(msg, reply, cid)` overload attributes any `register` (or
   register-or-attach `attach`) decoded from `msg` to `cid`'s scope: the
-  `ModelId` is recorded in a `cid → (ModelId → count)` map, next to the
-  instance directory under the same `_regMtx`, so scope membership can never
-  desync from instance existence. The count
-  lets one connection hold more than one reference to the same shared
-  instance (e.g. two handlers on one connection attaching the same key)
-  without either reference leaking the other's release.
+  `ModelId` is recorded in a `cid → (ModelId → count)` map, server-strand state
+  next to the instance directory, so scope membership can never desync from
+  instance existence. The count lets one connection hold more than one
+  reference to the same shared instance (e.g. two handlers on one connection
+  attaching the same key) without either reference leaking the other's
+  release.
 - A `deregister` releases exactly the reference **the requesting connection**
   holds — decrementing `cid`'s own scope entry for that `ModelId`, using the
   `cid` the deregister call itself carries, never whichever connection
@@ -1327,11 +906,11 @@ nothing for a caller that never uses it.
   owning connections at once; crediting the release to the wrong one would
   either strand a reference no one will ever decrement, or let one
   connection's deregister silently consume another's hold.
-- `closeConnection(cid)` erases every model still recorded in `cid`'s scope
-  (its directory record and the per-instance connection entry) exactly as the
-  `deregister` path does, then drops the scope itself. Passing `0`, an
-  unknown `cid`, or a `cid` already closed is a no-op — idempotent by
-  construction.
+- `closeConnection(cid)` posts, to the server strand, the erasure of every model
+  still recorded in `cid`'s scope (its directory record and the per-instance
+  connection entry) exactly as the `deregister` path does, then drops the scope
+  itself. Passing `0`, an unknown `cid`, or a `cid` already closed is a no-op —
+  idempotent by construction.
 - **`closeConnection` does not consult `IAuthorizer`.** It is server-side
   housekeeping triggered by the transport observing its own connection close,
   not a caller-attributed action — synthesising a `deregister` envelope
@@ -1340,50 +919,47 @@ nothing for a caller that never uses it.
   transport to parse every `register` reply to learn which ids it owns. Only
   in-process transport code can reach `closeConnection`, and the transport is
   already inside the server's trust boundary (see security.md).
-- Cleanup never races a running `execute`: `dispatchExecute` copies the
-  instance's `shared_ptr<IModelHolder>` into the strand task before dispatch,
-  so an in-flight action keeps the holder alive until its task completes;
-  `closeConnection` only removes the registry's reference, preventing *new*
-  lookups (see concurrency_and_lifetimes.md).
-- A `register` that arrives *after* its scope was closed is refused with
-  `err "connection closed"` and no instance is retained. `handle()` posts to
-  the worker pool while `closeConnection` runs synchronously on the transport's
-  disconnect callback, so a client that registers and immediately drops its
-  socket genuinely interleaves the two. The scope is looked up, never
-  default-created: recreating it would strand that model (and every later one
-  on the dead id) in a scope nothing closes a second time — an unbounded leak
-  that, with `LimitPolicy::maxLiveModels` set, wedges the server permanently at
-  `err "too many models"`.
+- Cleanup never races a running `execute`: admission copies the instance's
+  `shared_ptr<IModelHolder>` into the model strand's task, so an in-flight
+  action keeps the holder alive until its task completes; `closeConnection`
+  only removes the registry's reference, preventing *new* lookups (see
+  concurrency_and_lifetimes.md).
+- A `register` that reaches the server strand *after* its scope was closed is
+  refused with `err "connection closed"` and no instance is retained. The
+  transport's disconnect callback can post `closeConnection` while a
+  `register` the client sent just before dropping is still queued behind it.
+  The scope is looked up, never default-created: recreating it would strand
+  that model (and every later one on the dead id) in a scope nothing closes a
+  second time — an unbounded leak that, with `LimitPolicy::maxLiveModels` set,
+  wedges the server permanently at `err "too many models"`.
 - `SimulatedRemoteBackend` keeps using the unscoped path (its "connection" is
   the process itself) — it is unaffected by connection scopes.
 
 ### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
 
 `beginShutdown()` enters shutdown: every subsequent `register`, `attach` and
-`execute` envelope is rejected with `err "server shutting down"` (checked once, at the
-top of `dispatchMessage`, before any other validation — including the
-shutdown check happening before authorization or registry lookups run);
-`deregister` (and any other envelope kind) is still served so clients can
-tear down cleanly during the drain window. A refused `execute` releases any
-execute-ordering ticket it took on the way out; see
-[Per-model execute ordering](#per-model-execute-ordering) for why that
-matters more than it looks. Idempotent, and irreversible —
-there is no un-shutdown; a restarted service constructs a fresh
-`RemoteServer`. `beginShutdown()` also flips `health()`'s `ready` to `false`
-and, if a handler is installed via `setHealthHandler()`, re-invokes it with
-the post-shutdown snapshot — the mechanism that lets an orchestrator stop
-routing to a server that is draining.
+`execute` envelope is rejected with `err "server shutting down"` (checked once,
+first, on the server strand — before authorization or registry lookups run);
+`deregister` (and any other envelope kind) is still served so clients can tear
+down cleanly during the drain window. It is posted, so an envelope handed to
+`handle()` after it returned is refused, and one admitted before it — even one
+the same client sent a moment earlier — runs to its reply. Idempotent, and
+irreversible — there is no un-shutdown; a restarted service constructs a fresh
+`RemoteServer`. It also flips `health()`'s `ready` to `false` and, if
+`ServerConfig::healthHandler` is set, calls it with the post-shutdown snapshot,
+on the server strand — the mechanism that lets an orchestrator stop routing to
+a server that is draining.
 
-`drainedWithin(deadline)` blocks the calling thread (via a condition
-variable, not a busy poll) until every in-flight `execute` has delivered its
-reply, or `deadline` elapses, returning `true`/`false` accordingly.
-"In-flight" is the same `_inFlightExecutes` counter `LimitPolicy::maxInFlightExecutes`
-gates and `health()`'s `inFlight` field reads (one counter, never
-double-counted): incremented when `dispatchExecute` admits a call for
-dispatch (before posting to the model's strand) and decremented — waking any
-`drainedWithin()` waiter once it reaches zero — right before its reply is
-sent, on every resolving path (`ok`, `err`, or a `LimitPolicy::executeTimeout`
-firing first).
+`drainedWithin(deadline, replyExec)` returns a `Completion<bool>` settled on the
+server strand and delivered on `replyExec`, the caller's owner: `true` once the in-flight count is zero — at once if it already is —
+or `false` when `deadline` elapses first (a `deadline` of `0` answers from the
+count as it stands). A waiter is server-strand state; its deadline is a timer
+on a `TimeoutScheduler` the strand creates on first use, whose expiry is posted
+back to the strand. Nothing blocks: a caller that wants to wait attaches to the
+completion. "In-flight" is the count `LimitPolicy::maxInFlightExecutes` gates
+and `health()`'s `inFlight` field reads: incremented when an `execute` is
+admitted and decremented, on the strand, as its reply is sent on every
+resolving path (`ok`, `err`, or a `LimitPolicy::executeTimeout` firing first).
 
 The standard sequence an operator (or `QtWebSocketServer::closeGracefully`,
 below) follows is `beginShutdown()` then `drainedWithin(deadline)`: new work
@@ -1402,19 +978,20 @@ other used to produce no server-side record at all — the operator questions
 why did that one drop?" had no server-side answer. Four points now log, each
 a one-line call at a point the code already reaches:
 
-- **`RemoteServer::dispatchMessage` — undecodable envelope (`logError`).** A
-  client that swallows its own error (or is malformed precisely because it
-  is confused) previously left no trace of a request that never dispatched
-  at all. Logs the connection id, the exception text, the byte count, and a
+- **`RemoteServer::replyUndecodable` — undecodable envelope (`logError`,
+  prefixed `[dispatchMessage]`).** Without it, a client that swallows its own
+  error (or is malformed precisely because it is confused) leaves no trace of
+  a request that never dispatched at all. Logs the connection id, the exception text, the byte count, and a
   **truncated** (256-byte) prefix of the raw payload. The payload is the
   most useful field for diagnosing *why* a client sent something malformed —
   and the most likely to contain application data, hence truncated rather
   than logged in full; server logs should already be treated as
   operationally sensitive (they also carry exception text and, on other
   lines, connection ids), and this is not a general redaction mechanism.
-- **`RemoteServer::dispatchMessage` — one line per successfully-decoded
-  request (`logDebug`).** `dispatchMessage` is the one place every kind
-  funnels through, so it is the natural spot: connection id, `kind`,
+- **`RemoteServer::dispatchEnvelope` — one line per successfully-decoded
+  request (`logDebug`, prefixed `[dispatchMessage]`).** `dispatchEnvelope` is
+  the one place every kind funnels through, on the server strand, so it is the
+  natural spot: connection id, `kind`,
   `callId`, `typeId`/`modelId`/`modelType`/`actionType` (whichever the kind
   populates), and the body's byte count. Deliberately omits the session
   principal (personal data in many deployments; attribution is still
@@ -1501,108 +1078,73 @@ itself be destroyed).
 call.
 
 **Threading.** Single-threaded: must be constructed and used on the Qt event
-loop thread. `execute`, the `QWebSocket` signal slots, and the reconnect timer
-all run on that one thread, so `_connected`, `_nextCallId`, and the reconnect
-state need no locking. Only `_pending` (the callId → completion map) is guarded
-by `_pendingMtx`, because `cancelPending` can be called from `Bridge` /
-`~Bridge` on another thread.
+loop thread. Every verb, the `QWebSocket` signal slots and the reconnect timer
+run on the socket's thread — a `Bridge` over it calls from its owner, which
+for a Qt application is that thread — so `_connected`, `_nextCallId`, the
+reconnect state and the pending tables (`_pending`, `_pendingControl`,
+`_queuedRegistrations`, `_pendingDeregisters`) need no lock. Each site that
+touches the tables asserts, in a debug build, that it runs on the socket's
+thread. The reconnect handler is posted to the executor it was installed with,
+never run from the `connected` slot.
 
-**Control operations are synchronous; execute is asynchronous.**
-- `registerModel` — sends a `register` envelope via `sendSync`, which pumps a
-  **nested `QEventLoop`** on the Qt thread until the reply arrives, then decodes
-  it. `ok` → returns the server-assigned `ModelId`; a non-`ok` reply throws
-  `std::runtime_error("register failed: " + message)`. If `sendSync` throws
-  (see below — the socket is not connected, or disconnects while the reply is
-  outstanding), `registerModel` wraps it as
-  `std::runtime_error("register failed: <what>")` (so a lost connection surfaces
-  as `"register failed: disconnected"`) rather than propagating the raw error or
-  hanging. The `factory` argument is ignored (model construction is delegated to
-  the server, as with all remote backends). `registerModel` is a forward to
-  `registerModelWithContext` with an empty key, so there is one place that
-  builds this envelope rather than two.
+**Every request is asynchronous.** Each one carries a fresh non-zero `callId`
+from the one counter (`++_nextCallId`), and its reply settles a `Completion`
+delivered on the executor the caller names. Nothing waits for a reply inside a
+call: on the Qt thread waiting would mean a nested `QEventLoop`, which a WASM
+main thread cannot spin.
 
-- `registerModelWithContext` — the same `register` round trip, carrying
-  `contextKey` on the envelope (`wire::makeRegister(typeId, contextKey)`).
-  Overridden here rather than left at `IBackend`'s default, which
-  drops the key. That is not a missing field:
+- `bindModel` — the request's shape selects `register`, a shared `register`, or
+  `attach` (see [Backends with a genuinely non-blocking
+  path](#backends-with-a-genuinely-non-blocking-path)). Every shape carries
+  `contextKey`: the server constructs the holder itself, and
   `RemoteServer::attachLogIfConfigured` returns **before** consulting its
-  `LogProvider` when the envelope's `contextKey` is empty, so a privately
-  registered instance over this transport produced no action-log record at all
-  while `SimulatedRemoteBackend` and `SocketBackend` produced one. Three call
-  sites reached the dropping default: the blocking `bindModel`'s
-  empty-`primary`/zero-`current` branch (so, every private registration made
-  with `Config::asyncRegistrationEnabled` unset — its default),
-  `Bridge::switchBackend`'s re-registration after a reconnect (whatever that
-  flag was set to), and `registerModelShared`/`attachModel`'s own
-  empty-`primary` degradation. `bindModel`'s non-blocking path already carried
-  the key, which is what made the flag decide whether an instance was audited.
-  `tests/qt/test_qt_websocket.cpp`, "a private registration carries contextKey
-  to the server's log provider", pins all of it against a real
-  `QtWebSocketServer` and asserts on the provider rather than on the
-  registration succeeding — registration succeeded before the fix too.
-
-  `sendSync` itself is hardened against a disconnect mid-call. Before parking the
-  nested loop it checks `_connected` and throws `"disconnected"` up front if the
-  socket is already down, and it rejects a **reentrant** call (a second sync send
-  while one is already parked) with an error rather than clobbering the single
-  `_syncLoop` pointer. The `disconnected` slot, if a sync loop is parked, clears
-  `_pendingReply` and quits the loop, so a register whose reply never arrives
-  unblocks and reports failure instead of freezing the Qt thread forever; when
-  the parked loop returns with an empty `_pendingReply`, `sendSync` throws
-  `"disconnected"`. See concurrency_and_lifetimes.md.
-
-  **`bindModel` is the non-blocking alternative**, opt-in via
-  `QtWebSocketBackendConfig::asyncRegistrationEnabled` (default `false`, which
-  makes `bindModel` run `IBackend`'s blocking default, so every existing
-  embedder keeps `registerModel`'s synchronous behavior unchanged). A private
+  `LogProvider` when the envelope's `contextKey` is empty, so a dropped key
+  leaves the instance unjournalled. `tests/qt/test_qt_websocket.cpp`, "a
+  private registration carries contextKey to the server's log provider", pins
+  it against a real `QtWebSocketServer` and asserts on the provider. A private
   bind made before the socket has finished connecting is queued
   (`_queuedRegistrations`) rather than failed, and flushed — each entry
   assigned a call-id and sent, in FIFO order — from the `connected` slot, the
-  first connect included, before `_connectHandler`'s reconnect-handler
-  counterpart runs. If the backend is destroyed (or the socket disconnects)
-  before that queue is ever flushed, `cancelPending` drains it and still
-  rejects each entry's `Completion` exactly once. See [Backends with a
-  genuinely non-blocking path](#backends-with-a-genuinely-non-blocking-path).
-- `deregisterModel` — **fire-and-forget**, not synchronous: if `_connected`, it
-  sends a `deregister` envelope and returns immediately without waiting for the
-  ack; if disconnected, it does nothing. This deliberately avoids a nested
-  `QEventLoop` during a destructor, which can trip Qt asserts. An undelivered or
-  lost `deregister` no longer leaks the model indefinitely when the server side
-  is a `QtWebSocketServer`: its connection scope reclaims every model this
-  client registered at the next disconnect (see "Connection scopes" and
-  Limitations).
+  first connect included, before the reconnect handler is posted. If the
+  backend is destroyed (or the socket disconnects) before the queue is flushed,
+  `cancelPending` drains it and rejects each entry's `Completion` exactly once.
+  A keyed bind on a disconnected socket rejects at once.
+- `promoteModel` — sends `assign`; the documented no-op cases resolve without
+  sending.
+- `instances(typeId, cbExec)` — sends `instances`; the reply's body is the
+  key list. `BridgeHandler::instances()` reaches it through
+  `Bridge::instancesOf`.
+- `negotiateProtocolVersion(replyExec)` — sends `hello` and classifies the
+  reply (see [Protocol negotiation](#protocol-negotiation)).
+- `registerModel` (and so `registerModelWithContext`, which `IBackend` forwards
+  to it), `assignPrimary`, `listInstances` — the synchronous `IBackend` verbs
+  that would have to wait for a reply — throw `std::logic_error` naming their
+  completion form.
+- `deregisterModel` — **fire-and-forget**: if `_connected`, it sends a
+  `deregister` envelope and returns without waiting for the ack; if
+  disconnected, it does nothing. Its `callId` is filed in `_pendingDeregisters`
+  only so the reply is recognised and dropped. An undelivered or lost
+  `deregister` does not leak the model indefinitely when the server side is a
+  `QtWebSocketServer`: its connection scope reclaims every model this client
+  registered at the next disconnect (see "Connection scopes" and Limitations).
 - `execute` — if not connected, resolves the returned `Completion` immediately
-  with `DisconnectedError`. Otherwise it assigns a monotonic `callId`
-  (`++_nextCallId`), records the completion state + `deserializeResult` +
-  `cbExec` in `_pending[callId]`, serialises the action, and sends the `execute`
-  envelope. The `Completion` resolves when the reply with the matching `callId`
-  arrives.
+  with `DisconnectedError`. Otherwise it records the completion state +
+  `deserializeResult` + `cbExec` in `_pending[callId]`, serialises the action,
+  and sends the `execute` envelope.
 
-**Reply framing / callId multiplexing.** `onTextMessage` decodes each incoming
-frame and routes it by `callId`:
-- A **non-zero `callId`** is checked against `_pending` first (an async
-  `execute` reply): the backend pops the matching `PendingExecute`; `ok` →
-  `deserialize(body)` into the completion's value (deserialisation exceptions
-  become the completion's error), any other kind → `std::runtime_error(message)`
-  into the completion's error. If not found there, `_pendingRegistrations` is
-  checked next (a non-blocking `bindModel`/`promoteModel` reply — same `callId`
-  counter/namespace as `execute`, separate map because the reply shape differs;
-  one map for both verbs, because a `register`, a shared `register`, an `attach`
-  and an `assign` reply are all matched identically): `ok` →
-  `resolve(ModelId{modelId})`, any other kind → `reject(runtime_error(message))`,
-  both **outside** `_pendingMtx`, since settling runs the caller's continuation
-  and `Bridge`'s executor runs it inline. A `callId` matching **neither** map
-  (e.g. a late reply for an already-cancelled call) is dropped silently.
-- A **`callId == 0`** frame is a synchronous control reply (`register` when
-  `asyncRegistrationEnabled` is `false`, or `attach`/`assign`/`instances`);
-  it is stored in `_pendingReply` and quits the parked nested `QEventLoop`.
-  A frame that fails to decode is also routed to the parked sync waiter (as
-  the raw string) so the blocked `sendSync` unblocks with an error rather
-  than hanging. `deregister` is deliberately **not** on that list — it is
-  fire-and-forget, nobody parks for its reply, and sending it with `callId ==
-  0` would let its stray `ok` resume an unrelated parked control call (issue
-  above); it therefore takes a non-zero `callId` and its reply is recognised
-  and discarded via `_pendingDeregisters`.
+**Reply routing.** `onTextMessage` decodes each incoming frame and routes it by
+`callId`. `_pending` is checked first (an `execute` reply): `ok` →
+`deserialize(body)` into the completion's value (deserialisation exceptions
+become the completion's error), any other kind → `std::runtime_error(message)`.
+`_pendingControl` is checked next (every other request — same `callId`
+namespace, separate map because each settles its own value type): the entry is
+removed from the map, then its reply function settles the caller's
+`Completion`, since settling may run a continuation that re-enters the
+backend. `_pendingDeregisters` last, whose replies are discarded. A `callId`
+matching none of them — a late reply for an already-cancelled call, or `0` —
+is dropped. A frame that fails to decode fails every pending request
+(`cancelPending` with a protocol error): its `callId` is unreadable and the
+peer's framing can no longer be trusted.
 
 Because `execute` replies are matched on `callId`, concurrent in-flight execute
 calls are supported; `RemoteServer`/`QtWebSocketServer` echo the request `callId`
@@ -1651,18 +1193,20 @@ subsequently built `register`/`registerShared`/`attach`/`assign`/`deregister`
 envelope's `session` field is set from it before sending. See
 [Session propagation to control envelopes](#session-propagation-to-control-envelopes).
 
-**`waitForConnected(timeoutMs = 5000)`** pumps the Qt event loop until the socket
-connects or the timeout elapses; returns the current `_connected` flag. Intended
-to be called once after construction on the Qt thread.
+**`waitForConnected(timeoutMs = 5000)`** pumps a local `QEventLoop` until the
+socket connects or the timeout elapses; returns the current `_connected` flag.
+A desktop or test convenience, called on the Qt thread; a WASM main thread
+cannot spin it, and binds without waiting instead (a private bind made before
+the connect is queued) or reacts to `setConnectHandler`.
 
-**`negotiateProtocolVersion()`** sends a `"hello"` synchronously — the same
-nested-`QEventLoop` path `sendSync` uses for `registerModel` — and classifies
-the reply via `wire::interpretHelloReply`. Opt-in: intended to be called once,
-after `waitForConnected()` returns `true` and before any
-`registerModel`/`execute` call, but nothing enforces that ordering and nothing
-calls it automatically. Throws `std::runtime_error` if the server explicitly
-rejects the version or if `sendSync` fails (not connected, or a disconnect
-mid-call). See [wire.md](wire.md#protocol-version-negotiation).
+<a id="protocol-negotiation"></a>**`negotiateProtocolVersion(replyExec)`** sends
+a `"hello"` and returns a `Completion` the reply settles, classified via
+`wire::interpretHelloReply`. Opt-in: intended to be sent once, after the
+socket connects and before any `bindModel`/`execute`, but nothing enforces that
+ordering and nothing sends it automatically. Rejects with `std::runtime_error`
+if the server explicitly rejects the version or the socket is not connected,
+and with `DisconnectedError` if it drops before the reply. See
+[wire.md](wire.md#protocol-version-negotiation).
 
 **TLS.** Pass a `QSslConfiguration` to enable `wss://`. Build it with
 `tlsVerifyingConfig()` (CA-verified, the recommended production default) or
@@ -1777,10 +1321,11 @@ pool threads and are each marshalled back to their originating socket.
 counterpart to `RemoteServer::beginShutdown()`/`drainedWithin()`: it calls
 `QWebSocketServer::pauseAccepting()` (no new connections), then
 `beginShutdown()` on the `RemoteServer` (new `register`/`execute` now fail
-fast on every existing connection), then waits up to `deadline` for
-`drainedWithin()` — pumping the Qt event loop while it waits so the reply
-callbacks `onTextMessage` already queued via `QMetaObject::invokeMethod`
-actually run. Because `drainedWithin()`'s in-flight count can reach zero a
+fast on every existing connection), then asks `drainedWithin(deadline)` for an
+answer delivered on its own thread through a `QtExecutor`, and pumps the Qt
+event loop until it answers — so the reply callbacks
+`onTextMessage` already queued via `QMetaObject::invokeMethod` actually run
+while it waits. Because `drainedWithin()`'s in-flight count can reach zero a
 moment before that queued reply callback has actually flushed the bytes over
 the socket, `closeGracefully` pumps a short additional settle window (bounded
 by whatever is left of `deadline`) before proceeding, so a reply that just
@@ -1825,112 +1370,105 @@ and the core-cpp modules `morph` already links: the HTTP/1.1 Upgrade handshake
 (`Sec-WebSocket-Key`/`Sec-WebSocket-Accept`, via a hand-rolled SHA-1 and
 core-cpp's `core::base64::encode`) and the masked/unmasked text-frame codec are
 implemented in `include/morph/net/detail/` (`sha1.hpp`, `ws_handshake.hpp`,
-`ws_frame.hpp`, `tcp_socket.hpp`), and the accept loop's wakeup is core-cpp's
-`core::platform::Wakeup`. Because both transports round-trip the same
+`ws_frame.hpp`, `tcp_socket.hpp`), and the sockets, the listener and the
+timers underneath are core-cpp's `core::net` event loop's. Because both
+transports round-trip the same
 `wire::Envelope`, a `SocketBackend` client and a `QtWebSocketServer`
 interoperate (and vice versa) with no protocol changes on either side.
 
-**Reconnect handlers run on their own thread.** `SocketBackend` invokes the
-handler installed by `setReconnectHandler` (which `Bridge` uses to re-register
-its models) from a dedicated handler thread, not inline from the I/O thread's
-connect path. A reconnect handler is expected to issue synchronous control
-calls, and those park on `_syncCv` waiting for a reply only the I/O thread's
-read loop can deliver — run inline, before that read loop starts, the wait
-blocks the one thread able to satisfy it and the transport deadlocks with no
-timeout to break it. Requests coalesce: a reconnect arriving while a handler is
-still running re-runs it once afterwards rather than queueing. A handler that
-throws is caught and logged, so the next reconnect still finds the thread
-waiting. `QtWebSocketBackend` has no equivalent need — its `sendSync` runs a
-nested `QEventLoop` that keeps pumping the socket.
+**Reconnect handlers are posted to the executor they were installed with.**
+`SocketBackend` never runs the handler installed by `setReconnectHandler` on
+the I/O loop: when a connection after the first completes, the loop posts the
+handler to the executor passed with it — the bridge's owner, for `Bridge`'s
+handler. The handler re-registers through `bindModel`, whose replies this same
+loop delivers, so nothing on the reconnect path waits for the loop.
 
 ### The structural registration surface, natively
 
 `SocketBackend` overrides `bindModel`/`promoteModel` itself rather than being
-wrapped in [`SynchronousBackendAdapter`](#synchronousbackendadapter--a-blocking-backend-on-the-new-surface).
-It had overridden none of the four `*Async` verbs, so the wrapper was the
-expected route; three findings decide against it.
+wrapped in [`SynchronousBackendAdapter`](#synchronousbackendadapter--a-blocking-backend-behind-a-strand).
 
-1. **The transport already has the machinery.** The I/O thread demultiplexes
+1. **The transport already has the machinery.** The I/O loop demultiplexes
    replies by `callId` for `execute`, and `RemoteServer` echoes `callId` on
    every control reply it sends — `register`, `registerShared`, `attach` and
    `assign` all answer with `makeOk(env.callId, {}, mid)`. A control call is
    therefore the same shape as an execute, and the native path needs no
    protocol change, no server change and no new thread. It is a second
-   `PendingCallTable`, sharing `_pending`'s `callId` counter so an id can never
-   be ambiguous between the two.
-2. **A wrapper would keep every bind inside `sendSync`'s one-call token.**
-   `sendSync` admits exactly one synchronous control call across the whole
-   backend and throws `"a synchronous call is already in flight (reentrant
-   use)"` on a second. The adapter's strand serialises binds against *each
-   other*, but `listInstances` and the legacy `registerModel` are not on that
-   strand, and this backend is explicitly documented as safe to drive from
-   several threads at once. The native path takes no token at all.
-3. **The adapter's reconnect property does not apply here** — see the answer
-   below.
+   `PendingCallTable`, sharing the execute table's `callId` counter so an id
+   can never be ambiguous between the two.
+2. **A bind cannot block anything.** `bindModel` posts its frame to the loop
+   and returns before the reply exists; the loop settles the `Completion` when
+   the reply arrives, and the continuation runs on the caller's executor. There
+   is no wait for any thread to block — the loop's own included — whichever
+   thread issues the call.
 
-What does **not** change: `registerModel`, `registerModelShared`, `attachModel`
-and `assignPrimary` still use `sendSync` with `callId == 0`, so every caller
-has not been moved onto the new surface behaves exactly as before, and nothing on the
-wire changes for them. `cancelPending` now sweeps both tables, so a disconnect
-rejects an in-flight bind with `DisconnectedError` instead of stranding it —
-the asynchronous counterpart of `sendSync` waking on `!_connected`.
+The synchronous control verbs (`registerModel`, `registerModelWithContext`,
+`assignPrimary`, `listInstances`) post the same request and wait on a future
+for its reply, so several may be in flight at once, each matched by `callId`;
+on the loop's own thread they throw instead of waiting on themselves.
+`cancelPending` sweeps both tables, so a disconnect rejects an in-flight bind
+with `DisconnectedError` and a waiting synchronous verb with `"<verb> failed:
+disconnected"`.
 
-**What the new surface does to the reconnect-handler deadlock hazard.** The
-hazard is that a control call parks on `_syncCv` waiting for a reply only the
-I/O thread's read loop can deliver, so running one *on* that thread blocks the
-thread that would satisfy it. Stated precisely, in three parts:
+`tests/net/test_socket_backend.cpp` pins it: several binds in flight at once,
+matched by `callId`, with the replies delivered back to front; and a reconnect
+handler's body runs as a task of the executor it was installed with, never on
+the loop.
 
-- **Through the adapter it would be untouched.** Not relocated — untouched. The
-  adapter forwards `setReconnectHandler` to the wrapped backend, so the handler
-  still runs wherever `SocketBackend` chooses to run it, and
-  `Bridge::installReconnectHandler`'s handler calls the blocking verbs, which
-  the adapter also forwards unchanged. Nothing about that path would have gone
-  near the strand.
-- **Natively, a bind cannot have the hazard at all.** `bindModel` never enters
-  `sendSync`, never waits on `_syncCv`, and returns before the reply exists, so
-  there is no wait for any thread to block — including the I/O thread itself.
-  That is structural, not a mitigation: it follows from the signature returning
-  a `Completion` rather than a `ModelId`, and it holds whichever thread issues
-  the call.
-- **The hazard is nevertheless still present in the backend, and the dedicated
-  handler thread is still load-bearing.** The blocking verbs still park on
-  `_syncCv`, and `Bridge`'s reconnect handler still calls them. A hazard-free
-  route now exists; the hazardous one has not been removed or moved. Only when
-  `Bridge::installReconnectHandler` goes through `bindModel` does the
-  hazard become unreachable from the reconnect path, and only then is dropping
-  the handler thread a question worth asking.
+**Threading — one I/O loop per process.** Neither `SocketBackend` nor
+`SocketServer` owns a thread for its I/O. Every socket, every connection,
+every pending call, the reconnect backoff and the accept flow live on an
+`morph::exec::IoLoop` (`include/morph/core/io_loop.hpp`): one
+`core::net::PlatformLoop` and, natively, the one thread that runs it. An
+application constructs one `IoLoop` and passes it to every component built on
+it — `SocketBackend(loop, url)`, `SocketServer(loop, server, port)`,
+`TimeoutScheduler(loop)`, `NetworkMonitor(loop, …)` — the way `LocalBackend`
+takes its pool. The loop is injected rather than a process-wide singleton the
+framework starts on first use: the dependency is then visible in every
+constructor, there is no global to reset between tests, and an application
+decides how many loops it runs (one, normally). Each component also keeps its
+old constructor, which builds a private `IoLoop` — one loop, and one thread,
+for a caller with no loop to share.
 
-None of this touches the use-after-free window. The surface adds no lock and knows nothing
-about a caller's teardown; it moves the choice of delivery thread from the
-implementor to the caller, exactly as
-[How the threading contract becomes structural](#how-the-threading-contract-becomes-structural)
-says and no further.
+Each component's state is touched only in tasks its loop runs. Its public verbs
+post to the loop and return; the ones that must answer do so from an atomic
+(`connected`, `port`) or an id allocated before the post (`TimeoutScheduler`'s
+handle). Its destructor runs its close on the loop — inline when it runs on
+the loop's own thread, posted and waited for otherwise — so it never waits on
+itself.
 
-`tests/net/test_socket_backend.cpp` pins the property the argument rests on
-rather than only its result: a bind is accepted and settles *while a legacy
-synchronous call is still parked on `_syncCv`* — which a blocking bind cannot
-be, because it fails there with the reentrant-use error — and four binds are in
-flight simultaneously, matched by `callId`, with the replies delivered back to
-front.
+| Component | Cross-thread surface | Everything else |
+|---|---|---|
+| `SocketBackend` | `execute`, `bindModel`, `promoteModel`, `deregisterModel`, `cancelPending` post; `waitForConnected` posts a waiter and blocks the caller; the synchronous control verbs post their frame and wait on a future for the reply; `setSession`, `setReconnectHandler` post | socket, both pending tables, call-id counter, session, reconnect handler, reconnect delay and backoff timer, connect waiters: loop only |
+| `SocketServer` | `listen()`, `close()` run on the loop and wait; `port()` is atomic; a `RemoteServer` reply is posted from the replying thread | listener, connections, writers: loop only |
 
-**Threading — the one deliberate difference from the Qt transport.**
-`QtWebSocketBackend` is pinned to the Qt event loop and uses a nested
-`QEventLoop` for its synchronous `registerModel`; `SocketBackend` instead owns
-a dedicated I/O thread and uses `std::condition_variable`s for the same
-synchronous control op, so it needs no GUI event loop at all. A consequence is
-that, unlike `QtWebSocketBackend`, `SocketBackend` may safely be driven from
-multiple threads concurrently — `registerModel`/`execute`/`deregisterModel`/
-`cancelPending` are all internally synchronized; there is no single "owning"
-thread. `SocketServer` mirrors this: one accept thread plus one thread per
-accepted connection, in place of Qt's event-loop-driven socket signals. One
-consequence worth calling out for tests/embedders: because neither side of
-`morph::net` needs a Qt event loop, blocking calls like
-`SocketBackend::waitForConnected()`/the synchronous `registerModel` genuinely
-block the calling thread with no event-loop pumping of their own — fine
-against a `SocketServer` peer (which needs no pumping either), but calling
-them directly from the one thread that owns a `QCoreApplication` a
-*`QtWebSocketServer`* peer depends on would starve that peer's own
-accept/handshake machinery. See
+The flows are `core::async::Task`s spawned on the loop. `SocketBackend` runs
+one attempt flow per connection attempt — dial through `core::net::connect`
+(its budget is `connectTimeout`; a literal address never leaves the loop, a
+hostname is resolved on core-cpp's resolver pool), the RFC 6455 handshake,
+then the read loop — and, when the connection ends, arms a loop timer for the
+backoff before the next attempt. Each connection has one writer flow that
+drains its queued frames one 64 KiB chunk at a time; a loop timer armed around
+each chunk's write (`sendTimeout`) closes the socket if the write makes no
+progress, which ends the connection like any other disconnect.
+
+`morph::net` keeps its own WebSocket framing (`detail/ws_frame.hpp`) and
+handshake text (`detail/ws_handshake.hpp`); only the socket underneath is
+core-cpp's. `detail/ws_connection.hpp` holds the loop-side pieces both roles
+share: the connection with its outgoing queue, the writer flow, and the
+handshake header read.
+
+Because the loop is shared, a callback that runs on it — a
+`TimeoutScheduler` callback, a `NetworkMonitor` probe or callback, a
+completion delivered on `inlineExecutor()` — must not block. The synchronous
+control verbs throw when called on the loop's thread (the reply they would
+wait for is read by that thread), so that mistake fails rather than hangs.
+
+Blocking calls like `SocketBackend::waitForConnected()`/the synchronous
+`registerModel` genuinely block the calling thread with no event-loop pumping
+of their own — fine against a `SocketServer` peer, but calling them directly
+from the one thread that owns a `QCoreApplication` a *`QtWebSocketServer`*
+peer depends on would starve that peer's own accept/handshake machinery. See
 `tests/net_qt_interop/test_net_qt_interop.cpp`'s `waitForConnectedPumpingQt`/
 `makeHandlerPumpingQt` helpers for the pattern such a caller needs (poll with
 a short timeout while pumping `QCoreApplication::processEvents()`).
@@ -1939,43 +1477,41 @@ a short timeout while pumping `QCoreApplication::processEvents()`).
 method with the same observable semantics as `QtWebSocketBackend`:
 `registerModel` is synchronous (parks on a condition variable instead of a
 nested event loop; a register whose reply never arrives unblocks with
-`"register failed: disconnected"` rather than hanging, the same hardening
-`QtWebSocketBackend::sendSync` applies); `deregisterModel` is fire-and-forget
+`"register failed: disconnected"` rather than hanging); `deregisterModel` is fire-and-forget
 (same trade-off; an undelivered or lost `deregister` against a `SocketServer`
-peer no longer leaks the model, because `SocketServer` now participates in
+peer does not leak the model, because `SocketServer` participates in
 `RemoteServer`'s connection-scope contract exactly as `QtWebSocketServer`
-does — see below); `execute` assigns a monotonic `callId`, is
-fully asynchronous, and supports concurrent in-flight calls matched by
-`callId` exactly like the Qt transport. `setSession` stores the session
-under its own mutex (`_sessionMtx`, guarding the one field it protects — this
-backend is driven from multiple threads, unlike the single-threaded Qt
-transport) and every subsequently built `register`/`registerShared`/
-`attach`/`assign`/`deregister` envelope's `session` field is set from it
-before sending — see
+does — see below); `execute` serialises the action on the calling thread and
+posts the envelope; the loop assigns a monotonic `callId`, files the pending
+record and writes the frame, and the reply flow finds the record and settles
+the completion. `setSession` stores the session under its own mutex and every
+subsequently built `register`/`registerShared`/`attach`/`assign`/`deregister`
+envelope's `session` field is set from it before sending — see
 [Session propagation to control envelopes](#session-propagation-to-control-envelopes).
-Reconnect is configured by
-`SocketBackendConfig` (aliased `SocketBackend::Config`), with the same four
-fields and defaults as `QtWebSocketBackendConfig` (`reconnectEnabled`,
-`initialReconnectDelay`, `maxReconnectDelay`, `backoffMultiplier`) plus two new
-fields: `connectTimeout` (default 5 s), bounding the initial/reconnect TCP
-connect attempt, and `handshakeTimeout` (default 10 s), bounding the
-handshake response read that follows a successful connect — applied as
-`SO_RCVTIMEO` for that read only, then cleared before the normal read loop,
-which is meant to block indefinitely waiting for the next frame.
-`waitForConnected(timeout = 5000ms)` blocks the calling
-thread on a condition variable until connected or the timeout elapses — the
-non-Qt equivalent of pumping the Qt event loop. The constructor takes a
-`ws://` URL string (`wss://` throws immediately — see Limitations) and starts
-the I/O thread; the thread connects, performs the RFC 6455 handshake, and then
-reads framed messages until told to shut down.
+Reconnect is configured by `SocketBackendConfig` (aliased
+`SocketBackend::Config`), with the same four fields and defaults as
+`QtWebSocketBackendConfig` (`reconnectEnabled`, `initialReconnectDelay`,
+`maxReconnectDelay`, `backoffMultiplier`) plus `connectTimeout` (default 5 s,
+the whole dial), `sendTimeout` (default 30 s, one chunk's write) and
+`handshakeTimeout` (default 10 s, the whole handshake response read, from its
+first byte to the header's end). `waitForConnected(timeout = 5000ms)` posts a
+waiter the loop releases when a connection completes, and blocks the calling
+thread on it until then or the timeout — the non-Qt equivalent of pumping the
+Qt event loop. The constructor takes a `ws://` URL string (`wss://` throws
+immediately, before any loop is started — see Limitations) and posts the first
+connection attempt.
 
 **`SocketServer` — server-side transport.** Fronts a `RemoteServer` by
 reference — the same non-owning-reference lifetime rule as `QtWebSocketServer`
 applies (see Lifetime & ownership). `listen()` binds `127.0.0.1:port` (`0`
-lets the OS assign a free port, exactly like the Qt transport) and spawns an
-accept thread; each accepted connection gets its own thread that performs the
-server-side handshake, then reads framed text messages and calls the
-**scoped** `RemoteServer::handle(msg, reply, cid)`.
+lets the OS assign a free port, exactly like the Qt transport) with
+`SO_REUSEADDR`, hands the listener to the loop (`core::net::adoptListener`)
+and spawns the accept flow; each accepted connection gets a flow that performs
+the server-side handshake (bounded as a whole by `handshakeTimeout`), then
+reads framed text messages and calls the **scoped**
+`RemoteServer::handle(msg, reply, cid)`. A server built with the loop-less
+constructor creates its loop on the first `listen()`; a process out of
+descriptors gets `false` rather than a throw.
 
 **Connection scope.** `SocketServer` opts every client into `RemoteServer`'s
 connection scope end to end, matching `QtWebSocketServer`:
@@ -1984,78 +1520,31 @@ connection scope end to end, matching `QtWebSocketServer`:
   it on the per-connection state.
 - **Dispatch** passes that id to the three-argument `handle()`, so every
   `register` on the connection is attributed to its scope.
-- **Teardown** calls `closeConnection(cid)` from a scope guard in the client
-  thread, so it runs however the loop exits — failed handshake, peer close,
-  read error, or `close()` (which joins those threads). `closeConnection` is
-  idempotent, so the overlap during shutdown is harmless.
+- **Teardown** calls `closeConnection(cid)` once per connection, however it
+  ends — failed handshake, peer close, read error, a stalled write, or
+  `close()`, which does it for every connection still open before it returns.
 
-Without this the raw-socket transport leaked every model it ever registered:
-each one outlived its connection with nothing able to reclaim it.
-
-The `reply` callback (which runs on a
-`RemoteServer` worker-pool thread) writes back to the originating connection
-under a per-connection write mutex; if the connection closed before the reply
-is ready, a `weak_ptr` check drops the write silently — the same behavior
-`QtWebSocketServer`'s `QPointer` gives. `close()` (also run by the destructor)
-is idempotent: it wakes the accept thread, shuts down every client socket
-(unblocking their threads' blocked reads), then joins every thread it started,
-so destruction leaves no dangling threads. It marks each connection closed and
-then calls `shutdownBoth()` **without** taking that connection's write mutex: a
-client thread blocked in `sendAll` against a stalled peer holds that mutex for
-as long as the send is stuck, and the shutdown is precisely what unblocks it —
-waiting for the lock first would block `close()` (and therefore the destructor)
-indefinitely, with no timeout. `shutdownBoth()` is documented safe to call from
-any thread for exactly this purpose, on a **connected** socket.
-
-**The accept loop owns its own wakeup, and does not borrow the kernel's**
-The accept thread never parks in `accept(2)`. `listen()` sets
-`O_NONBLOCK` on the listening socket and creates a `core::platform::Wakeup`
-(an eventfd on Linux, a self-pipe on macOS and the BSDs); the loop waits in a
-single `poll()` over the listening fd and the wakeup's descriptor, and takes a
-ready connection with `TcpSocket::tryAccept()`, which answers `std::nullopt`
-rather than parking when a readiness report has gone stale. `close()` signals
-the wakeup before `join()`, which is what ends the loop.
+The `reply` callback runs on a `RemoteServer` worker-pool thread. It encodes
+the frame there and posts it to the loop through a weak handle
+(`IoLoop::weak()`), so a reply that outlives the loop is dropped rather than
+posted to freed memory; on the loop, a connection that closed meanwhile drops
+it, the same behaviour `QtWebSocketServer`'s `QPointer` gives. `close()` (also
+run by the destructor) is idempotent, and so is concurrent use of it on a live
+object: each call is one loop task, and the loop runs them one at a time. It
+closes the listener — the accept flow resumes with `Cancelled` on a later turn
+and ends — and every connection's socket, which resumes each connection's
+parked read the same way. `port()` reads `0` afterwards, and the port is free
+to rebind, matching `QtWebSocketServer`.
 
 **The listener's non-blocking mode stops at the listener.**
 `TcpSocket`'s fd-adopting constructor clears `O_NONBLOCK` on every descriptor it
 takes ownership of, so a connection from `accept()` or `tryAccept()` is always
-blocking, whatever mode the listener it came from is in. That is a correctness
-requirement rather than tidiness: `recvSome()` and `sendAll()` are written for
-blocking descriptors and treat `EAGAIN` as a fatal error, and `clientLoop()`'s
-first act on a new connection is `performServerHandshake()` — a read issued
-before the client's `Upgrade` request has necessarily arrived. macOS/BSD
-propagate a listening socket's `O_NONBLOCK` onto the sockets `accept(2)`
-returns (POSIX permits this; Linux does not do it), so without the reset every
-connection failed its handshake on those platforms while Linux-only CI stayed
-green. Because Linux never propagates the flag, the regression test for this
-asserts the constructor's reset on a descriptor it makes non-blocking itself,
-rather than on an accepted one — an accept-side assertion cannot fail on CI's
-platform.
-
-That replaces, rather than supplements, the previous mechanism: `close()` no
-longer calls `shutdownBoth()` on the *listening* socket at all. It used to, and
-relied on `shutdown(2)` kicking a parked `accept()` — true on Linux, not a POSIX
-guarantee, and false on macOS/BSD, where the accept thread stayed parked and
-`~SocketServer()` hung with no timeout on its join. Because the wakeup is the
-only way the loop ends, the mechanism is exercised by every teardown on every
-platform, including CI's: removing the `signal()` hangs the Linux build too.
-The wakeup's kernel object does differ by platform — an eventfd on Linux, a
-self-pipe elsewhere — and morph's Linux-only CI exercises only the first; the
-self-pipe is core-cpp's, covered by its `Wakeup_test` on core-cpp's own macOS
-legs, rather than a morph code path nothing here could execute.
-
-Two consequences follow, both deliberate:
-
-- `listen()` **fails closed** if the wakeup cannot be created (the kernel out
-  of descriptors, which `core::platform::Wakeup`'s constructor reports by
-  throwing): it returns `false` and spawns no thread, rather
-  than starting an accept loop nothing could ever interrupt.
-- `close()` **releases the listening descriptor** once the accept thread has
-  joined — after the join, so no fd number can be reused under a `poll()` still
-  holding it. Without `shutdownBoth()`, leaving it open would let the kernel
-  keep completing handshakes into a backlog nobody drains, and a client would
-  hang in the WebSocket Upgrade read instead of failing fast. `port()` therefore
-  reads `0` after `close()`, matching `QtWebSocketServer`.
+blocking, whatever mode the listener it came from is in. The transports no
+longer read through `TcpSocket` — the loop's sockets are non-blocking by
+design — but the tests and any blocking caller do: macOS/BSD propagate a
+listening socket's `O_NONBLOCK` onto the sockets `accept(2)` returns (POSIX
+permits this; Linux does not do it), and a blocking reader of such a socket
+fails on `EAGAIN` before its peer has written.
 
 ## Lifetime & ownership
 
@@ -2070,10 +1559,15 @@ are:
   `Bridge` that owns the backend. Destroying the pool first leaves the strand
   pointing at freed storage.
 - **`RemoteServer` must be created via `std::make_shared`.** It derives from
-  `std::enable_shared_from_this<RemoteServer>`; `handle()` captures
-  `shared_from_this()` into the pool task. Constructing it on the stack and
-  calling `handle()` throws `std::bad_weak_ptr` (see ARCHITECTURE.md
-  "RemoteServer must be heap-allocated").
+  `std::enable_shared_from_this<RemoteServer>`; every public verb but
+  `openConnection`'s id and the two accessors captures `shared_from_this()`
+  into the task it posts. Constructing it on the stack and calling one throws
+  `std::bad_weak_ptr` (see ARCHITECTURE.md "RemoteServer must be
+  heap-allocated").
+- **`~RemoteServer` closes the server strand first.** Every task on it holds
+  the server, so when the destructor runs none is queued; closing waits for a
+  task still running on another thread (and returns at once from inside the
+  server's own last task), before any member the strand's tasks touch goes.
 - **The `RemoteServer` shared_ptr must outlive every referencing
   `SimulatedRemoteBackend` and every transport front (`QtWebSocketServer`,
   `morph::net::SocketServer`).**
@@ -2087,13 +1581,19 @@ are:
   whole lifetime. (`QtWebSocketBackend`/`SocketBackend`, by contrast, hold no
   `RemoteServer` reference: they are clients that reach the server only over
   the socket.)
+- **The `exec::IoLoop` must outlive every component built on it.**
+  `SocketBackend`, `SocketServer`, `TimeoutScheduler` and `NetworkMonitor`
+  borrow the loop they were given, and each destructor runs its close on it
+  and waits: a loop destroyed first would never run that close. Destroy the
+  components, then the loop. A component built with its loop-less constructor
+  owns a private loop and destroys it last, after its own close.
 - **Pending strand tasks capture shared_ptr copies, so model destruction
   mid-flight is safe.** Both backends' `execute` strand tasks capture the model
   `holder` by `shared_ptr` copy (and `RemoteServer`'s also captures the reply
   callback and the moved `Envelope`). A `deregisterModel` that erases the map
   entry while a task is queued or running only drops the *map's* reference; the
   in-flight task holds its own, so the holder stays alive until the task
-  completes. `RemoteServer`'s pool tasks additionally keep the server itself
+  completes. `RemoteServer`'s tasks additionally keep the server itself
   alive via `shared_from_this()`. `closeConnection` erases the same map entries
   as an explicit `deregister`, so the same guarantee covers it: it never races a
   running `execute` into use-after-free, only prevents *new* lookups.
@@ -2103,23 +1603,19 @@ are:
   [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#destruction-ordering--who-must-outlive-whom)
   states for a call on a handler whose `Bridge` is gone; no backend is exempt
   from it. It is worth spelling out for `morph::net::SocketBackend`, because
-  that is the one shipped backend whose blocking calls are safe to make from a
-  thread *other* than the one that owns it: `waitForConnected()` parks on a
-  condition variable, and `~SocketBackend` neither notifies nor waits for a
-  parked waiter, so destroying the backend from another thread destroys
-  `_connectCv` and the object's storage underneath one — a data race, whatever
-  the waiter's remaining timeout. A caller that wants to abandon a wait must
-  bound it with the `timeout` argument and let it return before destruction
-  begins; there is no cancel. (The `_shuttingDown` disjunct that used to sit in
-  `waitForConnected`'s predicate looked like an escape hatch for exactly this
-  and was not one — the destructor never notifies `_connectCv`, so it could not
-  reliably release anybody.)
+  its blocking calls are made from threads other than the loop that owns its
+  state: `waitForConnected()` blocks on a future and then reads the backend's
+  connected flag, and `~SocketBackend` does not wait for a parked waiter, so
+  destroying the backend from another thread frees the storage that read
+  touches — a data race, whatever the waiter's remaining timeout. A caller
+  that wants to abandon a wait must bound it with the `timeout` argument and
+  let it return before destruction begins; there is no cancel.
 
 ## Failure modes
 
 | Situation | Local (`LocalBackend`) | Remote (`RemoteServer` / `SimulatedRemoteBackend`) |
 |---|---|---|
-| `register` with an unregistered `typeId` | N/A — the local factory closure constructs the instance directly; there is no registry lookup and no type-id failure. | `ModelRegistryFactory::create(typeId)` fails → the catch in `dispatchMessage` replies `err "unknown model type: <typeId>"`. Remote registration therefore requires the model to have been macro-registered with `BRIDGE_REGISTER_MODEL`. `SimulatedRemoteBackend::registerModelWithContext` turns that `err` into a thrown `std::runtime_error("register failed: unknown model type: <typeId>")`. |
+| `register` with an unregistered `typeId` | N/A — the local factory closure constructs the instance directly; there is no registry lookup and no type-id failure. | `ModelRegistryFactory::create(typeId)` fails → the catch in `dispatchEnvelope` replies `err "unknown model type: <typeId>"`. Remote registration therefore requires the model to have been macro-registered with `BRIDGE_REGISTER_MODEL`. `SimulatedRemoteBackend::registerModelWithContext` turns that `err` into a thrown `std::runtime_error("register failed: unknown model type: <typeId>")`. |
 | `register` with an empty `typeId` | N/A | `err "register requires a typeId"`. |
 | `execute` against an unknown model id | Completion resolves with an **untyped** `std::runtime_error("model not found: id=<n>")`. | `err "model not found"` (bare, no id); `SimulatedRemoteBackend` surfaces it as a thrown/`onError` `std::runtime_error("model not found")`. |
 | Action handler throws | Caught on the strand; completion resolves with the thrown exception. | Caught on the strand; `err exc.what()` reply, which the client re-throws into the completion. |
@@ -2134,16 +1630,16 @@ apply, plus transport-level failures the in-process backends cannot hit:
 | `execute` while the socket is disconnected | Completion resolves immediately with `DisconnectedError`. |
 | Socket drops with execute calls in flight | The `disconnected` slot calls `cancelPending(DisconnectedError{})`, resolving every pending completion with `DisconnectedError`. `Bridge` may retry on reconnect. |
 | Reply arrives for an unknown/cancelled `callId` | Dropped silently. |
-| `register` reply is `err` (e.g. unknown model type) | `registerModel` throws `std::runtime_error("register failed: " + message)`. |
-| Malformed reply frame while a sync waiter is parked | The raw frame is handed to the parked `sendSync` loop so it unblocks rather than hanging; decode then fails there. |
+| `register` reply is `err` (e.g. unknown model type) | `bindModel`'s `Completion` rejects with `std::runtime_error(message)`. |
+| Malformed reply frame | Every pending request is rejected with a protocol error: the `callId` is unreadable, and the peer's framing can no longer be trusted. |
 
 `morph::net::SocketBackend` gives the same guarantees over its own transport
-(condition-variable waits in place of the nested `QEventLoop`):
+(its synchronous verbs wait on a future, off the loop's thread):
 
 | Situation | `SocketBackend` |
 |---|---|
 | `execute` while the socket is disconnected | Completion resolves immediately with `DisconnectedError`. |
-| Socket drops with execute calls in flight | The I/O thread's disconnect handling calls `cancelPending(DisconnectedError{})`, resolving every pending completion with `DisconnectedError`. |
+| Socket drops with execute calls in flight | The loop's disconnect handling sweeps both pending tables, resolving every pending completion with `DisconnectedError`. |
 | Reply arrives for an unknown/cancelled `callId` | Dropped silently. |
 | `register` reply is `err` (e.g. unknown model type) | `registerModel` throws `std::runtime_error("register failed: " + message)`. |
 | `register` reply never arrives (never connected, or disconnects mid-call) | The parked `sendSync` wait wakes on disconnect and throws `"disconnected"`, wrapped as `"register failed: disconnected"` — never hangs. |
@@ -2166,14 +1662,11 @@ round-trip; model and GUI authors must not assume any two share a thread:
 | `deserializeResult` | The **reply / pool thread** — invoked inside the `handle()` reply callback when the server's `ok` arrives (for `SimulatedRemoteBackend`, that is a `RemoteServer` worker-pool thread). |
 | `localOp` | The **model strand** (`LocalBackend` only) — posted on the per-`ModelId` strand, serialised against other actions for the same model. Never invoked on the remote path. |
 
-On the server side, `RemoteServer` runs authorize/authenticate and the model
-lookup on the pool thread that `dispatchMessage` runs on, then runs
-`ActionDispatcher::dispatch` (and the `ScopedContext`) on the model strand. A
-third thread is involved before either: `handle()`'s own calling thread — the
-transport's — is where an `execute`'s ordering ticket is taken, and the pool
-thread may then block briefly on that ticket before posting to the strand (see
-[Per-model execute ordering](#per-model-execute-ordering)). The strand itself
-is never blocked by that wait.
+On the server side, `handle()`'s calling thread — the transport's — decodes
+the envelope; `RemoteServer` then runs authorize/authenticate and the model
+lookup on the server strand, and `ActionDispatcher::dispatch` (and the
+`ScopedContext`) on the model's strand. Both strands run on the server's pool
+(see [Per-model execute ordering](#per-model-execute-ordering)).
 Completion *callbacks* (`.then`/`.onError`) are delivered via the `cbExec`
 executor passed to `execute`, independent of all of the above.
 
@@ -2187,33 +1680,30 @@ Over the WebSocket transport the split is different again:
 
 `QtWebSocketBackend` is single-threaded (Qt event loop). `QtWebSocketServer`
 receives frames on the Qt thread, hands them to `RemoteServer::handle` (which
-runs on the server pool / model strand as above), and marshals the reply *back*
+runs on the server strand / model strand as above), and marshals the reply *back*
 onto the Qt thread before `sendTextMessage`.
 
-`morph::net::SocketBackend` splits the same callables across its own I/O
-thread instead of the Qt thread:
+`morph::net::SocketBackend` splits the same callables between the caller and
+its I/O loop instead of the Qt thread:
 
 | Callable | Runs on (`SocketBackend`) |
 |---|---|
-| `serializeAction` | The **calling thread** — `execute` invokes it while building the envelope, before handing the frame to the I/O thread's write path. |
-| `deserializeResult` | The **I/O thread** — invoked when the matching reply frame arrives. |
+| `serializeAction` | The **calling thread** — `execute` invokes it while building the envelope, before posting it to the loop. |
+| `deserializeResult` | The **I/O loop's thread** — invoked when the matching reply frame arrives. |
 | `localOp` | Never invoked (no local models). |
 
 Unlike `QtWebSocketBackend`, `SocketBackend`'s `execute`/`registerModel`/
-`deregisterModel` may themselves be called from any thread — there is no
-single owning event-loop thread to violate. `bindModel`/`promoteModel` are
-likewise callable from any thread, including the I/O thread itself: they park
-on nothing, and their continuations run on the caller's `cbExec` rather than on
-the I/O thread that settles them. `morph::net::SocketServer`
-receives frames on its own per-connection thread, hands them to
-`RemoteServer::handle` (server pool / model strand, as above), and writes the
-reply back on whichever thread produces it (serialized per connection by a
-write mutex) — there is no separate marshalling step because there is no GUI
-thread to marshal onto. `SocketServer::close()` is likewise callable from any
-thread, including concurrently with another `close()` on the same live server:
-it takes its own teardown mutex for the whole body so exactly one caller ever
-joins the accept thread. That mutex is deadlock-free precisely because nothing
-inside the class calls `close()` — no thread it joins can be waiting on it.
+`deregisterModel` may be called from any thread, because each posts to the
+loop that owns the state (the synchronous verbs excepted on the loop's own
+thread, where they throw). `bindModel`/`promoteModel` are callable from any
+thread, the loop's included: they park on nothing, and their continuations run
+on the caller's `cbExec` rather than on the loop that settles them.
+`morph::net::SocketServer` receives frames on the loop, hands them to
+`RemoteServer::handle` (server strand / model strand, as above), and the reply,
+produced on whichever thread finishes the work, is posted back to the loop,
+which queues it on the connection's writer. `SocketServer::close()` is callable
+from any thread, including concurrently with another `close()` on the same live
+server: each call is a loop task, so the loop serialises them.
 
 ## API reference
 
@@ -2236,15 +1726,15 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 |---|---|---|
 | `registerModel` | `virtual ModelId registerModel(const string&, function<unique_ptr<IModelHolder>()>)` | Pure virtual. |
 | `registerModelWithContext` | `virtual ModelId registerModelWithContext(const string&, function<unique_ptr<IModelHolder>()>, string_view)` | Default: drops `contextKey`, calls `registerModel`. |
-| `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | Default: runs `bindModelBlocking` inline and settles. See [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
+| `bindModel` | `virtual Completion<ModelId> bindModel(BindRequest, IExecutor& cbExec)` | Default: binds a private instance through `registerModelWithContext` for every shape (no shared directory), releases a non-zero `current` after acquiring, and settles before returning. See [The structural registration surface](#the-structural-registration-surface--bindmodel-and-promotemodel). |
 | `promoteModel` | `virtual Completion<ModelId> promoteModel(PromoteRequest, IExecutor& cbExec)` | Default: calls `assignPrimary` inline and settles with `request.mid`. |
-| `bindWaitPolicy` | `virtual BindWait bindWaitPolicy() const noexcept` | Default: `BindWait::kCallerMayBlock`. Whether a caller may block until a `bindModel`/`promoteModel` completion settles. Read by `Bridge::registerHandlerImpl`, `Bridge::switchBackend` and `Bridge::installReconnectHandler`'s handler. |
-| `bindModelBlocking` | `ModelId bindModelBlocking(BindRequest)` | Non-virtual. Routes a `BindRequest` to `registerModelWithContext` / `registerModelShared` / `attachModel` by its shape; blocks. Shared by the default `bindModel` and by `SynchronousBackendAdapter`. |
+| `instances` | `virtual Completion<vector<string>> instances(const string&, IExecutor& cbExec)` | Default: calls `listInstances` inline and settles with its answer (a throw rejects). `QtWebSocketBackend` overrides it with an `instances` request. |
+| `setOwner` | `virtual void setOwner(const exec::detail::OwnerAffinity&)` | Default: ignored. Called by `Bridge` when it installs the backend. |
 | `deregisterModel` | `virtual void deregisterModel(ModelId)` | Pure virtual. |
 | `execute` | `virtual Completion<shared_ptr<void>> execute(ModelId, ActionCall, IExecutor*)` | Pure virtual. |
 | `notifyBackendChanged` | `virtual void notifyBackendChanged()` | Pure virtual. |
 | `cancelPending` | `virtual void cancelPending(const exception_ptr&)` | Pure virtual. |
-| `setReconnectHandler` | `virtual void setReconnectHandler(const function<void()>&)` | Default: no-op. Fires only on the second and later connects. |
+| `setReconnectHandler` | `virtual void setReconnectHandler(function<void()>, IExecutor*)` | Default: no-op. The handler is posted to the executor after the second and later connects, never run on the backend's thread. Both null clears. |
 | `setConnectHandler` | `virtual void setConnectHandler(const function<void()>&)` | Default: no-op. Fires on every successful connect, first included. |
 | `setDisconnectHandler` | `virtual void setDisconnectHandler(const function<void()>&)` | Default: no-op. Fires whenever the transport drops, before any reconnect is scheduled. |
 | `setSession` | `virtual void setSession(session::Context)` | Default: no-op. Stamped onto every control envelope (`register`/`registerShared`/`attach`/`assign`/`deregister`) subsequently built. See [Session propagation to control envelopes](#session-propagation-to-control-envelopes). |
@@ -2262,12 +1752,6 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `PromoteRequest::typeId` | `std::string` | Model type id — the directory's first key component. |
 | `PromoteRequest::primary` | `std::string` | Key to file `mid` under. |
 
-### `detail::BindWait`
-
-| Enumerator | Meaning |
-|---|---|
-| `kCallerMayBlock` | Default. The completion settles without the calling thread's participation; a caller may wait for it. Implies the backend settles every `Completion` exactly once, unprompted. |
-| `kCallerMustNotBlock` | Waiting is impossible (the reply needs the caller's own event loop) or pointless (`SynchronousBackendAdapter`). The caller registers its continuation and returns. |
 
 ### `SynchronousBackendAdapter`
 
@@ -2275,11 +1759,11 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 |---|---|
 | `SynchronousBackendAdapter(shared_ptr<IBackend> inner, IExecutor& blockingExec)` | Throws `std::invalid_argument` if `inner` is null. `blockingExec` is `MORPH_LIFETIMEBOUND` and must keep running tasks until the destructor's wait completes. |
 | `wrapped()` | The wrapped backend; never null. |
-| `bindModel(request, cbExec)` | Posts `inner->bindModelBlocking(request)` onto the control strand; settles the returned `Completion` on `cbExec`. Never blocks the caller. |
-| `bindWaitPolicy()` | `BindWait::kCallerMustNotBlock`, always. Not forwarded: it describes the two verbs the adapter reshapes. |
-| `promoteModel(request, cbExec)` | Posts `inner->assignPrimary(...)` onto the control strand; resolves with `request.mid`. |
-| `cancelPending(exc)` | Sets each still-unsettled `bindModel`/`promoteModel` record's `cancelled` flag and rejects its promise with `exc`, **then** forwards to `inner`. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of. The flag is what stops a task still *queued* on `_control` from making its blocking control call after the caller was told the bind was cancelled; a task already inside that call is unaffected. |
-| every other `IBackend` verb | Forwarded to `inner` unchanged — the synchronous verbs only: the one verb that could carry a non-blocking path is `bindModel`, which this adapter reshapes. |
+| `bindModel(request, cbExec)` | Posts `inner->bindModel(request, inlineExecutor())` onto the control strand; settles the returned `Completion` on `cbExec` from there. Never blocks the caller. |
+| `promoteModel(request, cbExec)` | Posts `inner->promoteModel(request, inlineExecutor())` onto the control strand; settles on `cbExec`. |
+| `cancelPending(exc)` | On the caller's owner: sets each still-unsettled `bindModel`/`promoteModel` record's `cancelled` flag and rejects its promise with `exc`, **then** posts `inner->cancelPending(exc)` to the strand. Not a plain forward: those promises are settled from `_control` tasks the wrapped backend has never heard of. The flag is what stops a task still *queued* on `_control` from making its control call after the caller was told the bind was cancelled; a task already inside that call is unaffected. |
+| `setOwner(affinity)` | Records the caller's owner; not forwarded (the wrapped backend's owner is the control strand). |
+| every other `IBackend` verb | Run on the control strand. The synchronous ones (`registerModel`, `registerModelWithContext`, `assignPrimary`, `listInstances`) wait for it, so they must not be called from the executor's only thread. |
 
 ### Error types
 
@@ -2296,31 +1780,41 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | Method | Notes |
 |---|---|
 | `explicit LocalBackend(IExecutor& workerPool)` | Constructs with a strand around `workerPool`. |
-| `registerModel(typeId, factory)` | Atomically increments `_nextId`, files the holder as a private instance in `_instances` under `_regMtx`; also records the id in `_changeAware` when the holder is backend-change-aware. `typeId` is accepted for interface compatibility but not used. |
-| `deregisterModel(mid)` | Releases one attachment through `_instances` under `_regMtx`; erases from `_changeAware` when that destroys the instance. |
-| `notifyBackendChanged()` | Looks up the models recorded in `_changeAware` under `_regMtx`, then posts `onBackendChanged()` (the `IModelHolder` base virtual — no `dynamic_cast`) onto each such model's strand (outside the lock). Cost is O(change-aware models). |
+| `registerModel(typeId, factory)` | Atomically increments `_nextId`, files the holder as a private instance in `_instances`, on the owner; also records the id in `_changeAware` when the holder is backend-change-aware. `typeId` is accepted for interface compatibility but not used. |
+| `deregisterModel(mid)` | Releases one attachment through `_instances`, on the owner; erases from `_changeAware` when that destroys the instance. |
+| `notifyBackendChanged()` | Looks up the models recorded in `_changeAware`, on the owner, then posts `onBackendChanged()` (the `IModelHolder` base virtual — no `dynamic_cast`) onto each such model's strand. Cost is O(change-aware models). |
 | `execute(mid, call, cbExec)` | Posts `call.localOp` on the model's strand with `ScopedContext`. Returns a `Completion`. |
 | `cancelPending(exc)` | Snapshots `_pending`, delivers `exc` to each live state, and re-arms the compaction threshold. |
-| `trackedPendingCount()` | `[[nodiscard]] std::size_t trackedPendingCount() const` — size of `_pending` under `_pendingMtx`. **Not** the in-flight count: between sweeps the list also holds entries whose state is already destroyed. An upper bound on in-flight, and the observable that makes [the compaction policy](#the-pending-list-and-its-amortised-compaction)'s memory cost measurable. For in-flight *calls*, use `Bridge::pendingCalls()`. |
+| `trackedPendingCount()` | `[[nodiscard]] std::size_t trackedPendingCount() const` — size of `_pending`, on the owner. **Not** the in-flight count: between sweeps the list also holds entries whose state is already destroyed. An upper bound on in-flight, and the observable that makes [the compaction policy](#the-pending-list-and-its-amortised-compaction)'s memory cost measurable. For in-flight *calls*, use `Bridge::pendingCalls()`. |
 
 ### `RemoteServer`
 
 | Method | Notes |
 |---|---|
-| `RemoteServer(workerPool, dispatcher, registry)` | Allow-all authorizer. |
-| `RemoteServer(workerPool, authorizer, dispatcher, registry)` | Custom authorizer; null → allow-all. |
-| `handle(msg, reply)` | Async: posts to pool, decodes, dispatches, calls `reply` once. Unscoped (`cid == 0`). Thread-safe. For an `execute` naming a `modelId`, takes that model's ordering ticket on the calling thread before posting — see [Per-model execute ordering](#per-model-execute-ordering). |
-| `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. Thread-safe. |
-| `handleInline(msg)` | Sync: runs `dispatchMessage` on the calling thread and returns the reply JSON; intended for `register`/`deregister` only. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Unscoped. |
-| `openConnection()` | Returns a fresh non-zero `ConnectionId` and opens an empty scope for it. Thread-safe. |
-| `closeConnection(cid)` | Erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. Thread-safe. |
-| `setLogProvider(provider)` | Installs a `LogProvider`; `nullptr` clears. Thread-safe. |
-| `setLimitPolicy(policy)` | Installs a `LimitPolicy`; thread-safe. All-zero (default) reproduces pre-existing behavior. |
-| `setSupportedVersionRange(min, max)` | Sets the inclusive protocol-version range advertised on `hello`. Defaults to `{kProtocolVersion, kProtocolVersion}`. Throws `std::invalid_argument` if `min > max`. Thread-safe. |
-| `health()` | `[[nodiscard]] HealthStatus health() const` — snapshot of readiness/liveModels/inFlight. Cheap; safe from any thread. See [observability.md](observability.md). |
-| `setHealthHandler(handler)` | `void setHealthHandler(std::function<void(const HealthStatus&)>)` — fires immediately with the current status, and again whenever readiness changes (currently only `beginShutdown()` triggers a change); `nullptr` clears without firing. |
-| `beginShutdown()` | Enters shutdown: subsequent `register`/`attach`/`execute` envelopes get `err "server shutting down"`; `deregister` still served. A client therefore cannot re-attach to a shared instance during the drain window. Idempotent, irreversible. Flips `health().ready` to `false` and re-invokes any installed health handler. |
-| `drainedWithin(deadline)` | `[[nodiscard]] bool drainedWithin(std::chrono::milliseconds deadline)` — blocks (condition-variable wait, not a poll) until every in-flight `execute` has replied or `deadline` elapses. Returns `true`/`false` accordingly. |
+| `RemoteServer(workerPool, dispatcher, registry)` | Allow-all authorizer, default `ServerConfig`. |
+| `RemoteServer(workerPool, authorizer, dispatcher, registry)` | Custom authorizer; null → allow-all. Default `ServerConfig`. |
+| `RemoteServer(workerPool, config, dispatcher, registry)` | Allow-all authorizer, `config` fixed for the server's life. Throws `std::invalid_argument` if `config.minProtocolVersion > config.maxProtocolVersion`. Calls `config.healthHandler` once before returning. |
+| `RemoteServer(workerPool, authorizer, config, dispatcher, registry)` | Both. |
+| `handle(msg, reply)` | Async: decodes on the calling thread, posts to the server strand, calls `reply` once from a pool thread. Unscoped (`cid == 0`). Callable from any thread; calls from one thread are handled in call order — see [Per-model execute ordering](#per-model-execute-ordering). |
+| `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. |
+| `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
+| `openConnection()` | Returns a fresh non-zero `ConnectionId` at once; its empty scope is opened on the server strand, before the caller's next `handle()`. |
+| `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |
+| `payloadCompleteness()` | The `ServerConfig::payloadCompleteness` given at construction. |
+| `strand()` | The server strand, as an `exec::IExecutor`: `runningOn(server.strand())` is true inside every task on the server's state. |
+| `health(replyExec)` | `[[nodiscard]] Completion<HealthStatus> health(IExecutor& replyExec)` — readiness/liveModels/inFlight, answered on the server strand; delivered on `replyExec`, the executor the caller attaches from (borrowed: it must outlive the delivery). See [observability.md](observability.md). |
+| `beginShutdown()` | Posts: subsequent `register`/`attach`/`execute` envelopes get `err "server shutting down"`; `deregister` still served. A client therefore cannot re-attach to a shared instance during the drain window. Idempotent, irreversible. Flips `ready` to `false` and calls `ServerConfig::healthHandler`, on the server strand. |
+| `drainedWithin(deadline, replyExec)` | `[[nodiscard]] Completion<bool> drainedWithin(std::chrono::milliseconds deadline, IExecutor& replyExec)` — settled on the server strand: `true` once no `execute` is in flight, `false` if `deadline` elapses first; delivered on `replyExec`, the executor the caller attaches from (borrowed: it must outlive the delivery). Blocks nothing. |
+
+### `ServerConfig`
+
+| Field | Notes |
+|---|---|
+| `limits` | `LimitPolicy`; all-zero (default) applies no limit. |
+| `logProvider` | `LogProvider`, consulted on the server strand for an instance created with a non-empty `contextKey`; null attaches no log. |
+| `healthHandler` | `std::function<void(const HealthStatus&)>`: called from the constructor, then on the server strand when readiness changes. |
+| `minProtocolVersion`, `maxProtocolVersion` | Inclusive `hello` range; default `{kProtocolVersion, kProtocolVersion}`. |
+| `payloadCompleteness` | `PayloadCompleteness`; default `Lenient`. |
 
 ### `SimulatedRemoteBackend`
 
@@ -2343,7 +1837,6 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 | `initialReconnectDelay` | `std::chrono::milliseconds` | `500 ms` |
 | `maxReconnectDelay` | `std::chrono::milliseconds` | `30 s` |
 | `backoffMultiplier` | `double` | `2.0` |
-| `asyncRegistrationEnabled` | `bool` | `false` — whether `bindModel` may return before the reply. `false` defers to `IBackend::bindModel`, which blocks the Qt thread in a nested `QEventLoop`, keeping every existing embedder's behaviour. `true` is the WASM setting. Not an opt-in to a second set of verbs any more: the continuation exists either way. |
 
 ### `QtWebSocketBackend` (namespace `morph::qt`)
 
@@ -2351,18 +1844,17 @@ inside the class calls `close()` — no thread it joins can be waiting on it.
 |---|---|
 | `QtWebSocketBackend(serverUrl, dispatcher = defaultDispatcher(), registry = defaultRegistry(), tls = nullopt, cfg = Config{})` | Opens the socket to `serverUrl` in the constructor. `dispatcher`/`registry` params are accepted but unused (models live on the server). `tls` non-null → `wss://`. `tls` is not declared at all when Qt is built with `QT_NO_SSL` (see above). |
 | `QtWebSocketBackend(serverUrl, tls, cfg = Config{})` | Overload that skips the unused `dispatcher`/`registry` pair: a caller who only needs `tls`/`cfg` reaches them directly, without naming `morph::model::detail::defaultDispatcher()`/`defaultRegistry()` explicitly. Delegates to the main constructor with both defaulted. Not declared on a `QT_NO_SSL` build (no `tls` parameter to distinguish it from the `(serverUrl, cfg)` overload below). |
-| `QtWebSocketBackend(serverUrl, cfg)` | Overload that skips `dispatcher`/`registry` and `tls` together — the common case for a caller that only wants to set a `Config` field (e.g. `asyncRegistrationEnabled`) over a plaintext `ws://` connection. Delegates to the main constructor with `dispatcher`/`registry` defaulted and (on an SSL-enabled build) `tls = std::nullopt`. |
-| `bindModel(request, cbExec)` | Defers to `IBackend::bindModel` (blocking) unless `cfg.asyncRegistrationEnabled` is `true`. Otherwise builds the envelope `request`'s shape names — `register`, shared `register`, or `attach` — assigns a fresh `callId` (the same counter `execute` uses), records the promise in `_pendingRegistrations[callId]` and sends. The `Completion` settles later from `onTextMessage` (or from `cancelPending` on a disconnect). A private bind on an unconnected socket is queued in `_queuedRegistrations` instead; a keyed one rejects with `"disconnected"`. |
-| `bindWaitPolicy()` | `kCallerMustNotBlock` exactly when `cfg.asyncRegistrationEnabled` is set — that is when completions are settled by `onTextMessage`, a Qt slot delivered by the calling thread's own event loop, so a caller that blocked waiting for one would never see it arrive. `kCallerMayBlock` otherwise, where `bindModel` settles inside the call. |
-| `promoteModel(request, cbExec)` | Always non-blocking, with no `Config` gate — `assignPrimary`'s caller is inside a `Completion` chain, so there is no synchronous guarantee to preserve. Sends `assign` through the same path. An empty `primary` or zero `mid` resolves with `request.mid` without sending. |
-| `waitForConnected(timeoutMs = 5000)` | Pumps the Qt loop until connected or timeout; returns `_connected`. |
-| `negotiateProtocolVersion()` | Opt-in: sends `hello` synchronously (same nested-`QEventLoop` path as `registerModel`), classifies the reply via `wire::interpretHelloReply`. Throws on an explicit version rejection or a `sendSync` failure. |
-| `registerModel(typeId, factory)` | Forwards to `registerModelWithContext` with an empty key. |
-| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous via nested `QEventLoop`; `factory` ignored. Sends `register` carrying `contextKey`, so a privately registered instance is journalled. Throws on `err` reply, and wraps a `sendSync` failure as `"register failed: <what>"`. |
-| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses, recorded in `_pendingDeregisters` so `onTextMessage` recognises the unwanted reply and drops it rather than handing it to a parked `sendSync`. |
+| `QtWebSocketBackend(serverUrl, cfg)` | Overload that skips `dispatcher`/`registry` and `tls` together — the common case for a caller that only wants to set a `Config` field (e.g. `reconnectEnabled`) over a plaintext `ws://` connection. Delegates to the main constructor with `dispatcher`/`registry` defaulted and (on an SSL-enabled build) `tls = std::nullopt`. |
+| `bindModel(request, cbExec)` | Builds the envelope `request`'s shape names — `register`, shared `register`, or `attach` — assigns a fresh `callId` (the same counter `execute` uses), files the pending entry in `_pendingControl[callId]` and sends. The `Completion` settles later from `onTextMessage` (or from `cancelPending` on a disconnect). A private bind on an unconnected socket is queued in `_queuedRegistrations` instead; a keyed one rejects with `"disconnected"`. |
+| `promoteModel(request, cbExec)` | Sends `assign` through the same path. An empty `primary` or zero `mid` resolves with `request.mid` without sending. |
+| `instances(typeId, cbExec)` | Sends `instances` through the same path; the reply's body is decoded into the key list. Rejects with `"disconnected"` when not connected. |
+| `waitForConnected(timeoutMs = 5000)` | Pumps a local `QEventLoop` until connected or timeout; returns `_connected`. Not for a WASM main thread. |
+| `negotiateProtocolVersion(replyExec)` | Opt-in: sends `hello` through the same path and settles the returned `Completion` with `wire::interpretHelloReply`'s classification. Rejects on an explicit version rejection, when not connected, or on a drop. |
+| `registerModel(typeId, factory)`, `assignPrimary(...)`, `listInstances(typeId)` | Throw `std::logic_error`: each would have to wait for a reply. `registerModelWithContext` is `IBackend`'s default, which forwards to `registerModel`. |
+| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses, recorded in `_pendingDeregisters` so `onTextMessage` recognises the reply and drops it. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. |
 | `notifyBackendChanged()` | No-op. |
-| `cancelPending(exc)` | Drains `_pending`, `_pendingRegistrations` and `_queuedRegistrations` under `_pendingMtx`, then delivers `exc` to each — the exception itself, so a control call rejected by a dropped socket carries the same `DisconnectedError` an `execute` does. |
+| `cancelPending(exc)` | On the socket's thread, takes `_pending`, `_pendingControl` and `_queuedRegistrations` out, then delivers `exc` to each — the exception itself, so a request rejected by a dropped socket carries the same `DisconnectedError` an `execute` does. |
 | `setReconnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every *subsequent* connect. `nullptr` clears. |
 | `setConnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every successful connect, first included. `nullptr` clears. |
 | `setDisconnectHandler(handler)` | Stores the handler; invoked on the Qt thread whenever the socket drops, before reconnect scheduling. `nullptr` clears. |
@@ -2411,17 +1903,20 @@ not a behavior change to the existing loopback-only default.
 
 | Method | Notes |
 |---|---|
-| `explicit SocketBackend(serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and starts the I/O thread, which connects asynchronously. |
-| `waitForConnected(timeout = 5000ms)` | Blocks the calling thread on a condition variable until connected or the timeout elapses; returns the current connected state. The backend must outlive the call — destroying it while a thread is parked here is undefined, and there is no cancel (see Lifetime & ownership). |
+| `SocketBackend(loop, serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and posts the first connection attempt to `loop`, an `exec::IoLoop` that must outlive the backend. |
+| `explicit SocketBackend(serverUrl, cfg = Config{})` | The same, on a private `IoLoop` the backend owns. The URL is parsed before that loop is started. |
+| `~SocketBackend()` | Runs its close on the loop — inline on the loop's own thread, posted and waited for otherwise: closes the connection, retires the backoff timer, rejects every pending call — a waiting synchronous verb's included — with `DisconnectedError`. Never waits for a dial in progress. |
+| `waitForConnected(timeout = 5000ms)` | Posts a waiter the loop releases on the next completed connection, and blocks the calling thread on it until then or the timeout; returns the current connected state. On the loop's own thread it answers at once. The backend must outlive the call — destroying it while a thread is parked here is undefined, and there is no cancel (see Lifetime & ownership). |
 | `registerModel(typeId, factory)` | Forwards to `registerModelWithContext` with an empty `contextKey`; `factory` ignored. |
-| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous via a parked condition variable; sends `register` carrying `contextKey`, so the server's `LogProvider` is consulted for a private registration exactly as it is for a shared one. `factory` ignored. Throws on `err` reply or disconnect. Thread-safe, but only one such call may be in flight at a time. `registerModelShared` and `attachModel` degrade here when `primary` is empty, so their private paths carry the key too. |
-| `bindModel(request, cbExec)` | Native override of the structural surface. Sends the envelope `request`'s shape names with a non-zero `callId` and returns immediately; every shape carries `request.contextKey`, the private one included; the I/O thread settles the `Completion` when the reply arrives, delivered on `cbExec`. Never enters `sendSync`, so it takes no synchronous-call token and any number may be in flight. Rejects with `DisconnectedError` when the socket is down or drops first, or with `std::runtime_error{"<verb> failed: <server message>"}`. |
+| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous: posts `register` carrying `contextKey` and waits on a future for the loop to settle the reply, so the server's `LogProvider` is consulted for a private registration exactly as it is for a shared one. `factory` ignored. Throws on `err` reply or disconnect, and on the loop's own thread. Any number may be in flight, matched by `callId`. |
+| `bindModel(request, cbExec)` | Native override of the structural surface. Posts the envelope `request`'s shape names and returns immediately; the loop gives it a non-zero `callId`, files it and writes it; every shape carries `request.contextKey`, the private one included; the loop settles the `Completion` when the reply arrives, delivered on `cbExec`. Any number may be in flight. Rejects with `DisconnectedError` when the socket is down or drops first, or with `std::runtime_error{"<verb> failed: <server message>"}`. |
 | `promoteModel(request, cbExec)` | The `assign` counterpart of `bindModel`, on the same path; resolves with `request.mid` echoed back. An empty `primary` or a zero `mid` resolves without sending, matching `assignPrimary`'s guards. |
-| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses so its unawaited `ok` cannot be handed to a parked synchronous control call, as it is on `QtWebSocketBackend`. Needs no pending-id bookkeeping of its own: `dispatchIncomingEnvelope` already drops a non-zero `callId` that is absent from `_pending`. |
-| `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. Thread-safe; supports concurrent in-flight calls from multiple threads. |
+| `deregisterModel(mid)` | **Fire-and-forget** — posted only if connected, does not wait for the ack. The loop gives it a non-zero `callId` from the same counter `execute` uses, so its unawaited `ok` is never taken for another call's reply. Needs no pending-id bookkeeping of its own: the reply router already drops a non-zero `callId` that is not pending. |
+| `execute(mid, call, cbExec)` | Serialises the action on the calling thread and posts the envelope; the loop assigns a `callId`, files the pending record and writes the frame. Returns a `Completion`, already rejected with `DisconnectedError` if not connected. Callable from any thread; any number may be in flight. |
 | `notifyBackendChanged()` | No-op. |
-| `cancelPending(exc)` | Drains **both** pending maps — the `execute` calls and the `bindModel`/`promoteModel` control calls — and delivers `exc` to each state. |
-| `setReconnectHandler(handler)` | Stores the handler; invoked on the **dedicated handler thread**, not the I/O thread, after every *subsequent* connect — see "Reconnect handlers run on their own thread" above. `nullptr` clears. |
+| `cancelPending(exc)` | Posted: the loop drains **both** pending tables — the `execute` calls and the `bindModel`/`promoteModel` control calls — and delivers `exc` to each state. Covers every call issued before it. |
+| `setReconnectHandler(handler, exec)` | Posted: the loop stores the handler and its executor, and after every *subsequent* connect posts the handler to `exec` — never runs it on the loop. `nullptr` clears. |
+| `setSession(session)` | Posted: the loop stores the session it stamps onto every control envelope it builds afterwards. |
 
 ### `SocketServerConfig` (`morph::net::SocketServer::Config`)
 
@@ -2432,36 +1927,29 @@ not a behavior change to the existing loopback-only default.
 | `sendTimeout` | `std::chrono::milliseconds` | `30 s` |
 
 `handshakeTimeout` bounds the whole RFC 6455 Upgrade read (accept to the
-terminating `\r\n\r\n`), not each individual `recv` the way
-`SocketBackendConfig::handshakeTimeout` (`SO_RCVTIMEO`) does — a peer that
-never sends a complete request has no legitimate reason to behave that way, so
-this bound carries no false-positive cost and is enforced as a single deadline
-across `readHttpHeaderBlock`'s read loop, via `poll()` with the remaining
-budget on each iteration, rather than a socket option that would only bound
-each read and let a byte-at-a-time peer stretch the total to
-`handshakeTimeout` times the header's 64 KiB cap. `sendTimeout` is `SO_SNDTIMEO`
-on the accepted socket (the same mechanism and default as
-`SocketBackendConfig::sendTimeout`, applied once in `acceptLoop` and never
-cleared — unlike the client side, a `SocketServer` connection's steady-state
-replies are meant to be bounded too): without it, a peer that stops reading
-fills the kernel send buffer and parks whichever `RemoteServer` worker-pool
-thread is calling `ClientConnection::sendText` forever, and that method's
-existing failed-send handling (`closed.store(true); socket.shutdownBoth()`) —
-which is what stops the connection from continuing to execute actions whose
-replies go nowhere — never gets a chance to run. Both are `0`-disables opt-outs
-that restore the pre-existing block-forever behavior; deliberately not opt-in,
-since neither has the false-positive risk that ruled out an `idleTimeout`
-(reaping an idle-by-design desktop client with no keepalive to tell "idle"
-from "dead" apart).
+terminating `\r\n\r\n`), as one loop timer that closes the connection when it
+runs out: a peer that dribbles one byte at a time cannot stretch it, the way it
+could stretch a per-read bound to `handshakeTimeout` times the header's 64 KiB
+cap. `SocketBackendConfig::handshakeTimeout` is the same whole-read bound on
+the client side. `sendTimeout` bounds each 64 KiB chunk of a reply's write,
+with the same mechanism and default as `SocketBackendConfig::sendTimeout`:
+without it, a peer that stops reading fills the kernel send buffer and its
+replies queue on the loop forever, while the connection goes on executing
+actions whose replies go nowhere. When it runs out the connection is retired —
+its socket closed, its models reclaimed. Both are `0`-disables opt-outs;
+deliberately not opt-in, since neither has the false-positive risk that ruled
+out an `idleTimeout` (reaping an idle-by-design desktop client with no
+keepalive to tell "idle" from "dead" apart).
 
 ### `SocketServer` (namespace `morph::net`)
 
 | Method | Notes |
 |---|---|
-| `SocketServer(server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server`. Does not start listening. |
-| `listen()` | Binds `127.0.0.1:port`, makes the listening socket non-blocking, creates the accept loop's wakeup (`core::platform::Wakeup`), and spawns the accept thread; returns success. Fails closed (`false`, no thread) if the wakeup cannot be created — an accept loop nothing can interrupt is worse than not listening. |
-| `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
-| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. Interrupts the accept loop by signalling the wakeup it polls — **not** by `shutdownBoth()` on the listening socket, which works only because Linux kicks a parked `accept(2)` on shutdown and leaves macOS/BSD teardown hanging forever. Releases the listening descriptor after the join, so `port()` reads `0` afterwards. Serialized against itself by a dedicated mutex, so concurrent callers on a **live** object are safe and each returns only once teardown is complete. A `_closing.exchange` guard is not enough: it lets a second caller reach `_acceptThread.join()` while the first is inside it — two joins on one `std::thread`, which hangs forever on Linux/glibc and throws `std::system_error` on macOS/libc++. The wakeup signal runs under that same mutex and at most once per `listen()`/`close()` cycle. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
+| `SocketServer(loop, server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server` on `loop`, an `exec::IoLoop` that must outlive it. Does not start listening. |
+| `SocketServer(server, port = 0, cfg = Config{})` | The same, on a private `IoLoop` the first `listen()` creates. |
+| `listen()` | On the loop, and waited for: binds `127.0.0.1:port` with `SO_REUSEADDR`, hands the listener to the loop and starts the accept flow; returns success. `false` if the port cannot be bound or, for the loop-less constructor, the loop cannot be created (a process out of descriptors). |
+| `port()` | Bound port (OS-assigned when constructed with `0`), or `0` when not listening. Atomic; callable from any thread. |
+| `close()` | On the loop, and waited for (inline on the loop's own thread): closes the listener, reclaims every connection's models (`closeConnection`) and closes its socket. `port()` reads `0` afterwards and the port is free to rebind. Idempotent; also run by the destructor. Concurrent callers on a **live** object are safe — each call is one loop task, run one at a time. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## `executeInto` — settling the caller's own completion
 
@@ -2510,11 +1998,13 @@ implementation to absorb — see
 | Callables are function pointers, not `std::function`s | `std::string (*)(const void*)` etc., with the action in `ActionCall::action` | Every call builds all three, whichever path it takes, so a stateful callable charges an allocation to calls that never invoke it. The behaviour is a constant of `(Model, Action)`; only the action is per-call. Measured at 3 allocations per local round trip. The cost is an explicit borrow: see [Lifetime contract](#lifetime-contract). |
 | Type ids are `string_view`s, not `std::string`s | `modelTypeId`, `actionTypeId` | They are always views of `constexpr` string literals from the registration macros, so copying them into a `std::string` bought nothing and allocated whenever an id exceeded the SSO threshold (`"CreateSwimlane"` is 14 characters; the margin is one character wide). |
 | `registerModelWithContext` | Virtual with a default that drops `contextKey` | `LocalBackend`'s factory closure already captures identity, so there is nothing to forward — which is why the default drops the key rather than being pure virtual. A backend whose instances are constructed on the far side of a wire protocol has no such closure, so the envelope is the only channel the identity has: `SimulatedRemoteBackend` and `SocketBackend` both override it so the server's `LogProvider` can attach an action log. The default being *permissive* is what lets a wire backend ship without an override and silently stop journalling private registrations; the price of that permissiveness is that "is this a wire backend?" has to be answered by hand for each new transport. |
-| `RemoteServer` heap requirement | `std::enable_shared_from_this` | `handle()` posts to the worker pool capturing `shared_from_this()` — the server must outlive any in-flight message. |
+| `RemoteServer` heap requirement | `std::enable_shared_from_this` | Every task the server posts captures `shared_from_this()` — the server must outlive any in-flight message. |
+| `RemoteServer` state on one strand | `exec::OwnerStrand` over the pool; `execute` admitted there, run on the model's strand | The registry, scopes, in-flight count and readiness need no lock, and per-model order is two strands' FIFO rather than a ticket gate. Admission is not on the model's strand, so a rejection never waits on a busy model — see [Per-model execute ordering](#per-model-execute-ordering). |
+| `RemoteServer` configuration | `ServerConfig` at construction, no setters | Read on the strands without a lock because nothing writes it afterwards. |
 | `handleInline` | Synchronous; caller-restricted to control messages | Safe to call from a worker-pool thread (e.g. from a `BridgeHandler` constructor). It is meant for `register`/`deregister` only; an `execute` envelope is rejected with an `err` reply, because `dispatchExecute` posts to the strand and would reply after `handleInline` returns (writing into an already-destroyed reply buffer). The rejection is now enforced by the code, matching the documented intent. |
 | `SimulatedRemoteBackend` factory ignored | Model construction delegated to `RemoteServer`'s `ModelRegistryFactory` | The factory closure lives on the client side; the server owns the actual instances. |
 | `cancelPending` snapshots | Weak-ptr snapshot under lock, then resolves outside | Avoids holding the lock while delivering exceptions to each state, preventing deadlock if a callback re-enters the backend. |
-| `_pending` compacted amortised, not intrusively | Sweep when `size() >= _compactAt`, re-arm at twice the survivors | The intrusive alternative is to give `CompletionState` a slot index and unlink on settle, making both registration and removal O(1) with no sweep at all. Rejected. It pushes a back-reference to the backend's table into a type shared by every backend, and puts a `_pendingMtx` acquisition on the settle path of every completion — turning a cost paid once per burst into contention paid by every strand thread on every result, on the exact path `Completion`'s value-handling contract exists to keep cheap. The amortised sweep buys the same O(1) admission for one `size_t` of state confined to `LocalBackend`, at the cost of a list bounded at 2× the live count instead of exactly it. |
+| `_pending` compacted amortised, not intrusively | Sweep when `size() >= _compactAt`, re-arm at twice the survivors | The intrusive alternative is to give `CompletionState` a slot index and unlink on settle, making both registration and removal O(1) with no sweep at all. Rejected. It pushes a back-reference to the backend's table into a type shared by every backend, and puts a cross-thread unlink — a lock, or a post to the owner — on the settle path of every completion, turning a cost paid once per burst into work paid by every strand thread on every result, on the exact path `Completion`'s value-handling contract exists to keep cheap. The amortised sweep buys the same O(1) admission for one `size_t` of state confined to `LocalBackend`, at the cost of a list bounded at 2× the live count instead of exactly it. |
 | `setReconnectHandler` | Default no-op | Only backends with a transport layer (e.g. `QtWebSocketBackend`) need to react to reconnects. `LocalBackend` and `SimulatedRemoteBackend` never invoke it. |
 | `setConnectHandler`/`setDisconnectHandler` on `IBackend`, not only `QtWebSocketBackend` | Same no-op-default pattern as `setReconnectHandler` | Connection state is a property of any transport-backed backend; a UI observing it shouldn't have to downcast to a concrete backend type. A purely local backend has no meaningful connection state, so the base-class hook is simply inert for it — no behavior change, matching the existing `setReconnectHandler` precedent exactly. |
 | `setDisconnectHandler` fires before reconnect scheduling | Ordering choice, not incidental | An instant successful reconnect must not look, from an observer's perspective, like nothing happened — the disconnected state must be visible even when the very next thing that happens is a fresh `connected`. |
@@ -2523,15 +2013,15 @@ implementation to absorb — see
 | Opaque model ids | Monotonic counter run through a keyed 4-round Feistel permutation (`detail::OpaqueIdGenerator`), key drawn from `std::random_device` at construction | Guarantees uniqueness (Feistel networks are bijections for any round function) while making ids unguessable without the key; self-contained, no external crypto dependency — same posture as the reference HMAC-SHA256 in `session_auth.hpp`. |
 | WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. A lost/undelivered deregister no longer leaks indefinitely: `QtWebSocketServer`'s connection scope reclaims the model at the next disconnect (see Limitations). |
 | Connection-scoped cleanup bypasses `IAuthorizer` | `closeConnection` never calls `authorize`/`authorizeInstance`/`authenticate` | It is server housekeeping triggered by the transport's own connection-close event, not a caller action; synthesising a `deregister` envelope would need a token to pass ownership checks and would require the transport to learn ids by parsing replies — recording the owning connection at register time is simpler and cannot desync. |
-| `callId`-multiplexed replies | `execute` replies carry a non-zero `callId`; *awaited* control replies carry `0`. The one exception is the fire-and-forget `deregister`, which carries a non-zero `callId` from the same counter on both WebSocket transports | Lets `QtWebSocketBackend` run many concurrent async executes over one socket and match each reply to its `Completion`, while still supporting the parked-nested-loop synchronous `register` path (which uses `callId == 0`). The `deregister` exception exists because `0` means "give this payload to whoever is parked in `sendSync`", and `deregister` is the one control message nobody parks for: with `callId == 0` its own unwanted `ok` is handed to an unrelated `register`/`attach` that happens to be parked, which then returns that reply's `modelId` of `0`. Every message whose reply *is* awaited synchronously still uses `0`. |
+| `callId`-multiplexed replies | Every request carries a non-zero `callId` from one counter per connection, the fire-and-forget `deregister` included, on both WebSocket transports; a reply with `callId == 0` names no request and is dropped | Lets one socket carry many requests in flight and match each reply to its `Completion` without waiting for any of them. `deregister` takes an id too, filed only so its reply is recognised and discarded rather than mistaken for another request's. |
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
 | No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
-| `executeTimeout` implementation | A dedicated, lazily-started background thread (`morph::async::detail::TimeoutScheduler`, a thread running core-cpp's `PlatformLoop`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. The deadlines are the loop's own timers, so nothing polls: an armed timer is what bounds the loop's next wait. |
+| `executeTimeout` implementation | A `morph::async::detail::TimeoutScheduler` per `RemoteServer`, created by the constructor when `ServerConfig::limits.executeTimeout` is positive, on a private `exec::IoLoop` (one thread running core-cpp's `PlatformLoop`), not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call, and a server configured without the feature pays no cost. The deadlines are the loop's own timers, so nothing polls: an armed timer is what bounds the loop's next wait. |
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill; on empty the frame is refused with an `err` reply, and the connection is left open | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Refusing rather than closing keeps a transient burst from taking down the connection. The frame is *answered* rather than discarded because a reply costs nothing at the protocol level and is the difference between a caller's `Completion` failing and it hanging: the id is recovered by the same bounded prefix scan (`peekCallId`) the `maxMessageBytes` branch uses, so no decode of a frame that will not run is needed. |
 | Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
-| Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models) under `_regMtx`. No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
-| `morph::net`'s I/O model | A dedicated I/O thread + `std::condition_variable`, instead of the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and — as a side effect — lets `SocketBackend` be driven safely from multiple threads (`QtWebSocketBackend` cannot be, since it is pinned to one event-loop thread). |
+| Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models). No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
+| `morph::net`'s I/O model | One `exec::IoLoop` (a core-cpp `PlatformLoop` and its one thread) injected into every component, instead of a thread per component or the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and puts every socket, timer and probe of a process on one owner: the components' state needs no lock, and a process runs one I/O thread rather than one per connection. Injected rather than a framework-owned singleton so the dependency is visible in each constructor and nothing global outlives a test. `SocketBackend` stays callable from any thread (`QtWebSocketBackend` is pinned to its event-loop thread) because every verb posts to the loop. |
 | `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + HTTP Upgrade + frame codec), with base64 from core-cpp, not a WebSocket library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency beyond core-cpp, which morph links anyway, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
 | `WsFrameReader` reassembles fragments | Accumulates continuation frames and returns only the completed message | Fragmentation is not an exotic case: a peer fragments whenever a message exceeds its outgoing frame size, and Qt's `QWebSocket` defaults that to 512 KiB. Rejecting fragments broke interop with the transport this project ships, for every payload past that size. Control frames interleaved between fragments pass through untouched, and the reassembled total is bounded by `wire::kMaxEnvelopeBytes` so a stream of tiny continuations cannot grow the buffer without limit. |
 | `WsFrameReader` rejects RFC 6455-illegal frames instead of tolerating them | Masking direction, RSV bits, opcode range, control-frame framing, Close status code, minimal length encoding and text-payload UTF-8 are all checked; a violation throws out of `tryExtractFrame()` and the call site drops the connection | The interop requirement above makes what the reader *refuses* part of the transport's contract rather than an implementation detail: a tolerant reader accepts ten classes of illegal frame, and a peer that sends one here gets disconnected instead. The reader is given its role at construction (`expectMasked`) because §5.1 is directional — a server MUST reject an unmasked client frame and a client MUST reject a masked server frame, and that rule is the anti-cache-poisoning defence, not a formality. Text UTF-8 is validated incrementally, since a multi-byte sequence may straddle a fragment boundary. On the sending side the mask key is drawn per frame from a thread-local `std::random_device` rather than a thread-local `std::mt19937`, whose state a peer can reconstruct from 624 observed keys (§5.3); `random_device` has no reproducible state to recover, and holding it thread-local keeps the entropy source open instead of reacquiring it on every outbound message. |
@@ -2539,8 +2029,8 @@ implementation to absorb — see
 | One `bindModel` instead of three acquire verbs | Behaviour selected by `BindRequest`'s shape (`primary` empty?, `current` zero?) | The three verbs already degrade into each other exactly along those two fields, so naming them separately stated the same distinction three times — and tripled it again for the `*Async` twins. The default implementation still routes each shape to the legacy verb it names, so a backend that overrides only some of the three is unaffected. |
 | `SynchronousBackendAdapter` is a decorator, not a base class or a CRTP mixin | Wraps `shared_ptr<IBackend>` and forwards every verb | It must work on `LocalBackend` and eleven test doubles *without modifying them*, which rules out anything they would have to derive from. Cost is one forwarding method per unchanged verb; benefit is that an unmodified blocking backend reaches the new surface at all. |
 | The adapter's blocking executor is required, not defaulted | Constructor parameter with no default; null `inner` throws | "Where does the blocking happen" is the only question the class exists to answer. An adapter that silently ran the call inline when handed nothing would block on some configurations and not others — contract by configuration, which is the thing being removed. |
-| `SocketBackend` runs reconnect handlers on a dedicated thread | Not inline from the I/O thread's connect path | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the I/O thread's read loop can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. Still load-bearing even though `bindModel` cannot deadlock this way: the blocking verbs can, and a caller may still reach them. |
-| `SocketBackend` implements `bindModel`/`promoteModel` natively | Not wrapped in `SynchronousBackendAdapter`, although it overrides none of the four `*Async` verbs | The I/O thread already demultiplexes replies by `callId` for `execute` and `RemoteServer` echoes `callId` on every control reply, so the non-blocking path costs a second `PendingCallTable` and no protocol change. Wrapping instead would park a thread per bind for a round trip this transport need not park for, and would keep every bind inside `sendSync`'s one-synchronous-call token — which `listInstances` and the legacy `registerModel` share, and which is the one global restriction on a backend otherwise documented as drivable from several threads at once. The adapter's reconnect-handler property, the other reason to consider it, does not apply: it forwards `setReconnectHandler` and the blocking verbs straight through, so a wrapped `SocketBackend` would run reconnect control calls exactly where it does today. |
+| `SocketBackend` runs reconnect handlers on a dedicated thread | Not on the I/O loop that completes the connection | A reconnect handler re-registers models via the synchronous control path, which waits for a reply only the loop's read flow can deliver. Inline, that wait blocks the very thread that would satisfy it, deadlocking the transport with no timeout. Still load-bearing even though `bindModel` cannot deadlock this way: the blocking verbs can, and a caller may still reach them. |
+| `SocketBackend` implements `bindModel`/`promoteModel` natively | Not wrapped in `SynchronousBackendAdapter`, although it overrides none of the four `*Async` verbs | The I/O loop already demultiplexes replies by `callId` for `execute` and `RemoteServer` echoes `callId` on every control reply, so the non-blocking path costs a second `PendingCallTable` and no protocol change. Wrapping instead would park a thread per bind for a round trip this transport need not park for, and would keep every bind inside `sendSync`'s one-synchronous-call token — which `listInstances` and the legacy `registerModel` share, and which is the one global restriction on a backend otherwise callable from any thread. The adapter's reconnect-handler property, the other reason to consider it, does not apply: it forwards `setReconnectHandler` and the blocking verbs straight through, so a wrapped `SocketBackend` would run reconnect control calls exactly where it does today. |
 
 ## Lifetime annotations
 
@@ -2562,8 +2052,8 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
 | completion.md | `Completion<shared_ptr<void>>` returned by `execute`, the `CompletionState` the backends track for `cancelPending`, and `cbExec` callback delivery. |
 | offline.md | `NetworkMonitorConfig` (the sibling struct whose declaration-order rationale `QtWebSocketBackendConfig` mirrors) and the disconnect/reconnect story the `QtWebSocketBackend` transport participates in. |
 | executor.md | `IExecutor` / `ThreadPoolExecutor` (the server worker pool); `qt/qt_executor.hpp`'s `QtExecutor` is the `cbExec` a Qt host uses to deliver completion callbacks onto the Qt thread, while a `morph::net::SocketBackend` host uses a plain `ThreadPoolExecutor`/`MainThreadExecutor` instead — no Qt event loop required. |
-| observability.md | The `morph::observe` metrics/trace seam wrapping `RemoteServer`/`LocalBackend` dispatch, and `RemoteServer::health()`/`setHealthHandler()`. |
-| testing_strategy.md | `fuzz_dispatch_execute` fuzzes `RemoteServer::handle`/`dispatchMessage` directly; the soak test (`test_soak_switch_backend.cpp`) cycles `switchBackend` between `LocalBackend` and `SimulatedRemoteBackend` under load; the load benchmark (`bench_dispatch_latency.cpp`) baselines dispatch throughput/latency; the adversarial run (`test_qt_websocket_adversarial.cpp`) drives a hostile client against `QtWebSocketServer` and exercises the default (unconfigured) `LimitPolicy`/`QtWebSocketServerConfig`. |
+| observability.md | The `morph::observe` metrics/trace seam wrapping `RemoteServer`/`LocalBackend` dispatch, and `RemoteServer::health()`/`ServerConfig::healthHandler`. |
+| testing_strategy.md | `fuzz_dispatch_execute` fuzzes `RemoteServer::handle` directly; the soak test (`test_soak_switch_backend.cpp`) cycles `switchBackend` between `LocalBackend` and `SimulatedRemoteBackend` under load; the load benchmark (`bench_dispatch_latency.cpp`) baselines dispatch throughput/latency; the adversarial run (`test_qt_websocket_adversarial.cpp`) drives a hostile client against `QtWebSocketServer` and exercises the default (unconfigured) `LimitPolicy`/`QtWebSocketServerConfig`. |
 
 ## Limitations
 
@@ -2608,8 +2098,8 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   go through a scope-aware transport.
 - **WebSocket transport is single-threaded and Qt-bound.** `QtWebSocketBackend`
   must live on the Qt event loop thread; there is no way to drive it from a
-  plain worker thread, and `waitForConnected` / the synchronous `register` path
-  both pump nested `QEventLoop`s on that thread. Completion callbacks reach the
+  plain worker thread, and `waitForConnected` pumps a nested `QEventLoop` on
+  that thread. Completion callbacks reach the
   GUI only if `cbExec` (typically `QtExecutor`) posts back to the Qt loop.
   `morph::net::SocketBackend` does not have this limitation (see above) — but a
   test or app that mixes a `SocketBackend`/`SocketServer` with a
@@ -2617,25 +2107,23 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   the `QCoreApplication` must still pump Qt events while any blocking
   `morph::net` call is outstanding, or the Qt-side peer starves (see the
   `SocketBackend`/`SocketServer` Threading note above).
-- **`morph::net` is Linux/macOS only.** `TcpSocket` is a thin wrapper over
-  POSIX `sys/socket.h`; `MORPH_BUILD_NET=ON` on Windows produces a
-  `message(WARNING ...)` and builds nothing. Windows/Winsock2 support is
-  documented future work, not implemented today. Nothing in `SocketServer`'s
-  teardown depends on which of those kernels it runs on any more: the accept
-  loop is interrupted by a wakeup file descriptor the server owns, not by any
-  kernel's treatment of `shutdown(2)` on a listening socket. One
-  half of that is still unverified first-hand — **the macOS symptom has never
-  been reproduced on a Darwin machine by this project's own measurement**; the
-  original report's `sample(1)` backtrace and documented BSD semantics are the
-  evidence for it, and the Linux half (that `shutdown()` is what unblocks the
-  old code, and that a `poll()`/self-pipe wakeup replaces it deterministically)
-  is measured. There is no macOS CI leg.
-- **`SocketServer` has no bound on how long a *client* thread takes to
-  finish.** The accept thread is now interruptible on every platform, but
-  `close()` still joins each per-connection thread, and those are unblocked by
-  `shutdownBoth()` on their own connected sockets — portable, but with no
-  timeout. A peer that keeps a send stalled therefore still bounds teardown by
-  the OS's own error reporting.
+- **`morph::net` is Linux/macOS only.** The listener is bound through
+  `TcpSocket`, a thin wrapper over POSIX `sys/socket.h`, before the loop adopts
+  it; `MORPH_BUILD_NET=ON` on Windows produces a `message(WARNING ...)` and
+  builds nothing. Windows/Winsock2 support is documented future work, not
+  implemented today. Teardown does not depend on the kernel: closing the
+  listener and each connection's socket resumes their parked flows through the
+  loop on every platform.
+- **A blocking callback stalls the whole loop.** Every socket, timer and probe
+  built on one `IoLoop` shares its thread, so a `TimeoutScheduler` callback, a
+  `NetworkMonitor` probe or callback, or a completion delivered on
+  `inlineExecutor()` that blocks, stalls every connection on that loop until it
+  returns. The synchronous control verbs throw on the loop's thread; anything
+  else is the caller's to keep short.
+- **A hostname is resolved off the loop, on core-cpp's resolver pool.** A
+  numeric address never leaves the loop's thread; a name goes to
+  `core::net::defaultAsyncResolver()`, a small fixed pool core-cpp owns
+  process-wide.
 - **`morph::net` has no TLS.** `SocketBackend`/`SocketServer` speak plaintext
   `ws://` only; `parseWsUrl` throws immediately on a `wss://` URL. A `wss://`
   variant needing a TLS library (e.g. OpenSSL) is future work.
@@ -2665,29 +2153,24 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   *from* the peer is a different path and is not a violation: it is echoed back
   carrying the peer's own status code (§5.5.1), where it used to be echoed
   empty.
-- **`SocketServer` joins its per-connection threads at `close()`/destruction,
-  not eagerly per-disconnect.** A client that disconnects naturally leaves its
-  finished-but-unjoined thread handle in an internal list until the whole
-  server is closed; this bounds resource growth by the server's lifetime, not
-  by connection churn — acceptable for a reference transport (see the
-  connection-scoping bullet above) but worth knowing before running a very
-  long-lived `SocketServer` under heavy connection churn.
-- **`SocketBackend`'s destructor can block up to `Config::connectTimeout` plus
-  `Config::handshakeTimeout`.** If destruction races an in-flight (re)connect
-  attempt, the TCP connect phase is bounded by the former and the handshake
-  response read that follows a successful TCP connect is bounded by the
-  latter (`SO_RCVTIMEO` on the not-yet-published socket — a peer
-  that completes the TCP handshake but never speaks, or never finishes, the
-  WebSocket Upgrade used to leave the I/O thread, and therefore the
-  destructor's join, waiting forever). Neither bound is a hard real-time
-  guarantee — both are ordinary blocking-socket timeouts, subject to the same
-  scheduling slop as any other syscall — so production code with a genuine
-  hard deadline on teardown should still not depend on this alone.
+- **A dial in progress outlives `~SocketBackend` by up to
+  `Config::connectTimeout`.** The destructor does not wait for it: the dial's
+  flow holds the loop-side state, finds it closed when the dial completes, and
+  drops the socket. Until then it holds a descriptor and, for a hostname, a
+  resolver-pool slot.
+- **`RemoteServer::handleInline` needs a free pool thread.** It waits for the
+  server strand, which runs on the pool; a one-thread pool calling it from
+  inside its own task, or every pool thread blocked in it at once, never gets
+  its reply. See [`handleInline(msg)`](#remoteserver--server-side-message-handler).
+- **`RemoteServer` admits every `execute` on one strand.** The authorizer's
+  hooks, the registry lookup and the optional payload parse run one at a time
+  across all models; a slow authorizer slows admission for every model, though
+  never the handlers, which run on their own strands.
 - **Graceful shutdown never preempts a running action.** `beginShutdown()`,
   `drainedWithin()`, and `closeGracefully()` only stop new work from arriving
   and wait for old work to finish; a model whose action runs longer than the
   caller's `deadline` still finishes on its strand after `drainedWithin`
-  returns `false` (and after `closeGracefully`'s hard stop reclaims the
+  answers `false` (and after `closeGracefully`'s hard stop reclaims the
   connection). This is intentional — morph never interrupts a strand task —
   but it does mean a model with no self-imposed bound can make
   `closeGracefully` always hit its hard stop.

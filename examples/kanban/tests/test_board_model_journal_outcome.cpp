@@ -46,6 +46,7 @@
 #include "testkit/db_busy_fixture.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/db_pool_drain.hpp"
+#include "testkit/storage_owner.hpp"
 
 using morph::ladder::testkit::DbBusyFixture;
 using morph::ladder::testkit::DbFixture;
@@ -254,7 +255,7 @@ TEST_CASE("A WIP-limit Conflict on MoveTaskPosition leaves a Failed journal entr
     model.execute(kanban::MoveTaskPosition{
         .taskId = taskA, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*projectId));
 
     REQUIRE_THROWS_AS(model.execute(kanban::MoveTaskPosition{
@@ -276,7 +277,7 @@ TEST_CASE("A ValidationError refusal on CreateColumn leaves a Failed journal ent
     const ScopedPrincipal alice{"alice"};
     model.execute(kanban::OpenBoard{.projectId = projectId});
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*projectId));
 
     // An empty name fails action.validate() before requireRole/the database
@@ -298,7 +299,7 @@ TEST_CASE("A non-KanbanError pre-commit failure leaves a Failed journal entry", 
     const ScopedPrincipal alice{"alice"};
     model.execute(kanban::OpenBoard{.projectId = projectId});
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     model.attachActionLog(log, std::to_string(*projectId));
 
     // The failure CI's parallelism produces on this rung, arranged rather than

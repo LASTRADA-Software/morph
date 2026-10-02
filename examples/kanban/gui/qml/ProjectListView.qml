@@ -64,19 +64,16 @@ Item {
         page.statusIsError = isError
     }
 
-    // The first listing cannot simply be requested once on completion --
-    // see BookmarkListView.qml's identical `onBound` note (bookmarks' own
-    // rung) for the full rationale: a Remote-mode BridgeHandler's
-    // registration is a round trip, and `bound` (backed by Bridge::
-    // whenBound()) is this bridge's own settlement signal for it. Local
-    // mode's handler is already bound by construction, so this fires
-    // synchronously there.
+    // The first listing is requested on completion in both modes: a dispatch
+    // made while the handler's registration round trip is still in flight
+    // waits for it and is sent once it lands.
+    Component.onCompleted: {
+        if (page.projectAdminBridge !== null)
+            page.projectAdminBridge.refreshProjects()
+    }
+
     Connections {
         target: page.projectAdminBridge
-
-        function onBound() {
-            page.projectAdminBridge.refreshProjects()
-        }
 
         function onProjectsListed(projects) {
             page.report("", false)

@@ -37,6 +37,7 @@
 #include "crm/models/opportunity_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -145,7 +146,7 @@ TEST_CASE("Converting with no principal is refused", "[crm][convert_lead][audit]
 TEST_CASE("ConvertLead journals as exactly one entry against LeadModel's own log", "[crm][convert_lead][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::LeadModel leads;
     leads.attachActionLog(log, std::string{"leads"});
 
@@ -419,7 +420,7 @@ TEST_CASE("Crash-between-legs: a rejected conversion attempt journals nothing, m
     // convention, which only some rungs' models call on the failure path).
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::LeadModel leads;
     leads.attachActionLog(log, std::string{"leads"});
 

@@ -191,7 +191,7 @@ T settleSik(morph::async::Completion<T> comp) {
 
 TEST_CASE("a model keyed on a strong id shares instances by key", "[strong-id-keys]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec)};
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec), exec};
 
     BridgeHandler<SikRowModel, AllowShared> bench{bridge, &exec};
     BridgeHandler<SikRowModel, AllowShared> office{bridge, &exec};
@@ -211,7 +211,7 @@ TEST_CASE("a model keyed on a strong id shares instances by key", "[strong-id-ke
 
 TEST_CASE("a different strong id key reaches a different instance", "[strong-id-keys]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec)};
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec), exec};
 
     BridgeHandler<SikRowModel, AllowShared> first{bridge, &exec};
     BridgeHandler<SikRowModel, AllowShared> second{bridge, &exec};
@@ -226,7 +226,7 @@ TEST_CASE("a different strong id key reaches a different instance", "[strong-id-
 
 TEST_CASE("executing with an empty strong id fails the completion", "[strong-id-keys]") {
     morph::testing::InlineExecutor exec;
-    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec)};
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec), exec};
     BridgeHandler<SikRowModel, AllowShared> handler{bridge, &exec};
 
     // Key extraction throws; `BridgeHandler` converts that into a rejected

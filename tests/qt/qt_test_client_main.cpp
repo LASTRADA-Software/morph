@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
     }
 
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<ProcTestEchoModel> handler{bridge, &qtExec};
 
     if (useFail) {

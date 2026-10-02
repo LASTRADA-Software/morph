@@ -271,7 +271,7 @@ permanent failures will discard work it could have retried.
 | Error `message` | Raised in | Cause | Reachable when |
 |---|---|---|---|
 | `"server shutting down"` | `dispatchMessage`'s shutdown gate, ahead of every kind | `RemoteServer::shutdown()` has begun draining | Always — no configuration required |
-| `"connection closed"` | `attachExistingLocked` and `acquireSharedInstance` (`noteScopeAttachLocked` returning `false`), and the `register` branch's `scopeAlreadyClosed` path | The connection scope the instance was being attached to closed while the attach was in flight | Always; inherently a race |
+| `"connection closed"` | `attachExisting` and `acquireSharedInstance` (`noteScopeAttach` returning `false`), and the `register` branch's closed-scope check | The connection scope the instance was being attached to closed while the attach was in flight | Always; inherently a race |
 | `"too many models"` | `dispatchMessage`'s `register` branch (advisory pre-check and post-construction re-test) and `acquireSharedInstance`'s re-test under the insert lock | The live-model cap is reached | `LimitPolicy::maxLiveModels != 0` |
 | `"server busy"` | `dispatchExecute` (advisory early shed, then the compare-exchange reservation) | The in-flight execute cap is reached | `LimitPolicy::maxInFlightExecutes != 0` |
 | `"timeout"` | The `TimeoutScheduler` callback armed by `dispatchExecute` | The execute did not reply within the configured budget | `LimitPolicy::executeTimeout > 0` **and** a `TimeoutScheduler` installed — with either missing, no timer is armed |

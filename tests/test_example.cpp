@@ -8,7 +8,6 @@
 #include <thread>
 
 #include "test_support.hpp"
-using SyncExec = morph::testing::InlineExecutor;
 
 struct ActionInput {
     double a;
@@ -31,10 +30,9 @@ BRIDGE_REGISTER_ACTION(Model, ActionInput, "Test_ActionInput")
 
 TEST_CASE("Example Model", "[model]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-
-    SyncExec cbExec;
-    morph::bridge::BridgeHandler<Model> handler{bridge, &cbExec};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<Model> handler{bridge, &owner};
 
     handler.execute(ActionInput{1.0, 2.0, 3.0})
         .then([&](ActionOutput output) { REQUIRE(output.result == 6.0); })
@@ -49,6 +47,6 @@ TEST_CASE("Example Model", "[model]") {
     });
     handler.execute(ActionInput{.a = 1.0, .b = 2.0, .c = 3.0});
 
-    std::this_thread::sleep_for(std::chrono::milliseconds{50});
-    REQUIRE(fired.load() == true);
+    // The fan-out runs on the owner, which this test pumps.
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return fired.load(); }));
 }

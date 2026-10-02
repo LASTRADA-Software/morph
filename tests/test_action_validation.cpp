@@ -145,8 +145,8 @@ TEST_CASE("Bridge::executeVia rejects an invalid action on LocalBackend via onEr
           "[bridge][local][validation]") {
     gGatedExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawValidationError{false};
@@ -163,7 +163,7 @@ TEST_CASE("Bridge::executeVia rejects an invalid action on LocalBackend via onEr
             done.store(true);
         });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(sawValidationError.load());
     REQUIRE(gGatedExecuteCount.load() == 0);
 }
@@ -171,8 +171,8 @@ TEST_CASE("Bridge::executeVia rejects an invalid action on LocalBackend via onEr
 TEST_CASE("Bridge::executeVia dispatches a valid action normally on LocalBackend", "[bridge][local][validation]") {
     gGatedExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
 
     std::atomic<int> observedPayload{-1};
@@ -184,7 +184,7 @@ TEST_CASE("Bridge::executeVia dispatches a valid action normally on LocalBackend
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(observedPayload.load() == 3);
     REQUIRE(gGatedExecuteCount.load() == 1);
 }
@@ -192,8 +192,8 @@ TEST_CASE("Bridge::executeVia dispatches a valid action normally on LocalBackend
 TEST_CASE("Bridge::executeVia dispatches an action with no validator unchanged on LocalBackend",
           "[bridge][local][validation]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<UngatedModel> handler{bridge, &cbExec};
 
     std::atomic<int> observedResult{-1};
@@ -205,7 +205,7 @@ TEST_CASE("Bridge::executeVia dispatches an action with no validator unchanged o
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(observedResult.load() == 12);
 }
 
@@ -218,8 +218,8 @@ TEST_CASE("SimulatedRemoteBackend rejects an invalid action with an err reply ca
     gGatedExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawError{false};
@@ -237,7 +237,7 @@ TEST_CASE("SimulatedRemoteBackend rejects an invalid action with an err reply ca
             done.store(true);
         });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(sawError.load());
     REQUIRE(errorMessage == "action failed validation: Test_Validation_GatedModel/Test_Validation_GatedAction");
     REQUIRE(gGatedExecuteCount.load() == 0);
@@ -247,8 +247,8 @@ TEST_CASE("SimulatedRemoteBackend dispatches a valid action normally", "[bridge]
     gGatedExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
 
     std::atomic<int> observedPayload{-1};
@@ -260,7 +260,7 @@ TEST_CASE("SimulatedRemoteBackend dispatches a valid action normally", "[bridge]
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(observedPayload.load() == 5);
     REQUIRE(gGatedExecuteCount.load() == 1);
 }
@@ -268,8 +268,8 @@ TEST_CASE("SimulatedRemoteBackend dispatches a valid action normally", "[bridge]
 TEST_CASE("SimulatedRemoteBackend dispatches an action with no validator unchanged", "[bridge][remote][validation]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<UngatedModel> handler{bridge, &cbExec};
 
     std::atomic<int> observedResult{-1};
@@ -281,6 +281,6 @@ TEST_CASE("SimulatedRemoteBackend dispatches an action with no validator unchang
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(observedResult.load() == 12);
 }

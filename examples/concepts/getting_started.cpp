@@ -159,7 +159,7 @@ TEST_CASE("getting started: the same call site works in-process and over the wir
     morph::exec::ThreadPoolExecutor pool{2};  // where models run
 
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    morph::bridge::Bridge bridge{makeBackend(deployment, pool, server)};
+    morph::bridge::Bridge bridge{makeBackend(deployment, pool, server), gui};
 
     // The handler is the typed, GUI-facing handle to one model type. It
     // registers on construction and deregisters on destruction.
@@ -226,7 +226,7 @@ TEST_CASE("getting started: an action's validate() gates execution in both deplo
     morph::exec::MainThreadExecutor gui;
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    morph::bridge::Bridge bridge{makeBackend(deployment, pool, server)};
+    morph::bridge::Bridge bridge{makeBackend(deployment, pool, server), gui};
     morph::bridge::BridgeHandler<GsPasteModel> pastes{bridge, &gui};
 
     bool rejected = false;

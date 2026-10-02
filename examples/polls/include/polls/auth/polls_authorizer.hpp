@@ -70,7 +70,7 @@ public:
     /// Same conclusion as `BookmarksAuthorizer::authorizeRegister` (not the
     /// same shape -- see this file's `@file` comment), extended: this covers
     /// not only a plain `PollModel` registration but also the keyed
-    /// `OpenPoll` attach path (`registerModelShared`/`attachModel`'s wire
+    /// `OpenPoll` attach path (`bindModel`'s wire
     /// form, which now carries a session too, exactly like plain
     /// `wire::makeRegister`). Admitting an unauthenticated attach gives away
     /// exactly what knowing the `pollId` already gives away, which by this

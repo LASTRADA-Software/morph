@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "test_support.hpp"
+
 struct RxAction {
     int val = 0;
 };
@@ -158,7 +160,8 @@ TEST_CASE(
     // leaves attaching a log entirely up to the factory closure (or a later
     // explicit attachActionLog call). ScopedActionLog bounds the process-wide
     // default log to this test's scope so it never leaks into others.
-    morph::journal::ScopedActionLog const logGuard{std::make_shared<morph::journal::InMemoryActionLog>()};
+    morph::journal::ScopedActionLog const logGuard{
+        std::make_shared<morph::journal::InMemoryActionLog>(morph::testing::storageOwner())};
 
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<DiModel>("REG_DiModel_NoAutoLog",
@@ -175,7 +178,8 @@ TEST_CASE(
     // The contrasting case: the plain registerModel<Model>(modelId) overload
     // is unchanged and still goes through ModelFactory::create, which
     // auto-attaches the process-wide default log when one is installed.
-    morph::journal::ScopedActionLog const logGuard{std::make_shared<morph::journal::InMemoryActionLog>()};
+    morph::journal::ScopedActionLog const logGuard{
+        std::make_shared<morph::journal::InMemoryActionLog>(morph::testing::storageOwner())};
 
     morph::model::detail::ModelRegistryFactory registry;
     registry.registerModel<DiModel>("REG_DiModel_AutoLog");

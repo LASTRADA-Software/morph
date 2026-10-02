@@ -48,8 +48,8 @@ Per `TESTING.md`'s framework-gaps list and `LADDER.md`'s framework
 prerequisites, the two most likely failure modes and their owning findings:
 
 - **Page aborts before "connected" logs.** Something in the registration path
-  still nests a synchronous event loop despite `asyncRegistrationEnabled =
-  true` — re-open the *async shared/keyed attach* finding even though this
+  still nests a synchronous event loop, although `QtWebSocketBackend`
+  registers only through the non-blocking `bindModel` — re-open the *async shared/keyed attach* finding even though this
   spike deliberately avoids the *shared* path; if the *plain* async path also
   aborts, that is a new, more severe finding (the plain path was supposed to
   already be WASM-safe per `[issue26]`'s native tests) — it is a framework

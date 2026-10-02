@@ -45,13 +45,15 @@ three pieces: the awaiter hook in `completion.hpp`, the handler detection in
 executor. Where a coroutine resumes is core-cpp's current-executor context
 (`<core/async/ExecutorContext.hpp>`):
 
-- An executor that resumes coroutines states itself as the current executor
-  around each resumption, or each batch of them, with
-  `core::async::ExecutorScope`. morph's two do: the adapter `spawn` builds over
-  a `morph::exec::IExecutor`, and a Task handler's resumer (see
-  [The handler's resumer](#the-handlers-resumer)). So do core-cpp's: a strand
-  once per batch, `core::async::ThreadPoolExecutor` once per worker thread,
-  `core::net::EventLoop` once per turn.
+- An executor that runs tasks or resumes coroutines states itself as the
+  current executor around each one, or each batch of them, with
+  `core::async::ExecutorScope`. Every morph executor does except
+  `InlineExecutor`: `ThreadPoolExecutor`, `MainThreadExecutor` and `QtExecutor`
+  around each task (see [`executor.md`](executor.md#current-executor)), the
+  adapter `spawn` builds over a `morph::exec::IExecutor`, and a Task handler's
+  resumer (see [The handler's resumer](#the-handlers-resumer)). So do
+  core-cpp's: a strand once per batch, `core::async::ThreadPoolExecutor` once
+  per worker thread, `core::net::EventLoop` once per turn.
 - An awaitable reads it in `await_suspend`, on the thread that is suspending
   the coroutine, as a `core::async::ResumeTarget`, and hands the continuation
   back to it. Where the executor's lifetime is shared -- a model instance's
@@ -69,6 +71,13 @@ So a coroutine started with `spawn(exec, …)` resumes on `exec`, and a Task
 handler on its model's strand, after every `co_await` of an awaitable that
 follows the rule. This holds even when what it awaited completed on some other
 executor, such as another model's completion delivered on the worker pool.
+
+The same holds for a coroutine that nothing spawned but that is running inside a
+task of a `ThreadPoolExecutor`, `MainThreadExecutor` or `QtExecutor` -- one
+resumed by hand from a posted callable, say: it is inside that executor's scope,
+so an await comes back to that executor, not to the `Completion`'s. The
+completion's executor is used only when the coroutine suspended outside every
+executor's task, such as one resumed by hand from a test's own thread.
 
 morph's awaiters (`Completion<T>`, `delay`) and core-cpp's
 `core::async::AsyncQueue::pop` follow it, a stop included. `core::net`'s socket
@@ -111,13 +120,28 @@ core::async::Task<void> refresh(BridgeHandler<AccountModel>& accounts)
 - **How it attaches.** The awaiter uses the completion's ordinary `then` and
   `onError` fan-out, so handlers attached before or after it still run. The
   await is one more handler pair, not a replacement for them.
+- **Where it attaches.** A completion's handlers belong to its executor, and
+  attaching anywhere else is a contract violation for `then()`. The awaiter
+  does not inherit that restriction: when the coroutine is running on the
+  completion's executor it attaches directly, and otherwise it **posts the
+  attach to the completion's executor**. One extra hop, and always correct, so
+  any coroutine may await any completion — a Task handler on its model's
+  strand awaiting another model's call delivered on the GUI executor
+  included. The alternative, allowing `co_await` only from a coroutine already
+  on the completion's executor, would make that common case an error. The
+  posted attach is ordered behind the settle's own posted delivery by the
+  executor's queue, exactly like a late `then()`; resumption is unchanged,
+  through the coroutine's own resume target. An attach that cannot be posted
+  (the executor refuses the task) throws at the `co_await`; one that throws on
+  the executor resumes the coroutine with that exception.
 - **Where it resumes.** See the rule above: on the executor the coroutine
-  suspended on, or on the completion's executor if there was none.
+  was running on when it suspended, or on the completion's executor if it was
+  inside no executor's task.
   With a `MainThreadExecutor` as the completion's executor, the coroutine
   resumes inside `runFor`.
 - **An already-settled completion.** The coroutine still suspends and resumes
-  through the executor. It never continues inline, because `then()` on a ready
-  state posts too, and one rule is simpler to reason about than two.
+  through the executor. It never continues inline, because `then()` after
+  delivery posts too, and one rule is simpler to reason about than two.
 - **An empty completion.** A default-constructed or moved-from `Completion`
   has no state. Awaiting it throws `std::logic_error` from `await_resume`
   without suspending.
@@ -293,11 +317,10 @@ owned by its `IModelHolder`):
   and its handler does not run for a caller that has already been answered.
 
 The next action for a model therefore starts only after the current handler's
-Task has completed. The order is still arrival order. `ExecuteOrderGate`,
-which orders the *posting* of remote executes to the strand, is unchanged; it
-releases its ticket once the post has happened, as before, and does not wait
-for the action to run. The gate is touched only on the model's strand, so it
-needs no lock.
+Task has completed. The order is still arrival order: on `RemoteServer` the
+server strand posts executes to the model's strand in the order they arrived
+and does not wait for the action to run. The gate is touched only on the
+model's strand, so it needs no lock.
 
 A Task handler that awaits a second action *on its own model* waits forever:
 that action is queued behind the gate the awaiting handler holds. This is the
@@ -378,7 +401,7 @@ refused and unwinds inline, and closing them drops only what was queued before
 | The coroutine type | `core::async::Task<T>` | One coroutine type across the Contour Terminal projects, with a stop token that propagates down a chain of awaits. morph adds awaiters and executors, not a second task type. |
 | Where resumption happens | core-cpp's current-executor context, stated by every executor that resumes coroutines and read by every awaitable that follows it | `Task`'s promise carries no executor, and a handler that awaits another model's completion must come back to its own strand, not to wherever that completion was delivered. One context shared with core-cpp brings a handler back from `AsyncQueue::pop` too, which morph's own context could not. |
 | The session across a suspension | The strands' keyed around-task hook, for the instance's one running Task handler | A context carried by `Task` itself would cost every `co_await` of every consumer; the gate makes one handler per instance the only coroutine the hook has to find. |
-| Non-reentrancy | A per-instance action gate on the strand | Holding `ExecuteOrderGate`'s ticket until the Task completes would block a pool thread in `awaitTurn` for the whole suspension. With enough suspended handlers that exhausts the pool that their own awaits need. It would also leave `LocalBackend`, which has no ticket, unordered. |
+| Non-reentrancy | A per-instance action gate on the strand | Holding anything off the strand until the Task completes — a pool thread, or `RemoteServer`'s server strand — would block it for the whole suspension. With enough suspended handlers that exhausts the pool that their own awaits need. The gate works the same on `LocalBackend` and `RemoteServer`. |
 | Lvalue `co_await` | Refused at compile time | Awaiting consumes the completion's one await slot and moves the handle; an lvalue await would hide that. |
 
 ## Limitations
@@ -461,8 +484,8 @@ refused and unwinds inline, and closing them drops only what was queued before
   client-side execute deadline.
 - [`bridge.md`](bridge.md) — `executeVia` and `localOp`, where Task handlers
   are driven for `LocalBackend`.
-- [`backend.md`](backend.md) — `RemoteServer`'s dispatch and
-  `ExecuteOrderGate`.
+- [`backend.md`](backend.md) — `RemoteServer`'s dispatch and per-model
+  execute ordering.
 - [`executor.md`](executor.md) — the strand and the executors a coroutine
   resumes on.
 - [`concurrency_and_lifetimes.md`](../concurrency_and_lifetimes.md) — the

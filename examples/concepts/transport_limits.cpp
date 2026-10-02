@@ -5,7 +5,7 @@
 // wire envelopes (in-process simulation, WebSocket, raw socket, …).
 //
 // `LimitPolicy` is all-zero ("unbounded") by default, matching the server's
-// pre-existing behavior exactly until a deployer calls `setLimitPolicy()`.
+// pre-existing behavior exactly until a deployer sets `ServerConfig::limits`.
 // This example demonstrates `maxLiveModels`: the simplest knob to exercise
 // deterministically, with no timing involved (unlike `executeTimeout`/
 // `maxInFlightExecutes`, which need a slow action running concurrently --
@@ -60,16 +60,14 @@ BRIDGE_REGISTER_ACTION(LimitsDemoModel, LimitsDemoAction, "LimitsDemo_Action")
 //
 // Reach for this when a deployment must cap how many instances of a model can
 // be live at once (bounding memory/resource use per server): configure it
-// once via setLimitPolicy(), then every register is checked against the cap
+// once, in the ServerConfig the server is constructed with, then every register is checked against the cap
 // automatically, with no per-call code at the call site.
 
 TEST_CASE("transport limits: maxLiveModels rejects a register beyond the cap", "[concepts][limits]") {
     InlineExecutor pool;
-    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-
-    morph::backend::LimitPolicy policy;
-    policy.maxLiveModels = 2;  // this server never holds more than 2 instances live at once
-    server->setLimitPolicy(policy);
+    morph::backend::ServerConfig config;
+    config.limits.maxLiveModels = 2;  // this server never holds more than 2 instances live at once
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, config);
 
     CapturedReply first;
     server->handle(morph::wire::encode(morph::wire::makeRegister("LimitsDemo_Model")), std::ref(first));
@@ -99,7 +97,7 @@ TEST_CASE("transport limits: an unconfigured server imposes no cap (opt-in, not 
           "[concepts][limits]") {
     InlineExecutor pool;
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    // No setLimitPolicy() call at all: registering many instances just works,
+    // No LimitPolicy in the ServerConfig at all: registering many instances just works,
     // exactly as it did before LimitPolicy existed.
 
     for (int i = 0; i < 10; ++i) {

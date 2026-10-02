@@ -15,6 +15,7 @@
 #include "lims/models/analysis_catalog_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -187,7 +188,7 @@ TEST_CASE("The served schema carries the version's detection limits too", "[lims
 TEST_CASE("The catalogue journals its edits against the attached identity", "[lims][catalog][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     lims::AnalysisCatalogModel model;
     model.attachActionLog(log, std::string{"catalogue"});
 

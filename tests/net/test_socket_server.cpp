@@ -9,9 +9,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/io_loop.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
@@ -25,6 +27,7 @@
 #include <thread>
 #include <vector>
 
+#include "../owner_probe_recorder.hpp"
 #include "../test_support.hpp"
 
 // ── Test model, registered process-wide (same pattern as tests/qt/test_qt_websocket.cpp) ──
@@ -376,11 +379,14 @@ TEST_CASE("SocketServer: dropping a client reclaims the models it registered", "
         REQUIRE(regReply.kind == "ok");
         modelId = regReply.modelId;
         REQUIRE(modelId != 0U);
-        REQUIRE(server->health().liveModels == 1U);
+        REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
     }  // client destructs: the socket closes and the server observes EOF
 
-    REQUIRE(morph::testing::waitUntil([&] { return server->health().liveModels == 0U; },
-                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+    REQUIRE(morph::testing::waitUntil(
+        [&] {
+            return morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U;
+        },
+        morph::testing::WaitBudget{std::chrono::seconds{5}}));
 
     // A late execute against the reclaimed id is answered, not serviced.
     RawWsClient probe{wsServer.port()};
@@ -412,12 +418,15 @@ TEST_CASE("SocketServer: each client's models are reclaimed independently", "[ne
         RawWsClient transient{wsServer.port()};
         transient.send(morph::wire::makeRegister("NetEchoModel"));
         REQUIRE(transient.receive().kind == "ok");
-        REQUIRE(server->health().liveModels == 2U);
+        REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 2U);
     }
 
     // Only the departed client's instance goes; the survivor keeps working.
-    REQUIRE(morph::testing::waitUntil([&] { return server->health().liveModels == 1U; },
-                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+    REQUIRE(morph::testing::waitUntil(
+        [&] {
+            return morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U;
+        },
+        morph::testing::WaitBudget{std::chrono::seconds{5}}));
 
     morph::wire::Envelope execReq;
     execReq.kind = "execute";
@@ -439,14 +448,12 @@ TEST_CASE("SocketServer: each client's models are reclaimed independently", "[ne
 // destructor of a listening server hangs forever. The destruction
 // runs on its own thread here so the deadline can be observed and reported as a
 // failure instead of wedging the whole test binary until ctest's timeout.
-TEST_CASE("SocketServer: destruction completes promptly with the accept loop parked in accept()",
-          "[net][socket_server]") {
+TEST_CASE("SocketServer: destruction completes promptly with the accept flow parked", "[net][socket_server]") {
     // The whole server stack in one heap block so the thread below can destroy
     // it in a single step (members die in reverse order: SocketServer first, so
     // its close() still sees a live RemoteServer and executor). Held through a
-    // shared_ptr the destroying thread owns, which is what keeps it alive if the
-    // deadline is missed: that thread is then still inside close() and must not
-    // observe these objects destroyed.
+    // shared_ptr the destroying thread owns, which keeps it alive if the deadline
+    // is missed: that thread is then still inside close().
     struct ServerStack {
         morph::exec::ThreadPoolExecutor pool{2};
         std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(pool);
@@ -465,7 +472,7 @@ TEST_CASE("SocketServer: destruction completes promptly with the accept loop par
 
     auto const destroyed = std::make_shared<std::atomic<bool>>(false);
     std::thread destroyer{[owned = std::move(stack), destroyed] mutable {
-        owned.reset();  // ~SocketServer -> close() -> join the accept thread
+        owned.reset();  // ~SocketServer -> close() on the loop -> the loop joins
         destroyed->store(true);
     }};
 
@@ -489,26 +496,24 @@ TEST_CASE("SocketServer::close() reclaims every connected client's models", "[ne
     RawWsClient clientB{wsServer->port()};
     clientB.send(morph::wire::makeRegister("NetEchoModel"));
     REQUIRE(clientB.receive().kind == "ok");
-    REQUIRE(server->health().liveModels == 2U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 2U);
 
     // close() joins the client threads, each of which runs its own scope
     // teardown on the way out.
     wsServer->close();
-    REQUIRE(server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
 }
 
 // ── Task 6b: closing socket_server.hpp's remaining coverage gaps ───────────
 // See .superpowers/sdd/2026-09-03-framework-coverage-and-mutation/
 // task-6-socket_server-findings.md for the audit this section closes.
 
-TEST_CASE("SocketServer::listen() fails closed when the WakeupPipe can't be constructed (fd exhaustion)",
-          "[net][socket_server]") {
-    // listen()'s very first check (`!_wakeup.valid()`) never sees `false` in
-    // any other test: WakeupPipe's constructor only fails if `::pipe()`
-    // fails, which needs the process to be out of file descriptors.
-    // RLIMIT_NOFILE, lowered to exactly the number of fds already open (zero
-    // headroom for the two new ones `pipe()` needs), forces that
-    // deterministically without touching anything already open.
+TEST_CASE("SocketServer::listen() fails closed when the process is out of descriptors", "[net][socket_server]") {
+    // With no descriptor headroom, the server's own loop and its listening
+    // socket cannot be created. listen() must report that as `false`, not
+    // throw and not start anything. RLIMIT_NOFILE, lowered to exactly the
+    // number of fds already open, forces it deterministically without touching
+    // anything already open.
     morph::exec::ThreadPoolExecutor pool{1};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
@@ -557,8 +562,8 @@ TEST_CASE("SocketServer::listen() fails closed when the WakeupPipe can't be cons
 
     {
         morph::net::SocketServer wsServer{*server, 0};
-        // Constructed under the constrained limit: WakeupPipe's pipe() call
-        // had no fd headroom and must have failed.
+        // Under the constrained limit neither the server's loop nor its
+        // listening socket can be created.
         REQUIRE_FALSE(wsServer.listen());
     }
 
@@ -585,16 +590,8 @@ TEST_CASE("SocketServer::listen() fails when the requested port is already bound
 }
 
 TEST_CASE("SocketServer: close() on a server that was never listen()ed is a safe no-op", "[net][socket_server]") {
-    // NOTE (classification correction vs. the findings doc): `_closing`
-    // defaults to `true`, so this hits the *same* early-return guard already
-    // exercised by every other idempotent-close test in this file
-    // (wasAlreadyClosing == true, and the accept thread -- never started --
-    // is not joinable). It does not reach line 110's `_acceptThread.joinable()`
-    // check with a `false` result the way the findings doc's suggested
-    // reproduction implied; that branch turns out to only be reachable via
-    // the genuinely concurrent close() race below. Kept anyway as a basic
-    // regression check: a constructed-but-never-started server must still
-    // close/destruct cleanly.
+    // A constructed-but-never-started server must close and destruct cleanly,
+    // and a second close() must be a no-op.
     morph::exec::ThreadPoolExecutor pool{1};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::net::SocketServer wsServer{*server, 0};
@@ -604,21 +601,9 @@ TEST_CASE("SocketServer: close() on a server that was never listen()ed is a safe
 
 TEST_CASE("SocketServer: concurrent close() calls from two threads do not hang or corrupt state",
           "[net][socket_server]") {
-    // close()'s idempotency guard (`wasAlreadyClosing && !_acceptThread.joinable()`)
-    // has a narrow window: if two threads call close() at genuinely the same
-    // time, thread B's check can find `wasAlreadyClosing == true` (A already
-    // flipped `_closing`) but `_acceptThread.joinable() == true` (A hasn't
-    // finished joining it yet) -- so B falls through the early-return guard,
-    // and both threads end up calling `.join()` on the very same std::thread
-    // concurrently. Confirmed via a standalone repro on this platform (Apple
-    // libc++/Darwin): the loser's `.join()` throws `std::system_error`
-    // ("Invalid argument") rather than hanging or corrupting memory, and the
-    // winner's successful join still leaves the thread object correctly
-    // non-joinable afterward (2000/2000 repro iterations, no crash). Each
-    // racer below therefore wraps its close() call in try/catch: letting a
-    // std::system_error escape a std::thread's initial function would call
-    // std::terminate(), which is exactly the kind of "test that can crash the
-    // whole binary" this finding warns about if not handled carefully.
+    // Two threads call close() at the same moment, repeatedly. Each call is one
+    // task on the server's loop, so they run one after the other: both must
+    // return, neither may throw, and a further close() must still be a no-op.
     constexpr int kIterations = 30;
     auto done = std::make_shared<std::atomic<bool>>(false);
     auto exceptionCount = std::make_shared<std::atomic<int>>(0);
@@ -672,54 +657,13 @@ TEST_CASE("SocketServer: concurrent close() calls from two threads do not hang o
                      << kIterations << " iterations (the narrow join() race this test targets)");
 }
 
-TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close() racing a pending connection",
-          "[net][socket_server]") {
-    // acceptLoop() checks `_closing.load()` twice per iteration (once right
-    // after waking from poll(), once right after tryAccept()); both checks
-    // are never `true` in any other test in this file, because close()'s
-    // `_wakeup.signal()` is what normally wakes the loop. If a real
-    // connection is already pending on the listener when close() races in,
-    // poll() can report listener-readiness instead of (or as well as) the
-    // wake fd, letting the loop reach either checkpoint with `_closing`
-    // already flipped.
-    //
-    // A single connect() racing a single close() essentially never lands
-    // this: close()'s wakeup write is a handful of instructions, almost
-    // always faster than a fresh connect() reaching the backlog, so
-    // acceptLoop()'s poll() is woken by the wake fd (not the listener) on
-    // nearly every iteration -- confirmed empirically (0/many across earlier
-    // revisions of this test using one real OS thread per connect() attempt).
-    // fireNonBlockingConnect() below skips both the thread-per-attempt
-    // overhead and TcpSocket::connect()'s getaddrinfo()/poll() machinery, so a
-    // burst of many can be issued, back-to-back, on this same thread, right
-    // before calling close() -- queuing several connections into the backlog
-    // gives the accept loop several iterations' worth of draining to do,
-    // widening the window during which a concurrent close() can land
-    // mid-drain. Repeated, statistical -- matching this file's existing
-    // "destruction completes promptly" precedent for teardown races.
-    //
-    // A hang is the loop *stopping*, not the loop being slow -- and only the
-    // first of those is a bug in SocketServer. What one iteration costs is set
-    // by how many of its 16 connects acceptLoop() manages to take before
-    // close() lands: each one it takes spawns a client thread that has to be
-    // shut down and joined. Under Valgrind, where every one of those thread
-    // switches goes through Valgrind's own serialising scheduler, the whole
-    // 200-iteration loop measured 0.35 s to 1.76 s on a developer box and
-    // ~44 s for the structurally identical burst test just below on a
-    // GitHub-hosted runner. A wall-clock budget on the *total* therefore
-    // measures the runner, not liveness, which is what made a 30 s one fire on
-    // a run where nothing was stuck.
-    //
-    // So: watch progress instead of the total. `progress` ticks once per
-    // completed iteration; the loop is only declared hung when it stops
-    // ticking, which no amount of slowness can imitate. A runner too slow to
-    // finish all 200 just finishes fewer -- the race this test samples is
-    // sampled on every iteration, so a short run is a weaker sample, not a
-    // failure. `stop` retires the worker at the overall budget so it is always
-    // joinable: detaching it left a thread constructing `RemoteServer`s after
-    // `exit()` had already destroyed `allowAllAuthorizer()`'s function-local
-    // static, which memcheck reports as a use-after-free -- a real error
-    // manufactured by the timeout path itself.
+TEST_CASE("SocketServer: close() racing a burst of pending connections still finishes", "[net][socket_server]") {
+    // A burst of connects is queued in the listener's backlog and close() races
+    // it, so the accept flow may be anywhere between an accept and starting a
+    // connection's flow when the close runs. A hang is the loop *stopping*, not
+    // the loop being slow: `progress` ticks once per completed iteration, and the
+    // case fails only when it stops ticking. `stop` retires the worker at the
+    // overall budget so it is always joinable.
     constexpr int kIterations = 200;
     constexpr int kBacklogDepth = 16;
     // No progress for this long == stuck. Generous: one iteration's honest
@@ -785,27 +729,18 @@ TEST_CASE("SocketServer: acceptLoop's _closing checks observe a concurrent close
     worker.join();
     INFO("Completed " << progress->load() << " of " << kIterations << " close()-races-connect-burst iterations");
     if (stalled) {
-        FAIL("acceptLoop/close() race stopped making progress for " << kStallBudget.count() << "s after " << lastSeen
-                                                                    << " iterations -- hang");
+        FAIL("close()/connect-burst race stopped making progress for " << kStallBudget.count() << "s after "
+                                                                       << lastSeen << " iterations -- hang");
     }
     REQUIRE(progress->load() > 0);
 }
 
-TEST_CASE("SocketServer: acceptLoop retries when a pending connection is aborted before accept() runs",
+TEST_CASE("SocketServer: the accept flow keeps serving after pending connections are aborted before accept",
           "[net][socket_server]") {
-    // tryAccept() returning nullopt (EAGAIN/EWOULDBLOCK/ECONNABORTED) means
-    // "the pending connection went away before we took it" -- never exercised
-    // elsewhere. A single sequential connect-then-abort essentially always
-    // loses this race on this machine: the listener's own accept() is simpler
-    // and faster than our own connect()+setsockopt()+close() round trip
-    // (confirmed empirically -- 0/150 with one real, fully-established
-    // TcpSocket::connect() per attempt, sequential or threaded). Firing many
-    // *non-blocking* connects back-to-back on one thread (skipping both the
-    // thread-per-attempt overhead and TcpSocket::connect()'s
-    // getaddrinfo()/poll() machinery -- see fireNonBlockingConnectAndArmAbort())
-    // queues a deep backlog fast enough that some entries' RST plausibly lands
-    // before the single-threaded accept loop's sequential, one-at-a-time
-    // accept()+thread-spawn+handshake-attempt cycle reaches them.
+    // Many non-blocking connects are fired and reset (SO_LINGER{1,0}) back to
+    // back, so some are aborted before the loop accepts them. The accept flow
+    // must keep going through every one: a well-behaved client still gets served
+    // afterwards.
     morph::exec::ThreadPoolExecutor pool{4};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::net::SocketServer wsServer{*server, 0};
@@ -835,17 +770,12 @@ TEST_CASE("SocketServer: acceptLoop retries when a pending connection is aborted
     REQUIRE(reg.kind == "ok");
 }
 
-// ── Undocumented extra beyond the findings doc's 15 numbered gaps ──────────
-// acceptLoop()'s `catch` around `tryAccept()` itself (lines 182-186, "listener
-// is unusable (server closing)") is a *different* branch from finding #10's
-// nullopt case just above: tryAccept() only returns nullopt for
-// EAGAIN/EWOULDBLOCK/ECONNABORTED, but *throws* for any other accept(2)
-// failure. None of the findings doc's 15 write-ups mention this catch. Unlike
-// the OS-scheduling races above, EMFILE is deterministic: accept(2) checks
-// the process's fd-table limit inside the kernel before returning a new fd,
-// independent of any TCP-level timing -- exactly finding #1's fault-injection
-// technique (RLIMIT_NOFILE), reused here against accept() instead of pipe().
-TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when accept() runs out of fds",
+// accept(2) failing with EMFILE is deterministic: the kernel checks the
+// process's fd-table limit before returning a new fd, independent of any
+// TCP-level timing. RLIMIT_NOFILE is lowered to zero headroom with connections
+// pending; the accept flow must survive the failures and close() must still
+// complete promptly.
+TEST_CASE("SocketServer: the accept flow survives accept() running out of fds, and close() still completes",
           "[net][socket_server]") {
     morph::exec::ThreadPoolExecutor pool{1};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
@@ -900,25 +830,14 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
         beginConnect(fd, LoopbackPort{port});
     }
 
-    // Let the accept loop's *own* poll()/tryAccept() cycle discover and fail
-    // on the pending connections on its own -- deliberately not calling
-    // close() yet. close()'s _wakeup.signal() would otherwise race the
-    // still-pending connections' own readiness for which one poll() reports
-    // first (acceptLoop() checks the wake fd's revents before the
-    // listener's, so it wins whenever both are ready), and calling close() immediately
-    // after firing the connects lets it win essentially every time, returning
-    // via the ordinary "close() signalled" path before tryAccept() is ever
-    // attempted. There is no public signal to poll for "the accept thread
-    // gave up" instead, so this waits a fixed, generous duration -- EMFILE is
-    // a persistent *state* here (the limit stays constrained the whole time),
-    // not a narrow instant, so any reasonable wait reaches it.
+    // Let the accept flow meet EMFILE on its own before close() runs. There
+    // is no public signal for "an accept failed", so this waits a fixed,
+    // generous duration -- EMFILE is a persistent *state* here (the limit
+    // stays constrained the whole time), so any reasonable wait reaches it.
     std::this_thread::sleep_for(std::chrono::milliseconds{300});
 
-    // acceptLoop() should have observed EMFILE and returned on its own by
-    // now (see the comment in socket_server.hpp: "listener is unusable").
-    // Confirm the accept thread actually terminated, rather than assuming it:
-    // close() should complete promptly since nothing is left parked in
-    // poll().
+    // The accept flow backs off between failed accepts rather than spinning,
+    // so the loop stays responsive: close() must complete promptly.
     auto closed = std::make_shared<std::atomic<bool>>(false);
     std::thread closer([&wsServer, closed] {
         wsServer.close();
@@ -934,49 +853,37 @@ TEST_CASE("SocketServer: acceptLoop's tryAccept() exception path is caught when 
 
     if (!finishedPromptly) {
         closer.detach();
-        FAIL("close() did not complete within 5s after tryAccept() should have hit EMFILE and exited the loop");
+        FAIL("close() did not complete within 5s after accept() hit EMFILE");
     }
     closer.join();
 }
 
-TEST_CASE("SocketServer: sendText() catches a send failure when the peer resets mid-reply", "[net][socket_server]") {
-    // The classic "peer reset the connection right as the server tries to
-    // reply" scenario: ClientConnection::sendText()'s try/catch around
-    // sendAll(). RemoteServer::handle() dispatches the actual reply
-    // asynchronously through the given IExecutor (both the top-level dispatch
-    // and, for "execute", a further per-model strand post -- see
-    // morph::testing::StepExecutor's own doc comment), which normally races
-    // against this same connection's read side noticing a reset via
-    // recvSome() (the already-tested clean-drop path). On this machine that
-    // race is essentially always won by the read side when the reply runs on
-    // its own thread pool (confirmed: 300/300 landed there in an earlier
-    // revision of this test using ThreadPoolExecutor -- see git history),
-    // because it is already blocked in recvSome() and wakes directly off the
-    // very same RST that would fail the send, whereas the reply is
-    // independently scheduled work with no relationship to when the reset
-    // happens.
-    //
-    // StepExecutor removes the *scheduling* half of that race: nothing runs
-    // until this test thread calls runAll(), so the reset is always applied
-    // before any reply-producing work is even attempted. What remains is only
-    // the much narrower race between this thread's own (synchronous, no
-    // scheduling delay) dispatch-and-reply call chain and the connection's
-    // real OS read-thread noticing the same RST -- heavily biased toward this
-    // thread winning, but not provably 100% (confirmed empirically: usually
-    // wins on the first attempt, occasionally needs a retry). A handful of
-    // repeats over fresh connections closes the rest of that gap.
+TEST_CASE("SocketServer: a reply written after the peer reset retires the connection", "[net][socket_server]") {
+    // The peer resets its connection before the server replies. StepExecutor
+    // holds the reply-producing work until this thread runs it, so the reset is
+    // always applied first; the reply is then written to a reset socket, which
+    // must retire the connection and leave the server serving other clients.
     morph::testing::StepExecutor pool;
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-    morph::net::SocketServer wsServer{*server, 0};
-    REQUIRE(wsServer.listen());
+    auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    // Opening and closing a connection post to `pool` too (the server strand
+    // runs there), so a pending task does not say which request it carries;
+    // a register's reply is waited for by running `pool` until it arrives.
+    auto receiveRunning = [&pool](RawWsClient& client) {
+        auto reply = std::async(std::launch::async, [&client] { return client.receive(); });
+        while (reply.wait_for(std::chrono::milliseconds{1}) != std::future_status::ready) {
+            pool.runAll();
+        }
+        return reply.get();
+    };
 
     constexpr int kAttempts = 10;
     for (int i = 0; i < kAttempts; ++i) {
-        auto client = std::make_unique<RawWsClient>(wsServer.port());
+        auto client = std::make_unique<RawWsClient>(wsServer->port());
         client->send(morph::wire::makeRegister("NetEchoModel"));
-        REQUIRE(morph::testing::waitUntil([&] { return pool.pending() > 0; }));
-        pool.runAll();
-        auto reg = client->receive();
+        auto reg = receiveRunning(*client);
         REQUIRE(reg.kind == "ok");
 
         morph::wire::Envelope execReq;
@@ -987,34 +894,42 @@ TEST_CASE("SocketServer: sendText() catches a send failure when the peer resets 
         execReq.actionType = "NetEchoAction";
         execReq.body = R"({"value":1})";
         client->send(execReq);
-        // Wait for the connection's own clientLoop thread to have read the
-        // request and posted its dispatch -- but nothing has run yet.
+        // Wait for the loop to have handed the server something -- the
+        // request, or this connection's scope bookkeeping -- but nothing has
+        // run yet. Whatever of the execute is not run below runs with the next
+        // register, still after the reset.
         REQUIRE(morph::testing::waitUntil([&] { return pool.pending() > 0; }));
 
         client->armAbortiveClose();
         client.reset();  // destructor -> abortive close -> RST, *before* any reply work runs
 
         // Runs the dispatch (and any nested strand-posted reply task) with the
-        // connection already broken: sendText()'s sendAll() should fail here.
+        // connection already broken: the reply's write fails, or finds the
+        // connection already retired.
         pool.runAll();
     }
 
     // The server must still be usable afterward: no RST'd peer may wedge the
-    // accept loop or any other connection. `pool` is a StepExecutor, so this
+    // accept flow or any other connection. `pool` is a StepExecutor, so this
     // reply needs pumping too, exactly like the registers above.
-    RawWsClient probe{wsServer.port()};
-    probe.send(morph::wire::makeRegister("NetEchoModel"));
-    REQUIRE(morph::testing::waitUntil([&] { return pool.pending() > 0; }));
+    {
+        RawWsClient probe{wsServer->port()};
+        probe.send(morph::wire::makeRegister("NetEchoModel"));
+        auto probeReg = receiveRunning(probe);
+        REQUIRE(probeReg.kind == "ok");
+    }
+
+    // Closing the probe and stopping the server post their teardown to `pool`,
+    // which holds it until run. Run it, or the work queued on the server's
+    // strand keeps the server alive and the two hold each other.
+    wsServer.reset();
     pool.runAll();
-    auto probeReg = probe.receive();
-    REQUIRE(probeReg.kind == "ok");
 }
 
-TEST_CASE("SocketServer: a malformed handshake is caught, the accept loop keeps serving other clients",
+TEST_CASE("SocketServer: a malformed handshake is caught, the accept flow keeps serving other clients",
           "[net][socket_server]") {
-    // Exactly the "malformed handshake" scenario the task brief calls out:
-    // performServerHandshake() throws, clientLoop() catches it and returns
-    // without crashing the accept loop or wedging other connections.
+    // A malformed Upgrade request ends that connection only: the accept flow
+    // and every other connection go on.
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::net::SocketServer wsServer{*server, 0};
@@ -1033,14 +948,13 @@ TEST_CASE("SocketServer: a malformed handshake is caught, the accept loop keeps 
     REQUIRE(reg.kind == "ok");
 }
 
-TEST_CASE("SocketServer: a malformed WebSocket frame is caught, the accept loop keeps serving other clients",
+TEST_CASE("SocketServer: a malformed WebSocket frame is caught, the accept flow keeps serving other clients",
           "[net][socket_server]") {
-    // The other headline "error path nobody bothers testing": a continuation
-    // frame with no message in progress (same violation as test_ws_frame.cpp's
-    // "rejects a continuation with no message in progress"), sent over a real
-    // socket instead of fed to the reader directly. tryExtractFrame() throws;
-    // drainFrames() catches it, marks the connection closed, and returns
-    // false -- without taking down the accept loop.
+    // A continuation frame with no message in progress (same violation as
+    // test_ws_frame.cpp's "rejects a continuation with no message in
+    // progress"), sent over a real socket instead of fed to the reader
+    // directly. The reader throws; the connection's flow ends that connection
+    // only -- without taking down the accept flow.
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::net::SocketServer wsServer{*server, 0};
@@ -1109,17 +1023,9 @@ TEST_CASE("SocketServer: an unsolicited Pong and a Binary frame are silently ign
     REQUIRE(reg.kind == "ok");
 }
 
-TEST_CASE("SocketServer: sendControlFrame() swallows a send failure when the peer resets before the Pong reply",
-          "[net][socket_server]") {
-    // sendControlFrame()'s own try/catch (lines 263-267) is a *different*
-    // catch block from sendText()'s (it never sets `closed` -- see the doc
-    // comment above sendControlFrame() -- because the next read will notice
-    // the same thing). Unlike sendText()'s reply, which is dispatched onto a
-    // thread pool (see the test above), a control-frame reply runs
-    // synchronously on the *same* clientLoop thread that just read the Ping:
-    // there is no read-side thread racing it, so sending the abortive close
-    // immediately after the Ping bytes reliably lands the RST before this
-    // thread gets back around to attempting the Pong reply.
+TEST_CASE("SocketServer: a Pong written after the peer reset retires the connection", "[net][socket_server]") {
+    // The peer pings and resets before the Pong goes out: the failed write must
+    // retire the connection without disturbing the server.
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::net::SocketServer wsServer{*server, 0};
@@ -1142,34 +1048,11 @@ TEST_CASE("SocketServer: sendControlFrame() swallows a send failure when the pee
 // The Catch2 assertion macros, not branching logic, are what push this over the
 // cognitive-complexity threshold -- as in the sibling cases above.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("SocketServer: two threads calling close() concurrently do not both reach join()", "[net][socket_server]") {
-    // A `_closing` flag alone is not enough to serialise close(). Guarded with
-    //
-    //     bool const wasAlreadyClosing = _closing.exchange(true);
-    //     if (wasAlreadyClosing && !_acceptThread.joinable()) { return; }
-    //
-    // which is not a mutual exclusion: the loser of the exchange still sees a
-    // *joinable* accept thread (the winner has not joined it yet, and cannot
-    // have -- it is still parked in poll() until the winner's wakeup byte
-    // releases it), falls through, and calls join() on the very same
-    // std::thread the winner is joining. Two concurrent join()s on one
-    // thread is UB, and the two platforms cash it out differently: on
-    // Linux/glibc the loser parks forever in pthread_join's futex on a thread
-    // descriptor the winner already reaped, on macOS/libc++ it throws
-    // std::system_error. Serialising the whole body on a dedicated mutex makes
-    // the second caller wait and then observe !joinable(), which is what the
-    // atomic exchange was already trying, and failing, to express.
-    //
-    // The try/catch matters as much as the ctest TIMEOUT does: this test has
-    // to fail on both of those outcomes, and asserting only "nothing was
-    // thrown" would go green on Linux with the bug present -- the hang is
-    // caught by the timeout, the exception by the catch.
-    //
-    // Deliberately scoped to close()-vs-close() on a *live* server.
-    // close()-vs-destruction is out of contract (see
-    // docs/spec/concurrency_and_lifetimes.md, "Destruction ordering") and is
-    // not fixable here anyway: member destruction would destroy the mutex
-    // itself out from under a caller still blocked on it.
+TEST_CASE("SocketServer: two threads calling close() concurrently both return without throwing",
+          "[net][socket_server]") {
+    // close() is one loop task per call, so two racing callers are serialised
+    // by the loop: both return, neither throws, whichever ran first did the
+    // teardown and the other found nothing left to do.
     constexpr int kIterations = 20;
     for (int iter = 0; iter < kIterations; ++iter) {
         morph::exec::ThreadPoolExecutor pool{2};
@@ -1221,25 +1104,11 @@ TEST_CASE("SocketServer: two threads calling close() concurrently do not both re
 // The Catch2 assertion macros, not branching logic, are what push this over the
 // cognitive-complexity threshold -- as in the sibling cases above.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST_CASE("SocketServer: tearing down a parked accept loop finishes promptly", "[net][socket_server]") {
-    // close() must not interrupt the accept
-    // thread with `_listenSocket.shutdownBoth()` -- ::shutdown(fd, SHUT_RDWR)
-    // on the *listening* socket -- and then join() it. That works only because
-    // Linux chooses to kick a parked accept(2) when its listener is shut down.
-    // It is not a POSIX guarantee and macOS/BSD do not do it, so on those
-    // kernels the accept thread stayed parked, join() never returned, and
-    // ~SocketServer() hung until something external killed the process.
-    //
-    // Why this can fail *here*, on Linux, which is the whole point of writing
-    // it (AGENTS.md, "would this still pass if the feature did nothing?"): the
-    // fix does not add a second wakeup beside the kernel's, it *replaces* it.
-    // close() no longer touches the listening socket at all, so the pipe write
-    // is now the only thing that ends the loop on every platform. Delete that
-    // one write() and this test hangs on Linux exactly as the shutdown-based
-    // teardown hung on Darwin -- which is the falsification the PR records.
-    //
-    // No client, pending or established: the accept thread has to be genuinely
-    // parked in poll() with nothing else that could return it.
+TEST_CASE("SocketServer: tearing down a parked accept flow finishes promptly", "[net][socket_server]") {
+    // No client, pending or established: the accept flow is parked on the
+    // listener with nothing else that could resume it. close() closes the
+    // listener, which resumes the parked accept through the loop on every
+    // platform; teardown must finish within a bounded time, not merely finish.
     constexpr auto kBudget = std::chrono::seconds{2};
 
     morph::exec::ThreadPoolExecutor pool{2};
@@ -1248,7 +1117,7 @@ TEST_CASE("SocketServer: tearing down a parked accept loop finishes promptly", "
     REQUIRE(wsServer->listen());
     REQUIRE(wsServer->port() != 0U);
 
-    // Let the accept thread actually reach its wait. Without this the test
+    // Let the accept flow actually reach its wait. Without this the test
     // could measure a loop that had not started, which is not the parked case.
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
 
@@ -1269,12 +1138,11 @@ TEST_CASE("SocketServer: tearing down a parked accept loop finishes promptly", "
     REQUIRE(dtorElapsed < kBudget);
 }
 
-TEST_CASE("SocketServer: a parked accept loop survives repeated listen/close cycles", "[net][socket_server]") {
-    // The wakeup pipe is per-listen(): each cycle must get a fresh one, or the
-    // byte the previous close() left undrained would make the next accept loop
-    // return the instant it started -- a server that binds a port and then
-    // silently refuses to accept anything, which no timing assertion above
-    // would catch.
+TEST_CASE("SocketServer: the accept flow survives repeated listen/close cycles", "[net][socket_server]") {
+    // Each listen() starts a fresh accept flow on a fresh listener. A flow left
+    // over from an earlier cycle must end with its own listener and never
+    // swallow the next cycle's connections: a real client completes a round
+    // trip on every cycle.
     constexpr auto kBudget = std::chrono::seconds{2};
     constexpr int kCycles = 5;
 
@@ -1299,11 +1167,8 @@ TEST_CASE("SocketServer: a parked accept loop survives repeated listen/close cyc
 }
 
 TEST_CASE("SocketServer::close() releases the listening port", "[net][socket_server]") {
-    // close() does not call shutdownBoth() on the listener, so it
-    // has to drop the descriptor instead -- left open with no accept thread,
-    // the kernel would keep completing handshakes into a backlog nobody drains
-    // and a client would hang in the WebSocket Upgrade read rather than fail
-    // fast. Same post-close observation QtWebSocketServer already makes.
+    // close() releases the listening descriptor, so the port can be bound again
+    // at once -- the same post-close observation QtWebSocketServer makes.
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::net::SocketServer wsServer{*server, 0};
@@ -1321,11 +1186,9 @@ TEST_CASE("SocketServer::close() releases the listening port", "[net][socket_ser
 }
 
 TEST_CASE("SocketServer: teardown racing a connecting client still finishes promptly", "[net][socket_server]") {
-    // The interleaving the parked-loop case above deliberately excludes: a
-    // client arriving while close() is already under way, so the accept loop
-    // may be anywhere between poll(), tryAccept(), and spawning a client
-    // thread. Complements the parked case; it does not replace it, because a
-    // pending connection is itself something that returns poll().
+    // A client arriving while close() is already under way, so the accept flow
+    // may be anywhere between an accept and starting the connection's flow.
+    // Complements the parked case above.
     constexpr auto kBudget = std::chrono::seconds{5};
     constexpr int kIterations = 10;
 
@@ -1356,17 +1219,10 @@ TEST_CASE("SocketServer: teardown racing a connecting client still finishes prom
 
 // ── Finished connections must be reclaimed while the server runs ────────────
 //
-// `_clients` and `_clientThreads` were only ever pushed to in acceptLoop and
-// cleared in close(); nothing removed a connection whose clientLoop had
-// returned. The shared_ptr kept the ClientConnection -- and its TcpSocket --
-// alive, so the fd stayed open, and each std::thread stayed joinable. The leak
-// was therefore per connection *ever accepted*, not per live connection.
-//
-// The class doc and docs/spec/core/backend.md both say destruction leaves no
-// dangling threads, and both are true -- at teardown. That is exactly why this
-// test samples the fd count *while the server is still running*: a test that
-// opened N connections and then destroyed the server would have passed before
-// the fix and proved nothing (invariant 7).
+// A connection's socket is released when its flow ends, not when the server
+// closes. The fd count is sampled *while the server is still running*: a test
+// that opened N connections and then destroyed the server could not tell
+// eager release from release at teardown.
 #ifndef _WIN32
 namespace {
 std::size_t openFdCount() {
@@ -1379,8 +1235,7 @@ std::size_t openFdCount() {
 }
 }  // namespace
 
-TEST_CASE("SocketServer: a finished connection's fd and thread are reclaimed before shutdown",
-          "[net][socket_server][morph498]") {
+TEST_CASE("SocketServer: a finished connection's fd is reclaimed before shutdown", "[net][socket_server][morph498]") {
     if (!std::filesystem::exists("/proc/self/fd")) {
         SUCCEED("no /proc/self/fd on this platform");
         return;
@@ -1408,8 +1263,8 @@ TEST_CASE("SocketServer: a finished connection's fd and thread are reclaimed bef
     for (int i = 0; i < kRounds; ++i) {
         RawWsClient const client{wsServer.port()};
     }
-    // Reaping happens on accept, so the last couple of connections are still
-    // tracked; give the loop one more accept and a moment to settle.
+    // A connection's socket goes when its flow sees the peer's close; give
+    // the loop a moment, and a couple more connections, to settle.
     {
         RawWsClient const trigger{wsServer.port()};
     }
@@ -1437,9 +1292,8 @@ TEST_CASE("SocketServer: a finished connection's fd and thread are reclaimed bef
 TEST_CASE("SocketServer: handshakeTimeout retires a connection that never completes its handshake",
           "[net][socket_server][morph534]") {
     // Slowloris, minimal form: connect and send one byte that is not a
-    // complete HTTP request, then go silent. `performServerHandshake()`'s
-    // `readHttpHeaderBlock()` loop has nothing else in it that returns --
-    // without a timeout this parks `clientLoop` (and the fd) forever.
+    // complete HTTP request, then go silent. Without a timeout the
+    // connection's handshake read, and its fd, would wait forever.
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
     morph::net::SocketServer::Config cfg;
@@ -1451,24 +1305,18 @@ TEST_CASE("SocketServer: handshakeTimeout retires a connection that never comple
     char const one = 'G';
     sock.sendAll(&one, 1);
 
-    // Give the timeout time to fire and clientLoop time to return -- well
-    // over the 200ms handshakeTimeout above.
+    // Give the timeout time to fire -- well over the 200ms handshakeTimeout
+    // above.
     std::this_thread::sleep_for(std::chrono::milliseconds{600});
 
-    // A finished connection's fd is reclaimed lazily, on the *next* accept
-    // (see "a finished connection's fd and thread are reclaimed before
-    // shutdown" above, and reapFinishedClients()'s own doc comment) -- so a
-    // well-behaved probe connection has to arrive before the stalled
-    // connection's socket actually closes. This also proves the accept loop
-    // itself was never wedged by the earlier bad connection.
+    // A well-behaved probe proves the accept flow itself was never wedged by
+    // the earlier bad connection.
     RawWsClient probe{wsServer.port()};
     probe.send(morph::wire::makeRegister("NetEchoModel"));
     REQUIRE(probe.receive().kind == "ok");
 
-    // Pre-fix, clientLoop's `performServerHandshake()` call never returns
-    // (blocked in `recvSome` forever), so it never sets `finished`, and
-    // `reapFinishedClients()` -- run above, from the probe's own accept --
-    // never removes or closes it: this poll would time out (rc == 0).
+    // The timed-out connection has been closed by the server: its peer reads
+    // EOF. Without the timeout this poll would time out (rc == 0).
     pollfd pfd{};
     pfd.fd = sock.nativeHandle();
     pfd.events = POLLIN;
@@ -1481,27 +1329,15 @@ TEST_CASE("SocketServer: handshakeTimeout retires a connection that never comple
 
 TEST_CASE("SocketServer: a stalled reply write on a still-readable connection retires it instead of hanging",
           "[net][socket_server][morph534]") {
-    // Regression test for the acceptance clause #534's rescope comment added
-    // on top of PR #558: a reply write that fails on a connection whose read
-    // direction is still live (no reset, no FIN -- just a peer that stopped
-    // draining its socket) must stop that connection from dispatching further
-    // frames into RemoteServer. `ClientConnection::sendText()`'s catch already
-    // retires the connection on a *failed* send (`socket.shutdownBoth()`), but
-    // nothing before this change ever makes `sendAll` fail here: no timeout is
-    // set on the accepted socket, so a `send()` against a full, undrained
-    // receive window blocks forever instead of throwing.
+    // A peer that stops draining its socket, with its read direction still
+    // live (no reset, no FIN), must be retired rather than left dispatching
+    // requests whose replies queue forever: `sendTimeout` bounds each chunk
+    // of a reply's write, and when it runs out the connection is closed and
+    // its models reclaimed. Not the "peer reset" case above, where the very
+    // next write fails with no timeout involved.
     //
-    // Deliberately not the "peer reset" scenario the existing sendText test
-    // above covers -- that connection is already dead on both sides. Here the
-    // TCP connection stays fully open; only the client stops reading, which is
-    // what actually needs `sendTimeout` (a reset fails the very next `send()`
-    // immediately, with no timeout involved at all).
-    //
-    // The stall this reproduces is genuinely unbounded pre-fix, so the wait
-    // below runs on a background thread with a bounded budget and detaches on
-    // stall rather than blocking the test binary -- same pattern as
-    // "SocketServer: destruction completes promptly with the accept loop
-    // parked in accept()" above.
+    // The wait runs on a background thread with a bounded budget and
+    // detaches on stall rather than blocking the test binary.
     struct Stack {
         morph::exec::ThreadPoolExecutor pool{2};
         std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(pool);
@@ -1550,7 +1386,7 @@ TEST_CASE("SocketServer: a stalled reply write on a still-readable connection re
     sendEnvelope(morph::wire::makeRegister("NetEchoModel"));
     auto reg = recvOne();
     REQUIRE(reg.kind == "ok");
-    REQUIRE(stack->server->health().liveModels == 1U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return stack->server->health(owner); }).liveModels == 1U);
 
     // Flood large replies without ever reading them: the client's receive
     // window fills, the server's `sendAll` for a later reply stalls, and
@@ -1583,8 +1419,13 @@ TEST_CASE("SocketServer: a stalled reply write on a still-readable connection re
 
     auto reclaimed = std::make_shared<std::atomic<bool>>(false);
     std::thread waiter{[stack, reclaimed] {
-        morph::testing::waitUntil([&] { return stack->server->health().liveModels == 0U; },
-                                  morph::testing::WaitBudget{std::chrono::seconds{15}});
+        morph::testing::waitUntil(
+            [&] {
+                return morph::testing::awaitAnswer([&](auto& owner) {
+                           return stack->server->health(owner);
+                       }).liveModels == 0U;
+            },
+            morph::testing::WaitBudget{std::chrono::seconds{15}});
         reclaimed->store(true);
     }};
 
@@ -1596,8 +1437,83 @@ TEST_CASE("SocketServer: a stalled reply write on a still-readable connection re
     }
     waiter.join();
 
-    // The connection must actually have been retired -- clientLoop exited and
+    // The connection must actually have been retired -- its flow ended and
     // its ScopeGuard reclaimed the model -- not merely "eventually true by
     // coincidence".
-    REQUIRE(stack->server->health().liveModels == 0U);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return stack->server->health(owner); }).liveModels == 0U);
+}
+
+// ── One I/O loop owns the server ────────────────────────────────────────────
+//
+// The listener, the connection list and every reply write live on the
+// `IoLoop` the server was built on. Each case drives the server from this
+// test's own thread, or from the `RemoteServer`'s pool for a reply, and reads,
+// from inside the body that runs, whether it runs as a task of the loop.
+
+TEST_CASE("SocketServer: a reply produced on the server's pool is written on the loop",
+          "[net][socket_server][owner]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{loop, *server, 0};
+    REQUIRE(wsServer.listen());
+
+    RawWsClient client{wsServer.port()};
+    client.send(morph::wire::makeRegister("NetEchoModel"));
+    REQUIRE(client.receive().kind == "ok");
+
+    CHECK(recorder.count("SocketServer::reply") >= 1U);
+    CHECK(recorder.allPosted("SocketServer::reply"));
+}
+
+TEST_CASE("SocketServer: connections are accepted and closed on the loop", "[net][socket_server][owner]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{loop, *server, 0};
+    REQUIRE(wsServer.listen());
+
+    RawWsClient client{wsServer.port()};
+    client.send(morph::wire::makeRegister("NetEchoModel"));
+    REQUIRE(client.receive().kind == "ok");
+    wsServer.close();
+
+    CHECK(recorder.allPosted("SocketServer::listen"));
+    CHECK(recorder.allPosted("SocketServer::accept"));
+    CHECK(recorder.allPosted("SocketServer::close"));
+    CHECK(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 0U);
+}
+
+TEST_CASE("SocketServer: close() from two threads at once runs twice on the loop, one after the other",
+          "[net][socket_server][owner]") {
+    morph::exec::IoLoop loop;
+    morph::testing::OwnerProbeRecorder const recorder{loop.loop()};
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{loop, *server, 0};
+    REQUIRE(wsServer.listen());
+
+    std::atomic<int> ready{0};
+    std::atomic<bool> go{false};
+    auto racer = [&] {
+        ready.fetch_add(1);
+        while (!go.load()) {
+            std::this_thread::yield();
+        }
+        wsServer.close();
+    };
+    std::thread first{racer};
+    std::thread second{racer};
+    while (ready.load() < 2) {
+        std::this_thread::yield();
+    }
+    go.store(true);
+    first.join();
+    second.join();
+
+    CHECK(recorder.count("SocketServer::close") == 2U);
+    CHECK(recorder.allPosted("SocketServer::close"));
+    CHECK(wsServer.port() == 0U);
 }

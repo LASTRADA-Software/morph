@@ -52,12 +52,6 @@ public:
     ProbePresenter(morph::bridge::Bridge& bridge, morph::exec::IExecutor* exec)
         : _handler{bridge, exec}, _failHandler{bridge, exec} {}
 
-    /// @brief Calls trackBound() on the base class -- the doc-commented
-    ///        usage pattern (presenter.hpp) that no other test in this file
-    ///        exercises: every other ProbePresenter test constructs the
-    ///        presenter and never touches bound()/trackBound() at all.
-    void hookBound() { trackBound(_handler.whenBound()); }
-
     void bump(int value) {
         track<int>(_handler.execute(PresenterProbeAction{value}), [this](int result) { lastResult = result; });
     }
@@ -333,52 +327,10 @@ TEST_CASE("AppContext{Remote} defers readiness to the first connect",
     REQUIRE(fired == 1);  // the first callback is not re-run
 }
 
-TEST_CASE("Presenter::trackBound() emits bound() exactly once, synchronously in Local mode",
-          "[ladder][testkit][gui][presenter]") {
-    // Local mode's handler is already bound by construction (presenter.hpp's
-    // own doc comment on bound()), so whenBound()'s Completion<bool> settles
-    // on the very first event-loop turn -- pumpUntil, not a bare assertion,
-    // since "posted, not delivered inline" (trackBound()'s own comment on why
-    // it uses QPointer) still applies even when the outcome is a foregone
-    // conclusion.
-    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
-    ProbePresenter presenter{ctx.bridge(), ctx.executor()};
-
-    int boundCount = 0;
-    QObject::connect(&presenter, &morph::ladder::gui::Presenter::bound, [&] { ++boundCount; });
-
-    presenter.hookBound();
-    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return boundCount == 1; }));
-    REQUIRE(boundCount == 1);
-}
-
-TEST_CASE("Presenter::trackBound() still emits bound() when the presenter is destroyed first",
-          "[ladder][testkit][gui][presenter]") {
-    // trackBound()'s QPointer<Presenter> guard exists for exactly this case:
-    // whenBound()'s Completion resolves through the executor (posted, not
-    // inline), so a short-lived presenter destroyed before that post runs
-    // must not have its .then()/.onError() handlers dereference freed
-    // memory. This constructs the presenter inside a nested scope, destroys
-    // it immediately, then pumps -- if the QPointer guard were missing or
-    // wrong, this would be a use-after-free (caught by ASan/UBSan CI legs,
-    // not just a logic assertion here).
-    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
-    {
-        ProbePresenter presenter{ctx.bridge(), ctx.executor()};
-        presenter.hookBound();
-    }  // presenter destroyed here, whenBound()'s completion still pending
-
-    // Nothing to assert beyond "this doesn't crash" -- pump a couple of turns
-    // so the posted completion actually runs while the presenter is gone.
-    REQUIRE_FALSE(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
-    SUCCEED("posted whenBound() completion resolved after destruction without crashing");
-}
-
 TEST_CASE("Presenter::track() does not touch a presenter destroyed before its completion resolves",
           "[ladder][testkit][gui][presenter]") {
-    // The track() counterpart of the trackBound() case above. Both capture a
-    // `QPointer` rather than a bare `this`, and this case is what holds them to
-    // it. A Completion resolves through the executor (posted, never delivered
+    // track() captures a `QPointer` rather than a bare `this`, and this case
+    // is what holds it to that. A Completion resolves through the executor (posted, never delivered
     // inline), so a presenter destroyed before that post runs would have
     // finishOne() write to freed memory: with a bare `this`, AddressSanitizer
     // reports a stack-use-after-scope on the atomic fetch_sub, from a
@@ -387,7 +339,7 @@ TEST_CASE("Presenter::track() does not touch a presenter destroyed before its co
     // Constructing the presenter in a nested scope and pumping after it dies
     // reproduces that exactly. There is nothing to assert but "this does not
     // corrupt memory", which is a real assertion under the ASan/UBSan ladder
-    // leg -- the same shape, and the same reasoning, as the trackBound() case.
+    // leg.
     morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
     {
         ProbePresenter presenter{ctx.bridge(), ctx.executor()};
@@ -492,7 +444,7 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
     // callback and nothing else.
     morph::exec::ThreadPoolExecutor workerPool{2};
     morph::ladder::testkit::DeterministicExecutor clientExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), clientExec};
     ProbePresenter presenter{bridge, &clientExec};
 
     int idleCount = 0;
@@ -503,16 +455,13 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
     presenter.bumpConcurrent(2);
 
     // Both actions run on the pool and post onto clientExec as they finish --
-    // wait until both have queued *something* there before stepping, so the
-    // pool's own scheduling can't race this test. Each action's full
-    // settlement is actually two chained posts on clientExec, not one:
-    // Bridge::executeVia's raw backend Completion resolves first (queuing its
-    // own .then() translation lambda), and *that* lambda -- once it runs --
-    // is what calls the typed CompletionState::setValue() that queues
-    // track()'s own .then() callback in turn. The two actions' chains can
-    // interleave in either order (both settle on the pool independently), so
-    // this steps one at a time and watches settledOrder itself rather than
-    // assuming a fixed step count per action.
+    // wait until both have queued *something* there before stepping. Each
+    // action's settlement is a chain of posts on clientExec, each queued only
+    // when the one before it runs, and an action's first post lands whenever
+    // the pool settles it; so every step waits for a post to be queued rather
+    // than assuming one already is. The two actions' chains can interleave in
+    // either order, so this steps one at a time and watches settledOrder
+    // itself rather than assuming a fixed step count per action.
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return clientExec.pending() >= 2; }));
     REQUIRE(presenter.busy());  // both queued before either callback ran
 
@@ -520,7 +469,7 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
     // this is finishOne()'s fetch_sub(1) returning 2, not 1, the branch no
     // other test in this suite reaches.
     while (presenter.settledOrder.empty()) {
-        REQUIRE(clientExec.pending() > 0);
+        REQUIRE(morph::ladder::testkit::pumpUntil([&] { return clientExec.pending() > 0; }));
         clientExec.step();
     }
     REQUIRE(presenter.settledOrder.size() == 1);
@@ -528,42 +477,34 @@ TEST_CASE("Presenter::busy() stays true while a second tracked completion is sti
     REQUIRE(idleCount == 0);
 
     while (presenter.busy()) {
-        REQUIRE(clientExec.pending() > 0);
+        REQUIRE(morph::ladder::testkit::pumpUntil([&] { return clientExec.pending() > 0; }));
         clientExec.step();
     }
     REQUIRE(idleCount == 1);  // idle() fires exactly once, when the counter actually reaches zero
     REQUIRE(presenter.settledOrder.size() == 2);
 }
 
-TEST_CASE("Presenter::trackBound() emits bound() on the .onError path when registration never settles",
+TEST_CASE("Presenter: a dispatch made before registration settles is rejected when it never does",
           "[ladder][testkit][gui][presenter][socket-only]") {
-    // Every other trackBound() test in this file runs in Local mode, where
-    // whenBound()'s Completion<bool> always resolves via .then() -- Local's
-    // handler is bound by construction (presenter.hpp's own doc comment), so
-    // trackBound()'s .onError() branch (and the `if (self)` guard inside it)
-    // is otherwise never reached by this suite at all.
+    // A presenter built the moment a Remote-mode socket is asked for may
+    // dispatch before its handler's registration round trip lands. That
+    // dispatch waits for the bind; when the bind fails it is rejected, and
+    // track()'s error branch brings busy() back to false.
     //
-    // ws://127.0.0.1:1 is a reserved, never-listening port -- the same
-    // deterministic "connection never comes up" seam
-    // tests/qt/test_qt_websocket.cpp's issue26/issue54 cases use, chosen so
-    // this is a real onError delivery rather than a timing race. With
-    // asyncRegistrationEnabled set, constructing the handler queues its
-    // registration (the backend's pre-connect queueing); QtWebSocketBackend's
-    // own disconnect/never-connected handling then drains that queue through
-    // cancelPending(DisconnectedError), which is whenBound()'s only route to
-    // .onError() -- see qt_websocket_backend.cpp's cancelPending().
+    // ws://127.0.0.1:1 is a reserved, never-listening port, so the
+    // connection deterministically never comes up. The handler's private bind
+    // is queued until the socket connects; the failed connection rejects it
+    // with a DisconnectedError, and the held dispatch with it.
     morph::qt::QtExecutor qtExec;
     QUrl const url{QStringLiteral("ws://127.0.0.1:1")};
-    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, std::nullopt, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    auto backendPtr =
+        std::make_unique<morph::qt::QtWebSocketBackend>(url, std::nullopt, morph::qt::QtWebSocketBackend::Config{});
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
 
     ProbePresenter presenter{bridge, &qtExec};
+    presenter.bump(7);
+    REQUIRE(presenter.busy());
 
-    int boundCount = 0;
-    QObject::connect(&presenter, &morph::ladder::gui::Presenter::bound, [&] { ++boundCount; });
-
-    presenter.hookBound();
-    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return boundCount == 1; }));
-    REQUIRE(boundCount == 1);  // bound() still fires exactly once, from the error branch this time
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return !presenter.busy(); }));
+    REQUIRE(presenter.lastResult == -1);
 }

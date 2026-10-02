@@ -13,16 +13,14 @@ that only know action names at runtime.
 - [`HandlerBinding`](#handlerbinding)
 - [`Bridge`](#bridge)
   - [`BridgeSink` — the typed state the backend settles](#bridgesink--the-typed-state-the-backend-settles)
-  - [The bridge's own executor](#the-bridges-own-executor)
 - [`BridgeHandler<Model>`](#bridgehandlermodel)
-- [Registration readiness — `isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound)
-  - [`executeWhenBound()` — holding a dispatch until the bind lands](#executewhenbound--holding-a-dispatch-until-the-bind-lands)
+- [Registration readiness — the bind rule](#registration-readiness--the-bind-rule)
 - [`ActionExecuteRegistry`](#actionexecuteregistry)
   - [Why the key carries the sharing policy](#why-the-key-carries-the-sharing-policy)
 - [`BRIDGE_REGISTER_ACTION` and `registerActionExecutorOnce`](#bridge_register_action-and-registeractionexecutoronce)
 - [`MemberPointerTraits`](#memberpointertraits)
 - [Subscription semantics](#subscription-semantics)
-- [Thread safety](#thread-safety)
+- [Thread safety — one owner](#thread-safety--one-owner)
 - [Lifetime & ownership](#lifetime--ownership)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -68,92 +66,78 @@ struct HandlerBinding {
     std::string typeId;
     std::function<std::unique_ptr<IModelHolder>()> modelFactory;
     std::string contextKey;
-    // … shared-instance fields (`shared`, `primary`) — see shared_instances.md
+    std::string primary;   // shared bindings only — see shared_instances.md
+    bool shared = false;
     std::atomic<uint64_t> currentId{0};
 
-    // Registration-settled seam — see "Registration readiness" below.
-    std::mutex registrationMtx;
-    bool registrationInFlight = false;
-    std::vector<std::pair<std::function<void(bool)>,
-                          std::function<void(std::exception_ptr)>>> registrationWaiters;
+    // The bind rule's state — see "Registration readiness" below.
+    bool bindInFlight = false;
+    std::uint64_t bindGeneration = 0;
+    std::exception_ptr bindFailure;
+    std::function<void(std::exception_ptr)> afterBind;
+    std::deque<std::function<void(std::exception_ptr)>> waiting;
 };
 ```
 
 One record per registered model instance. `typeId` is the string
 `ModelTraits<Model>::typeId()`. `modelFactory` creates a fresh
-`IModelHolder` — used by `switchBackend()` to re-register on the new
-backend. `contextKey` is an optional stable identity (e.g. account id) that
-travels in the `register` wire envelope for remote backends. `currentId` is
-the `ModelId` value the active backend assigned; 0 = unbound.
+`IModelHolder` — used by `switchBackend()` and the reconnect handler to
+re-create the instance on a backend. `contextKey` is an optional stable
+identity (e.g. account id) that travels in the `register` wire envelope for
+remote backends. `currentId` is the `ModelId` value the active backend
+assigned; 0 = unbound.
 
-The last three fields are the state behind
-[`isBound()` / `whenBound()`](#registration-readiness--isbound--whenbound).
-`registrationInFlight` is `true` from just *before* `registerHandlerImpl` calls
-`IBackend::bindModel` until the resulting `Completion`
-callback resolves. It is set unconditionally on every path, the synchronous
-fallback included — that fallback does not *leave* it set, because it resolves
-the waiters and clears the flag before returning; `registrationWaiters` holds the callbacks queued while it is.
-Both are guarded by `registrationMtx` — deliberately a mutex of the binding's
-own, not `Bridge::_mtx` or `_attachMtx`, because a waiter may be queued or
-resolved from either the registering thread or the backend's reply-delivering
-thread and must never block on the bridge's own locks.
+Every field is touched only on the bridge's owner, except `currentId`, which is
+an atomic so `isBound()` can be asked from any thread. The last five fields
+carry the [bind rule](#registration-readiness--the-bind-rule): whether a bind
+is in flight, a count that tells a current reply from a superseded one, the
+last bind's failure, the continuation of the operation that issued the bind
+(an attach, a result-keyed action's first bind), and the calls held until the
+bind settles.
 
 ## `Bridge`
 
-Central dispatcher. Non-copyable, non-movable. Thread-safe.
+Central dispatcher. Non-copyable, non-movable. Belongs to one owner executor.
 
-**Construction** takes ownership of an `IBackend` and installs a reconnect
-handler so backends with recoverable transports (e.g. `QtWebSocketBackend`)
-re-register all live bindings on reconnection. The handler branches on
-`binding->shared` exactly as `switchBackend()`'s phase 1 does: an unattached
-shared binding (`binding->primary` empty) has no instance to recreate and is
-skipped, and an attached shared binding re-registers through the
-`registerModelShared` request shape (a non-empty `primary`) rather than the
-`registerModelWithContext` one — otherwise the reconnected registration would
-come back as an ordinary non-shared instance, silently dropping the sharing a
-surviving handler had before the disconnect. A non-shared binding is
-unaffected and still re-registers through the `registerModelWithContext`
-shape.
+**Construction** takes ownership of an `IBackend` and the owner executor
+(required; see [Thread safety — one owner](#thread-safety--one-owner)), tells
+the backend its owner (`IBackend::setOwner`), pushes the initially empty
+default session, and installs a reconnect handler posted to the owner, so a
+backend with a recoverable transport (e.g. `QtWebSocketBackend`,
+`SocketBackend`) re-registers every live binding on the owner after a
+reconnect.
 
-The handler reaches the backend through
-`IBackend::bindModel` — the structural registration surface — and consults
-`IBackend::bindWaitPolicy()` exactly as `registerHandlerImpl` does. It matters
-here more than anywhere: the handler runs on the backend's *transport* thread,
-so for a backend whose reply is delivered by that same thread's event loop
-(`QtWebSocketBackend` with `asyncRegistrationEnabled`) the blocking verbs this
-loop used to call park the thread against itself, and on a WASM main thread
-abort the page. Three consequences:
-
-- For a `kCallerMayBlock` backend the handler waits out each bind and behaves
-  exactly as it did before, blocking verb for blocking verb.
-- For a `kCallerMustNotBlock` backend it does not wait. Each binding's
-  `currentId` is cleared — the id belonged to the connection that just
-  dropped, so `executeVia`'s fast fail is the honest answer and `whenBound()`
-  becomes gateable (see below) — and the reply publishes the new id when it
-  arrives.
-- A failing re-registration no longer takes the rest of the loop with it. It
-  used to throw out of the handler and onto the transport thread; a rejected
-  `Completion` is reported per binding instead, the binding is left unbound,
-  and the loop continues.
+The reconnect handler runs as a task on the owner. It ignores a reconnect of a
+backend the bridge has since switched away from. For every live binding it
+clears `currentId` — the id belonged to the connection that dropped — and
+issues the ordinary bind on the owner: an unattached shared binding
+(`primary` empty) has no instance to re-create and is skipped; an attached
+shared binding re-binds with its `primary` (the register-or-attach shape), so
+the instance stays shared; a private binding re-binds with the private shape.
+A bind that settles before returning binds at once; one still in flight holds
+the binding's calls until it settles. A failed re-bind is recorded on its
+binding and rejects its held calls; the rest of the loop continues.
 
 **`registerHandler<Model>()`** creates a `HandlerBinding` with the default
 `ModelFactory::create<Model>()` factory and registers it on the active
 backend. Returns the `shared_ptr<HandlerBinding>`. An overload accepts a
 pre-built binding (for dependency injection, custom `contextKey`, or custom
-factory captures). Both funnel through a shared `registerHandlerImpl`, which
-dispatches `IBackend::bindModel` (see
-`backend.md`, "The structural registration surface") and waits for it only when
-the backend says it may — otherwise it returns unbound, exactly as the removed
-non-blocking twin's caller did. It no longer falls back to the synchronous
-`registerModelWithContext` otherwise — the returned binding may therefore come
-back **unbound** (`currentId == 0`) if the backend registered asynchronously
-and the reply has not arrived yet.
+factory captures). Both issue the bind through `IBackend::bindModel` with the
+owner as the delivery executor and return without waiting: a backend that
+settles before returning (`LocalBackend`, `SimulatedRemoteBackend`, a
+blocking-configured `QtWebSocketBackend`) has bound the binding by then;
+otherwise the binding comes back with a bind in flight and every call made
+through it is held until the bind settles. See
+[Registration readiness](#registration-readiness--the-bind-rule).
 
 **`executeVia<Model, Action>(binding, action, cbExec)`** dispatches one
-action. Takes a short snapshot of the backend `shared_ptr` under the dedicated
-`_backendMtx` (never `_mtx`) plus a lock-free atomic read of the binding's
-`currentId`, so it never blocks on `switchBackend()`'s `_mtx`. If `currentId` is 0,
-completes immediately with `"handler not bound"`. Constructs an `ActionCall`
+action, on the owner. It counts the call pending and arms the client-side
+deadline at once; then, when no bind is in flight for the binding, it
+dispatches to the active backend here, and otherwise holds the call on the
+binding until the bind settles (see
+[Registration readiness](#registration-readiness--the-bind-rule)). A binding
+with no instance and nothing to wait for — an `AllowShared` handler never
+attached — rejects the call with `"handler not bound"`. Constructs an `ActionCall`
 holding one `make_shared<Action>` and three stateless function pointers — the
 serialiser, the deserialiser, and a `localOp` that, on
 `LocalBackend`, first overwrites any declared computed fields from their
@@ -230,16 +214,14 @@ round trip, clang 22.1.8 Release, twelve runs each, every run identical:
 `executeJson` path, which runs through the same function, falls **21.07 →
 15.06**.
 
-Everything the forwarding block did is a method on that class now. Each piece
-carries a comment naming the bug it came from, because moving them was the risk
-in this change:
+Everything the forwarding block did is a method on that class:
 
-| Invariant | Where it lives now |
+| Invariant | Where it lives |
 |---|---|
 | The deadline is disarmed **first**, before any forwarding work, so a slow `onResult`/`publishResult` cannot give the timer a window to resolve the completion with `ClientTimeoutError` while the real result is in hand | `BridgeSink::settleOnce`, called at the top of both settle methods |
 | `pendingCalls()` is decremented on **exactly one** of two mutually-exclusive paths, whether or not the forwarding that follows then throws | `settleOnce`'s latch |
-| `lifetime->alive` is read **once**, and that one snapshot decides both `onResult` and `publishResult` | `BridgeSink::settleValue` |
-| The value forwarding is `try`/`catch`-guarded, so a throwing move of `R` reaches the error sink rather than the callback executor | `BridgeSink::settleValue` |
+| The bridge-side work a result triggers — `onResult` (a result-keyed action's promotion) and the subscription fan-out — runs on the owner, gated on the bridge's `CallbackToken`, before the value reaches the caller | `BridgeSink::settleValue` / `forward` |
+| The value forwarding is `try`/`catch`-guarded, so a throwing move of `R` reaches the error sink rather than the callback executor | `BridgeSink::forward` |
 | A throw out of the backend undoes both the pending count and the deadline | `BridgeSink::abandon`, routed through the same latch |
 
 The latch is load-bearing. With a plain `Completion`, "exactly one decrement per
@@ -250,61 +232,62 @@ settling it from another. Without the latch the second settle decrements
 `_pendingCalls` again, and the counter is a `std::size_t` — a second decrement
 from zero reads as `18446744073709551615`, in a value `pendingCalls()`
 documents as a quiescence gate. `test_bridge_pending_calls.cpp` pins exactly
-that sequence, and was watched failing with the latch removed.
+that sequence.
 
 The typed result is unwrapped from `std::shared_ptr<void>`
 into the final `Completion<R>` inside a `try`/`catch`: moving the result out of
 the opaque `shared_ptr<void>` can throw (a throwing move/copy on `R`, or a bad
-cast), and if that exception escaped the `.then` callback it would be swallowed
-by a `ThreadPoolExecutor` — leaving the typed `Completion` unresolved (a silent
+cast), and if that exception escaped it would be swallowed by a
+`ThreadPoolExecutor` — leaving the typed `Completion` unresolved (a silent
 hang) — or reach `QCoreApplication::exec` under `QtExecutor` and
 `std::terminate`. On a caught exception the forwarding routes it to the typed
 completion's error sink via `setException`, so the caller's `.onError(...)`
-fires instead. This mirrors the identical forwarding guard in
-`SimulatedRemoteBackend::execute` (remote.hpp). The type-erased `executeJson`
-path (`ActionExecuteRegistry::registerAction`) guards its own `resultToJson`
+fires instead. The type-erased `executeJson` path
+(`ActionExecuteRegistry::registerAction`) guards its own `resultToJson`
 forwarding the same way.
 
-Before any of that forwarding, `BridgeSink::settleValue` reads the bridge's
-lifetime gate once and gates every
-bridge-touching side effect on that one snapshot — checked first, before
-`onResult` or `hasSubscribers()` run. A backend completion can in principle
-resolve after the `Bridge` is gone: the backend may be co-owned and outlive
-this `Bridge`, or the callback may already be running when `~Bridge()` runs
-concurrently on another thread. `onResult` — used for a result-keyed action to
-call back into the bridge via a captured raw pointer and adopt the binding's
-primary — and `hasSubscribers()` — which reads `this` — must never run once
-the bridge might be gone; running either on a dangling `Bridge` is a
-use-after-free. The typed result is still delivered to the caller's own
-`Completion` either way (`typedState->setValue` does not touch the bridge) —
-only the two bridge-touching side effects are skipped when the token has
-expired.
+**Where the settle runs.** A backend settles the sink on its own thread — a
+pool strand, the I/O loop, the Qt thread. When the result has no bridge-side
+work (no `onResult`, no subscriber — `hasSubscribers()` is an atomic the sink
+reads there), the value is forwarded at once, where the backend settled, and
+the caller's continuations are posted to its `cbExec`. When it has some, the
+rest of the settle is done on the owner: inline when the backend already
+settled there, posted otherwise. That task checks the bridge's
+`CallbackToken` first; a bridge destroyed in the meantime has expired it, so
+the bridge-side work is skipped and only the value is delivered. On the owner
+the check is exact, because `~Bridge` runs there too.
 
-**`switchBackend(newBackend)`** replaces the active backend atomically: the
-switch either fully succeeds or leaves everything exactly as it was. Phase 1
-acquires each instance through `IBackend::bindModel` and consults
-`IBackend::bindWaitPolicy()`, and **atomicity is exactly as strong as the wait
-is**:
+**`switchBackend(newBackend)`** replaces the active backend, on the owner. It
+tells the new backend its owner and pushes the current default session onto it
+(so every control envelope the re-binds build carries the session, exactly as
+it would on the backend being replaced — see `IBackend::setSession` and
+[backend.md](backend.md#session-propagation-to-control-envelopes)), then
+issues a bind on it for every live binding with the owner as the delivery
+executor. An unattached shared binding has no instance to re-create and is
+left as it is; an attached shared one re-binds with its `primary`.
 
-- `kCallerMayBlock` (every backend in the tree that is not a
-  `SynchronousBackendAdapter` or a WASM-configured `QtWebSocketBackend`): the
-  frame waits out each bind, so every outcome is known before anything is
-  published. The guarantee is unchanged; the rollback simply keys on a
-  rejected `Completion` now rather than on a thrown exception, which is what
-  the structural surface reports failure through.
-- `kCallerMustNotBlock`: it cannot be. "Did every re-registration succeed" is
-  not knowable without waiting, and waiting on such a backend is the deadlock
-  the policy exists to prevent. Those bindings are *deferred*: the swap
-  happens, their `currentId` is set to 0, `registrationInFlight` is set so
-  `whenBound()` can gate on them, and each reply binds its own. A deferred
-  bind that fails after the swap is logged and rejects that binding's
-  `whenBound()` waiters; it cannot roll the switch back. An instance created
-  by a deferred bind whose switch later threw is not deregistered either —
-  nothing in the rollback ever learns its id.
+The binds the new backend settles **before returning** decide the switch. If
+any of them failed, every instance acquired so far is released — at once for
+the settled ones, when it settles for one still in flight — and the failure is
+rethrown with the old backend and every binding untouched: the call is a
+no-op. Otherwise the switch commits:
 
-Waiters are always resolved after `_mtx`/`_attachMtx` are released, because
-resolving one runs consumer code that is free to re-enter the `Bridge`; the
-staging exception is rethrown after that, for the same reason.
+- each settled id is published into its binding's `currentId`;
+- a binding whose bind is still in flight gets `currentId = 0` and holds its
+  calls until the bind settles; a failure then cannot roll the switch back and
+  is recorded on the binding, rejecting its held calls;
+- the operation continuation of a bind superseded by the switch (an attach in
+  flight on the old backend) is rejected with `BackendChangedError`;
+- the backend is swapped, `notifyBackendChanged()` runs, the reconnect handler
+  moves to the new backend and is cleared on the old one, and the old backend's
+  pending calls are cancelled with `BackendChangedError` — a Task handler still
+  running there is asked to stop (its `StopSource`), not only settled;
+- finally the calls each binding held are drained.
+
+Every backend in the tree settles a bind before returning except a
+`SynchronousBackendAdapter`, a `SocketBackend` and an async-configured
+`QtWebSocketBackend`; over those the switch is all-or-nothing only for the
+binds that had settled when it committed.
 
 It has two overloads:
 
@@ -312,7 +295,7 @@ It has two overloads:
   so the same backend instance can be re-installed later (e.g. switching back
   to a long-lived remote backend, with its live socket and reconnect state,
   after a temporary fallback to a local one) instead of reconstructing it.
-- `switchBackend(unique_ptr<Backend>)` — transfers ownership, as before.
+- `switchBackend(unique_ptr<Backend>)` — transfers ownership.
   Templated on the concrete `Backend` type (rather than taking
   `unique_ptr<IBackend>` directly) so that a call like
   `switchBackend(std::make_unique<LocalBackend>(...))` is an *exact* match
@@ -322,245 +305,130 @@ It has two overloads:
   every existing call site ambiguous. It converts to a `shared_ptr` and
   delegates to the overload above.
 
-Before either phase, the current default session is pushed onto the new
-backend via `newBackend->setSession(...)` (read under `_sessionMtx` alone,
-never held while calling into the backend) — so every control envelope phase
-1 builds while re-registering handlers on the new backend already carries the
-session, exactly as it would on the backend that is being replaced. See
-`IBackend::setSession` and [backend.md](backend.md#session-propagation-to-control-envelopes).
-
-Both phases below run under `_mtx`:
-
-- **Phase 1 — stage, do not mutate.** Every live binding is registered on the
-  new backend and the resulting `(binding, newId)` pairs are collected into a
-  staging list. No `currentId` is touched and the old backend is still active,
-  so concurrent `executeVia()` calls continue to hit the old backend. If any
-  `registerModelWithContext` throws (a plausible remote/transport failure),
-  the already-staged registrations are rolled back by calling
-  `deregisterModel` on the new backend for each staged id (rollback-deregister
-  failures are logged, not propagated), and the original exception is
-  rethrown. On this path the old backend and every `currentId` are untouched —
-  the call is a no-op.
-- **Phase 2 — commit.** Only reached when *all* registrations succeeded. The
-  staged ids are published into each `binding->currentId`, the handler list is
-  replaced with the surviving-bindings list, the backend pointer is swapped via
-  `exchangeBackend`, and `notifyBackendChanged()` fires.
-
-After the swap the reconnect handler is re-installed on the new backend and
-cleared on the old one, and the old backend's pending completions are cancelled
-with `BackendChangedError` — outside `_mtx`, because `cancelPending` delivers
-callbacks through user executors and the bridge never runs user code while
-holding its mutex. Lock ordering: `_mtx` is acquired before the backend's
-internal mutex.
-
-**`onBackendChanged()` runs on the model's strand, not inline under `_mtx`.**
-`notifyBackendChanged()` fires while `_mtx` is held, but for `LocalBackend` it
-does not *call* each model's `onBackendChanged()` — it **posts** it onto that
-model's own strand (the same per-`ModelId` serial queue `execute` uses) and
-returns. Consequences:
+**`onBackendChanged()` runs on the model's strand.** `notifyBackendChanged()`
+does not *call* each model's `onBackendChanged()` on `LocalBackend` — it
+**posts** it onto that model's own strand (the same per-`ModelId` serial queue
+`execute` uses) and returns. Consequences:
 
 - **Strand-serialised, lock-free.** The callback body runs single-threaded per
   model, never overlapping an `execute()` on the same model, so a model
   reconciling state there (e.g. draining a shared `IOfflineQueue`) needs no
   locking of its own fields. It runs *after* `switchBackend` returns, so an
   observer must wait for it rather than assume it ran synchronously.
-- **`registerHandler()` / `deregisterHandler()` are now safe from
-  `onBackendChanged()`.** Because the body runs on a pool thread with `_mtx`
-  free, a re-entrant `registerHandler`/`deregisterHandler` acquires `_mtx`
-  freshly instead of self-deadlocking on the switch caller's held lock (the
-  earlier inline-under-`_mtx` design deadlocked here — this was the fix).
-- **`switchBackend()` from `onBackendChanged()` is still unsupported** — but for
-  a different reason than the lock. The callback runs on the *outgoing* backend's
-  strand; a nested `switchBackend` would release the last reference to that
-  backend when it returns, and `~LocalBackend` drains its strands — including
-  the very task calling it — a self-join hang, asserted in a debug build. Re-registering
-  models or reconciling queue state is the supported reaction; swapping the
-  backend again from inside the notification is not.
+- **It runs on a pool thread, off the owner.** A model that wants to register
+  or deregister a handler from there is a handler constructed inside a running
+  action: its constructor posts the registration to the owner (see
+  [Registration readiness](#registration-readiness--the-bind-rule)).
+- **`switchBackend()` from `onBackendChanged()` is unsupported**: it is an
+  owner-only verb, and the callback runs on the *outgoing* backend's strand;
+  releasing the last reference to that backend from there makes
+  `~LocalBackend` drain its strands — including the very task calling it — a
+  self-join hang, asserted in a debug build.
 
-**`deregisterHandler(binding)`** calls `deregisterModel` on the active backend
-(only if the binding still has a non-zero `currentId`), then resets
-`binding->currentId` to the `0 = unbound` sentinel and removes the binding from
-tracking. Resetting to `0` means a late or concurrent `executeVia()` on a
-deregistered binding fails fast on the "handler not bound" guard rather than
-sending a now-destroyed `ModelId` to the backend.
+**`deregisterHandler(binding)`** (called by `~BridgeHandler`) advances the
+binding's bind count, so a bind reply still in flight is superseded and
+releases its instance when it lands; rejects the in-flight operation's
+continuation and every held call with `HandlerDestroyedError`; deregisters
+`currentId` from the active backend if it is non-zero and resets it to `0`;
+and removes the binding from tracking.
 
 **`setDefaultSession(session)`** / **`defaultSession()`** installs a default
 `morph::session::Context` that is attached to every `executeVia()` call.
-Thread-safe, separate mutex from `_mtx`. `setDefaultSession` also pushes the
-new session to the active backend via `IBackend::setSession` (copied out from
-under `_sessionMtx` before the call, never while holding it), so every
-control envelope (`register`/`registerShared`/`attach`/`assign`/`deregister`)
-the backend subsequently builds carries the session too — not only `execute`
-envelopes. The constructor does the same with the (typically empty) initial
-session. See [session.md](../session/session.md#how-a-context-originates-and-flows)
-and [backend.md](backend.md#session-propagation-to-control-envelopes).
+`setDefaultSession` also pushes the new session to the active backend via
+`IBackend::setSession`, so every control envelope
+(`register`/`registerShared`/`attach`/`assign`/`deregister`) the backend
+subsequently builds carries the session too — not only `execute` envelopes.
+The constructor does the same with the (typically empty) initial session. See
+[session.md](../session/session.md#how-a-context-originates-and-flows) and
+[backend.md](backend.md#session-propagation-to-control-envelopes).
 
 **`setExecuteDeadline(deadline)`** / **`executeDeadline()`** installs an
 opt-in, client-side wall-clock bound on how long any subsequent `executeVia()`
-waits for a reply. Defaults to `std::chrono::milliseconds{0}` (disabled — the
-pre-existing behavior, and no extra thread). When enabled, each dispatch races
-the real reply against a `morph::async::detail::TimeoutScheduler` timer that
-resolves the pending `Completion` with `morph::backend::ClientTimeoutError`;
-whichever settles first wins, and the loser is discarded by
-`CompletionState`'s first-result-wins rule. The on-time reply path disarms the
-timer as the first statement of its completion callback. Thread-safe, its own
-mutex (`_executeDeadlineMtx`). Full semantics — including how
-`ClientTimeoutError` differs from the server-reported `TimeoutError` — in
+waits for a reply, measured from the call — a wait for the binding's bind
+included. Defaults to `std::chrono::milliseconds{0}` (disabled, and no extra
+thread). When enabled, each dispatch races the real reply against a
+`morph::async::detail::TimeoutScheduler` timer that resolves the pending
+`Completion` with `morph::backend::ClientTimeoutError` and requests stop on a
+Task handler's `StopSource`; whichever settles first wins, and the loser is
+discarded by `CompletionState`'s first-result-wins rule. The on-time reply
+disarms the timer first. A call whose deadline fired while it was held for its
+bind is never dispatched. Full semantics — including how `ClientTimeoutError`
+differs from the server-reported `TimeoutError` — in
 [completion.md](completion.md#client-side-execute-deadline).
 
 **`setPrincipal(principal)`** / **`currentPrincipal()`** installs and reads
 back a `morph::session::Principal` — the verified identity + roles, readable
 *outside* a dispatch (unlike `session::current()`, which only exists during
 one), so UI code can gate itself (`bridge.currentPrincipal().hasRole("editor")`)
-instead of attempting an action and catching the refusal. Thread-safe, its own
-mutex (`_principalMtx`, separate from both `_mtx` and the session mutex).
-Scoped to this `Bridge` instance, not a process-wide global — see
+instead of attempting an action and catching the refusal. Scoped to this
+`Bridge` instance, not a process-wide global — see
 [session.md](../session/session.md#principal--readable-authorization-state-outside-a-dispatch)
 for the full rationale and trust model. Purely a client-side convenience: it
 has no wire representation and does not affect dispatch or `Context` in any
 way — every dispatch is still authorized server-side via `IAuthorizer`
 regardless of what `currentPrincipal()` says.
 
-**`pendingCalls()`** returns the number of actions dispatched via
+**`pendingCalls()`** returns the number of actions made through
 `executeVia()` (and so, transitively, `BridgeHandler::execute()`) that have
 not yet resolved — a client-side quiescence signal for building a "still
 loading" indicator or gating a feature on "has everything settled" without
 hand-rolling a counter around every call site. Backed by a
 `std::shared_ptr<std::atomic<std::size_t>>` (`_pendingCalls`), incremented
-once per call right before the backend dispatch inside `executeVia()` and
-decremented exactly once by whichever of the two mutually-exclusive
-resolution continuations (the `.then`/`.onError` `executeVia()` attaches to
-the backend's own completion) actually fires — success, error, or a
-client-visible failure delivered through either path (e.g. a
-cancelled/backend-changed/disconnected completion, all of which resolve
-through `.onError`). The synchronous "handler not bound" early return in
-`executeVia()` never increments the counter in the first place (it resolves
-before any dispatch), so it needs no matching decrement. Heap-allocated and
-captured by value into both continuations rather than reached
-through `this`: a completion can resolve after `~Bridge()` runs on another
-thread, and touching `this` on a dangling `Bridge` would be a use-after-free,
-so the counter is pinned independently of the `Bridge` and decremented
-unconditionally — no liveness check needed for this piece, unlike the
-subscription-fan-out and result-adoption side effects the same continuations
-guard on `detail::BridgeLifetime` (see "Destructor" below and
-[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md)). A single
-relaxed atomic load/increment/decrement — cheap enough to poll every UI
-frame. See [Design decisions](#design-decisions) for why the counter lives at
-the `Bridge` layer rather than per-`HandlerBinding` or per-backend.
+once per call when it is made (a call held for its bind included) and
+decremented exactly once by the sink's settle latch — success, error, or a
+cancellation (`BackendChangedError`, `BridgeDestroyedError`, a dropped
+transport, a destroyed handler). Pinned in every sink rather than reached
+through `this`, because a sink is settled on the backend's thread and may be
+settled after `~Bridge`. A single relaxed atomic load — cheap enough to poll
+every UI frame, from any thread. See [Design decisions](#design-decisions) for
+why the counter lives at the `Bridge` layer rather than per-`HandlerBinding`
+or per-backend.
 
-**Destructor** first **retires the lifetime gate** (`closeLifetime()`, see
-`detail::BridgeLifetime` and "Lifetime & ownership" below) — this is the
-destructor's first statement and it waits out any `~BridgeHandler`
-deregistration already inside the gate before anything else runs. Only then
-does it **clear the active backend's reconnect handler**
-(`setReconnectHandler(nullptr)`) and cancel every pending completion on that
-backend with `BridgeDestroyedError`. In-flight replies that arrive after
-destruction are no-ops (`CompletionState::setValue`/`setException` is
-idempotent). Clearing the reconnect handler matters because the installed
-handler captures `this`: a backend co-owned elsewhere can outlive the `Bridge`,
-and a reconnect firing afterward would otherwise dereference the freed `Bridge`.
-The clear happens outside `_mtx` — `setReconnectHandler` only stores a callback
-and never re-enters the bridge, so there is no lock-ordering hazard. This closes
-the common case; the handler additionally guards on a `_callbacks` token (see
-below) so a reconnect already latched on the transport thread when the `Bridge`
-is destroyed is also a safe no-op. That token, not the lifetime gate, is the
-guard for this one call site deliberately: unlike `~BridgeHandler`'s
-deregistration, a reconnect can call into a backend's synchronous
-`registerModelWithContext`/`registerModelShared`, which blocks on a nested
-event loop for `QtWebSocketBackend` — holding the lifetime gate across that
-would let `~Bridge` block for the same round trip, and if the reconnect and the
-destructor ever land on the same thread, deadlock rather than a slow teardown.
-This one call site therefore keeps the weaker guard.
+**Destructor**, on the owner, clears the active backend's reconnect handler,
+supersedes every live binding's bind and rejects the calls each still holds
+with `BridgeDestroyedError`, and cancels every pending call on the backend with
+the same error (a running Task handler is asked to stop). In-flight replies that
+arrive afterwards are no-ops (`CompletionState::setValue`/`setException` is
+idempotent); a bind reply for a binding the bridge no longer tracks releases its
+instance on the backend that issued it. A reconnect, bind reply or result task
+already queued on the owner finds the bridge's `CallbackToken` expired — the
+`CallbackScope` member is declared last, so it is destroyed first — and touches
+nothing.
 
 **`liveness()`** (private, exposed only to `BridgeHandler` via friendship)
 returns a `morph::async::CallbackToken` issued from the bridge's `_callbacks`
 member — a `morph::async::CallbackScope` created with the bridge and destroyed
-with it. Each `BridgeHandler` captures this weak token at construction and
-consults it in its destructor so that destroying the `Bridge` before its
-handlers is a safe no-op rather than a use-after-free. See
-[Lifetime & ownership](#lifetime--ownership).
-
-The bridge is the framework's own first consumer of the primitive every caller
-now gets (see [callback_scope.md](callback_scope.md)); it uses only the liveness
-half — it never calls `requestStop()`, so its tokens go inactive only when the
-`Bridge` is destroyed.
-
-### The bridge's own executor
-
-`Bridge`'s constructor takes an optional second argument, `IExecutor*
-bridgeExec`. Every other completion in the framework is delivered
-on an executor its caller named — `BridgeHandler` supplies `guiExec`,
-`executeVia` takes a `cbExec`. The registrations the bridge issues *on its own
-behalf* had no such executor, and its five dispatch sites
-(`registerHandlerImpl`, `attachHandlerAsync`, `ensureBoundAsync`,
-`assignHandlerPrimary`, `rebindThroughSurface`) named
-`exec::detail::inlineExecutor()` instead: "deliver wherever the backend
-settled", written as a value rather than as a sentence in a doc comment.
-
-**What it is used for, and what it is not.** Exactly one thing: a registration
-reply that arrives *after* its dispatching frame has closed the
-`detail::AsyncDispatchHandoff` window (`detail::deliverLate`). A reply that
-settles while the dispatch call is still on the stack is parked by
-`detail::parkIfInFrame` and published by the dispatching frame itself, on the
-dispatching thread, whatever `bridgeExec` says.
-
-The `bindModel`/`promoteModel` calls therefore keep naming `inlineExecutor()`.
-That is a decision, not an omission, and two things break if it is changed:
-
-- **`registerHandler()` stops being synchronous.** For every backend that binds
-  inline — `LocalBackend`, `SimulatedRemoteBackend`, any `kCallerMayBlock`
-  backend — the settle would become a task queued on `bridgeExec` rather than a
-  callback on this stack, so `claimHandoff` would find nothing parked and the
-  caller would get an unbound handler from a call that has always returned a
-  bound one.
-- **A `kCallerMayBlock` backend deadlocks.** `detail::awaitHandoff` stops the
-  dispatching thread until the reply is parked. If the reply is instead a task
-  on `bridgeExec` and the dispatching thread *is* the executor's thread — a GUI
-  embedder passing its GUI executor, which is the intended use — nothing will
-  ever run that task.
-
-**What the caller must guarantee.** `bridgeExec` is borrowed: it must outlive
-the bridge *and* every registration still in flight when the bridge is
-destroyed, because a late reply can land after `~Bridge` (the same requirement
-`BridgeHandler`'s `guiExec` already carries).
-
-**What it buys, stated exactly.** The window in these callbacks is
-"check `CallbackToken::active()`, then touch the bridge". It is closed only if
-`bridgeExec` runs its tasks on a thread that cannot run `~Bridge` concurrently
-— for a Qt embedder, the GUI thread that both owns the `Bridge` and pumps the
-executor; the callback and the destructor are then two tasks on one thread and
-cannot interleave. An executor on some *other* thread satisfies the type and
-closes nothing. It makes nothing worse either: the callbacks' existing
-`CallbackToken`/`detail::BridgeLifetime` gates still apply, and with the null
-default the delivery is inline.
-
-`tests/test_async_registration.cpp` pins all three halves: a late reply is
-queued on the executor and publishes nothing until it is drained (restoring
-inline delivery fails that case), an inline bind and a keyed attach still
-publish before `registerHandler`/`attachHandler` returns even when the executor
-never runs, and a bridge constructed without one behaves as it always did.
+with it. Each `BridgeHandler` captures it at construction and consults it in
+its destructor, so destroying the `Bridge` before its handlers (on the owner)
+deregisters nothing rather than touching a destroyed bridge. Every continuation
+the bridge queues on the owner — bind and promote replies, reconnects,
+bridge-side result work — checks the same token first. See
+[Lifetime & ownership](#lifetime--ownership) and
+[callback_scope.md](callback_scope.md).
 
 ## `BridgeHandler<Model>`
 
 RAII handle. Registers a `HandlerBinding` on construction, deregisters on
 destruction. Non-copyable.
 
-**Construction** takes a `Bridge&` and a GUI executor. Optionally accepts a
-pre-built `HandlerBinding` (for dependency injection). It copies the bridge's
-`lifetimeGate()` `shared_ptr` into `_bridgeGate`, holds a strong `Bridge&`, and
+**Construction** takes a `Bridge&` and a GUI executor (`guiExec`, the
+executor its completions are delivered on: the bridge's owner or one that runs
+its tasks on the owner's thread). Optionally accepts a pre-built
+`HandlerBinding` (for dependency injection). It copies the bridge's
+`CallbackToken` (`liveness()`) and owner affinity, holds a `Bridge&`, and
 carries the sharing policy as its second template argument (see
-`BridgeHandler<Model, Sharing>` below).
+`BridgeHandler<Model, Sharing>` below). On the owner it registers its binding
+at once; constructed anywhere else — inside a running action on a pool thread —
+it marks the binding as binding and posts the registration to the owner, so a
+call made through it meanwhile is held rather than refused. Either way it never
+waits.
 
-**Destruction** takes `_bridgeGate` **shared, and holds it across the whole
-call**, then deregisters the binding via `Bridge::deregisterHandler` — but only
-if the gate still reports `alive`. If the `Bridge` was already destroyed the
-flag is clear, so the destructor skips deregistration instead of dereferencing a
-dangling `Bridge&`; and if it was not, `~Bridge` cannot start while this call is
-in progress. Holding the lock rather than merely reading a flag is the point:
-a bare check answers for an instant that has already passed, which is what turns
-this shape into a use-after-free. Destroying the bridge before its handlers is
-discouraged (see [Lifetime & ownership](#lifetime--ownership)), but it is
-defined behaviour on any thread, not a use-after-free.
+**Destruction**, on the owner, deregisters the binding via
+`Bridge::deregisterHandler` — which rejects every call still held for a bind
+with `HandlerDestroyedError` and releases a late bind reply's instance — but
+only if the bridge's token is still active. If the `Bridge` was destroyed first
+the token has expired and the destructor deregisters nothing; on one thread
+that check cannot be overtaken by `~Bridge`.
 
 **`execute<Action>(action)`** delegates to `Bridge::executeVia` with the
 handler's binding and GUI executor. Default session is attached
@@ -641,169 +509,64 @@ subscription.
 
 **`guiExecutor()`** returns the executor passed at construction.
 
-## Registration readiness — `isBound()` / `whenBound()`
+## Registration readiness — the bind rule
 
-A handler built over a backend that answers `BindWait::kCallerMustNotBlock` comes back
-**unbound**: `registerHandlerImpl` returns as soon as the request is sent, and
-`currentId` stays `0` until the reply arrives (`backend.md`,
-["Why registration needs a non-blocking path"](backend.md#why-registration-needs-a-non-blocking-path)).
-`executeVia` fails fast with `"handler not bound"` for anything dispatched in
-that window. The window is unavoidable — it is a network round trip — so the
-contract this pair provides is not that it can be closed, but that a caller can
-**observe** it without reaching into the framework's internals.
+**The bind is a `Completion` delivered on the owner; a backend that can settles
+it before returning; `execute` dispatches immediately when the binding is bound
+and no bind is in flight, and chains on the bind otherwise.**
 
-That is the point of these two being public API. `HandlerBinding` is an
-internal-linkage record ([`HandlerBinding`](#handlerbinding) above): the state
-that answers "is this handler usable yet" lives in a struct callers are not
-supposed to name, so before these seams existed the only ways to answer it were
-to poll `binding->currentId` directly — which is what the WASM spike and the
-testkit did — or to guess with a timer. Both couple caller code to a field
-whose synchronisation is the bridge's business.
+Every bind the bridge issues — a handler's registration, a shared handler's
+attach, a result-keyed action's first bind, a switch's or reconnect's re-bind —
+goes through `IBackend::bindModel` (`promoteModel` for a promotion) with the
+owner as the delivery executor. Nothing waits for it:
 
-**`isBound()`** is the synchronous, point-in-time answer: a lock-free atomic
-read of `currentId != 0`. It is a *snapshot*, not a guarantee — the binding can
-become bound (or, via `deregisterHandler`, unbound) the instant after it
-returns. Correct uses are ones where a stale answer is harmless: a poll from a
-UI timer, an assertion in a test, a readiness gate that will be re-consulted.
-`Bridge::isBound(binding)` is the free-function form; `BridgeHandler::isBound()`
-forwards to it.
+- **Settled before returning.** The bridge reads the returned `Completion`'s
+  outcome in the same call (`detail::takeSettled`) and applies it at once. A
+  `LocalBackend` handler is therefore bound when its constructor returns, and
+  its first `execute` dispatches without the owner being pumped.
+- **Still in flight.** The binding is marked `bindInFlight`; the reply is a task
+  on the owner that applies the outcome, gated on the bridge's token.
 
-**`whenBound()`** is the awaitable counterpart, and exists so that a caller
-wanting to dispatch the moment registration settles does not have to invent a
-polling loop for it. It returns `Completion<bool>`, delivered on the handler's
-GUI executor like every other completion the class hands out, and resolves on
-exactly one of three paths:
+Applying an outcome, on the owner: a reply for a binding that is gone, or whose
+`bindGeneration` a newer bind (a switch, a reconnect, the handler's
+destruction) has passed, releases a successful id on the backend that issued it
+and changes nothing else. The current reply publishes `currentId` (and, for an
+attach, the binding's `primary`) or records its failure in `bindFailure` and
+logs it; then runs the issuing operation's continuation (`afterBind`) and
+resumes the calls held in `waiting`, in the order they were made, while no new
+bind is in flight.
 
-| Binding state when called | Resolution |
+A call made through a binding:
+
+| Binding state | What `execute` does |
 |---|---|
-| Already bound | `true`, immediately (before the function returns). |
-| An async registration is in flight | `true` once `onRegistered` fires; the registration's failure via `.onError(...)` if `onError` fires instead. |
-| Nothing in flight and still unbound | `false`, immediately. |
+| No bind in flight, bound | Dispatches now. |
+| A bind in flight | Holds the call; dispatches it on the owner when the bind succeeds. |
+| The bind it waited for failed | Rejects it with the bind's error. |
+| The handler is destroyed while the call is held | Rejects it with `HandlerDestroyedError`. |
+| The bridge is destroyed while the call is held | Rejects it with `BridgeDestroyedError`. |
+| A switch supersedes the attach or first bind the call itself issued | Rejects it with `BackendChangedError`. Calls merely held behind that bind resume against the new backend. |
+| No instance and nothing to wait for (an `AllowShared` handler never attached) | Rejects it with `"handler not bound"`. |
 
-The third row is the one worth stating explicitly, because "false" and "an
-error" are different answers to different questions. `false` means *there is
-nothing to wait for* — no async registration was ever started for this binding,
-so the completion resolves rather than hanging forever on a reply that is not
-coming. It is reachable in two ways: a `shared` binding (`registerSharedHandler`
-files the binding but dispatches nothing, since a shared registration waits for
-a primary), and the narrow window before `registerHandlerImpl` has run at all,
-which the pre-built-binding `registerHandler` overload exposes by handing the
-caller the `shared_ptr` first. An ordinary non-shared handler is always either
-bound or mid-registration by the time anyone can observe it, so it never sees
-`false`.
+A held call is never left unsettled: every path that drops a binding's held
+calls rejects them, so a coroutine awaiting one is resumed.
 
-Three ordering rules make the above hold, and each exists because the obvious
-implementation would be wrong:
+The client-side deadline, when one is set, is armed when the call is made, so
+it covers the wait for the bind; a call whose deadline fired while it was held
+is not dispatched.
 
-- **`registrationInFlight` is set *before* the backend call, not after.** No
-  backend documented here invokes `onRegistered` synchronously from inside
-  a non-blocking bind, but one could; setting the flag afterwards would leave
-  a window in which the registration has already resolved while a concurrent
-  `whenBound()` still reads "nothing in flight" and answers `false`.
-- **`whenBound()` re-checks `isBound()` under `registrationMtx` after its
-  lock-free check.** The resolving callback binds the id and settles the
-  waiters as two steps; a caller landing between them would otherwise queue a
-  waiter onto a list that has already been drained, and wait forever.
-- **A bind that settles inline settles waiters too.** When `bindModel`
-  returns `false` and `registerHandlerImpl` falls back to
-  `registerModelWithContext`, it routes through the same
-  `resolveRegistrationWaiters` rather than clearing the flag directly — a
-  `whenBound()` call that raced into the window while the flag was still `true`
-  has a real `Completion` outstanding, and nothing else would ever settle it.
+**Why registration is asynchronous.** A `BridgeHandler` may be constructed
+inside a running action, on a pool thread that is not the owner (a model that
+registers a sub-model). The handler cannot touch the bridge from there, so it
+posts its registration to the owner and returns; whatever is made through it
+meanwhile is held. That case is the reason the bind is a `Completion` rather
+than a blocking call, not a cost of it.
 
-Waiters are settled **exactly once**, by whichever callback resolves first: the
-resolver swaps the waiter list out under `registrationMtx`, clears
-`registrationInFlight`, and invokes the callbacks outside the lock. This covers
-the stale-reply case too — a success callback whose id is discarded (because a
-`switchBackend()` already moved past this registration, or because the `Bridge`
-itself is gone) still settles the waiters, since the binding's *initial
-registration attempt* has finished either way and nothing further is coming to
-settle them. A discarded reply settles waiters through the **failure** arm, and
-the only failure it has to report is the absence of a result — so the resolver
-substitutes an exception saying exactly that, naming the binding's `typeId`.
-Treat a `whenBound()` error as "registration did not complete".
-
-That substitution is not cosmetic. This path previously passed a **null**
-`exception_ptr` straight through, which settled the completion `ready` with
-`error` still falsy — a state `attachOnError` cannot act on, so an
-`.onError(...)` attached after the settlement was silently discarded and the
-completion never resolved for that caller, in either direction. `whenBound()`
-resolves through the executor even in `Local` mode, so "attach after settle" is
-an ordinary interleaving rather than an exotic race. `CompletionState` now
-refuses to settle on a null at all
-([completion.md](completion.md#setting-a-value-or-exception)); this site
-supplies the specific message because the meaning of *this* failure is known
-here and nowhere else.
-
-Scope limits worth knowing, because each is a question `whenBound()` looks like
-it answers and does not:
-
-- **It tracks the initial registration, plus a re-registration that could not
-  be waited for.** `registerHandlerImpl` sets `registrationInFlight` on every
-  path. `switchBackend()` and the reconnect handler set it only when the new
-  backend answers `kCallerMustNotBlock` — the one case where they leave a
-  binding unbound with a reply still to come, which is exactly the state
-  `whenBound()` exists to describe. Against a `kCallerMayBlock` backend both
-  settle every outcome inside their own frame and set nothing, so `whenBound()`
-  says nothing about a swap or reconnect there.
-- **It does not track the shared attach path.** `attachHandler`/`ensureBound`
-  and their async counterparts bind a shared handler without going through
-  `registerHandlerImpl`, so for an `AllowShared` handler `whenBound()` is only
-  ever `isBound()` in awaitable clothing: `true` if the attach has already
-  landed, `false` immediately if it has not, never a wait. Gate a shared
-  handler on the `Completion` its own keyed `execute()` returns, which does
-  carry the attach ([shared_instances.md](shared_instances.md)).
-- **`true` means bound, not reachable.** It reports that the backend assigned
-  this binding an id, not that the transport is still up; the socket can drop
-  the moment after.
-
-### `executeWhenBound()` — holding a dispatch until the bind lands
-
-`execute()` never waits. A view model that constructs a handler and dispatches
-its first action in the same breath would otherwise wrap every handler it owns
-in the same gate — `whenBound()`, then the dispatch, plus a liveness guard in
-case the handler goes first. `BridgeHandler::executeWhenBound(action)` is that
-gate, built once:
-
-| Handler state when called | Result |
-|---|---|
-| Bound | Dispatches exactly as `execute()` does. |
-| Registration in flight, then succeeds | Dispatches on the GUI executor once `whenBound()` resolves `true`. |
-| Registration in flight, then fails | Rejects with the registration's error; nothing is dispatched. |
-| `whenBound()` resolves `false` | Rejects with `"handler not bound"`. |
-| Handler destroyed before the dispatch comes due | The held action is dropped: never dispatched, and the returned `Completion` never settles. |
-| Bridge retired before the dispatch comes due | Rejects with `"bridge destroyed"`. |
-
-Why each choice was made:
-
-- **A separate method, not a constructor policy.** With a policy, one
-  `execute()` call would wait or fail depending on how the handler had been
-  built somewhere else, and a reader of the call site could not tell which.
-  The name shows the wait where it happens.
-- **`NoSharing` only**, enforced with a `static_assert`. A shared handler's
-  initial binding goes through the attach path, which `whenBound()` does not
-  track (see the scope limits above), so on a shared handler it would resolve
-  `false` at once and the method would be fail-fast under another name. A
-  shared handler's keyed `execute()` already carries its attach.
-- **The held dispatch holds the binding weakly and does not capture the
-  handler.** The binding owns the `whenBound()` waiter, and the waiter owns the
-  held dispatch; a strong capture of the binding would close that loop and
-  keep the binding alive after its handler is gone — the dispatch would then
-  reach the backend on an instance nobody holds. With a weak capture, a
-  handler destroyed first takes the waiter (and the held action) with it.
-- **The bridge gate is read, then released, before the dispatch.** The
-  dispatch can settle inline, and `BridgeSink`'s settle path takes the same
-  gate; holding it across the call would lock it recursively. The check makes
-  the ordinary teardown order — bridge retired while the dispatch sat in the
-  GUI queue — a rejection instead of a call into a destroyed bridge. It is not
-  a licence to destroy the bridge concurrently with the dispatch: the bridge
-  must outlive the dispatch on the same terms as any other call made on the
-  handler.
-- **The result type must be copy-constructible** (a `static_assert`). The
-  deferred path forwards the value from `executeVia`'s `Completion` into the
-  one already handed to the caller, and a `Completion`'s value is observed,
-  never consumed ([completion.md](completion.md)).
-
+**`isBound()`** remains the synchronous, point-in-time answer: an atomic read of
+`currentId != 0`, safe from any thread. Nothing needs to wait on it, because a
+call made while a bind is in flight is held. `Bridge::isBound(binding)` is the
+free-function form; `BridgeHandler::isBound()` forwards to it. `true` means
+bound, not reachable: the transport can drop the moment after.
 
 ## `ActionExecuteRegistry`
 
@@ -978,8 +741,9 @@ existing subscriber.
   result only.
 - **Delivery is best-effort and unbuffered.** There is no replay, no cursor, no
   checkpointing, and no coalescing — a model that emits at high frequency must
-  throttle itself. Sinks are snapshotted under the registry lock and invoked
-  outside it, so a subscriber that re-enters the bridge cannot deadlock.
+  throttle itself. The matching sinks are snapshotted before any is invoked,
+  so a subscriber that re-enters the bridge (subscribing, unsubscribing)
+  cannot invalidate the iteration.
 - **Only copy-constructible results are published.** A result type that cannot
   be copied is delivered to its caller's `Completion` as usual but is never
   boxed for subscribers.
@@ -992,102 +756,68 @@ existing subscriber.
   each other's work; two clients do not, and must re-read to notice a change.
 
 
-## Thread safety
+## Thread safety — one owner
 
-`Bridge` is fully thread-safe (see the `Bridge` section: separate
-`_backendMtx`, `_mtx`, `_sessionMtx`, and `_attachMtx`, with `executeVia`
-taking its backend snapshot under the short, dedicated `_backendMtx` rather
-than `_mtx`, and a shared handler's `attachHandler`/`ensureBound`/
-`assignHandlerPrimary` running under `_attachMtx` rather than `_mtx`, so a
-slow remote round-trip on one handler's attach never blocks another
-handler's construction, destruction, or a `switchBackend()` call on the same
-`Bridge`).
+`Bridge` and every `BridgeHandler` built on it belong to one executor, the
+**owner**, which the `Bridge` constructor takes and which is required:
 
-`attachHandlerAsync`/`ensureBoundAsync` — the non-blocking counterparts
-`BridgeHandler::execute()` routes its keyed dispatches through — take
-`_attachMtx` over the same scope their synchronous twins do, but **release it
-before invoking their `onDone` callback**, on every path including the
-synchronous fallback. That is a hard requirement, not a style choice:
-`onDone` is where the action itself is dispatched, and a result-keyed dispatch
-promotes its binding via `assignHandlerPrimary`, which re-takes `_attachMtx`.
-It is the same rule `registerHandlerImpl` already follows for `_mtx`. See
-[shared_instances.md](shared_instances.md), "Async register-or-attach and
-attach".
+```cpp
+morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), guiExecutor};
+```
 
-**`registerHandlerImpl` reads `contextKey` without `_attachMtx`, on purpose.**
-`HandlerBinding::primary`/`contextKey` are otherwise mutated and read only under
-`_attachMtx`. Registration is the one carve-out, and it is forced: acquiring
-`_attachMtx` there makes `registerHandler()` contend with a slow shared attach,
-which is exactly the regression *"Bridge: an in-flight shared attach does not
-block unrelated handler registration"* (`tests/test_shared_instances.cpp`)
-exists to catch — taking the lock there reproduces that failure.
+Both are created, called and destroyed there, and every field either keeps is
+touched only there, so neither holds a lock. The backend installed in the
+bridge is reached only from there as well, which is why `LocalBackend`,
+`SynchronousBackendAdapter` and `SimulatedRemoteBackend` keep their registries,
+pending lists and sessions without a lock too (see
+[backend.md](backend.md)).
 
-The read is made safe by ordering rather than locking: every writer
-(`attachHandler`, `ensureBound`, `assignHandlerPrimary`) operates on an
-already-registered binding, while this read happens *during* registration. The
-pre-built-binding `registerHandler(binding)` overload hands the caller the
-binding first, so the requirement falls on the caller: **set `contextKey` before
-calling `registerHandler()`, and do not mutate it concurrently with that call.**
-Afterwards the ordinary `_attachMtx` rule applies.
+"There" means one of two things, which `exec::detail::OwnerAffinity` checks
+([executor.md](executor.md#owner-affinity)): inside a task the owner runs
+(`morph::exec::runningOn(owner)`), or on the thread that constructed the
+bridge, when that construction ran outside every executor's task. The second
+half is the owner's own thread running code outside the owner's tasks — a Qt
+application's slots and QML handlers, a test body, a `main()` before its event
+loop starts. A scope stated for that code would not do: executor scopes nest
+strictly per thread, and QML destroys the objects that own bridges in no
+particular order. A bridge constructed inside a task (on a strand, on a pool)
+records no thread and is checked by `runningOn` alone. A call from anywhere
+else is a contract violation. Debug builds assert it at every public entry
+point and at every site that touches owner state; a release build does not
+check.
 
-The guarantee is unconditional, including for a backend that completes its
-`bindModel` completion **inline** — from inside
-the dispatch call itself, while the dispatching frame still holds `_attachMtx`
-(`QtWebSocketBackend` does exactly this on its `!_connected` error branch).
-Such a callback does not act: it parks its outcome in a
-`detail::AsyncDispatchHandoff` and returns, and the dispatching frame applies
-the outcome once its own dispatch call has returned — publishing under the lock
-it already holds, then releasing it, then calling `onDone`. A tiny mutex inside
-the handoff makes the window race-free even against a backend that replies from
-another thread while its dispatch call is still on this stack, and keeps
-`onDone` invoked exactly once on every interleaving. Because the inline case can
-never reach the callback body, `attachHandlerAsync`'s out-of-frame success
-callback is free to re-acquire `_attachMtx` for the two `std::string` fields it
-publishes (`HandlerBinding::contextKey`/`primary`, which every other reader
-takes that lock for); `ensureBoundAsync`'s publishes only the atomic
-`currentId` and needs no lock to store it.
+Every public verb is owner-only: construction and destruction,
+`registerHandler`, `registerSharedHandler`, `deregisterHandler`, `executeVia`,
+`switchBackend`, `setDefaultSession`/`defaultSession`,
+`setPrincipal`/`currentPrincipal`, `setExecuteDeadline`/`executeDeadline`,
+the subscription verbs, and each `BridgeHandler` verb. Three answers are
+atomics and may be read from any thread: `pendingCalls()`, `isBound()` and
+`hasSubscribers()`.
 
-Both out-of-frame callbacks reach those publishes through one private helper,
-`publishLateBindReply`, which holds the four steps they share — the liveness
-check, the binding lock, the stale-backend comparison under `_attachMtx`, and
-the single `onDone` outside it — and takes what to publish as a callable. It is
-a template rather than a `std::function` parameter so the late path
-type-erases and allocates nothing. `assignHandlerPrimary`'s continuation
-deliberately does not use it: having no `onDone`, it drops a stale reply
-silently instead of reporting it, and that difference is intended rather than
-incidental.
+What does cross threads, and how it reaches the owner:
 
-`whenBound()` synchronises on the *binding's* `registrationMtx`, never on a
-`Bridge` mutex, and never holds it across a callback: the resolver swaps the
-waiter list out under the lock and invokes the callbacks after releasing it.
-That is what lets a waiter be queued from a GUI thread and settled from a
-backend's transport thread without either blocking on the bridge's own locks —
-see [Registration readiness](#registration-readiness--isbound--whenbound).
+| From | What | How it reaches the owner |
+|---|---|---|
+| A backend's thread (a pool strand, the I/O loop, the Qt thread) | A bind or promote reply | `IBackend::bindModel`/`promoteModel` are called with the owner as their executor, so the continuation is a task on the owner. A backend that settles before returning is applied at once, on the owner, by the call that issued it. |
+| A backend's thread | An action's result | The backend settles the call's `detail::BridgeSink` there; the caller's continuations run on the handler's `guiExec`. The bridge-side work a result triggers — subscription fan-out, a result-keyed action's promotion — is posted to the owner. |
+| A transport's thread | A reconnect | `IBackend::setReconnectHandler` takes the executor the handler runs on; the bridge installs its owner, so the re-registration is an ordinary task on the owner. |
+| A pool thread inside a running action | A `BridgeHandler` constructed there | The constructor posts its registration to the owner and returns. |
 
-`subscribe`/`unsubscribe` mutate `_subscriptions`, a
-`std::shared_ptr<morph::bridge::detail::SubscriptionRegistry<HandlerBinding>>`
-(the registry's own header, `core/detail/subscription_registry.hpp`, extracted
-out of `Bridge` the way `morph::backend::detail::ExecuteOrderGate` was
-extracted out of `RemoteServer` — see [backend.md](backend.md)'s "Per-model
-execute ordering" section for the sibling extraction), under that registry's
-own internal mutex. Callbacks never run under that mutex: `publishResult`
-snapshots the matching sinks under the lock and invokes them outside it,
-marshalled to the `guiExec` executor passed at construction, so a subscriber
-that re-enters the bridge cannot deadlock. A subscription holds a `weak_ptr` to
-its binding, so one belonging to a destroyed handler is skipped and pruned —
-on the next `publishResult` call, not the moment the handler dies — rather
-than dangling. The intended usage remains **single-GUI-thread affinity**: a
-handler and its subscriptions belong to one GUI thread.
+`BridgeHandler`'s `guiExec` must be the owner or an executor that runs its
+tasks on the owner's thread. The constructor checks it in a debug build by
+posting one task to `guiExec` that checks, where it runs, that it is on the owner.
 
-Heap-allocated behind a `shared_ptr` rather than a plain member for
-the same reason `_pendingCalls` is: `executeVia()`'s `.then` continuation calls
-`hasSubscribers()`/`publishResult()` from a context that can run after
-`~Bridge()`, and the registry's own "snapshot under lock, invoke outside it"
-discipline (above) means pinning the whole registry with a captured
-`shared_ptr` makes that call safe with no gate at all — unlike
-`onResult`'s call into `assignHandlerPrimary` in the same continuation, which
-genuinely needs the *current* bridge/backend and is gated on
-`detail::BridgeLifetime` instead (see "Destructor" above).
+**Teardown is on the owner, handlers before the bridge.** `~BridgeHandler`
+deregisters its binding; `~Bridge` rejects every call still waiting for a
+bind with `BridgeDestroyedError`, clears the reconnect handler and cancels the
+backend's pending calls. A handler whose bridge was destroyed first finds the
+bridge's `CallbackToken` expired and deregisters nothing: the check and the
+destructor are on one thread, so they cannot interleave.
+
+Subscriptions follow the same rule: `subscribe`/`unsubscribe` and the fan-out
+run on the owner, and `detail::SubscriptionRegistry` holds no lock.
+`publishResult` still snapshots the matching sinks before invoking them,
+because a subscriber may re-enter the registry.
 
 ## Lifetime & ownership
 
@@ -1098,57 +828,24 @@ exactly as long as its handler. The bridge can enumerate live bindings (for
 `switchBackend` and reconnect re-registration) and skip dead ones via
 `weak.lock()`, but it never keeps a handler alive.
 
-**Bridge-vs-handler teardown order.** The bridge owns a
-`shared_ptr<detail::BridgeLifetime>` — a `shared_mutex` plus an `alive` flag —
-and every handler copies that `shared_ptr` (`_bridgeGate`) at construction. This
-makes *teardown* order-independent, **on any thread**:
+**Teardown order: handlers before the bridge, on the owner.** Both
+destructors run on the owner, so they never overlap and need no gate.
+`~BridgeHandler` deregisters its binding from the bridge and rejects every
+call of its own still waiting for a bind. `~Bridge` rejects the calls still
+waiting on any live binding with `BridgeDestroyedError`, clears the active
+backend's reconnect handler, and cancels its pending calls.
 
-- Handler destroyed first (the normal case): its destructor takes the gate
-  shared, sees `alive`, and deregisters the binding from the still-live bridge.
-- Bridge destroyed first: `~Bridge`'s **first** statement takes the gate
-  exclusively and clears `alive`, so the handler's destructor skips
-  deregistration — a safe no-op instead of a use-after-free.
-- The two racing on different threads: the `shared_mutex` orders them. Either
-  the handler is inside the gate and `~Bridge` waits for it to leave before
-  running a single statement of its own body, or `~Bridge` got there first and
-  the handler sees `alive == false`. There is no in-between.
+A handler that outlives its bridge — the reverse order, still on the owner —
+checks the bridge's `CallbackToken` (`liveness()`) in its destructor and
+deregisters nothing once it has expired. On one thread that check is exact:
+the destructor it guards against cannot run between the check and the call.
+From any other thread the destructor is a contract violation, asserted in a
+debug build.
 
-The gate is heap-allocated and outlives the `Bridge`, because a handler that
-outlives its bridge must still be able to *ask* the question.
-
-**Why the liveness token is not enough here.** `Bridge::liveness()` (the
-`CallbackScope _callbacks` half) still gates *delivery* of the bridge's own
-callbacks, and that is the job it is right for: a suppressed callback simply
-does not run, so a check that has gone stale costs nothing. It cannot gate a
-*member call on the `Bridge`*, because `CallbackToken::active()` is explicitly
-advisory across threads ([callback_scope.md](callback_scope.md), "Boundary of
-the guarantee") — the bridge can be destroyed between the check and the call.
-A bare `active()` check in `~BridgeHandler` admits exactly that: a
-`shared_ptr<BridgeHandler>` kept alive by its own completions is released on a
-worker-pool thread while the owning thread runs `~App`, the check passes, the
-`Bridge` finishes being destroyed, and `deregisterHandler` then walks the freed
-`_handlers`. The gate replaces the check with something that holds.
-
-**Blocking, and why it is safe.** `~Bridge` waits for an in-flight
-deregistration, so `~Bridge` can block. The wait is bounded and cannot cycle:
-the only guarded region is `deregisterHandler`, whose sole outward call is
-`IBackend::deregisterModel`, which never blocks on another thread on any shipped
-backend — `LocalBackend` erases map entries under its own mutex,
-`SimulatedRemoteBackend` runs the envelope inline (`RemoteServer::handleInline`),
-and `QtWebSocketBackend`/`SocketBackend` are documented fire-and-forget sends
-precisely so destruction never spins a nested event loop. A destructor blocking
-on a bounded predicate is the framework's existing idiom for this hazard —
-`~LocalBackend` blocks until its strands have drained
-([concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md)).
-
-**The lifetime rule.** The gate makes only *destruction* safe in
-either order. It does **not** make a `Bridge` optional for live handlers: any
-`execute()`, `executeJson()`, or `FlowSession::set<>`-triggered fire dereferences the
-`Bridge&` and must run while the bridge is alive. In other words, the bridge
-must still outlive all normal use of its handlers; only mis-ordered
-*destruction* is now defined behaviour. (This corrects an earlier claim that
-"weak references let `BridgeHandler` outlive `Bridge`" — they do not; they only
-make teardown order-independent.)
+**The lifetime rule.** The bridge must outlive every *use* of its handlers:
+any `execute()`, `executeJson()`, or `FlowSession::set<>`-triggered fire
+dereferences the `Bridge&`. Only the destruction of a handler after its bridge
+is tolerated, as above.
 
 ## API reference
 
@@ -1165,42 +862,39 @@ make teardown order-independent.)
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor | `explicit Bridge(unique_ptr<IBackend>, IExecutor* bridgeExec = nullptr)` | Installs reconnect handler on the backend, then pushes the (initially empty) default session via `setSession`. `bridgeExec` is where a registration reply that arrived after its dispatch frame is delivered; null (the default) delivers it inline. See [The bridge's own executor](#the-bridges-own-executor). |
-| dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
-| `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Dispatches `IBackend::bindModel`; see `backend.md`. |
-| `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
-| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Stages all re-registrations through `bindModel` on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Atomic exactly when the new backend answers `kCallerMayBlock`; a `kCallerMustNotBlock` backend's binds are deferred and the switch is not all-or-nothing (see above). Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its staging and commit, and resolves `whenBound()` waiters after releasing them. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
-| `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged); a failure to serialise the result or to append the success entry happens after the mutation committed and rejects the completion with `morph::model::ActionRecordingError` instead of recording `Outcome::Failed`. Dispatches through `IBackend::executeInto`, handing the backend a `detail::BridgeSink<R>` that is simultaneously the caller's typed completion state and the backend's settle sink — one allocation where an erased-completion forwarding block costs six. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the bridge's `CallbackToken`, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
+| ctor | `Bridge(unique_ptr<IBackend>, IExecutor& owner)` | `owner` is required: the executor the bridge, its handlers and its backend belong to. Tells the backend its owner (`setOwner`), installs a reconnect handler posted to the owner, then pushes the (initially empty) default session via `setSession`. |
+| dtor | `~Bridge()` | On the owner. Clears the active backend's reconnect handler, rejects every call still held for a bind with `BridgeDestroyedError`, then cancels all pending completions with the same error. |
+| `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Issues `IBackend::bindModel` with the owner as delivery executor and returns without waiting; see [Registration readiness](#registration-readiness--the-bind-rule). |
+| `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same bind rule. |
+| `switchBackend` | `void switchBackend(unique_ptr<Backend>)` / `void switchBackend(shared_ptr<IBackend>)` | Tells the new backend its owner and pushes the default session, then issues a re-bind for every live binding. Binds settled before returning decide it: a failure releases what was acquired and rethrows with the old backend and every binding untouched; otherwise it commits — publishes settled ids, leaves bindings with a bind in flight holding their calls, swaps, notifies, moves the reconnect handler, and cancels the old backend's pending calls with `BackendChangedError` (stopping running Task handlers). The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one. |
+| `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Supersedes a bind in flight (its reply releases its instance), rejects held calls with `HandlerDestroyedError`, deregisters from the active backend (if bound), resets `currentId` to 0, removes from tracking. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*, function<void(const R&)> onResult = {})` | On the owner. Counts the call pending and arms the execute deadline when it is made; dispatches now when no bind is in flight, else holds it until the bind settles (a failed bind rejects it with the bind's error; a never-attached `AllowShared` binding with `"handler not bound"`). Attaches the default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged); a failure to serialise the result or to append the success entry happens after the mutation committed and rejects the completion with `morph::model::ActionRecordingError` instead. Dispatches through `IBackend::executeInto`, handing the backend a `detail::BridgeSink<R>` that is simultaneously the caller's typed completion state and the backend's settle sink. The bridge-side work a result triggers (`onResult`, the subscription fan-out) runs on the owner, gated on the bridge's `CallbackToken`. A call whose handler returns a `Task` carries a `StopSource`, requested by the deadline, by a `CallbackScope` a callback was attached through, and by the backend's `cancelPending`. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
-| `setExecuteDeadline` | `void setExecuteDeadline(std::chrono::milliseconds)` | Opt-in client-side execute deadline; `0` (the default) disables it. Lazily creates the backing `TimeoutScheduler` thread on first enable. |
+| `setExecuteDeadline` | `void setExecuteDeadline(std::chrono::milliseconds)` | Opt-in client-side execute deadline; `0` (the default) disables it. Lazily creates the backing `TimeoutScheduler`, on a private `exec::IoLoop` with one thread, on first enable. |
 | `executeDeadline` | `std::chrono::milliseconds executeDeadline() const` | Returns the installed deadline; `0` when disabled. |
 | `setPrincipal` | `void setPrincipal(session::Principal)` | Installs the verified `Principal`, readable outside a dispatch. Pass `Principal{}` to clear (sign-out). |
 | `currentPrincipal` | `session::Principal currentPrincipal() const` | Returns a snapshot of the installed `Principal`; default-constructed if none was ever set. |
-| `isBound` | `[[nodiscard]] static bool isBound(const shared_ptr<HandlerBinding>&) noexcept` | Lock-free `currentId != 0`. Point-in-time snapshot; see [Registration readiness](#registration-readiness--isbound--whenbound). |
-| `whenBound` | `[[nodiscard]] Completion<bool> whenBound(const shared_ptr<HandlerBinding>&, IExecutor* cbExec)` | Resolves `true` once the binding's initial registration settles, `false` immediately when nothing is in flight, or the registration's error via `onError`. Delivered on `cbExec`. Waiters settle exactly once. |
-| `pendingCalls` | `[[nodiscard]] size_t pendingCalls() const noexcept` | Count of `executeVia()` dispatches not yet resolved. Relaxed atomic load; see the `Bridge` section above. |
+| `isBound` | `[[nodiscard]] static bool isBound(const shared_ptr<HandlerBinding>&) noexcept` | Atomic `currentId != 0`, safe from any thread. Point-in-time snapshot; see [Registration readiness](#registration-readiness--the-bind-rule). |
+| `pendingCalls` | `[[nodiscard]] size_t pendingCalls() const noexcept` | Count of `executeVia()` calls not yet resolved, held calls included. Relaxed atomic load, safe from any thread; see the `Bridge` section above. |
 
 ### `BridgeHandler<Model>`
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor (default) | `BridgeHandler(Bridge&, IExecutor*)` | Registers via `Bridge::registerHandler<Model>()`. |
-| ctor (custom binding) | `BridgeHandler(Bridge&, IExecutor*, shared_ptr<HandlerBinding>)` | Registers pre-built binding. |
-| dtor | `~BridgeHandler()` | Deregisters via `Bridge::deregisterHandler`, but only if the bridge's `CallbackToken` is still active; a no-op if the `Bridge` was already destroyed. |
-| `execute<Action>` | `Completion<R> execute(Action)` | Typed dispatch through the bridge. For a shared handler, a payload-/result-keyed action's attach or promote step never throws synchronously — a backend refusal (e.g. `LimitPolicy::maxLiveModels`) resolves the returned `Completion` via `.onError(...)`. |
-| `executeWhenBound<Action>` | `Completion<R> executeWhenBound(Action)` | `NoSharing` only. Dispatches like `execute()` when bound; otherwise holds the action until `whenBound()` settles, then dispatches it or rejects with the registration's error (or `"handler not bound"`). Dropped if the handler is destroyed first. See [`executeWhenBound()`](#executewhenbound--holding-a-dispatch-until-the-bind-lands). |
+| ctor (default) | `BridgeHandler(Bridge&, IExecutor*)` | Registers via the bridge's bind rule: at once on the owner, posted to the owner from anywhere else. Never waits. |
+| ctor (custom binding) | `BridgeHandler(Bridge&, IExecutor*, shared_ptr<HandlerBinding>)` | Registers the pre-built binding the same way. |
+| dtor | `~BridgeHandler()` | On the owner. Deregisters via `Bridge::deregisterHandler` (rejecting held calls with `HandlerDestroyedError`), but only if the bridge's `CallbackToken` is still active; a no-op if the `Bridge` was already destroyed. |
+| `execute<Action>` | `Completion<R> execute(Action)` | Typed dispatch through the bridge; held until the handler's bind settles when one is in flight. For a shared handler, a payload-/result-keyed action's attach or promote step never throws synchronously — a backend refusal (e.g. `LimitPolicy::maxLiveModels`) resolves the returned `Completion` via `.onError(...)`. |
 | `executeJson` | `Completion<string> executeJson(string_view actionType, string_view bodyJson)` | Type-erased dispatch through `ActionExecuteRegistry`. |
 | `subscribe<R>(cb)` | `void subscribe(function<void(R)>)` | Fire `cb` whenever an `R` is produced on the attached instance. |
 | `subscribe<R>(scope, cb)` | `void subscribe(CallbackScope const&, function<void(R)>)` | As above, gated on the scope's liveness and stop state ([callback_scope.md](callback_scope.md)). Dead sinks are refused, not pruned. |
 | `subscribe<R>(token, cb)` | `void subscribe(CallbackToken, function<void(R)>)` | Token-taking form of the above. |
 | `unsubscribe<R>` | `void unsubscribe()` | Drops this handler's callback for `R`. |
-| `attach(key)` | `void attach(const PrimaryKeyOf<Model>&)` | Attaches/re-points a shared handler. |
+| `attach(key)` | `void attach(const PrimaryKeyOf<Model>&)` | Attaches/re-points a shared handler: the same posted bind, issued after any bind in flight. Never throws; a refusal is logged and leaves the handler on the instance it held (a call held behind it is rejected with the refusal only when there is none). |
 | `primary()` | `optional<PrimaryKeyOf<Model>> primary()` | The handler's current primary, or empty. |
-| `instances()` | `Completion<vector<PrimaryKeyOf<Model>>> instances()` | Snapshot of live shared keys. |
-| `isBound` | `[[nodiscard]] bool isBound() const noexcept` | Forwards to `Bridge::isBound(binding())`. `false` while an async registration is still outstanding. |
-| `whenBound` | `[[nodiscard]] Completion<bool> whenBound()` | Forwards to `Bridge::whenBound(binding(), guiExecutor())`. The supported way to gate a first dispatch on registration settling — see [Registration readiness](#registration-readiness--isbound--whenbound). |
+| `instances()` | `Completion<vector<PrimaryKeyOf<Model>>> instances()` | Snapshot of live shared keys, asked of the backend through `Bridge::instancesOf` (`IBackend::instances`) and delivered on the handler's `guiExec`. |
+| `isBound` | `[[nodiscard]] bool isBound() const noexcept` | Forwards to `Bridge::isBound(binding())`. `false` while the first bind is in flight. |
 | `guiExecutor` | `IExecutor* guiExecutor() const noexcept` | Returns the callback executor. |
 | `binding` | `const shared_ptr<HandlerBinding>& binding() const` | Returns the underlying binding. |
 
@@ -1211,21 +905,22 @@ make teardown order-independent.)
 | `typeId` | `string` | `ModelTraits<Model>::typeId()`. |
 | `modelFactory` | `function<unique_ptr<IModelHolder>()>` | Factory for re-registration on backend switch. |
 | `contextKey` | `string` | Stable identity for remote backends (optional, empty by default). |
-| `currentId` | `atomic<uint64_t>` | Backend-assigned model id; 0 = unbound. Read lock-free by `isBound()`. |
-| `registrationMtx` | `mutex` | Guards the two fields below. The binding's own lock, not `Bridge::_mtx`/`_attachMtx`: it is taken from the backend's reply-delivering thread as well as the registering one. |
-| `registrationInFlight` | `bool` | `true` from just before `bindModel` is dispatched until its completion settles. A bind that settles inside the call never leaves it set. |
-| `registrationWaiters` | `vector<pair<function<void(bool)>, function<void(exception_ptr)>>>` | `whenBound()` callbacks queued while a registration is in flight; invoked and cleared exactly once, by the same call that clears `registrationInFlight`. |
+| `currentId` | `atomic<uint64_t>` | Backend-assigned model id; 0 = unbound. The one field read off the owner, by `isBound()`. |
+| `primary` / `shared` | `string` / `bool` | Shared-instance key and policy; see [shared_instances.md](shared_instances.md). |
+| `bindInFlight` | `bool` | A bind issued for this binding has not settled. Owner-only. |
+| `bindGeneration` | `uint64_t` | Counts binds issued; a reply carrying an older count is superseded and releases its instance. Owner-only. |
+| `bindFailure` | `exception_ptr` | The last bind's failure; what a held call is rejected with. Owner-only. |
+| `afterBind` | `function<void(exception_ptr)>` | The issuing operation's continuation, run before `waiting`. Owner-only. |
+| `waiting` | `deque<function<void(exception_ptr)>>` | Calls held until no bind is in flight, resumed in order with null to proceed or an error to reject. Owner-only. |
 
 ## Design decisions
 
 | Decision | Choice | Why |
 |---|---|---|
-| Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. (Handler *teardown* after the bridge is made safe separately, by the `detail::BridgeLifetime` gate — not by this weak storage.) |
-| Teardown order | **`shared_ptr<detail::BridgeLifetime>` — a `shared_mutex` + `alive` flag, shared with every handler** | Makes bridge-vs-handler destruction order-independent on any thread: `~BridgeHandler` holds the gate shared across its whole deregistration, `~Bridge`'s first statement takes it exclusively and clears `alive`, so the two can never overlap. Normal `execute`/`subscribe` still require the bridge to outlive its handlers. A per-handler `CallbackToken` from `_callbacks` cannot do this job: its `active()` is advisory across threads, so the check-then-call it permits is a use-after-free. The `CallbackScope` stays for what it is right for: gating *delivery* of the bridge's own callbacks ([callback_scope.md](callback_scope.md)). |
-| Backend pointer | **Short snapshot under the dedicated `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under `_backendMtx` (never `_mtx`), so it never blocks on `switchBackend()`'s `_mtx`. |
-| Session storage | **Separate `_sessionMtx` from `_mtx`** | Session access is a hot path (every `executeVia` reads it). A separate mutex avoids contention with handler registration/switchBackend. |
-| Attach-path locking | **Separate `_attachMtx` from `_mtx`** | `attachHandler`/`ensureBound`/`assignHandlerPrimary` can block on a full network round-trip for a remote backend. A dedicated mutex means that round-trip never blocks unrelated `registerHandler`/`deregisterHandler`/`switchBackend` calls on the same `Bridge`, closing a deadlock hazard if the thread expected to deliver the pending reply itself needs `_mtx`. `HandlerBinding::primary`/`contextKey` are mutated only under `_attachMtx`; `switchBackend()` and the reconnect handler, which also touch them, take both mutexes together. |
-| Reconnect handler | **Liveness guard + weak‑backend guard + stale check; cleared in `~Bridge`** | The lambda captures a `CallbackToken` from `_callbacks` and a `weak_ptr<IBackend>`. On invocation it first checks the token — if the `Bridge` is gone it returns without touching `this` (no use-after-free). It then checks `pinned == loadBackend()` — if a switch occurred since the handler was installed, the reconnect is ignored. `~Bridge` and `switchBackend` also clear the outgoing backend's handler via `setReconnectHandler(nullptr)`; the liveness guard covers a reconnect already in flight when teardown races it. |
+| Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. |
+| Threading | **One owner, given at construction; every verb owner-only, asserted in debug builds** | Every consumer already called its `Bridge` from one thread, and the free-threaded contract cost a lock per runtime-settable field, a lifetime gate for teardown on any thread, and a registration handoff for replies that settle on a thread the bridge does not own. Handing the owner to `bindModel`/`promoteModel` as the delivery executor, and having backends post reconnects to it, makes every one of those a task on the owner instead. Teardown follows: handlers before the bridge, on the owner. |
+| Registration | **Asynchronous, with no policy: the bind rule** | A handler can be constructed inside a running action, off the owner, so its registration has to be posted; once it can be, every bind can be a `Completion` delivered on the owner. A backend that settles before returning keeps the synchronous feel — a `LocalBackend` handler is bound when its constructor returns — and the caller never has to gate a first dispatch on readiness, because `execute` is held until the bind settles. |
+| Reconnect handler | **Posted to the owner; liveness guard + weak-backend guard + stale check; cleared in `~Bridge`** | `IBackend::setReconnectHandler` takes the executor the handler is posted to, and the bridge passes its owner, so the re-bind is an ordinary owner task. The handler checks the bridge's `CallbackToken`, then that the backend that reconnected is still the active one; a reconnect of a backend switched away from is ignored. `~Bridge` and `switchBackend` clear the outgoing backend's handler. |
 | Subscription keying | **On the result type, and against the binding rather than an instance id** | A subscriber is a renderer: it cares about the state it draws, not about which of several actions produced it, so a new action yielding the same type never breaks it. Storing against the binding makes a subscription follow a re-pointed handler, which is what "tell me about the account I am looking at" requires. |
 | Action readiness | **`ActionValidator<Action>::ready(snapshot)`** | Framework-agnostic validation — each action struct defines its own required-field semantics. The bridge never interprets action fields. |
 | Local-path validation enforcement | **`localOp` checks `ActionValidator<Action>::ready` before `Model::execute`** | Closes the gap where an `Action` built by hand and dispatched via `BridgeHandler::execute<Action>()` (without a client-side gate) reached the model unvalidated; mirrors `ActionDispatcher::registerAction`'s server-side runner (`registry.md`). Backward compatible: `ready()` defaults to `true` for actions with no validator. |

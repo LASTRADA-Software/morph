@@ -75,7 +75,13 @@ public:
     /// identical hazard (`include/morph/core/bridge.hpp`).
     /// @param task Callable to execute on the next event-loop turn.
     void post(std::function<void()> task) override {
-        _inner.post(std::move(task));
+        // Each task runs inside this executor's own scope, not only `_inner`'s:
+        // what was posted here asks `runningOn(*this)`, a `Completion`
+        // delivered here among them.
+        _inner.post([self = &coreExecutor(), task = std::move(task)] {
+            ::core::async::ExecutorScope const scope{*self};
+            task();
+        });
         QTimer::singleShot(0, [this, weakLiveness = std::weak_ptr<const void>{_liveness}] {
             if (weakLiveness.expired()) {
                 return;  // This executor is gone; `this` is dangling.
@@ -213,14 +219,15 @@ public:
                 // has no staleness to converge from). No construction loop is
                 // needed: client<Model>(index) hands every index the same
                 // Bridge built here regardless of nClients' value.
-                _sharedLocalBridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend));
+                _sharedLocalBridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_qtExecutor);
                 break;
             }
             case Mode::LocalSingleThread: {
                 _mainThreadExecutor = std::make_unique<detail::QtDrivenMainThreadExecutor>();
                 _clientExecutor = _mainThreadExecutor.get();
                 auto backend = std::make_unique<::morph::backend::LocalBackend>(*_mainThreadExecutor);
-                _sharedLocalBridge = std::make_unique<::morph::bridge::Bridge>(std::move(backend));
+                _sharedLocalBridge =
+                    std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_mainThreadExecutor);
                 break;
             }
             case Mode::Socket: {
@@ -249,7 +256,8 @@ public:
                     // can reach transport-level operations that have no
                     // Bridge-level equivalent (`negotiateProtocolVersion()`).
                     _socketBackends.push_back(backend.get());
-                    _socketBridges.push_back(std::make_unique<::morph::bridge::Bridge>(std::move(backend)));
+                    _socketBridges.push_back(
+                        std::make_unique<::morph::bridge::Bridge>(std::move(backend), *_qtExecutor));
                 }
                 break;
             }

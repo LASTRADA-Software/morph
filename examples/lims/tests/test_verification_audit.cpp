@@ -30,6 +30,7 @@
 #include "lims/models/sample_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -314,7 +315,7 @@ TEST_CASE("The model re-checks the role the authorizer already checked", "[lims]
 TEST_CASE("Every state the sample was ever in is reconstructible from the journal alone", "[lims][audit][dod]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
 
     lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
@@ -372,7 +373,7 @@ TEST_CASE("Every state the sample was ever in is reconstructible from the journa
 TEST_CASE("A refused attempt appears in the trail, marked refused", "[lims][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
 
     CHECK_THROWS_AS(lab.bench.execute(lims::PublishSample{}), lims::IllegalTransition);
@@ -398,7 +399,7 @@ TEST_CASE("A refused attempt appears in the trail, marked refused", "[lims][audi
 TEST_CASE("An entry this build cannot interpret is surfaced, never silently dropped", "[lims][audit][finding]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
 
     const auto entityKey = std::to_string(*lab.sample.id);
@@ -449,7 +450,7 @@ TEST_CASE("A renamed payload field decodes to a default, silently -- the payload
           "[lims][audit][finding]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
 
     // A journal line written by an older build, in which the field now called
@@ -484,7 +485,7 @@ TEST_CASE("A renamed payload field decodes to a default, silently -- the payload
 TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
     lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
 
@@ -516,7 +517,7 @@ TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audi
 TEST_CASE("A refused verification appears in the trail, marked refused", "[lims][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
     lab.bench.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Verifier});
 
@@ -540,7 +541,7 @@ TEST_CASE("A refused verification appears in the trail, marked refused", "[lims]
 TEST_CASE("Offline replay and conflict resolution both reach the sample's trail", "[lims][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
     lims::AnalysisCatalogModel catalog;
     const auto nitrate =
@@ -624,7 +625,7 @@ TEST_CASE("The audit and verification listings need an attached handler", "[lims
 TEST_CASE("Every refused action kind is named in the trail, not lumped as unreadable", "[lims][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
     lims::AnalysisCatalogModel catalog;
     const auto nitrate =

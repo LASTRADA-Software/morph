@@ -25,10 +25,12 @@ namespace morph::qt::bridge::detail {
 struct OwnedLocalBridge {
     /// @brief Backs `bridge`'s `LocalBackend`.
     ::morph::exec::ThreadPoolExecutor pool{2};
-    /// @brief Delivers `Completion` callbacks on the GUI thread.
+    /// @brief The GUI thread's executor: the bridge's owner, and where
+    ///        `Completion` callbacks are delivered.
     ::morph::qt::QtExecutor gui;
-    /// @brief The always-local `Bridge` every composed handler registers on.
-    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
+    /// @brief The always-local `Bridge` every composed handler registers on,
+    ///        owned by `gui`.
+    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool), gui};
 };
 
 }  // namespace morph::qt::bridge::detail

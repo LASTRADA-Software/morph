@@ -103,7 +103,7 @@ Actions, in build order:
   matters most: signed tokens minted by the
   server, verified on every single `execute`, with the verified principal
   made authoritative before any model runs. The local backend genuinely
-  never authorizes (`LocalBackend::registerModel`/`registerModelShared`
+  never authorizes (`LocalBackend::registerModel`/`bindModel`
   consult no `IAuthorizer` anywhere in `backend.hpp`) — models re-check
   `Context::principal` themselves regardless of backend, per rule 1.
 - **The background-job pattern** (this rung's framework-level deliverable):
@@ -513,17 +513,12 @@ Known gaps:
   classes take `(Bridge&, IExecutor*)` by presenter rule 2, so sharing one
   handler between them is not expressible today. At the 256 cap that is ~42
   concurrent clients rather than ~64.
-- **Registration timing.** `BookmarkListView`'s three list controllers each
-  expose a `bound` signal (`Presenter::trackBound()`, backed by
-  `Bridge::whenBound()`) that settles once their registration round trip
-  lands; the view gates its bootstrap `refresh()` calls on it instead of
-  retrying on a timer. The login submit has no such gate, because it is
-  user-initiated: a click that lands before registration settles reports
-  "handler not bound" and the next click works. Measured against a real
-  server, registration settles well inside the time it takes to type a
-  username, so this was never observed in practice — but it is reachable, and
-  a server that never answers leaves the login button failing forever, since
-  `Remote` mode has no connect timeout at all.
+- **Registration timing.** `BookmarkListView` requests its three bootstrap
+  listings on `Component.onCompleted`, and the login submit is dispatched
+  whenever the user clicks. A call made before its handler's registration
+  round trip lands waits for it and is dispatched once it does, or is
+  rejected if registration fails. `Remote` mode has no connect timeout, so a
+  server that never answers leaves those calls pending.
 - **No `--seed`.** `LADDER.md` asks every rung for one; this rung's server
   ships none, deliberately — see `src/server/main.cpp`'s file comment for the
   argument (seeding by direct model call would need

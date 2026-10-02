@@ -63,7 +63,7 @@ TEST_CASE("App boots, registers PollModel, and a real client can CreatePoll/Open
         // the rung's own design intends (polls_authorizer.hpp's @file
         // comment).
         morph::qt::QtExecutor exec;
-        Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*app.server())};
+        Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*app.server()), exec};
 
         // Plain (NoSharing) handler for CreatePoll -- CreatePoll carries no
         // key, so nothing about it is shared/keyed. Mirrors

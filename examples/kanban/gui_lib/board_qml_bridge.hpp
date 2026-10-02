@@ -436,15 +436,6 @@ public:
 #endif
 
 signals:
-    // No `bound()` relay here, unlike `ProjectAdminBridge`. That signal exists
-    // so a view can delay its *first* dispatch until a Remote-mode handler's
-    // registration round trip lands (examples/common/gui/presenter.hpp), and
-    // `ProjectListView.qml` uses it for exactly that. This bridge has no such
-    // caller and could not usefully acquire one where it stands: `Main.qml`
-    // dispatches `openBoard()` and only then pushes `BoardView`, so a handler
-    // on that screen would attach after the signal could have fired.
-    // `BoardPresenter::bound` is still emitted; re-relaying it is one line if
-    // a future shell gates navigation on it.
     /// @brief `board` changed — any of `openBoard`/`refresh`/`createColumn`/
     ///        `createSwimlane`/`createTask`/`moveTask`/`addComment`
     ///        succeeded.
@@ -563,9 +554,7 @@ private:
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief `_syncWorker`'s `ReplayFunction`: deserialises @p payload and
     ///        replays it via `BoardPresenter::moveTaskForReplay`, blocking
-    ///        (via a nested `QEventLoop`, the same idiom
-    ///        `QtWebSocketBackend::sendSync` uses for its own synchronous
-    ///        contract — `qt_websocket_backend.cpp`) until that call's own
+    ///        (via a nested `QEventLoop`) until that call's own
     ///        `Completion` settles, since `SyncWorker::run()` calls this
     ///        function synchronously and needs an immediate `bool` back
     ///        (`sync_worker.hpp`'s documented `ReplayFunction` contract).
@@ -619,6 +608,11 @@ private:
     /// `unique_ptr` that had already been reset to null -- `_callbacks`'s own
     /// guard does not catch this, since `_callbacks` itself is destroyed even
     /// later still and would not yet report the token inactive.
+    ///
+    /// `_syncWorker` drains on `_reconnectCoordinator`'s strand, inside the
+    /// coordinator's `replay` step, so it is declared before the coordinator
+    /// and destroyed after it: the coordinator's destructor closes the strand,
+    /// waiting for a sequence still running, before the worker goes.
     std::unique_ptr<::morph::offline::SqliteOfflineQueue> _offlineQueue;
     std::unique_ptr<::morph::offline::SyncWorker> _syncWorker;
     std::unique_ptr<::morph::offline::ReconnectCoordinator> _reconnectCoordinator;

@@ -184,7 +184,7 @@ TEST_CASE("Dropping MoveTaskPosition's reply frame and retrying is exactly-once,
         proxyUrl, std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
     REQUIRE(clientBackend->waitForConnected());
     ::morph::qt::QtExecutor qtExec;
-    ::morph::bridge::Bridge bridge{std::move(clientBackend)};
+    ::morph::bridge::Bridge bridge{std::move(clientBackend), qtExec};
     bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
     BridgeHandler<kanban::BoardModel, AllowShared> handler{bridge, &qtExec};
@@ -297,7 +297,7 @@ TEST_CASE("Reconnecting after a dropped connection replays the offline queue and
         url, std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
     REQUIRE(clientBackend->waitForConnected());
     ::morph::qt::QtExecutor qtExec;
-    ::morph::bridge::Bridge bridge{std::move(clientBackend)};
+    ::morph::bridge::Bridge bridge{std::move(clientBackend), qtExec};
 
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     bridge.setDefaultSession(tokenContextFor(issuer, "alice"));

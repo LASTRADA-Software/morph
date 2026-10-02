@@ -112,49 +112,23 @@
 /// non-empty value.
 ///
 /// @par Note what is *not* here, and why this is the first WASM binary that can say so honestly
-/// No `asyncRegistrationEnabled` flag, no `setConnectHandler`, no
-/// hand-rolled wait-for-binding timer — `AppContext`
-/// (`examples/common/gui/app_context.hpp`) owns the first two generically,
-/// confirmed still true by reading `examples/common/gui/app_context.cpp:37`,
-/// which builds this client's `QtWebSocketBackend` with
-/// `Config{.asyncRegistrationEnabled = true}` for every ladder GUI/WASM app,
-/// polls included, unconditionally. No new wiring was needed here beyond
-/// what `AppContext` already provides.
+/// No `setConnectHandler` and no hand-rolled wait-for-binding timer —
+/// `AppContext` (`examples/common/gui/app_context.hpp`) owns the first
+/// generically for every ladder GUI/WASM app, polls included, and
+/// `QtWebSocketBackend` registers without blocking. No new wiring was needed
+/// here beyond what `AppContext` already provides.
 ///
-/// More interestingly: this is also the first ladder WASM client with
-/// *no `bound`-gated (or hand-rolled retry-timer) bootstrap dispatch anywhere
-/// in its QML*, and that is not an oversight — `gui/qml/VoteView.qml`'s
-/// `Component.onCompleted` fires `pollBridge.openPoll(pollId)` exactly once,
-/// unconditionally, with nothing resembling pastebin's `PasteBridge::bound`/
-/// bookmarks' `BookmarkBridge::bound` gating (both covering the "handler not
-/// bound" window that opens on connect and closes when registration
-/// settles). Read `include/morph/core/bridge.hpp` to confirm this is
-/// actually safe rather than assuming this rung's `EventPoller` quietly
-/// papers over a real gap:
-///  - Pastebin's/bookmarks' plain (`NoSharing`) handlers each call
-///    `Bridge::registerHandler(binding)` at construction, which — via
-///    `registerHandlerImpl` — issues a real `IBackend::bindModel` round trip
-///    to the backend. Until that reply lands, any call through the handler
-///    fails "handler not bound"; that window is exactly why those two
-///    rungs' bridges expose a `bound` signal their QML gates the first
-///    dispatch on.
-///  - `PollFormsController`'s handler (`BridgeHandler<PollModel,
-///    AllowShared>`) is built via `Bridge::registerSharedHandler<Model>()`
-///    instead (`bridge.hpp`'s `BridgeHandler::makeBinding`, `kShared`
-///    branch), whose own doc comment says plainly: "this registers nothing
-///    on the backend: a shared handler has no instance until a keyed action
-///    ... tells it which one it wants." There is no preliminary round trip
-///    to race at all. The handler's first, and only, network operation is
-///    `Bridge::attachHandlerAsync` itself, fired directly from
-///    `PollFormsController::openPoll()` — which `VoteView.qml`'s
-///    `Component.onCompleted` only ever calls after `PollBridge` has been
-///    constructed, which this file only ever does from inside
-///    `ctx.onReady()` (below), by which point the socket is already
-///    connected and there is no *second*, separate registration step left
-///    to still be pending (that window never opens in the first place).
-///    This is the exact keyed-attach async path a shared handler needs to
-///    get right, and this file is the first real WASM binary to actually
-///    dispatch through it.
+/// Its QML dispatches on `Component.onCompleted` unconditionally:
+/// `gui/qml/VoteView.qml` fires `pollBridge.openPoll(pollId)` exactly once.
+/// That is safe for two reasons. A plain handler's call made before its
+/// registration reply lands waits for the bind and is dispatched once it
+/// does (`include/morph/core/bridge.hpp`, the bind rule). And
+/// `PollFormsController`'s handler (`BridgeHandler<PollModel, AllowShared>`)
+/// is built via `Bridge::registerSharedHandler<Model>()`, which registers
+/// nothing on the backend: its first network operation is the keyed attach
+/// fired from `PollFormsController::openPoll()` itself. This is the
+/// keyed-attach path a shared handler needs to get right, and this file is
+/// the first WASM binary to dispatch through it.
 ///
 /// @par Verification status
 /// Structurally complete and reviewed, **never compiled**: no Emscripten
@@ -164,7 +138,7 @@
 /// than either of those: the `pollsWasmQueryPollId()` `EM_JS` shim below is
 /// this repository's first use of `EM_JS`/raw Emscripten JS interop anywhere
 /// (previously only Qt's own WASM platform layer touched JS at all), and the
-/// keyed-attach dispatch path it feeds (`OpenPoll` → `attachHandlerAsync`)
+/// keyed-attach dispatch path it feeds (`OpenPoll` → a keyed `bindModel`)
 /// has, per the reasoning above, literally never run inside a real WASM
 /// binary before. The `ladder-wasm` compile gate in
 /// `.github/workflows/wasm-ladder.yml` (which this task extends with a named
@@ -231,9 +205,8 @@ int main(int argc, char** argv) {
     QGuiApplication qtApp{argc, argv};
 
     // Always Remote — see this file's header comment. `AppContext` builds the
-    // QtWebSocketBackend with asyncRegistrationEnabled=true, which is what
-    // makes registration WASM-safe at all (the synchronous path nests a
-    // QEventLoop and aborts the page — examples/TESTING.md, "WASM reality").
+    // QtWebSocketBackend, whose registration never nests a QEventLoop (which
+    // would abort the page — examples/TESTING.md, "WASM reality").
     ::morph::ladder::gui::AppContext ctx{
         ::morph::ladder::gui::Remote{.url = QUrl{QString::fromUtf8(MORPH_LADDER_POLLS_WASM_SERVER_URL)}}};
 

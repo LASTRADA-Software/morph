@@ -130,9 +130,10 @@ inline void spawn(::morph::exec::IExecutor& executor, ::core::async::Task<void> 
 ///        entry fires, or until a stop withdraws it.
 ///
 /// Resumes on the executor the awaiting coroutine was running on (core-cpp's
-/// current executor), or on the scheduler's thread if there was none. With a
-/// stoppable token on the awaiting promise, a stop cancels the scheduler entry
-/// -- releasing its capture at once -- and resumes the coroutine with
+/// current executor), or on the scheduler's loop thread if there was none.
+/// With a stoppable token on the awaiting promise, a stop cancels the scheduler
+/// entry -- its capture is released on the scheduler's loop -- and resumes the
+/// coroutine with
 /// `core::async::OperationCancelled` on the same executor, or, with none,
 /// inline on the thread that requested the stop. Exactly one of the timer and the stop resumes it.
 class DelayAwaiter {

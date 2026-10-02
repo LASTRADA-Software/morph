@@ -14,6 +14,7 @@
 #include "crm/models/lead_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -146,7 +147,7 @@ TEST_CASE("ListLeads lists every lead", "[crm][lead]") {
 TEST_CASE("LeadModel journals its edits against the attached identity", "[crm][lead][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::LeadModel model;
     model.attachActionLog(log, std::string{"leads"});
 

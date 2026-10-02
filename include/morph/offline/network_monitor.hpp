@@ -3,12 +3,14 @@
 #pragma once
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
+#include <core/net/EventLoop.hpp>
 #include <functional>
-#include <mutex>
-#include <thread>
+#include <memory>
+#include <utility>
 
 #include "../attributes.hpp"
+#include "../core/detail/owner_probe.hpp"
+#include "../core/io_loop.hpp"
 
 namespace morph::offline {
 
@@ -29,12 +31,22 @@ struct NetworkMonitorConfig {
     int onlineThreshold = 1;
 };
 
-/// @brief Background connectivity monitor that fires callbacks on state changes.
+/// @brief Connectivity monitor that calls a probe on a timer and fires
+///        callbacks on state changes.
 ///
-/// A dedicated thread calls the user-supplied probe function at regular intervals.
-/// The monitor starts in the *online* state and transitions to *offline* only after
-/// `failureThreshold` consecutive failures. It returns to *online* after
-/// `onlineThreshold` consecutive successes.
+/// The probe runs every `probeInterval` on an `exec::IoLoop`'s thread, as a
+/// loop timer. The monitor starts in the *online* state and transitions to
+/// *offline* only after `failureThreshold` consecutive failures. It returns to
+/// *online* after `onlineThreshold` consecutive successes.
+///
+/// The probe and both callbacks run on the loop's thread and **must not block
+/// it**: every socket and timer on the same loop waits while they run. A probe
+/// that needs a slow check should start it elsewhere and report the last
+/// result it has.
+///
+/// Cross-thread surface: `isOnline()`, an atomic read, and `stop()` and the
+/// destructor, which run their close on the loop and wait for it. Every other
+/// field is touched only on the loop.
 ///
 /// The monitor is non-copyable and non-movable. Destroy it to stop monitoring.
 class NetworkMonitor {
@@ -48,57 +60,57 @@ public:
     /// @brief Alias for the configuration struct.
     using Config = NetworkMonitorConfig;
 
-    /// @brief Starts the monitor and launches the probe thread.
+    /// @brief Starts the monitor on @p loop.
     ///
     /// The monitor starts in the online state. The first `failureThreshold`
     /// consecutive probe failures must occur before `onOffline` is invoked.
     /// Callers that know the initial state is offline should use a probe that
     /// starts returning `false` immediately.
     ///
+    /// @param loop      The application's loop, whose thread runs the probe and
+    ///                  the callbacks. Borrowed: it must outlive this monitor.
     /// @param probe     Callable that tests connectivity. Must not throw
-    ///                  (exceptions are swallowed). Stored and invoked on the
-    ///                  probe thread for this monitor's whole lifetime, so
-    ///                  anything the callable refers to must outlive the monitor.
-    /// @param onOffline Called on the probe thread when the monitor goes offline.
-    ///                  Retained on the same terms as @p probe.
-    /// @param onOnline  Called on the probe thread when the monitor comes back
+    ///                  (exceptions are swallowed) and must not block. Stored and
+    ///                  invoked on the loop's thread for this monitor's whole
+    ///                  lifetime, so anything the callable refers to must outlive
+    ///                  the monitor.
+    /// @param onOffline Called on the loop's thread when the monitor goes
+    ///                  offline. Retained on the same terms as @p probe.
+    /// @param onOnline  Called on the loop's thread when the monitor comes back
     ///                  online. Retained on the same terms as @p probe.
+    /// @param cfg       Tuning parameters (interval, thresholds).
+    NetworkMonitor(::morph::exec::IoLoop& loop MORPH_LIFETIMEBOUND, ProbeFunction probe MORPH_LIFETIMEBOUND,
+                   Callback onOffline MORPH_LIFETIMEBOUND, Callback onOnline MORPH_LIFETIMEBOUND,
+                   Config cfg = Config{})
+        : _loop{&loop},
+          _state{std::make_shared<State>(loop, std::move(probe), std::move(onOffline), std::move(onOnline), cfg)} {
+        start();
+    }
+
+    /// @brief Starts the monitor on a loop of its own, for a caller with no
+    ///        `IoLoop` to share. Natively that loop owns one thread.
+    ///
+    /// @param probe     As for the other constructor.
+    /// @param onOffline As for the other constructor.
+    /// @param onOnline  As for the other constructor.
     /// @param cfg       Tuning parameters (interval, thresholds).
     NetworkMonitor(ProbeFunction probe MORPH_LIFETIMEBOUND, Callback onOffline MORPH_LIFETIMEBOUND,
                    Callback onOnline MORPH_LIFETIMEBOUND, Config cfg = Config{})
-        : _probe{std::move(probe)},
-          _onOffline{std::move(onOffline)},
-          _onOnline{std::move(onOnline)},
-          _cfg{cfg},
-          _online{true},
-          _stopped{false},
-          _thread{[this] { run(); }} {}
-
-    /// @brief Stops the monitor and waits for the probe thread to exit.
-    ///
-    /// Calls `stop()` internally. The destructor spin-waits on `_runExited` to
-    /// handle the case where `stop()` was called from within a probe callback
-    /// (which would deadlock a `join()`).
-    ///
-    /// The destructor itself must not run on the probe thread: this spin-wait
-    /// blocks until `run()` sets `_runExited`, but `run()` cannot reach that
-    /// store while it is paused lower on the same thread's call stack waiting
-    /// for a callback (and this destructor, called from within it) to return.
-    /// A callback that drops the owning object's last reference and thereby
-    /// triggers this destructor synchronously, on the probe thread, deadlocks
-    /// here by construction — not a supported lifetime. The supported,
-    /// documented seam for a self-thread teardown request is calling `stop()`
-    /// itself from the callback (see its doc comment and `_thread.get_id() ==
-    /// std::this_thread::get_id()` below): that only detaches and returns,
-    /// letting `run()` continue and exit on its own; the actual destructor
-    /// runs later, from a different thread, once the owner is done reacting
-    /// to the callback.
-    ~NetworkMonitor() {
-        stop();
-        while (!_runExited.load()) {
-            std::this_thread::yield();
-        }
+        : _ownedLoop{std::make_unique<::morph::exec::IoLoop>()},
+          _loop{_ownedLoop.get()},
+          _state{
+              std::make_shared<State>(*_ownedLoop, std::move(probe), std::move(onOffline), std::move(onOnline), cfg)} {
+        start();
     }
+
+    /// @brief Stops the monitor. Once this returns, no probe or callback of
+    ///        this monitor will run again, and from any thread but the loop's
+    ///        none is running.
+    ///
+    /// May run anywhere, including inside this monitor's own probe or
+    /// callback: the timer that called it keeps the loop-side state alive
+    /// until it has returned.
+    ~NetworkMonitor() { stop(); }
 
     NetworkMonitor(const NetworkMonitor&) = delete;
     NetworkMonitor& operator=(const NetworkMonitor&) = delete;
@@ -110,91 +122,119 @@ public:
     /// Reads an atomic flag — safe to call from any thread at any time.
     ///
     /// @return Current online state.
-    [[nodiscard]] bool isOnline() const noexcept { return _online.load(); }
+    [[nodiscard]] bool isOnline() const noexcept { return _state->online.load(); }
 
-    /// @brief Signals the probe thread to stop and, if possible, joins it.
+    /// @brief Stops probing. Idempotent.
     ///
-    /// Idempotent — subsequent calls are no-ops. If called from inside the probe
-    /// thread (e.g. from a probe callback), the thread is detached instead of
-    /// joined to avoid a deadlock; the destructor then spin-waits for it to exit.
-    ///
-    /// Thread-safe.
+    /// Runs on the loop: inline when called there (from the probe or a
+    /// callback, which then finishes normally, and no further probe runs),
+    /// posted and waited for from any other thread, so that once it returns
+    /// no probe or callback is running.
     void stop() {
-        {
-            std::scoped_lock const lock{_mtx};
-            if (_stopped) {
-                return;
-            }
-            _stopped = true;
-        }
-        _cv.notify_all();
-        if (_thread.joinable()) {
-            if (_thread.get_id() == std::this_thread::get_id()) {
-                _thread.detach();
-            } else {
-                _thread.join();
-            }
-        }
+        _loop->runAndWait([state = _state] { state->stop(); });
     }
 
 private:
-    static bool safeProbe(const ProbeFunction& probe) noexcept {
-        try {
-            return probe ? probe() : false;
-        } catch (...) {
-            return false;
-        }
-    }
+    /// Everything the loop owns. `online` is the one field read elsewhere.
+    struct State : std::enable_shared_from_this<State> {
+        State(::morph::exec::IoLoop& ioLoop, ProbeFunction probeFn, Callback offline, Callback online_, Config config)
+            : loop{ioLoop},
+              probe{std::move(probeFn)},
+              onOffline{std::move(offline)},
+              onOnline{std::move(online_)},
+              cfg{config} {}
 
-    void handleProbeResult(bool probeOk, int& consecutiveFailures, int& consecutiveSuccesses) {
-        if (!probeOk) {
-            consecutiveSuccesses = 0;
-            ++consecutiveFailures;
-            if (_online && consecutiveFailures >= _cfg.failureThreshold) {
-                _online.store(false);
-                if (_onOffline) {
-                    _onOffline();
+        void armNext() {
+            timer = loop.loop().addTimer(loop.loop().clock().now() + cfg.probeInterval, &State::fire, this);
+        }
+
+        void stop() {
+            ::morph::exec::detail::noteOwner("NetworkMonitor::stop", loop.loop(), loop.runningHere());
+            if (stopped) {
+                return;
+            }
+            stopped = true;
+            static_cast<void>(loop.loop().cancelTimer(timer));
+        }
+
+        static bool safeProbe(const ProbeFunction& probeFn) noexcept {
+            try {
+                return probeFn ? probeFn() : false;
+            } catch (...) {
+                return false;
+            }
+        }
+
+        void handleProbeResult(bool probeOk) {
+            if (!probeOk) {
+                consecutiveSuccesses = 0;
+                ++consecutiveFailures;
+                if (online.load() && consecutiveFailures >= cfg.failureThreshold) {
+                    online.store(false);
+                    if (onOffline) {
+                        onOffline();
+                    }
+                }
+            } else {
+                consecutiveFailures = 0;
+                ++consecutiveSuccesses;
+                if (!online.load() && consecutiveSuccesses >= cfg.onlineThreshold) {
+                    online.store(true);
+                    if (onOnline) {
+                        onOnline();
+                    }
                 }
             }
-        } else {
-            consecutiveFailures = 0;
-            ++consecutiveSuccesses;
-            if (!_online && consecutiveSuccesses >= _cfg.onlineThreshold) {
-                _online.store(true);
-                if (_onOnline) {
-                    _onOnline();
-                }
+        }
+
+        /// The probe timer's callback, on the loop's thread. The timer has
+        /// already fired, so a `stop()` from the probe or a callback retires
+        /// nothing and only prevents the re-arm below.
+        static void fire(void* statePtr) {
+            // Held for the whole call: the probe or a callback may destroy
+            // the monitor, and with it the monitor's own share of this state.
+            std::shared_ptr<State> const keep = static_cast<State*>(statePtr)->shared_from_this();
+            State& self = *keep;
+            ::morph::exec::detail::noteOwner("NetworkMonitor::probe", self.loop.loop(), self.loop.runningHere());
+            self.timer = {};
+            if (self.stopped) {
+                return;
+            }
+            bool const probeOk = safeProbe(self.probe);
+            if (self.stopped) {
+                return;
+            }
+            self.handleProbeResult(probeOk);
+            if (!self.stopped) {
+                self.armNext();
             }
         }
-    }
 
-    void run() {
-        int consecutiveFailures = 0;
-        int consecutiveSuccesses = 0;
+        ::morph::exec::IoLoop& loop;
+        ProbeFunction probe;
+        Callback onOffline;
+        Callback onOnline;
+        Config cfg;
+        std::atomic<bool> online{true};
+        int consecutiveFailures{0};
+        int consecutiveSuccesses{0};
+        ::core::net::TimerId timer{};
+        bool stopped{false};
+    };
 
-        while (true) {
-            {
-                std::unique_lock lock{_mtx};
-                _cv.wait_for(lock, _cfg.probeInterval, [this] { return _stopped.load(); });
-                if (_stopped) {
-                    break;
-                }
+    void start() {
+        _loop->post([state = _state] {
+            if (!state->stopped) {
+                state->armNext();
             }
-            handleProbeResult(safeProbe(_probe), consecutiveFailures, consecutiveSuccesses);
-        }
-        _runExited.store(true);
+        });
     }
 
-    ProbeFunction _probe;
-    Callback _onOffline;
-    Callback _onOnline;
-    Config _cfg;
-    std::atomic<bool> _online;
-    std::atomic<bool> _stopped;
-    std::atomic<bool> _runExited{false};
-    std::mutex _mtx;
-    std::condition_variable _cv;
-    std::thread _thread;
+    /// Present only for the owning constructor. First, so it is destroyed
+    /// last, after the destructor has stopped the state on it.
+    std::unique_ptr<::morph::exec::IoLoop> _ownedLoop;
+    ::morph::exec::IoLoop* _loop;
+    std::shared_ptr<State> _state;
 };
 
 }  // namespace morph::offline

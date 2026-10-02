@@ -5,13 +5,18 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
-#include <mutex>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "../attributes.hpp"
+#include "../core/completion.hpp"
+#include "../core/detail/owner_probe.hpp"
+#include "../core/executor.hpp"
 #include "../core/logger.hpp"
 #include "../core/observability.hpp"
+#include "../core/owner_strand.hpp"
 
 namespace morph::offline {
 
@@ -64,9 +69,9 @@ struct ReconnectCoordinatorConfig {
 /// @brief Sequences reconnect → activate → bind → replay when connectivity returns.
 ///
 /// All side effects are injected via `Deps`. The coordinator contains only the
-/// retry loop, the ordering guarantees, and the abort checks. It performs no I/O
-/// and owns no thread; `onOnline()` / `onOffline()` run synchronously on the
-/// calling thread.
+/// retry loop, the ordering guarantees, and the abort checks. It performs no
+/// I/O and owns no thread: it owns a strand over the executor it is given, the
+/// *offline strand*, and runs `onOnline()`'s and `onOffline()`'s bodies there.
 ///
 /// @par Ordering guarantee (the reason this class exists)
 /// Within a successful `onOnline()`, the steps run in this strict order:
@@ -77,18 +82,25 @@ struct ReconnectCoordinatorConfig {
 /// Step 4 MUST NOT run before step 3 completes, and step 3 MUST NOT run before
 /// step 2. Implementations and tests should treat this as an invariant.
 ///
-/// @par Thread safety
-/// `onOnline()` and `onOffline()` are mutually serialised by an internal mutex,
-/// mirroring `SyncWorker::run()`. Calling them concurrently is safe; the second
-/// caller blocks. They are intended to be posted onto a worker executor by the
-/// host (see the wiring note in the design doc), not called on the probe thread.
+/// @par One owner
+/// `onOnline()` posts its whole sequence, retry sleeps included, as one task
+/// on the offline strand; `onOffline()` posts its two steps as another. A
+/// strand runs one task at a time, in post order, so the two never overlap and
+/// an `onOffline()` can never land between `bindContext()` and `replay()`.
+/// Both are callable from any thread and return at once. The executor should
+/// be a worker pool, **not** the I/O loop that runs `NetworkMonitor`'s
+/// callbacks: the retry sleeps block the thread the task runs on.
+///
+/// A `SyncWorker` given `strand()` as its owner drains inside the `replay`
+/// step when the step calls its `run()`, rather than after the task.
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class ReconnectCoordinator {
 public:
     /// @brief Alias for the configuration struct.
     using Config = ReconnectCoordinatorConfig;
 
-    /// @brief Injected, host-supplied side effects. None may be null.
+    /// @brief Injected, host-supplied side effects. None may be null. Each is
+    ///        called on the offline strand.
     struct Deps {
         /// @brief Attempt to (re)open the primary backend.
         /// @return true once the backend is genuinely usable (not merely TCP-open).
@@ -110,7 +122,9 @@ public:
         std::function<void()> bindContext;
 
         /// @brief Replay the offline queue against the now-active primary.
-        /// Typically wraps `SyncWorker::run()`. Called last in `onOnline()`.
+        /// Typically wraps `SyncWorker::run(replyExec)` on a worker owned by
+        /// `strand()`.
+        /// Called last in `onOnline()`.
         std::function<void()> replay;
 
         /// @brief Returns false to abort the current `onOnline()` sequence early
@@ -124,68 +138,73 @@ public:
         std::function<void(std::chrono::milliseconds)> sleep;
     };
 
-    /// @brief Constructs a coordinator with injected dependencies and tuning.
-    /// @param deps Side-effect callbacks (all required, none null).
-    /// @param cfg  Retry tuning.
+    /// @brief Constructs a coordinator with injected dependencies and tuning,
+    ///        running its sequences on a strand over @p executor.
+    /// @param deps     Side-effect callbacks (all required, none null).
+    /// @param executor Where the offline strand's tasks run: a worker pool.
+    ///                 Borrowed: it must outlive this coordinator and keep
+    ///                 running tasks until the coordinator is destroyed.
+    /// @param cfg      Retry tuning.
     ///
     /// A null `Deps` member is logged via `morph::log::logError` in all builds;
     /// construction still succeeds. Invoking the coordinator with any null member
     /// is undefined behaviour.
-    explicit ReconnectCoordinator(Deps deps, Config cfg = Config{}) : _deps{std::move(deps)}, _cfg{cfg} {
-        assertDepsNonNull(_deps);
+    ReconnectCoordinator(Deps deps, ::morph::exec::IExecutor& executor MORPH_LIFETIMEBOUND, Config cfg = Config{})
+        : _state{std::make_shared<State>(std::move(deps), cfg)}, _strand{executor} {
+        assertDepsNonNull(_state->deps);
     }
+
+    /// @brief Closes the offline strand: a sequence not yet started is dropped,
+    ///        one running on another thread is waited for.
+    ~ReconnectCoordinator() { _strand.close(); }
 
     ReconnectCoordinator(const ReconnectCoordinator&) = delete;
     ReconnectCoordinator& operator=(const ReconnectCoordinator&) = delete;
     ReconnectCoordinator(ReconnectCoordinator&&) = delete;
     ReconnectCoordinator& operator=(ReconnectCoordinator&&) = delete;
 
-    /// @brief Run the reconnect → activate → bind → replay sequence.
+    /// @brief Runs the reconnect → activate → bind → replay sequence on the
+    ///        offline strand.
     ///
-    /// Synchronous; runs entirely on the calling thread. Serialised against
-    /// `onOffline()` by an internal mutex.
+    /// Posted as one task, after any `onOnline()`/`onOffline()` posted before
+    /// it. Callable from any thread; returns at once.
     ///
-    /// @return How the sequence ended (see `ReconnectOutcome`).
-    ReconnectOutcome onOnline() {
-        std::scoped_lock const lock{_mtx};
-
-        for (int attempt = 1; attempt <= _cfg.maxAttempts; ++attempt) {
-            if (!callShouldContinue()) {
-                return emitOutcome(ReconnectOutcome::Aborted);
-            }
-            ::morph::observe::detail::emitMetric(::morph::observe::Metric::reconnectAttempts, 1.0);
-            if (callTryReconnect()) {
-                _deps.activatePrimary();
-                _deps.bindContext();
-                // Re-check before replay so we never replay into a backend that
-                // just went away. We are still Reconnected either way; this only
-                // controls whether replay runs.
-                if (callShouldContinue()) {
-                    _deps.replay();
-                }
-                return emitOutcome(ReconnectOutcome::Reconnected);
-            }
-            // No sleep after the final attempt — it would just waste retryDelay
-            // before giving up.
-            if (attempt < _cfg.maxAttempts) {
-                _deps.sleep(_cfg.retryDelay);
-            }
-        }
-
-        ::morph::log::logWarn("[reconnect_coordinator] gave up after " + std::to_string(_cfg.maxAttempts) +
-                              " attempts, staying offline");
-        return emitOutcome(ReconnectOutcome::GaveUp);
+    /// @param replyExec Executor the outcome is delivered on and the caller
+    ///        attaches its callbacks on: the caller's own, or `strand()` for a
+    ///        caller that does not wait for it. Borrowed: it must outlive the
+    ///        returned `Completion`.
+    /// @return A `Completion` settled on the offline strand with how the
+    ///         sequence ended (see `ReconnectOutcome`), delivered on
+    ///         @p replyExec.
+    ::morph::async::Completion<ReconnectOutcome> onOnline(::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND) {
+        auto settleable = ::morph::async::Completion<ReconnectOutcome>::makeSettleable(&replyExec);
+        _strand.postTask([state = _state, strand = &_strand, promise = std::move(settleable.second)]() mutable {
+            ::morph::exec::detail::noteOwner("ReconnectCoordinator::onOnline", strand->coreExecutor(),
+                                             strand->runningHere());
+            promise.resolve(state->runOnline());
+        });
+        return std::move(settleable.first);
     }
 
-    /// @brief Switch to the local backend and rebind context.
+    /// @brief Switches to the local backend and rebinds context, on the
+    ///        offline strand.
     ///
-    /// Idempotent at the policy level: safe to call when already local. Serialised
-    /// against `onOnline()` by an internal mutex.
+    /// Idempotent at the policy level: safe to call when already local. Posted
+    /// after any `onOnline()`/`onOffline()` posted before it. Callable from any
+    /// thread; returns at once.
     void onOffline() {
-        std::scoped_lock const lock{_mtx};
-        _deps.activateLocal();
-        _deps.bindContext();
+        _strand.postTask([state = _state, strand = &_strand] {
+            ::morph::exec::detail::noteOwner("ReconnectCoordinator::onOffline", strand->coreExecutor(),
+                                             strand->runningHere());
+            state->deps.activateLocal();
+            state->deps.bindContext();
+        });
     }
+
+    /// @brief The offline strand, as an executor: what a `SyncWorker` that
+    ///        replays for this coordinator is given as its owner.
+    /// @return The strand every `onOnline()`/`onOffline()` body runs on.
+    [[nodiscard]] ::morph::exec::IExecutor& strand() noexcept { return _strand; }
 
 private:
     /// @brief Logs each null `Deps` member at error level (in all builds; does
@@ -205,23 +224,63 @@ private:
         check("sleep", static_cast<bool>(deps.sleep));
     }
 
-    /// @brief Calls `tryReconnect`, treating a thrown exception as a failed attempt.
-    [[nodiscard]] bool callTryReconnect() const noexcept {
-        try {
-            return _deps.tryReconnect();
-        } catch (...) {
-            return false;
-        }
-    }
+    /// What the offline strand's tasks run on: the deps and the retry loop.
+    /// Shared with each posted task, so a task never reaches through the
+    /// coordinator.
+    struct State {
+        State(Deps injected, Config config) : deps{std::move(injected)}, cfg{config} {}
 
-    /// @brief Calls `shouldContinue`, treating a throw as "do not continue".
-    [[nodiscard]] bool callShouldContinue() const noexcept {
-        try {
-            return _deps.shouldContinue();
-        } catch (...) {
-            return false;
+        Deps deps;
+        Config cfg;
+
+        /// @brief The whole `onOnline()` sequence. On the offline strand.
+        /// @return How it ended.
+        [[nodiscard]] ReconnectOutcome runOnline() const {
+            for (int attempt = 1; attempt <= cfg.maxAttempts; ++attempt) {
+                if (!callShouldContinue()) {
+                    return emitOutcome(ReconnectOutcome::Aborted);
+                }
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::reconnectAttempts, 1.0);
+                if (callTryReconnect()) {
+                    deps.activatePrimary();
+                    deps.bindContext();
+                    // Re-check before replay so we never replay into a backend
+                    // that just went away. We are still Reconnected either way;
+                    // this only controls whether replay runs.
+                    if (callShouldContinue()) {
+                        deps.replay();
+                    }
+                    return emitOutcome(ReconnectOutcome::Reconnected);
+                }
+                // No sleep after the final attempt — it would just waste
+                // retryDelay before giving up.
+                if (attempt < cfg.maxAttempts) {
+                    deps.sleep(cfg.retryDelay);
+                }
+            }
+            ::morph::log::logWarn("[reconnect_coordinator] gave up after " + std::to_string(cfg.maxAttempts) +
+                                  " attempts, staying offline");
+            return emitOutcome(ReconnectOutcome::GaveUp);
         }
-    }
+
+        /// @brief Calls `tryReconnect`, treating a thrown exception as a failed attempt.
+        [[nodiscard]] bool callTryReconnect() const noexcept {
+            try {
+                return deps.tryReconnect();
+            } catch (...) {
+                return false;
+            }
+        }
+
+        /// @brief Calls `shouldContinue`, treating a throw as "do not continue".
+        [[nodiscard]] bool callShouldContinue() const noexcept {
+            try {
+                return deps.shouldContinue();
+            } catch (...) {
+                return false;
+            }
+        }
+    };
 
     /// @brief Emits the `reconnectOutcome` counter tagged by @p outcome, then
     ///        returns it — lets each `onOnline()` return site emit-and-return
@@ -233,9 +292,10 @@ private:
         return outcome;
     }
 
-    Deps _deps;
-    Config _cfg;
-    std::mutex _mtx;  ///< Serialises onOnline()/onOffline().
+    std::shared_ptr<State> _state;
+    /// The offline strand. Declared last, so it is closed before the state
+    /// the destructor's close waits on a running task to finish with.
+    ::morph::exec::OwnerStrand _strand;
 };
 
 }  // namespace morph::offline

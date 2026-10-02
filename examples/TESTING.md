@@ -540,21 +540,19 @@ Open framework facts every rung must respect (verified):
   clients" job builds the spike and rungs 1–3's clients by name under
   `-DMORPH_LADDER_RUNGS=all`, and runs green. So "does it build" is answered;
   "does it work in a browser" is still not.
-- The plain registration path is only WASM-safe with
-  **`asyncRegistrationEnabled = true`, which is opt-in and off by
-  default**; with defaults, the first `registerModel` aborts the page.
+- `QtWebSocketBackend` registers only through `bindModel`, which never
+  blocks; its synchronous `registerModel` refuses rather than spin a nested
+  event loop, so the registration path is WASM-safe by construction.
 - **`waitForConnected()` hangs the page on WASM** — the WASM client must
   use the `setConnectHandler` pattern instead; the Socket rig's
   `waitForConnected()` recipe is for *native* tests only.
-- The **synchronous shared/keyed attach path
-  (`registerModelShared`/`attachModel`) nests an event loop that aborts the
-  page on WASM** — that part still holds, and a WASM client must not call it.
-  What has changed is the remedy: async attach is **no longer a missing
-  framework prerequisite**. `IBackend::bindModel`
+- A **blocking keyed acquire would nest an event loop that aborts the page on
+  WASM**; `QtWebSocketBackend` has none, and async attach is
+  **not a missing framework prerequisite**. `IBackend::bindModel`
   (`include/morph/core/backend.hpp`) is the one non-blocking acquire verb —
   a request with a non-empty `primary` is the register-or-attach case, one
   that also carries a non-zero `current` is the re-point —
-  `Bridge::ensureBoundAsync`/`attachHandlerAsync` dispatch to it, and
+  every keyed `BridgeHandler::execute` goes through it, and
   `QtWebSocketBackend` implements it natively. A rung's WASM
   story uses that rather than waiting on the framework. (The rung-1 coupling
   the pastebin README calls out — burn atomicity via a shared keyed instance —

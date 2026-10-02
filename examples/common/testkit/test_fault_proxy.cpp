@@ -79,7 +79,7 @@ struct ProxyRig {
         if (!backendPtr->waitForConnected()) {
             throw std::runtime_error("ProxyRig: client failed to connect through the proxy");
         }
-        bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backendPtr));
+        bridge = std::make_unique<::morph::bridge::Bridge>(std::move(backendPtr), qtExec);
     }
 
     ProxyRig(const ProxyRig&) = delete;
@@ -221,6 +221,10 @@ TEST_CASE("FaultProxy::duplicateReply delivers the reply twice on the wire but r
     ProxyRig rig;
     ::morph::bridge::BridgeHandler<FaultProbeCounter> handler{*rig.bridge, &rig.qtExec};
 
+    // The handler's bind is a round trip too: let its reply land before the
+    // reply count is read below.
+    REQUIRE(::morph::ladder::testkit::pumpUntil([&] { return handler.isBound(); }));
+
     rig.proxy->setRequestObserver([&](std::uint64_t callId, ::morph::ladder::testkit::FaultProxy& self) {
         if (++requestsSeen == 1) {
             self.duplicateReply(callId);
@@ -269,7 +273,7 @@ TEST_CASE("FaultProxy: a second client connection replaces the first, still work
     auto secondBackend = std::make_unique<::morph::qt::QtWebSocketBackend>(
         rig.proxy->url(), std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
     REQUIRE(secondBackend->waitForConnected());
-    ::morph::bridge::Bridge secondBridge{std::move(secondBackend)};
+    ::morph::bridge::Bridge secondBridge{std::move(secondBackend), rig.qtExec};
     ::morph::bridge::BridgeHandler<FaultProbeCounter> secondHandler{secondBridge, &rig.qtExec};
 
     // The replacement leg genuinely relays end-to-end through the proxy. A
@@ -332,6 +336,10 @@ TEST_CASE("FaultProxy::killAfter drops the connection instead of the targeted re
     // notification (the [issue29] pattern in tests/qt/test_qt_websocket.cpp) —
     // not by inspecting the proxy's or the server's side of the socket.
     rig.backend->setDisconnectHandler([&] { disconnected.store(true); });
+
+    // The handler's bind is a round trip too: let its reply land before the
+    // reply count is read below.
+    REQUIRE(::morph::ladder::testkit::pumpUntil([&] { return handler.isBound(); }));
 
     rig.proxy->setRequestObserver([&](std::uint64_t callId, ::morph::ladder::testkit::FaultProxy& self) {
         if (++requestsSeen == 1) {

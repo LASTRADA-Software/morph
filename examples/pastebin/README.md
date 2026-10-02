@@ -46,8 +46,8 @@ infrastructure is now **rung 0**, delivered *before* the pastebin app: the
 testkit subset (`pump.hpp`, `backend_rig.hpp`, `db_fixture.hpp`, Qt-owning
 test main), `examples/common/gui` (AppContext + Presenter base), the
 `ladder-tests` CI job, and the **WASM-remote spike** — the first-ever
-WASM + `QtWebSocketBackend` run, which requires `asyncRegistrationEnabled =
-true` (opt-in, off by default) and the `setConnectHandler` pattern instead
+WASM + `QtWebSocketBackend` run, which requires registration that never
+blocks and the `setConnectHandler` pattern instead
 of `waitForConnected()` (which hangs the page on WASM), with a written
 fallback plan if it bounces off framework work. Rung 1 proper is the app
 below plus its design records. Deferred from rung 1: the convergence
@@ -403,12 +403,12 @@ themselves" presenter rule requires.
   `linux-all-features` job now enables `MORPH_BUILD_LADDER` alongside
   `MORPH_BUILD_FORMS_QML` (it already installs Qt 6.8), so that is where those
   targets are built and that test runs.
-- **Registration timing.** `PasteBridge` exposes a `bound` signal
-  (`Presenter::trackBound()`, backed by `Bridge::whenBound()`) that settles
-  once the registration round trip lands; both clients' `Main.qml` gates its
-  bootstrap `refresh()` on it instead of retrying on a timer. `Remote` mode
-  still has no connect timeout, so a server that never answers leaves `bound`
-  simply never firing and the list pane empty with no terminal error.
+- **Registration timing.** Both clients' `Main.qml` request the first
+  listing on `Component.onCompleted`. A call made before the handler's
+  registration round trip lands waits for it and is dispatched once it does,
+  or is rejected if registration fails. `Remote` mode still has no connect
+  timeout, so a server that never answers leaves that first call pending and
+  the list pane empty with no terminal error.
 - Deferred by design: the convergence assertion (needs rung 3's
   `poll()`/`lastEventId()`), the full hostile-content corpus (a representative
   subset ships), file attachments. Reply-frame loss is deferred for a

@@ -10,13 +10,7 @@
 namespace lims::gui {
 
 SamplePresenter::SamplePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : Presenter{parent}, _creator{bridge, executor}, _handler{bridge, executor} {
-    // The *plain* handler's binding is the one that gates the first dispatch
-    // a view can make (`submitIfValid("RegisterClient", ...)`). The shared
-    // handler is unbound by design until something attaches it, so gating on
-    // it would never fire.
-    trackBound(_creator.whenBound());
-}
+    : Presenter{parent}, _creator{bridge, executor}, _handler{bridge, executor} {}
 
 void SamplePresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 

@@ -45,8 +45,8 @@ TEST_CASE(
     "morph::bridge::detail::HandlerBinding: RAII  -  model deregistered when morph::bridge::BridgeHandler destroyed",
     "[binding]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     std::atomic<int> result{-1};
     {
@@ -54,7 +54,7 @@ TEST_CASE(
         handler.execute(HBAction{10}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
         });
 
-        REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+        REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return result.load() != -1; }));
         REQUIRE(result.load() == 11);
         // handler destroyed here  -  deregisterModel called on backend
     }
@@ -68,7 +68,7 @@ TEST_CASE(
             .then([&](int val) { result2.store(val); })
             .onError([](const std::exception_ptr&) {});
 
-        REQUIRE(morph::testing::waitUntil([&] { return result2.load() != -1; }));
+        REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return result2.load() != -1; }));
         REQUIRE(result2.load() == 21);
     }
 }
@@ -83,7 +83,7 @@ TEST_CASE("morph::bridge::detail::HandlerBinding: executeVia with currentId=0 de
           "[binding]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "HB_Model";
@@ -117,8 +117,8 @@ TEST_CASE(
     "new registration",
     "[binding]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     // Register and immediately destroy several handlers.
     for (int i = 0; i < 5; ++i) {
@@ -132,7 +132,7 @@ TEST_CASE(
     morph::bridge::BridgeHandler<HBModel> live{bridge, &cbExec};
     live.execute(HBAction{99}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
 
-    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return result.load() != -1; }));
     REQUIRE(result.load() == 100);
 }
 
@@ -150,7 +150,7 @@ TEST_CASE(
     "[binding]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
     std::shared_ptr<morph::bridge::detail::HandlerBinding> captured;
 

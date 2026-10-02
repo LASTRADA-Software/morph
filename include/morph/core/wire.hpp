@@ -48,7 +48,7 @@ inline constexpr std::uint32_t kProtocolVersion = 1;
 /// @par Discriminator values
 /// - `"register"`  — client requests model creation. Uses `typeId`, and
 ///                   optionally `contextKey` (the new instance's stable
-///                   identity, e.g. an account id — see `RemoteServer::setLogProvider`).
+///                   identity, e.g. an account id — see `ServerConfig::logProvider`).
 ///                   With `shared` set, additionally uses `primary` and becomes
 ///                   a register-or-attach against the shared directory.
 /// - `"attach"`    — client re-points at a different `primary` of `typeId`,
@@ -148,7 +148,7 @@ struct Envelope {
 ///        `"hello"`.
 ///
 /// Serialized as the `"ok"` reply's `body` (JSON) when a server accepts a
-/// `"hello"` — see `RemoteServer::setSupportedVersionRange`.
+/// `"hello"` — see `ServerConfig::minProtocolVersion`/`maxProtocolVersion`.
 struct ProtocolRange {
     /// @brief Oldest protocol version the server accepts.
     std::uint32_t min = kProtocolVersion;
@@ -380,14 +380,13 @@ struct EscapingWriteOpts : glz::opts {
 /// - **`kind`** is the discriminator; an envelope without one is malformed.
 ///   Keeping it unconditional also means the first key of every message is
 ///   still `"kind"`.
-/// - **`callId` is a correlation field, and `0` is a live routing instruction
-///   rather than an absence.** Both transports discriminate on it: a reply with
-///   a non-zero `callId` is matched against the pending-execute map, and one
-///   with `callId == 0` is handed to whichever synchronous control call is
-///   parked (`QtWebSocketBackend::onTextMessage`,
+/// - **`callId` is a correlation field, and `0` is a value rather than an
+///   absence.** Both transports route on it: a reply is matched against the
+///   pending request filed under its `callId`, and `0` names none, so such a
+///   reply is dropped (`QtWebSocketBackend::onTextMessage`,
 ///   `SocketBackend::dispatchIncomingEnvelope`). A peer therefore cannot treat
 ///   an absent `callId` as "no information"; it has to *reconstruct* the
-///   sentinel before it can route the frame at all. morph's own `decode` does
+///   value before it can route the frame at all. morph's own `decode` does
 ///   that for free by default-initialising, so omitting it round-trips cleanly
 ///   in C++ and still breaks the scenario driver, a second decoder that reads
 ///   absence as `None`. Emitting correlation
@@ -565,7 +564,7 @@ inline Envelope makeErr(std::string message, uint64_t callId = 0) {
 
 /// @brief The `err` reply message `RemoteServer` sends when
 ///        `LimitPolicy::executeTimeout` fires server-side (see
-///        `RemoteServer::dispatchExecute`'s `_timeoutScheduler` path).
+///        `RemoteServer::dispatchExecute`'s `_executeTimeouts` path).
 ///
 /// `"timeout"` exactly is the documented wire contract (`docs/spec/core/
 /// backend.md`'s `executeTimeout` row, `docs/spec/core/completion.md`'s

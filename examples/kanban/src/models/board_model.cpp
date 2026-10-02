@@ -295,7 +295,7 @@ void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> l
     // shared-instance directory key *is* the project id
     // (BRIDGE_MODEL_KEY(BoardModel, OpenBoard, &OpenBoard::projectId)), so a
     // second attach naming a *different* project can never even reach an
-    // already-live instance: attachExistingLocked's re-attach-by-key path
+    // already-live instance: attachExisting's re-attach-by-key path
     // only bumps a refcount and never calls attachActionLog again, and a
     // genuinely different key routes to a different, freshly-constructed
     // instance via the registry instead. _projectIdStr therefore has no
@@ -345,19 +345,20 @@ void BoardModel::logAction(const Action& action, const Result& result, std::stri
     entry.timestampMs = nowMs();
     entry.causalParentId = std::move(causalParentId);
     _log->append(std::move(entry));
-    // GetActivity reads this same log back via a fresh `entries()` call
-    // (design spec §4), and `FileActionLog::entries()`'s own doc comment is
-    // explicit that an unflushed `append()` is only visible "if the
-    // platform's stdio buffering has already handed it to the OS" --
-    // otherwise invisible to entries()'s separate ifstream, since append()
-    // writes through buffered C stdio (`fwrite`) with no implicit flush.
-    // Without this, a client polling GetActivity immediately after its own
-    // mutating call would nondeterministically miss the entry it just
-    // caused -- observed directly: `docs/spec/journal/journal.md`'s stated
-    // contract is not something GetActivity can rely on without calling it.
-    // `InMemoryActionLog::flush()` is a no-op, so this costs nothing for the
-    // log type most non-App tests actually attach.
-    _log->flush();
+    flushLog();
+}
+
+void BoardModel::flushLog() const {
+    // Through the log's owner, behind the append above: GetActivity reads the
+    // file through a separate stream, which sees only what stdio has handed to
+    // the OS, and its read on the same owner is ordered after this flush. A
+    // failure is reported by the dropped completion's orphan log; the action
+    // itself has already succeeded.
+    if (auto* owner = _log->owner(); owner != nullptr) {
+        static_cast<void>(_log->flush(*owner));
+    } else {
+        _log->flush();
+    }
 }
 
 template <typename Action>
@@ -381,7 +382,7 @@ void BoardModel::logFailure(const Action& action, const std::string& error) cons
     }
     entry.timestampMs = nowMs();
     _log->append(std::move(entry));
-    _log->flush();
+    flushLog();
 }
 
 template <typename Action>
@@ -1374,27 +1375,34 @@ GetEventsSinceResult BoardModel::execute(const GetEventsSince& action) {
     return result;
 }
 
-GetActivityResult BoardModel::execute(const GetActivity& /*action*/) {
+core::async::Task<GetActivityResult> BoardModel::execute(GetActivity /*action*/) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"GetActivity: handler was never attached via OpenBoard"};
     }
     requireRole(Role::Viewer);
     GetActivityResult result;
     if (!_log) {
-        return result;  // no log attached (design spec §4: Local-mode-without-attach is a stated limitation)
+        co_return result;  // no log attached (design spec §4: Local-mode-without-attach is a stated limitation)
     }
     // FileActionLog re-reads its whole backing file per call (LADDER.md's own
     // journal-honesty note) -- acceptable at this rung's per-board scale
     // (design spec §4), but not a pattern to copy at bigger scale without
     // re-checking that cost.
-    auto entries = _log->entries(*_projectIdStr);
+    //
+    // Read on the log's owner, which every board on this server shares and
+    // which this strand is not: the read is ordered behind every append this
+    // board posted there, so a client polling right after its own mutating
+    // call sees the entry it caused.
+    std::string const key = *_projectIdStr;
+    auto* const owner = _log->owner();
+    auto entries = owner != nullptr ? co_await _log->entries(*owner, key) : _log->entries(key);
     for (const auto& entry : entries) {
         result.events.push_back({.actionType = entry.actionType,
                                  .principal = entry.principal,
                                  .timestampMs = entry.timestampMs,
                                  .summary = entry.actionType + " by " + entry.principal});
     }
-    return result;
+    co_return result;
 }
 
 }  // namespace kanban

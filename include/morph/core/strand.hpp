@@ -51,42 +51,6 @@ struct ModelIdHash {
     std::size_t operator()(ModelId mid) const noexcept { return std::hash<uint64_t>{}(mid.v); }
 };
 
-/// @brief A `core::async::IExecutor` over a morph executor: how a core-cpp
-///        strand's pump reaches a thread pool, a main-thread pump or Qt.
-///
-/// A strand hands its base one bare coroutine handle per turn, which this
-/// posts as a lambda holding nothing else: trivially copyable, so it fits a
-/// `std::function`'s small buffer and a turn costs no allocation. The lambda
-/// does not refer to this object, so it may be destroyed while a pump it
-/// posted is still queued: the pump finds its strand closed and ends.
-class CoreExecutorOver final : public ::core::async::IExecutor {
-public:
-    /// @param executor Where every resumption is posted. Borrowed: it must
-    ///        outlive every strand over this object and run what it queued.
-    explicit CoreExecutorOver(::morph::exec::IExecutor& executor MORPH_LIFETIMEBOUND) : _executor{&executor} {}
-
-    using ::core::async::IExecutor::submit;
-
-    /// @brief Posts @p handle's resumption.
-    /// @param handle The coroutine to resume; borrowed.
-    void submit(std::coroutine_handle<> handle) override {
-        _executor->post([handle] { handle.resume(); });
-    }
-
-    /// @brief Posts @p work's resumption. An executor that drops the task
-    ///        unrun releases its claim, which frees a chain nobody owns.
-    /// @param work The coroutine to resume, and its claim.
-    void submit(::core::async::ParkedWork work) override {
-        _executor->post([work] {
-            work.abandon.disarm();
-            work.resume.resume();
-        });
-    }
-
-private:
-    ::morph::exec::IExecutor* _executor;
-};
-
 /// @brief A callable posted to a strand, with its throw logged rather than
 ///        propagated.
 ///
@@ -138,7 +102,8 @@ inline constexpr TeardownOrder buildTeardownOrder =
 ///        concurrently where the executor has the threads.
 ///
 /// `core::async::KeyedStrands<ModelId>`, with what morph adds to it:
-/// - the base adapter (`CoreExecutorOver`), owned here;
+/// - the base executor's core-cpp identity (`IExecutor::coreExecutor`), which
+///   the strands run their pumps on;
 /// - posted callables that log a throw (`LoggedTask`);
 /// - the action's session, and the Task handler's resumer as the current
 ///   executor, around every coroutine resumed on a model instance whose Task
@@ -158,7 +123,7 @@ public:
     ///                unset, since these strands install their own.
     explicit ModelStrands(::morph::exec::IExecutor& base MORPH_LIFETIMEBOUND,
                           ::core::async::StrandOptions options = {})
-        : _base{base}, _strands{_base, options, ::core::async::KeyedAroundTask<ModelId>::of(_hook)} {}
+        : _strands{base.coreExecutor(), options, ::core::async::KeyedAroundTask<ModelId>::of(_hook)} {}
 
     ModelStrands(const ModelStrands&) = delete;
     ModelStrands& operator=(const ModelStrands&) = delete;
@@ -326,7 +291,6 @@ private:
         void operator()(const ModelId& key, ::core::async::RunTask run) const;
     };
 
-    CoreExecutorOver _base;
     /// Shared by the hook, which only reads: tasks of different keys do not
     /// serialise on it while handlers are enrolled.
     std::shared_mutex _enrolledMtx;
@@ -334,8 +298,7 @@ private:
     std::atomic<std::size_t> _enrolledCount{0};
     std::unordered_map<ModelId, std::weak_ptr<TaskResumer>, ModelIdHash> _enrolled;
     AroundTask _hook{this};
-    /// Last, so it is destroyed first: its strands reference the base and the
-    /// hook.
+    /// Last, so it is destroyed first: its strands reference the hook.
     ::core::async::KeyedStrands<ModelId, ModelIdHash> _strands;
 };
 

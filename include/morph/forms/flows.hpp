@@ -27,7 +27,6 @@
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -159,8 +158,10 @@ class FlowSession {
 public:
     /// @brief Constructs a flow over @p handler, starting at step 0.
     /// @param handler Handler the flow dispatches every step through. Must
-    ///                outlive this `FlowSession` (only *destruction* order is
-    ///                unconstrained; see bridge.md's Lifetime & ownership).
+    ///                outlive this `FlowSession`. The session belongs to the
+    ///                handler's owner: it is built, used and destroyed there,
+    ///                and the handler's `guiExec` delivers its continuations
+    ///                there.
     /// @param onError Optional callback invoked when the current step's fire
     ///                fails (e.g. `BackendChangedError` mid-flight). When
     ///                absent, the error is logged via `morph::log::logError`,
@@ -188,27 +189,22 @@ public:
     /// installed callback on a token the callback checks *before* touching
     /// `this`.
     ///
-    /// The strength of that gate depends on which thread destroys this
-    /// session, exactly as `CallbackScope`'s "Boundary of the guarantee"
-    /// describes: destroying it on the same thread the step's continuations
-    /// are delivered on makes check-then-run atomic, so a callback still in
-    /// flight is refused instead of touching a partially- or fully-destroyed
-    /// object. Destroying it from another thread is advisory only — a
-    /// continuation that read `Active` a moment before `requestStop()` lands
-    /// can still go on to run against a destroyed session — since `_callbacks`
-    /// gates delivery but never blocks until an in-flight callback finishes.
-    /// A caller destroying a `FlowSession` off the delivery thread is
-    /// responsible for its own synchronisation.
+    /// The session is destroyed on the handler's owner, where the step's
+    /// continuations are delivered, so check-then-run is atomic: a callback
+    /// still in flight is refused instead of touching a destroyed object.
     ///
     /// `requestStop()` is called explicitly rather than left to the member's own
     /// destruction, even though `_callbacks` is declared last: members are
     /// destroyed only *after* the destructor body, so a body that grew a call
-    /// pumping an event loop (a `sendSync`-style blocking call) would
-    /// otherwise deliver into a half-dead session. This is the "teardown that
-    /// pumps" escape hatch docs/spec/core/callback_scope.md documents; the
-    /// body here does not do that today, but stopping first keeps the
-    /// destructor correct if one is added.
-    ~FlowSession() { _callbacks.requestStop(); }
+    /// pumping an event loop would otherwise deliver into a half-dead session.
+    /// This is the "teardown that pumps" escape hatch
+    /// docs/spec/core/callback_scope.md documents; the body here does not do
+    /// that today, but stopping first keeps the destructor correct if one is
+    /// added.
+    ~FlowSession() {
+        note("FlowSession::~FlowSession");
+        _callbacks.requestStop();
+    }
 
     FlowSession(const FlowSession&) = delete;
     FlowSession& operator=(const FlowSession&) = delete;
@@ -244,17 +240,13 @@ public:
         using A = typename ::morph::bridge::detail::MemberPointerTraits<decltype(FieldPtr)>::ClassType;
         static_assert((std::is_same_v<A, Steps> || ...),
                       "FlowSession::set<>: field's action is not a step of this flow");
+        note("FlowSession::set");
         if (::morph::model::ActionTraits<A>::typeId() != currentActionType()) {
             throw std::logic_error{"FlowSession::set<>: field belongs to an action that is not the current step"};
         }
-        A draft{};
-        std::size_t stepIndex = 0;
-        {
-            std::scoped_lock const lock{_mtx};
-            std::get<A>(_drafts).*FieldPtr = std::move(value);
-            draft = std::get<A>(_drafts);
-            stepIndex = _activeStep;
-        }
+        std::get<A>(_drafts).*FieldPtr = std::move(value);
+        A draft = std::get<A>(_drafts);
+        std::size_t const stepIndex = _activeStep;
         // The readiness gate that used to live in the handler's draft machinery
         // lives here now: the flow already owns the draft, so it can decide when
         // the step is complete and dispatch it itself. The absence of in-flight
@@ -270,50 +262,18 @@ public:
     /// @return `true` if the flow advanced, `false` if the current step is not
     ///         ready or the flow is already `finished()`.
     ///
-    /// @par Why `finished()` can never be the reason this returns `false`
-    /// `ready` is read under its own `scoped_lock`, released before
-    /// `finished()` is even evaluated -- a two-phase read that looks, on its
-    /// face, like it could observe `_currentReady == true` for a flow that
-    /// has *already* advanced past its last step. It cannot: `_currentReady`
-    /// and `_activeStep` are set together, under the one `scoped_lock` below,
-    /// every time `_activeStep` becomes `sizeof...(Steps)` (the "finished"
-    /// sentinel) -- so the instant `_activeStep` reaches it, `_currentReady`
-    /// is atomically forced to `false` in the same critical section, with no
-    /// writer able to interleave between the two stores. No other writer of
-    /// `_currentReady = true` can ever land while `_activeStep` holds that
-    /// sentinel: `captureResult`'s guard requires `stepIndex == _activeStep`,
-    /// and `stepIndex` is always a step position in `[0, sizeof...(Steps))`
-    /// (captured from `_activeStep` in `set<>()` at fire time, which only
-    /// ever fires the current, not-yet-finished step); `back()` decrements
-    /// `_index` below the sentinel and re-pairs `_activeStep` with that
-    /// smaller value in the same lock scope it sets `_currentReady = true`
-    /// in. So `_activeStep == sizeof...(Steps)` implies `_currentReady ==
-    /// false` for as long as the flow stays finished -- which means whenever
-    /// `finished()` would be `true` here, `!ready` was already `true`, and
-    /// the `||`'s right operand never contributes a case of its own.
-    /// Confirmed empirically: `llvm-cov` reports `finished()`'s branch here
-    /// as never observed `true` across the whole suite, matching the proof
-    /// rather than contradicting it -- this is a documented-unreachable
-    /// defensive check, not an undertested live TOCTOU.
     bool advance() {
-        bool ready = false;
-        {
-            std::scoped_lock const lock{_mtx};
-            ready = _currentReady;
-        }
-        if (!ready || finished()) {
+        note("FlowSession::advance");
+        if (!_currentReady || finished()) {
             return false;
         }
         ++_index;
-        {
-            std::scoped_lock const lock{_mtx};
-            _currentReady = false;
-            // Retire the old step's callbacks here, not only in beginStep():
-            // on the last step this advance finishes the flow and no further
-            // beginStep() follows, so nothing else would move the marker and a
-            // late reply could still mark a finished flow ready.
-            _activeStep = _index;
-        }
+        _currentReady = false;
+        // Retire the old step's callbacks here, not only in beginStep(): on
+        // the last step this advance finishes the flow and no further
+        // beginStep() follows, so nothing else would move the marker and a
+        // late reply could still mark a finished flow ready.
+        _activeStep = _index;
         if (!finished()) {
             beginStep();
         }
@@ -325,15 +285,13 @@ public:
     ///        reset, so its entered values are intact.
     /// @return `true` if the flow moved back, `false` if already at step 0.
     bool back() {
+        note("FlowSession::back");
         if (_index == 0) {
             return false;
         }
         --_index;
-        {
-            std::scoped_lock const lock{_mtx};
-            _currentReady = true;  // this step already produced a result once, or it could not have been left
-            _activeStep = _index;
-        }
+        _currentReady = true;  // this step already produced a result once, or it could not have been left
+        _activeStep = _index;
         beginStep();
         return true;
     }
@@ -345,7 +303,7 @@ public:
     /// @brief Whether the current step already has a captured, successful result.
     /// @return `true` if `advance()` would move the flow forward right now.
     [[nodiscard]] bool ready() const noexcept {
-        std::scoped_lock const lock{_mtx};
+        note("FlowSession::ready");
         return _currentReady;
     }
 
@@ -373,7 +331,7 @@ public:
     /// @return The field's JSON-encoded value, or `std::nullopt` if @p path
     ///         was never captured (the step never fired, or never had that field).
     [[nodiscard]] std::optional<std::string> resolved(std::string_view path) const {
-        std::scoped_lock const lock{_mtx};
+        note("FlowSession::resolved");
         auto iter = _resolvedValues.find(std::string{path});
         if (iter == _resolvedValues.end()) {
             return std::nullopt;
@@ -384,7 +342,7 @@ public:
 private:
     template <typename A>
     void captureResult(const ::morph::model::ActionTraits<A>::Result& result, std::size_t stepIndex) {
-        std::scoped_lock const lock{_mtx};
+        note("FlowSession::captureResult");
         if (stepIndex != _activeStep) {
             // A reply for a step the flow has already left. A dispatch in
             // flight cannot be recalled -- its `.then` continuation is already
@@ -421,9 +379,10 @@ private:
 
     /// @brief Dispatches step @p A's completed draft and routes its outcome.
     ///
-    /// Both closures are gated on `_callbacks`, so neither touches anything on
-    /// `this` once the flow has been stopped or destroyed — a completion can
-    /// still resolve after the flow is gone.
+    /// Both closures run on the handler's `guiExec`, which must be its owner,
+    /// and are gated on `_callbacks`, so neither touches anything on `this`
+    /// once the flow has been stopped or destroyed — a completion can still
+    /// resolve after the flow is gone.
     /// @tparam A Step action type.
     /// @param draft     The completed action to execute.
     /// @param stepIndex Index of the step this dispatch belongs to.
@@ -435,17 +394,14 @@ private:
                       this->template captureResult<A>(result, stepIndex);
                   })
             .onError(_callbacks, [this, stepIndex](const std::exception_ptr& err) {
-                {
-                    // Only clear readiness while this really is the current
-                    // step. A late failure from a step already left behind used
-                    // to clear `_currentReady` for whichever step the flow had
-                    // moved on to — un-readying a step that had legitimately
-                    // completed. The error is still reported below either way:
-                    // the action did fail, and the host wants to know.
-                    std::scoped_lock const lock{_mtx};
-                    if (stepIndex == _activeStep) {
-                        _currentReady = false;
-                    }
+                note("FlowSession::fireStep");
+                // Only clear readiness while this really is the current step: a
+                // late failure from a step already left behind must not
+                // un-ready the step the flow moved on to. The error is still
+                // reported below either way: the action did fail, and the host
+                // wants to know.
+                if (stepIndex == _activeStep) {
+                    _currentReady = false;
                 }
                 if (_onError) {
                     _onError(err);
@@ -468,28 +424,25 @@ private:
 
     /// @brief Publishes which step is now current.
     ///
-    /// Read back under the same mutex by every dispatch callback, so one that
-    /// resolves after the flow has moved on recognises itself as stale.
-    void beginStep() {
-        std::scoped_lock const lock{_mtx};
-        _activeStep = _index;
+    /// Read back by every dispatch callback, so one that resolves after the
+    /// flow has moved on recognises itself as stale.
+    void beginStep() { _activeStep = _index; }
+
+    /// @brief Checks, in a debug build, that @p site runs on the handler's owner.
+    /// @param site Name of the calling body.
+    void note(char const* site) const noexcept {
+        ::morph::exec::detail::noteOwner(site, _handler.owner().coreExecutor(), _handler.onOwner());
     }
 
     ::morph::bridge::BridgeHandler<Model>& _handler;
     std::function<void(std::exception_ptr)> _onError;
-    // _index/_handler/_onError are touched only from the thread that owns
-    // this FlowSession (constructor, destructor, set/advance/back); guarded
-    // separately below is the state a step's result/error continuation also
-    // touches, which runs on whatever thread/executor resolves the underlying
-    // BridgeHandler completion -- not necessarily this same thread. See
-    // docs/spec/core/bridge.md's executor/callback model.
+    // Everything below is touched only on the handler's owner: by the verbs,
+    // and by a step's continuations, delivered on the handler's `guiExec` —
+    // the owner.
     std::size_t _index{0};
-    mutable std::mutex _mtx;
     std::tuple<Steps...> _drafts{};
-    // The step whose continuations are the ones the flow still recognises,
-    // mirrored under _mtx so a callback running on the resolving executor's
-    // thread can tell whether it still speaks for the current step. `_index` itself is only
-    // safe to read from the owning thread.
+    // The step whose continuations are the ones the flow still recognises, so
+    // a reply for a step already left behind can tell it is stale.
     std::size_t _activeStep{0};
     bool _currentReady{false};
     std::unordered_map<std::string, std::string> _resolvedValues;

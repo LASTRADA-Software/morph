@@ -19,6 +19,8 @@ add_executable(morph_tests
     oom_injector.cpp
     test_oom_injector.cpp
     test_executor.cpp
+    test_executor_scope.cpp
+    test_io_loop.cpp
     test_example.cpp
     test_executor_extra.cpp
     test_strand.cpp
@@ -27,6 +29,8 @@ add_executable(morph_tests
     test_completion_multi_handler.cpp
     test_completion_promise.cpp
     test_completion_value_contract.cpp
+    test_completion_owner.cpp
+    test_storage_owner.cpp
     test_coroutine_client.cpp
     test_coroutine_model.cpp
     test_async_delay.cpp
@@ -48,14 +52,17 @@ add_executable(morph_tests
     test_bridge_execute_json.cpp
     test_bridge_pending_calls.cpp
     test_remote_extra.cpp
+    test_remote_server_strand.cpp
     test_remote_connection_scope.cpp
     test_remote_step_interleaving.cpp
     test_remote_execute_ordering.cpp
-    test_execute_order_gate.cpp
     test_action_validation.cpp
     test_action_wire_rejection.cpp
     test_security_fixes.cpp
     test_bridge_lifetime.cpp
+    test_bridge_bind_paths.cpp
+    test_bridge_owner.cpp
+    test_core_branch_gaps.cpp
     test_client_execute_deadline.cpp
     test_timeout_scheduler.cpp
     test_dispatch_di.cpp

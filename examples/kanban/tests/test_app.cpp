@@ -20,6 +20,7 @@
 #include "kanban/models/project_admin_model.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/storage_owner.hpp"
 
 using kanban::BoardModel;
 using kanban::ProjectAdminModel;
@@ -136,10 +137,10 @@ TEST_CASE(
         kanban::app::App app{logPath, std::string{kSecret}};
 
         const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
-        auto backend = std::make_unique<::morph::backend::SimulatedRemoteBackend>(*app.server());
-        Bridge bridge{std::move(backend)};
-        bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
         ::morph::qt::QtExecutor exec;
+        auto backend = std::make_unique<::morph::backend::SimulatedRemoteBackend>(*app.server());
+        Bridge bridge{std::move(backend), exec};
+        bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
         // CreateProject over a plain (non-keyed) handler -- alice becomes
         // the project's Manager, per design spec §3.
@@ -186,7 +187,7 @@ TEST_CASE(
         // App's FileActionLog was constructed over shows the identical
         // entry, keyed by the project id, exactly as attachLogIfConfigured's
         // contextKey plumbing promises.
-        const morph::journal::FileActionLog reopened{logPath};
+        const morph::journal::FileActionLog reopened{morph::ladder::testkit::storageOwner(), logPath};
         const auto entries = reopened.entries(std::to_string(*created.id));
         REQUIRE(entries.size() == 1);
         CHECK(entries.front().actionType == "CreateColumn");
@@ -217,10 +218,10 @@ TEST_CASE(
     {
         kanban::app::App app{logPath, std::string{kSecret}};
         const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
-        auto backend = std::make_unique<::morph::backend::SimulatedRemoteBackend>(*app.server());
-        Bridge bridge{std::move(backend)};
-        bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
         ::morph::qt::QtExecutor exec;
+        auto backend = std::make_unique<::morph::backend::SimulatedRemoteBackend>(*app.server());
+        Bridge bridge{std::move(backend), exec};
+        bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
         BridgeHandler<ProjectAdminModel> admin{bridge, &exec};
         const auto created = awaitQt(admin.execute(kanban::CreateProject{.name = "Plain Registration Board"}));

@@ -18,7 +18,7 @@ All types live in `morph::offline`.
 
 | Type | Header | Role |
 |---|---|---|
-| `NetworkMonitor` / `NetworkMonitorConfig` | `network_monitor.hpp` | Background probe thread + online/offline state machine. |
+| `NetworkMonitor` / `NetworkMonitorConfig` | `network_monitor.hpp` | Periodic probe on the I/O loop + online/offline state machine. |
 | `QueueItem`, `IOfflineQueue`, `InMemoryOfflineQueue` | `offline_queue.hpp` | Passive store of undelivered actions (opaque payloads); durable retry-attempt tracking. |
 | `FileOfflineQueue` | `file_offline_queue.hpp` | Reference NDJSON-file-backed durable queue; no extra dependency, ships by default. |
 | `SqliteOfflineQueue` | `sqlite_offline_queue.hpp` | Reference SQLite-backed durable queue; opt-in (`MORPH_BUILD_OFFLINE_SQLITE`). |
@@ -30,6 +30,7 @@ All types live in `morph::offline`.
 - [NetworkMonitor](#networkmonitor)
 - [NetworkMonitor callback constraint](#networkmonitor-callback-constraint)
 - [Offline queue](#offline-queue)
+  - [One owner](#one-owner)
 - [Ownership: who enqueues](#ownership-who-enqueues)
 - [SyncWorker](#syncworker)
 - [Conflict resolution on replay](#conflict-resolution-on-replay)
@@ -42,12 +43,18 @@ All types live in `morph::offline`.
 
 ## NetworkMonitor
 
-A background thread calls a user-supplied probe function at regular intervals.
-The monitor starts *online* and transitions to *offline* only after
-`failureThreshold` consecutive failures. It returns to *online* after
-`onlineThreshold` consecutive successes. Callbacks fire on the probe thread.
+A loop timer on an `exec::IoLoop` calls a user-supplied probe function at
+regular intervals. The monitor starts *online* and transitions to *offline*
+only after `failureThreshold` consecutive failures. It returns to *online*
+after `onlineThreshold` consecutive successes. The probe and the callbacks run
+on the loop's thread — the application's one I/O loop, shared with its
+sockets and timers, when it passes one in; a private one otherwise.
 
 The monitor is non-copyable and non-movable. Destroy it to stop monitoring.
+
+Cross-thread surface: `isOnline()` (an atomic read), and `stop()` and the
+destructor (which run on the loop and wait for it). Everything else — the
+counters, the timer, the callbacks — is touched only on the loop.
 
 ### `NetworkMonitorConfig`
 
@@ -68,43 +75,48 @@ type breaks constructor-default-argument lookup on clang/GCC.
 | `ProbeFunction` | `std::function<bool()>` | Returns `true` when the network is reachable. |
 | `Callback` | `std::function<void()>` | Called on state change. |
 | `Config` | `NetworkMonitorConfig` | Alias for the config struct. |
-| ctor | `NetworkMonitor(ProbeFunction, Callback onOffline, Callback onOnline, Config = {})` | Launches the probe thread immediately. |
-| dtor | `~NetworkMonitor()` | Calls `stop()` then spin-waits on `_runExited` to handle the case where `stop()` was called from within a probe callback (avoiding deadlock on `join()`). |
+| ctor | `NetworkMonitor(IoLoop& loop, ProbeFunction, Callback onOffline, Callback onOnline, Config = {})` | Posts the first probe timer to `loop`, which must outlive the monitor. |
+| ctor | `NetworkMonitor(ProbeFunction, Callback onOffline, Callback onOnline, Config = {})` | The same on a private `IoLoop` the monitor owns (natively, one thread). |
+| dtor | `~NetworkMonitor()` | Calls `stop()`. Safe from anywhere, including the monitor's own probe or callback. |
 | `isOnline()` | `bool isOnline() const noexcept` | Reads an atomic flag; safe from any thread. |
-| `stop()` | `void stop()` | Signals the thread to stop. Idempotent. If called from the probe thread itself, detaches instead of joining. |
+| `stop()` | `void stop()` | Retires the probe timer, on the loop: posted and waited for from another thread, so no probe or callback is running once it returns; inline from the probe or a callback, which then finish normally. Idempotent. |
 
 **Probe exceptions are swallowed** — a throwing probe is treated as a failed
 probe (`safeProbe` catches everything and returns `false`).
 
 ## NetworkMonitor callback constraint
 
-**`onOffline` and `onOnline` run on the probe thread, inline inside the probe
-loop.** Look at `run()`: it waits on the condition variable for `probeInterval`,
-calls `safeProbe`, then calls `handleProbeResult`, which invokes the callback
-*before* the loop can circle back to wait for the next interval. There is no
-executor, no second thread, and no queue between the probe result and the
-callback — whatever the callback does, the probe thread does.
+**The probe, `onOffline` and `onOnline` run on the I/O loop's thread, inline
+inside the probe timer's callback.** The timer fires, `safeProbe` runs, then
+`handleProbeResult` invokes the callback *before* the timer is re-armed. There
+is no executor, no second thread, and no queue between the probe result and
+the callback — whatever the callback does, the loop does.
 
 Consequences:
 
-- **A blocking callback stalls all probes.** While the callback runs, the next
-  `wait_for` has not started, so no further connectivity checks happen. A
-  callback that blocks for 30s means 30s of connectivity blindness.
+- **A blocking probe or callback stalls the whole loop.** While it runs no
+  other probe, no socket read or write and no timer on the same `IoLoop`
+  makes progress. A callback that blocks for 30s means 30s of connectivity
+  blindness and 30s of stalled connections. A probe that needs a slow check
+  (a TCP connect, an HTTP round trip) should start it elsewhere and report the
+  last result it has.
 - **Running the coordinator or `SyncWorker` inline is a mistake.** A
   `ReconnectCoordinator::onOnline()` can spin for up to
   `maxAttempts * retryDelay` (≈20s at defaults) of retry-and-sleep, and a
   `SyncWorker::run()` executes arbitrarily long replay work. Doing either
-  directly inside a callback runs *seconds of retry loop on the probe thread*,
-  which is exactly the thread that is supposed to be watching the network.
+  directly inside a callback runs *seconds of retry loop on the I/O loop*,
+  which is exactly the thread that is supposed to be watching the network and
+  carrying the connection being retried.
 - **The safe shape is: set an atomic, or post to an executor, and return.**
   The callback should do O(1) work — flip a flag, `post()` a lambda onto a
   worker executor — and let the heavy sequencing run elsewhere. This is why
   `ReconnectCoordinator::onOnline()`/`onOffline()` are documented as
-  "posted onto a worker executor by the host, not called on the probe thread."
+  "posted onto a worker executor by the host, not called on the I/O loop."
 
-Calling `stop()` from within a callback is supported (it detaches rather than
-joins to avoid a self-deadlock — see the dtor/`stop()` notes above), but it is
-still a callback running on the probe thread and must not block first.
+Calling `stop()`, or destroying the monitor, from within the probe or a
+callback is supported — the timer holds the monitor's loop-side state until the
+callback returns — but it is still code running on the loop and must not block
+first.
 
 See `concurrency_and_lifetimes.md` for the framework-wide rule that
 notification callbacks marshal work off the thread that raised them.
@@ -246,10 +258,9 @@ exact contract for its own idempotency-key dedup (opaque key, non-empty keys
 only, a repeat is a silent no-op) — this is that decision made once, not
 re-litigated per rung.
 
-**`InMemoryReplayLedger` materialises its key inside its lock, on purpose.**
-Its `doLookup` builds two `std::string`s from its `string_view` parameters,
-under `_mtx`, only to probe a `std::map<std::pair<std::string, std::string>,
-std::string>`. A transparent comparator would remove both. It is left in place
+**`InMemoryReplayLedger` materialises its key on every lookup, on purpose.**
+Its `doLookup` builds two `std::string`s from its `string_view` parameters only
+to probe a `std::map<std::pair<std::string, std::string>, std::string>`. A transparent comparator would remove both. It is left in place
 because the class has no shipping caller: `InMemoryReplayLedger` is
 constructed in exactly one file in this tree
 (`tests/test_replay_ledger.cpp`), and the one production
@@ -259,8 +270,7 @@ constructed in exactly one file in this tree
 SQL round-trip. Measured with clang 22 `-O2`, counting `operator new`, 2e6
 iterations: 2.00 allocations per lookup with both key halves past libstdc++'s
 15-character SSO buffer, 1.00 with one past it, 0.00 with both inside — costing
-3.4 ns of a 31.6 ns uncontended lookup, and 55 ns of a 740 ns lookup with eight
-threads on the mutex. It is parked on that census rather than on the size of
+3.4 ns of a 31.6 ns lookup. It is parked on that census rather than on the size of
 the number, and becomes worth doing the moment a per-request caller of this
 class exists; the header's own `doLookup` comment carries the full table and
 the shape of the fix.
@@ -284,6 +294,64 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 `drain()` is `const` — it takes a snapshot and mutates nothing, so `size()`'s
 default can call it (and so can an application) without needing a non-`const`
 reference to the queue.
+
+Three completion overloads serve a caller that is not on the queue's owner
+(see [One owner](#one-owner)):
+
+| Member | Signature | Notes |
+|---|---|---|
+| `enqueue` | `Completion<uint64_t> enqueue(IExecutor& replyExec, std::string payload, std::string idempotencyKey = {})` | Enqueues on the owner; the id is delivered on `replyExec`. A full queue rejects it with `OfflineQueueFullError`. |
+| `drain` | `Completion<std::vector<QueueItem>> drain(IExecutor& replyExec) const` | Snapshots on the owner; delivered on `replyExec`. |
+| `size` | `Completion<std::size_t> size(IExecutor& replyExec) const` | Counts on the owner; delivered on `replyExec`. |
+
+They are non-virtual, each over a protected virtual hook (`askEnqueue`,
+`askDrain`, `askSize`) whose default answers synchronously where it is asked —
+right for an implementation with no owner, such as bank's
+`LightweightOfflineQueue`. A virtual overload would be hidden by every
+implementation that overrides only the synchronous verb, which
+`-Woverloaded-virtual` rejects.
+
+### One owner
+
+Every queue morph ships — `InMemoryOfflineQueue`, `FileOfflineQueue`,
+`SqliteOfflineQueue` — takes its **owner** executor as the first constructor
+argument and touches its items, its file or its SQLite connection only there.
+The owner must run one task at a time.
+
+| Verb | On the owner | Elsewhere |
+|---|---|---|
+| `markDone`, `setAttempts`, `setIdempotencyKey` | Run at once | Posted to the owner; return at once. A failure there is logged and the item stays queued |
+| `enqueue`, `drain`, `size` | Run at once | Not allowed: reported by the owner check (a debug assertion, or a test's probe) |
+| `enqueue(replyExec, …)`, `drain(replyExec)`, `size(replyExec)` | Run at once; answer delivered on `replyExec` | Posted to the owner; answer delivered on `replyExec` |
+| `maxDepth` (and `SqliteOfflineQueue::synchronousLevel`/`journalMode`) | Anywhere: fixed at construction | Anywhere |
+
+"On the owner" is `exec::detail::OwnerAffinity`'s answer: inside a task of the
+owner, or on the constructing thread when it was outside every executor's
+task — the GUI thread that built the queue.
+
+`enqueue` stays synchronous on the owner because it answers with the item's id
+and throws `OfflineQueueFullError`, which a posted call could not return.
+
+**The queue's owner is its `SyncWorker`'s.** The drain calls `drain()`,
+`markDone()` and `setAttempts()` synchronously, so the queue belongs to the
+worker's owner or to the executor that strand runs over: kanban's
+`BoardBridge` gives its `SqliteOfflineQueue` the bridge's executor, and its
+worker the coordinator's strand over that same executor. The application's
+`enqueue` on the GUI thread and the worker's drain are then tasks of one
+thread, and the queue needs no lock.
+
+**The fsync and the SQLite statements are where they were.** Each
+`FileOfflineQueue` mutation still appends its line and fsyncs before
+returning on the owner, and each `SqliteOfflineQueue` write is still its own
+committed statement; the owner runs them one at a time.
+The constructors — the file replay and compaction, the SQLite schema and
+pragmas, the containing directory's fsync — run on the constructing thread
+before the queue is shared, unchanged.
+
+**Teardown.** A queue keeps its state in a `std::shared_ptr` every posted task
+holds, so it can be destroyed on any thread; a `markDone` posted before then
+still runs on the owner, and the file or connection closes with the last task
+that holds it. The owner must outlive the queue and run what it posted.
 
 ### `Attempts`: why the count has its own type
 
@@ -379,8 +447,8 @@ the `queueOverflow` counter metric with the rejection-time size as its value
 
 Per-implementation notes:
 
-- **`InMemoryOfflineQueue`** checks capacity under its existing lock, before
-  the deque `push_back`. It has no idempotency-key dedup at all, so there is
+- **`InMemoryOfflineQueue`** checks capacity on its owner, before the deque
+  `push_back`. It has no idempotency-key dedup at all, so there is
   no dedup-hit-vs-capacity ordering question here.
 - **`FileOfflineQueue`** runs its existing keyed-dedup scan *first*; the
   capacity check sits after it, before `appendPut`. A dedup hit (a re-enqueue
@@ -405,8 +473,9 @@ cap enforced; nothing on disk remembers it.
 
 ### `InMemoryOfflineQueue`
 
-Thread-safe in-memory implementation of `IOfflineQueue`. Items live in a
-`std::deque<QueueItem>` protected by a `std::mutex`. Ids are monotonically
+In-memory implementation of `IOfflineQueue`,
+`InMemoryOfflineQueue(IExecutor& owner, std::optional<std::size_t> maxDepth = std::nullopt)`.
+Items live in a `std::deque<QueueItem>` that belongs to the owner. Ids are monotonically
 increasing. Overrides `setAttempts` to update the in-deque item, so the
 attempt count is current for as long as the queue object lives — but it has
 no persistence, so a process restart still resets it to `0`. Suitable for
@@ -518,8 +587,9 @@ queue depths; `SqliteOfflineQueue` is the index-backed alternative for
 high-volume keyed enqueues. Not safe for multiple processes to open the same
 path concurrently.
 
-The constructor takes an optional second `morph::core::FileIoOps` parameter
-(`FileOfflineQueue(std::filesystem::path, morph::core::FileIoOps = {})`) — the
+The constructor takes the queue's owner first ([One owner](#one-owner)) and an
+optional `morph::core::FileIoOps` parameter after the path
+(`FileOfflineQueue(IExecutor& owner, std::filesystem::path, morph::core::FileIoOps = {}, std::optional<std::size_t> maxDepth = std::nullopt)`) — the
 same test-only fault-injection seam `FileActionLog` uses (see
 `docs/spec/journal/journal.md`): the raw `fwrite`/`fflush`/`fsync`/`fopen`
 calls this class makes, as an injectable strategy defaulting to the real
@@ -566,8 +636,9 @@ contract above; cross-restart identity is carried by `idempotencyKey`, not
 existing row's id; empty keys are exempt and are never deduplicated, matching
 `InMemoryOfflineQueue`. `drain()` never deletes, so a crash between `drain()`
 and `markDone()` loses nothing; every write is its own committed statement
-under `PRAGMA journal_mode=WAL`. All operations serialise on an internal
-mutex, so the queue is safe to share between the write and drain/replay paths.
+under `PRAGMA journal_mode=WAL`. Every statement runs on the queue's owner,
+which is how the write path and the drain/replay path share it
+([One owner](#one-owner)).
 
 **Durability settings, set once at construction**, in this order — the order is
 load-bearing:
@@ -585,7 +656,7 @@ available (`Synchronous::full`) and costs roughly **18x per mutation**
 (measured: ~0.08 ms to ~1.44 ms, NVMe/btrfs, SQLite 3.53.4). Every mutation here
 is its own commit and `SyncWorker::relay()` calls `markDone`/`setAttempts` once
 per drained item, so a 200-item drain goes from ~16 ms to ~290 ms — all of it
-under this class's mutex, where it also blocks the producer's `enqueue()`.
+on the queue's owner, where it also holds up the producer's `enqueue()`.
 
 The `journal_mode` read-back exists because `sqlite3_exec` discards the row a
 `PRAGMA` returns, so a **silent fallback** would otherwise go unnoticed: WAL
@@ -600,10 +671,10 @@ once `synchronous` is set above — and an earlier revision that did throw made
 the queue unconstructible on an NFS home directory, which `examples/kanban`'s
 `enableOfflineQueue()` reaches with a user-supplied path.
 
-`busy_timeout` buys a wait, not a guarantee: this class's own mutex makes
-`SQLITE_BUSY` unreachable for a single instance, so the timeout matters only
-when something else has the database open — and the wait then happens *under
-that mutex*, blocking every other caller of the instance, a Qt GUI thread
+`busy_timeout` buys a wait, not a guarantee: one owner running every statement
+makes `SQLITE_BUSY` unreachable for a single instance, so the timeout matters
+only when something else has the database open — and the wait then happens *on
+the owner*, holding up every other caller of the instance, a Qt GUI thread
 included. Pass `std::chrono::milliseconds{0}` to restore fail-fast.
 
 Construction also **fsyncs the containing directory** once, after
@@ -753,6 +824,16 @@ reason a third reinvention goes unexamined.
 Replays queued actions from an `IOfflineQueue` on reconnect. Drains the queue
 and calls a caller-supplied `ReplayFunction` for each item.
 
+**One owner.** A worker belongs to the executor it is given, which must run one
+task at a time — the coordinator's offline strand (`ReconnectCoordinator::strand()`)
+or another `exec::OwnerStrand`. Its drain, its attempt counts and its
+dead-lettering run only in that owner's tasks, so none of it has a lock.
+Cross-thread surface: `run(replyExec)`, which posts the drain to the owner (or
+runs it at once when already there) and delivers the answer on `replyExec`,
+the caller's own executor — the `health(replyExec)` shape — and `stop()`, an
+atomic flag. A caller never attaches to a completion owned by the worker's
+strand, so it never has to post into that strand to wait for a drain.
+
 ### `SyncResult`
 
 | Field | Type | Default | Purpose |
@@ -770,10 +851,10 @@ and calls a caller-supplied `ReplayFunction` for each item.
 | `DetailedReplayFunction` | `std::function<ReplayOutcome(const std::string&)>` | The three-outcome replay callable. The only form that can report `Undelivered`. |
 | `ReplayFunction` | `std::function<bool(const std::string&)>` | Two-outcome callable, unchanged. `true` → `Succeeded`, `false` → `Rejected`. Throwing is treated as `Rejected`. |
 | `DeadLetterSink` | `std::function<void(const QueueItem&)>` | Invoked with the exhausted item, just before it is removed, when an item hits the retry cap. Optional — default unset. |
-| ctor | `SyncWorker(IOfflineQueue&, ReplayFunction, DeadLetterSink = nullptr)` | References the queue and the replay callable; the sink is an optional third argument. |
-| ctor | `SyncWorker(IOfflineQueue&, DetailedReplayFunction, DeadLetterSink = nullptr)` | Same, taking the three-outcome callable. The two overloads are unambiguous — `ReplayOutcome` is a scoped enum, so neither return type implicitly converts to the other. The boolean overload adapts into this one, so `run()` implements a single contract. |
-| `run()` | `SyncResult run()` | Drains the queue and replays each item. Concurrent calls are serialised by an internal mutex. Returns immediately if `stop()` was called before acquiring the lock. Emits the `queueDepth` metric once, with the drained item count, before replaying (see [observability.md](../core/observability.md)). |
-| `stop()` | `void stop()` | Signals an in-progress `run()` to stop after the current item. `run()` clears the flag at its start — but a `stop()` landing *during* a run leaves it set on return, so the next `run()` takes its early-out and drains nothing; work resumes on the run after that. |
+| ctor | `SyncWorker(exec::IExecutor& owner, IOfflineQueue&, ReplayFunction, DeadLetterSink = nullptr)` | References the owner, the queue and the replay callable; the sink is an optional last argument. `owner` must run one task at a time. A drain `run()` posts refers to the worker, so the worker must outlive it: destroy the worker once every `run()` has settled, or after its owner is closed. |
+| ctor | `SyncWorker(exec::IExecutor& owner, IOfflineQueue&, DetailedReplayFunction, DeadLetterSink = nullptr)` | Same, taking the three-outcome callable. The two overloads are unambiguous — `ReplayOutcome` is a scoped enum, so neither return type implicitly converts to the other. The boolean overload adapts into this one, so the drain implements a single contract. |
+| `run(replyExec)` | `Completion<SyncResult> run(exec::IExecutor& replyExec)` | Drains the queue and replays each item, on the owner: at once when called on it, posted after any drain posted before it otherwise. Returns a `Completion` settled on the owner and delivered on `replyExec`, where its callbacks run. A drain that finds `stop()` was called before it started resets the flag and answers an empty result. Emits the `queueDepth` metric once, with the drained item count, before replaying (see [observability.md](../core/observability.md)). |
+| `stop()` | `void stop()` | Callable from any thread. Signals an in-progress drain to stop after the current item. A drain clears the flag at its start — but a `stop()` landing *during* a drain leaves it set on return, so the next drain takes its early-out and drains nothing; work resumes on the one after that. |
 
 **Retry & dead-letter (hard-coded cap, durable count):**
 
@@ -798,7 +879,7 @@ and calls a caller-supplied `ReplayFunction` for each item.
   server never saw is then reported as work that could not be applied, and the
   payload is gone unless the host's sink persisted it. Two shipped conditions
   make that reachable rather than theoretical: `ReconnectCoordinator::onOnline()`
-  holds its mutex for the whole retry loop, so a flap back offline cannot
+  holds the offline strand for the whole retry loop, so a flap back offline cannot
   preempt an in-progress replay; and nothing in the framework wires a
   `NetworkMonitor` transition to `SyncWorker::stop()`.
 
@@ -934,7 +1015,19 @@ thread — `LocalBackend::notifyBackendChanged` **posts** it onto the model's ow
 strand (the same per-`ModelId` serial queue `execute` uses). It therefore runs
 single-threaded per model, never overlapping an `execute()` on that model, so a
 model draining the queue and mutating its own counters there needs **no locking**
-of its own state. Because the drain is posted (asynchronous), it completes some
+of its own state.
+
+**The queue's owner is the executor the model runs on.** The drain and each
+`markDone()` are synchronous calls made on the model's strand, and a queue
+answers synchronously only on its owner ([One owner](#one-owner)). So a queue
+drained on this path belongs to the executor the backend runs its models on,
+and that executor runs one task at a time — a one-thread pool, as
+`tests/test_conflict_resolution.cpp` uses, every backend the bridge switches
+between sharing it. Over a multi-threaded pool there is no executor that is
+both the queue's owner and where the model's strand runs: framework code has no
+way to name one model's strand as an `IExecutor`, and `onBackendChanged()`
+cannot await the completion overloads. A host on a pool replays through
+`SyncWorker` instead. Because the drain is posted (asynchronous), it completes some
 time *after* `switchBackend` returns; a test or host that must observe the
 drained result waits for it (the conflict-resolution tests poll a model counter)
 rather than assuming it finished synchronously. See
@@ -951,8 +1044,8 @@ you want the built-in retry budget.
 Sequences the reconnect → activate → bind → replay steps when the network comes
 back. All side effects are injected via `Deps`; the coordinator contains only
 the retry loop, the ordering guarantees, and the abort checks. It performs no
-I/O and owns no thread — `onOnline()` / `onOffline()` run synchronously on the
-calling thread.
+I/O and owns no thread: it owns a strand over the executor it is given — the
+*offline strand* — and `onOnline()` / `onOffline()` post their bodies there.
 
 ### `ReconnectOutcome`
 
@@ -975,7 +1068,11 @@ calling thread.
 |---|---|---|
 | `Config` | `ReconnectCoordinatorConfig` | Alias. |
 | `Deps` | struct | Injected side-effect callbacks (see below). |
-| ctor | `explicit ReconnectCoordinator(Deps, Config = {})` | Non-copyable, non-movable. Null `Deps` members are logged via `morph::log::logError` in all builds; construction still succeeds. |
+| ctor | `ReconnectCoordinator(Deps, exec::IExecutor& executor, Config = {})` | Owns an `exec::OwnerStrand` over `executor` (a worker pool; it must outlive the coordinator). Non-copyable, non-movable. Null `Deps` members are logged via `morph::log::logError` in all builds; construction still succeeds. |
+| `onOnline(replyExec)` | `Completion<ReconnectOutcome> onOnline(exec::IExecutor& replyExec)` | Posts the sequence below; the outcome is delivered on `replyExec`. See `onOnline()`. |
+| `onOffline()` | `void onOffline()` | Posts `activateLocal` → `bindContext`. |
+| `strand()` | `exec::IExecutor& strand()` | The offline strand: the owner to give a `SyncWorker` the `replay` step drives. |
+| dtor | | Closes the offline strand: a sequence not yet started is dropped, one running on another thread is waited for. Not from inside a `Deps` callback. |
 
 #### `Deps` struct
 
@@ -985,7 +1082,7 @@ calling thread.
 | `activatePrimary` | `void()` | Make the freshly-reconnected primary the active backend. Called once per successful `onOnline()`, after `tryReconnect()` succeeds. |
 | `activateLocal` | `void()` | Switch the active backend to the local/offline one. Called by `onOffline()`. |
 | `bindContext` | `void()` | Rebind per-connection/per-session context to the active backend. Called after every `activate*` step. Must not throw. |
-| `replay` | `void()` | Replay the offline queue against the now-active primary. Typically wraps `SyncWorker::run()`. Called last in `onOnline()`. |
+| `replay` | `void()` | Replay the offline queue against the now-active primary. Typically calls `run()` on a `SyncWorker` owned by `strand()`, which then drains before `replay` returns. Called last in `onOnline()`. |
 | `shouldContinue` | `bool()` | Return `false` to abort the current `onOnline()` early (e.g. monitor reports offline mid-retry). Polled before each attempt and once more before replay. |
 | `sleep` | `void(std::chrono::milliseconds)` | Sleep between failed attempts. Tests substitute a no-op/counter; hosts wire to `std::this_thread::sleep_for`. |
 
@@ -1003,10 +1100,13 @@ Step 4 MUST NOT run before step 3, and step 3 MUST NOT run before step 2.
 #### `onOnline()`
 
 ```cpp
-ReconnectOutcome onOnline();
+Completion<ReconnectOutcome> onOnline(exec::IExecutor& replyExec);
 ```
 
-Synchronous. Runs the retry loop. For each attempt:
+Posts the retry loop to the offline strand as one task, and returns at once.
+The completion settles, on the strand, with the outcome, and is delivered on
+`replyExec`: the caller's own executor, or `strand()` for a caller that does
+not wait for the outcome. `onOffline()` has no outcome to deliver. For each attempt:
 
 1. Check `shouldContinue()` — abort if false.
 2. Emit the `reconnectAttempts` metric, then call `tryReconnect()` — skip to sleep if false.
@@ -1025,58 +1125,69 @@ Every return path also emits the `reconnectOutcome` metric once, tagged
 void onOffline();
 ```
 
-Calls `activateLocal()` then `bindContext()`. Idempotent — safe to call when
-already local.
+Posts `activateLocal()` then `bindContext()` to the offline strand. Idempotent
+— safe to call when already local.
 
-#### Thread safety
+#### One owner
 
-`onOnline()` and `onOffline()` are mutually serialised by an internal mutex.
-They are intended to be posted onto a worker executor by the host, not called
-directly on the probe thread.
+Every `Deps` callback runs on the offline strand. `onOnline()` and
+`onOffline()` are callable from any thread — `NetworkMonitor`'s callbacks on the
+I/O loop included, since they only post — and their bodies run one at a time,
+in the order they were called: two `onOnline()`s never overlap, and an
+`onOffline()` called during a reconnect runs after it, never between its
+`bindContext` and `replay`. The strand's executor should be a worker pool, not
+the I/O loop: the retry sleeps block the thread the task runs on.
 
 ## End-to-end integration
 
 The four types compose into one pipeline. The rule that ties them together:
-**the probe callback does no work of its own — it posts, and the coordinator
-does the sequencing on a worker executor, and the coordinator's `replay`
-dependency wraps `SyncWorker::run()` over the same queue the application
-enqueues into.**
+**the probe callback does no work of its own — it calls the coordinator, which
+only posts to its offline strand over a worker executor, and the coordinator's
+`replay` dependency runs `SyncWorker::run(replyExec)`, on a worker owned by that strand,
+over the same queue the application enqueues into.**
 
 ```cpp
-morph::offline::InMemoryOfflineQueue queue;   // shared by both halves
-morph::exec::SomeExecutor worker;             // host's worker executor
+morph::exec::ThreadPoolExecutor worker{2};    // host's worker executor
 
-morph::offline::SyncWorker sync{
-    queue,
-    [&](const std::string& payload) { return deliver(payload); }  // ReplayFunction
-};
+std::unique_ptr<morph::offline::InMemoryOfflineQueue> queue;  // owned by the coordinator's strand, below
+std::unique_ptr<morph::offline::SyncWorker> sync;             // built on the coordinator's strand, below
 
 morph::offline::ReconnectCoordinator coordinator{{
     .tryReconnect    = [&] { return backend.reopen(); },
     .activatePrimary = [&] { bridge.switchBackend(makePrimary()); },
     .activateLocal   = [&] { bridge.switchBackend(makeLocal()); },
     .bindContext     = [&] { session.rebind(); },
-    .replay          = [&] { sync.run(); },          // <-- SyncWorker over the shared queue
+    .replay          = [&] { (void)sync->run(coordinator.strand()); },  // <-- drains here, on the offline strand
     .shouldContinue  = [&] { return monitor.isOnline(); },
     .sleep           = [](std::chrono::milliseconds d) { std::this_thread::sleep_for(d); },
-}};
+}, worker};
 
-// Callbacks run on the probe thread, so they ONLY post — never run the
-// coordinator inline (see "NetworkMonitor callback constraint").
+// The queue belongs to the strand the worker drains on. The application,
+// on its own thread, enqueues through the completion form:
+// `queue->enqueue(guiExec, payload).then(...)`.
+queue = std::make_unique<morph::offline::InMemoryOfflineQueue>(coordinator.strand());
+sync = std::make_unique<morph::offline::SyncWorker>(
+    coordinator.strand(), *queue,
+    [&](const std::string& payload) { return deliver(payload); });  // ReplayFunction
+
+// The probe and callbacks run on the I/O loop, so the probe only reads a
+// result it already has, and the callbacks call verbs that only post (see
+// "NetworkMonitor callback constraint").
 morph::offline::NetworkMonitor monitor{
-    [] { return tcpProbe(); },                                   // ProbeFunction: bool()
-    [&] { worker.post([&] { coordinator.onOffline(); }); },      // onOffline
-    [&] { worker.post([&] { coordinator.onOnline();  }); },      // onOnline
+    ioLoop,                                                      // exec::IoLoop, shared with the app's sockets
+    [&] { return lastProbeResult.load(); },                      // ProbeFunction: bool(), non-blocking
+    [&] { coordinator.onOffline(); },                            // posts to the offline strand
+    [&] { (void)coordinator.onOnline(coordinator.strand()); },   // posts to the offline strand
 };
 ```
 
 Flow: the `bool()` probe drives `NetworkMonitor`'s state machine → on a
-transition the callback *only* posts a lambda to `worker` (it must not run
-reconnect logic inline on the probe thread) → the worker runs
-`ReconnectCoordinator::onOffline()` / `onOnline()` → a successful `onOnline()`
-calls `activatePrimary` → `bindContext` → `replay`, and `replay` runs
-`SyncWorker::run()`, which drains and replays the `queue` the application filled
-on the write path ([Ownership: who enqueues](#ownership-who-enqueues)).
+transition the callback calls `onOffline()` / `onOnline()`, which post their
+bodies to the offline strand and return at once (nothing runs on the I/O loop)
+→ a successful `onOnline()` calls `activatePrimary` → `bindContext` → `replay`,
+and `replay` runs `SyncWorker::run(replyExec)`, which — on its owner — drains and
+replays the `queue` the application filled on the write path ([Ownership: who
+enqueues](#ownership-who-enqueues)) before `replay` returns.
 
 ### Reconciling with ARCHITECTURE.md's direct wiring
 
@@ -1095,19 +1206,19 @@ Both are legitimate; they are different points on a spectrum:
 
 - **Direct `switchBackend` — the minimal path.** No retry, no ordered
   replay, no abort-on-flap. `switchBackend` is a bounded mutex operation (it is
-  not a seconds-long retry loop), so calling it inline on the probe thread is
+  not a seconds-long retry loop), so calling it inline on the I/O loop is
   acceptable *as a minimal demo*. It does not replay a queue and has no
   `shouldContinue` guard.
 - **`ReconnectCoordinator` — the ordered, tested path.** Use it when reconnect
   can *fail and need retries*, when replay must run strictly *after* activate +
   bind, and when a mid-retry flap-back-offline must abort cleanly. This is the
   path with the ordering invariant and the guarantees this file documents. Its
-  own callbacks must be posted off the probe thread precisely because the retry
-  loop can run for seconds.
+  sequences run on its own offline strand, off the I/O loop, precisely because
+  the retry loop can run for seconds.
 
 Rule of thumb: a demo or a backend switch with no pending writes can use direct
 `switchBackend`; anything that must not lose queued writes on a flaky link uses
-the coordinator, with `replay` wrapping `SyncWorker::run()`.
+the coordinator, with `replay` driving a `SyncWorker` owned by its strand.
 
 ## Failure modes
 
@@ -1175,14 +1286,14 @@ throw. A coordinator built with a null `tryReconnect`/`replay`/etc. constructs
 fine and later crashes when `onOnline()`/`onOffline()` invokes the null
 `std::function`. Treat the logged error line as the only warning you get.
 
-### `onOnline()` holds the mutex for the entire retry loop
+### `onOnline()` holds the offline strand for the entire retry loop
 
-`onOnline()` takes `_mtx` at entry and holds it across the whole loop —
-including every `sleep(retryDelay)` — for up to `maxAttempts * retryDelay`
-(≈20s at defaults). Because `onOffline()` shares that mutex, **a
-flap-back-offline cannot preempt an in-progress `onOnline()` by acquiring the
-lock**; it can only take effect through `shouldContinue()` returning `false` at
-the next poll. Wire `shouldContinue` to the live monitor state
+`onOnline()`'s task runs the whole loop — including every `sleep(retryDelay)`
+— for up to `maxAttempts * retryDelay` (≈20s at defaults), and the offline
+strand runs nothing else meanwhile. Because `onOffline()` runs on the same
+strand, **a flap-back-offline cannot preempt an in-progress `onOnline()`**: its
+task queues behind it, and the flap can only take effect through
+`shouldContinue()` returning `false` at the next poll. Wire `shouldContinue` to the live monitor state
 (`monitor.isOnline()`) so a flap is actually observed, rather than to a stale
 snapshot.
 
@@ -1225,9 +1336,10 @@ Honest boundaries of what ships today:
   seam, not a built-in queue.
 - **Null `Deps` are not rejected at construction** (see Failure modes) — a
   misconfigured coordinator is a latent crash, not a constructor error.
-- **`onOnline()` serialises the whole retry loop under one mutex**, so
+- **`onOnline()` holds the offline strand for the whole retry loop**, so
   responsiveness to a mid-retry state change is bounded only by the
-  `shouldContinue()` poll cadence, not by lock hand-off.
+  `shouldContinue()` poll cadence, and the retry sleeps occupy one thread of
+  the coordinator's executor meanwhile.
 
 ## Design decisions
 
@@ -1243,25 +1355,27 @@ Honest boundaries of what ships today:
 | `DeadLetterSink` | **Optional third constructor arg, replaces (not augments) the log line** | Gives a host a programmatic hand-off for a poisoned item; a throwing sink is caught and logged, the item is still removed — consistent with the framework's swallow-and-continue policy. |
 | Two shipped durable queues, split by dependency | **`FileOfflineQueue` in the default target; `SqliteOfflineQueue` opt-in** | A host that cannot add a SQLite dependency still gets restart-durability for free; a host that wants indexed dedup and can accept the dependency opts in via `MORPH_BUILD_OFFLINE_SQLITE`. |
 | Idempotency-key dedup strengthened in `SqliteOfflineQueue` only | **Partial unique index on non-empty `idempotency_key`** | The base `IOfflineQueue` contract only stores the key; the SQLite reference implementation additionally enforces insert-time dedup as a deliberate strengthening, not a contract change — `FileOfflineQueue` mirrors the same dedup behavior (linear scan) for parity, but neither is required by the interface. |
-| SyncWorker thread safety | **Internal mutex serialises `run()`** | Second caller blocks — safe to fire from multiple executors. |
-| Reconnect retry loop | **Synchronous, no background thread** | The host owns the executor; the coordinator is pure orchestration with no hidden threads. |
+| SyncWorker thread safety | **One owner; `run()` posts to it** | Two callers never overlap and neither blocks; the coordinator's `replay` step, already on the owner, drains inline. |
+| Reconnect retry loop | **One task on an offline strand over an executor the host gives it** | The host owns the executor; the coordinator is pure orchestration with no hidden threads, and posting its own sequences keeps them off the I/O loop that calls it. |
 | Reconnect step ordering | **Explicit in the `onOnline()` body** | The strict order (reconnect → activate → bind → replay) is the class's reason to exist — callers should never have to get it right themselves. |
-| `onOnline()` / `onOffline()` serialised | **Same internal mutex** | Prevents a race where a concurrent `onOffline()` replays into a local backend during an in-progress `onOnline()`. |
+| `onOnline()` / `onOffline()` serialised | **Same strand** | Prevents a race where a concurrent `onOffline()` replays into a local backend during an in-progress `onOnline()`. |
 | `shouldContinue` re-checked before replay | **Second poll after bind** | The backend may have gone away during `activatePrimary()` / `bindContext()` — never replay into a backend that just became unreachable. |
 | No sleep after final attempt | **`retryDelay` skipped on last iteration** | Wasting 2s after we already know we're giving up serves no purpose. |
 | Conflict resolution lives in the model | **`SyncWorker` has no conflict hook; models reconcile in `onBackendChanged()`** | The framework cannot know whether a payload was superseded — only the domain model can. Keeping `SyncWorker`'s contract a plain `bool` avoids baking a conflict model into the framework; hosts that need merge/discard drain the queue inside `onBackendChanged()` instead (see [Conflict resolution on replay](#conflict-resolution-on-replay)). |
 
 ## Lifetime annotations
 
-`SyncWorker`'s `IOfflineQueue& queue` is marked `MORPH_LIFETIMEBOUND`
-(`morph/attributes.hpp`) — the queue must outlive the worker draining it.
+`SyncWorker`'s `IOfflineQueue& queue` and `exec::IExecutor& owner`, and
+`ReconnectCoordinator`'s `exec::IExecutor& executor`, are marked
+`MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`) — the queue must outlive the
+worker draining it, and each executor the object that posts to it.
 
 The callbacks are annotated too: `NetworkMonitor`'s `probe`/`onOffline`/`onOnline`
 and `SyncWorker`'s `replay`/`deadLetterSink`. Those are taken *by value*, so the
 `std::function` itself is owned rather than borrowed; what the annotation
 documents is that anything the stored callable refers to must outlive the object,
-which matters here precisely because the callable runs on the probe thread (or on
-whatever thread calls `run()`) for that object's whole life. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
+which matters here precisely because the callable runs on the I/O loop (or on
+the worker's owner) for that object's whole life. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetimebound--the-must-outlive-rules-told-to-the-compiler).
 
 ## Cross-references
 

@@ -9,6 +9,7 @@
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/rule_model.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 namespace {
 
@@ -114,7 +115,7 @@ TEST_CASE("RuleModel journals a rule mutation once a log is attached", "[ledger]
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
     const auto entityKey = std::to_string(*ledgerId);
 
-    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ledger::RuleModel model;
     model.attachActionLog(log, entityKey);
 

@@ -25,7 +25,7 @@
 /// `morph::session::detail::ScopedContext`, a `detail::` namespace with no
 /// public seam for this — exactly the class of reach-in
 /// `examples/common/testkit` migrated away from onto public seams
-/// (`Completion<T>::makeSettleable()`, `BridgeHandler::whenBound()`, the
+/// (`Completion<T>::makeSettleable()`, the
 /// `QtWebSocketBackend(url, tls, cfg)` overload) as soon as public seams
 /// existed for them; adding a new reach-in here from an *example* would be a
 /// step backward, not forward. The alternative — an internal client with a

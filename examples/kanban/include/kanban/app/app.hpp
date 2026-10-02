@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <memory>
 #include <morph/core/executor.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/journal/file_action_log.hpp>
 #include <string>
@@ -69,8 +70,11 @@ public:
     [[nodiscard]] std::shared_ptr<::morph::backend::RemoteServer> server() const noexcept { return _server; }
 
 private:
-    std::shared_ptr<::morph::journal::FileActionLog> _actionLog;
     ::morph::exec::ThreadPoolExecutor _pool;
+    /// The action log's owner: boards append from their strands on `_pool`,
+    /// and every append, flush and `GetActivity` read runs here, one at a time.
+    ::morph::exec::OwnerStrand _journalOwner{_pool};
+    std::shared_ptr<::morph::journal::FileActionLog> _actionLog;
     std::shared_ptr<::morph::backend::RemoteServer> _server;
 };
 

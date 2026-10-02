@@ -49,7 +49,7 @@ BRIDGE_REGISTER_ACTION(CovModel, CovAction, "Cov_CovAction")
 TEST_CASE("BridgeHandler::unsubscribe on type with no entry is a no-op", "[bridge]") {
     morph::exec::ThreadPoolExecutor pool{1};
     CovSyncExecutor cb;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cb};
     morph::bridge::BridgeHandler<CovModel> handler{bridge, &cb};
 
     // No prior subscribe<int>, so the removal path finds nothing to erase.
@@ -59,7 +59,7 @@ TEST_CASE("BridgeHandler::unsubscribe on type with no entry is a no-op", "[bridg
 TEST_CASE("BridgeHandler::unsubscribe is idempotent", "[bridge]") {
     morph::exec::ThreadPoolExecutor pool{1};
     CovSyncExecutor cb;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cb};
     morph::bridge::BridgeHandler<CovModel> handler{bridge, &cb};
 
     handler.subscribe<int>([](int) {});

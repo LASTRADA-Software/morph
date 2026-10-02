@@ -15,6 +15,7 @@
 #include "crm/models/contact_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -182,7 +183,7 @@ TEST_CASE("ListContactOptions serves {id, name} rows for the primary-contact Cho
 TEST_CASE("ContactModel journals its edits against the attached identity", "[crm][contact][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel accounts;
     crm::ContactModel contacts;
     contacts.attachActionLog(log, std::string{"contacts"});

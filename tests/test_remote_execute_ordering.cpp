@@ -3,6 +3,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <morph/core/executor.hpp>
@@ -10,6 +11,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -19,44 +21,15 @@
 
 #include "test_support.hpp"
 
-// Regression test for the same-model execute reordering `RemoteServer` used
-// to allow: `handle()` posts every envelope to the shared worker pool, so two
-// `execute` envelopes for the *same* model, sent back-to-back on one
-// connection, could reach the model's own strand out of send order the moment
-// more than one pool worker was free to race the pre-strand work
-// (decode/authorize/authenticate/registry-lookup) ahead of the other. The
-// per-model execute-ordering gate that closes it
-// (`morph::backend::detail::ExecuteOrderGate::take`/`awaitTurn`/`release`,
-// `include/morph/core/detail/execute_order_gate.hpp`) is wired into
-// `include/morph/core/remote.hpp`, whose comments carry its full design
-// history — including the reverted first attempt. The gate's own internal
-// state machine, including the out-of-order-release mechanism,
-// has direct, threadless unit coverage in
-// `tests/test_execute_order_gate.cpp`; what remains here is what only
-// `RemoteServer`'s real dispatch path can prove.
+// Per-model execute ordering at the `RemoteServer` level: for one model, the
+// order `handle()` is called in is the order the model runs the actions.
+// `handle()` posts every envelope to the server strand, which admits an
+// `execute` and posts it to the model's strand; both run in post order.
 //
-// examples/common/testkit/test_fault_proxy.cpp's `FaultProxy::dropReply` test
-// caught this incidentally (it happens to send two calls close together) but
-// relies on real OS thread scheduling to hit the race, so it passed on every
-// quiet/fast run and only failed, intermittently, under CI load — not a
-// reliable reproduction on its own.
-//
-// This test forces the exact interleaving instead of hoping for it: a real
-// ThreadPoolExecutor{2} (so the two calls' pre-strand work can genuinely run
-// concurrently, on separate threads, exactly as in production), paired with a
-// custom IAuthorizer whose `authorize()` deliberately sleeps for call A's
-// invocation only. That guarantees call B's pre-strand work (which never
-// sleeps) finishes first on every run, deterministically — call B's own
-// pool thread reaches the point where it would call `_strand.post(mid, ...)`
-// while call A's thread is still sleeping inside `authorize()`, on every
-// single run of this test, not just probabilistically. A
-// DeterministicExecutor-based version (single-threaded, step-driven) was
-// tried first and does not work for this: it cannot model "B's pool thread
-// blocks waiting for A to make progress" without a second real thread to
-// make that progress — DeterministicExecutor only runs one task to
-// completion at a time, so a fix that makes B legitimately wait for A
-// deadlocks it. Real threads are required to exercise the actual blocking
-// wait the ordering gate introduces.
+// Each case forces its interleaving with real threads rather than hoping for
+// it: a ThreadPoolExecutor with more than one worker, so pre-dispatch work that
+// the design ran concurrently would genuinely race, and an authorizer or an
+// executor wrapper that holds one request back on purpose.
 
 namespace {
 
@@ -71,15 +44,11 @@ namespace {
 // it, further down, for exactly that reason.)
 
 /// @brief Allow-all authorizer whose `authorize()` sleeps once, for the
-///        first call it sees carrying `EroAddAction::by == kSlowByValue` —
-///        every other call (including a second `by == kSlowByValue` call,
-///        should a future edit to this test ever add one) returns
-///        immediately. This is what turns "the race might happen" into "the
-///        race always happens": call A's pre-strand work is held up right
-///        here, in `dispatchExecute`'s own authorize() step, for long enough
-///        that call B's identical pre-strand work — running concurrently on
-///        the pool's other thread — reliably finishes first and reaches the
-///        ticket-wait point before A ever does.
+///        first call it sees; every other call returns immediately. Call A's
+///        admission is held up right here, in `dispatchExecute`'s authorize()
+///        step, for long enough that call B — with the pool's other thread
+///        free — would reach its model's strand first if anything but the
+///        server strand's order decided it.
 class SlowFirstAuthorizer : public morph::session::IAuthorizer {
 public:
     [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
@@ -199,12 +168,9 @@ TEST_CASE(
     WaitReply replyB;
     server->handle(morph::wire::encode(reqB), std::ref(replyB));
 
-    // SlowFirstAuthorizer guarantees B's authorize() call (and everything
-    // after it in B's pre-strand work) finishes before A's does -- A is the
-    // first call reaching authorize() program-order, so it is the one held
-    // up. Without the ordering gate, this is precisely the interleaving that
-    // lets B's execute reach the model's strand before A's, even though the
-    // client sent A first.
+    // SlowFirstAuthorizer holds A's admission for 200ms while the pool's
+    // second thread is free. Were admission run concurrently, B would reach
+    // the model's strand first; on the server strand B waits its turn.
     REQUIRE(replyA.await(std::chrono::milliseconds{5000}));
     REQUIRE(replyB.await(std::chrono::milliseconds{5000}));
     REQUIRE(replyA.env.kind == "ok");
@@ -216,127 +182,56 @@ TEST_CASE(
     // is "100" -- still internally consistent, still both "ok", but
     // backwards relative to send order. Correct behaviour is A settles at
     // 10, B settles at 110, in THAT order -- matching send order, not
-    // whichever pool thread happened to finish its pre-strand work first.
+    // whichever pool thread happened to finish its admission first.
     CHECK(replyA.env.body == "10");
     CHECK(replyB.env.body == "110");
 }
 
-// A prior version of this file had a test here --
-// "RemoteServer::dispatchExecute: awaitExecuteTurn and releaseExecuteTicket
-// both cope when their model's execute gate has already fully drained and
-// been erased" -- built the same way as its siblings below (a
-// ThreadPoolExecutor, a bespoke IAuthorizer, a full register round-trip) to
-// force three same-model executes into an interleaving meant to reach the
-// gate's "already gone" defensive branches.
-//
-// It cannot. That interleaving is reachable only if the gate erases a model's
-// map entry the moment the *last* ticket
-// released, even with an earlier ticket still outstanding, which is exactly
-// what lets a third, later-arriving ticket find the entry gone. With the
-// current rule (a released-out-of-order ticket is recorded rather than applied,
-// and the entry is erased only once every ticket up to it has released in
-// order), that specific interleaving can no longer surface a missing entry --
-// confirmed directly: instrumenting both defensive branches and re-running
-// this test's pre-removal body showed neither one firing. So this test had
-// already stopped covering what its name claimed *before* this extraction;
-// removing it here isn't a migration of live coverage so much as retiring a
-// test whose target moved out from under it. The branches it meant to reach
-// are covered directly and deterministically instead by
-// `tests/test_execute_order_gate.cpp`'s "awaitTurn and release both cope once
-// a gate has fully drained mid-sequence" (a synchronous, threadless case that
-// reaches the erased-map-entry state without needing any thread interleaving
-// at all, since `ExecuteOrderGate` exposes it directly). Removed here rather
-// than duplicated -- tracked in the assertion-count accounting in this task's
-// report.
-
 namespace {
 
-/// @brief Wraps a real executor and holds back exactly one task -- the first
-///        posted after `holdNextPost()` -- until `releaseHeld()` forwards it.
+/// @brief Allow-all authorizer whose `authorize()` blocks, for the first call
+///        it sees, until `release()`; every other call returns at once.
 ///
-/// `RemoteServer` posts each `handle()` call's dispatch work to the executor it
-/// was constructed with (and routes `_strand` through the same one), so
-/// intercepting a single post is enough to decide *which* of two concurrent
-/// requests reaches `dispatchMessage` first. That is what makes the shutdown
-/// interleaving below deterministic instead of a nanoseconds-wide race between
-/// two pool threads reading `_shuttingDown`: without it the window is real but
-/// far too narrow to hit on demand (400 jittered attempts did not).
-class HoldOnePostExecutor : public morph::exec::IExecutor {
+/// Holds one request's admission on the server strand, so what is sent after
+/// it queues behind it — the way the shutdown case below orders "admitted
+/// before shutdown" against "refused after it" without a sleep.
+class GateFirstAuthorizer : public morph::session::IAuthorizer {
 public:
-    explicit HoldOnePostExecutor(morph::exec::IExecutor& inner) : _inner{inner} {}
-
-    /// @brief Forwards @p task, unless it is the one post `holdNextPost()` armed.
-    /// @param task Callable to execute.
-    void post(std::function<void()> task) override {
-        {
-            std::scoped_lock const lock{_mtx};
-            if (_armed) {
-                _armed = false;
-                _held = std::move(task);
-                return;
-            }
+    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
+        if (!_firstTaken.exchange(true)) {
+            _arrived.store(true);
+            (void)morph::testing::waitUntil([this] { return _released.load(); },
+                                            morph::testing::WaitBudget{std::chrono::milliseconds{10000}});
         }
-        _inner.post(std::move(task));
+        return true;
     }
 
-    /// @brief Arms the interception: the next `post()` is captured, not forwarded.
-    void holdNextPost() {
-        std::scoped_lock const lock{_mtx};
-        _armed = true;
-    }
+    /// @return Whether the held call has reached `authorize()`.
+    [[nodiscard]] bool arrived() const { return _arrived.load(); }
 
-    /// @brief Forwards the captured task. No-op if nothing was captured.
-    void releaseHeld() {
-        std::function<void()> task;
-        {
-            std::scoped_lock const lock{_mtx};
-            task = std::move(_held);
-            _held = nullptr;
-        }
-        if (task) {
-            _inner.post(std::move(task));
-        }
-    }
+    /// @brief Lets the held call return.
+    void release() { _released.store(true); }
 
 private:
-    morph::exec::IExecutor& _inner;
-    std::mutex _mtx;
-    bool _armed = false;
-    std::function<void()> _held;
+    mutable std::atomic<bool> _firstTaken{false};
+    mutable std::atomic<bool> _arrived{false};
+    std::atomic<bool> _released{false};
 };
 
 }  // namespace
 
 TEST_CASE(
-    "an execute refused by the shutdown gate releases the execute-ordering "
-    "ticket it took, so a later ticket already waiting on it is not stranded",
+    "an execute refused by the shutdown gate does not strand a same-model "
+    "execute admitted before it",
     "[remote][execute-ordering][shutdown]") {
-    // `handleImpl` takes the ordering ticket on the
-    // transport thread, in send order; `dispatchMessage`'s shutdown gate then
-    // returns *before* `dispatchExecute`, which is the only place a ticket is
-    // released. Because the pool may run the two posted tasks in either order,
-    // the later ticket can pass the gate while the earlier one is still
-    // upstream of it -- and if the earlier one is then refused and drops its
-    // ticket, the later one waits in `ExecuteOrderGate::awaitTurn` on a `cv.wait` with no
-    // deadline, forever.
-    //
-    // The interleaving, forced rather than raced:
-    //   A  handle() -> ticket 0; its pool task is intercepted before it runs.
-    //   B  handle() -> ticket 1; runs, passes the gate, blocks in
-    //      ExecuteOrderGate::awaitTurn(mid, 1) waiting for ticket 0.
-    //   .. beginShutdown()
-    //   A  released; reaches the gate, now closed, and is refused.
-    // A must release ticket 0 on that path or B never completes.
-    //
-    // Heap-allocated because a regression strands a pool worker in a wait with
-    // no deadline: ~ThreadPoolExecutor would then block forever in join(),
-    // turning a clean assertion failure into a whole-binary hang. On the
-    // failing path the fixture is deliberately leaked instead (see below) --
-    // the run is already reporting a failure, and a leak is a far more useful
-    // outcome than a hang.
-    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(2);
-    auto gated = std::make_unique<HoldOnePostExecutor>(*pool);
-    auto server = std::make_shared<morph::backend::RemoteServer>(*gated, eroDispatcher(), eroRegistry());
+    // B is admitted before beginShutdown() takes effect and A after it, on the
+    // same model. A is refused; B must still run and reply, and the drain must
+    // still complete. B's admission is held on the server strand (its
+    // authorize() blocks), so beginShutdown() and A queue behind it: the order
+    // is decided, not raced.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto authorizer = std::make_shared<GateFirstAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, eroDispatcher(), eroRegistry());
 
     WaitReply regReply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
@@ -357,49 +252,28 @@ TEST_CASE(
     reqB.callId = 2;
     reqB.body = R"({"by":11})";
 
-    // A takes ticket 0 but does not run: its dispatch task is held.
-    gated->holdNextPost();
-    WaitReply replyA;
-    server->handle(morph::wire::encode(reqA), std::ref(replyA));
-
-    // B takes ticket 1 and runs all the way to ExecuteOrderGate::awaitTurn(mid, 1), where
-    // it waits for ticket 0. `_inFlightExecutes` is incremented immediately
-    // before that wait, so `health().inFlight == 1` is a deterministic signal
-    // that B is parked there rather than a sleep hoping that it is.
     WaitReply replyB;
     server->handle(morph::wire::encode(reqB), std::ref(replyB));
-    REQUIRE(morph::testing::waitUntil([&] { return server->health().inFlight == 1; }));
-    REQUIRE_FALSE(replyB.ready.load());
+    REQUIRE(morph::testing::waitUntil([&] { return authorizer->arrived(); }));
 
     server->beginShutdown();
-    gated->releaseHeld();
+    WaitReply replyA;
+    server->handle(morph::wire::encode(reqA), std::ref(replyA));
+    REQUIRE_FALSE(replyA.ready.load());
+    authorizer->release();
 
     // A is refused by the now-closed gate...
     REQUIRE(replyA.await());
     CHECK(replyA.env.kind == "err");
     CHECK(replyA.env.message == "server shutting down");
 
-    // ...and must have released ticket 0 on the way out. B passed the gate
-    // before shutdown, so it is still owed its dispatch.
-    bool const bCompleted = replyB.await(std::chrono::milliseconds{5000});
-    if (!bCompleted) {
-        // See the note above: B's pool thread is stuck in a deadline-less wait
-        // and can never be joined.
-        (void)server.get();
-        (void)gated.release();
-        // Assigned rather than `(void)pool.release()`: bugprone-unused-return-value
-        // flags the discarded unique_ptr::release(), and a cast to void does not
-        // satisfy it. Naming the leaked pointer says the same thing and lints clean.
-        [[maybe_unused]] auto* const leakedPool = pool.release();
-    }
-    REQUIRE(bCompleted);
+    // ...and B, admitted before shutdown, is still owed its dispatch.
+    REQUIRE(replyB.await(std::chrono::milliseconds{5000}));
     CHECK(replyB.env.kind == "ok");
     CHECK(replyB.env.body == "11");
 
-    // The same stranded wait also holds `_inFlightExecutes` above zero for
-    // good, because it is incremented before the wait -- so a regression here
-    // breaks graceful shutdown as well as this one caller.
-    CHECK(server->drainedWithin(std::chrono::milliseconds{2000}));
+    CHECK(morph::testing::awaitAnswer(
+        [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{2000}, owner); }));
 }
 
 namespace {
@@ -411,27 +285,22 @@ namespace {
 /// (`remote.hpp`): `authorize` (type-level gate), `authenticate` (principal
 /// stamping), then -- after the registry lookup -- `authorizeInstance` (the
 /// row-level gate). All three are non-`noexcept` virtuals on the public
-/// `morph::session::IAuthorizer` extension point, and each sits *between*
-/// `handleImpl`'s `ExecuteOrderGate::take` and the `ExecuteOrderGate::release` that
-/// follows `_strand.post`, so a throw from any of them unwinds across the
-/// ticketed region.
+/// `morph::session::IAuthorizer` extension point.
 enum class ThrowingHook : std::uint8_t { Authorize, Authenticate, AuthorizeInstance };
 
-/// @brief Allow-all authorizer that throws from one chosen hook, but only
-///        once `arm()` has been called.
+/// @brief Allow-all authorizer that throws from one chosen hook, once, the
+///        first time that hook is called after `arm()`.
 ///
-/// Arming is what keeps the interleaving decided rather than raced: the
-/// `register` envelope and request B both run through this authorizer while
-/// it is still a plain allow-all, and only the *held* request A -- released
-/// after B is parked in `ExecuteOrderGate::awaitTurn` -- ever sees the throw.
+/// Arming after the `register` reply keeps registration (which also
+/// authenticates) out of it, and throwing once means only the first execute
+/// sent afterwards sees the throw.
 class ArmedThrowingAuthorizer : public morph::session::IAuthorizer {
 public:
     /// @brief Constructs an authorizer that will throw from @p hook once armed.
     /// @param hook The hook to throw from.
     explicit ArmedThrowingAuthorizer(ThrowingHook hook) : _hook{hook} {}
 
-    /// @brief Arms the throw: every call after this point throws from the
-    ///        configured hook.
+    /// @brief Arms the throw: the next call of the configured hook throws.
     void arm() { _armed.store(true); }
 
     /// @brief Type-level gate; throws when armed and configured to.
@@ -470,32 +339,25 @@ public:
 
 private:
     void maybeThrow(ThrowingHook from) const {
-        if (from == _hook && _armed.load()) {
+        if (from == _hook && _armed.exchange(false)) {
             throw std::runtime_error{std::string{kThrowMessage}};
         }
     }
 
     ThrowingHook _hook;
-    std::atomic<bool> _armed{false};
+    mutable std::atomic<bool> _armed{false};
 };
 
-/// @brief Runs the "A throws while B is parked on A's ticket" scenario once,
-///        with the throw coming from @p hook.
-/// @param hook Which `IAuthorizer` hook request A's dispatch throws from.
+/// @brief Runs the "A throws, B sent after it on the same model" scenario
+///        once, with the throw coming from @p hook.
+/// @param hook Which `IAuthorizer` hook request A's admission throws from.
 // The Catch2 assertion macros, not branching logic, are what push this over
-// the cognitive-complexity threshold -- exactly as they do in the sibling
-// TEST_CASEs above, which the checker exempts only because it does not see
-// through TEST_CASE's own generated function.
+// the cognitive-complexity threshold.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void runThrowingHookStrandsNothing(ThrowingHook hook) {
-    // Same fixture shape, and the same leak-on-failure reasoning, as the
-    // shutdown-gate case above: a regression parks a pool worker in a wait
-    // with no deadline, so ~ThreadPoolExecutor would hang the whole binary in
-    // join() instead of reporting a failed assertion.
-    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(2);
-    auto gated = std::make_unique<HoldOnePostExecutor>(*pool);
+    morph::exec::ThreadPoolExecutor pool{2};
     auto authorizer = std::make_shared<ArmedThrowingAuthorizer>(hook);
-    auto server = std::make_shared<morph::backend::RemoteServer>(*gated, authorizer, eroDispatcher(), eroRegistry());
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, eroDispatcher(), eroRegistry());
 
     WaitReply regReply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
@@ -516,89 +378,41 @@ void runThrowingHookStrandsNothing(ThrowingHook hook) {
     reqB.callId = 2;
     reqB.body = R"({"by":11})";
 
-    // A takes ticket 0 but does not run: its dispatch task is held.
-    gated->holdNextPost();
+    // Only A, the first execute after arming, sees the throw.
+    authorizer->arm();
     WaitReply replyA;
     server->handle(morph::wire::encode(reqA), std::ref(replyA));
-
-    // B takes ticket 1 and runs, unimpeded (the authorizer is not armed yet),
-    // all the way to ExecuteOrderGate::awaitTurn(mid, 1). `_inFlightExecutes` is
-    // incremented immediately before that wait, so `health().inFlight == 1` is
-    // a deterministic signal that B is parked there -- no sleep involved.
     WaitReply replyB;
     server->handle(morph::wire::encode(reqB), std::ref(replyB));
-    REQUIRE(morph::testing::waitUntil([&] { return server->health().inFlight == 1; }));
-    REQUIRE_FALSE(replyB.ready.load());
 
-    // Only A's dispatch can reach the authorizer from here on.
-    authorizer->arm();
-    gated->releaseHeld();
-
-    // A's hook throws; dispatchMessage's outer catch turns it into an `err`...
+    // A's hook throws; dispatchEnvelope's catch turns it into an `err`...
     REQUIRE(replyA.await());
     CHECK(replyA.env.kind == "err");
     CHECK(replyA.env.message == std::string{ArmedThrowingAuthorizer::kThrowMessage});
 
-    // ...and ticket 0 must have been released as that throw unwound out of
-    // dispatchExecute, or B waits on it forever.
-    bool const bCompleted = replyB.await(std::chrono::milliseconds{5000});
-    bool const drained = bCompleted && server->drainedWithin(std::chrono::milliseconds{2000});
-    if (!bCompleted) {
-        // B's pool thread is stuck in a deadline-less wait and can never be
-        // joined; leak the fixture rather than hang the run (see above).
-        (void)server.get();
-        (void)gated.release();
-        // Assigned rather than `(void)pool.release()`: bugprone-unused-return-value
-        // flags the discarded unique_ptr::release(), and a cast to void does not
-        // satisfy it. Naming the leaked pointer says the same thing and lints clean.
-        [[maybe_unused]] auto* const leakedPool = pool.release();
-    }
-    REQUIRE(bCompleted);
+    // ...and B, behind it on the same model, still runs, on a counter A never
+    // touched.
+    REQUIRE(replyB.await(std::chrono::milliseconds{5000}));
     CHECK(replyB.env.kind == "ok");
     CHECK(replyB.env.body == "11");
 
-    // The stranded wait also holds `_inFlightExecutes` above zero for good,
-    // because it is incremented before the wait -- so a regression here breaks
-    // graceful shutdown as well as this one caller.
-    CHECK(drained);
+    // A throw during admission leaves no in-flight slot behind.
+    CHECK(morph::testing::awaitAnswer(
+        [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{2000}, owner); }));
 }
 
 }  // namespace
 
 TEST_CASE(
-    "a throw out of dispatchExecute releases the execute-ordering ticket it took, "
-    "so a later ticket already waiting on it is not stranded",
+    "a throw out of dispatchExecute's admission does not strand a same-model "
+    "execute sent after it",
     "[remote][execute-ordering][exceptions]") {
-    // The sibling of the shutdown-gate case above: the same stranded ticket,
-    // reached by a different route.
-    // `dispatchExecute` has no try/catch of its own, and its rejectAndRelease
-    // helper only covers the *explicit* early returns; an exception unwinds
-    // past all of them into `dispatchMessage`'s outer catch, which replies but
-    // released nothing. The fix is structural -- the ticket is owned by an
-    // RAII holder for the whole span between `ExecuteOrderGate::take` and the
-    // release that follows `_strand.post`, so every exit path releases it,
-    // including ones nobody has thought of yet.
-    //
-    // The interleaving, forced rather than raced (identical to the
-    // shutdown-gate case's):
-    //   A  handle() -> ticket 0; its pool task is intercepted before it runs.
-    //   B  handle() -> ticket 1; runs, passes every gate, parks in
-    //      ExecuteOrderGate::awaitTurn(mid, 1) waiting for ticket 0.
-    //   .. the authorizer is armed (so only A can see the throw)
-    //   A  released; its hook throws.
-    //
-    // The three sections below are the three `IAuthorizer` hooks
-    // `dispatchExecute` calls inside the ticketed region. The fourth reachable
-    // throw site in that region -- `missingRequiredFields`, under
-    // `PayloadCompleteness::RequireDeclaredFields` -- is *not* separately
-    // exercised here: it is not a user-supplied virtual, so forcing a throw
-    // out of it would mean faulting the dispatcher's own parse rather than
-    // driving a documented extension point. It sits between the same two
-    // points as these three (`remote.hpp`: after `authorizeInstance`, before
-    // the in-flight reservation), so the holder covers it by construction --
-    // as it does any future throw added anywhere in that span, which is the
-    // whole reason the fix is a holder rather than a fourth hand-written
-    // release.
+    // The three sections are the three `IAuthorizer` hooks `dispatchExecute`
+    // calls during admission. The fourth throw site there --
+    // `missingRequiredFields`, under `PayloadCompleteness::RequireDeclaredFields`
+    // -- is not a user-supplied virtual, so forcing a throw out of it would mean
+    // faulting the dispatcher's own parse rather than driving a documented
+    // extension point; it unwinds the same way.
     SECTION("authorize() throws") { runThrowingHookStrandsNothing(ThrowingHook::Authorize); }
     SECTION("authenticate() throws") { runThrowingHookStrandsNothing(ThrowingHook::Authenticate); }
     SECTION("authorizeInstance() throws") { runThrowingHookStrandsNothing(ThrowingHook::AuthorizeInstance); }
@@ -606,14 +420,7 @@ TEST_CASE(
 
 namespace {
 
-/// @brief Allow-all authorizer that refuses exactly the marker action type,
-///        with no sleeps anywhere.
-///
-/// The interleaving in the test below is forced by holding pool posts, not by
-/// timing, so nothing here needs to be slow -- this authorizer's only job is
-/// to make one of three same-model executes take `dispatchExecute`'s
-/// `rejectAndRelease` path (which releases its ticket immediately, without
-/// ever waiting for its turn) while the others take the normal path.
+/// @brief Allow-all authorizer that refuses exactly the marker action type.
 class RejectMarkerAuthorizer : public morph::session::IAuthorizer {
 public:
     /// @brief Refuses `kRejectMarker`, allows everything else.
@@ -628,102 +435,17 @@ public:
     static constexpr std::string_view kRejectMarker = "ERO_RejectAction";
 };
 
-/// @brief Wraps a real executor and holds back the next `n` posts, handing
-///        each one on individually, by the order it was posted in.
-///
-/// The single-post `HoldOnePostExecutor` above is not enough for the scenario
-/// below, which needs *three* `handle()` calls to have taken their tickets --
-/// tickets are taken synchronously on the calling thread, but the work is
-/// posted -- before any of the three dispatch tasks runs. Holding only the
-/// first would let the second's dispatch (and its ticket release) race the
-/// third's `handle()` call, and the interleaving under test depends on the
-/// third ticket already existing.
-///
-/// Only the *arming window* is intercepted: once `n` posts have been captured
-/// every later post (notably the strands', which `RemoteServer` routes
-/// through this same executor) passes straight through.
-class HoldNextPostsExecutor : public morph::exec::IExecutor {
-public:
-    /// @brief Wraps @p inner, forwarding to it once the arming window closes.
-    /// @param inner Executor that actually runs the tasks.
-    explicit HoldNextPostsExecutor(morph::exec::IExecutor& inner) : _inner{inner} {}
-
-    /// @brief Captures @p task while posts remain armed, otherwise forwards it.
-    /// @param task Callable to execute.
-    void post(std::function<void()> task) override {
-        {
-            std::scoped_lock const lock{_mtx};
-            if (_remainingToHold > 0) {
-                --_remainingToHold;
-                _held.push_back(std::move(task));
-                return;
-            }
-        }
-        _inner.post(std::move(task));
-    }
-
-    /// @brief Arms interception of the next @p count posts.
-    /// @param count Number of posts to capture instead of forwarding.
-    void holdNextPosts(std::size_t count) {
-        std::scoped_lock const lock{_mtx};
-        _remainingToHold = count;
-    }
-
-    /// @brief Forwards the @p index-th captured post. No-op if already forwarded.
-    /// @param index Position in capture (i.e. post) order.
-    void forward(std::size_t index) {
-        std::function<void()> task;
-        {
-            std::scoped_lock const lock{_mtx};
-            if (index < _held.size()) {
-                task = std::move(_held.at(index));
-                _held.at(index) = nullptr;
-            }
-        }
-        if (task) {
-            _inner.post(std::move(task));
-        }
-    }
-
-    /// @brief Forwards every captured post not already forwarded.
-    void forwardRest() {
-        std::vector<std::function<void()>> pending;
-        {
-            std::scoped_lock const lock{_mtx};
-            pending.swap(_held);
-            _remainingToHold = 0;
-        }
-        for (auto& task : pending) {
-            if (task) {
-                _inner.post(std::move(task));
-            }
-        }
-    }
-
-private:
-    morph::exec::IExecutor& _inner;
-    std::mutex _mtx;
-    std::size_t _remainingToHold = 0;
-    std::vector<std::function<void()>> _held;
-};
-
-}  // namespace
-
-namespace {
-
 /// @brief Wraps a real executor and, once armed, blocks the *next* `post()`
 ///        call until `releaseFirst()` is called, forwarding it then; every
 ///        other call forwards immediately.
 ///
-/// Not armed by default -- like `HoldOnePostExecutor` above, a caller must
-/// opt in via `armNextPost()` before anything is intercepted, so setup
-/// traffic (e.g. a `register` envelope) that also goes through `post()`
-/// passes straight through instead of being caught by surprise.
+/// Not armed by default: a caller opts in via `armNextPost()`, so setup
+/// traffic (e.g. a `register` envelope) that also goes through `post()` passes
+/// straight through.
 ///
-/// Lets a test hold open the window between one caller's `take()` (or
-/// `takeAndPost`) and its enqueue reaching the real pool, so a second,
-/// concurrent caller gets every chance to run in between -- without touching
-/// production code.
+/// Holds one caller inside `handle()` — inside the server strand's hand-off
+/// to the pool, or the model strand's — so a second, concurrent caller gets
+/// every chance to run in between.
 class StallFirstPostExecutor : public morph::exec::IExecutor {
 public:
     explicit StallFirstPostExecutor(morph::exec::IExecutor& inner) : _inner{inner} {}
@@ -786,33 +508,14 @@ private:
 
 TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do not deadlock",
           "[remote][execute-ordering][morph-519]") {
-    // `handleImpl` must not take an execute-ordering ticket and enqueue the
-    // dispatch work as two separate, unlocked steps: two threads calling handle() concurrently
-    // for the same model could take tickets in order but enqueue out of order: if the
-    // later ticket's task reached the pool's FIFO queue first, a pool worker picked it
-    // up, called ExecuteOrderGate::awaitTurn and blocked waiting for the earlier
-    // ticket -- and with a pool no larger than the number of same-model callers, every
-    // worker ended up parked that way while the earlier ticket's task never got a
-    // worker to run on. That is exactly the topology morph::net::SocketServer uses
-    // (one thread per connection, all calling handle()).
-    //
-    // What is forced and what is not: StallFirstPostExecutor deterministically
-    // blocks thread A inside post() until released, so thread B's handle() call
-    // gets every chance to run first. B actually *winning* that window is
-    // best-effort, and deliberately so -- it cannot be made deterministic. The
-    // fix holds `_enqueueMtx` across postFn, so once A is stalled inside post()
-    // it still owns that mutex and B blocks in takeAndPost before taking a
-    // ticket at all; a handshake that waited for B's own post to arrive before
-    // releasing A would therefore wait forever against the *fixed* code. The
-    // sleep below is an aid for reproducing the inversion by hand against the
-    // pre-fix code, not part of what this test asserts.
-    // Manually reverting the takeAndPost fix and re-running this test reproduces the
-    // deadlock (both replies time out); with the fix, ExecuteOrderGate::takeAndPost's
-    // atomicity means thread B cannot even take its ticket until thread A's whole
-    // take-and-post call (post() included) has returned, so thread A's task is
-    // unconditionally enqueued first -- deterministically, regardless of exactly when
-    // thread B is scheduled relative to the release below.
-    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(1);  // matches the issue's confirmed-stalling size
+    // morph::net::SocketServer's shape: more than one thread calling handle()
+    // for the same model, against a pool no larger than the number of
+    // callers. StallFirstPostExecutor blocks thread A inside a post() it makes
+    // on the way to the pool, so thread B's handle() call gets every chance to
+    // run first. B *winning* that window is best-effort and cannot be made
+    // deterministic; what is asserted holds however the two interleave: both
+    // replies arrive, and A — whose handle() call came first — runs first.
+    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
     StallFirstPostExecutor gated{*pool};
     auto server = std::make_shared<morph::backend::RemoteServer>(gated, eroDispatcher(), eroRegistry());
 
@@ -835,23 +538,18 @@ TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do 
     reqB.callId = 2;
     reqB.body = R"({"by":100})";
 
-    // Armed *before* starting thread A, and only now -- the registration call
-    // above also goes through post(), and must not be the one intercepted.
+    // Armed only now -- the registration above also goes through post(), and
+    // must not be the one intercepted.
     gated.armNextPost();
     WaitReply replyA;
     std::thread threadA([&] { server->handle(morph::wire::encode(reqA), std::ref(replyA)); });
 
-    // Deterministic: proceed only once A's handle() call has actually reached
-    // _pool.post() and is stalled there.
+    // Proceed only once a post on A's path has reached the executor and is
+    // stalled there.
     gated.waitForArrival();
 
     WaitReply replyB;
     std::thread threadB([&] { server->handle(morph::wire::encode(reqB), std::ref(replyB)); });
-    // Best-effort head start for B, for manual pre-fix reproduction only (see the
-    // note above for why it cannot be a deterministic handshake). If B loses this
-    // window the pre-fix code enqueues in order and no inversion is reproduced --
-    // but what CI asserts below is the fixed code's behaviour, which holds
-    // regardless of how these two threads interleave.
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     gated.releaseFirst();
 
@@ -860,17 +558,6 @@ TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do 
 
     bool const aCompleted = replyA.await(std::chrono::milliseconds{5000});
     bool const bCompleted = aCompleted && replyB.await(std::chrono::milliseconds{5000});
-    if (!aCompleted || !bCompleted) {
-        // Pre-fix reproduction: the pool's one worker is parked forever in
-        // ExecuteOrderGate::awaitTurn. Leak rather than hang the whole binary in
-        // ~ThreadPoolExecutor, exactly as this file's other tests already do for the
-        // same deadline-less cv.wait.
-        (void)server.get();
-        // Assigned rather than `(void)pool.release()`: bugprone-unused-return-value
-        // flags the discarded unique_ptr::release(), and a cast to void does not
-        // satisfy it. Naming the leaked pointer says the same thing and lints clean.
-        [[maybe_unused]] auto* const leakedPool = pool.release();
-    }
     REQUIRE(aCompleted);
     REQUIRE(bCompleted);
     CHECK(replyA.env.kind == "ok");
@@ -885,57 +572,16 @@ TEST_CASE("two concurrent handle() callers on one modelId with a pool of one do 
 // the cognitive-complexity threshold -- as in the sibling TEST_CASEs above.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE(
-    "an execute rejected out of ticket order does not strand an earlier ticket "
-    "that has not reached ExecuteOrderGate::awaitTurn yet",
+    "an execute rejected between two same-model executes does not break the "
+    "order of the two it sits between",
     "[remote][execute-ordering]") {
-    // The third distinct way into the stranded-ticket failure. The other two
-    // are closed by making the *release* structural.
-    // Making release unmissable is necessary and is not sufficient: the
-    // remaining hole is in `ExecuteOrderGate::release` itself.
-    //
-    // `ExecuteOrderGate::release(mid, ticket)` used to assign
-    //
-    //     gate.nextToRun = ticket + 1;
-    //
-    // which is only correct if tickets are released in ticket order. They are
-    // not, and by design: every early return in `dispatchExecute`
-    // (`rejectAndRelease` -- model not found, unauthorized, over limit) and
-    // `dispatchMessage`'s shutdown gate release *immediately*, deliberately
-    // never calling `ExecuteOrderGate::awaitTurn`, so that a rejection cannot hold up the
-    // live executes queued behind it. So a later ticket routinely releases
-    // first -- and when it did, that assignment pushed `nextToRun` straight
-    // *past* an earlier ticket's number. `ExecuteOrderGate::awaitTurn` waits on
-    // `nextToRun == ticket` with no deadline, so the earlier ticket's waiter
-    // could never be satisfied: a pool worker blocked for the rest of the
-    // process's life, `_inFlightExecutes` stuck above zero (so
-    // `drainedWithin()` can never succeed), and `~ThreadPoolExecutor` hanging
-    // forever in join(). That is exactly the reported symptom, and it explains
-    // why this reproduces under `morph::net` in particular: a dropped
-    // connection reclaims that connection's models, so the executes still in
-    // flight for one model split into some that find the model and some that
-    // reject with "model not found" -- manufacturing precisely this
-    // out-of-order release.
-    //
-    // The fix keeps the fast-reject path fast and instead makes `nextToRun`
-    // advance only over a *contiguous* run of released tickets, holding an
-    // early release aside as pending until every ticket before it has released
-    // too.
-    //
-    // Forced, not raced. Three same-model executes take tickets 0, 1 and 2
-    // synchronously in `handle()`, with all three dispatch tasks held, so the
-    // gate is fully populated before any of them runs:
-    //   A  ticket 0, ERO_AddAction    -- released second; must run first.
-    //   B  ticket 1, ERO_RejectAction -- released first; rejected in
-    //      authorize(), so it releases ticket 1 without ever waiting.
-    //   C  ticket 2, ERO_AddAction    -- not released until the end, purely so
-    //      `nextToRun` cannot reach `nextTicket` and erase the gate (that
-    //      erase is what makes the *two*-ticket version of this interleaving
-    //      harmless, and it is already covered by the "gate has already fully
-    //      drained" case above).
-    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(3);
-    auto gated = std::make_unique<HoldNextPostsExecutor>(*pool);
+    // Three same-model executes, sent in order: A adds 5, B is refused by the
+    // authorizer, C adds 7. A rejection answers in its own turn on the server
+    // strand and holds nothing for anyone; A and C still run in send order, so
+    // C reads 5 + 7.
+    morph::exec::ThreadPoolExecutor pool{3};
     auto authorizer = std::make_shared<RejectMarkerAuthorizer>();
-    auto server = std::make_shared<morph::backend::RemoteServer>(*gated, authorizer, eroDispatcher(), eroRegistry());
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, eroDispatcher(), eroRegistry());
 
     WaitReply regReply;
     server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
@@ -960,53 +606,25 @@ TEST_CASE(
     reqC.callId = 3;
     reqC.body = R"({"by":7})";
 
-    gated->holdNextPosts(3);
     WaitReply replyA;
     server->handle(morph::wire::encode(reqA), std::ref(replyA));
     WaitReply replyB;
     server->handle(morph::wire::encode(reqB), std::ref(replyB));
     WaitReply replyC;
     server->handle(morph::wire::encode(reqC), std::ref(replyC));
-    REQUIRE_FALSE(replyA.ready.load());
-    REQUIRE_FALSE(replyB.ready.load());
-    REQUIRE_FALSE(replyC.ready.load());
 
-    // B first: `rejectAndRelease` releases ticket 1 and only then writes the
-    // reply, so a settled replyB is a deterministic signal that ticket 1 is
-    // already released -- no sleep involved.
-    gated->forward(1);
     REQUIRE(replyB.await());
     CHECK(replyB.env.kind == "err");
     CHECK(replyB.env.message == "unauthorized");
 
-    // Now A, whose ticket 0 that release skipped over.
-    gated->forward(0);
-    bool const aCompleted = replyA.await(std::chrono::milliseconds{5000});
-    if (!aCompleted) {
-        // A's pool thread is parked in a wait with no deadline and can never
-        // be joined; leak the fixture rather than hang the whole binary in
-        // ~ThreadPoolExecutor, exactly as the two cases above do.
-        (void)server.get();
-        // NOLINTBEGIN(bugprone-unused-return-value) -- leaking is the point.
-        (void)gated.release();
-        // Assigned rather than `(void)pool.release()`: bugprone-unused-return-value
-        // flags the discarded unique_ptr::release(), and a cast to void does not
-        // satisfy it. Naming the leaked pointer says the same thing and lints clean.
-        [[maybe_unused]] auto* const leakedPool = pool.release();
-        // NOLINTEND(bugprone-unused-return-value)
-    }
-    REQUIRE(aCompleted);
+    REQUIRE(replyA.await(std::chrono::milliseconds{5000}));
     CHECK(replyA.env.kind == "ok");
     CHECK(replyA.env.body == "5");
 
-    // And ordering still holds for the ticket behind the skipped one: C ran
-    // after A, so the counter reads 5 + 7 rather than 7.
-    gated->forwardRest();
     REQUIRE(replyC.await());
     CHECK(replyC.env.kind == "ok");
     CHECK(replyC.env.body == "12");
 
-    // The stranded wait would also hold `_inFlightExecutes` above zero for
-    // good, so a regression breaks graceful shutdown as well as this caller.
-    CHECK(server->drainedWithin(std::chrono::milliseconds{2000}));
+    CHECK(morph::testing::awaitAnswer(
+        [&](auto& owner) { return server->drainedWithin(std::chrono::milliseconds{2000}, owner); }));
 }

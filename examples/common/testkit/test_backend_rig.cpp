@@ -169,11 +169,12 @@ TEST_CASE("BackendRig::Socket threads a custom authorizer through to the RemoteS
     auto authorizer = std::make_shared<DenyAllAuthorizer>();
     morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, /*nClients=*/1, authorizer};
 
-    // Registration itself is denied and throws synchronously from
-    // BridgeHandler's constructor — if the authorizer were silently ignored
-    // (the pre-fix default-allow behavior), this would construct cleanly
-    // instead.
-    REQUIRE_THROWS_WITH(rig.client<RigProbeModel>(0), Catch::Matchers::ContainsSubstring("unauthorized"));
+    // Registration is denied: the handler's bind fails, and the first call
+    // made through it is rejected with the bind's error. An authorizer that
+    // was silently ignored would let the call through instead.
+    auto handler = rig.client<RigProbeModel>(0);
+    REQUIRE_THROWS_WITH(morph::ladder::testkit::awaitQt(handler.execute(RigProbeAction{1})),
+                        Catch::Matchers::ContainsSubstring("unauthorized"));
 }
 
 TEST_CASE("BackendRig::Socket threads a custom QtWebSocketServerConfig through to the server it builds",
@@ -203,8 +204,11 @@ TEST_CASE("BackendRig::socketBackend() hands out the live backend, usable for he
 
     // negotiateProtocolVersion() is transport-level and has no Bridge-level
     // equivalent — reaching it at all is the reason this accessor exists.
-    REQUIRE(rig.socketBackend(0).negotiateProtocolVersion() == morph::wire::ProtocolNegotiationResult::Negotiated);
-    REQUIRE(rig.socketBackend(1).negotiateProtocolVersion() == morph::wire::ProtocolNegotiationResult::Negotiated);
+    morph::qt::QtExecutor qtExec;
+    REQUIRE(morph::ladder::testkit::awaitQt(rig.socketBackend(0).negotiateProtocolVersion(qtExec)) ==
+            morph::wire::ProtocolNegotiationResult::Negotiated);
+    REQUIRE(morph::ladder::testkit::awaitQt(rig.socketBackend(1).negotiateProtocolVersion(qtExec)) ==
+            morph::wire::ProtocolNegotiationResult::Negotiated);
 
     // Still a working backend afterwards: negotiation is not a one-way door.
     auto handler = rig.client<RigProbeModel>(0);

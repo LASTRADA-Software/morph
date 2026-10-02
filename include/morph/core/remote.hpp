@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <latch>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -25,10 +26,12 @@
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
 #include "backend.hpp"
-#include "detail/execute_order_gate.hpp"
+#include "completion.hpp"
+#include "detail/owner_probe.hpp"
 #include "detail/reply_router.hpp"
 #include "logger.hpp"
 #include "observability.hpp"
+#include "owner_strand.hpp"
 #include "timeout_scheduler.hpp"
 #include "wire.hpp"
 
@@ -36,9 +39,9 @@ namespace morph::backend {
 
 /// @brief Opt-in, connection-agnostic resource limits enforced by `RemoteServer`.
 ///
-/// Every field defaults to `0`, meaning "unbounded" — installing no policy (or
-/// installing a default-constructed one) reproduces today's behavior exactly.
-/// Install via `RemoteServer::setLimitPolicy()`. See `docs/spec/core/backend.md`.
+/// Every field defaults to `0`, meaning "unbounded": a default-constructed
+/// policy applies no limit. Given as `ServerConfig::limits`, at construction.
+/// See `docs/spec/core/backend.md`.
 struct LimitPolicy {
     /// @brief Max wall-clock time a single `execute` may take before the server
     ///        sends an `err "timeout"` reply and discards the eventual strand
@@ -190,6 +193,58 @@ struct HealthStatus {
     std::size_t inFlight;
 };
 
+/// @brief Callable that supplies the action log to attach to a newly
+///        registered instance, given its model type and `contextKey`.
+///
+/// Return `nullptr` to register the instance with no log attached (e.g. for
+/// model types or context keys the host app doesn't want journaled).
+using LogProvider = std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType,
+                                                                                std::string_view contextKey)>;
+
+/// @brief Everything about a `RemoteServer` that is configured rather than
+///        learned: given once, at construction, and never changed.
+///
+/// The server reads these fields on its own strand and on its models' strands
+/// without a lock, which is sound only because nothing writes them after the
+/// constructor. A deployment that wants different limits constructs a
+/// different server. See `docs/spec/core/backend.md`, "`ServerConfig`".
+struct ServerConfig {
+    /// @brief Opt-in resource limits. Default-constructed: unbounded.
+    LimitPolicy limits{};
+
+    /// @brief Consulted whenever an instance is constructed with a non-empty
+    ///        `contextKey` — every `register` envelope, and every `attach` that
+    ///        misses the shared directory and therefore creates the instance.
+    ///
+    /// `RemoteServer` owns the model instances of every remote client, so it is
+    /// the only place that can attach an action log to them. Null: no instance
+    /// gets a log. Runs on the server's strand.
+    LogProvider logProvider;
+
+    /// @brief Called with the server's health: once from the constructor, and
+    ///        again, on the server's strand, whenever readiness changes
+    ///        (`beginShutdown()`). Null: nothing is called.
+    ///
+    /// A deployment's transport can expose it over a probe endpoint; morph does
+    /// not embed an HTTP server.
+    std::function<void(const HealthStatus&)> healthHandler;
+
+    /// @brief Oldest protocol version this server accepts in reply to
+    ///        `"hello"`. Must not exceed `maxProtocolVersion`.
+    std::uint32_t minProtocolVersion = ::morph::wire::kProtocolVersion;
+
+    /// @brief Newest protocol version this server accepts in reply to
+    ///        `"hello"`. Widen the range when a `kProtocolVersion` bump must keep
+    ///        serving older clients through their deprecation window (see
+    ///        docs/spec/core/wire.md, "Action-evolution policy").
+    std::uint32_t maxProtocolVersion = ::morph::wire::kProtocolVersion;
+
+    /// @brief Whether an `execute` body must carry every field the action's
+    ///        served schema marks `required`. See `PayloadCompleteness` for why
+    ///        `Lenient` is the default.
+    PayloadCompleteness payloadCompleteness = PayloadCompleteness::Lenient;
+};
+
 /// @brief Server-side message handler that owns model instances and dispatches actions.
 ///
 /// `RemoteServer` receives JSON envelopes (`morph::wire::Envelope`) from any
@@ -197,22 +252,35 @@ struct HealthStatus {
 /// model operations via an `ActionDispatcher`. Authorization is delegated to an
 /// `IAuthorizer` that defaults to allow-all.
 ///
+/// @par One owner
+/// The server's state — the instance registry, the connection scopes, the
+/// in-flight count, readiness — belongs to one strand over the worker pool, the
+/// *server strand*, and is touched only in its tasks. Every public verb posts
+/// to it. An `execute` is admitted there and then posted to its model's own
+/// strand, so for one model the order `handle()` was called in is the order the
+/// model runs them: both hops are strands, and a strand runs in post order.
+/// Configuration is a `ServerConfig`, fixed at construction.
+///
 /// @par Heap allocation requirement
-/// `RemoteServer` **must** be heap-allocated via `std::make_shared`. `handle()`
-/// captures `shared_from_this()` to prevent use-after-free when the worker pool
-/// outlives the server object.
+/// `RemoteServer` **must** be heap-allocated via `std::make_shared`. Every task
+/// it posts captures `shared_from_this()`, so the server outlives its queued
+/// work however the last external reference is dropped.
 ///
 /// @par Wire format
 /// All requests and replies are encoded as `morph::wire::Envelope` JSON. See
 /// `wire.hpp` for the field semantics. The `kind` field is the discriminator.
 class RemoteServer : public std::enable_shared_from_this<RemoteServer> {
 public:
-    /// @brief Constructs a server backed by @p workerPool with allow-all authorization.
+    /// @brief Alias of `morph::backend::LogProvider`, the type of
+    ///        `ServerConfig::logProvider`.
+    using LogProvider = ::morph::backend::LogProvider;
+
+    /// @brief Constructs a server backed by @p workerPool with allow-all
+    ///        authorization and a default `ServerConfig`.
     ///
-    /// @param workerPool Pool used to process messages asynchronously. Borrowed,
-    ///                   not owned: it must outlive this server — and, because
-    ///                   the server's strands run on it, keep running until
-    ///                   teardown completes (see
+    /// @param workerPool Pool the server strand and every model strand run on.
+    ///                   Borrowed, not owned: it must outlive this server and
+    ///                   keep running until teardown completes (see
     ///                   `docs/spec/concurrency_and_lifetimes.md`, "Destruction
     ///                   ordering").
     /// @param dispatcher Action dispatcher; defaults to the process-level
@@ -224,17 +292,15 @@ public:
                               ::morph::model::detail::defaultDispatcher(),
                           ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
                               ::morph::model::detail::defaultRegistry())
-        : _pool{workerPool},
-          _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)},
-          _dispatcher{dispatcher},
-          _registry{registry},
-          _authorizer{::morph::session::allowAllAuthorizer()} {}
+        : RemoteServer{workerPool, ::morph::session::allowAllAuthorizer(), ServerConfig{}, dispatcher, registry} {}
 
-    /// @brief Constructs a server with a custom authorizer.
+    /// @brief Constructs a server with a custom authorizer and a default
+    ///        `ServerConfig`.
     ///
-    /// @param workerPool Pool used to process messages asynchronously. Borrowed,
-    ///                   on the same terms as the constructor above.
-    /// @param authorizer Authorizer consulted for every `execute` envelope.
+    /// @param workerPool Pool the server's strands run on. Borrowed, on the
+    ///                   same terms as the constructor above.
+    /// @param authorizer Authorizer consulted for every envelope that makes an
+    ///                   authorization decision; null means allow-all.
     /// @param dispatcher Action dispatcher; defaults to the process-level
     ///                   singleton. Borrowed: it must outlive this server.
     /// @param registry   Model factory registry; defaults to the process-level
@@ -245,22 +311,88 @@ public:
                      ::morph::model::detail::defaultDispatcher(),
                  ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
                      ::morph::model::detail::defaultRegistry())
-        : _pool{workerPool},
+        : RemoteServer{workerPool, std::move(authorizer), ServerConfig{}, dispatcher, registry} {}
+
+    /// @brief Constructs a server with allow-all authorization and @p config.
+    ///
+    /// @param workerPool Pool the server's strands run on. Borrowed, on the
+    ///                   same terms as the first constructor.
+    /// @param config     Limits, log provider, health handler, protocol range
+    ///                   and payload rule, fixed for the server's life.
+    /// @param dispatcher Action dispatcher; defaults to the process-level
+    ///                   singleton. Borrowed: it must outlive this server.
+    /// @param registry   Model factory registry; defaults to the process-level
+    ///                   singleton. Borrowed: it must outlive this server.
+    /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
+    ///         `config.maxProtocolVersion`.
+    RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND, ServerConfig config,
+                 ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
+                     ::morph::model::detail::defaultDispatcher(),
+                 ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
+                     ::morph::model::detail::defaultRegistry())
+        : RemoteServer{workerPool, ::morph::session::allowAllAuthorizer(), std::move(config), dispatcher, registry} {}
+
+    /// @brief Constructs a server with a custom authorizer and @p config.
+    ///
+    /// Calls `config.healthHandler`, if set, once, before returning, with the
+    /// initial status (ready, nothing registered, nothing in flight).
+    ///
+    /// @param workerPool Pool the server's strands run on. Borrowed, on the
+    ///                   same terms as the first constructor.
+    /// @param authorizer Authorizer consulted for every envelope that makes an
+    ///                   authorization decision; null means allow-all.
+    /// @param config     Limits, log provider, health handler, protocol range
+    ///                   and payload rule, fixed for the server's life.
+    /// @param dispatcher Action dispatcher; defaults to the process-level
+    ///                   singleton. Borrowed: it must outlive this server.
+    /// @param registry   Model factory registry; defaults to the process-level
+    ///                   singleton. Borrowed: it must outlive this server.
+    /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
+    ///         `config.maxProtocolVersion`.
+    RemoteServer(::morph::exec::IExecutor& workerPool MORPH_LIFETIMEBOUND,
+                 std::shared_ptr<::morph::session::IAuthorizer> authorizer, ServerConfig config,
+                 ::morph::model::detail::ActionDispatcher& dispatcher MORPH_LIFETIMEBOUND =
+                     ::morph::model::detail::defaultDispatcher(),
+                 ::morph::model::detail::ModelRegistryFactory& registry MORPH_LIFETIMEBOUND =
+                     ::morph::model::detail::defaultRegistry())
+        : _strand{workerPool},
           _strands{std::make_shared<::morph::exec::detail::ModelStrands>(workerPool)},
           _dispatcher{dispatcher},
           _registry{registry},
-          _authorizer{std::move(authorizer)} {
-        if (!_authorizer) {
-            _authorizer = ::morph::session::allowAllAuthorizer();
+          _authorizer{authorizer ? std::move(authorizer) : ::morph::session::allowAllAuthorizer()},
+          _config{validated(std::move(config))},
+          _executeTimeouts{_config.limits.executeTimeout.count() > 0
+                               ? std::make_unique<::morph::async::detail::TimeoutScheduler>()
+                               : nullptr} {
+        if (_config.healthHandler) {
+            _config.healthHandler(HealthStatus{.ready = true, .liveModels = 0, .inFlight = 0});
         }
+    }
+
+    RemoteServer(const RemoteServer&) = delete;
+    RemoteServer& operator=(const RemoteServer&) = delete;
+    RemoteServer(RemoteServer&&) = delete;
+    RemoteServer& operator=(RemoteServer&&) = delete;
+
+    /// @brief Closes the server strand before any other member goes.
+    ///
+    /// Every task the server posts holds the server, so nothing of it is still
+    /// queued here; closing waits for a task still running on another thread
+    /// and returns at once from inside the server's own last task.
+    ~RemoteServer() {
+        _strand.seal();
+        _strand.close();
     }
 
     /// @brief Asynchronously processes a JSON `Envelope` and calls @p reply with the response.
     ///
-    /// The message is dispatched to the worker pool. @p reply is called exactly
-    /// once from the pool thread when processing completes.
+    /// Decodes on the calling thread and posts the envelope to the server
+    /// strand. @p reply is called exactly once, from a pool thread: the server
+    /// strand's, or, for an `execute`, the model strand's (or the I/O loop's,
+    /// when a `LimitPolicy::executeTimeout` answers first).
     ///
-    /// Thread-safe. Safe to call before the previous call's reply has been delivered.
+    /// Callable from any thread. For one connection, calls made one after the
+    /// other on one thread are handled in that order.
     ///
     /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
     /// @param reply Callback invoked with the JSON-encoded reply envelope.
@@ -276,7 +408,7 @@ public:
     /// Passing `cid == 0` is exactly the unscoped, two-argument `handle()` —
     /// nothing is recorded and nothing is ever cleaned up automatically.
     ///
-    /// Thread-safe. Safe to call before the previous call's reply has been delivered.
+    /// Callable from any thread, on the same terms as `handle(msg, reply)`.
     ///
     /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
     /// @param reply Callback invoked with the JSON-encoded reply envelope.
@@ -286,20 +418,21 @@ public:
         handleImpl(std::move(msg), std::move(reply), cid);
     }
 
-    /// @brief Synchronously processes a JSON `Envelope` on the calling thread and returns the reply.
+    /// @brief Processes a control `Envelope` on the server strand and returns
+    ///        its reply, blocking the caller until it has one.
     ///
-    /// Equivalent to `handle()` but never posts to the worker pool, so it is safe
-    /// to call from a thread that *is* the worker pool — for example, from a
-    /// `BridgeHandler` constructor invoked from inside an action handler.
+    /// For `register`, `deregister`, `attach`, `assign`, `instances`, `schemas`
+    /// and `hello` — the synchronous control path `SimulatedRemoteBackend`
+    /// uses. Runs inline when the caller is already on the server strand;
+    /// otherwise posts and waits. `execute` is rejected up front with an `err`
+    /// reply: its reply is produced later, on the model's strand.
     ///
-    /// Safe for every kind except `execute` — `register`, `deregister`,
-    /// `attach`, `assign`, `instances`, `schemas` and `hello` all route through
-    /// here (see `SimulatedRemoteBackend` below, which uses all seven). An
-    /// `execute`
-    /// envelope posts to the strand and produces its reply asynchronously, after
-    /// this synchronous call has already returned and destroyed the local reply
-    /// buffer the deferred callback would write into. To keep that from becoming a
-    /// dangling write, `execute` is rejected up front with an `err` reply.
+    /// Callable from a pool thread, including one inside a running action (a
+    /// handler registered from an action handler): the server strand then runs
+    /// on another pool thread while this one waits. So the pool needs a thread
+    /// free for it — a one-thread pool calling this from inside its own task,
+    /// or every pool thread blocked here at once, never gets its reply. See
+    /// docs/spec/concurrency_and_lifetimes.md, "Synchronous re-entry".
     ///
     /// @param msg JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
     /// @return JSON-encoded reply envelope.
@@ -309,94 +442,41 @@ public:
     ///        `register` decoded from @p msg to a connection scope.
     ///
     /// The synchronous counterpart to the scoped `handle(msg, reply, cid)`
-    /// overload — same "processed inline, safe from the worker pool itself"
-    /// contract as the two-argument `handleInline`, with `register`/`attach`
-    /// additionally recorded in `cid`'s scope so a later `closeConnection(cid)`
-    /// reclaims it. Passing `cid == 0` is exactly the unscoped overload above.
+    /// overload, on the same terms as the one-argument `handleInline`.
+    /// Passing `cid == 0` is exactly the unscoped overload above.
     ///
     /// @param msg JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
     /// @param cid Connection scope to attribute a `register` in @p msg to;
     ///            `0` means unscoped.
     /// @return JSON-encoded reply envelope.
     std::string handleInline(const std::string& msg, ConnectionId cid) {
-        try {
-            auto env = ::morph::wire::decode(msg);
-            if (env.kind == "execute") {
-                return ::morph::wire::encode(::morph::wire::makeErr(
-                    "handleInline does not support execute (reply is asynchronous)", env.callId));
-            }
-        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
-            // Malformed input: fall through so dispatchMessage produces the
-            // canonical decode-error reply (avoids duplicating that path here).
+        Decoded decoded = decodeEnvelope(msg);
+        if (decoded.env && decoded.env->kind == "execute") {
+            return ::morph::wire::encode(::morph::wire::makeErr(
+                "handleInline does not support execute (reply is asynchronous)", decoded.env->callId));
         }
-        std::string reply;
-        std::function<void(std::string)> capture = [&reply](std::string out) noexcept { reply = std::move(out); };
-        dispatchMessage(msg, capture, cid);
-        return reply;
+        std::string out;
+        std::function<void(std::string)> capture = [&out](std::string reply) noexcept { out = std::move(reply); };
+        if (_strand.runningHere()) {
+            dispatchDecoded(std::move(decoded), capture, cid);
+            return out;
+        }
+        std::latch done{1};
+        _strand.postTask([self = shared_from_this(), &decoded, &capture, cid, &done] {
+            // Counted down however the dispatch ends, so the caller is never
+            // left waiting on a task that threw.
+            try {
+                self->dispatchDecoded(std::move(decoded), capture, cid);
+            } catch (...) {
+                done.count_down();
+                throw;
+            }
+            done.count_down();
+        });
+        done.wait();
+        return out;
     }
 
-private:
-    /// @brief Shared body of both `handle()` overloads.
-    ///
-    /// Peeks at @p msg's `kind`/`modelId` — a cheap, best-effort decode, thrown
-    /// away immediately either way — and, for an `execute` naming a `modelId`,
-    /// takes an execute-ordering ticket and hands the dispatch work to `_pool`
-    /// in the *same* atomic step (`_executeGate`'s own doc comment on the
-    /// class-private members, and
-    /// `morph::backend::detail::ExecuteOrderGate::takeAndPost`), so two
-    /// same-model `execute`s posted back-to-back always reach the pool's queue
-    /// in ticket order — the same order the transport called `handle()` in,
-    /// i.e. send order — no matter how the calling threads are scheduled
-    /// relative to each other. Taking the ticket and enqueueing as two
-    /// separate, unlocked steps would let two concurrent transport threads'
-    /// tickets and enqueue order diverge, which can park every pool worker in
-    /// `awaitTurn` permanently. If this peek fails to decode at all, or
-    /// isn't an `execute`, no ticket is taken; `dispatchMessage` still does the
-    /// real (only) decode moments later on the pool thread and produces the
-    /// canonical error for genuinely malformed input — this peek only ever
-    /// *adds* a ticket for a well-formed `execute`, it never changes what gets
-    /// sent to `dispatchMessage` or how errors are reported.
-    /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
-    /// @param reply Callback invoked with the JSON-encoded reply envelope.
-    /// @param cid   Connection scope; `0` means unscoped (see `handle()`'s own doc).
-    void handleImpl(std::string msg, std::function<void(std::string)> reply, ConnectionId cid) {
-        auto self = shared_from_this();
-        std::optional<::morph::exec::detail::ModelId> executeMid;
-        try {
-            if (auto peek = ::morph::wire::decode(msg); peek.kind == "execute" && peek.modelId != 0) {
-                executeMid = ::morph::exec::detail::ModelId{peek.modelId};
-            }
-        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
-            // Malformed input: no ticket taken (there is no well-formed
-            // execute to order). dispatchMessage's own decode, on the pool
-            // thread, produces the canonical decode-error reply for this —
-            // duplicating that error path here would serve no purpose since
-            // this peek's only job is deciding whether to take a ticket.
-        }
-        // Moves msg/reply into its own captures exactly once, on whichever of
-        // the two calls below actually happens, and enqueues the one shared
-        // dispatch task -- ticketed or not.
-        auto doPost = [self, msg = std::move(msg), reply = std::move(reply),
-                       cid](::morph::backend::detail::ExecuteOrderGate::Ticket ticket) mutable {
-            self->_pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
-                self->dispatchMessage(msg, reply, cid, std::move(ticket));
-            });
-        };
-        if (executeMid) {
-            // Ticket and enqueue happen inside one call, under the gate's own
-            // lock: if `_pool.post` throws, `takeAndPost` releases the ticket
-            // itself before rethrowing (see its own doc comment) — no local
-            // `ExecuteTicketGuard` is needed here the way the old two-step
-            // take()-then-post() shape required one. `doPost` already matches
-            // `takeAndPost`'s callback signature, so it is passed straight
-            // through rather than behind a redundant forwarding lambda.
-            _executeGate.takeAndPost(*executeMid, doPost);
-        } else {
-            doPost({});
-        }
-    }
-
-public:
     /// @brief Opens a new connection scope and returns its id.
     ///
     /// Call once per accepted transport connection (e.g. from a WebSocket
@@ -406,12 +486,15 @@ public:
     /// received on that connection, and to `closeConnection(cid)` once the
     /// connection is gone.
     ///
-    /// Thread-safe.
+    /// Callable from any thread. The id is drawn at once; the scope is opened
+    /// on the server strand, before any `handle()` the same thread makes next.
     /// @return A fresh, non-zero `ConnectionId`.
     [[nodiscard]] ConnectionId openConnection() {
         ConnectionId const cid{_nextConnectionId.fetch_add(1) + 1};
-        std::scoped_lock const lock{_regMtx};
-        _connectionScopes.try_emplace(cid);
+        _strand.postTask([self = shared_from_this(), cid] {
+            self->noteOwner("RemoteServer::openConnection");
+            self->_connectionScopes.try_emplace(cid);
+        });
         return cid;
     }
 
@@ -431,18 +514,176 @@ public:
     /// server's own housekeeping in reaction to a transport-level event, not
     /// an action attributable to any caller (see docs/spec/core/backend.md).
     ///
-    /// Safe to call while a model in the scope has an `execute` in flight: the
-    /// strand task already holds its own `shared_ptr` to the model holder, so
-    /// erasing the registry entry here only prevents *new* lookups (see
+    /// Safe while a model in the scope has an `execute` in flight: the model
+    /// strand's task holds its own `shared_ptr` to the model holder, so erasing
+    /// the registry entry here only prevents *new* lookups (see
     /// docs/spec/concurrency_and_lifetimes.md).
     ///
-    /// Thread-safe.
+    /// Callable from any thread; runs on the server strand, before any
+    /// `handle()` the same thread makes next.
     /// @param cid Connection scope to close, as returned by `openConnection()`.
     void closeConnection(ConnectionId cid) {
         if (cid == 0) {
             return;
         }
-        std::scoped_lock const lock{_regMtx};
+        _strand.postTask([self = shared_from_this(), cid] { self->closeConnectionHere(cid); });
+    }
+
+    /// @brief The server strand, as an executor.
+    ///
+    /// What `runningOn(server.strand())` asks about: true inside every task the
+    /// server runs on its own state, false elsewhere. A task posted to it runs
+    /// in order with the server's own, never beside one.
+    /// @return The strand every envelope, verb and `execute` admission runs on.
+    [[nodiscard]] ::morph::exec::IExecutor& strand() noexcept { return _strand; }
+
+    /// @brief Returns the configured payload-completeness rule.
+    /// @return `ServerConfig::payloadCompleteness`, as given at construction.
+    [[nodiscard]] PayloadCompleteness payloadCompleteness() const noexcept { return _config.payloadCompleteness; }
+
+    /// @brief The server's health, answered on the server strand.
+    ///
+    /// Posted, so the answer reflects every envelope and verb this thread
+    /// handed the server before calling. Callable from any thread; the caller
+    /// attaches to the answer on @p replyExec, the owner it names.
+    /// @param replyExec Executor the answer is delivered on, and the one the
+    ///        caller attaches its callbacks from. Borrowed: it must outlive the
+    ///        returned `Completion`'s delivery.
+    /// @return A `Completion` settled on the server strand with `ready`, the
+    ///         live model count and the in-flight execute count; its callbacks
+    ///         run on @p replyExec.
+    [[nodiscard]] ::morph::async::Completion<HealthStatus> health(::morph::exec::IExecutor& replyExec) {
+        auto settleable = ::morph::async::Completion<HealthStatus>::makeSettleable(&replyExec);
+        _strand.postTask([self = shared_from_this(), promise = std::move(settleable.second)]() mutable {
+            self->noteOwner("RemoteServer::health");
+            promise.resolve(self->snapshotHealth());
+        });
+        return std::move(settleable.first);
+    }
+
+    /// @brief Enters shutdown: from now on, `register`, `attach` and `execute`
+    ///        envelopes are rejected with `err "server shutting down"`.
+    ///        `deregister` is still served so clients can tear down cleanly.
+    ///        `attach` is refused too, so a client cannot re-attach to a shared
+    ///        instance during the drain window.
+    ///
+    /// Posted to the server strand: an envelope this thread hands `handle()`
+    /// after this call returns is refused. Idempotent. There is no way back: a
+    /// restarted service constructs a fresh `RemoteServer`.
+    ///
+    /// Also flips `health()`'s `ready` to `false` and calls
+    /// `ServerConfig::healthHandler`, if set, with the post-shutdown status, on
+    /// the server strand — what lets an orchestrator stop routing to this
+    /// server while `drainedWithin()`'s drain runs.
+    void beginShutdown() {
+        _strand.postTask([self = shared_from_this()] {
+            self->noteOwner("RemoteServer::beginShutdown");
+            bool const wasReady = self->_ready;
+            self->_shuttingDown = true;
+            self->_ready = false;
+            if (wasReady && self->_config.healthHandler) {
+                self->_config.healthHandler(self->snapshotHealth());
+            }
+        });
+    }
+
+    /// @brief Answers whether every in-flight `execute` delivers its reply
+    ///        within @p deadline.
+    ///
+    /// "In-flight" is one count, kept on the server strand: incremented when an
+    /// `execute` is admitted for dispatch and decremented, on the strand, when
+    /// its reply is sent — on every resolving path (`ok`, `err`, or a
+    /// `LimitPolicy::executeTimeout` firing first). The same count
+    /// `LimitPolicy::maxInFlightExecutes` gates and `health()`'s `inFlight`
+    /// reads. Independent of `beginShutdown()`: it observes, it does not stop
+    /// new work from arriving. Callable from any thread; nothing blocks. The
+    /// caller attaches to the answer on @p replyExec, the owner it names.
+    /// @param deadline Longest time to wait; `0` answers from the count as it
+    ///        stands.
+    /// @param replyExec Executor the answer is delivered on, and the one the
+    ///        caller attaches its callbacks from. Borrowed: it must outlive the
+    ///        returned `Completion`'s delivery.
+    /// @return A `Completion` settled on the server strand: `true` once the
+    ///         count is zero, `false` if @p deadline elapses first. Its
+    ///         callbacks run on @p replyExec.
+    [[nodiscard]] ::morph::async::Completion<bool> drainedWithin(std::chrono::milliseconds deadline,
+                                                                 ::morph::exec::IExecutor& replyExec) {
+        auto settleable = ::morph::async::Completion<bool>::makeSettleable(&replyExec);
+        _strand.postTask(
+            [self = shared_from_this(), deadline,
+             promise = std::make_shared<::morph::async::Completion<bool>::Promise>(std::move(settleable.second))] {
+                self->noteOwner("RemoteServer::drainedWithin");
+                self->addDrainWaiter(deadline, promise);
+            });
+        return std::move(settleable.first);
+    }
+
+private:
+    /// A settleable `bool` completion, held by a drain waiter.
+    using DrainPromise = std::shared_ptr<::morph::async::Completion<bool>::Promise>;
+
+    /// An envelope decoded on the transport's thread, or why it could not be.
+    struct Decoded {
+        std::optional<::morph::wire::Envelope> env;
+        /// The raw message, kept only when the decode failed, for the log line.
+        std::string raw;
+        /// The decode exception's message, when the decode failed.
+        std::string error;
+    };
+
+    /// @brief Rejects a configuration whose protocol range is empty.
+    /// @param config The configuration to check.
+    /// @return @p config, unchanged.
+    /// @throws std::invalid_argument if `minProtocolVersion > maxProtocolVersion`.
+    static ServerConfig validated(ServerConfig config) {
+        if (config.minProtocolVersion > config.maxProtocolVersion) {
+            throw std::invalid_argument("ServerConfig: minProtocolVersion must not exceed maxProtocolVersion");
+        }
+        return config;
+    }
+
+    /// @brief Decodes @p msg, keeping the message and the error when it fails.
+    /// @param msg JSON-encoded envelope.
+    /// @return The envelope, or the raw message and the decode error.
+    static Decoded decodeEnvelope(std::string msg) {
+        Decoded decoded;
+        try {
+            decoded.env = ::morph::wire::decode(msg);
+        } catch (const std::exception& exc) {
+            decoded.raw = std::move(msg);
+            decoded.error = exc.what();
+        }
+        return decoded;
+    }
+
+    /// @brief Shared body of both `handle()` overloads: one decode here, on the
+    ///        transport's thread, and one post to the server strand.
+    /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
+    /// @param reply Callback invoked with the JSON-encoded reply envelope.
+    /// @param cid   Connection scope; `0` means unscoped (see `handle()`'s own doc).
+    void handleImpl(std::string msg, std::function<void(std::string)> reply, ConnectionId cid) {
+        _strand.postTask([self = shared_from_this(), decoded = decodeEnvelope(std::move(msg)),
+                          reply = std::move(reply),
+                          cid]() mutable { self->dispatchDecoded(std::move(decoded), reply, cid); });
+    }
+
+    /// @brief Records that the calling body touches server-strand state; a
+    ///        debug build asserts it runs on the server strand.
+    /// @param site Static name of the body.
+    void noteOwner(char const* site) {
+        ::morph::exec::detail::noteOwner(site, _strand.coreExecutor(), _strand.runningHere());
+    }
+
+    /// @brief The health snapshot. On the server strand.
+    /// @return `ready`, the live instance count, the in-flight count.
+    [[nodiscard]] HealthStatus snapshotHealth() const {
+        return HealthStatus{.ready = _ready, .liveModels = _instances.size(), .inFlight = _inFlight};
+    }
+
+    /// @brief Body of `closeConnection`. On the server strand.
+    /// @param cid Connection scope to close.
+    void closeConnectionHere(ConnectionId cid) {
+        noteOwner("RemoteServer::closeConnection");
         auto scopeIter = _connectionScopes.find(cid);
         if (scopeIter == _connectionScopes.end()) {
             return;
@@ -450,182 +691,73 @@ public:
         for (const auto& [mid, refs] : scopeIter->second) {
             // Release exactly as many references as this connection held. A
             // shared instance another connection is still attached to survives;
-            // a private one (count 1, no directory entry) is erased outright,
-            // which is byte-for-byte the previous behaviour.
+            // a private one (count 1, no directory entry) is erased outright.
             for (std::size_t idx = 0; idx < refs; ++idx) {
-                releaseInstanceLocked(mid);
+                releaseInstance(mid);
             }
         }
         _connectionScopes.erase(scopeIter);
     }
 
-    /// @brief Callable that supplies the action log to attach to a newly
-    ///        registered instance, given its model type and `contextKey`.
-    ///
-    /// Return `nullptr` to register the instance with no log attached (e.g. for
-    /// model types or context keys the host app doesn't want journaled).
-    using LogProvider = std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType,
-                                                                                    std::string_view contextKey)>;
-
-    /// @brief Installs @p provider, consulted whenever an instance is
-    ///        constructed with a non-empty `contextKey` — every `register`
-    ///        envelope, and every `attach` that misses the shared directory and
-    ///        therefore creates the instance (both reach
-    ///        `attachLogIfConfigured`).
-    ///
-    /// This is what closes the gap `IModelHolder::attachActionLog` leaves open
-    /// for remote topologies: `RemoteServer` owns the actual model instances for
-    /// every remote/simulated-remote client, so it is the only place that can
-    /// attach a log to them. Pass `nullptr` to remove a previously installed
-    /// provider (new registrations get no log). Thread-safe.
-    /// @param provider Callable invoked synchronously while handling `register`.
-    void setLogProvider(LogProvider provider) {
-        std::scoped_lock const lock{_logProviderMtx};
-        _logProvider = std::move(provider);
+    /// @brief Registers a drain waiter, or answers it at once. On the server strand.
+    /// @param deadline Longest time to wait for the in-flight count to reach zero.
+    /// @param promise  Settled `true` at zero, `false` at the deadline.
+    void addDrainWaiter(std::chrono::milliseconds deadline, const DrainPromise& promise) {
+        if (_inFlight == 0) {
+            promise->resolve(true);
+            return;
+        }
+        if (deadline.count() <= 0) {
+            promise->resolve(false);
+            return;
+        }
+        std::uint64_t const waiterId = ++_nextDrainWaiter;
+        if (!_drainTimer) {
+            _drainTimer = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+        }
+        // Weak: a pending deadline does not keep a server alive that nothing
+        // else refers to. The expiry is posted back, since the waiters are
+        // strand state and the timer fires on its I/O loop.
+        auto const handle = _drainTimer->schedule(deadline, [weak = weak_from_this(), waiterId] {
+            if (auto self = weak.lock()) {
+                self->_strand.postTask([self, waiterId] { self->expireDrainWaiter(waiterId); });
+            }
+        });
+        _drainWaiters.push_back(DrainWaiter{.id = waiterId, .promise = promise, .timer = handle});
     }
 
-    /// @brief Installs @p policy, consulted by every subsequent `register` and
-    ///        `execute`. Thread-safe.
-    ///
-    /// All-zero fields (the default-constructed value) mean "unbounded" — an
-    /// unconfigured server never applies any of the limits below.
-    /// @param policy Resource limits to apply from this call onward.
-    void setLimitPolicy(LimitPolicy policy) {
-        std::scoped_lock const lock{_limitsMtx};
-        _limits = policy;
-        if (_limits.executeTimeout.count() > 0 && !_timeoutScheduler) {
-            _timeoutScheduler = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+    /// @brief Answers `false` to the drain waiter @p waiterId, if it is still
+    ///        waiting. On the server strand.
+    /// @param waiterId The waiter whose deadline elapsed.
+    void expireDrainWaiter(std::uint64_t waiterId) {
+        noteOwner("RemoteServer::drainedWithin");
+        auto const found = std::ranges::find(_drainWaiters, waiterId, &DrainWaiter::id);
+        if (found == _drainWaiters.end()) {
+            return;
+        }
+        DrainPromise const promise = found->promise;
+        _drainWaiters.erase(found);
+        promise->resolve(false);
+    }
+
+    /// @brief Counts one execute's reply as sent, and answers every drain
+    ///        waiter once none is left in flight. On the server strand.
+    void executeFinished() {
+        noteOwner("RemoteServer::executeFinished");
+        _inFlight -= 1;
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                             static_cast<double>(_inFlight));
+        if (_inFlight != 0 || _drainWaiters.empty()) {
+            return;
+        }
+        auto waiters = std::move(_drainWaiters);
+        _drainWaiters.clear();
+        for (auto& waiter : waiters) {
+            _drainTimer->cancel(waiter.timer);
+            waiter.promise->resolve(true);
         }
     }
 
-    /// @brief Sets the inclusive protocol-version range this server advertises
-    ///        in reply to a `"hello"` envelope.
-    ///
-    /// Defaults to `{::morph::wire::kProtocolVersion, ::morph::wire::kProtocolVersion}`
-    /// — this build's single supported version. Widen the range when a future
-    /// `kProtocolVersion` bump must keep serving older clients through their
-    /// deprecation window (see docs/spec/core/wire.md, "Action-evolution policy").
-    /// Thread-safe.
-    ///
-    /// @param min Oldest protocol version this server accepts.
-    /// @param max Newest protocol version this server accepts.
-    /// @throws std::invalid_argument if `min > max`.
-    void setSupportedVersionRange(std::uint32_t min, std::uint32_t max) {
-        if (min > max) {
-            throw std::invalid_argument("setSupportedVersionRange: min must not exceed max");
-        }
-        _minVersion.store(min);
-        _maxVersion.store(max);
-    }
-
-    /// @brief Chooses whether an `execute` body must carry every field the
-    ///        action's served schema marks `required`.
-    ///
-    /// Opt-in, and settable at any time (the flag is read once per `execute`).
-    /// Defaults to `PayloadCompleteness::Lenient` — byte-for-byte today's
-    /// behaviour — for the reason spelled out on `PayloadCompleteness` itself:
-    /// making the check mandatory would be the non-additive wire change the
-    /// policy it enforces forbids without a `kProtocolVersion` bump.
-    ///
-    /// @param mode The completeness rule to apply from the next `execute` on.
-    void setPayloadCompleteness(PayloadCompleteness mode) noexcept { _completeness.store(mode); }
-
-    /// @brief Returns the configured payload-completeness rule.
-    /// @return The current `PayloadCompleteness`.
-    [[nodiscard]] PayloadCompleteness payloadCompleteness() const noexcept { return _completeness.load(); }
-
-    /// @brief Snapshots the server's current health. Cheap; safe from any thread.
-    /// @return Current `HealthStatus` (`liveModels` from the registry, `inFlight`
-    ///         from the same counter the `executeInFlight` metric reads).
-    [[nodiscard]] HealthStatus health() const {
-        std::size_t liveModels = 0;
-        {
-            std::scoped_lock const lock{_regMtx};
-            liveModels = _instances.size();
-        }
-        return HealthStatus{
-            .ready = _ready.load(std::memory_order_relaxed),
-            .liveModels = liveModels,
-            .inFlight = _inFlightExecutes.load(std::memory_order_relaxed),
-        };
-    }
-
-    /// @brief Installs @p handler, invoked immediately with the current
-    ///        `health()` snapshot, and again whenever readiness changes.
-    ///
-    /// Thread-safe. Pass `nullptr` to remove a previously installed handler
-    /// (clearing does not itself invoke anything). `beginShutdown()` is
-    /// currently the only internal path that flips `HealthStatus::ready` to
-    /// `false`; it re-invokes this handler (if installed) with the
-    /// post-shutdown snapshot. A deployment's transport (e.g.
-    /// `QtWebSocketServer`) can expose `health()`/this handler over an
-    /// HTTP/probe endpoint; `morph` does not embed an HTTP server.
-    /// @param handler Callback invoked with the current `HealthStatus`.
-    void setHealthHandler(std::function<void(const HealthStatus&)> handler) {
-        std::function<void(const HealthStatus&)> toCall;
-        {
-            std::scoped_lock const lock{_healthMtx};
-            _healthHandler = std::move(handler);
-            toCall = _healthHandler;
-        }
-        if (toCall) {
-            toCall(health());
-        }
-    }
-
-    /// @brief Enters shutdown: from now on, `register`, `attach` and `execute`
-    ///        envelopes are rejected with `err "server shutting down"`.
-    ///        `deregister` is still served so clients can tear down cleanly.
-    ///        Note `attach` is refused too, so a client cannot re-attach to a
-    ///        shared instance during the drain window.
-    ///
-    /// Idempotent — safe to call more than once, and safe to call while
-    /// `handle()`/`handleInline()` calls are concurrently in flight on other
-    /// threads. There is no way back: a restarted service constructs a fresh
-    /// `RemoteServer` rather than un-shutting-down this one.
-    ///
-    /// Also flips `health().ready` to `false` and, if a handler is installed
-    /// via `setHealthHandler()`, re-invokes it with the post-shutdown
-    /// snapshot — the same "invoked again whenever readiness changes"
-    /// contract `setHealthHandler` documents. This is what lets an
-    /// orchestrator stop routing to this server while `drainedWithin()`'s
-    /// drain runs.
-    void beginShutdown() {
-        _shuttingDown.store(true, std::memory_order_release);
-        _ready.store(false, std::memory_order_release);
-        std::function<void(const HealthStatus&)> handler;
-        {
-            std::scoped_lock const lock{_healthMtx};
-            handler = _healthHandler;
-        }
-        if (handler) {
-            handler(health());
-        }
-    }
-
-    /// @brief Blocks until every in-flight `execute` has delivered its reply,
-    ///        or @p deadline elapses.
-    ///
-    /// "In-flight" is one counter (`_inFlightExecutes`), incremented when
-    /// `dispatchExecute` admits a call for dispatch (right before posting to
-    /// the model's strand) and decremented right before its reply is sent, on
-    /// every resolving path (`ok`, `err`, or a `LimitPolicy::executeTimeout`
-    /// firing first) — the same state `LimitPolicy::maxInFlightExecutes` (if
-    /// configured) gates and `health()`'s `inFlight` field reads, shared
-    /// rather than double-counted. Waits on a condition variable signalled
-    /// when the counter reaches zero — not a busy poll. Safe to call from any
-    /// thread, independently of `beginShutdown()` (it only observes the
-    /// counter; it does not itself stop new work from arriving).
-    /// @param deadline Maximum time to wait.
-    /// @return `true` if the in-flight count reached zero before @p deadline
-    ///         elapsed; `false` on timeout.
-    [[nodiscard]] bool drainedWithin(std::chrono::milliseconds deadline) {
-        std::unique_lock lock{_drainMtx};
-        return _drainCv.wait_for(lock, deadline,
-                                 [this] { return _inFlightExecutes.load(std::memory_order_acquire) == 0; });
-    }
-
-private:
     /// @brief Authenticates @p env's session and makes the verified identity
     ///        authoritative on it.
     ///
@@ -647,32 +779,21 @@ private:
         }
     }
 
-    /// @brief Returns a copy of the currently installed `LimitPolicy`. Thread-safe.
+    /// @brief Releases one reference to @p mid, destroying it at zero. On the server strand.
     ///
-    /// A snapshot rather than a reference: the caller checks it against
-    /// values that can change concurrently via `setLimitPolicy`, so it must
-    /// see one atomic value throughout its own check, not `_limits` re-read
-    /// mid-decision.
-    [[nodiscard]] LimitPolicy snapshotLimits() const {
-        std::scoped_lock const lock{_limitsMtx};
-        return _limits;
-    }
-
-    /// @brief Releases one reference to @p mid, destroying it at zero. Caller holds `_regMtx`.
-    ///
-    /// A private instance carries no attachments and is erased outright —
-    /// byte-for-byte the pre-sharing behaviour. A shared instance is erased, and
-    /// removed from the directory, only when its last attachment goes away, so
-    /// one client's `deregister` or dropped connection never tears an instance
-    /// out from under another client still using it.
+    /// A private instance carries no attachments and is erased outright. A
+    /// shared instance is erased, and removed from the directory, only when its
+    /// last attachment goes away, so one client's `deregister` or dropped
+    /// connection never tears an instance out from under another client still
+    /// using it.
     /// @param mid Instance to release.
-    void releaseInstanceLocked(::morph::exec::detail::ModelId mid) { (void)_instances.release(mid); }
+    void releaseInstance(::morph::exec::detail::ModelId mid) { (void)_instances.release(mid); }
 
-    /// @brief Drops one of @p cid's references to @p mid, then releases the instance.
-    ///        Caller holds `_regMtx`.
+    /// @brief Drops one of @p cid's references to @p mid, then releases the
+    ///        instance. On the server strand.
     /// @param mid Instance to release.
     /// @param cid Connection whose reference is being dropped; `0` for unscoped.
-    void releaseScopedLocked(::morph::exec::detail::ModelId mid, ConnectionId cid) {
+    void releaseScoped(::morph::exec::detail::ModelId mid, ConnectionId cid) {
         if (cid != 0) {
             if (auto scopeIter = _connectionScopes.find(cid); scopeIter != _connectionScopes.end()) {
                 if (auto refIter = scopeIter->second.find(mid); refIter != scopeIter->second.end()) {
@@ -683,14 +804,14 @@ private:
                 }
             }
         }
-        releaseInstanceLocked(mid);
+        releaseInstance(mid);
     }
 
-    /// @brief Records a new attachment of @p mid to @p cid. Caller holds `_regMtx`.
+    /// @brief Records a new attachment of @p mid to @p cid. On the server strand.
     /// @param mid Instance being attached.
     /// @param cid Connection attaching it; `0` for unscoped (records nothing).
     /// @return `false` if @p cid's scope was already closed, in which case nothing was recorded.
-    bool noteScopeAttachLocked(::morph::exec::detail::ModelId mid, ConnectionId cid) {
+    bool noteScopeAttach(::morph::exec::detail::ModelId mid, ConnectionId cid) {
         if (cid == 0) {
             return true;
         }
@@ -702,41 +823,28 @@ private:
         return true;
     }
 
-    /// @brief Attaches a configured `LogProvider`'s log to a freshly created holder.
+    /// @brief Attaches the configured `LogProvider`'s log to a freshly created
+    ///        holder. On the server strand.
     /// @param holder Newly created instance.
     /// @param env    Envelope carrying `typeId` and `contextKey`.
     void attachLogIfConfigured(::morph::model::detail::IModelHolder& holder, const ::morph::wire::Envelope& env) {
-        if (env.contextKey.empty()) {
+        if (env.contextKey.empty() || !_config.logProvider) {
             return;
         }
-        LogProvider provider;
-        {
-            std::scoped_lock const lock{_logProviderMtx};
-            provider = _logProvider;
-        }
-        if (provider) {
-            if (auto log = provider(env.typeId, env.contextKey)) {
-                holder.attachActionLog(std::move(log), env.contextKey);
-            }
+        noteOwner("RemoteServer::attachLog");
+        if (auto log = _config.logProvider(env.typeId, env.contextKey)) {
+            holder.attachActionLog(std::move(log), env.contextKey);
         }
     }
 
-    /// @brief Attaches to an already-live directory entry, if there is one. Caller holds `_regMtx`.
-    ///
-    /// Factored out because `acquireSharedInstance` checks the directory twice —
-    /// once on entry, and again under the insert lock after building a holder
-    /// outside it, in case a concurrent request for the same key won the race.
-    /// The second check is by nature almost never taken, so duplicating the body
-    /// would leave a block that is both untested and free to drift from the one
-    /// that is.
-    ///
+    /// @brief Attaches to an already-live directory entry, if there is one. On the server strand.
     /// @param dirKey Directory key being acquired.
     /// @param env    Decoded request, for `callId`.
     /// @param reply  Reply sink; invoked only when this returns `true`.
     /// @param cid    Connection scope, or `0` for unscoped.
     /// @return `true` if an entry existed and @p reply was invoked; `false` to keep going.
-    bool attachExistingLocked(const detail::DirectoryKey& dirKey, const ::morph::wire::Envelope& env,
-                              const std::function<void(std::string)>& reply, ConnectionId cid) {
+    bool attachExisting(const detail::DirectoryKey& dirKey, const ::morph::wire::Envelope& env,
+                        const std::function<void(std::string)>& reply, ConnectionId cid) {
         // `nullopt` covers both a plain directory miss and an instance whose
         // first action failed: `InstanceDirectory::attach` evicts the latter and
         // reports it as a miss, so the caller falls through to creating a fresh
@@ -747,8 +855,8 @@ private:
             return false;
         }
         auto const mid = *attached;
-        if (!noteScopeAttachLocked(mid, cid)) {
-            releaseInstanceLocked(mid);
+        if (!noteScopeAttach(mid, cid)) {
+            releaseInstance(mid);
             reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
             return true;
         }
@@ -756,7 +864,8 @@ private:
         return true;
     }
 
-    /// @brief Acquires (or creates) the shared instance for `(typeId, primary)` and replies.
+    /// @brief Acquires (or creates) the shared instance for `(typeId, primary)`
+    ///        and replies. On the server strand.
     ///
     /// The register-or-attach core shared by the `register` branch (when
     /// `shared` is set) and by `attach`. A shared instance is recorded with an
@@ -766,104 +875,85 @@ private:
     /// outright. Gating access to a shared model is therefore `authorize`'s job
     /// (per type and action) or the model's own — see docs/spec/security.md.
     ///
+    /// The directory check, the construction, the `maxLiveModels` admission and
+    /// the insert all run in this one strand task. Only host code this task
+    /// itself calls — the model's construction, the log provider — can file the
+    /// key in between, through `handleInline`, so the directory is checked
+    /// again after it.
+    ///
     /// @param env            Decoded request; uses `typeId`, `primary`, `contextKey`, `callId`.
     /// @param reply          Reply sink; always invoked exactly once.
     /// @param cid            Connection scope, or `0` for unscoped.
-    /// @param releaseCurrent Instance to release once the target is
-    ///                       confirmed acquired or confirmed about to be
-    ///                       created (an `attach` re-point), or `ModelId{0}`.
-    ///                       A throwing *construction* (`_registry.create`)
-    ///                       never touches it. Once construction succeeds,
-    ///                       release happens in the same locked section as
-    ///                       the `maxLiveModels` admission check, so a sole
-    ///                       holder's release frees the slot the re-point
-    ///                       itself needs rather than losing it to the cap;
-    ///                       the only remaining post-release failure is the
-    ///                       connection's own scope having closed
-    ///                       concurrently, in which case no further request
-    ///                       on it will run anyway.
+    /// @param releaseCurrent Instance to release once the target is confirmed
+    ///                       acquired or about to be created (an `attach`
+    ///                       re-point), or `ModelId{0}`. A throwing construction
+    ///                       never touches it. It is released before the
+    ///                       `maxLiveModels` admission check, so a sole holder's
+    ///                       release frees the slot the re-point itself needs.
     void acquireSharedInstance(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply,
                                ConnectionId cid, ::morph::exec::detail::ModelId releaseCurrent) {
-        LimitPolicy const limits = snapshotLimits();
         detail::DirectoryKey dirKey{env.typeId, env.primary};
-        {
-            std::scoped_lock const lock{_regMtx};
-            if (attachExistingLocked(dirKey, env, reply, cid)) {
-                // Acquired (or re-confirmed) the target before touching
-                // `releaseCurrent` -- a same-key re-attach lands on the exact
-                // same mid attachExistingLocked just incremented, so
-                // releasing it here cancels out only the redundant reference
-                // that call just took, never the caller's sole hold on the
-                // instance it is "re-pointing" to itself. A genuinely
-                // different-key re-point releases the real old instance.
-                if (releaseCurrent.v != 0U) {
-                    releaseScopedLocked(releaseCurrent, cid);
-                }
-                return;
+        if (attachExisting(dirKey, env, reply, cid)) {
+            // A same-key re-attach lands on the exact mid attachExisting just
+            // incremented, so releasing `releaseCurrent` here cancels only the
+            // redundant reference that call took, never the caller's sole hold.
+            // A different-key re-point releases the real old instance.
+            if (releaseCurrent.v != 0U) {
+                releaseScoped(releaseCurrent, cid);
             }
+            return;
         }
-        // Directory miss. Construct outside the lock, exactly as the private
-        // register path does, then re-check under the insert lock: a concurrent
-        // request for the same key may have won the race while we built ours.
-        // env.primary is this instance's directory key -- always non-empty
-        // here (acquireSharedInstance is only reached for a shared/keyed
+        // env.primary is this instance's directory key -- always non-empty here
+        // (acquireSharedInstance is only reached for a shared/keyed
         // register-or-attach), so the model learns its own key once, at
         // construction, via IModelHolder::attachIdentity.
         auto holder = _registry.create(env.typeId, env.primary);
         attachLogIfConfigured(*holder, env);
-        ::morph::exec::detail::ModelId const fresh{nextOpaqueId()};
-        {
-            std::scoped_lock const lock{_regMtx};
-            if (attachExistingLocked(dirKey, env, reply, cid)) {
-                if (releaseCurrent.v != 0U) {
-                    releaseScopedLocked(releaseCurrent, cid);
-                }
-                return;
-            }
-            // Confirmed miss: release the old instance now, in the same
-            // locked section as the maxLiveModels admission check, so a sole
-            // holder's release frees exactly the slot this re-point needs
-            // rather than losing it to the cap in between -- the property
-            // the single `attach` wire request exists to provide. The only
-            // way admission can still fail after this is a concurrently
-            // closed connection scope (noteScopeAttachLocked below), which
-            // makes "stranding" moot: no further request on that connection
-            // will ever run anyway.
+        // Checked again: the construction and the log provider are host code,
+        // and one that registers or attaches through `handleInline` runs that
+        // request inline, on this strand, possibly filing this very key.
+        if (attachExisting(dirKey, env, reply, cid)) {
             if (releaseCurrent.v != 0U) {
-                releaseScopedLocked(releaseCurrent, cid);
+                releaseScoped(releaseCurrent, cid);
             }
-            if (limits.maxLiveModels != 0 && _instances.size() >= limits.maxLiveModels) {
-                reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
-                return;
-            }
-            if (!noteScopeAttachLocked(fresh, cid)) {
-                reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
-                return;
-            }
-            // Filed with one attachment, an empty owner (shared instances are
-            // ownerless, by design -- see this function's doc comment) and its
-            // hydration pending, so the first action's outcome decides whether a
-            // second client may ever be handed it.
-            _instances.insertShared(fresh, std::move(holder), std::move(dirKey));
+            return;
         }
+        ::morph::exec::detail::ModelId const fresh{nextOpaqueId()};
+        if (releaseCurrent.v != 0U) {
+            releaseScoped(releaseCurrent, cid);
+        }
+        LimitPolicy const& limits = _config.limits;
+        if (limits.maxLiveModels != 0 && _instances.size() >= limits.maxLiveModels) {
+            reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
+            return;
+        }
+        if (!noteScopeAttach(fresh, cid)) {
+            reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
+            return;
+        }
+        // Filed with one attachment, an empty owner (shared instances are
+        // ownerless, by design -- see this function's doc comment) and its
+        // hydration pending, so the first action's outcome decides whether a
+        // second client may ever be handed it.
+        _instances.insertShared(fresh, std::move(holder), std::move(dirKey));
         reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, fresh.v)));
     }
 
-    /// @brief Files a live, still-anonymous instance under a primary key, in place.
+    /// @brief Files a live, still-anonymous instance under a primary key, in
+    ///        place. On the server strand.
     ///
     /// The existing holder of a key always wins: promoting onto a key another
     /// instance already holds is a silent no-op rather than a displacement.
     /// Symmetrically, an instance that already holds a *different* real key is
     /// left exactly where it is — also a silent no-op — since instances never
     /// change key (docs/spec/core/shared_instances.md); only a `mid` that has
-    /// never held a directory key can ever be promoted. That last part matters
-    /// here in particular: this server hands every keyed instance its own key
-    /// once, at construction, through `_registry.create(typeId, primary)` ->
-    /// `IModelHolder::attachIdentity`, and never updates it — so an instance
-    /// evicted from its key as poisoned stays ineligible even though the
-    /// directory no longer files it anywhere.
+    /// never held a directory key can ever be promoted. This server hands every
+    /// keyed instance its own key once, at construction, through
+    /// `_registry.create(typeId, primary)` -> `IModelHolder::attachIdentity`,
+    /// and never updates it — so an instance evicted from its key as poisoned
+    /// stays ineligible even though the directory no longer files it anywhere.
     /// @param env Decoded request; uses `typeId`, `primary`, `modelId`.
-    void applyAssignLocked(const ::morph::wire::Envelope& env) {
+    void applyAssign(const ::morph::wire::Envelope& env) {
         if (env.primary.empty()) {
             return;
         }
@@ -916,106 +1006,79 @@ private:
         return missing;
     }
 
-    /// @brief Answers an `instances` request with the live shared keys of a type.
+    /// @brief Answers an `instances` request with the live shared keys of a
+    ///        type. On the server strand.
     /// @param env   Decoded request; uses `typeId` and `callId`.
     /// @param reply Reply sink; always invoked exactly once.
     void handleInstances(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply) {
-        std::vector<std::string> keys;
-        {
-            std::scoped_lock const lock{_regMtx};
-            keys = _instances.keysOfType(env.typeId);
-        }
         std::string body;
-        (void)glz::write_json(keys, body);
+        (void)glz::write_json(_instances.keysOfType(env.typeId), body);
         reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(body))));
     }
 
-    /// @brief Execute-ordering ticket guard.
+    /// @brief Replies to an envelope that did not decode, and logs it. On the
+    ///        server strand.
     ///
-    /// Extracted, verbatim in behavior, to
-    /// `morph::backend::detail::ExecuteTicketGuard`
-    /// (`include/morph/core/detail/execute_order_gate.hpp`) — see that
-    /// class's own doc comment for the full design rationale. Aliased here so
-    /// every call site in this class reads `ExecuteTicketGuard` unqualified.
-    using ExecuteTicketGuard = ::morph::backend::detail::ExecuteTicketGuard;
+    /// The one server-side record of a request that never dispatched at all. A
+    /// client that swallows its own error (or is malformed precisely because it
+    /// is confused) would otherwise leave no trace here. The payload prefix is
+    /// the most useful field for diagnosing *why* the client sent something
+    /// malformed -- and the most likely to carry application data, so it is
+    /// capped at kLogPayloadPreviewBytes rather than logged in full. See
+    /// docs/spec/core/backend.md, "Server-side observability".
+    /// @param msg   The raw message.
+    /// @param error The decode exception's message.
+    /// @param reply Reply sink.
+    /// @param cid   Connection the message arrived on.
+    static void replyUndecodable(const std::string& msg, const std::string& error,
+                                 const std::function<void(std::string)>& reply, ConnectionId cid) {
+        constexpr std::size_t kLogPayloadPreviewBytes = 256;
+        std::string_view const preview =
+            std::string_view{msg}.substr(0, std::min(msg.size(), kLogPayloadPreviewBytes));
+        ::morph::log::logError(
+            "[dispatchMessage] undecodable envelope from connection {}: {} ({} bytes, "
+            "payload prefix: {}{})",
+            cid, error, msg.size(), preview, msg.size() > kLogPayloadPreviewBytes ? "..." : "");
+        reply(::morph::wire::encode(::morph::wire::makeErr(error)));
+    }
+
+    /// @brief Dispatches one decoded envelope, or replies to one that did not
+    ///        decode. On the server strand: every envelope's body starts here.
+    /// @param decoded The envelope, or its decode failure.
+    /// @param reply   Reply sink; invoked exactly once, now or (for an admitted
+    ///                `execute`) from the model's strand.
+    /// @param cid     Connection scope; `0` means unscoped.
+    void dispatchDecoded(Decoded decoded, std::function<void(std::string)>& reply, ConnectionId cid) {
+        noteOwner("RemoteServer::dispatch");
+        if (!decoded.env) {
+            replyUndecodable(decoded.raw, decoded.error, reply, cid);
+            return;
+        }
+        dispatchEnvelope(std::move(*decoded.env), reply, cid);
+    }
 
     // One flat switch over the wire's `kind` discriminator. Splitting it would
     // scatter the authorization sequence each branch depends on across helpers,
-    // with no reader benefit.
-    //
-    // `executeTicket`, when engaged, is this call's execute-ordering ticket from
-    // `handleImpl`, adopted below by an `ExecuteTicketGuard` that owns it for
-    // the rest of this frame — including `dispatchExecute`, the only branch that
-    // does anything with it beyond releasing it. Every other `kind` ignores it;
-    // `handleImpl` never takes one for a non-`execute` envelope in the first
-    // place, so it is always the empty `Ticket` for those.
+    // with no reader benefit. On the server strand.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-    void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0,
-                         ::morph::backend::detail::ExecuteOrderGate::Ticket executeTicket = {}) {
-        // Adopted before anything that can fail, including the decode: from
-        // here on every way out of this function — each early return below,
-        // the outer catch, and any branch a later change adds — releases the
-        // ticket, which is what makes `ExecuteOrderGate::release`'s stated
-        // rule structurally true rather than a convention each call site has
-        // to remember.
-        ExecuteTicketGuard ticketGuard{_executeGate, std::move(executeTicket)};
-        ::morph::wire::Envelope env;
-        try {
-            env = ::morph::wire::decode(msg);
-        } catch (const std::exception& exc) {
-            // Undecodable envelope: the one server-side record of a request
-            // that never dispatched at all. A client that swallows its own
-            // error (or is malformed precisely because it is confused) would
-            // otherwise leave no trace here. The payload prefix is the most
-            // useful field for diagnosing *why* the client sent something
-            // malformed -- and the most likely to carry application data, so
-            // it is capped at kLogPayloadPreviewBytes rather than logged in
-            // full. See docs/spec/core/backend.md, "Server-side observability".
-            constexpr std::size_t kLogPayloadPreviewBytes = 256;
-            std::string_view const preview =
-                std::string_view{msg}.substr(0, std::min(msg.size(), kLogPayloadPreviewBytes));
-            ::morph::log::logError(
-                "[dispatchMessage] undecodable envelope from connection {}: {} ({} bytes, "
-                "payload prefix: {}{})",
-                cid, exc.what(), msg.size(), preview, msg.size() > kLogPayloadPreviewBytes ? "..." : "");
-            reply(::morph::wire::encode(::morph::wire::makeErr(exc.what())));
-            return;
-        }
+    void dispatchEnvelope(::morph::wire::Envelope env, std::function<void(std::string)>& reply, ConnectionId cid) {
         // One line per successfully-decoded request -- the point every kind
         // funnels through, so a client stuck mid-handshake (or one that never
         // sent anything) is distinguishable from one whose requests are
         // arriving normally. Deliberately omits the session principal (opt-in
         // territory: personal data in many deployments) and the payload body
-        // (already covered, truncated, on the decode-failure path above;
-        // logging every successful body by default would be far higher volume
-        // and duplicate what dispatch already records via the action log for
-        // execute).
+        // (already covered, truncated, on the decode-failure path; logging every
+        // successful body by default would be far higher volume and duplicate
+        // what dispatch already records via the action log for execute).
         ::morph::log::logDebug(
             "[dispatchMessage] connection {}: kind={} callId={} typeId={} modelId={} "
             "modelType={} actionType={} bodyBytes={}",
             cid, env.kind, env.callId, env.typeId, env.modelId, env.modelType, env.actionType, env.body.size());
-        // Once shutdown has begun, new work is rejected fast — before any of
-        // the existing register/execute validation runs — while `deregister`
-        // (and any other kind) still flows through unchanged, so a client can
-        // still tear its models down cleanly during the drain window.
-        if ((env.kind == "register" || env.kind == "execute" || env.kind == "attach") &&
-            _shuttingDown.load(std::memory_order_acquire)) {
-            // Release before replying, rather than leaving it to the guard's
-            // destructor: this reply may be slow (it is a transport write), and
-            // nothing about it is worth making a later same-model `execute`
-            // wait for.
-            //
-            // Not merely a leaked map entry on a dying server: tickets are
-            // taken in send order on the transport thread, but the pool is free to
-            // run the two posted tasks in either order. A *later* ticket that
-            // passed this gate before `beginShutdown()` is already parked in
-            // `ExecuteOrderGate::awaitTurn`, on a `cv.wait` with no deadline,
-            // waiting for this one -- so dropping it strands that caller permanently, holds
-            // a pool worker forever, and (because `_inFlightExecutes` is
-            // incremented before that wait) makes `drainedWithin()` unable to
-            // ever succeed. See `tests/test_remote_execute_ordering.cpp`'s
-            // shutdown-gate case, which forces that interleaving.
-            ticketGuard.release();
+        // Once shutdown has begun, new work is rejected fast — before any other
+        // validation runs — while `deregister` (and any other kind) still flows
+        // through unchanged, so a client can still tear its models down cleanly
+        // during the drain window.
+        if ((env.kind == "register" || env.kind == "execute" || env.kind == "attach") && _shuttingDown) {
             reply(::morph::wire::encode(::morph::wire::makeErr("server shutting down", env.callId)));
             return;
         }
@@ -1025,25 +1088,18 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("register requires a typeId");
                 }
-                LimitPolicy const limits = snapshotLimits();
+                LimitPolicy const& limits = _config.limits;
                 // Cheap early rejection, so a server already at its cap does not
                 // pay for authorize()/authenticate() and a model construction it
-                // is about to discard. Advisory only — the binding check is the
-                // re-test under the insert lock further below.
+                // is about to discard.
                 //
                 // Skipped for a *shared* register, which may well create nothing:
                 // if the key is already live it only takes another reference, and
                 // `maxLiveModels` caps live models, not attachments to them.
-                // Rejecting here would make a loaded server refuse the second
-                // client of an instance it is already hosting — exactly when
-                // sharing is worth the most. `acquireSharedInstance` re-tests the
-                // cap under the insert lock, where it can tell the two apart.
-                if (limits.maxLiveModels != 0 && (!env.shared || env.primary.empty())) {
-                    std::scoped_lock const lock{_regMtx};
-                    if (_instances.size() >= limits.maxLiveModels) {
-                        reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
-                        return;
-                    }
+                if (limits.maxLiveModels != 0 && (!env.shared || env.primary.empty()) &&
+                    _instances.size() >= limits.maxLiveModels) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
+                    return;
                 }
                 // Authenticate the caller and make the verified identity
                 // authoritative, exactly as dispatchExecute does for execute: a
@@ -1062,86 +1118,44 @@ private:
                     return;
                 }
                 // A `shared` register naming a primary is a register-or-attach
-                // against the directory; everything below is the private path,
-                // unchanged.
+                // against the directory; everything below is the private path.
                 if (env.shared && !env.primary.empty()) {
                     acquireSharedInstance(env, reply, cid, ::morph::exec::detail::ModelId{0});
                     return;
                 }
-                // The branch above already returned for a shared register
-                // naming a primary; env.primary here is either empty (a
-                // private/anonymous instance -- attachIdentity is then a
-                // no-op) or a caller-supplied identity for a non-shared
-                // instance, which is still this instance's own key to learn.
+                // env.primary here is either empty (a private/anonymous instance
+                // -- attachIdentity is then a no-op) or a caller-supplied
+                // identity for a non-shared instance, which is still this
+                // instance's own key to learn.
                 auto holder = _registry.create(env.typeId, env.primary);
                 attachLogIfConfigured(*holder, env);
-                // Record the owner principal for per-instance authorization:
-                // env.session's principal is already the verified identity
-                // stamped above (empty if the authorizer does not
-                // authenticate), never the client's raw claim. This is what
-                // lets `authorizeInstance` later deny a different principal.
-                ::morph::exec::detail::ModelId const mid{nextOpaqueId()};
-                bool scopeAlreadyClosed = false;
-                bool overLiveModelCap = false;
-                {
-                    std::scoped_lock const lock{_regMtx};
-                    // Authoritative cap re-test, in the same critical section as
-                    // the insert. The check near the top of this branch releases
-                    // _regMtx before authorize(), authenticate() and
-                    // _registry.create() run, so concurrent registers all
-                    // observed the same under-cap size and every one of them
-                    // proceeded to insert -- overshooting maxLiveModels by up to
-                    // the worker pool's width. Only a check that cannot be
-                    // separated from its insert actually bounds anything.
-                    if (limits.maxLiveModels != 0 && _instances.size() >= limits.maxLiveModels) {
-                        overLiveModelCap = true;
-                    }
-                    // A non-zero cid attributes the new instance to that
-                    // connection's scope, next to the instance directory under
-                    // the same lock so scope membership can never desync from
-                    // instance existence. cid == 0 (the unscoped default)
-                    // records nothing, matching today's behavior byte-for-byte.
-                    //
-                    // find(), never operator[]: the scope may already be gone.
-                    // handle() *posts* this work to the pool, while
-                    // closeConnection() runs synchronously on the transport's
-                    // disconnect callback from another thread, so a client that
-                    // registers and immediately drops its socket genuinely
-                    // interleaves the two. operator[] would default-construct —
-                    // resurrecting a scope closeConnection() had already
-                    // erased — and nothing ever closes a scope twice, so this
-                    // model and every later one on the dead cid would be
-                    // unreclaimable: an unbounded leak that, with
-                    // `maxLiveModels` set, wedges the server permanently at
-                    // `err "too many models"`.
-                    if (!overLiveModelCap && cid != 0) {
-                        auto scopeIter = _connectionScopes.find(cid);
-                        if (scopeIter == _connectionScopes.end()) {
-                            scopeAlreadyClosed = true;
-                        } else {
-                            scopeIter->second[mid] += 1;
-                        }
-                    }
-                    if (!overLiveModelCap && !scopeAlreadyClosed) {
-                        // Private: no directory key, no sharing, no hydration
-                        // tracking. The owner is the principal stamped above,
-                        // never the client's raw claim.
-                        _instances.insertPrivate(mid, std::move(holder), std::move(env.session.principal));
-                    }
-                }
-                if (overLiveModelCap) {
-                    // Lost the race for the last slot. `holder` goes out of
-                    // scope unregistered.
-                    reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
-                    return;
-                }
-                if (scopeAlreadyClosed) {
-                    // The connection that asked for this instance is gone. Let
-                    // `holder` go out of scope unregistered rather than leak it,
-                    // and answer the (already dead) caller honestly.
+                // find(), never operator[]: the scope may already be gone. A
+                // client that registers and immediately drops its socket
+                // closes its scope before this register runs, and operator[]
+                // would resurrect it -- a scope nothing closes a second time, so
+                // this model and every later one on the dead cid would be
+                // unreclaimable, and with `maxLiveModels` set the server would
+                // wedge at `err "too many models"`.
+                if (cid != 0 && !_connectionScopes.contains(cid)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
                     return;
                 }
+                // Re-tested after the construction, which is host code: a model
+                // constructor that registers another model through
+                // `handleInline` runs that register inline, on this strand.
+                if (limits.maxLiveModels != 0 && _instances.size() >= limits.maxLiveModels) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
+                    return;
+                }
+                ::morph::exec::detail::ModelId const mid{nextOpaqueId()};
+                if (cid != 0) {
+                    _connectionScopes.at(cid)[mid] += 1;
+                }
+                // Private: no directory key, no sharing, no hydration tracking.
+                // The owner is the principal stamped above, never the client's
+                // raw claim; it is what lets `authorizeInstance` later deny a
+                // different principal.
+                _instances.insertPrivate(mid, std::move(holder), std::move(env.session.principal));
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
             } else if (env.kind == "attach") {
                 if (env.typeId.empty()) {
@@ -1169,10 +1183,7 @@ private:
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
                 }
-                {
-                    std::scoped_lock const lock{_regMtx};
-                    applyAssignLocked(env);
-                }
+                applyAssign(env);
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, env.modelId)));
             } else if (env.kind == "instances") {
                 if (env.typeId.empty()) {
@@ -1213,37 +1224,25 @@ private:
                 // The default hook allows all, so unconfigured behaviour is
                 // unchanged; an ownership-enforcing authorizer can reject a
                 // caller tearing down an instance it does not own.
-                std::string owner;
-                bool known = false;
-                {
-                    std::scoped_lock const lock{_regMtx};
-                    if (const auto* inst = _instances.find(mid)) {
-                        owner = inst->owner;
-                        known = true;
-                    }
-                }
-                if (known && !_authorizer->authorizeInstance(env.session, {}, {}, mid.v, owner)) {
+                if (const auto* inst = _instances.find(mid);
+                    inst != nullptr && !_authorizer->authorizeInstance(env.session, {}, {}, mid.v, inst->owner)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
                 }
-                {
-                    std::scoped_lock const lock{_regMtx};
-                    // Release exactly the reference *this* connection (`cid`,
-                    // the scope the deregister request itself carries) holds,
-                    // not whichever connection happened to attach the
-                    // instance last -- a shared instance may have several
-                    // owning connections at once, and crediting the release
-                    // to the wrong one either strands a reference nobody will
-                    // ever decrement, or lets one connection's deregister
-                    // silently consume another's hold.
-                    releaseScopedLocked(mid, cid);
-                }
+                // Release exactly the reference *this* connection (`cid`, the
+                // scope the deregister request itself carries) holds, not
+                // whichever connection happened to attach the instance last --
+                // a shared instance may have several owning connections at once,
+                // and crediting the release to the wrong one either strands a
+                // reference nobody will ever decrement, or lets one connection's
+                // deregister silently consume another's hold.
+                releaseScoped(mid, cid);
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
-                dispatchExecute(std::move(env), reply, ticketGuard);
+                dispatchExecute(std::move(env), reply);
             } else if (env.kind == "hello") {
-                const std::uint32_t minV = _minVersion.load();
-                const std::uint32_t maxV = _maxVersion.load();
+                const std::uint32_t minV = _config.minProtocolVersion;
+                const std::uint32_t maxV = _config.maxProtocolVersion;
                 if (env.protocolVersion < minV || env.protocolVersion > maxV) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("protocol version unsupported", env.callId)));
                 } else {
@@ -1256,59 +1255,35 @@ private:
             }
         } catch (const std::exception& exc) {
             // Any throw from the branches above — including one out of
-            // `dispatchExecute`, which has no catch of its own and whose
-            // `authorize`/`authenticate`/`authorizeInstance`/
-            // `missingRequiredFields` steps are all reachable, non-`noexcept`
-            // code — unwinds past every explicit release to here. `ticketGuard`
-            // is what releases the ticket on this path; it is destroyed as this
-            // frame returns. Replying here without releasing would strand the
-            // ticket, and the next same-model `execute` would wait on it
-            // forever.
+            // `dispatchExecute`'s `authorize`/`authenticate`/`authorizeInstance`/
+            // `missingRequiredFields` steps, all reachable, non-`noexcept` code
+            // — becomes this call's `err` reply. Nothing is held across it: a
+            // later execute for the same model is simply the next task on this
+            // strand.
             reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
         }
     }
 
-    // A single ordered gate sequence — limits, authorize, authenticate, lookup,
-    // per-instance authorize — whose *order* is the security contract itself
-    // (see docs/spec/security.md), so it is deliberately not broken up.
-    //
-    // `ticketGuard` owns this call's execute-ordering ticket (if one was
-    // taken) on behalf of `dispatchMessage`, which constructed it and
-    // outlives this call. Every path out of this function releases the ticket:
-    // the rejection branches below do it explicitly, through
-    // `rejectAndRelease`, so it is freed before their reply goes out; the one
-    // path that reaches the strand releases it immediately after
-    // `_strands->post(mid, ...)` (that post is the entire point of taking a
-    // ticket, so this path brackets it with `awaitTurn()` rather than
-    // releasing up front); and every *implicit* exit — an exception out of
-    // `authorize`/`authenticate`/`authorizeInstance`/`missingRequiredFields`,
-    // or out of the post itself — is covered by the guard's destructor back in
-    // `dispatchMessage`. See `ExecuteTicketGuard` and the class-private
-    // members' own doc comment for the full design.
+    // Admission: one ordered gate sequence — limits, authorize, authenticate,
+    // lookup, per-instance authorize, payload completeness, in-flight
+    // reservation — whose *order* is the security contract itself (see
+    // docs/spec/security.md), so it is deliberately not broken up. On the
+    // server strand; the admitted run is posted to the model's strand.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply,
-                         ExecuteTicketGuard& ticketGuard) {
-        // Releases the ticket (if one is held), then calls reply with an error
-        // envelope. Used by every early-return branch below, so a rejection
-        // frees the gate before its reply is written rather than at end of
-        // scope — the guard would release it either way, but not this early.
-        auto rejectAndRelease = [&ticketGuard, &env, &reply](const char* message) {
-            ticketGuard.release();
+    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply) {
+        noteOwner("RemoteServer::admitExecute");
+        auto reject = [&env, &reply](const char* message) {
             reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
         };
-        LimitPolicy const limits = snapshotLimits();
-        // Cheap early shed, so an overloaded server does not pay for
-        // authorize()/authenticate() on work it is about to refuse. Advisory
-        // only — the binding check is the atomic reservation further below,
-        // since this load and that increment are separated by authorization
-        // and a registry lookup.
-        if (limits.maxInFlightExecutes != 0 &&
-            _inFlightExecutes.load(std::memory_order_relaxed) >= limits.maxInFlightExecutes) {
-            rejectAndRelease("server busy");
+        LimitPolicy const& limits = _config.limits;
+        // Exact, not advisory: the count is this strand's own state, so nothing
+        // can be admitted between this check and the increment below.
+        if (limits.maxInFlightExecutes != 0 && _inFlight >= limits.maxInFlightExecutes) {
+            reject("server busy");
             return;
         }
         if (!_authorizer->authorize(env.session, env.modelType, env.actionType)) {
-            rejectAndRelease("unauthorized");
+            reject("unauthorized");
             return;
         }
         // Make the identity authoritative. A verifying authorizer returns the
@@ -1317,174 +1292,84 @@ private:
         // returns nullopt the authorizer cannot vouch for the caller, so we CLEAR
         // the client-asserted principal rather than passing it through unverified.
         // This closes two holes: (1) the TOCTOU window where a token that passed
-        // authorize() expires before authenticate() (worst case is now an empty
+        // authorize() expires before authenticate() (worst case is an empty
         // principal, never the attacker's claim), and (2) an authorize-only or
         // allow-all authorizer that never authenticates (the model never sees an
         // untrusted principal as authoritative). See docs/spec/security.md.
         stampVerifiedPrincipal(env);
         ::morph::exec::detail::ModelId const mid{env.modelId};
-        std::shared_ptr<::morph::model::detail::IModelHolder> holder;
-        std::shared_ptr<detail::HydrationState> hydration;
-        std::string owner;
-        bool known = false;
-        {
-            std::scoped_lock const lock{_regMtx};
-            // One lookup for the holder, its recorded owner and its hydration
-            // state together: they are fields of one record now, not entries in
-            // three maps kept in lockstep by convention.
-            if (const auto* inst = _instances.find(mid)) {
-                holder = inst->holder;
-                hydration = inst->hydration;
-                owner = inst->owner;
-                known = true;
-            }
-        }
-        if (!holder) {
-            // The one path this whole mechanism exists to keep fast (and the
-            // reverted first attempt the doc comment on the class-private
-            // members describes): a lookup against a modelId
-            // that is not (or no longer) live must resolve immediately,
-            // never waiting on some other, unrelated model's strand — this
-            // ticket is released right here, before any wait could ever be
-            // introduced by a future change to this function.
-            rejectAndRelease("model not found");
+        // One lookup for the holder, its recorded owner and its hydration state
+        // together: they are fields of one record.
+        const auto* inst = _instances.find(mid);
+        if (inst == nullptr) {
+            // Answered in this task's turn: the server strand runs no handler,
+            // so a lookup of a model that is gone never waits on a model that
+            // is busy.
+            reject("model not found");
             return;
         }
+        std::shared_ptr<::morph::model::detail::IModelHolder> holder = inst->holder;
+        std::shared_ptr<detail::HydrationState> hydration = inst->hydration;
         // Per-instance (row-level) authorization. `authorize` above only saw the
         // model *type*; this consults the optional ownership hook with the target
-        // instance id and its recorded owner. The default hook allows all, so
-        // behaviour is unchanged unless an authorizer overrides it. env.session
-        // now carries the verified principal (stamped just above), so an
+        // instance id and its recorded owner. The default hook allows all.
+        // env.session carries the verified principal (stamped just above), so an
         // ownership authorizer compares the recorded owner against it.
-        if (known && !_authorizer->authorizeInstance(env.session, env.modelType, env.actionType, mid.v, owner)) {
-            rejectAndRelease("unauthorized");
+        if (!_authorizer->authorizeInstance(env.session, env.modelType, env.actionType, mid.v, inst->owner)) {
+            reject("unauthorized");
             return;
         }
         // Action-evolution policy gate (opt-in; see `PayloadCompleteness`).
-        // Placed after authorization — the diagnostic names the action's own
-        // field, which is exactly what the `"schemas"` kind discloses and is
-        // therefore owed the same gate — and before the in-flight slot is
-        // reserved, so a payload that will not be dispatched never consumes
-        // one. Costs one extra parse of `body`, which is why it is not on by
-        // default.
-        if (_completeness.load() == PayloadCompleteness::RequireDeclaredFields) {
+        // After authorization — the diagnostic names the action's own field,
+        // which is exactly what the `"schemas"` kind discloses and is therefore
+        // owed the same gate — and before the in-flight slot is reserved, so a
+        // payload that will not be dispatched never consumes one.
+        if (_config.payloadCompleteness == PayloadCompleteness::RequireDeclaredFields) {
             const std::string missing = missingRequiredFields(env.modelType, env.actionType, env.body);
             if (!missing.empty()) {
                 const std::string message = "payload missing required field(s): " + missing;
-                rejectAndRelease(message.c_str());
+                reject(message.c_str());
                 return;
             }
         }
-        // Capture a strong self-reference so the server (and therefore
-        // `_dispatcher`, which is a reference member) stays alive until this
-        // strand task runs and delivers its reply. `handle()`'s task only holds
-        // `self` until it enqueues onto the strand; without this capture the last
-        // external shared_ptr could drop before the strand task executes, leaving
-        // `_dispatcher` dangling (use-after-free) or the reply silently lost so a
-        // client Completion hangs forever. See docs/spec/concurrency_and_lifetimes.md.
-        // Concurrent in-flight executes: this is the same counter
-        // LimitPolicy::maxInFlightExecutes checks above, reused (not duplicated)
-        // as the executeInFlight metric's gauge, health()'s inFlight field, and
-        // drainedWithin()'s drain-detection condition — one counter, four
-        // consumers, never double-counted.
-        //
-        // Reserved with a compare-exchange rather than an unconditional
-        // fetch_add, so `maxInFlightExecutes` is an actual bound. The advisory
-        // check at the top of this function is a plain load, and authorize(),
-        // authenticate() and the registry lookup all run between it and here —
-        // long enough for every thread in the worker pool to observe the same
-        // under-limit value and proceed, overshooting the cap by up to the
-        // pool's width. That is exactly the burst the limit exists to prevent.
-        // Reserving here, at the last point before the slot is genuinely taken,
-        // needs no unwind on the early-return paths above.
-        // Created before the reservation below, not after it, so `reservation`
-        // can claim the same completion slot `complete` uses. Everything between
-        // the increment and the strand post is non-`noexcept` -- emitMetric, two
-        // make_shared, TimeoutScheduler::schedule, awaitTurn's mutex, the post
-        // itself -- and a throw there would otherwise leak the slot permanently.
-        auto finished = std::make_shared<std::atomic_flag>();
-
-        std::size_t inFlightAfterInc = 0;
-        if (limits.maxInFlightExecutes != 0) {
-            std::size_t current = _inFlightExecutes.load(std::memory_order_relaxed);
-            for (;;) {
-                if (current >= limits.maxInFlightExecutes) {
-                    rejectAndRelease("server busy");
-                    return;
-                }
-                // compare_exchange_weak refreshes `current` on failure, so a
-                // losing thread re-tests the limit rather than forcing its way in.
-                if (_inFlightExecutes.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {
-                    inFlightAfterInc = current + 1;
-                    break;
-                }
-            }
-        } else {
-            inFlightAfterInc = _inFlightExecutes.fetch_add(1, std::memory_order_relaxed) + 1;
-        }
+        // Reserve the in-flight slot. From here the call is answered exactly
+        // once, by `complete`, whichever of the model strand's finish and the
+        // `executeTimeout` gets there first; `complete` posts the matching
+        // `executeFinished` back to this strand.
+        _inFlight += 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
-                                             static_cast<double>(inFlightAfterInc));
+                                             static_cast<double>(_inFlight));
         auto self = shared_from_this();
-
-        // Releases the in-flight slot if this frame leaves by exception before
-        // the dispatch is handed off. It claims `finished` rather than replying:
-        // dispatchMessage's catch is what replies on that path, and replying here
-        // too would break handle()'s reply-exactly-once contract. Claiming the
-        // flag also makes an already-armed timeout a no-op, so the caller cannot
-        // receive a second `err "timeout"` for the same callId afterwards.
-        //
-        // Without this, one throw left `_inFlightExecutes` permanently
-        // over-counted: `drainedWithin()` predicates on it reaching zero, so
-        // graceful shutdown could never succeed again for that server, and with
-        // `maxInFlightExecutes` set a slot would be lost for good.
-        struct InFlightReservation {
-            RemoteServer* server;
+        auto finished = std::make_shared<std::atomic_flag>();
+        // Gives the slot back if this frame leaves by exception before the run
+        // is handed to the model's strand: dispatchEnvelope's catch replies on
+        // that path, so this only claims `finished` (making an armed timeout a
+        // no-op) and decrements, here, on the strand.
+        struct Reservation {
+            RemoteServer& server;
             std::shared_ptr<std::atomic_flag> finished;
             bool handedOff = false;
-
-            InFlightReservation(RemoteServer* owner, std::shared_ptr<std::atomic_flag> flag)
+            Reservation(RemoteServer& owner, std::shared_ptr<std::atomic_flag> flag)
                 : server{owner}, finished{std::move(flag)} {}
-            ~InFlightReservation() {
-                if (handedOff || finished->test_and_set()) {
-                    return;
-                }
-                auto const remaining = server->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed) - 1;
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
-                                                     static_cast<double>(remaining));
-                if (remaining == 0) {
-                    std::scoped_lock const drainLock{server->_drainMtx};
-                    server->_drainCv.notify_all();
+            Reservation(const Reservation&) = delete;
+            Reservation& operator=(const Reservation&) = delete;
+            Reservation(Reservation&&) = delete;
+            Reservation& operator=(Reservation&&) = delete;
+            // NOLINTNEXTLINE(bugprone-exception-escape): executeFinished runs the server's drain bookkeeping on its owner; a failure there has no recovery in a destructor.
+            ~Reservation() {
+                if (!handedOff && !finished->test_and_set()) {
+                    server.executeFinished();
                 }
             }
-            InFlightReservation(const InFlightReservation&) = delete;
-            InFlightReservation& operator=(const InFlightReservation&) = delete;
-            InFlightReservation(InFlightReservation&&) = delete;
-            InFlightReservation& operator=(InFlightReservation&&) = delete;
-        };
-        InFlightReservation reservation{this, finished};
+        } reservation{*this, finished};
 
         std::uint64_t const callId = env.callId;
-
-        // `finished` fires the caller's `reply` exactly once — whichever of the
-        // timeout path or the strand path gets there first — and always
-        // decrements the in-flight counter exactly once, regardless of which
-        // path won. This preserves handle()'s reply-exactly-once contract even
-        // though two independent paths can now race to resolve the same call.
         auto replySlot = std::make_shared<std::function<void(std::string)>>(std::move(reply));
+        // The decrement is posted before the reply goes out, so anything posted
+        // to the server strand by someone who has seen the reply runs after it.
         auto complete = [self, finished, replySlot](std::string msg) {
             if (!finished->test_and_set()) {
-                auto const inFlightAfterDec = self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed) - 1;
-                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
-                                                     static_cast<double>(inFlightAfterDec));
-                if (inFlightAfterDec == 0) {
-                    // Wakes any drainedWithin() waiter blocked on the in-flight
-                    // count reaching zero. Locking _drainMtx here (rather than
-                    // just notifying) closes the classic lost-wakeup window: it
-                    // guarantees this notify cannot land between a waiter's
-                    // predicate check and its wait_for() call.
-                    std::scoped_lock const drainLock{self->_drainMtx};
-                    self->_drainCv.notify_all();
-                }
+                self->_strand.postTask([self] { self->executeFinished(); });
                 (*replySlot)(std::move(msg));
             }
         };
@@ -1494,56 +1379,22 @@ private:
         // suspended when the caller is answered unwinds and leaves the action
         // gate rather than holding the model until its await completes.
         std::shared_ptr<::core::async::StopSource> stopSource;
-        if (limits.executeTimeout.count() > 0) {
-            std::scoped_lock const lock{_limitsMtx};
-            if (_timeoutScheduler) {
-                stopSource = std::make_shared<::core::async::StopSource>();
-                // The literal, not wire::kExecuteTimeoutMessage, on purpose:
-                // a scenario-coverage script (since removed) statically scanned this
-                // file for a string literal passed directly to makeErr to
-                // enumerate every refusal a scenario can assert against, and
-                // does not follow named constants across headers (see that
-                // script's own module docstring on its scan scope). This is
-                // the single call site that produces this message, so the
-                // typo-drift risk a shared constant guards against doesn't
-                // apply here the way it does for the consumer-side comparison
-                // in `core/detail/reply_router.hpp`.
-                //
-                // Safe to fire after its own `cancel()`, which the strand task
-                // below issues on both its success and its failure arm:
-                // `TimeoutScheduler::cancel` stops a callback that has not
-                // started but returns without waiting for one that already has
-                // (see that function's comment). A timeout callback already
-                // mid-flight when the dispatch finishes therefore still calls
-                // `complete`, and `complete`'s reply-exactly-once flag drops
-                // it rather than double-answering the call.
-                timeoutHandle =
-                    _timeoutScheduler->schedule(limits.executeTimeout, [complete, callId, stopSource]() mutable {
-                        complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
-                        stopSource->request_stop();
-                    });
-            }
+        if (_executeTimeouts) {
+            stopSource = std::make_shared<::core::async::StopSource>();
+            // Safe to fire after its own `cancel()`, which the model strand's
+            // finish issues on both its success and its failure arm:
+            // `TimeoutScheduler::cancel` stops a callback that has not started
+            // but returns without waiting for one that already has. A timeout
+            // callback already mid-flight when the dispatch finishes therefore
+            // still calls `complete`, and `complete`'s reply-exactly-once flag
+            // drops it rather than double-answering the call.
+            timeoutHandle =
+                _executeTimeouts->schedule(limits.executeTimeout, [complete, callId, stopSource]() mutable {
+                    complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
+                    stopSource->request_stop();
+                });
         }
 
-        // Where per-model ordering is enforced: block (on this pool thread —
-        // never the strand itself, and never any other model's strand) until
-        // every execute for `mid` that the transport sent before this one has
-        // already made its own `_strands->post(mid, ...)` call below. Every
-        // early-return above this point released its ticket immediately without
-        // ever waiting here, so a model-not-found/unauthorized/busy rejection
-        // for a *different* ticket can never be the thing this wait is stuck
-        // behind — only a ticket that is also headed for `_strands->post` can
-        // hold this one up, and it can only hold it up for as long as *its own*
-        // pre-strand work (identical in kind to this one's) takes, not for the
-        // duration of whatever the model's strand does with it afterward.
-        //
-        // Those immediate releases are also *out of ticket order* whenever the
-        // rejected request was sent after this one, which is why
-        // `ExecuteOrderGate::release` advances `nextToRun` over a contiguous
-        // run of released tickets rather than jumping to `ticket + 1`: jumping
-        // would let a rejection skip past this wait's ticket and park it here
-        // for good.
-        ticketGuard.awaitTurn();
         RemoteRun run;
         run.self = self;
         run.env = std::move(env);
@@ -1553,6 +1404,10 @@ private:
         run.timeoutHandle = timeoutHandle;
         run.stopSource = std::move(stopSource);
         run.mid = mid;
+        // Posted in this strand's order, which is the order `handle()` was
+        // called in; the model's strand runs its tasks in the order they were
+        // posted. That is the whole of per-model execute ordering.
+        //
         // Through the instance's action gate: an action starts only once the one
         // before it has finished, which a Task handler does when its Task
         // completes rather than when the strand task that started it returns.
@@ -1575,22 +1430,12 @@ private:
                 gate.enter([waiting = std::make_shared<RemoteRun>(std::move(run))] { startRemote(*waiting); });
             });
         }
-        // The ticket's whole job was ordering *this* `_strands->post()` call
-        // relative to any other in-flight execute for `mid` — that call has
-        // now happened, in its correct turn, so the next ticket (if any) may
-        // proceed immediately. Not tied to the strand task's own completion:
-        // the strand already serializes everything from here on (that is
-        // its entire job), so holding this ticket any longer would only
-        // delay a *different* execute's own pre-strand work for no ordering
-        // benefit.
-        ticketGuard.release();
-        // The strand task now owns `complete`, so the in-flight slot is its
-        // responsibility rather than this frame's. Anything that throws past
-        // here is on a path where `complete` will still run.
+        // The model strand's task now owns `complete`, so the in-flight slot is
+        // its responsibility rather than this frame's.
         reservation.handedOff = true;
     }
 
-    /// @brief Returns the next opaque model id.
+    /// @brief Returns the next opaque model id. On the server strand.
     ///
     /// Runs an internal monotonic counter through `detail::OpaqueIdGenerator`,
     /// so distinct calls never collide (the permutation is a bijection) but
@@ -1604,16 +1449,17 @@ private:
     [[nodiscard]] ::morph::exec::detail::ModelId nextOpaqueId() {
         uint64_t id = 0;
         do {
-            id = _idGen.permute(_nextId.fetch_add(1) + 1);
+            id = _idGen.permute(++_nextId);
         } while (id == 0);
         return ::morph::exec::detail::ModelId{id};
     }
 
     /// Everything one dispatched execute carries from `dispatchExecute` to its
-    /// reply. An ordinary handler's run is held by its strand task, or by the
-    /// gate's queue while it waits there; a Task handler's is shared, because
-    /// its completion callback holds it too. Holding `self` is what keeps the server, and with
-    /// it `_dispatcher`, alive until the reply is delivered.
+    /// reply. An ordinary handler's run is held by its model-strand task, or by
+    /// the action gate's queue while it waits there; a Task handler's is
+    /// shared, because its completion callback holds it too. Holding `self` is
+    /// what keeps the server, and with it `_dispatcher`, alive until the reply
+    /// is delivered.
     struct RemoteRun {
         std::shared_ptr<RemoteServer> self;
         ::morph::wire::Envelope env;
@@ -1699,11 +1545,8 @@ private:
     /// next execute on the instance can start. On the strand.
     static void finishRemote(RemoteRun& run, std::string result, const std::exception_ptr& error) {
         auto& self = *run.self;
-        {
-            std::scoped_lock const lock{self._limitsMtx};
-            if (self._timeoutScheduler) {
-                self._timeoutScheduler->cancel(run.timeoutHandle);
-            }
+        if (self._executeTimeouts) {
+            self._executeTimeouts->cancel(run.timeoutHandle);
         }
         bool const succeeded = error == nullptr;
         // Settle hydration before `endSpan`, before the metrics and before
@@ -1738,7 +1581,9 @@ private:
         run.holder->actionGate().leave();
     }
 
-    ::morph::exec::IExecutor& _pool;
+    // The server strand. Declared before every member its tasks touch, and
+    // closed first, in the destructor's body.
+    ::morph::exec::OwnerStrand _strand;
     // One strand per model instance, shared with the Task handlers' resumers.
     // Never closed before its last owner goes: a suspended handler's driver
     // frame holds its `RemoteRun`, and with it this server.
@@ -1746,149 +1591,71 @@ private:
     ::morph::model::detail::ActionDispatcher& _dispatcher;
     ::morph::model::detail::ModelRegistryFactory& _registry;
     std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
+    // Fixed at construction; read on the server strand and on model strands
+    // without a lock because nothing writes it afterwards.
+    ServerConfig const _config;
+    // Arms `LimitPolicy::executeTimeout`; present only when one is configured.
+    // Fixed at construction, so a model strand's finish can cancel through it
+    // without a lock.
+    std::unique_ptr<::morph::async::detail::TimeoutScheduler> const _executeTimeouts;
 
-    // ── Per-model execute-ordering gate ──────────────────────────────────────
-    // Specified in `docs/spec/core/backend.md`, "Per-model execute ordering".
-    //
-    // `handle()`'s two overloads dispatch to `_pool`, a multi-worker
-    // ThreadPoolExecutor: two `execute` envelopes for the *same* model,
-    // posted back-to-back, can have their pre-strand work (decode, authorize,
-    // authenticate, registry lookup) finish on two different pool threads in
-    // either order -- so without this gate, whichever one finishes first
-    // reaches `_strands->post(mid, ...)` first, even if the client sent the
-    // other one first (`tests/test_remote_execute_ordering.cpp` reproduces
-    // this deterministically). A first attempt strand-routed the *entire*
-    // dispatch pipeline for a known `modelId`, which closed the race but
-    // broke `test_remote_connection_scope.cpp`'s "an in-flight execute
-    // completes safely across a disconnect" guarantee: a lookup against a
-    // since-reclaimed `modelId` must resolve immediately without waiting on
-    // some other, still-blocked model's strand, and moving the whole
-    // pipeline onto the strand collapsed that fast-reject path into the same
-    // queue as the slow model's in-flight work. The ticket gate below fixes
-    // only the ordering of the `_strands->post()` call itself, leaving the
-    // fast-reject path exactly as fast as it always was.
-    //
-    // The gate orders only the *moment of the `_strands->post()` call itself*,
-    // not the pipeline before it: a ticket is handed out and the dispatch
-    // work is handed to `_pool` in one atomic step, synchronously in
-    // `handleImpl` (called directly from `handle()`, which runs on
-    // whatever single thread the transport calls it from -- in true send
-    // order, nothing async yet) for every `execute` with a known `modelId`
-    // (see `ExecuteOrderGate::takeAndPost` -- taking the ticket and posting
-    // to `_pool` as two separate, unlocked steps would let two concurrent
-    // transport threads' ticket order and enqueue order diverge).
-    // `dispatchExecute` waits for its ticket's
-    // turn only immediately before the pre-existing `_strands->post(mid, ...)`
-    // call, and releases the next ticket's turn either right after posting
-    // (live model) or immediately on a "model not found"/other early-return
-    // rejection (dead model, unauthorized, over limit, etc. -- none of these
-    // ever reach the strand, so their ticket must not block anyone behind
-    // it -- and, on any path that leaves by exception rather than by return,
-    // `ExecuteTicketGuard`'s destructor does the same). This keeps the
-    // fast-reject path exactly as fast as it always was
-    // (`test_remote_connection_scope.cpp`'s "an in-flight execute completes
-    // safely across a disconnect" test — a lookup against a since-reclaimed
-    // modelId must resolve without waiting on some other blocked model's
-    // strand). That path *does* take a ticket: `handleImpl` takes one for any
-    // well-formed `execute` with a non-zero `modelId`, long before the registry
-    // lookup that discovers the model is gone. What keeps it fast is releasing
-    // that ticket immediately rather than holding up a live one behind it; see
-    // `ExecuteOrderGate::release`'s own doc comment.
-    //
-    // Keyed by ModelId internally, not held forever: a model with no
-    // outstanding tickets has no entry in the gate's map at all (erased once
-    // its last ticket is released), so this never grows unbounded across the
-    // server's lifetime the way a per-model map with no cleanup would. Under
-    // load this erase-and-recreate can happen while a same-model ticket is
-    // still in flight (its dispatch task enqueued but not yet reached by a
-    // pool worker), which is why `handleImpl`/`dispatchExecute` carry an
-    // `ExecuteOrderGate::Ticket` end to end rather than a bare `ModelId` --
-    // it is bound to the exact `Gate` it was issued from, so a fresh map
-    // lookup finding a newer generation can never redirect it.
-    //
-    // The gate itself -- `take`/`takeAndPost`/`awaitTurn`/`release`, the
-    // out-of-order-release handling, the atomic take-and-enqueue step, and
-    // the "gate already gone" defensive branches -- is extracted to
-    // `morph::backend::detail::ExecuteOrderGate`
-    // (`include/morph/core/detail/execute_order_gate.hpp`), which has its own
-    // direct unit tests (`tests/test_execute_order_gate.cpp`). What stays here
-    // is purely the wiring: `handleImpl` calls `_executeGate.takeAndPost(mid,
-    // ...)`, which hands out the ticket and posts to `_pool` inside one
-    // critical section; `dispatchExecute` calls `ticketGuard.awaitTurn()`
-    // immediately before `_strands->post(mid, ...)`; every exit path releases
-    // through `ExecuteTicketGuard`, explicitly or via its destructor.
-    ::morph::backend::detail::ExecuteOrderGate _executeGate;
-    // mutable: health() is const and must still be able to lock this to read
-    // the live instance count safely from any thread.
-    mutable std::mutex _regMtx;
+    // ── Server-strand state: touched only in the server strand's tasks ──────
     // Every live instance, private and shared alike, plus the shared-instance
     // directory over them — holder, owner principal, attach count, directory key
-    // and hydration state as one record per instance rather than seven parallel
-    // ModelId-keyed containers held in lockstep by convention, and the same
-    // type LocalBackend owns rather than a second implementation of it.
-    // Guarded by `_regMtx`; `InstanceDirectory` is caller-locked by design,
-    // because the admission checks and connection-scope updates in the same
-    // critical sections must not be able to straddle a directory change.
-    //
-    // `HydrationState` is the one part with synchronisation of its own: it is
-    // settled from `dispatchExecute`'s strand task, which holds no lock, and is
-    // reached there through a `shared_ptr` captured at dispatch time rather than
-    // by looking the instance up again.
+    // and hydration state as one record per instance, and the same type
+    // LocalBackend owns. `HydrationState` is the one part with synchronisation
+    // of its own: it is settled from the model strand's finish, reached through
+    // a `shared_ptr` captured at admission rather than by looking the instance
+    // up again.
     detail::InstanceDirectory _instances;
     // Connection-scope bookkeeping (opt-in; see openConnection/closeConnection
-    // and the scoped handle(msg, reply, cid) overload). Guarded by _regMtx —
-    // the same lock as the instance directory — so scope membership can never
-    // desync from instance existence.
-    // Value is a *count* per instance, not a set: one connection may attach the
-    // same shared instance from two handlers, and closing the connection must
-    // release both references or the instance leaks. A private instance always
-    // has a count of exactly 1.
+    // and the scoped handle(msg, reply, cid) overload). The value is a *count*
+    // per instance, not a set: one connection may attach the same shared
+    // instance from two handlers, and closing the connection must release both
+    // references or the instance leaks. A private instance always has a count
+    // of exactly 1.
     std::unordered_map<ConnectionId, std::unordered_map<::morph::exec::detail::ModelId, std::size_t,
                                                         ::morph::exec::detail::ModelIdHash>>
         _connectionScopes;
-    std::atomic<uint64_t> _nextId{0};
-    std::atomic<uint64_t> _nextConnectionId{0};
-    std::atomic<std::uint32_t> _minVersion{::morph::wire::kProtocolVersion};
-    std::atomic<std::uint32_t> _maxVersion{::morph::wire::kProtocolVersion};
-    std::atomic<PayloadCompleteness> _completeness{PayloadCompleteness::Lenient};
+    std::uint64_t _nextId{0};
     detail::OpaqueIdGenerator _idGen;
-    std::mutex _logProviderMtx;
-    LogProvider _logProvider;
-    mutable std::mutex _limitsMtx;
-    LimitPolicy _limits;
-    // Concurrent in-flight executes: incremented when dispatchExecute admits a
-    // call for dispatch (post-authorization), decremented exactly once when
-    // its reply is delivered (see `complete`, above) — regardless of whether
-    // the winning path was the strand's dispatch or a LimitPolicy::executeTimeout
-    // firing first. Shared by the executeInFlight metric, health()'s inFlight
-    // field, and drainedWithin(): one counter, never double-counted.
-    std::atomic<std::size_t> _inFlightExecutes{0};
-    std::unique_ptr<::morph::async::detail::TimeoutScheduler> _timeoutScheduler;
-    // Set once by beginShutdown() and never cleared — there is no
-    // un-shutdown. Checked at the top of dispatchMessage() for register,
-    // attach and execute envelopes; deregister and any other kind are
-    // unaffected.
-    std::atomic<bool> _shuttingDown{false};
-    // Readiness flag for health(). Flipped to false exactly once, by
-    // beginShutdown() — there is no un-shutdown, so once false it stays false.
-    std::atomic<bool> _ready{true};
-    std::mutex _healthMtx;
-    std::function<void(const HealthStatus&)> _healthHandler;
-    // Guards the condition variable drainedWithin() waits on; signalled by
-    // dispatchExecute's `complete` whenever _inFlightExecutes reaches zero.
-    std::mutex _drainMtx;
-    std::condition_variable _drainCv;
+    // Admitted executes whose reply has not been sent: incremented at
+    // admission, decremented by `executeFinished`, which each reply posts here.
+    // What `maxInFlightExecutes` gates, `health()` reports, the
+    // `executeInFlight` metric carries and `drainedWithin()` waits on.
+    std::size_t _inFlight{0};
+    // Set by beginShutdown() and never cleared.
+    bool _shuttingDown{false};
+    // `health()`'s `ready`; cleared by beginShutdown() and never set again.
+    bool _ready{true};
+    /// One `drainedWithin()` call still waiting for the in-flight count to reach zero.
+    struct DrainWaiter {
+        std::uint64_t id;
+        DrainPromise promise;
+        ::morph::async::detail::TimeoutScheduler::Handle timer;
+    };
+    std::vector<DrainWaiter> _drainWaiters;
+    std::uint64_t _nextDrainWaiter{0};
+    // Arms drain deadlines; created by the first waiter that needs one.
+    std::unique_ptr<::morph::async::detail::TimeoutScheduler> _drainTimer;
+
+    // Drawn off the strand by openConnection(), which answers at once.
+    std::atomic<uint64_t> _nextConnectionId{0};
 };
 
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as
 ///        wire `Envelope` messages.
 ///
 /// Intended for testing and in-process simulation of remote execution.
-/// `registerModel()` and `deregisterModel()` are processed inline on the calling
-/// thread via `RemoteServer::handleInline`. `execute()` is asynchronous: it sends
-/// the message through `RemoteServer::handle` and resolves the returned
-/// `Completion` when the reply arrives (there is no `std::promise` and no
-/// blocking wait).
+/// Control envelopes (`bindModel`, `registerModel`, `deregisterModel`, ...) are
+/// processed through `RemoteServer::handleInline`, which answers before it
+/// returns, so a bind settles inside the call. `execute()` is asynchronous: it
+/// sends the message through `RemoteServer::handle` and resolves the returned
+/// `Completion` when the reply arrives.
+///
+/// Its pending list and session belong to the caller's owner (`setOwner`) and
+/// are touched only there, without a lock; the server's reply callback touches
+/// only the completion it settles.
 class SimulatedRemoteBackend : public detail::IBackend {
 public:
     /// @brief Constructs the backend targeting @p server, unscoped.
@@ -1933,9 +1700,8 @@ public:
 
     /// @brief Registers the model type on the server and returns its assigned id.
     ///
-    /// Processed inline on the calling thread (no pool round-trip), so it is safe
-    /// to call from any thread including a worker in the same pool that backs the
-    /// `RemoteServer`. The @p factory argument is ignored — model construction is
+    /// Processed through `RemoteServer::handleInline`, which answers before it
+    /// returns. The @p factory argument is ignored — model construction is
     /// delegated to the server's `ModelRegistryFactory`.
     ///
     /// @param typeId String type-id sent in the `register` message.
@@ -1960,8 +1726,9 @@ public:
     ::morph::exec::detail::ModelId registerModelWithContext(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
         std::string_view contextKey) override {
+        note("SimulatedRemoteBackend::registerModelWithContext");
         auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
-        env.session = currentSession();
+        env.session = _session;
         auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
@@ -1969,61 +1736,37 @@ public:
         throw std::runtime_error("register failed: " + reply.message);
     }
 
-    /// @brief Registers or attaches to the server's shared instance for @p identity.
+    /// @brief Acquires an instance on the server for @p request and settles
+    ///        the returned `Completion` before returning.
     ///
-    /// Sends a `shared` register, so the server returns the live instance for
-    /// `(typeId, primary)` when one exists rather than creating a second. An
-    /// empty primary degrades to the private path.
-    /// @param typeId   String type-id sent in the `register` message.
-    /// @param factory  Ignored — the server constructs via its own registry.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @return `ModelId` of the shared (or newly created) instance.
-    /// @throws std::runtime_error if the server replies with an error.
-    ::morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        detail::InstanceIdentity identity) override {
-        if (identity.primary.empty()) {
-            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+    /// Each shape of `BindRequest` is one envelope, processed through
+    /// `RemoteServer::handleInline` on the calling thread: a private
+    /// `register`, a shared `register` (register-or-attach), or an `attach`
+    /// that re-points from `current` in one request, so a re-pointing client
+    /// cannot lose its slot to `LimitPolicy::maxLiveModels` between releasing
+    /// the old instance and acquiring the new one. An empty `primary` with a
+    /// live `current` releases it first and binds a private instance.
+    /// @param request Owning bind request; moved from.
+    /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
+    ///                must outlive the returned `Completion`.
+    /// @return A settled `Completion`: the bound id, or the server's refusal as
+    ///         a `std::runtime_error`.
+    ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(detail::BindRequest request,
+                                                                         ::morph::exec::IExecutor& cbExec) override {
+        note("SimulatedRemoteBackend::bindModel");
+        auto [completion, promise] =
+            ::morph::async::Completion<::morph::exec::detail::ModelId>::makeSettleable(&cbExec);
+        try {
+            promise.resolve(bindNow(request));
+        } catch (...) {
+            promise.reject(std::current_exception());
         }
-        auto env =
-            ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
-        env.session = currentSession();
-        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
-        if (reply.kind == "ok") {
-            return ::morph::exec::detail::ModelId{reply.modelId};
-        }
-        throw std::runtime_error("register failed: " + reply.message);
+        return std::move(completion);
     }
 
-    /// @brief Re-points from @p current to the server's shared instance for @p identity.
-    ///
-    /// One `attach` request rather than a deregister/register pair, so the
-    /// re-pointing client cannot lose its slot to `LimitPolicy::maxLiveModels`
-    /// between releasing the old instance and acquiring the new one.
-    /// @param typeId   String type-id sent in the `attach` message.
-    /// @param factory  Ignored — the server constructs via its own registry.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @param current  Instance currently held, or `ModelId{0}` if none.
-    /// @return `ModelId` of the instance now attached to.
-    /// @throws std::runtime_error if the server replies with an error.
-    ::morph::exec::detail::ModelId attachModel(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override {
-        if (identity.primary.empty()) {
-            if (current.v != 0U) {
-                deregisterModel(current);
-            }
-            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
-        }
-        auto env = ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
-                                             std::string{identity.contextKey});
-        env.session = currentSession();
-        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
-        if (reply.kind == "ok") {
-            return ::morph::exec::detail::ModelId{reply.modelId};
-        }
-        throw std::runtime_error("attach failed: " + reply.message);
-    }
+    /// @brief Records the owner every verb is called from.
+    /// @param owner The caller's owner.
+    void setOwner(const ::morph::exec::detail::OwnerAffinity& owner) override { _affinity.emplace(owner); }
 
     /// @brief Files a live server-side instance under @p primary.
     /// @param mid     Live instance to promote.
@@ -2031,11 +1774,12 @@ public:
     /// @param primary Canonical string encoding of the key to file it under.
     void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
                        std::string_view primary) override {
+        note("SimulatedRemoteBackend::assignPrimary");
         if (primary.empty() || mid.v == 0U) {
             return;
         }
         auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
-        env.session = currentSession();
+        env.session = _session;
         (void)_server.handleInline(::morph::wire::encode(env), _cid);
     }
 
@@ -2044,6 +1788,7 @@ public:
     /// @return Canonical key strings of the live shared instances.
     /// @throws std::runtime_error if the server replies with an error.
     std::vector<std::string> listInstances(const std::string& typeId) override {
+        note("SimulatedRemoteBackend::listInstances");
         auto reply = ::morph::wire::decode(
             _server.handleInline(::morph::wire::encode(::morph::wire::makeInstances(typeId)), _cid));
         if (reply.kind != "ok") {
@@ -2073,7 +1818,7 @@ public:
         return keys;
     }
 
-    /// @brief Deregisters the model on the server. Processed inline; safe from any thread.
+    /// @brief Deregisters the model on the server. Processed inline.
     ///
     /// Carries this backend's own `ConnectionId`, so a shared instance's
     /// attach count is decremented against *this* backend's scope entry —
@@ -2081,8 +1826,9 @@ public:
     /// `deregister` does (`backend.md`, "Connection scopes").
     /// @param mid Id of the model to deregister.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
+        note("SimulatedRemoteBackend::deregisterModel");
         auto env = ::morph::wire::makeDeregister(mid.v);
-        env.session = currentSession();
+        env.session = _session;
         (void)_server.handleInline(::morph::wire::encode(env), _cid);
     }
 
@@ -2123,7 +1869,7 @@ public:
     ///         server predating this kind).
     [[nodiscard]] std::string fetchActionSchemas(std::string typeId) {
         auto env = ::morph::wire::makeSchemas(std::move(typeId));
-        env.session = currentSession();
+        env.session = _session;
         auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env)));
         if (reply.kind != "ok") {
             throw std::runtime_error("schemas request failed: " +
@@ -2146,6 +1892,7 @@ public:
     ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
                                                               detail::ActionCall call,
                                                               ::morph::exec::IExecutor* cbExec) override {
+        note("SimulatedRemoteBackend::execute");
         auto state = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{state, cbExec};
         trackPending(state);
@@ -2196,11 +1943,8 @@ public:
     /// @brief Resolves every still-pending completion this backend produced with @p exc.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
-        std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
-        {
-            std::scoped_lock const lock{_pendingMtx};
-            snapshot.swap(_pending);
-        }
+        note("SimulatedRemoteBackend::cancelPending");
+        auto snapshot = std::exchange(_pending, {});
         for (auto& weak : snapshot) {
             if (auto state = weak.lock()) {
                 state->setException(exc);
@@ -2213,21 +1957,46 @@ public:
     ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
     /// @param session Session to stamp; typically pushed by `Bridge::setDefaultSession()`.
     void setSession(::morph::session::Context session) override {
-        std::scoped_lock const lock{_sessionMtx};
+        note("SimulatedRemoteBackend::setSession");
         _session = std::move(session);
     }
 
 private:
-    void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
-        std::scoped_lock const lock{_pendingMtx};
-        std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
-        _pending.emplace_back(state);
+    /// @brief Checks, in a debug build, that the caller is on the owner the
+    ///        backend was given. Nothing to check before `setOwner`.
+    /// @param site Name of the calling body.
+    void note(char const* site) const noexcept {
+        if (_affinity) {
+            _affinity->note(site);
+        }
     }
 
-    /// @brief Returns a copy of the session last installed via `setSession`.
-    [[nodiscard]] ::morph::session::Context currentSession() const {
-        std::scoped_lock const lock{_sessionMtx};
-        return _session;
+    /// @brief `bindModel`'s body: one control envelope per request shape.
+    /// @param request The bind request.
+    /// @return The bound id.
+    /// @throws std::runtime_error if the server replies with an error.
+    ::morph::exec::detail::ModelId bindNow(const detail::BindRequest& request) {
+        if (request.primary.empty()) {
+            if (request.current.v != 0U) {
+                deregisterModel(request.current);
+            }
+            return registerModelWithContext(request.typeId, {}, request.contextKey);
+        }
+        auto env =
+            request.current.v == 0U
+                ? ::morph::wire::makeRegisterShared(request.typeId, request.primary, request.contextKey)
+                : ::morph::wire::makeAttach(request.typeId, request.primary, request.current.v, request.contextKey);
+        env.session = _session;
+        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
+        if (reply.kind == "ok") {
+            return ::morph::exec::detail::ModelId{reply.modelId};
+        }
+        throw std::runtime_error((request.current.v == 0U ? "register failed: " : "attach failed: ") + reply.message);
+    }
+
+    void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
+        std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
+        _pending.emplace_back(state);
     }
 
     RemoteServer& _server;
@@ -2235,9 +2004,10 @@ private:
     // constructed with a ConnectionId from server.openConnection(). Threaded
     // through every handle()/handleInline() call this backend makes.
     ConnectionId _cid{0};
-    std::mutex _pendingMtx;
+    // The owner every verb is called from, once `setOwner` has named it. The
+    // two fields below are touched only there.
+    std::optional<::morph::exec::detail::OwnerAffinity> _affinity;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
-    mutable std::mutex _sessionMtx;
     ::morph::session::Context _session;
 };
 

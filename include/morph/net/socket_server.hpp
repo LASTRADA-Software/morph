@@ -1,25 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <poll.h>
-
 #include <array>
 #include <atomic>
-#include <cerrno>
 #include <chrono>
-#include <core/platform/Wakeup.hpp>
+#include <core/async/Task.hpp>
+#include <core/net/EventLoop.hpp>
+#include <core/net/IListener.hpp>
+#include <core/net/Sockets.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <morph/core/detail/owner_probe.hpp>
+#include <morph/core/io_loop.hpp>
 #include <morph/core/remote.hpp>
-#include <mutex>
 #include <optional>
 #include <string>
-#include <thread>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../attributes.hpp"
 #include "detail/tcp_socket.hpp"
+#include "detail/ws_connection.hpp"
 #include "detail/ws_frame.hpp"
 #include "detail/ws_handshake.hpp"
 
@@ -31,19 +35,16 @@ struct SocketServerConfig {
     int backlog = 64;
 
     /// @brief Bound on completing the RFC 6455 Upgrade handshake, from
-    /// accept() to the request's terminating `\r\n\r\n`. See
-    /// `readHttpHeaderBlock`'s `timeout` parameter for how this is enforced
-    /// and why (deliberately not `SocketBackendConfig::handshakeTimeout`'s
-    /// `SO_RCVTIMEO` approach). Zero disables it (the previous behavior:
-    /// block forever).
+    /// accept to the request's terminating `\r\n\r\n`, as a single deadline
+    /// across the whole read. Zero disables it.
     std::chrono::milliseconds handshakeTimeout{10000};
 
-    /// @brief Bound on a single `::send` that is making no progress, applied
-    /// to every accepted connection via `SO_SNDTIMEO` (see `acceptLoop`).
-    /// Without it, a peer that stops reading parks whichever thread is
-    /// replying in `sendAll` forever, and `ClientConnection::sendText`'s
-    /// existing failed-send handling never gets a chance to run. Zero
-    /// disables it (the previous behavior: block forever).
+    /// @brief Bound on writing one chunk (up to 64 KiB) of a reply frame.
+    ///
+    /// A loop timer armed around each chunk's write closes the connection when
+    /// it runs out, so a peer that stops reading is retired — its models
+    /// reclaimed, its requests no longer dispatched — instead of accumulating
+    /// replies it will never read. Zero disables it.
     std::chrono::milliseconds sendTimeout{30000};
 };
 
@@ -56,11 +57,14 @@ struct SocketServerConfig {
 /// gone by the time the reply is ready.
 ///
 /// @par Threading
-/// Owns one accept thread plus one thread per accepted connection — there is
-/// no shared event loop. `RemoteServer::handle()` replies arrive on the
-/// server's worker-pool thread and are written back on that same thread, over
-/// the owning connection's socket, serialized by a per-connection write mutex.
-/// Nothing is handed to the connection's own reader thread.
+/// Owns no thread. The listener, every accepted connection and every reply
+/// write live on an `exec::IoLoop` — the application's one loop, shared with
+/// every other socket and timer built on it. `RemoteServer::handle()` replies
+/// arrive on the server's worker pool and are posted to the loop, which queues
+/// them on the connection's writer.
+///
+/// Cross-thread surface: `listen()` and `close()`, which run on the loop and
+/// wait for it (inline when already there), and `port()`, an atomic read.
 ///
 /// @par Lifetime
 /// Holds `RemoteServer& _server` by reference, exactly like
@@ -71,7 +75,9 @@ public:
     /// @brief Alias for the config struct.
     using Config = SocketServerConfig;
 
-    /// @brief Constructs the server; does not start listening.
+    /// @brief Constructs the server on @p loop; does not start listening.
+    /// @param loop   The application's I/O loop. Borrowed: it must outlive this
+    ///               server.
     /// @param server `RemoteServer` instance that processes incoming messages.
     ///               Borrowed, not owned: it must outlive this server (see
     ///               `docs/spec/concurrency_and_lifetimes.md`, "Destruction
@@ -79,460 +85,336 @@ public:
     /// @param port   TCP port to listen on. Pass 0 to let the OS pick a free port.
     /// @param cfg    Backlog and timeout tuning. Default: 64-connection
     ///               backlog, 10s handshake timeout, 30s send timeout.
-    // Copy/move are implicitly deleted by the non-copyable/non-movable
-    // std::mutex/std::thread members below — no explicit `= delete` needed
-    // (matches the rest of the codebase's convention, e.g. `LocalBackend`).
+    SocketServer(::morph::exec::IoLoop& loop MORPH_LIFETIMEBOUND,
+                 ::morph::backend::RemoteServer& server MORPH_LIFETIMEBOUND, std::uint16_t port, Config cfg = {})
+        : _loop{&loop}, _core{std::make_shared<Core>(loop, server, cfg)}, _requestedPort{port} {}
+
+    /// @brief Constructs the server on a loop of its own, created by the first
+    ///        `listen()`; does not start listening.
+    /// @param server `RemoteServer` instance that processes incoming messages.
+    ///               Borrowed, not owned: it must outlive this server.
+    /// @param port   TCP port to listen on. Pass 0 to let the OS pick a free port.
+    /// @param cfg    Backlog and timeout tuning.
     SocketServer(::morph::backend::RemoteServer& server MORPH_LIFETIMEBOUND, std::uint16_t port, Config cfg = {})
-        : _server{server}, _requestedPort{port}, _cfg{cfg} {}
+        : _server{&server}, _requestedPort{port}, _cfg{cfg} {}
+
+    SocketServer(const SocketServer&) = delete;
+    SocketServer& operator=(const SocketServer&) = delete;
+    SocketServer(SocketServer&&) = delete;
+    SocketServer& operator=(SocketServer&&) = delete;
 
     /// @brief Stops accepting and closes every client connection.
-    ~SocketServer() { close(); }
+    ///
+    /// Closes on the loop and waits for it (inline when already there), then
+    /// cuts the loop's tie to `RemoteServer`, so a connection's flow that
+    /// resumes later touches neither this object nor the server.
+    // NOLINTNEXTLINE(bugprone-exception-escape): teardown has no recovery if handing the close to the loop fails, so terminating is the outcome.
+    ~SocketServer() {
+        if (_core) {
+            _loop->runAndWait([core = _core] {
+                core->close();
+                core->server = nullptr;
+            });
+        }
+    }
 
     /// @brief Starts listening for incoming WebSocket connections.
     ///
-    /// Fails closed: the accept loop's only way to stop waiting is its wakeup
-    /// (see `acceptLoop()`), so if that cannot be created — the kernel out of
-    /// descriptors — this reports failure and spawns no thread rather than
-    /// starting a loop nothing could ever interrupt.
-    /// @return `true` if the server bound the requested port *and* armed its
-    ///         wakeup.
+    /// Binds `127.0.0.1:port` and starts the accept flow, on the loop. With no
+    /// loop of its own yet, creates one first; a process out of descriptors
+    /// cannot, and gets `false`.
+    /// @return `true` if the server bound the requested port and is accepting.
     bool listen() {
-        try {
-            _listenSocket = ::morph::net::detail::TcpSocket::listen(_requestedPort, _cfg.backlog);
-        } catch (const std::exception&) {
-            return false;
+        if (!_core) {
+            try {
+                _ownedLoop = std::make_unique<::morph::exec::IoLoop>();
+            } catch (const std::exception&) {
+                return false;
+            }
+            _loop = _ownedLoop.get();
+            _core = std::make_shared<Core>(*_ownedLoop, *_server, _cfg);
         }
-        // Non-blocking before the loop can ever reach ::accept -- see
-        // TcpSocket::tryAccept()'s doc comment for why a poll() readiness
-        // report is not a promise that accept() will not park.
-        if (!_listenSocket.setNonBlocking() || !openWakeup()) {
-            _listenSocket = ::morph::net::detail::TcpSocket{};
-            return false;
-        }
-        _closing.store(false);
-        _acceptThread = std::thread{[this] { acceptLoop(); }};
-        return true;
+        bool listening = false;
+        _loop->runAndWait([core = _core, port = _requestedPort, &listening] { listening = core->listen(port); });
+        return listening;
     }
 
     /// @brief Returns the port the server is currently bound to.
-    /// @return Bound TCP port (OS-assigned when constructed with port 0), or `0` before `listen()` succeeds.
-    [[nodiscard]] std::uint16_t port() const { return _listenSocket.boundPort(); }
+    /// @return Bound TCP port (OS-assigned when constructed with port 0), or
+    ///         `0` when not listening.
+    [[nodiscard]] std::uint16_t port() const { return _core ? _core->port.load() : std::uint16_t{0}; }
 
     /// @brief Stops accepting new connections and closes every client connection.
     ///
-    /// Releases the listening socket once the accept thread has joined, so
-    /// `port()` reads `0` afterwards and the bound port is free to rebind —
-    /// the same post-close observation `QtWebSocketServer` makes.
+    /// Releases the listening socket, so `port()` reads `0` afterwards and the
+    /// bound port is free to rebind — the same post-close observation
+    /// `QtWebSocketServer` makes. Reclaims every connection's models
+    /// (`RemoteServer::closeConnection`) before it returns.
     ///
-    /// Idempotent: safe to call more than once (including implicitly, via the
-    /// destructor, after an explicit call), and safe to call from several
-    /// threads at once **on a live object** — concurrent callers are
-    /// serialized, and every one of them returns only once the teardown is
-    /// complete. Racing a call against the *destructor* is still the caller's
+    /// Runs on the loop and waits for it, inline when already there.
+    /// Idempotent, and safe to call from several threads at once on a live
+    /// object: each call is one loop task, and the loop runs them one at a
+    /// time. Racing a call against the *destructor* is still the caller's
     /// problem (see `docs/spec/concurrency_and_lifetimes.md`, "Destruction
-    /// ordering"): no lock inside this object can outlive the object holding
-    /// it.
+    /// ordering").
     void close() {
-        // Serialize the whole body, not just the guard below.
-        // `_closing.exchange` alone cannot exclude a second caller: the loser
-        // still sees a *joinable* accept thread — the winner has not joined it
-        // yet and cannot have, since that thread is parked in poll() until the
-        // winner's wakeup byte releases it — so it falls through and calls
-        // join() on the same std::thread the winner is joining. That is
-        // UB, and it is not a theoretical one: on Linux/glibc the loser parks
-        // forever in pthread_join's futex on a descriptor the winner already
-        // reaped; on macOS/libc++ it throws std::system_error. Holding the
-        // mutex across the join makes the second caller wait for the first and
-        // then observe !joinable(), which is exactly the outcome the guard was
-        // written to produce.
-        //
-        // Deadlock-free because nothing inside this class calls close():
-        // neither acceptLoop() nor a per-client thread does, so no thread this
-        // function joins can be waiting on this mutex.
-        std::scoped_lock const teardownLock{_closeMtx};
-        // Kept as-is despite the mutex: acceptLoop() reads `_closing` from the
-        // accept thread, which never takes `_closeMtx`.
-        bool const wasAlreadyClosing = _closing.exchange(true);
-        if (wasAlreadyClosing && !_acceptThread.joinable()) {
-            return;
-        }
-        // The accept loop's wakeup, and the reason this teardown terminates at
-        // all. `_listenSocket.shutdownBoth()` would not do: it works only
-        // because Linux happens to kick a parked accept(2) when the listening
-        // socket is shut down, and macOS/BSD do not, so the join below would
-        // never return there.
-        // The loop parks in poll() on the wakeup as well as on the listener,
-        // so signalling it ends the loop on every platform.
-        //
-        // Runs at most once per listen()/close() cycle and never blocks: the
-        // guard above returns before reaching it on a second call, and the
-        // wakeup is non-blocking regardless. Absent only when listen() never
-        // armed one, in which case there is no accept thread to wake either.
-        if (_wakeup) {
-            _wakeup->signal();
-        }
-        if (_acceptThread.joinable()) {
-            _acceptThread.join();
-        }
-        // Only now that the accept thread is gone, so no fd number released
-        // here can be reused under a poll()/accept() still holding it.
-        // Dropping the listener is what keeps close()'s documented "stops
-        // accepting new connections" true without shutdownBoth(): left open,
-        // the kernel would keep completing handshakes into a backlog nobody
-        // drains, and a client would hang in the WebSocket Upgrade read
-        // instead of failing fast. `port()` therefore reads 0 after close(),
-        // which is what QtWebSocketServer already does.
-        _listenSocket = ::morph::net::detail::TcpSocket{};
-        _wakeup.reset();
-        std::vector<std::shared_ptr<ClientConnection>> clients;
-        std::vector<std::thread> threads;
-        {
-            std::scoped_lock lock{_clientsMtx};
-            clients = _clients;
-            threads.swap(_clientThreads);
-            _clients.clear();
-        }
-        for (auto& client : clients) {
-            // `closed` first, so no client thread starts a *new* send; then
-            // shutdown without taking writeMtx. Taking it here would deadlock
-            // exactly when the shutdown is most needed: a client thread blocked
-            // in sendAll against a stalled peer's full socket buffer holds
-            // writeMtx for as long as that send is stuck, and close() has no
-            // timeout -- it is reached from the destructor. shutdownBoth() is
-            // documented safe from any thread and is itself the mechanism that
-            // unblocks that send (it fails, sendText catches, the thread exits
-            // and releases the lock). Locking to "protect" the socket would
-            // therefore wait on the very thing it is trying to interrupt.
-            client->closed.store(true);
-            client->socket.shutdownBoth();
-        }
-        for (auto& t : threads) {
-            if (t.joinable()) {
-                t.join();
-            }
+        if (_core) {
+            _loop->runAndWait([core = _core] { core->close(); });
         }
     }
 
 private:
-    struct ClientConnection {
-        ClientConnection(::morph::net::detail::TcpSocket sock, ::morph::backend::ConnectionId connectionId)
-            : socket{std::move(sock)}, cid{connectionId} {}
-        ::morph::net::detail::TcpSocket socket;
+    /// One accepted connection.
+    struct Client {
+        std::shared_ptr<::morph::net::detail::LoopConnection> conn;
         /// Scope every `register` on this connection belongs to, so dropping
         /// the connection reclaims its models. See `RemoteServer::openConnection`.
         ::morph::backend::ConnectionId cid{0};
-        std::mutex writeMtx;
-        std::atomic<bool> closed{false};
-        /// Set by `clientLoop` as its last act, so `acceptLoop` can tell a
-        /// finished connection from a live one and reclaim both its fd and its
-        /// thread handle. See `reapFinishedClients`.
-        std::atomic<bool> finished{false};
-
-        /// Writes one reply frame. A failure is never propagated to the caller
-        /// -- it is a `RemoteServer` completion callback, which has nowhere to
-        /// put it -- but it must still retire the connection, for the two
-        /// reasons `sendControlFrame()` gives: `sendAll` can throw having
-        /// already written part of the frame, leaving this connection's
-        /// outgoing stream desynchronised, and `closed` on its own gates only
-        /// *writes* -- `clientLoop()` is blocked in `recvSome()` and never
-        /// consults it, so without the `shutdownBoth()` the connection goes on
-        /// draining and dispatching whatever the peer already queued, into a
-        /// `RemoteServer` whose replies this function then silently drops.
-        /// The rule is that *any* caller observing a partial write marks the
-        /// connection unusable, and this is one of them.
-        void sendText(const std::string& payload) {
-            std::scoped_lock lock{writeMtx};
-            if (closed.load() || !socket.valid()) {
-                return;
-            }
-            try {
-                std::string frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText, payload,
-                                                                        /*mask=*/false);
-                socket.sendAll(frame.data(), frame.size());
-            } catch (const std::exception&) {
-                closed.store(true);
-                socket.shutdownBoth();
-            }
-        }
+        /// Set once its models are reclaimed; the flow touches nothing after.
+        bool done{false};
     };
 
-    void acceptLoop() {
-        // listen() opens the wakeup before it starts this loop, and nothing
-        // resets it while the loop runs.
-        if (!_wakeup.has_value()) {
-            return;
+    /// @brief Everything the loop owns, touched only in its tasks.
+    ///
+    /// Held by `shared_ptr` from the server and from every flow, so a flow
+    /// that resumes after the server is gone finds it closed and ends.
+    struct Core : std::enable_shared_from_this<Core> {
+        Core(::morph::exec::IoLoop& ioLoop, ::morph::backend::RemoteServer& remote, Config config)
+            : loop{ioLoop}, server{&remote}, cfg{config} {}
+
+        void note(char const* site) const noexcept {
+            ::morph::exec::detail::noteOwner(site, loop.loop(), loop.runningHere());
         }
-        auto const wakeupHandle = _wakeup->nativeHandle();
-        for (;;) {
-            std::array<pollfd, kPollFdCount> fds{};
-            pollfd& listenPfd = fds.front();
-            pollfd& wakeupPfd = fds.back();
-            listenPfd.fd = _listenSocket.nativeHandle();
-            listenPfd.events = POLLIN;
-            wakeupPfd.fd = wakeupHandle;
-            wakeupPfd.events = POLLIN;
-            // No timeout: the loop has an explicit wakeup now, so it has no
-            // reason to surface periodically and re-check anything.
-            if (::poll(fds.data(), kPollFdCount, -1) < 0) {
-                if (errno == EINTR) {
-                    continue;  // a delivered signal, not a failure -- as in TcpSocket::accept()
-                }
-                return;  // poll() itself is broken; there is nothing left to wait on
+
+        bool listen(std::uint16_t requestedPort) {
+            note("SocketServer::listen");
+            if (listener || server == nullptr) {
+                return false;
             }
-            if (wakeupPfd.revents != 0) {
-                return;  // close() signalled the wakeup
-            }
-            if (listenPfd.revents == 0) {
-                continue;
-            }
-            std::optional<::morph::net::detail::TcpSocket> clientSocket;
+            ::morph::net::detail::TcpSocket bound;
             try {
-                clientSocket = _listenSocket.tryAccept();
+                bound = ::morph::net::detail::TcpSocket::listen(requestedPort, cfg.backlog);
             } catch (const std::exception&) {
-                return;  // the listener is unusable (server closing)
+                return false;
             }
-            if (!clientSocket) {
-                continue;  // readiness went stale before the accept; wait again
+            if (!bound.setNonBlocking()) {
+                return false;
             }
-            if (_closing.load()) {
+            auto adopted = ::core::net::adoptListener(loop.loop(), bound.nativeHandle());
+            if (!adopted) {
+                return false;  // `bound` still owns the descriptor and closes it
+            }
+            static_cast<void>(bound.release());
+            listener = std::move(*adopted);
+            port.store(listener->boundPort());
+            ++generation;
+            loop.loop().spawn(acceptFlow(shared_from_this(), listener.get(), generation));
+            return true;
+        }
+
+        void close() {
+            note("SocketServer::close");
+            ++generation;
+            if (listener) {
+                // The accept flow parked on it resumes, in a later turn, with
+                // `Cancelled`, sees the generation moved on, and ends without
+                // touching the listener it no longer owns.
+                listener->close();
+                listener.reset();
+            }
+            port.store(0);
+            for (auto const& client : std::exchange(clients, {})) {
+                finish(*client, /*flush=*/false);
+            }
+        }
+
+        /// Reclaims @p client's models and closes its socket. Idempotent.
+        void finish(Client& client, bool flush) const {
+            if (client.done) {
                 return;
             }
-            if (_cfg.sendTimeout.count() > 0) {
-                // See `SocketServerConfig::sendTimeout`. Applies to both
-                // `ClientConnection::sendText()` and `sendControlFrame()`,
-                // which share this socket. Best-effort, like every other
-                // socket-option application in this class.
-                static_cast<void>(clientSocket->setSendTimeout(_cfg.sendTimeout));
+            client.done = true;
+            if (server != nullptr) {
+                server->closeConnection(client.cid);
             }
-            // Before taking on another one: nothing else removes a finished
-            // connection, so without this an fd and a joinable thread handle
-            // accumulate per connection *ever accepted*, not per live
-            // connection, until close().
-            reapFinishedClients();
-
-            auto conn = std::make_shared<ClientConnection>(std::move(*clientSocket), _server.openConnection());
-            std::thread clientThread{[this, conn] { clientLoop(conn); }};
-            {
-                std::scoped_lock lock{_clientsMtx};
-                _clients.push_back(conn);
-                _clientThreads.push_back(std::move(clientThread));
+            if (flush) {
+                ::morph::net::detail::closeAfterFlush(client.conn);
+            } else {
+                ::morph::net::detail::closeConnection(*client.conn);
             }
         }
-    }
 
-    /// @brief Drops connections whose `clientLoop` has returned, joining their
-    ///        threads and releasing their sockets.
-    ///
-    /// Called from `acceptLoop` only, so it never runs concurrently with itself.
-    /// Threads are moved out and joined *after* `_clientsMtx` is released: a
-    /// join can block, and `clientLoop`'s own teardown takes that same mutex
-    /// through `sendText`, so joining under the lock would deadlock. Every
-    /// thread collected here has already set `finished`, so each join is
-    /// effectively immediate.
-    void reapFinishedClients() {
-        std::vector<std::thread> doneThreads;
-        {
-            std::scoped_lock const lock{_clientsMtx};
-            for (std::size_t i = _clients.size(); i-- > 0;) {
-                auto const clientIt = _clients.begin() + static_cast<std::ptrdiff_t>(i);
-                auto const threadIt = _clientThreads.begin() + static_cast<std::ptrdiff_t>(i);
-                if (!(*clientIt)->finished.load(std::memory_order_acquire)) {
+        void forget(Client const& client) {
+            std::erase_if(clients, [&client](std::shared_ptr<Client> const& entry) { return entry.get() == &client; });
+        }
+
+        void accepted(std::unique_ptr<::core::net::ISocket> socket) {
+            note("SocketServer::accept");
+            if (server == nullptr) {
+                return;
+            }
+            auto client =
+                std::make_shared<Client>(Client{.conn = std::make_shared<::morph::net::detail::LoopConnection>(
+                                                    loop.loop(), std::move(socket), cfg.sendTimeout),
+                                                .cid = server->openConnection(),
+                                                .done = false});
+            clients.push_back(client);
+            loop.loop().spawn(clientFlow(shared_from_this(), client));
+        }
+
+        /// Accepts until the listener it was started with is closed.
+        static ::core::async::Task<void> acceptFlow(std::shared_ptr<Core> self, ::core::net::IListener* accepting,
+                                                    std::uint64_t startedAt) {
+            for (;;) {
+                auto next = co_await accepting->accept();
+                if (self->generation != startedAt) {
+                    co_return;
+                }
+                if (!next) {
+                    if (next.error().code == ::core::net::NetErrorCode::Cancelled) {
+                        co_return;
+                    }
+                    // Out of descriptors, or another failure the next attempt
+                    // may not repeat: wait a little rather than spin on a
+                    // listener that stays readable.
+                    co_await self->loop.loop().delay(std::chrono::milliseconds{50});
+                    if (self->generation != startedAt) {
+                        co_return;
+                    }
                     continue;
                 }
-                doneThreads.push_back(std::move(*threadIt));
-                _clientThreads.erase(threadIt);
-                _clients.erase(clientIt);
+                self->accepted(std::move(*next));
             }
         }
-        for (auto& done : doneThreads) {
-            if (done.joinable()) {
-                done.join();
+
+        /// One connection: handshake, then read frames until it ends.
+        static ::core::async::Task<void> clientFlow(std::shared_ptr<Core> self, std::shared_ptr<Client> client) {
+            auto const connection = client->conn;
+            auto header = co_await ::morph::net::detail::readHeaderBlockAsync(connection, self->cfg.handshakeTimeout);
+            if (client->done) {
+                co_return;
+            }
+            std::optional<std::string> leftover;
+            if (header) {
+                try {
+                    auto const request = ::morph::net::detail::parseClientHandshakeRequest(header->header);
+                    static_cast<void>(::morph::net::detail::enqueueFrame(
+                        connection, ::morph::net::detail::buildServerHandshakeResponse(request.key)));
+                    leftover = std::move(header->leftover);
+                } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
+                    // A malformed Upgrade request: the connection ends below.
+                }
+            }
+            bool flush = false;
+            if (leftover) {
+                // Server role: RFC 6455 §5.1 requires a client to mask every
+                // frame it sends, so this reader must reject an unmasked one.
+                ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/true};
+                reader.feed(*leftover);
+                std::array<std::byte, 4096> buf{};
+                for (;;) {
+                    auto const outcome = self->drainFrames(client, reader);
+                    if (outcome != Drain::More) {
+                        flush = outcome == Drain::Closed;
+                        break;
+                    }
+                    auto const got = co_await connection->socket->read(buf);
+                    if (client->done || !got || *got == 0) {
+                        break;
+                    }
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): the socket yields bytes, the reader takes text; same object representation.
+                    reader.feed(std::string_view{reinterpret_cast<char const*>(buf.data()), *got});
+                }
+            }
+            if (client->done) {
+                co_return;
+            }
+            self->finish(*client, flush);
+            self->forget(*client);
+        }
+
+        enum class Drain : std::uint8_t {
+            More,    ///< Read on.
+            Closed,  ///< The peer sent Close; the echo is queued.
+            Failed,  ///< A protocol error, or the connection is done.
+        };
+
+        Drain drainFrames(std::shared_ptr<Client> const& client, ::morph::net::detail::WsFrameReader& reader) const {
+            using ::morph::net::detail::WsOpcode;
+            for (;;) {
+                std::optional<::morph::net::detail::WsFrame> frame;
+                try {
+                    frame = reader.tryExtractFrame();
+                } catch (const std::exception&) {
+                    return Drain::Failed;
+                }
+                if (!frame) {
+                    return Drain::More;
+                }
+                if (frame->opcode == WsOpcode::kClose) {
+                    static_cast<void>(::morph::net::detail::enqueueFrame(
+                        client->conn, ::morph::net::detail::encodeWsFrame(WsOpcode::kClose, frame->payload, false)));
+                    return Drain::Closed;
+                }
+                if (frame->opcode == WsOpcode::kPing) {
+                    static_cast<void>(::morph::net::detail::enqueueFrame(
+                        client->conn, ::morph::net::detail::encodeWsFrame(WsOpcode::kPong, frame->payload, false)));
+                    continue;
+                }
+                if (frame->opcode == WsOpcode::kText && server != nullptr) {
+                    dispatch(client, frame->payload);
+                    if (client->done) {
+                        return Drain::Failed;
+                    }
+                }
             }
         }
-    }
 
-    void clientLoop(const std::shared_ptr<ClientConnection>& conn) {
-        // Announces "this thread is done" on every exit path, so acceptLoop's
-        // reaper can release the fd and join the thread handle rather than
-        // holding both until close(). Declared *before* the scope guard below so
-        // it is destroyed last: the flag must not go up until the connection's
-        // models have actually been reclaimed.
-        struct FinishedFlag {
-            explicit FinishedFlag(std::atomic<bool>& target MORPH_LIFETIMEBOUND) : flag{target} {}
-            ~FinishedFlag() { flag.store(true, std::memory_order_release); }
-            FinishedFlag(const FinishedFlag&) = delete;
-            FinishedFlag& operator=(const FinishedFlag&) = delete;
-            FinishedFlag(FinishedFlag&&) = delete;
-            FinishedFlag& operator=(FinishedFlag&&) = delete;
-
-            std::atomic<bool>& flag;
-        } const finishedFlag{conn->finished};
-
-        // Reclaim this connection's models however the loop exits — failed
-        // handshake, peer close, read error, or shutdown via close(). Without
-        // it every model registered over this transport outlived its connection
-        // forever: the scope machinery was wired into QtWebSocketServer only,
-        // and this server dispatched through the unscoped two-argument
-        // handle(). closeConnection() is idempotent, so the redundant call
-        // during close() (which joins these threads) is harmless.
-        struct ScopeGuard {
-            ScopeGuard(::morph::backend::RemoteServer& srv MORPH_LIFETIMEBOUND,
-                       ::morph::backend::ConnectionId connectionId)
-                : server{srv}, cid{connectionId} {}
-            ~ScopeGuard() { server.closeConnection(cid); }
-            ScopeGuard(const ScopeGuard&) = delete;
-            ScopeGuard& operator=(const ScopeGuard&) = delete;
-            ScopeGuard(ScopeGuard&&) = delete;
-            ScopeGuard& operator=(ScopeGuard&&) = delete;
-
-            ::morph::backend::RemoteServer& server;
-            ::morph::backend::ConnectionId cid;
-        } const guard{_server, conn->cid};
-
-        std::string leftover;
-        try {
-            leftover = ::morph::net::detail::performServerHandshake(conn->socket, _cfg.handshakeTimeout);
-        } catch (const std::exception&) {
-            conn->closed.store(true);
-            return;
-        }
-        // Server role: RFC 6455 §5.1 requires a client to mask every frame it
-        // sends, so this reader must reject an unmasked one.
-        ::morph::net::detail::WsFrameReader reader{/*expectMasked=*/true};
-        reader.feed(leftover);
-        char buf[4096];
-        for (;;) {
-            if (!drainFrames(conn, reader)) {
-                return;
-            }
-            std::size_t got = 0;
-            try {
-                got = conn->socket.recvSome(buf, sizeof(buf));
-            } catch (const std::exception&) {
-                conn->closed.store(true);
-                return;
-            }
-            if (got == 0) {
-                conn->closed.store(true);
-                return;
-            }
-            reader.feed(std::string_view{buf, got});
-        }
-    }
-
-    /// Best-effort control-frame write (a Close echo or a Pong). Failure to
-    /// send one is never worth propagating to the caller -- but unlike a
-    /// clean disconnect, a *partial* send (e.g. a timed-out write) leaves
-    /// this connection's outgoing frame stream desynchronised without
-    /// closing it: the read side keeps working, so a future frame written
-    /// here would land in the middle of the truncated one. `closed` is
-    /// therefore set exactly as `sendText()`'s own catch does, so no later
-    /// write on this connection is attempted.
-    ///
-    /// Marking it closed is not enough on its own, though: `closed` only gates
-    /// *writes*, and `clientLoop()` is blocked in `recvSome()` on a socket the
-    /// peer may well keep feeding. Left at that, the connection would go on
-    /// dispatching requests to `RemoteServer` whose replies `sendText()` then
-    /// silently drops, so the caller sees hangs rather than a disconnect.
-    /// `shutdownBoth()` is therefore what actually retires the connection --
-    /// it unblocks that read and lets the loop exit, mirroring what
-    /// `SocketBackend::sendFrame()` does on the client side.
-    static void sendControlFrame(const std::shared_ptr<ClientConnection>& conn, ::morph::net::detail::WsOpcode opcode,
-                                 std::string_view payload) {
-        std::scoped_lock const lock{conn->writeMtx};
-        if (conn->closed.load() || !conn->socket.valid()) {
-            return;
-        }
-        try {
-            std::string const frame = ::morph::net::detail::encodeWsFrame(opcode, payload, /*mask=*/false);
-            conn->socket.sendAll(frame.data(), frame.size());
-        } catch (const std::exception&) {
-            conn->closed.store(true);
-            conn->socket.shutdownBoth();
-        }
-    }
-
-    // Returns false when the connection should stop reading (peer sent
-    // Close, or a protocol error was detected).
-    bool drainFrames(const std::shared_ptr<ClientConnection>& conn, ::morph::net::detail::WsFrameReader& reader) {
-        using ::morph::net::detail::WsOpcode;
-        for (;;) {
-            std::optional<::morph::net::detail::WsFrame> frame;
-            try {
-                frame = reader.tryExtractFrame();
-            } catch (const std::exception&) {
-                conn->closed.store(true);
-                return false;
-            }
-            if (!frame) {
-                return true;
-            }
-            if (frame->opcode == WsOpcode::kClose) {
-                sendControlFrame(conn, WsOpcode::kClose, frame->payload);
-                conn->closed.store(true);
-                return false;
-            }
-            if (frame->opcode == WsOpcode::kPing) {
-                sendControlFrame(conn, WsOpcode::kPong, frame->payload);
-                continue;
-            }
-            if (frame->opcode == WsOpcode::kPong) {
-                continue;
-            }
-            if (frame->opcode == WsOpcode::kText) {
-                std::weak_ptr<ClientConnection> weak = conn;
-                _server.handle(
-                    frame->payload,
-                    [weak](const std::string& reply) {
-                        if (auto locked = weak.lock()) {
-                            locked->sendText(reply);
+        /// Hands one request to the server. Its reply comes back on whichever
+        /// thread produces it — the server's pool, usually — and is posted
+        /// here, to be queued on this connection if it is still open.
+        void dispatch(std::shared_ptr<Client> const& client, std::string const& payload) const {
+            std::weak_ptr<Client> const weak = client;
+            server->handle(
+                payload,
+                [loopHandle = loop.weak(), weak](const std::string& reply) {
+                    // Encoded on the replying thread, so the loop only queues it.
+                    std::string frame = ::morph::net::detail::encodeWsFrame(::morph::net::detail::WsOpcode::kText,
+                                                                            reply, /*mask=*/false);
+                    static_cast<void>(loopHandle.post([weak, frame = std::move(frame)]() mutable {
+                        auto const target = weak.lock();
+                        if (!target || target->done) {
+                            return;
                         }
-                    },
-                    conn->cid);
-            }
+                        ::morph::exec::detail::noteOwner("SocketServer::reply", target->conn->loop,
+                                                         ::morph::exec::runningOn(target->conn->loop));
+                        static_cast<void>(::morph::net::detail::enqueueFrame(target->conn, std::move(frame)));
+                    }));
+                },
+                client->cid);
         }
-    }
 
-    /// Arms a fresh wakeup for the accept loop about to start.
-    /// @return `false` if the kernel refused one (out of descriptors or
-    ///         kernel memory), which `listen()` turns into a refusal to listen.
-    bool openWakeup() noexcept {
-        try {
-            _wakeup.emplace();
-            return true;
-        } catch (const std::exception&) {
-            _wakeup.reset();
-            return false;
-        }
-    }
+        ::morph::exec::IoLoop& loop;
+        /// The server, until `~SocketServer`.
+        ::morph::backend::RemoteServer* server;
+        Config cfg;
+        std::unique_ptr<::core::net::IListener> listener;
+        std::vector<std::shared_ptr<Client>> clients;
+        /// Moves on with every `listen()` and `close()`, so an accept flow can
+        /// tell that the listener it was started with is gone.
+        std::uint64_t generation{0};
+        /// Read by `port()` from any thread.
+        std::atomic<std::uint16_t> port{0};
+    };
 
-    /// Size of `acceptLoop()`'s poll set: the listening socket and the
-    /// wakeup's descriptor. Typed `nfds_t` rather than converted at the call site
-    /// because neither spelling of the conversion is portable: `nfds_t` is
-    /// `unsigned long` on Linux, where an explicit cast trips GCC's
-    /// `-Wuseless-cast`, and `unsigned int` on macOS, where an implicit one
-    /// trips Clang's `-Wshorten-64-to-32`.
-    static constexpr nfds_t kPollFdCount = 2;
-
-    ::morph::backend::RemoteServer& _server;
+    /// Present only for the owning constructor, from the first `listen()`;
+    /// destroyed after the core has been closed on it.
+    std::unique_ptr<::morph::exec::IoLoop> _ownedLoop;
+    ::morph::exec::IoLoop* _loop{nullptr};
+    std::shared_ptr<Core> _core;
+    ::morph::backend::RemoteServer* _server{nullptr};
     std::uint16_t _requestedPort;
-    Config _cfg;
-    ::morph::net::detail::TcpSocket _listenSocket;
-    /// Signalled by `close()`, polled by `acceptLoop()`: core-cpp's wakeup
-    /// primitive, an eventfd on Linux and a self-pipe elsewhere. Created by
-    /// `listen()` before the accept thread starts and released by `close()`
-    /// after it has joined, so the two never touch it concurrently. A fresh
-    /// one per `listen()`, so a signal an earlier `close()` left undrained
-    /// cannot end the next accept loop the moment it starts.
-    std::optional<::core::platform::Wakeup> _wakeup;
-    /// Serializes `close()` against itself so only one caller ever reaches
-    /// `_acceptThread.join()`. Not taken anywhere else.
-    std::mutex _closeMtx;
-    std::atomic<bool> _closing{true};
-    std::thread _acceptThread;
-    std::mutex _clientsMtx;
-    std::vector<std::shared_ptr<ClientConnection>> _clients;
-    std::vector<std::thread> _clientThreads;
+    Config _cfg{};
 };
 
 }  // namespace morph::net

@@ -389,8 +389,8 @@ A dedicated `kind` negotiates the protocol version once, before any
 |---|---|---|---|
 | `"hello"` | request | `protocolVersion` (the sender's version, from `makeHello()`) | `"ok"` with `body` = the server's `ProtocolRange` (`{min, max}`), or `"err"` |
 
-`RemoteServer::setSupportedVersionRange(min, max)` configures the inclusive
-range a server advertises; it defaults to `{kProtocolVersion, kProtocolVersion}`
+`ServerConfig::minProtocolVersion`/`maxProtocolVersion`, given to the
+`RemoteServer` constructor, set the inclusive range a server advertises; it defaults to `{kProtocolVersion, kProtocolVersion}`
 — this build's single supported version. On `"hello"`, `RemoteServer` compares
 the request's `protocolVersion` against that range:
 
@@ -398,11 +398,11 @@ the request's `protocolVersion` against that range:
   `ProtocolRange{min, max}`.
 - Outside the range → `"err"` reply, `message = "protocol version unsupported"`.
 
-`SimulatedRemoteBackend::negotiateProtocolVersion()` and
-`QtWebSocketBackend::negotiateProtocolVersion()` send a `"hello"` — over the
-same synchronous control path as `registerModel` (`handleInline` for the
-simulated backend, `sendSync` for the Qt backend) — and classify the decoded
-reply through `interpretHelloReply`:
+`SimulatedRemoteBackend::negotiateProtocolVersion()` sends a `"hello"`
+synchronously over `handleInline`, and
+`QtWebSocketBackend::negotiateProtocolVersion(replyExec)` sends one and settles
+a `Completion` from the reply; both classify the decoded reply through
+`interpretHelloReply`:
 
 - The peer's `"ok"` → `ProtocolNegotiationResult::Negotiated`.
 - An `"err"` whose `message` is exactly `"unknown envelope kind: hello"` (the
@@ -430,7 +430,7 @@ no version check, `protocolVersion` stays `0` on every envelope.
   this feature existed.
 - **Old client, new server.** An old client never sends `"hello"`; the server
   never receives one and behaves exactly as before (register/execute only).
-- **New client, new server, incompatible versions.** `setSupportedVersionRange`
+- **New client, new server, incompatible versions.** The configured range
   lets a server narrow its accepted range (e.g. after a breaking
   `kProtocolVersion` bump and a deprecation window); a client outside it gets a
   clear `"protocol version unsupported"` refusal at connect time instead of a
@@ -591,8 +591,8 @@ is:
   `kProtocolVersion` bump.
 - **Removals or retypes require a `kProtocolVersion` bump.** Any non-additive
   change increments `kProtocolVersion`; a server that must keep serving
-  pre-bump clients through their deprecation window widens its
-  `setSupportedVersionRange` accordingly, then narrows it once the window
+  pre-bump clients through their deprecation window is constructed with a
+  wider `ServerConfig` protocol range, then with a narrower one once the window
   closes.
 
 ### Enforcing the policy
@@ -629,8 +629,8 @@ non-`optional` type safely defaulted says so by adding it to `optionalFields`
 rather than by hoping the wire agrees.
 
 **The rule, as `RemoteServer` applies it.**
-`RemoteServer::setPayloadCompleteness(PayloadCompleteness::RequireDeclaredFields)`
-rejects an `"execute"` whose `body` carries no **key** for a field the action's
+A `RemoteServer` constructed with `ServerConfig::payloadCompleteness =
+PayloadCompleteness::RequireDeclaredFields` rejects an `"execute"` whose `body` carries no **key** for a field the action's
 served schema lists in `required`, replying
 `err "payload missing required field(s): <names>"`. Presence is judged on the
 key, not on the decoded value, because that is precisely the question the

@@ -124,10 +124,6 @@ public:
     Q_INVOKABLE void removeMember(qlonglong projectId, const QString& principal);
 
 signals:
-    /// @brief Emitted once the wrapped presenter's registration round trip
-    ///        settles — successfully or not (`Presenter::bound()`,
-    ///        `morph/core/bridge.hpp`'s `whenBound()`).
-    void bound();
     /// @brief Emitted after a successful `login` — see `principal` property.
     /// @param principal The verified username the server echoed back.
     void loggedIn(const QString& principal);

@@ -86,7 +86,7 @@ void requireServerStillServesHonestClients(const QUrl& url) {
     auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
     morph::qt::QtExecutor qtExec;
-    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
     morph::bridge::BridgeHandler<AdvEchoModel> handler{bridge, &qtExec};
 
     std::atomic<int> result{-1};

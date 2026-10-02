@@ -95,7 +95,7 @@ BRIDGE_REGISTER_ACTION(OBModel, OBGetBalance, "OB_GetBalance", ::morph::model::L
 // ── InMemoryActionLog: idempotencyKey dedup ─────────────────────────────────
 
 TEST_CASE("InMemoryActionLog::append: dedups a repeated non-empty idempotencyKey", "[outbox][action_log]") {
-    InMemoryActionLog log;
+    InMemoryActionLog log{morph::testing::storageOwner()};
     log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));
     log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));  // simulated re-relay
 
@@ -105,7 +105,7 @@ TEST_CASE("InMemoryActionLog::append: dedups a repeated non-empty idempotencyKey
 }
 
 TEST_CASE("InMemoryActionLog::append: empty idempotencyKey never dedups", "[outbox][action_log]") {
-    InMemoryActionLog log;
+    InMemoryActionLog log{morph::testing::storageOwner()};
     log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit"));  // idempotencyKey == ""
     log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit"));
 
@@ -117,7 +117,7 @@ TEST_CASE("InMemoryActionLog::append: empty idempotencyKey never dedups", "[outb
 TEST_CASE("FileActionLog::append: dedups a repeated non-empty idempotencyKey within one process",
           "[outbox][file_action_log]") {
     TempFile tmp{"outbox_dedup"};
-    FileActionLog log{tmp.path};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path};
     log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));
     log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));
     log.flush();
@@ -129,12 +129,13 @@ TEST_CASE("FileActionLog: idempotencyKey dedup survives reopening the same file 
           "[outbox][file_action_log]") {
     TempFile tmp{"outbox_restart"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));
         log.flush();
     }  // "process" ends here — the FileActionLog and its fd are gone
 
-    FileActionLog reopened{tmp.path};  // "restart": rebuilds the seen-key set from disk
+    FileActionLog reopened{morph::testing::storageOwner(),
+                           tmp.path};  // "restart": rebuilds the seen-key set from disk
     reopened.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));  // re-relay after crash
     reopened.flush();
 
@@ -146,7 +147,7 @@ TEST_CASE("FileActionLog: idempotencyKey dedup survives reopening the same file 
 TEST_CASE("IModelHolder::setOutboxManaged: suppresses recordIfAttached while hasActionLog stays true",
           "[outbox][holder]") {
     auto holder = morph::model::detail::ModelFactory::create<OBModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "acct-1");
     holder->setOutboxManaged(true);
 
@@ -160,7 +161,7 @@ TEST_CASE("IModelHolder::setOutboxManaged: suppresses recordIfAttached while has
 
 TEST_CASE("IModelHolder::setOutboxManaged: defaults to false, ordinary recording is unaffected", "[outbox][holder]") {
     auto holder = morph::model::detail::ModelFactory::create<OBModel>();
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "acct-1");
 
     REQUIRE_FALSE(holder->isOutboxManaged());
@@ -177,7 +178,7 @@ TEST_CASE("ActionDispatcher: outbox-managed holder does not auto-append despite 
     dispatcher.registerAction<OBModel, OBDeposit>("OB_Model", "OB_Deposit");
 
     auto holder = registry.create("OB_Model");
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     holder->attachActionLog(log, "acct-1");
     holder->setOutboxManaged(true);
 
@@ -190,10 +191,10 @@ TEST_CASE("ActionDispatcher: outbox-managed holder does not auto-append despite 
 TEST_CASE("Bridge/LocalBackend: outbox-managed holder does not auto-append despite an attached log",
           "[outbox][bridge]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
 
-    auto log = std::make_shared<InMemoryActionLog>();
+    auto log = std::make_shared<InMemoryActionLog>(cbExec);
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "OB_Model";
     binding->modelFactory = [log] {
@@ -208,7 +209,7 @@ TEST_CASE("Bridge/LocalBackend: outbox-managed holder does not auto-append despi
     handler.execute(OBDeposit{.amount = 20})
         .then([&](int v) { depositResult.store(v); })
         .onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return depositResult.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return depositResult.load() != -1; }));
     REQUIRE(depositResult.load() == 20);
 
     REQUIRE(log->entries().empty());
@@ -222,7 +223,7 @@ TEST_CASE("OutboxRelay::relay(): moves drained rows to sink and marks them relay
         makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-2"),
     };
     int markCalls = 0;
-    auto sink = std::make_shared<InMemoryActionLog>();
+    auto sink = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
 
     OutboxRelay relay;
     relay.drainOutbox = [&] { return pending; };
@@ -245,7 +246,7 @@ TEST_CASE("OutboxRelay::relay(): moves drained rows to sink and marks them relay
 
 TEST_CASE("OutboxRelay::relay(): no-op when drainOutbox returns nothing", "[outbox][relay]") {
     bool markCalled = false;
-    auto sink = std::make_shared<InMemoryActionLog>();
+    auto sink = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
 
     OutboxRelay relay;
     relay.drainOutbox = [] { return std::vector<LogEntry>{}; };
@@ -266,7 +267,7 @@ TEST_CASE("OutboxRelay::relay(): re-relay after a simulated crash between append
     // section describes: append succeeded, the mark-relayed commit did not).
     std::vector<LogEntry> fixedRows{makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1")};
     int markCalls = 0;
-    auto sink = std::make_shared<InMemoryActionLog>();
+    auto sink = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
 
     OutboxRelay relay;
     relay.drainOutbox = [&] { return fixedRows; };
@@ -292,7 +293,7 @@ TEST_CASE("OutboxRelay::relay(): a null dependency is logged, not rejected, at c
         morph::log::LogLevel::debug,
     };
 
-    auto sink = std::make_shared<InMemoryActionLog>();
+    auto sink = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     OutboxRelay relay;
     relay.drainOutbox = [] { return std::vector<LogEntry>{makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1")}; };
     relay.sink = sink;
@@ -321,7 +322,7 @@ TEST_CASE("OutboxRelay + journal::replay: relayed entries reconstruct state matc
     pending[0].payload = morph::model::ActionTraits<OBDeposit>::toJson(OBDeposit{.amount = 10});
     pending[1].payload = morph::model::ActionTraits<OBDeposit>::toJson(OBDeposit{.amount = 5});
 
-    auto sink = std::make_shared<InMemoryActionLog>();
+    auto sink = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     OutboxRelay relay;
     relay.drainOutbox = [&] { return pending; };
     relay.markRelayed = [&](std::span<const LogEntry> rows) {
@@ -346,7 +347,7 @@ TEST_CASE("OutboxRelay::relay(): a null drainOutbox is logged, not rejected, at 
         morph::log::LogLevel::debug,
     };
 
-    auto sink = std::make_shared<InMemoryActionLog>();
+    auto sink = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
     OutboxRelay relay;
     // relay.drainOutbox left null on purpose.
     relay.markRelayed = [](std::span<const LogEntry>) {};
@@ -422,7 +423,7 @@ TEST_CASE("OutboxRelay + FileActionLog: re-relay after a simulated process resta
     row.payload = morph::model::ActionTraits<OBDeposit>::toJson(OBDeposit{.amount = 7});
 
     {
-        auto sink = std::make_shared<FileActionLog>(tmp.path);
+        auto sink = std::make_shared<FileActionLog>(morph::testing::storageOwner(), tmp.path);
         OutboxRelay relay;
         relay.drainOutbox = [&] { return std::vector<LogEntry>{row}; };
         relay.markRelayed = [](std::span<const LogEntry>) {};  // simulate: mark-relayed commit never happened
@@ -433,7 +434,8 @@ TEST_CASE("OutboxRelay + FileActionLog: re-relay after a simulated process resta
     }  // "process" ends; the FileActionLog and its fd are gone
 
     {
-        auto sink = std::make_shared<FileActionLog>(tmp.path);  // "restart": rebuilds dedup set from disk
+        auto sink = std::make_shared<FileActionLog>(morph::testing::storageOwner(),
+                                                    tmp.path);  // "restart": rebuilds dedup set from disk
         OutboxRelay relay;
         relay.drainOutbox = [&] { return std::vector<LogEntry>{row}; };  // outbox table still shows it unrelayed
         bool marked = false;

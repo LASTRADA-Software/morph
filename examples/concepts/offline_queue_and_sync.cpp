@@ -19,6 +19,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <morph/core/executor.hpp>
 #include <morph/offline/file_offline_queue.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
@@ -40,7 +42,12 @@ using morph::offline::SyncWorker;
 // standing alone as it does in this example.
 
 TEST_CASE("offline queue: enqueue -> drain -> markDone", "[concepts][offline]") {
-    InMemoryOfflineQueue queue;
+    // A queue belongs to one executor, its owner, and is used there. This
+    // thread built the queue outside any executor's task, so this thread
+    // counts as the owner and calls it directly; a caller on another thread
+    // would use the completion overloads (`enqueue(replyExec, …)`).
+    morph::exec::MainThreadExecutor owner;
+    InMemoryOfflineQueue queue{owner};
 
     auto id = queue.enqueue(R"({"action":"Deposit","amount":10})");
 
@@ -66,11 +73,16 @@ TEST_CASE("offline queue: enqueue -> drain -> markDone", "[concepts][offline]") 
 // can look at it later.
 
 TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to replay", "[concepts][offline][sync]") {
-    InMemoryOfflineQueue queue;
+    // SyncWorker drains on the executor it is given, which must run one task
+    // at a time. This thread is the app: its executor owns the queue and the
+    // drain, and receives each run's result, each when the test pumps it.
+    morph::exec::MainThreadExecutor app;
+    InMemoryOfflineQueue queue{app};
     (void)queue.enqueue("poison-payload", "op-1");  // "op-1" is this item's idempotencyKey
 
     std::vector<QueueItem> deadLettered;
     SyncWorker worker{
+        app,
         queue,
         [](const std::string&) { return false; },  // a replay function that always fails
         [&](const QueueItem& item) { deadLettered.push_back(item); },
@@ -80,8 +92,9 @@ TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to r
     // 5 cumulative attempts, so 5 calls are needed to exhaust the budget.
     morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = worker.run();
+        worker.run(app).then([&result](const morph::offline::SyncResult& drained) { result = drained; });
     }
+    app.drain();
 
     REQUIRE(result.deadLettered == 1);
     REQUIRE(deadLettered.size() == 1);
@@ -107,9 +120,10 @@ TEST_CASE("offline queue: FileOfflineQueue survives destroying and reopening the
         ("morph_concepts_offline_queue_" + std::to_string(reinterpret_cast<std::uintptr_t>(&uniqueTag)) + ".ndjson");
     std::filesystem::remove(path);  // start from a clean slate even if a previous run left this behind
 
+    morph::exec::MainThreadExecutor owner;  // this thread uses both queue objects below
     QueueItem survivor;
     {
-        FileOfflineQueue queue{path};
+        FileOfflineQueue queue{owner, path};
         auto id = queue.enqueue("payload-that-must-survive-a-restart");
         survivor = queue.drain().at(0);
         REQUIRE(survivor.id == id);
@@ -118,7 +132,7 @@ TEST_CASE("offline queue: FileOfflineQueue survives destroying and reopening the
     {
         // "process restarts": a fresh FileOfflineQueue over the same path
         // replays what's on disk instead of starting empty.
-        FileOfflineQueue reopened{path};
+        FileOfflineQueue reopened{owner, path};
         auto pending = reopened.drain();
         REQUIRE(pending.size() == 1);
         REQUIRE(pending[0].id == survivor.id);

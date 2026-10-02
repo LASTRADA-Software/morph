@@ -61,6 +61,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/journal/file_action_log.hpp>
 #include <morph/journal/journal.hpp>
+#include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session.hpp>
 #include <optional>
@@ -173,6 +174,7 @@ constexpr std::size_t kMaxLiveModels = 256;
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an example server; an uncaught failure at startup ends the process, which is the right outcome.
 int main(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
@@ -197,18 +199,20 @@ int main(int argc, char** argv) {
     // surface and not every list call. Installed process-wide, because a
     // registry-constructed model is always default-constructed and so has no
     // DI seam to receive it through.
-    auto actionLog =
-        std::make_shared<::morph::journal::FileActionLog>(std::filesystem::current_path() / "bank_actions.jsonl");
+    // The log belongs to this thread's event loop: models append from their
+    // strands on the pool below, and every append runs here, one at a time.
+    ::morph::qt::QtExecutor journalOwner;
+    auto actionLog = std::make_shared<::morph::journal::FileActionLog>(
+        journalOwner, std::filesystem::current_path() / "bank_actions.jsonl");
     ::morph::journal::setActionLog(actionLog);
 
     int exitCode = 0;
     {
         ::morph::exec::ThreadPoolExecutor pool{4};
-        auto server = std::make_shared<::morph::backend::RemoteServer>(pool, std::make_shared<BankDemoAuthorizer>());
-
-        ::morph::backend::LimitPolicy limits;
-        limits.maxLiveModels = kMaxLiveModels;
-        server->setLimitPolicy(limits);
+        ::morph::backend::ServerConfig serverConfig;
+        serverConfig.limits.maxLiveModels = kMaxLiveModels;
+        auto server = std::make_shared<::morph::backend::RemoteServer>(pool, std::make_shared<BankDemoAuthorizer>(),
+                                                                       std::move(serverConfig));
 
         ::morph::qt::QtWebSocketServer wsServer{*server, portFromEnvironment("BANK_PORT")};
         if (!wsServer.listen()) {

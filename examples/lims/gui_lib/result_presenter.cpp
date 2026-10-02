@@ -10,14 +10,7 @@
 namespace lims::gui {
 
 ResultPresenter::ResultPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : Presenter{parent}, _catalog{bridge, executor}, _sample{bridge, executor} {
-    // The *catalogue* handler's binding, not the sample one's: `_sample` is
-    // `AllowShared` and therefore unbound until something attaches it to a
-    // key, so gating the view's first call on it would wait forever. The
-    // first thing this surface does is list analyses, which runs on
-    // `_catalog`.
-    trackBound(_catalog.whenBound());
-}
+    : Presenter{parent}, _catalog{bridge, executor}, _sample{bridge, executor} {}
 
 void ResultPresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 

@@ -1237,8 +1237,8 @@ TEST_CASE("Forms::Rules::NoDrift::ActionDispatcherDispatchesAValidBookingNormall
 TEST_CASE("Forms::Rules::NoDrift::LocalBackendRejectsViaOnErrorWithValidationError", "[forms][rules][validation]") {
     gCfrBookRoomExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CFRBookingModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawValidationError{false};
@@ -1255,7 +1255,7 @@ TEST_CASE("Forms::Rules::NoDrift::LocalBackendRejectsViaOnErrorWithValidationErr
             done.store(true);
         });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(sawValidationError.load());
     REQUIRE(gCfrBookRoomExecuteCount.load() == 0);
 }
@@ -1263,8 +1263,8 @@ TEST_CASE("Forms::Rules::NoDrift::LocalBackendRejectsViaOnErrorWithValidationErr
 TEST_CASE("Forms::Rules::NoDrift::LocalBackendDispatchesAValidBookingNormally", "[forms][rules][validation]") {
     gCfrBookRoomExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor pool{2};
-    morph::testing::InlineExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<CFRBookingModel> handler{bridge, &cbExec};
 
     std::atomic<bool> observedBooked{false};
@@ -1276,7 +1276,7 @@ TEST_CASE("Forms::Rules::NoDrift::LocalBackendDispatchesAValidBookingNormally", 
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(observedBooked.load());
     REQUIRE(gCfrBookRoomExecuteCount.load() == 1);
 }
@@ -1285,8 +1285,8 @@ TEST_CASE("Forms::Rules::NoDrift::SimulatedRemoteBackendRejectsTheSameViolatingA
     gCfrBookRoomExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    morph::testing::InlineExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<CFRBookingModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawError{false};
@@ -1304,7 +1304,7 @@ TEST_CASE("Forms::Rules::NoDrift::SimulatedRemoteBackendRejectsTheSameViolatingA
             done.store(true);
         });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(sawError.load());
     REQUIRE(errorMessage == "action failed validation: CFR_BookingModel/CFR_BookRoom");
     REQUIRE(gCfrBookRoomExecuteCount.load() == 0);
@@ -1315,8 +1315,8 @@ TEST_CASE("Forms::Rules::NoDrift::SimulatedRemoteBackendDispatchesAValidBookingN
     gCfrBookRoomExecuteCount.store(0);
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    morph::testing::InlineExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), cbExec};
     morph::bridge::BridgeHandler<CFRBookingModel> handler{bridge, &cbExec};
 
     std::atomic<bool> observedBooked{false};
@@ -1328,7 +1328,7 @@ TEST_CASE("Forms::Rules::NoDrift::SimulatedRemoteBackendDispatchesAValidBookingN
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(observedBooked.load());
     REQUIRE(gCfrBookRoomExecuteCount.load() == 1);
 }

@@ -74,6 +74,14 @@ constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;  // 2100-01-01T
 ///        concurrent clients, not a limit a real session will meet.
 constexpr std::size_t kMaxLiveModels = 256;
 
+/// @brief The server's configuration: the live-model cap above.
+/// @return A `ServerConfig` whose `limits.maxLiveModels` is `kMaxLiveModels`.
+::morph::backend::ServerConfig serverConfig() {
+    ::morph::backend::ServerConfig config;
+    config.limits.maxLiveModels = kMaxLiveModels;
+    return config;
+}
+
 /// @brief One dispatched `RunReportJob`'s share of the pass: it keeps the
 ///        pass's internal client alive, and it is what `reportsInFlight()`
 ///        actually counts.
@@ -140,18 +148,14 @@ App::App(std::string tokenSecret, std::chrono::milliseconds runInterval, std::si
       // constructor, whose MacFunction default is dropped entirely under
       // MORPH_REQUIRE_VETTED_HMAC.
       _server{std::make_shared<::morph::backend::RemoteServer>(
-          _pool, std::make_shared<auth::LedgerAuthorizer>(tokenSecret, ::morph::session::hmacSha256))},
-      _reportBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server)} {
+          _pool, std::make_shared<auth::LedgerAuthorizer>(tokenSecret, ::morph::session::hmacSha256), serverConfig())},
+      _reportBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _reportExecutor} {
     // Installed process-wide so AuthModel::execute(const Login&) can mint
     // tokens against this exact secret -- the same "registry-constructed
     // models are always default-constructed, so there is no DI seam" answer
     // morph::journal::setActionLog and bookmarks::auth::setTokenIssuer
     // already use.
     auth::setTokenIssuer(std::make_shared<::morph::session::TokenIssuer>(tokenSecret, ::morph::session::hmacSha256));
-
-    ::morph::backend::LimitPolicy limits;
-    limits.maxLiveModels = kMaxLiveModels;
-    _server->setLimitPolicy(limits);
 
     // The runner's own service-principal session, genuinely signed. Minted
     // here rather than through AuthModel deliberately: AuthModel *refuses* to

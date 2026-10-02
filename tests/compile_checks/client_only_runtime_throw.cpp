@@ -19,22 +19,12 @@
 #include <chrono>
 #include <cstdio>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <stdexcept>
 #include <string>
-#include <thread>
-
-namespace {
-
-struct InlineExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
-
-}  // namespace
 
 struct ClientOnlyRuntimeAction {
     int x = 0;
@@ -50,12 +40,12 @@ BRIDGE_REGISTER_ACTION_4(ClientOnlyRuntimeModel, ClientOnlyRuntimeAction, "Clien
 
 int main() {
     morph::exec::ThreadPoolExecutor pool{2};
-    InlineExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     // Deliberate misuse: MORPH_DETAIL_REGISTER_MODEL_LOCAL's @warning says
     // MORPH_CLIENT_ONLY must never be paired with LocalBackend. Exercising it
     // anyway is exactly how this probe proves the throw fires instead of
     // silently calling execute.
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<ClientOnlyRuntimeModel> handler{bridge, &cbExec};
 
     std::atomic<bool> gotExpectedError{false};
@@ -73,8 +63,9 @@ int main() {
             completed.store(true);
         });
 
+    // The reply is delivered on cbExec, which this thread owns and pumps.
     for (int idx = 0; idx < 200 && !completed.load(); ++idx) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        cbExec.runFor(std::chrono::milliseconds(10));
     }
 
     if (!completed.load()) {

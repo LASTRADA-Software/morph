@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <QEventLoop>
 #ifndef QT_NO_SSL
 #include <QSslConfiguration>
 #endif
@@ -10,10 +9,10 @@
 #include <QWebSocket>
 #include <chrono>
 #include <functional>
+#include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/wire.hpp>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -38,56 +37,32 @@ struct QtWebSocketBackendConfig {
 
     /// @brief Multiplier applied to the delay after each failed attempt.
     double backoffMultiplier = 2.0;
-
-    /// @brief Whether `bindModel`/`promoteModel` may return before the reply.
-    ///
-    /// Defaults to `false`: both settle their `Completion` from inside the call,
-    /// having blocked the Qt thread in a nested `QEventLoop` for the round trip
-    /// — `IBackend`'s own default behaviour, and what a desktop Qt embedder
-    /// relies on, since it makes a handler usable on the line after
-    /// `BridgeHandler`'s constructor returns.
-    ///
-    /// Set `true` for a build where that blocking call cannot happen at all —
-    /// a WASM main thread, where Qt refuses to spin a nested loop and the
-    /// attempt aborts the page outright. `bindModel` then sends the request and
-    /// returns an unsettled `Completion`, which the reply settles later. That is
-    /// a deliberate trade, not a free improvement: the caller must wait for the
-    /// continuation (gate the UI on `BridgeHandler::whenBound()`, or dispatch
-    /// through `BridgeHandler::executeWhenBound()`, which holds the action
-    /// until the bind settles) before firing an action through that handler,
-    /// since `execute()` fails fast with "handler not bound" for an unbound
-    /// binding rather than queuing or blocking.
-    ///
-    /// This flag chooses *whether the transport blocks*, nothing more: the
-    /// continuation exists on both paths, because `bindModel` returns a
-    /// `Completion` either way.
-    bool asyncRegistrationEnabled = false;
 };
 
 /// @brief `IBackend` implementation that communicates with a `RemoteServer` over WebSocket.
 ///
-/// Registration goes through the structural surface: `bindModel()` and
-/// `promoteModel()` (`IBackend`, and `docs/spec/core/backend.md`'s "The
-/// structural registration surface"). This is the one backend in the tree that
-/// implements them *natively* rather than through the blocking defaults or
-/// `SynchronousBackendAdapter` — with `Config::asyncRegistrationEnabled` set it
-/// assigns a call-id, sends the message, and returns an unsettled `Completion`
-/// that the matching reply settles, using the same call-id-matching mechanism
-/// `execute()` already uses. Which thread the continuation then runs on is the
-/// caller's choice, not this class's: `Completion` posts to the `IExecutor`
-/// passed to `bindModel`/`promoteModel`, so a caller that needs the
-/// continuation on its own thread names its own executor and gets it.
+/// Every request is asynchronous and nothing blocks the Qt thread: a request
+/// carries a fresh non-zero `callId`, its pending entry is filed under it, and
+/// the matching reply settles that entry from the `textMessageReceived` slot.
+/// The caller's `Completion` is delivered on the executor the caller names.
+/// The request verbs are `execute()`, `bindModel()`/`promoteModel()` (the
+/// structural registration surface, `docs/spec/core/backend.md`),
+/// `instances()` and `negotiateProtocolVersion()`. A bind issued before the
+/// socket is up leaves its handler unbound; a call made through it is held by
+/// the `Bridge` and dispatched when the bind settles.
 ///
-/// The synchronous verbs (`registerModel()`, `registerModelShared()`,
-/// `attachModel()`, `assignPrimary()`) remain, and still block the calling
-/// thread in a nested `QEventLoop` until the server replies — unusable on a
-/// WASM main thread, which Qt refuses to spin a nested loop on at all. They are
-/// what the default (`asyncRegistrationEnabled == false`) `bindModel` runs, and
-/// what `Bridge::switchBackend()` re-registers through.
-/// `deregisterModel()` is fire-and-forget (it sends the message without
-/// waiting, avoiding a nested event loop during destruction). `execute()` is
-/// asynchronous: it assigns a call-id, sends the message, and resolves the
-/// returned `Completion` when the matching reply arrives.
+/// The synchronous `IBackend` verbs that would have to wait for a reply —
+/// `registerModel()`, `assignPrimary()`, `listInstances()` — throw
+/// `std::logic_error` naming their completion form: waiting would mean
+/// spinning a nested event loop on the Qt thread, which a WASM main thread
+/// cannot do at all.
+///
+/// Everything this backend keeps — the socket, the pending tables — belongs to
+/// the thread the socket lives on, as Qt's own objects do: every verb is called
+/// there (the `Bridge`'s owner is that thread) and every reply slot runs there,
+/// so none of it takes a lock. A debug build asserts it at each site.
+/// `deregisterModel()` is fire-and-forget: it sends the message and files only
+/// its `callId`, so the reply can be recognised and dropped.
 ///
 /// @par TLS
 /// Pass a `QSslConfiguration` to enable `wss://`. Build it with `tlsVerifyingConfig()`
@@ -107,8 +82,8 @@ struct QtWebSocketBackendConfig {
 /// `wss://` and `ws://` both still connect normally.
 ///
 /// @par Threading
-/// Must be used from the Qt event loop thread. `execute()` and the internal
-/// message handler are both called on that thread.
+/// Must be used from the Qt event loop thread. Every verb and the internal
+/// message handler are called on that thread.
 class QtWebSocketBackend : public ::morph::backend::detail::IBackend {
 public:
     /// @brief Alias for the reconnect configuration struct.
@@ -141,7 +116,7 @@ public:
     /// see `registerModel()`'s doc comment); the main constructor still accepts
     /// them, positioned before `tls`/`cfg`, purely for API-shape parity with
     /// other backends. That forces a caller who only wants to set `cfg` (e.g.
-    /// `Config::asyncRegistrationEnabled`) to spell out
+    /// `Config::reconnectEnabled`) to spell out
     /// `morph::model::detail::defaultDispatcher()`/`defaultRegistry()` explicitly
     /// to reach the parameters after them — reaching into a `detail::` namespace
     /// for no functional reason. This overload skips straight to `tls`/`cfg`.
@@ -186,7 +161,10 @@ public:
 
     /// @brief Pumps the Qt event loop until the socket is connected or @p timeoutMs elapses.
     ///
-    /// Must be called on the Qt event loop thread after construction.
+    /// Must be called on the Qt event loop thread after construction. It spins
+    /// a local `QEventLoop`, which a WASM main thread cannot do: a WASM client
+    /// binds without waiting (a bind issued before the socket is up is queued)
+    /// or reacts to `setConnectHandler`.
     ///
     /// @param timeoutMs Maximum time to wait in milliseconds.
     /// @return `true` if connected before the timeout, `false` otherwise.
@@ -194,78 +172,38 @@ public:
 
     /// @brief Sends a `"hello"` envelope to the server and classifies its reply.
     ///
-    /// Synchronous, like `registerModel` — blocks the calling (Qt event loop)
-    /// thread via a nested `QEventLoop` until the reply arrives. Intended to be
-    /// called once, after `waitForConnected()` returns `true` and before any
-    /// `registerModel`/`execute` call; nothing enforces that ordering.
+    /// Intended to be sent once, after the socket connects and before any
+    /// `bindModel`/`execute`; nothing enforces that ordering.
     ///
-    /// @return `Negotiated` if the server accepted `kProtocolVersion`;
-    ///         `LegacyPeer` if the server does not understand `"hello"`.
-    /// @throws std::runtime_error if the server explicitly rejects the version,
-    ///         or if the socket is not connected (or disconnects mid-call).
-    ::morph::wire::ProtocolNegotiationResult negotiateProtocolVersion();
+    /// @param replyExec Executor the answer is delivered on. Borrowed: it must
+    ///        outlive the returned `Completion`.
+    /// @return A `Completion` resolved with `Negotiated` if the server accepted
+    ///         `kProtocolVersion`, or `LegacyPeer` if it does not understand
+    ///         `"hello"`; rejected with a `std::runtime_error` if the server
+    ///         rejects the version or the socket is not connected, and with
+    ///         `backend::DisconnectedError` if it drops before the reply.
+    [[nodiscard]] ::morph::async::Completion<::morph::wire::ProtocolNegotiationResult> negotiateProtocolVersion(
+        ::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND);
 
-    /// @brief Sends a `register` message to the server and blocks until the reply arrives.
+    /// @brief Refuses: this backend registers only through `bindModel`.
     ///
-    /// @param typeId  String type-id of the model to register.
-    /// @param factory Ignored — model construction is delegated to the server.
-    /// @return `ModelId` assigned by the server.
-    /// @throws std::runtime_error if the server replies with an error or the socket is not connected.
+    /// A registration is a round trip, and answering it synchronously would
+    /// mean blocking the Qt thread until the reply. `bindModel` with an empty
+    /// `primary` sends the same `register` envelope and settles a `Completion`.
+    /// The model is constructed by the server from its own registry, so this
+    /// backend never uses a factory.
+    /// @param typeId  Unused.
+    /// @param factory Unused.
+    /// @return Never returns.
+    /// @throws std::logic_error always.
     ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override;
 
-    /// @brief Sends a `register` carrying @p contextKey and blocks until the reply arrives.
+    /// @brief Acquires a model instance over the wire, settled by the server's reply.
     ///
-    /// `IBackend::registerModelWithContext`'s default drops @p contextKey, which
-    /// is right for `LocalBackend` — the caller's own factory closure already
-    /// captures the identity — but wrong for a backend whose instances live on
-    /// the far side of a wire protocol: the server constructs the holder itself,
-    /// so `contextKey` is the *only* channel by which the instance's identity
-    /// reaches it. `RemoteServer::attachLogIfConfigured` returns without
-    /// consulting its `LogProvider` at all when the envelope's `contextKey` is
-    /// empty, so dropping the key here would not merely lose an entity key — it
-    /// would leave the instance **unjournalled**. `SimulatedRemoteBackend` and
-    /// `morph::net::SocketBackend` override this for the same reason; backends
-    /// documented as interchangeable must not disagree about whether a private
-    /// registration is audited.
-    ///
-    /// This is also the verb the *blocking* `bindModel` path reaches for an
-    /// empty-`primary`, zero-`current` request, and the one
-    /// `Bridge::switchBackend` calls directly when it re-registers a handler
-    /// after a reconnect — so it carries the key on a backend swap and on every
-    /// private registration, whatever `Config::asyncRegistrationEnabled` is set
-    /// to.
-    ///
-    /// `registerModel` forwards here with an empty key, so there is one place
-    /// that builds this envelope rather than two that can drift apart.
-    ///
-    /// @param typeId     String type-id of the model to register.
-    /// @param factory    Ignored — model construction is delegated to the server.
-    /// @param contextKey Stable identity of the new instance; empty if none.
-    /// @return `ModelId` assigned by the server.
-    /// @throws std::runtime_error if the server replies with an error or the socket is not connected.
-    ::morph::exec::detail::ModelId registerModelWithContext(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        std::string_view contextKey) override;
-
-    /// @brief Acquires a model instance over the wire, natively non-blocking
-    ///        when `Config::asyncRegistrationEnabled` is set.
-    ///
-    /// The structural registration surface (`IBackend::bindModel`), implemented
-    /// here rather than inherited: this is the one backend in the tree with a
-    /// genuinely non-blocking acquire path, so it settles the returned
-    /// `Completion` when the server's reply arrives instead of blocking a
-    /// thread until then.
-    ///
-    /// With `Config::asyncRegistrationEnabled` unset (the default) this defers
-    /// to `IBackend::bindModel`, which runs the synchronous verb the request's
-    /// shape names and **blocks the Qt thread** in a nested `QEventLoop` for the
-    /// round trip. That is the desktop behaviour every existing embedder
-    /// relies on; see `QtWebSocketBackendConfig::asyncRegistrationEnabled`.
-    ///
-    /// With it set, the request's shape selects the envelope, mirroring
-    /// `IBackend::bindModelBlocking`'s routing of the same three shapes:
+    /// The structural registration surface (`IBackend::bindModel`). The
+    /// request's shape selects the envelope:
     ///
     /// | `primary` | `current` | Envelope sent |
     /// |---|---|---|
@@ -274,109 +212,49 @@ public:
     /// | non-empty | `0` | `register` with `shared` (register-or-attach) |
     /// | non-empty | non-zero | `attach`, naming `current` |
     ///
-    /// Each carries a fresh `callId` from the counter `execute()` uses, and the
-    /// reply is matched via `_pendingRegistrations` when `onTextMessage` sees
-    /// it — no protocol change, since the server already echoes `callId` on
-    /// every reply.
+    /// Each carries a fresh `callId` from the counter `execute()` uses and the
+    /// installed session; `request.contextKey` rides on every shape, since the
+    /// server constructs the holder itself and the key is the only channel by
+    /// which the instance's identity (and so its action log) reaches it.
     ///
     /// A **private** registration issued before the socket has finished
     /// connecting is queued rather than failed: exactly the ordering a
-    /// single-threaded WASM client must use, since it can never block waiting
-    /// for the connection to settle (a `BridgeHandler` constructed the moment
-    /// the backend is wired up, before the first `connected` signal). The queued
-    /// request is sent — with a call-id assigned at that point, not now — the
-    /// moment `connected` fires next, first connect included, in FIFO order. If
-    /// the socket never connects and the backend is torn down first, the queued
-    /// entry is still settled: `~QtWebSocketBackend` calls `cancelPending`,
-    /// which drains `_queuedRegistrations` too and rejects each exactly once.
-    /// A keyed bind on a disconnected socket rejects immediately instead.
+    /// single-threaded WASM client must use, since it can never wait for the
+    /// connection to settle. The queued request is sent — with a call-id
+    /// assigned at that point — the moment `connected` fires next, first
+    /// connect included, in FIFO order. If the backend is torn down first,
+    /// `cancelPending` rejects each queued entry exactly once. A keyed bind on
+    /// a disconnected socket rejects immediately instead: it may re-point a
+    /// live instance, and replaying that against a later connection would
+    /// attach from a `current` that connection never issued.
     ///
     /// @param request Owning bind request; moved from. `request.factory` is
-    ///                unused — this backend holds no local model to construct;
-    ///                the server instantiates the model from `request.typeId`.
+    ///                unused — the server instantiates the model from
+    ///                `request.typeId`.
     /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
     ///                must outlive the returned `Completion`.
     /// @return A `Completion` resolved with the bound `ModelId`, or rejected
-    ///         with the failure. Already settled on the blocking path.
+    ///         with the failure.
     ::morph::async::Completion<::morph::exec::detail::ModelId> bindModel(::morph::backend::detail::BindRequest request,
                                                                          ::morph::exec::IExecutor& cbExec) override;
 
-    /// @brief Whether a caller may block waiting for this backend's
-    ///        `bindModel`/`promoteModel` completions.
+    /// @brief Refuses: this backend promotes only through `promoteModel`.
     ///
-    /// `kCallerMustNotBlock` exactly when `Config::asyncRegistrationEnabled` is
-    /// set, because that is exactly when a completion is settled by
-    /// `onTextMessage` — a Qt slot, delivered by the event loop of the thread
-    /// that called `bindModel`. A caller blocked in a wait is not running that
-    /// event loop, so the reply it is waiting for can never arrive — a deadlock,
-    /// which on a WASM main thread aborts the page outright.
-    ///
-    /// With the flag unset this backend's `bindModel` is `IBackend`'s default,
-    /// which settles inside the call, so `kCallerMayBlock` is both true and
-    /// free: the caller's wait finds the outcome already parked and returns
-    /// without sleeping.
-    ///
-    /// Note which way round this reads. It does not say "registration is
-    /// asynchronous" — `SocketBackend`'s is too, and it answers
-    /// `kCallerMayBlock` because a separate I/O thread settles its completions.
-    /// It says only that *this* thread must not stop and wait.
-    ///
-    /// @return `kCallerMustNotBlock` when `Config::asyncRegistrationEnabled` is
-    ///         set, `kCallerMayBlock` otherwise.
-    [[nodiscard]] ::morph::backend::detail::BindWait bindWaitPolicy() const noexcept override {
-        return _cfg.asyncRegistrationEnabled ? ::morph::backend::detail::BindWait::kCallerMustNotBlock
-                                             : ::morph::backend::detail::BindWait::kCallerMayBlock;
-    }
-
-    /// @brief Sends a shared (register-or-attach) `register` and blocks for the reply.
-    ///
-    /// An empty primary degrades to the private path.
-    /// @param typeId   String type-id of the model.
-    /// @param factory  Ignored — model construction is delegated to the server.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @return `ModelId` of the shared (or newly created) instance.
-    /// @throws std::runtime_error if the server errors or the socket is not connected.
-    ::morph::exec::detail::ModelId registerModelShared(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        ::morph::backend::detail::InstanceIdentity identity) override;
-
-    /// @brief Sends an `attach` and blocks for the reply, re-pointing from @p current.
-    /// @param typeId   String type-id of the model.
-    /// @param factory  Ignored — model construction is delegated to the server.
-    /// @param identity Entity key for the action log plus the directory primary key.
-    /// @param current  Instance currently held, or `ModelId{0}` if none.
-    /// @return `ModelId` of the instance now attached to.
-    /// @throws std::runtime_error if the server errors or the socket is not connected.
-    ::morph::exec::detail::ModelId attachModel(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
-        ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override;
-
-    /// @brief Files a live server-side instance under @p primary.
-    /// @param mid     Live instance to promote.
-    /// @param typeId  Model type id.
-    /// @param primary Canonical string encoding of the key to file it under.
+    /// Same reason as `registerModel`: an `assign` is a round trip.
+    /// @param mid     Unused.
+    /// @param typeId  Unused.
+    /// @param primary Unused.
+    /// @throws std::logic_error always.
     void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
                        std::string_view primary) override;
 
-    /// @brief Files a live server-side instance under a key, without blocking.
+    /// @brief Files a live server-side instance under a key, settled by the server's reply.
     ///
-    /// The structural counterpart of `assignPrimary` (`IBackend::promoteModel`),
-    /// implemented natively for the same reason `bindModel` above is:
-    /// `assignPrimary` blocks the Qt thread in a nested `QEventLoop` via
-    /// `sendSync`, which a WASM main thread cannot do. This assigns a fresh
-    /// `callId` from the counter `execute()`/`bindModel()` use, sends the
-    /// `assign` envelope, and returns an unsettled `Completion`; the reply is
-    /// matched via `_pendingAssigns` when `onTextMessage` sees it.
-    ///
-    /// Unlike `bindModel`, this does **not** consult
-    /// `Config::asyncRegistrationEnabled`: promotion happens from inside the
-    /// result `Completion`'s callback chain, where no caller is left blocked
-    /// waiting for it either way, so there is no synchronous guarantee an
-    /// opt-in gate would protect.
-    ///
-    /// The documented no-op cases (empty `primary`, zero `mid`) resolve with
-    /// @p request's `mid` without sending anything, matching
-    /// `IBackend::promoteModel`. A disconnected socket rejects.
+    /// The structural counterpart of `assignPrimary` (`IBackend::promoteModel`):
+    /// sends the `assign` envelope with a fresh `callId` and returns an
+    /// unsettled `Completion`. The documented no-op cases (empty `primary`,
+    /// zero `mid`) resolve with @p request's `mid` without sending anything,
+    /// matching `IBackend::promoteModel`. A disconnected socket rejects.
     ///
     /// @param request Owning promote request; moved from.
     /// @param cbExec  Executor the continuation is delivered on. Borrowed: it
@@ -386,27 +264,36 @@ public:
     ::morph::async::Completion<::morph::exec::detail::ModelId> promoteModel(
         ::morph::backend::detail::PromoteRequest request, ::morph::exec::IExecutor& cbExec) override;
 
-    /// @brief Asks the server for the live shared primary keys of @p typeId.
-    /// @param typeId String type-id to enumerate.
-    /// @return Canonical key strings of the live shared instances.
-    /// @throws std::runtime_error if the server errors or the socket is not connected.
+    /// @brief Refuses: this backend lists instances only through `instances`.
+    ///
+    /// Same reason as `registerModel`: an `instances` request is a round trip.
+    /// @param typeId Unused.
+    /// @return Never returns.
+    /// @throws std::logic_error always.
     std::vector<std::string> listInstances(const std::string& typeId) override;
+
+    /// @brief Asks the server for the live shared primary keys of @p typeId.
+    ///
+    /// Sends an `instances` envelope with a fresh `callId`; the reply settles
+    /// the returned `Completion`. A disconnected socket rejects.
+    /// @param typeId String type-id to enumerate.
+    /// @param cbExec Executor the answer is delivered on. Borrowed: it must
+    ///        outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the canonical key strings of the
+    ///         live shared instances, or rejected with the server's error, a
+    ///         decode failure, or `backend::DisconnectedError`.
+    ::morph::async::Completion<std::vector<std::string>> instances(const std::string& typeId,
+                                                                   ::morph::exec::IExecutor& cbExec) override;
 
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
-    /// No acknowledgement is awaited, which avoids a nested `QEventLoop` during
-    /// destruction (that can trip Qt asserts). Note the server performs no
-    /// connection-scoped cleanup: an undelivered or lost `deregister` leaves the
-    /// model registered on the server indefinitely.
+    /// Nothing waits for the acknowledgement, so it is safe from a destructor.
+    /// The server performs no connection-scoped cleanup: an undelivered or lost
+    /// `deregister` leaves the model registered on the server indefinitely.
     ///
-    /// Assigned a real, non-zero `callId` from the same counter/namespace
-    /// `execute()`/`bindModel()` use: `callId == 0`
-    /// is reserved for a parked synchronous control call's reply, and a
-    /// fire-and-forget `deregister` sharing that sentinel could otherwise have
-    /// its own stray "ok" reply handed to an unrelated `registerModel`'s
-    /// parked `sendSync` loop if the two land back to back on the same
-    /// connection. The reply is tracked in `_pendingDeregisters` purely so it
-    /// can be recognised and dropped in `onTextMessage`; nothing observes it.
+    /// The request carries a real, non-zero `callId` from the counter every
+    /// other request uses, filed in `_pendingDeregisters` only so its reply is
+    /// recognised and dropped.
     ///
     /// @param mid Id of the model to remove on the server.
     void deregisterModel(::morph::exec::detail::ModelId mid) override;
@@ -427,20 +314,23 @@ public:
     /// @brief No-op — this backend holds no local model objects.
     void notifyBackendChanged() override {}
 
-    /// @brief Rejects every in-flight call's `Completion` with @p exc —
-    ///        executes, binds (queued ones included) and promotes alike.
+    /// @brief Rejects every in-flight request's `Completion` with @p exc —
+    ///        executes, binds (queued ones included), promotes, instance
+    ///        listings and the `hello` alike.
     ///
     /// Called by `Bridge::switchBackend()` on the outgoing backend, by `~Bridge`,
     /// and internally when the socket disconnects. Late replies arriving for
-    /// already-cancelled call ids (execute, bind or promote) are dropped silently.
+    /// already-cancelled call ids are dropped silently.
     ///
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override;
 
     /// @brief Installs the handler `Bridge` uses to re-register handlers after a reconnect.
-    /// @param handler Callable invoked on the Qt thread after every successful reconnect.
-    ///                Pass `nullptr` to clear.
-    void setReconnectHandler(const std::function<void()>& handler) override;
+    /// @param handler Callable posted to @p exec after every successful
+    ///                reconnect. Pass `nullptr` to clear.
+    /// @param exec    Executor the handler runs on. Borrowed: it must outlive
+    ///                the installation.
+    void setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* exec) override;
 
     /// @brief Installs a handler invoked on every successful connect, including the first.
     /// @param handler Callable invoked on the Qt thread after every successful connect
@@ -462,33 +352,37 @@ public:
     void setSession(::morph::session::Context session) override;
 
 private:
-    /// @brief Sends @p msg synchronously by blocking the Qt thread via a nested event loop.
-    std::string sendSync(const std::string& msg);
+    /// @brief A request waiting for its reply: what the reply settles, and
+    ///        what a cancel rejects. Exactly one of the two is called.
+    struct PendingControl {
+        /// Settles the caller's `Completion` from the matching reply.
+        std::function<void(const ::morph::wire::Envelope&)> reply;
+        /// Rejects it, when the request is cancelled or never sent.
+        std::function<void(const std::exception_ptr&)> fail;
+    };
+
+    /// @brief A `PendingControl` whose reply is a bare `modelId`
+    ///        (`register`, `registerShared`, `attach`, `assign`).
+    /// @param promise The caller's promise.
+    /// @return The pending entry that settles @p promise.
+    static PendingControl modelIdReply(::morph::async::Completion<::morph::exec::detail::ModelId>::Promise promise);
 
     /// @brief Slot called by `QWebSocket` when a text frame arrives.
     void onTextMessage(const QString& message);
 
-    /// @brief Handles a frame that is not a decodable envelope.
-    ///
-    /// Hands @p msg to a parked `sendSync` waiter if there is one; otherwise
-    /// fails every in-flight call, because an undecodable frame means the
-    /// peer's framing can no longer be trusted.
-    /// @param msg Raw frame text, as received.
-    void onUndecodableMessage(std::string msg);
-
-    /// @brief Dispatches a reply carrying a non-zero `callId` to whichever
-    ///        pending-call map holds that id, if any.
+    /// @brief Dispatches a reply to whichever pending table holds its `callId`,
+    ///        and drops it when none does.
     /// @param env Decoded reply envelope.
-    void routeKeyedReply(const ::morph::wire::Envelope& env);
+    void routeReply(const ::morph::wire::Envelope& env);
 
     /// @brief Settles the execute filed under `env.callId`, if one is pending.
     /// @param env Decoded reply envelope.
     /// @return `true` if an execute was found and settled.
     bool tryRouteExecuteReply(const ::morph::wire::Envelope& env);
 
-    /// @brief Settles the bind/promote filed under `env.callId`, if one is pending.
+    /// @brief Settles the request filed under `env.callId` in `_pendingControl`, if any.
     /// @param env Decoded reply envelope.
-    /// @return `true` if a pending control call was found and settled.
+    /// @return `true` if a pending request was found and settled.
     bool tryRouteControlReply(const ::morph::wire::Envelope& env);
 
     /// @brief Drops the reply to a fire-and-forget deregister.
@@ -502,25 +396,28 @@ private:
     /// @brief Attempts to reopen the socket using the saved URL/TLS config.
     void attemptReconnect();
 
-    /// @brief Assigns a call-id, records @p promise, and sends @p env.
+    /// @brief Assigns a call-id, files @p pending under it, and sends @p env.
     ///
-    /// The one send path every non-blocking control call takes, so the ordering
-    /// invariant it enforces — encode before the map insertion, because a
-    /// throwing `wire::encode()` after inserting would park a promise for a
-    /// reply to a message that was never sent — is stated and tested once
-    /// rather than four times.
+    /// The one send path every request but `execute` takes. It encodes before
+    /// filing: a throwing `wire::encode()` after filing would leave an entry
+    /// waiting for a reply to a message that was never sent, so a throw
+    /// rejects through @p pending instead.
     ///
-    /// @param env     Control envelope to send; its `callId`/`session` are
+    /// @param env     Request envelope to send; its `callId`/`session` are
     ///                stamped here.
-    /// @param promise Settled when the matching reply arrives, or by
+    /// @param pending Settled when the matching reply arrives, or rejected by
     ///                `cancelPending`.
-    void sendControl(::morph::wire::Envelope env,
-                     ::morph::async::Completion<::morph::exec::detail::ModelId>::Promise promise);
+    void sendControl(::morph::wire::Envelope env, PendingControl pending);
 
     /// @brief Sends every private bind queued while the socket was not yet
     ///        connected, in FIFO order. Called from the `connected` slot,
     ///        before the reconnect handler fires.
     void flushQueuedRegistrations();
+
+    /// @brief Asserts, in a debug build, that @p site runs on the socket's
+    ///        thread — where every table this backend keeps belongs.
+    /// @param site Name of the calling body.
+    void checkThread(char const* site) const noexcept;
 
     QUrl _serverUrl;
 #ifndef QT_NO_SSL
@@ -534,12 +431,10 @@ private:
     bool _everConnected{false};
     bool _shuttingDown{false};
     std::function<void()> _reconnectHandler;
+    ::morph::exec::IExecutor* _reconnectExec{nullptr};
     std::function<void()> _connectHandler;
     std::function<void()> _disconnectHandler;
     ::morph::session::Context _session;
-
-    std::string _pendingReply;
-    QEventLoop* _syncLoop{nullptr};
 
     struct PendingExecute {
         std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
@@ -547,22 +442,18 @@ private:
         ::morph::exec::IExecutor* cbExec{nullptr};
     };
     uint64_t _nextCallId{0};
+    // Every table below is touched only on the socket's thread: by the verbs,
+    // called there, and by the reply slot, which runs there. All of them share
+    // the one `callId` counter, so an id names one request across them.
     std::unordered_map<uint64_t, PendingExecute> _pending;
-    std::mutex _pendingMtx;
 
-    /// @brief In-flight `bindModel`/`promoteModel` calls, keyed by `callId`.
+    /// @brief In-flight requests other than `execute` — `register`,
+    ///        `registerShared`, `attach`, `assign`, `instances`, `hello` —
+    ///        keyed by `callId`.
     ///
-    /// Kept separate from `PendingExecute`/`_pending` (a different `callId`
-    /// namespace would be a protocol change; this shares the same namespace
-    /// and counter, just a different local map) because a control reply's shape
-    /// (`modelId`, no `deserialize` step) differs from an execute reply's.
-    ///
-    /// One map for both verbs, not two: `register`, `registerShared`, `attach`
-    /// and `assign` replies are all matched identically — a bare `modelId`
-    /// echoed against the `callId` — so a per-verb split would have nothing to
-    /// represent.
-    std::unordered_map<uint64_t, ::morph::async::Completion<::morph::exec::detail::ModelId>::Promise>
-        _pendingRegistrations;
+    /// Apart from `_pending` because an execute reply is deserialised into the
+    /// action's result, while each of these settles its own value type.
+    std::unordered_map<uint64_t, PendingControl> _pendingControl;
 
     /// @brief One private `bindModel` issued before the socket had finished
     ///        connecting. No call-id is assigned until the request is actually
@@ -577,15 +468,8 @@ private:
     std::vector<QueuedRegistration> _queuedRegistrations;
 
     /// @brief Call-ids of `deregister` envelopes still awaiting their (unused)
-    ///        reply.
-    ///
-    /// `deregisterModel` is fire-and-forget: nobody observes the reply, but it
-    /// still needs a real, non-zero `callId` so `onTextMessage` can recognise
-    /// and drop it explicitly, rather than letting it fall through to the
-    /// `callId == 0` branch and collide with a parked `sendSync` waiter. A
-    /// late reply for an id no longer in this set (already dropped, or the
-    /// backend was cancelled/destroyed) is simply ignored — nothing to clean
-    /// up either way.
+    ///        reply, so the reply is recognised and dropped. A late reply for
+    ///        an id no longer here (the backend was cancelled) is dropped too.
     std::unordered_set<uint64_t> _pendingDeregisters;
 };
 

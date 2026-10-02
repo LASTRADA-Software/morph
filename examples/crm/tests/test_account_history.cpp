@@ -14,6 +14,7 @@
 #include "crm/models/account_model.hpp"
 #include "crm_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using crm::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -30,7 +31,7 @@ crm::AccountId createAcme(crm::AccountModel& model) {
 TEST_CASE("GetAccountHistory lists every recorded change to an account", "[crm][history]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
 
@@ -51,7 +52,7 @@ TEST_CASE("GetAccountHistory lists every recorded change to an account", "[crm][
 TEST_CASE("GetAccountHistory doesn't mix entries from a different account", "[crm][history]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
 
@@ -71,7 +72,7 @@ TEST_CASE("GetAccountHistory doesn't mix entries from a different account", "[cr
 TEST_CASE("A restricted principal's history redacts industry's historical value", "[crm][history][per_field]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
 
@@ -94,7 +95,7 @@ TEST_CASE("A restricted principal's history redacts industry's historical value"
 TEST_CASE("A Manager's history shows industry's historical value", "[crm][history][per_field]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
 
@@ -114,7 +115,7 @@ TEST_CASE("A Manager's history shows industry's historical value", "[crm][histor
 TEST_CASE("UndoLastAccountChange restores the account's fields to their prior value", "[crm][history][undo]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
 
@@ -135,7 +136,7 @@ TEST_CASE("UndoLastAccountChange restores the account's fields to their prior va
 TEST_CASE("UndoLastAccountChange records its own new journal entry, not a rewrite", "[crm][history][undo][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
 
@@ -155,7 +156,7 @@ TEST_CASE("UndoLastAccountChange records its own new journal entry, not a rewrit
 TEST_CASE("UndoLastAccountChange with no prior change to undo to is NotFound", "[crm][history][undo]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
 
@@ -167,7 +168,7 @@ TEST_CASE("A Member undoing a change that would restore industry to a Manager-se
           "[crm][history][undo][per_field]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
 
@@ -186,7 +187,7 @@ TEST_CASE("A Member undoing a change that would restore industry to a Manager-se
 
 TEST_CASE("Undoing with no principal is refused", "[crm][history][undo][audit]") {
     DbFixture fixture;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     crm::AccountModel model;
     model.attachActionLog(log, std::string{});
     crm::AccountId accountId;

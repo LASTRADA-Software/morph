@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 
 #if defined(__APPLE__)
 #include <signal.h>
@@ -117,14 +118,13 @@ public:
     /// The blocking reset is not hypothetical bookkeeping.
     /// macOS/BSD propagate a listening socket's `O_NONBLOCK` onto the sockets
     /// `accept(2)` returns; POSIX permits that and Linux documents that it does
-    /// not do it. `SocketServer::listen()` makes its listener non-blocking, so
-    /// without this every connection `tryAccept()` hands back on macOS/BSD
-    /// would be non-blocking too, and `clientLoop()`'s first read —
-    /// `performServerHandshake()` — threw on `EAGAIN` before the client's
-    /// Upgrade request had arrived. Every connection failed, and Linux-only CI
-    /// could not see it. Clearing it here rather than in `tryAccept()` covers
-    /// `accept()`, `connect()` and `listen()` by the same rule, and leaves one
-    /// place where the mode is decided.
+    /// not do it. Without this, every connection `tryAccept()` hands back from
+    /// a non-blocking listener on macOS/BSD would be non-blocking too, and a
+    /// blocking reader such as `performServerHandshake()` would throw on
+    /// `EAGAIN` before the client's Upgrade request had arrived. Clearing it
+    /// here rather than in `tryAccept()` covers `accept()`, `connect()` and
+    /// `listen()` by the same rule, and leaves one place where the mode is
+    /// decided.
     ///
     /// Best effort, like `applyNoSigPipe`: an fd whose flags cannot be read or
     /// written fails its first read anyway, which every caller already handles.
@@ -181,9 +181,9 @@ public:
             //
             // It also stays, rather than being replaced the way `std::strerror`
             // was, because it does not have `std::strerror`'s thread-safety
-            // defect. This throw site runs on threads this subsystem spawns
-            // (see `errnoMessage` below), so the question is live; what follows
-            // is measured rather than assumed.
+            // defect. This throw site can run on several threads at once (see
+            // `errnoMessage` below), so the question is live; what follows is
+            // measured rather than assumed.
             //
             // glibc 2.44, `gcc -O0`: `gai_strerror` returns a pointer to a
             // string literal inside libc's own read-only data, distinct per
@@ -302,11 +302,11 @@ public:
     /// *listening* socket unblocks a parked `accept()` on Linux, but that is a
     /// Linux property rather than a POSIX one — on macOS/BSD the parked thread
     /// stays parked. Anything that has to be able to stop waiting
-    /// must therefore not park here at all: use `setNonBlocking()` plus
-    /// `::poll` on `nativeHandle()` alongside a self-pipe, and take the
-    /// connection with `tryAccept()`. `SocketServer::acceptLoop()` is the
-    /// in-tree example. This blocking overload remains for callers that wait
-    /// for exactly one known-imminent connection (the socket-level tests).
+    /// must therefore not park here at all: use `setNonBlocking()` plus a
+    /// readiness wait, and take the connection with `tryAccept()` — or hand
+    /// the listener to an event loop, as `SocketServer` does. This blocking
+    /// overload remains for callers that wait for exactly one known-imminent
+    /// connection (the socket-level tests).
     /// @return The accepted `TcpSocket`.
     /// @throws std::runtime_error if `::accept` fails.
     TcpSocket accept() {
@@ -444,10 +444,9 @@ public:
     ///
     /// Without this a `sendAll` against a peer that has stopped reading blocks
     /// forever once the kernel send buffer fills, and it does so while holding
-    /// whatever lock its caller took -- which is how `~SocketBackend` becomes
-    /// parkable behind `_socketMtx`. With `SO_SNDTIMEO` set, the
-    /// blocked `send` returns `EAGAIN`/`EWOULDBLOCK` instead, `sendAll` throws
-    /// as it already does for any other send error, and the lock is released.
+    /// whatever lock its caller took. With `SO_SNDTIMEO` set, the blocked
+    /// `send` returns `EAGAIN`/`EWOULDBLOCK` instead, `sendAll` throws as it
+    /// already does for any other send error, and the lock is released.
     ///
     /// A timeout is not a "slow link" cutoff: it bounds one `send` syscall that
     /// is making *no* progress, so it should be set generously. Zero disables it
@@ -506,6 +505,13 @@ public:
     /// @return The native fd.
     [[nodiscard]] int nativeHandle() const noexcept { return _fd; }
 
+    /// @brief Gives up ownership of the descriptor without closing it.
+    ///
+    /// For handing a bound listener to something that adopts it, such as
+    /// `core::net::adoptListener`, which closes it from then on.
+    /// @return The descriptor (`-1` if empty); this socket is empty afterwards.
+    [[nodiscard]] int release() noexcept { return std::exchange(_fd, -1); }
+
     /// @brief Returns whether this socket owns an open file descriptor.
     /// @return `true` if `nativeHandle() >= 0`.
     [[nodiscard]] bool valid() const noexcept { return _fd >= 0; }
@@ -515,10 +521,8 @@ private:
     /// shared static buffer.
     ///
     /// Every throw site in this class formats its message on whichever thread
-    /// hit the error, and this subsystem spawns those threads itself:
-    /// `SocketServer` runs an accept loop thread plus one `clientLoop` thread
-    /// per accepted connection (each of which drives `recvSome`/`sendAll`), and
-    /// `SocketBackend` runs an I/O thread and a handler thread. Two of them can
+    /// hit the error, and sockets are driven from several threads at once — a
+    /// server loop and its clients' threads, in the tests. Two of them can
     /// therefore be inside a throw site at the same moment, and `std::strerror`
     /// is permitted to return a pointer to one buffer shared by all callers --
     /// a data race on the message, not merely an interleaved string.
@@ -530,9 +534,7 @@ private:
     /// values are `errno` values on POSIX, which is what every caller here
     /// passes. Preferred over `strerror_r` because that function's XSI and GNU
     /// variants differ in return type, so a portable call needs a build-time
-    /// discriminator and a caller-supplied buffer; this needs neither. Also
-    /// preferred over `std::strerror`, which is not thread-safe and this
-    /// subsystem calls it from threads it spawns.
+    /// discriminator and a caller-supplied buffer; this needs neither.
     static std::string errnoMessage(int err) { return std::system_category().message(err); }
 
     /// POSIX allows `EAGAIN` and `EWOULDBLOCK` to differ, and both name the

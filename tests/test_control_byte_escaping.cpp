@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+#include "test_support.hpp"
+
 namespace {
 
 // A function, not a namespace-scope object, matching test_wire_hardening.cpp's
@@ -107,7 +109,7 @@ TEST_CASE("FileOfflineQueue: a control byte in payload survives being written an
     std::filesystem::remove(path);
     std::string payload = ctl();
     {
-        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::FileOfflineQueue queue{morph::testing::storageOwner(), path};
         // A second, ordinary item after the control-byte one so the
         // control-byte line is NOT the trailing line — FileOfflineQueue
         // tolerates (skips) a malformed *trailing* line as a torn-write
@@ -120,7 +122,7 @@ TEST_CASE("FileOfflineQueue: a control byte in payload survives being written an
 
     std::vector<morph::offline::QueueItem> items;
     {
-        morph::offline::FileOfflineQueue reopened{path};
+        morph::offline::FileOfflineQueue const reopened{morph::testing::storageOwner(), path};
         items = reopened.drain();
     }  // close the file handle before removing -- required on Windows
     REQUIRE(items.size() == 2);

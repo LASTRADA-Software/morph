@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     }
 
     morph::qt::QtExecutor executor;
-    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::Bridge bridge{std::move(backend), executor};
 
     // The server installs a KanbanAuthorizer, so every envelope must carry a
     // signed session. Set once on the Bridge rather than per call: Bridge

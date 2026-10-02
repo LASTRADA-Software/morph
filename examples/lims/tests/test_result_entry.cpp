@@ -23,6 +23,7 @@
 #include "lims/models/sample_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -272,7 +273,7 @@ TEST_CASE("The four result states survive a journal line round trip", "[lims][re
     using Traits = morph::model::ActionTraits<lims::CaptureConcentration>;
     const auto states = allFourStates(lims::AnalysisVersionId{7});
 
-    morph::journal::InMemoryActionLog log;
+    morph::journal::InMemoryActionLog log{morph::ladder::testkit::storageOwner()};
     for (const auto& state : states) {
         morph::journal::LogEntry entry;
         entry.modelType = "SampleModel";
@@ -305,7 +306,7 @@ TEST_CASE("The four result states survive the offline queue's opaque payload", "
     // interprets — the same contract `SqliteOfflineQueue` implements durably
     // (which needs -DMORPH_BUILD_OFFLINE_SQLITE, off in this build). What is
     // under test here is the payload contract, not the storage medium.
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::ladder::testkit::storageOwner()};
     for (const auto& state : states) {
         static_cast<void>(queue.enqueue(Traits::toJson(state)));
     }
@@ -519,7 +520,7 @@ TEST_CASE("Re-capturing one analysis version replaces its answer, and the journa
           "[lims][result][audit]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
     model.attachActionLog(log, std::string{});
@@ -583,7 +584,7 @@ TEST_CASE("A result stays bound to the version it was captured under", "[lims][r
 
 TEST_CASE("Capturing with no principal is refused and journals nothing", "[lims][result][audit]") {
     DbFixture fixture;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
 

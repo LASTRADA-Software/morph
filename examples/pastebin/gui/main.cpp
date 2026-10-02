@@ -73,8 +73,7 @@ int main(int argc, char** argv) {
     }
 
     // Mirrors AppContext's own doc-comment construction pattern: pick the
-    // mode, then build every handler from inside onReady(). `Remote` mode
-    // builds its backend with `asyncRegistrationEnabled`, and
+    // mode, then build every handler from inside onReady().
     // `QtWebSocketBackend::bindModel()` queues a private bind issued before
     // the socket finishes connecting and sends it once the connection comes
     // up (`docs/spec/core/backend.md`, "The structural registration

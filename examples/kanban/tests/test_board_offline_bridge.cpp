@@ -365,7 +365,9 @@ TEST_CASE("BoardBridge's deadLetterCount property reflects dead-lettered moves",
     }
 
     CHECK(bridge.deadLetterCount() == 1);
-    CHECK(bridge.queueDepth() == 0);
+    // The run's own result, delivered on the bridge's executor after the
+    // dead-letter sink fired, is what reports the emptied queue.
+    CHECK(pumpUntil([&] { return bridge.queueDepth() == 0; }, 2000ms));
 }
 
 TEST_CASE("BoardBridge's offline queue/reconnect path emits the framework's own morph::observe metrics",

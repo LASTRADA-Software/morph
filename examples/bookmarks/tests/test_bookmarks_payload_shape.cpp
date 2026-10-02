@@ -49,6 +49,7 @@
 #include "bookmarks/models/bookmark_model.hpp"
 #include "bookmarks/models/tag_model.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using morph::ladder::testkit::DbFixture;
 using morph::model::payloadFingerprint;
@@ -183,7 +184,7 @@ TEST_CASE("replay() refuses a RenameTag entry stamped by a build whose id was a 
     const auto tags = tagModel.execute(bookmarks::ListTags{}).tags;
     REQUIRE(tags.size() == 1);
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     auto holder = morph::model::detail::defaultRegistry().create("TagModel");
     REQUIRE(holder != nullptr);
     holder->attachActionLog(log, std::string{});

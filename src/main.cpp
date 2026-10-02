@@ -73,12 +73,12 @@ int main() {
     morph::exec::MainThreadExecutor gui;
 
     {
-        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(clientPool)};
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(clientPool), gui};
         runScenario(bridge, gui, "morph::backend::LocalBackend");
     }
     {
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-        morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), gui};
         runScenario(bridge, gui, "morph::backend::SimulatedRemoteBackend");
     }
     return 0;

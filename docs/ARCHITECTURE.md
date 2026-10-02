@@ -300,7 +300,7 @@ morph::offline::NetworkMonitor monitor{
 
 `drain()` returning items without removing them is deliberate — items survive a crash between `drain()` and `markDone()`. A SQL-backed implementation can persist items across process restarts by storing them in a table with a UNIQUE constraint on the payload.
 
-`InMemoryOfflineQueue` implements the interface with a `std::deque` protected by a mutex. It does not deduplicate.
+`InMemoryOfflineQueue` implements the interface with a `std::deque` that belongs to the executor the queue is given at construction: its verbs run there, and a caller elsewhere posts its writes and asks its reads through completion overloads (see `docs/spec/offline/offline.md`, "One owner"). It does not deduplicate.
 
 ### Action log — ordered, coalescing, identity-aware execution history
 
@@ -310,7 +310,7 @@ morph::offline::NetworkMonitor monitor{
 
 **Set the sink once, in `main()` — every model uses it automatically.** `morph::journal::setActionLog(log)` installs a process-wide default. `ModelFactory::create<Model>()` — the factory behind every ordinary model registration, local *or* remote — attaches that default to each new instance automatically (empty `entityKey`). No per-model, per-handler, or per-backend wiring is required; `RemoteServer`-owned instances get it exactly the same way, since they're constructed through the same factory. `defaultActionLog()` reads the current sink back; `ScopedActionLog` (RAII, mirrors `morph::log::ScopedLoggerOverride`) installs one temporarily and restores the previous one on scope exit — the tool tests use it to avoid leaking a sink across test cases.
 
-Application code that needs a specific instance identity (e.g. per-account auditing) can still call `IModelHolder::attachActionLog(log, contextKey)` explicitly on that instance — an explicit call always overrides the default, and is the seam `HandlerBinding::contextKey`/`RemoteServer::setLogProvider` (below) build on for the remote case. Recording itself happens at the two call sites that are the *only* two places `Model::execute()` is ever invoked in the whole codebase:
+Application code that needs a specific instance identity (e.g. per-account auditing) can still call `IModelHolder::attachActionLog(log, contextKey)` explicitly on that instance — an explicit call always overrides the default, and is the seam `HandlerBinding::contextKey`/`RemoteServer::ServerConfig::logProvider` (below) build on for the remote case. Recording itself happens at the two call sites that are the *only* two places `Model::execute()` is ever invoked in the whole codebase:
 
 | Site | Topology | 
 |---|---|
@@ -327,7 +327,7 @@ Because these are mutually exclusive per topology, recording is automatically se
 
 **Replay/undo never records into the live default log.** `journal::replay()` builds the reconstructed holder through `ModelRegistryFactory::create`, which (like every factory-built model) auto-attaches the process-wide default action log. Before replaying, `replay()` immediately **detaches** it (`attachActionLog(nullptr, {})`), so re-running the recorded actions does not re-record each one into the live sink — which would corrupt the very audit trail being read from. The suppression is scoped to the replay pass only: once replay finishes, the reconstructed instance becomes the live model, and any new action executed on it goes through the normal dispatch path (with the log attached) and is recorded as a new entry appended after the surviving entries — e.g. journal `[A, B, C]`, undo `C`, execute `D` leaves `[A, B, D]`.
 
-**Remote-mode per-instance identity** (`RemoteServer::setLogProvider`) is the advanced escape hatch for when the global default isn't granular enough: `RemoteServer` owns the actual model instances behind any remote/simulated-remote client, so it is the only place able to attach a *different* log (or a specific `entityKey`) to a *specific* instance. `HandlerBinding::contextKey` (client-side) travels through the `register` wire envelope's `contextKey` field; if a `LogProvider` is installed, `RemoteServer` calls it with `(modelType, contextKey)` and attaches whatever `IActionLog` it returns (or nothing, if it returns `nullptr` or no `contextKey` was sent) before the instance ever executes an action — overriding whatever the global default would have attached.
+**Remote-mode per-instance identity** (`ServerConfig::logProvider`) is the advanced escape hatch for when the global default isn't granular enough: `RemoteServer` owns the actual model instances behind any remote/simulated-remote client, so it is the only place able to attach a *different* log (or a specific `entityKey`) to a *specific* instance. `HandlerBinding::contextKey` (client-side) travels through the `register` wire envelope's `contextKey` field; if a `LogProvider` is installed, `RemoteServer` calls it with `(modelType, contextKey)` and attaches whatever `IActionLog` it returns (or nothing, if it returns `nullptr` or no `contextKey` was sent) before the instance ever executes an action — overriding whatever the global default would have attached.
 
 **Transactional outbox (opt-in)**: a model that also owns its own durable store can avoid the log and the store's committed state silently diverging by writing its own outbox row inside its own transaction, calling `IModelHolder::setOutboxManaged(true)` to suppress the automatic append, and draining that outbox through a `journal::OutboxRelay` into the real sink — see `docs/spec/journal/journal.md`'s "Transactional outbox (opt-in)" section. `examples/bank` still demonstrates the un-opted-in two-independent-writes behavior this closes for models that adopt the pattern.
 
@@ -338,7 +338,7 @@ Because these are mutually exclusive per topology, recording is automatically se
 - Returns `true` → `markDone` called, item removed.
 - Returns `false` or throws → item left in queue for the next `run()`.
 - `stop()` signals the current `run()` to abort after the current item. Resets at the start of each `run()`, so it is one-shot.
-- Concurrent `run()` calls are serialised by an internal mutex.
+- A worker belongs to the executor it is given, which runs one task at a time (typically the coordinator's offline strand). `run()` drains there — at once when already on it, posted otherwise — and returns a `Completion<SyncResult>`, so two `run()`s never overlap.
 
 ### ReconnectCoordinator
 
@@ -348,9 +348,10 @@ order, when connectivity returns: `tryReconnect()` → `activatePrimary()` →
 callables — the class contains only the retry loop, the strict ordering
 guarantee (each step waits for the previous), and the abort checks
 (`shouldContinue()` is polled before each attempt and again before replay). It
-performs no I/O and owns no thread; `onOnline()` / `onOffline()` run
-synchronously on the calling thread and are mutually serialised by an internal
-mutex (mirroring `SyncWorker::run()`). `onOnline()` returns a `ReconnectOutcome`
+performs no I/O and owns no thread: it owns a strand over the executor it is
+given, and `onOnline()` / `onOffline()` post their bodies there, so they run one
+at a time in call order. `onOnline(replyExec)` returns a
+`Completion<ReconnectOutcome>` delivered on the caller's `replyExec`
 (`Reconnected` / `GaveUp` after `maxAttempts` / `Aborted`); retry tuning lives in
 `ReconnectCoordinatorConfig` (`maxAttempts`, `retryDelay`). `tryReconnect` and
 `shouldContinue` throwing are treated as a failed attempt / "do not continue"
@@ -648,7 +649,7 @@ folder.
 | `core/model.hpp` | `IModelHolder`, `ModelHolder<T>`, `ModelFactory`, `IBackendChangedSink`, `BackendChangedNotifiable` — type-erased model storage; `IModelHolder::attachActionLog`/`hasActionLog`/`recordIfAttached` (`morph::model::detail::`) |
 | `core/registry.hpp` | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` (public) + `ActionDispatcher` (also tracking each action's `coalesce` policy), `ModelRegistryFactory`, `defaultDispatcher()`, `defaultRegistry()`, `ParseError`, `registerModelOnce`, `registerActionOnce`, `actionLoggable<A>()` (detail). Registration macros `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION` (optional 4th `Loggable` argument), `BRIDGE_REGISTER_VALIDATOR` are defined here at file scope. |
 | `core/backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail), including the non-breaking `registerModelWithContext()` default method |
-| `core/remote.hpp` | `RemoteServer` (with `setLogProvider()`), `SimulatedRemoteBackend` (`morph::backend::`) |
+| `core/remote.hpp` | `RemoteServer` (configured by `ServerConfig`, incl. `logProvider`), `SimulatedRemoteBackend` (`morph::backend::`) |
 | `core/bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding` (carrying `contextKey`), `MemberPointerTraits` (detail) |
 | `core/wire.hpp` | `Envelope`, `encode`/`decode`, `kMaxEnvelopeBytes` (`morph::wire::`) — the JSON wire envelope and length-bounded framing between any client and `RemoteServer` |
 

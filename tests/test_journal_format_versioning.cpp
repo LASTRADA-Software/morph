@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
@@ -21,6 +22,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "test_support.hpp"
 
 using morph::journal::FileActionLog;
 using morph::journal::LogEntry;
@@ -129,7 +132,7 @@ TEST_CASE(
     "[journal][format][version][file]") {
     TempFile tmp{"version_trailing_future"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("M", "acct-1", "A", "{}", "1"));
         log.flush();
     }
@@ -140,7 +143,7 @@ TEST_CASE(
             << "}\n";
     }
 
-    FileActionLog log{tmp.path};
+    FileActionLog log{morph::testing::storageOwner(), tmp.path};
     auto all = log.entries();
     REQUIRE(all.size() == 1);
     REQUIRE(all[0].entityKey == "acct-1");
@@ -152,7 +155,7 @@ TEST_CASE(
     "[journal][format][version][file]") {
     TempFile tmp{"version_midfile_future"};
     {
-        FileActionLog log{tmp.path};
+        FileActionLog log{morph::testing::storageOwner(), tmp.path};
         log.append(makeEntry("M", "acct-1", "A", "{}", "1"));
         log.flush();
     }
@@ -170,7 +173,7 @@ TEST_CASE(
     // construction itself, not just from a later explicit entries() call. See
     // the identical pattern in test_action_log_phase2.cpp's own mid-file
     // corruption test.
-    REQUIRE_THROWS_AS(FileActionLog(tmp.path), morph::journal::SerializationError);
+    REQUIRE_THROWS_AS(FileActionLog(morph::testing::storageOwner(), tmp.path), morph::journal::SerializationError);
 }
 
 // ── FileActionLog::rotate() ─────────────────────────────────────────────────
@@ -196,7 +199,7 @@ TEST_CASE("FileActionLog::rotate: seals the active file, reopens a fresh empty o
     TempFile active{"rotate_basic_active"};
     TempFile sealed{"rotate_basic_sealed"};
 
-    FileActionLog log{active.path};
+    FileActionLog log{morph::testing::storageOwner(), active.path};
     log.append(makeEntry("M", "acct-1", "A", "{}", "1"));
     log.append(makeEntry("M", "acct-2", "A", "{}", "2"));
     log.flush();
@@ -211,7 +214,7 @@ TEST_CASE("FileActionLog::rotate: seals the active file, reopens a fresh empty o
     REQUIRE(activeEntries.size() == 1);
     REQUIRE(activeEntries[0].entityKey == "acct-3");
 
-    FileActionLog sealedReader{sealed.path};
+    FileActionLog sealedReader{morph::testing::storageOwner(), sealed.path};
     auto sealedEntries = sealedReader.entries();
     REQUIRE(sealedEntries.size() == 2);
     REQUIRE(sealedEntries[0].entityKey == "acct-1");
@@ -220,7 +223,7 @@ TEST_CASE("FileActionLog::rotate: seals the active file, reopens a fresh empty o
 
 TEST_CASE("FileActionLog::rotate: a failed rename leaves the log open and unrotated", "[journal][format][rotate]") {
     TempFile active{"rotate_fail_active"};
-    FileActionLog log{active.path};
+    FileActionLog log{morph::testing::storageOwner(), active.path};
     log.append(makeEntry("M", "e", "A", "{}", "1"));
     log.flush();
 
@@ -235,33 +238,43 @@ TEST_CASE("FileActionLog::rotate: a failed rename leaves the log open and unrota
     REQUIRE(log.entries().size() == 2);
 }
 
-TEST_CASE("FileActionLog::rotate: concurrent append during rotation is safe", "[journal][format][rotate]") {
+TEST_CASE("FileActionLog::rotate: appends from another thread during a rotation land whole in one segment",
+          "[journal][format][rotate]") {
     TempFile active{"rotate_concurrent_active"};
     TempFile sealed{"rotate_concurrent_sealed"};
-    FileActionLog log{active.path};
+    morph::exec::MainThreadExecutor owner;
+    FileActionLog log{owner, active.path};
 
+    // The appender is off the owner: each append is posted to it. This thread
+    // is the owner, and pumps it while the appender runs, rotating part way.
     constexpr int kAppends = 500;
-    std::atomic<int> appended{0};
+    std::atomic<int> posted{0};
     std::thread appender{[&] {
         for (int i = 0; i < kAppends; ++i) {
             log.append(makeEntry("M", "e", "A", "{}", std::to_string(i)));
-            ++appended;
+            ++posted;
         }
     }};
 
-    while (appended.load() < kAppends / 4) { /* let the appender get a head start */
+    int ran = 0;
+    while (ran < kAppends / 4) {
+        if (owner.runOnce()) {
+            ++ran;
+        }
     }
     log.rotate(sealed.path);
-
     appender.join();
+    owner.drain();
     log.flush();
 
-    FileActionLog sealedReader{sealed.path};
+    morph::exec::MainThreadExecutor readerOwner;
+    FileActionLog sealedReader{readerOwner, sealed.path};
     auto sealedCount = sealedReader.entries().size();
     auto activeCount = log.entries().size();
-    // Every append() call is fully guarded by the same mutex rotate() takes, so
-    // none can be torn by a concurrent rotate — each one lands entirely before
-    // or entirely after the rename, and the total is exactly kAppends either way.
+    // Every append and the rotation are tasks of one owner, so none is torn by
+    // the rename: each lands entirely before or entirely after it, and the
+    // total is exactly kAppends either way.
+    CHECK(sealedCount >= static_cast<std::size_t>(kAppends / 4));
     REQUIRE(sealedCount + activeCount == static_cast<std::size_t>(kAppends));
 }
 
@@ -281,20 +294,20 @@ TEST_CASE(
     // Baseline: three deposits in one never-rotated file.
     TempFile baseline{"rotate_replay_baseline"};
     {
-        FileActionLog log{baseline.path};
+        FileActionLog log{morph::testing::storageOwner(), baseline.path};
         log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(10)));
         log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(5)));
         log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(7)));
         log.flush();
     }
-    FileActionLog baselineLog{baseline.path};
+    FileActionLog baselineLog{morph::testing::storageOwner(), baseline.path};
     auto baselineHolder = morph::journal::replay("JV_Model", baselineLog.entries(), registry, dispatcher);
 
     // Same three deposits, rotated after the first two.
     TempFile active{"rotate_replay_active"};
     TempFile sealed{"rotate_replay_sealed"};
     {
-        FileActionLog log{active.path};
+        FileActionLog log{morph::testing::storageOwner(), active.path};
         log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(10)));
         log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(5)));
         log.flush();
@@ -302,8 +315,8 @@ TEST_CASE(
         log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(7)));
         log.flush();
     }
-    FileActionLog sealedLog{sealed.path};
-    FileActionLog activeLog{active.path};
+    FileActionLog sealedLog{morph::testing::storageOwner(), sealed.path};
+    FileActionLog activeLog{morph::testing::storageOwner(), active.path};
     auto combined = sealedLog.entries();  // oldest segment first
     auto tail = activeLog.entries();      // then the active file
     combined.insert(combined.end(), tail.begin(), tail.end());

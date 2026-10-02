@@ -182,6 +182,7 @@ void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor&
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an example CLI; an uncaught failure ends the process, which is the right outcome.
 int main() {
     const auto dbPath = std::filesystem::temp_directory_path() / "morph_bank_cli.db";
     std::error_code ec;
@@ -193,15 +194,17 @@ int main() {
     // records to it. No per-handler wiring needed; see morph::journal::setActionLog.
     const auto auditPath = std::filesystem::temp_directory_path() / "morph_bank_cli_audit.ndjson";
     std::filesystem::remove(auditPath, ec);
-    auto auditLog = std::make_shared<morph::journal::FileActionLog>(auditPath);
+    // The log belongs to `gui`, which this thread pumps: models append from
+    // their strands on the pools below, and every append runs here.
+    morph::exec::MainThreadExecutor gui;
+    auto auditLog = std::make_shared<morph::journal::FileActionLog>(gui, auditPath);
     morph::journal::setActionLog(auditLog);
 
     morph::exec::ThreadPoolExecutor workerPool{4};
-    morph::exec::MainThreadExecutor gui;
 
     // 1) Local backend: models run in this process on the worker pool.
     {
-        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool), gui};
         runScenario(bridge, gui, "LocalBackend", "demo-local");
     }
 
@@ -212,10 +215,11 @@ int main() {
     {
         morph::exec::ThreadPoolExecutor serverPool{4};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-        morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), gui};
         runScenario(bridge, gui, "SimulatedRemoteBackend", "demo-remote");
     }
 
+    gui.drain();  // run any append still queued behind the last reply
     auditLog->flush();
     std::println("\n========== Audit trail ({}) ==========", auditPath.string());
     for (const auto& entry : auditLog->entries()) {

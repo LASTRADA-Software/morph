@@ -383,7 +383,7 @@ inline int Iss10Model::execute(const Iss10Action& act) {
 
 TEST_CASE("Issue 10: in-flight execute after deregisterModel completes without crash", "[backend][issue10]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExec cbExec;
+    morph::exec::MainThreadExecutor cbExec;
     morph::backend::LocalBackend backend{pool};
 
     auto mid = backend.registerModel("ISS10_Model", morph::model::detail::ModelFactory::create<Iss10Model>);
@@ -406,31 +406,34 @@ TEST_CASE("Issue 10: in-flight execute after deregisterModel completes without c
         completed.store(true);
     });
 
-    REQUIRE(waitUntil([&] { return completed.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return completed.load(); }));
 }
 
 // ── Issue 12: morph::offline::SyncWorker — concurrent enqueue during run does not corrupt queue
 
 TEST_CASE("Issue 12: morph::offline::SyncWorker concurrent enqueue during run does not corrupt queue",
           "[sync][issue12]") {
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::inlineOwner()};  // the worker below drains it there
     (void)queue.enqueue("pre1");
     (void)queue.enqueue("pre2");
 
     std::atomic<bool> replayStarted{false};
 
-    morph::offline::SyncWorker worker{queue, [&](const std::string&) {
+    morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue, [&](const std::string&) {
                                           replayStarted.store(true);
                                           std::this_thread::sleep_for(30ms);
                                           return true;
                                       }};
 
+    // Off the queue's owner, so the enqueue is asked of it: it runs on the
+    // owner once the drain in progress there has finished.
     std::thread enqueuer{[&] {
         waitUntil([&] { return replayStarted.load(); });
-        (void)queue.enqueue("concurrent");
+        (void)morph::testing::awaitAnswer(
+            [&](morph::exec::IExecutor& reply) { return queue.enqueue(reply, "concurrent"); });
     }};
 
-    auto result = worker.run();
+    auto result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     enqueuer.join();
 
     REQUIRE(result.successful == 2);

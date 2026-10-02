@@ -36,10 +36,12 @@ App::App(std::filesystem::path actionLogPath, std::chrono::milliseconds sweepInt
     // Initialiser order follows the declaration order in app.hpp, which is
     // itself chosen for teardown safety — see that header's comment.
     : QObject{parent},
-      _actionLog{std::make_shared<::morph::journal::FileActionLog>(std::move(actionLogPath))},
+      // The log belongs to this App's thread: models append from their
+      // strands on `_pool`, and every append runs there, one at a time.
+      _actionLog{std::make_shared<::morph::journal::FileActionLog>(_sweepExecutor, std::move(actionLogPath))},
       _pool{workers},
       _server{std::make_shared<::morph::backend::RemoteServer>(_pool)},
-      _sweepBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server)} {
+      _sweepBridge{std::make_unique<::morph::backend::SimulatedRemoteBackend>(*_server), _sweepExecutor} {
     ::morph::journal::setActionLog(_actionLog);
     connect(&_sweepTimer, &QTimer::timeout, this, &App::sweepExpiredOnce);
     _sweepTimer.start(sweepInterval);

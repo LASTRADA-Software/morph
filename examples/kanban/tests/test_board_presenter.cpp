@@ -116,10 +116,9 @@ TEST_CASE(
     // The premise worth pinning: `openBoard()` fired immediately after construction
     // races the handler's registration and can fail fast with "handler not
     // bound". `OpenBoard` is payload-keyed (BRIDGE_MODEL_KEY, board_model.hpp)
-    // so `BridgeHandler::execute()` routes it through `Bridge::attachHandlerAsync`
-    // (bridge.hpp), which the type's own doc comment says never throws "handler
-    // not bound" out of `execute()` -- it waits for the attach round trip and
-    // dispatches from inside that completion. `FaultProxy::delayReply` stalls
+    // so `BridgeHandler::execute()` routes it through `Bridge::executeAttachedVia`
+    // (bridge.hpp), which never throws "handler not bound" out of `execute()`
+    // -- it waits for the attach round trip and dispatches when it settles. `FaultProxy::delayReply` stalls
     // the attach reply itself, the most adversarial timing this rung's own
     // transport can produce, to check that promise rather than assume it.
     DbFixture fixture;
@@ -136,7 +135,7 @@ TEST_CASE(
         proxyUrl, std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
     REQUIRE(clientBackend->waitForConnected());
     ::morph::qt::QtExecutor qtExec;
-    ::morph::bridge::Bridge bridge{std::move(clientBackend)};
+    ::morph::bridge::Bridge bridge{std::move(clientBackend), qtExec};
     bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
     // Stall the very first request this bridge makes -- OpenBoard's own

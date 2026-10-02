@@ -17,6 +17,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <future>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -63,12 +64,13 @@ using SyncExec = morph::testing::InlineExecutor;
 TEST_CASE("Integration: offline queue replayed and backend switched on network recovery", "[integration]") {
     morph::exec::ThreadPoolExecutor localPool{2};
     morph::exec::ThreadPoolExecutor remotePool{2};
-    SyncExec cbExec;
-    morph::offline::InMemoryOfflineQueue queue;
+    morph::exec::MainThreadExecutor owner;
+    // The queue belongs to the strand the SyncWorker below drains on.
+    morph::offline::InMemoryOfflineQueue queue{morph::testing::inlineOwner()};
 
     // Start in local (offline) mode.
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool)};
-    morph::bridge::BridgeHandler<OffModel> handler{bridge, &cbExec};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool), owner};
+    morph::bridge::BridgeHandler<OffModel> handler{bridge, &owner};
 
     // Enqueue payloads that were written while offline.
     (void)queue.enqueue("{\"x\":1}");
@@ -81,7 +83,7 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     std::vector<std::string> replayed;
     std::mutex replayMtx;
 
-    morph::offline::SyncWorker syncWorker{queue, [&](const std::string& payload) {
+    morph::offline::SyncWorker syncWorker{morph::testing::inlineOwner(), queue, [&](const std::string& payload) {
                                               std::scoped_lock lock{replayMtx};
                                               replayed.push_back(payload);
                                               return true;
@@ -94,16 +96,15 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
     morph::offline::NetworkMonitor monitor{
         [&] { return networkOnline.load(); }, [] {},  // onOffline — not exercised here
         [&] {
-            // onOnline fires on the probe thread — replay then switch backend.
-            // `backendSwitched` is set only *after* switchBackend returns, so a
-            // waiter never observes "queue replayed" as a stand-in for "backend
-            // switched": the two used to be conflated by relying on the fixed
-            // 150ms sleep that preceded this test's waitUntil migration to have
-            // given switchBackend() enough slack to finish too, which held in
-            // practice but was never actually waited for.
-            syncWorker.run();
-            bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
-            backendSwitched.store(true);
+            // onOnline fires on the I/O loop: replay there, then ask the
+            // bridge's owner to switch. `backendSwitched` is set only after
+            // switchBackend returns. The worker's owner runs on the calling
+            // thread, so the drain has run when run() returns.
+            (void)syncWorker.run(morph::testing::inlineOwner());
+            owner.post([&] {
+                bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
+                backendSwitched.store(true);
+            });
         },
         morph::offline::NetworkMonitor::Config{.probeInterval = 30ms, .failureThreshold = 1, .onlineThreshold = 1}};
 
@@ -122,15 +123,18 @@ TEST_CASE("Integration: offline queue replayed and backend switched on network r
         const std::scoped_lock lock{replayMtx};
         REQUIRE(replayed.size() == 3);
     }
-    REQUIRE(queue.drain().empty());
+    // Read on the queue's strand, so it runs after the replay's last markDone
+    // rather than beside it: the replay is still finishing on the monitor's thread.
+    std::promise<std::size_t> pending;
+    morph::testing::inlineOwner().post([&] { pending.set_value(queue.drain().size()); });
+    REQUIRE(pending.get_future().get() == 0);
 
-    // Wait for the backend switch itself, not just the replay that precedes it
-    // in the same callback -- see the comment on `backendSwitched` above.
-    REQUIRE(morph::testing::waitUntil([&] { return backendSwitched.load(); }));
+    // Wait for the backend switch itself, which runs on the owner this test pumps.
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return backendSwitched.load(); }));
 
     // morph::bridge::Bridge now routes to remotePool — execute still works.
     std::atomic<int> result{-1};
     handler.execute(OffAction{5}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {});
-    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return result.load() != -1; }));
     REQUIRE(result.load() == 50);
 }

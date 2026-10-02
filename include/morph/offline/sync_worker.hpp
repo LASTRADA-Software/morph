@@ -5,11 +5,15 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
-#include <mutex>
+#include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "../attributes.hpp"
+#include "../core/completion.hpp"
+#include "../core/detail/owner_probe.hpp"
+#include "../core/executor.hpp"
 #include "../core/logger.hpp"
 #include "../core/observability.hpp"
 #include "offline_queue.hpp"
@@ -118,9 +122,19 @@ struct SyncResult {
 /// - Throw → treated as `Rejected`. A throw reports failure but not delivery,
 ///           and an unknown failure has to be charged for the same reason.
 ///
-/// @par Thread safety
-/// `run()` is safe to call from any thread. Concurrent calls are serialised
-/// by an internal mutex — the second caller blocks until the first `run()` completes.
+/// @par One owner
+/// A worker belongs to the executor it is given, which must run one task at a
+/// time: the coordinator's offline strand (`ReconnectCoordinator::strand()`),
+/// or any other strand. Its queue drain, attempt counts and dead-lettering run
+/// only in that owner's tasks. `run()` is callable from any thread: on the
+/// owner it drains at once; elsewhere it posts the drain to the owner, so two
+/// runs never overlap. Its answer is delivered on the executor the caller
+/// names, so a caller attaches to it where it already runs. `stop()` is the
+/// one cross-thread signal, an atomic.
+///
+/// The drain calls the queue's synchronous verbs, which answer only on the
+/// queue's own owner (see `IOfflineQueue`, "One owner"): give the queue the
+/// worker's owner, or the executor that strand runs over.
 class SyncWorker {
 public:
     /// @brief Callable that attempts to replay a single queued item, reporting
@@ -150,9 +164,14 @@ public:
     /// sink is caught and logged — the item is still removed.
     using DeadLetterSink = std::function<void(const QueueItem& poisoned)>;
 
-    /// @brief Constructs a worker that drains @p queue using @p replay.
-    /// @param queue          Queue to drain on each `run()` call. Borrowed, not
-    ///                       owned: it must outlive this worker.
+    /// @brief Constructs a worker that drains @p queue using @p replay, on
+    ///        @p owner.
+    /// @param owner          The executor every drain runs on; must run one task
+    ///                       at a time (a strand). Borrowed: it must outlive this
+    ///                       worker and keep running tasks until it is destroyed.
+    /// @param queue          Queue to drain on each `run()` call, belonging to
+    ///                       @p owner (or to the executor it runs over).
+    ///                       Borrowed, not owned: it must outlive this worker.
     /// @param replay         Function called for each pending item. Stored and
     ///                       invoked for this worker's whole lifetime, so
     ///                       anything the callable refers to must outlive it.
@@ -160,9 +179,9 @@ public:
     ///                       instead of the default log-and-drop path when an
     ///                       item exhausts its retry budget. Default: unset.
     ///                       Retained on the same terms as @p replay.
-    SyncWorker(IOfflineQueue& queue MORPH_LIFETIMEBOUND, ReplayFunction replay MORPH_LIFETIMEBOUND,
-               DeadLetterSink deadLetterSink MORPH_LIFETIMEBOUND = nullptr)
-        : SyncWorker{queue,
+    SyncWorker(::morph::exec::IExecutor& owner MORPH_LIFETIMEBOUND, IOfflineQueue& queue MORPH_LIFETIMEBOUND,
+               ReplayFunction replay MORPH_LIFETIMEBOUND, DeadLetterSink deadLetterSink MORPH_LIFETIMEBOUND = nullptr)
+        : SyncWorker{owner, queue,
                      [replay = std::move(replay)](const std::string& payload) {
                          return replay(payload) ? ReplayOutcome::Succeeded : ReplayOutcome::Rejected;
                      },
@@ -179,8 +198,12 @@ public:
     /// The two overloads are unambiguous: `ReplayOutcome` is a scoped enum, so
     /// neither return type implicitly converts to the other.
     ///
-    /// @param queue          Queue to drain on each `run()` call. Borrowed, not
-    ///                       owned: it must outlive this worker.
+    /// @param owner          The executor every drain runs on; must run one task
+    ///                       at a time (a strand). Borrowed: it must outlive this
+    ///                       worker and keep running tasks until it is destroyed.
+    /// @param queue          Queue to drain on each `run()` call, belonging to
+    ///                       @p owner (or to the executor it runs over).
+    ///                       Borrowed, not owned: it must outlive this worker.
     /// @param replay         Function called for each pending item. Stored and
     ///                       invoked for this worker's whole lifetime, so
     ///                       anything the callable refers to must outlive it.
@@ -188,21 +211,55 @@ public:
     ///                       instead of the default log-and-drop path when an
     ///                       item exhausts its retry budget. Default: unset.
     ///                       Retained on the same terms as @p replay.
-    SyncWorker(IOfflineQueue& queue MORPH_LIFETIMEBOUND, DetailedReplayFunction replay MORPH_LIFETIMEBOUND,
+    SyncWorker(::morph::exec::IExecutor& owner MORPH_LIFETIMEBOUND, IOfflineQueue& queue MORPH_LIFETIMEBOUND,
+               DetailedReplayFunction replay MORPH_LIFETIMEBOUND,
                DeadLetterSink deadLetterSink MORPH_LIFETIMEBOUND = nullptr)
-        : _queue{queue}, _replay{std::move(replay)}, _deadLetterSink{std::move(deadLetterSink)} {}
+        : _owner{owner}, _queue{queue}, _replay{std::move(replay)}, _deadLetterSink{std::move(deadLetterSink)} {}
 
-    /// @brief Drains the queue, replaying each item via the replay function.
+    /// @brief Drains the queue, replaying each item via the replay function,
+    ///        on the owner.
     ///
-    /// Concurrent calls are serialised. The call blocks until all pending items
-    /// have been processed or `stop()` is signalled.
+    /// On the owner the drain runs before this returns; from any other thread
+    /// it is posted there, after any drain posted before it. It processes every
+    /// pending item, or stops early once `stop()` is signalled.
     ///
-    /// If `stop()` was called before `run()` acquired the lock, `run()` returns
-    /// immediately with an empty result and resets the stop flag.
+    /// If `stop()` was called before the drain starts, the drain does nothing,
+    /// resets the stop flag and answers an empty result.
     ///
+    /// A posted drain refers to this worker, so the worker must outlive every
+    /// drain it has posted: destroy it once every `run()` has settled, or
+    /// after its owner is closed.
+    ///
+    /// @param replyExec Executor the answer is delivered on and the caller
+    ///        attaches its callbacks on: the caller's own. Borrowed: it must
+    ///        outlive the returned `Completion`.
+    /// @return A `Completion` settled on the owner with the counts of
+    ///         successful / failed / dead-lettered replays, delivered on
+    ///         @p replyExec.
+    ::morph::async::Completion<SyncResult> run(::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND) {
+        auto settleable = ::morph::async::Completion<SyncResult>::makeSettleable(&replyExec);
+        if (::morph::exec::runningOn(_owner)) {
+            settleable.second.resolve(drainHere());
+            return std::move(settleable.first);
+        }
+        _owner.post([this, promise = std::make_shared<::morph::async::Completion<SyncResult>::Promise>(
+                               std::move(settleable.second))] { promise->resolve(drainHere()); });
+        return std::move(settleable.first);
+    }
+
+    /// @brief Signals an in-progress drain to stop after the current item.
+    ///
+    /// Callable from any thread. The drain clears the flag at its start, so
+    /// stopping is one-shot — but a `stop()` that lands *during* a drain leaves
+    /// the flag set on return, so the next drain takes its early-out and drains
+    /// nothing; work resumes only on the drain after that.
+    void stop() { _stopped.store(true); }
+
+private:
+    /// @brief The drain itself. On the owner.
     /// @return Counts of successful / failed / dead-lettered replays.
-    SyncResult run() {
-        std::scoped_lock const runLock{_runMtx};
+    SyncResult drainHere() {
+        ::morph::exec::detail::noteOwner("SyncWorker::run", _owner.coreExecutor(), ::morph::exec::runningOn(_owner));
         bool const wasStoppedBeforeRun = _stopped.exchange(false);
         SyncResult result;
         if (wasStoppedBeforeRun) {
@@ -274,25 +331,16 @@ public:
         return result;
     }
 
-    /// @brief Signals an in-progress `run()` to stop after the current item.
-    ///
-    /// Thread-safe. `run()` clears the flag at its start, so stopping is
-    /// one-shot — but note a `stop()` that lands *during* a run leaves the flag
-    /// set on return, so the next `run()` takes its early-out and drains
-    /// nothing; work resumes only on the run after that.
-    void stop() { _stopped.store(true); }
-
-private:
     /// @brief Cap on per-item cumulative retry attempts. Intentionally
     ///        hard-coded — see class docs.
     static constexpr uint32_t kMaxAttempts = 5;
 
+    ::morph::exec::IExecutor& _owner;
     IOfflineQueue& _queue;
     // Always the three-outcome form: the boolean constructor adapts into it, so
     // `run()` has exactly one contract to implement rather than two.
     DetailedReplayFunction _replay;
     DeadLetterSink _deadLetterSink;
-    std::mutex _runMtx;
     std::atomic<bool> _stopped{false};
     std::unordered_map<uint64_t, uint32_t> _attempts;
 };

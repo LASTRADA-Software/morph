@@ -48,6 +48,7 @@
 #pragma GCC diagnostic pop
 #endif
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 #ifdef MORPH_LADDER_HAVE_OFFLINE_SQLITE
 #include <filesystem>
@@ -140,7 +141,7 @@ TEST_CASE("A field outbox stamps each update with the version it was prepared ag
     const ScopedPrincipal alice{"alice"};
     Deal deal;
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox outbox{queue, "fiona"};
     outbox.observe(deal.opportunity);
 
@@ -171,7 +172,7 @@ TEST_CASE("A client's second offline edit chains onto its own first, not onto se
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox outbox{queue, "fiona"};
     outbox.observe(deal.opportunity);
 
@@ -203,7 +204,7 @@ TEST_CASE("A client that does not chain flags its own second edit as a conflict"
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
 
     // The bug ODK hit, reproduced deliberately: stamp both edits with the
     // version the server last reported, because the client did not model its
@@ -242,8 +243,8 @@ TEST_CASE("Two field reps, one opportunity: reconnect flags exactly the stale-ba
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
     // Two devices, two operators, two queues — both last saw the same version.
-    auto fionaQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
-    auto gerardQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto fionaQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
+    auto gerardQueue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox fiona{fionaQueue, "fiona"};
     crm::offline::FieldOutbox gerard{gerardQueue, "gerard"};
     fiona.observe(deal.opportunity);
@@ -288,7 +289,7 @@ TEST_CASE("Discarding a conflict closes it and leaves the server's value standin
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox gerard{queue, "gerard"};
     gerard.observe(deal.opportunity);
     gerard.enqueue(deal.opportunity.id, accountChoice, crm::PrimaryContactChoice{}, "Gerard's edit", usd(999900));
@@ -333,7 +334,7 @@ TEST_CASE("Applying a conflict anyway rebases it onto the current version", "[cr
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox gerard{queue, "gerard"};
     gerard.observe(deal.opportunity);
     gerard.enqueue(deal.opportunity.id, accountChoice, crm::PrimaryContactChoice{}, "Gerard's edit", usd(999900));
@@ -384,7 +385,7 @@ TEST_CASE("A queued update may only be replayed by the operator who captured it"
     DbFixture fixture;
     crm::OpportunityId opportunityId;
     crm::QueuedOpportunityUpdate queued;
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     {
         const ScopedPrincipal alice{"alice"};
         Deal deal;
@@ -419,7 +420,7 @@ TEST_CASE("Redelivering an operation is skipped, not applied twice", "[crm][offl
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(deal.opportunity);
     const auto queued =
@@ -450,7 +451,7 @@ TEST_CASE("An apply whose op-key record is lost is rolled back, not left half-ap
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(deal.opportunity);
     const auto queued =
@@ -491,7 +492,7 @@ TEST_CASE("A conflict is decided once: redelivering it does not raise a second f
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox gerard{queue, "gerard"};
     gerard.observe(deal.opportunity);
     const auto queued =
@@ -523,7 +524,7 @@ TEST_CASE("An update for an opportunity that closed meanwhile is flagged, with t
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     crm::offline::FieldOutbox fiona{queue, "fiona"};
     fiona.observe(deal.opportunity);
     fiona.enqueue(deal.opportunity.id, accountChoice, crm::PrimaryContactChoice{}, "Fiona's edit", usd(100000));
@@ -551,8 +552,8 @@ TEST_CASE("An undecodable queued payload is journaled and dropped, never left to
     Deal deal;
     const auto accountChoice = crm::OpportunityAccountChoice{std::to_string(*deal.accountId)};
 
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
-    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>();
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
     (void)queue->enqueue("{ this is not json");
 
     crm::offline::FieldOutbox fiona{queue, "fiona"};
@@ -645,8 +646,10 @@ TEST_CASE("The definition-of-done flow holds on the durable queue, across a rest
     {
         // Out in the field: two devices queue against the same version, then
         // both are switched off (the queue objects go out of scope).
-        auto fionaQueue = std::make_shared<morph::offline::SqliteOfflineQueue>(fionaPath);
-        auto gerardQueue = std::make_shared<morph::offline::SqliteOfflineQueue>(gerardPath);
+        auto fionaQueue =
+            std::make_shared<morph::offline::SqliteOfflineQueue>(morph::ladder::testkit::storageOwner(), fionaPath);
+        auto gerardQueue =
+            std::make_shared<morph::offline::SqliteOfflineQueue>(morph::ladder::testkit::storageOwner(), gerardPath);
         crm::offline::FieldOutbox fiona{fionaQueue, "fiona"};
         crm::offline::FieldOutbox gerard{gerardQueue, "gerard"};
         fiona.observe(deal.opportunity);
@@ -658,8 +661,10 @@ TEST_CASE("The definition-of-done flow holds on the durable queue, across a rest
     }
 
     // Back at the office, fresh queue objects over the same files.
-    auto fionaQueue = std::make_shared<morph::offline::SqliteOfflineQueue>(fionaPath);
-    auto gerardQueue = std::make_shared<morph::offline::SqliteOfflineQueue>(gerardPath);
+    auto fionaQueue =
+        std::make_shared<morph::offline::SqliteOfflineQueue>(morph::ladder::testkit::storageOwner(), fionaPath);
+    auto gerardQueue =
+        std::make_shared<morph::offline::SqliteOfflineQueue>(morph::ladder::testkit::storageOwner(), gerardPath);
     REQUIRE(fionaQueue->size() == 1);
     REQUIRE(gerardQueue->size() == 1);
 

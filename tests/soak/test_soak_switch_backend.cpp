@@ -113,9 +113,9 @@ TEST_CASE("soak: switchBackend churn between LocalBackend and SimulatedRemoteBac
 
     morph::exec::ThreadPoolExecutor poolLocal{2};
     morph::exec::ThreadPoolExecutor poolRemote{2};
-    morph::testing::InlineExecutor cbExec;
+    morph::exec::MainThreadExecutor cbExec;
 
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolLocal)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolLocal), cbExec};
     morph::bridge::BridgeHandler<SoakModel> handler{bridge, &cbExec};
 
     std::atomic<uint64_t> issued{0};
@@ -160,14 +160,15 @@ TEST_CASE("soak: switchBackend churn between LocalBackend and SimulatedRemoteBac
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(poolLocal));
     currentServer.reset();
 
-    REQUIRE(morph::testing::waitUntil([&] { return resolved.load() == issued.load(); },
-                                      morph::testing::WaitBudget{std::chrono::milliseconds(20000)}));
+    REQUIRE(morph::testing::pumpOwnerUntil(
+        cbExec, [&] { return resolved.load() == issued.load(); },
+        morph::testing::WaitBudget{std::chrono::milliseconds(20000)}));
     REQUIRE(resolved.load() == issued.load());
 
     // No more than a couple of model instances should ever be alive at once
     // (the outgoing and incoming backend's models briefly overlap during a
     // switch); once every completion has resolved every backend has settled.
-    REQUIRE(morph::testing::waitUntil([&] { return gSoakLiveInstances.load() <= 2; }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return gSoakLiveInstances.load() <= 2; }));
     CHECK(gSoakLiveInstances.load() <= 2);
 
     if (rssSamplesKb.size() >= 4) {

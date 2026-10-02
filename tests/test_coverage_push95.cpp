@@ -26,6 +26,7 @@
 #include <string>
 #include <thread>
 
+#include "bind_support.hpp"
 #include "test_support.hpp"
 
 using namespace std::chrono_literals;
@@ -75,7 +76,9 @@ struct ControllableBackend : ::morph::backend::detail::IBackend {
     }
     void notifyBackendChanged() override {}
     void cancelPending(const std::exception_ptr& /*exc*/) override {}
-    void setReconnectHandler(const std::function<void()>& handler) override { reconnect = std::move(handler); }
+    void setReconnectHandler(std::function<void()> handler, ::morph::exec::IExecutor* /*exec*/) override {
+        reconnect = std::move(handler);
+    }
 };
 
 // A denying authorizer for the RemoteServer unauthorized path.
@@ -100,12 +103,13 @@ std::shared_ptr<::morph::bridge::detail::HandlerBinding> makeBinding() {
 TEST_CASE("morph::bridge::Bridge: reconnect handler re-registers live bindings and skips expired ones",
           "[coverage][bridge]") {
     // Firing the reconnect handler while its backend is still active drives the
-    // "proceed" path: pinned != nullptr and pinned == loadBackend() (both false
+    // "proceed" path: pinned != nullptr and pinned == the active backend (both false
     // arms of 293), the handler loop (296), and both arms of `!binding` (298) —
     // a live binding (false arm) plus an expired weak_ptr (true arm / continue).
     auto backend = std::make_unique<ControllableBackend>();
     auto* raw = backend.get();
-    ::morph::bridge::Bridge bridge{std::move(backend)};
+    morph::testing::InlineExecutor bridgeOwner;
+    ::morph::bridge::Bridge bridge{std::move(backend), bridgeOwner};
 
     auto live = makeBinding();
     bridge.registerHandler(live);
@@ -133,7 +137,8 @@ TEST_CASE("morph::bridge::Bridge: reconnect handler from a superseded backend is
     // lambda captures the still-alive Bridge, not backend A.
     auto backendA = std::make_unique<ControllableBackend>();
     auto* rawA = backendA.get();
-    ::morph::bridge::Bridge bridge{std::move(backendA)};
+    morph::testing::InlineExecutor bridgeOwner;
+    ::morph::bridge::Bridge bridge{std::move(backendA), bridgeOwner};
 
     std::function<void()> stale = rawA->reconnect;
     REQUIRE(stale);
@@ -146,7 +151,8 @@ TEST_CASE("morph::bridge::Bridge: reconnect handler from a superseded backend is
 
 TEST_CASE("morph::bridge::Bridge: setDefaultSession / defaultSession round-trip", "[coverage][bridge]") {
     ::morph::exec::ThreadPoolExecutor pool{1};
-    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
+    morph::testing::InlineExecutor bridgeOwner;
+    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool), bridgeOwner};
 
     ::morph::session::Context ctx;
     ctx.principal = "alice";
@@ -160,10 +166,11 @@ TEST_CASE("morph::bridge::Bridge: setDefaultSession / defaultSession round-trip"
 // ── bridge.hpp:91-95,283-285 — a null initial backend is tolerated ───────────
 
 TEST_CASE("morph::bridge::Bridge: constructed with a null backend and destroyed", "[coverage][bridge]") {
-    // installReconnectHandler sees a null backend and returns early (283-285);
-    // the destructor's `if (auto active = loadBackend())` takes its null/false
-    // arm (92) because the backend is still null at destruction.
-    REQUIRE_NOTHROW([] { ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}}; }());
+    // A null backend is tolerated at construction and at destruction.
+    morph::testing::InlineExecutor bridgeOwner;
+    REQUIRE_NOTHROW([&bridgeOwner] {
+        ::morph::bridge::Bridge const bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}, bridgeOwner};
+    }());
 }
 
 // ── bridge.hpp:184,190 — switchBackend from a null backend ───────────────────
@@ -174,7 +181,8 @@ TEST_CASE("morph::bridge::Bridge: switchBackend from a null backend skips the pr
     // `if (previous && previous != newShared)` guards (184, 190) take their false
     // arm and the old-backend teardown is skipped.
     ::morph::exec::ThreadPoolExecutor pool{1};
-    ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}};
+    morph::testing::InlineExecutor bridgeOwner;
+    ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}, bridgeOwner};
     REQUIRE_NOTHROW(bridge.switchBackend(std::make_unique<::morph::backend::LocalBackend>(pool)));
 }
 
@@ -186,7 +194,7 @@ TEST_CASE("morph::bridge::Bridge: executeVia on an unregistered binding fails wi
     // hits the `if (raw == 0U)` branch (239 true arm) and resolves with an error.
     ::morph::exec::ThreadPoolExecutor pool{1};
     SyncExecutor cbExec;
-    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
+    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool), cbExec};
 
     auto unbound = std::make_shared<::morph::bridge::detail::HandlerBinding>();
     auto comp = bridge.executeVia<P95Model, P95Action>(unbound, P95Action{5}, &cbExec);
@@ -330,7 +338,7 @@ EmptyThrowEnv& emptyThrowEnv() {
 TEST_CASE("morph::backend::SimulatedRemoteBackend: empty err message surfaces as \"malformed reply\"",
           "[coverage][remote]") {
     ::morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cb;
+    morph::exec::MainThreadExecutor cb;
     auto& env = emptyThrowEnv();
     auto server = std::make_shared<::morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     ::morph::backend::SimulatedRemoteBackend backend{*server};
@@ -356,7 +364,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: empty err message surfaces as
         }
         errored.store(true);
     });
-    REQUIRE(waitFor([&] { return errored.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cb, [&] { return errored.load(); }));
     REQUIRE(message == "malformed reply");
 
     backend.deregisterModel(mid);
@@ -367,7 +375,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: empty err message surfaces as
 TEST_CASE("morph::backend::SimulatedRemoteBackend: cancelPending tolerates an expired pending state",
           "[coverage][remote]") {
     ::morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cb;
+    morph::exec::MainThreadExecutor cb;
     auto& env = emptyThrowEnv();
     auto server = std::make_shared<::morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
     ::morph::backend::SimulatedRemoteBackend backend{*server};
@@ -386,7 +394,7 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: cancelPending tolerates an ex
         // Wait for the reply lambda to run so it releases its ref to the state.
         std::atomic<bool> done{false};
         comp.onError([&](const std::exception_ptr&) { done.store(true); });
-        REQUIRE(waitFor([&] { return done.load(); }));
+        REQUIRE(morph::testing::pumpOwnerUntil(cb, [&] { return done.load(); }));
         // `comp` (last owner of the state) is dropped at end of this scope.
     }
     // The tracked weak_ptr is now expired → cancelPending's `if (state = weak.lock())`
@@ -458,7 +466,7 @@ TEST_CASE("morph::offline::ReconnectCoordinator: null Deps member is logged at c
     deps.replay = [] {};
     deps.shouldContinue = [] { return true; };
     // deps.sleep intentionally left null → assertDepsNonNull logs it (162 true arm).
-    ::morph::offline::ReconnectCoordinator coordinator{std::move(deps)};
+    ::morph::offline::ReconnectCoordinator const coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
     (void)coordinator;
 
     REQUIRE(sawNull.load());
@@ -479,8 +487,10 @@ TEST_CASE("morph::offline::ReconnectCoordinator: onOnline reconnects and shouldC
         deps.replay = [&] { replayed.fetch_add(1); };
         deps.shouldContinue = [] { return true; };
         deps.sleep = [](std::chrono::milliseconds) {};
-        ::morph::offline::ReconnectCoordinator coordinator{std::move(deps)};
-        REQUIRE(coordinator.onOnline() == ::morph::offline::ReconnectOutcome::Reconnected);
+        ::morph::offline::ReconnectCoordinator coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
+        REQUIRE(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) {
+                    return coordinator.onOnline(reply);
+                }) == ::morph::offline::ReconnectOutcome::Reconnected);
         REQUIRE(replayed.load() == 1);
     }
 
@@ -494,8 +504,10 @@ TEST_CASE("morph::offline::ReconnectCoordinator: onOnline reconnects and shouldC
         deps.replay = [] {};
         deps.shouldContinue = []() -> bool { throw std::runtime_error("boom"); };
         deps.sleep = [](std::chrono::milliseconds) {};
-        ::morph::offline::ReconnectCoordinator coordinator{std::move(deps)};
-        REQUIRE(coordinator.onOnline() == ::morph::offline::ReconnectOutcome::Aborted);
+        ::morph::offline::ReconnectCoordinator coordinator{std::move(deps), ::morph::exec::detail::inlineExecutor()};
+        REQUIRE(morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) {
+                    return coordinator.onOnline(reply);
+                }) == ::morph::offline::ReconnectOutcome::Aborted);
     }
 }
 
@@ -505,20 +517,21 @@ TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAtte
     // Silence the "dropping payload" error log.
     LogGuard const guard{[](::morph::log::LogLevel, std::string_view) {}};
 
-    ::morph::offline::InMemoryOfflineQueue queue;
+    ::morph::offline::InMemoryOfflineQueue queue{morph::testing::inlineOwner()};  // the worker below drains it there
     (void)queue.enqueue("always-fails");
-    ::morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
+    ::morph::offline::SyncWorker worker{morph::testing::inlineOwner(), queue,
+                                        [](const std::string&) { return false; }};
 
     // kMaxAttempts is 5. Attempts 1-4 keep the item (failed); the 5th trips the
     // `counter >= kMaxAttempts` branch (132 true arm, no DeadLetterSink set) and
     // dead-letters it via the default log-and-drop path.
     ::morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
-        result = worker.run();
+        result = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     }
     REQUIRE(result.deadLettered == 1);
     // Item is gone now, so a further run does nothing.
-    auto after = worker.run();
+    auto after = morph::testing::awaitAnswer([&](morph::exec::IExecutor& reply) { return worker.run(reply); });
     REQUIRE(after.failed == 0);
     REQUIRE(after.deadLettered == 0);
 }
@@ -574,7 +587,6 @@ TEST_CASE(
     // fresh shared registration under that key gets its own new id, not
     // mid's -- if assignPrimary's guard had been bypassed, this would instead
     // reach mid.
-    auto attached = backend.registerModelShared("Cov_EmptyThrowModel", {},
-                                                ::morph::backend::detail::InstanceIdentity{.primary = "some-key"});
+    auto attached = morph::testing::bindShared(backend, "Cov_EmptyThrowModel", {}, "some-key");
     REQUIRE(attached.v != mid.v);
 }

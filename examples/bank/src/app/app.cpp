@@ -14,7 +14,7 @@
 namespace bank::app {
 
 App::App(const std::string& connectionString, std::size_t workers)
-    : _pool{workers}, _bridge{std::make_unique<morph::backend::LocalBackend>(_pool)} {
+    : _pool{workers}, _bridge{std::make_unique<morph::backend::LocalBackend>(_pool), _gui} {
     db::setup(connectionString);
 }
 

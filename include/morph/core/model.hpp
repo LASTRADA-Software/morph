@@ -272,8 +272,8 @@ struct IModelHolder {
     ///
     /// Independent of `attachActionLog`/`_contextKey`: `contextKey` is the
     /// action log's entity-key field, `primaryKey` is the shared-instance
-    /// directory key (see `backend.hpp`'s `InstanceIdentity` for why the two
-    /// are kept as separate named fields rather than conflated) — a caller
+    /// directory key (`backend.hpp`'s `BindRequest` carries them as two named
+    /// fields, since they mean different things) — a caller
     /// wanting both calls both.
     /// @param primaryKey Stable identity of this model instance; a no-op if empty.
     void attachIdentity(std::string primaryKey) {

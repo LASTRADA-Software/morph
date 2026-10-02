@@ -96,6 +96,11 @@ TEST_CASE("morph::testing::StepExecutor: hand-stepping RemoteServer preserves pe
     REQUIRE(replyB.env.kind == "ok");
     REQUIRE(replyA.env.callId == 10U);
     REQUIRE(replyB.env.callId == 11U);
+
+    // The server's own strand may still hold work whose task each captures the
+    // server; stepping stopped as soon as the replies landed. Drain it, or the
+    // strand and the server are left holding each other.
+    exec.runAll();
 }
 
 TEST_CASE("morph::testing::StepExecutor: two different models' work can be interleaved by the test, on demand",

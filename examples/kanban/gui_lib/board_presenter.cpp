@@ -21,9 +21,7 @@ using ::morph::ladder::gui::idText;
 }  // namespace
 
 BoardPresenter::BoardPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : Presenter{parent}, _handler{bridge, executor} {
-    trackBound(_handler.whenBound());
-}
+    : Presenter{parent}, _handler{bridge, executor} {}
 
 void BoardPresenter::reportError(const std::exception_ptr& err) { emit failed(::morph::ladder::gui::errorText(err)); }
 

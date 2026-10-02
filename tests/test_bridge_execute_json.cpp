@@ -33,8 +33,8 @@ using SyncExecutor = morph::testing::InlineExecutor;
 
 TEST_CASE("ActionExecuteRegistry: executeJson deserialises, executes, and re-serialises", "[bridge][execute-json]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<MathModel> handler{bridge, &cbExec};
 
     std::optional<std::string> resultJson;
@@ -46,7 +46,7 @@ TEST_CASE("ActionExecuteRegistry: executeJson deserialises, executes, and re-ser
         })
         .onError([&](const std::exception_ptr&) { done.store(true); });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(resultJson.has_value());
     REQUIRE(*resultJson == R"({"sum":7})");
 }
@@ -54,7 +54,7 @@ TEST_CASE("ActionExecuteRegistry: executeJson deserialises, executes, and re-ser
 TEST_CASE("ActionExecuteRegistry: executeJson reports parse errors via onError", "[bridge][execute-json]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<MathModel> handler{bridge, &cbExec};
 
     bool sawError = false;
@@ -73,7 +73,7 @@ TEST_CASE("ActionExecuteRegistry: executeJson reports parse errors via onError",
 TEST_CASE("ActionExecuteRegistry: unknown action type throws", "[bridge][execute-json]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<MathModel> handler{bridge, &cbExec};
 
     REQUIRE_THROWS_AS(handler.executeJson("NoSuchAction", "{}"), std::runtime_error);
@@ -83,7 +83,7 @@ TEST_CASE("BridgeHandler::servesAction is true for a registered action and false
           "[bridge][execute-json]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     const morph::bridge::BridgeHandler<MathModel> handler{bridge, &cbExec};
 
     CHECK(handler.servesAction("Test_ExecJson_AddNumbers"));
@@ -185,8 +185,8 @@ const bool kRegThrowOnExecute = morph::model::detail::registerActionExecutorOnce
 TEST_CASE("ActionExecuteRegistry: executeJson routes a throwing resultToJson to onError (not a hang)",
           "[bridge][execute-json][coverage]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<ThrowOnSerialiseModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawError{false};
@@ -204,7 +204,7 @@ TEST_CASE("ActionExecuteRegistry: executeJson routes a throwing resultToJson to 
             done.store(true);
         });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(sawError.load());
     REQUIRE_FALSE(sawResult.load());
 }
@@ -212,8 +212,8 @@ TEST_CASE("ActionExecuteRegistry: executeJson routes a throwing resultToJson to 
 TEST_CASE("ActionExecuteRegistry: executeJson forwards a handler execution failure via onError",
           "[bridge][execute-json][coverage]") {
     morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), cbExec};
     morph::bridge::BridgeHandler<ThrowOnExecuteModel> handler{bridge, &cbExec};
 
     std::atomic<bool> sawError{false};
@@ -231,7 +231,7 @@ TEST_CASE("ActionExecuteRegistry: executeJson forwards a handler execution failu
             done.store(true);
         });
 
-    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(sawError.load());
     REQUIRE_FALSE(sawResult.load());
 }
