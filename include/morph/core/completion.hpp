@@ -275,11 +275,15 @@ private:
             presumed != std::thread::id{} && presumed != here) {
             ::morph::exec::detail::noteOwner("Completion::deliver", cbExec->coreExecutor(), false);
         }
-        // Released here, on the owner, where they were added.
+        // Released here, on the owner, where they were added. Both lists leave
+        // the state now, not just the one that runs: the state is destroyed
+        // wherever its last reference drops (a timer thread's, say), and the
+        // list that did not run holds captures that must not die there.
         auto const links = std::move(stopLinks);
+        auto const okHandlers = std::move(onOk);
+        auto const errHandlers = std::move(onErr);
         if (value) {
-            auto const handlers = std::move(onOk);
-            for (const auto& handler : handlers) {
+            for (const auto& handler : okHandlers) {
                 try {
                     handler(*value);
                 } catch (...) {
@@ -288,8 +292,7 @@ private:
             }
             return;
         }
-        auto const handlers = std::move(onErr);
-        for (const auto& handler : handlers) {
+        for (const auto& handler : errHandlers) {
             try {
                 handler(error);
             } catch (...) {
