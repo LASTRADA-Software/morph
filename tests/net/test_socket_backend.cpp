@@ -1062,7 +1062,11 @@ TEST_CASE("SocketBackend: a send blocked past sendTimeout tears the connection d
     call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
     (void)backend.execute(morph::exec::detail::ModelId{1}, std::move(call), nullptr);
 
-    REQUIRE(waitForDisconnect(backend));
+    // The loop encodes and masks the 4 MiB frame before the first write arms
+    // the 300 ms deadline, so a build far slower than native (memcheck) needs
+    // a wait far longer than the deadline alone suggests. It returns as soon
+    // as the connection drops.
+    REQUIRE(waitForDisconnect(backend, 3000));
 }
 
 TEST_CASE("SocketBackend: a malformed WebSocket frame from the server is treated as a disconnect",
