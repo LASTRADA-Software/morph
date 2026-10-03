@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace morph::testing {
@@ -41,6 +42,12 @@ public:
     ~OwnerProbeRecorder() {
         ::morph::exec::detail::ownerProbe().store(nullptr);
         current().store(nullptr);
+        // A thread that read `current()` before it was cleared may still be
+        // inside `record()`, about to lock this object's mutex. Its members
+        // must outlive it.
+        while (inRecord().load() != 0) {
+            std::this_thread::yield();
+        }
     }
 
     OwnerProbeRecorder(const OwnerProbeRecorder&) = delete;
@@ -79,7 +86,23 @@ private:
         return recorder;
     }
 
+    /// How many threads are inside `record()`. Counted before `current()` is
+    /// read, so the destructor, which clears `current()` and then waits for
+    /// this to reach zero, cannot miss a caller that has seen the pointer.
+    static std::atomic<std::size_t>& inRecord() {
+        static std::atomic<std::size_t> count{0};
+        return count;
+    }
+
     static void record(char const* site, ::core::async::IExecutor const& owner) noexcept {
+        struct InRecord {
+            InRecord() { inRecord().fetch_add(1); }
+            ~InRecord() { inRecord().fetch_sub(1); }
+            InRecord(const InRecord&) = delete;
+            InRecord& operator=(const InRecord&) = delete;
+            InRecord(InRecord&&) = delete;
+            InRecord& operator=(InRecord&&) = delete;
+        } const counted;
         OwnerProbeRecorder* const self = current().load();
         if (self == nullptr) {
             return;
