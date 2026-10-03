@@ -691,10 +691,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/sqlite_
 <div class="line"><a id="l00544" name="l00544"></a><span class="lineno">  544</span>            <span class="keywordtype">int</span> <span class="keyword">const</span> lookupResult = sqlite3_step(lookupGuard.get());</div>
 <div class="line"><a id="l00545" name="l00545"></a><span class="lineno">  545</span>            <span class="keywordflow">if</span> (lookupResult != SQLITE_ROW) {</div>
 <div class="line"><a id="l00546" name="l00546"></a><span class="lineno">  546</span>                <span class="comment">// The conflict proved a row exists, so anything but a row here is a</span></div>
-<div class="line"><a id="l00547" name="l00547"></a><span class="lineno">  547</span>                <span class="comment">// real failure. Returning the `0` this used to fall through with</span></div>
-<div class="line"><a id="l00548" name="l00548"></a><span class="lineno">  548</span>                <span class="comment">// would hand the caller an id that matches nothing: `markDone(0)`</span></div>
-<div class="line"><a id="l00549" name="l00549"></a><span class="lineno">  549</span>                <span class="comment">// silently deletes no row, and the item is stranded in the queue</span></div>
-<div class="line"><a id="l00550" name="l00550"></a><span class="lineno">  550</span>                <span class="comment">// forever with no error ever reported.</span></div>
+<div class="line"><a id="l00547" name="l00547"></a><span class="lineno">  547</span>                <span class="comment">// real failure. Falling through to return `0` would hand the</span></div>
+<div class="line"><a id="l00548" name="l00548"></a><span class="lineno">  548</span>                <span class="comment">// caller an id that matches nothing: `markDone(0)` silently</span></div>
+<div class="line"><a id="l00549" name="l00549"></a><span class="lineno">  549</span>                <span class="comment">// deletes no row, and the item is stranded in the queue forever</span></div>
+<div class="line"><a id="l00550" name="l00550"></a><span class="lineno">  550</span>                <span class="comment">// with no error ever reported.</span></div>
 <div class="line"><a id="l00551" name="l00551"></a><span class="lineno">  551</span>                <span class="comment">//</span></div>
 <div class="line"><a id="l00552" name="l00552"></a><span class="lineno">  552</span>                <span class="comment">// COVERAGE GAP, documented not closed: reaching this branch needs</span></div>
 <div class="line"><a id="l00553" name="l00553"></a><span class="lineno">  553</span>                <span class="comment">// a second writer on the same underlying file to delete this</span></div>

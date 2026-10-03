@@ -700,131 +700,128 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/df5/file__o
 <div class="line"><a id="l00557" name="l00557"></a><span class="lineno">  557</span>            }</div>
 <div class="line"><a id="l00558" name="l00558"></a><span class="lineno">  558</span> </div>
 <div class="line"><a id="l00559" name="l00559"></a><span class="lineno">  559</span>            <span class="comment">// Every exit below this point closes `out` and, unless the rename</span></div>
-<div class="line"><a id="l00560" name="l00560"></a><span class="lineno">  560</span>            <span class="comment">// committed, removes `tmp`. Before this guard existed only the</span></div>
-<div class="line"><a id="l00561" name="l00561"></a><span class="lineno">  561</span>            <span class="comment">// short-write branch cleaned up: `syncFile(out, tmp)` threw straight out</span></div>
-<div class="line"><a id="l00562" name="l00562"></a><span class="lineno">  562</span>            <span class="comment">// of compact(), leaking the handle and orphaning the temp file. That is</span></div>
-<div class="line"><a id="l00563" name="l00563"></a><span class="lineno">  563</span>            <span class="comment">// not a theoretical path -- the fault-injection test &quot;a failing</span></div>
-<div class="line"><a id="l00564" name="l00564"></a><span class="lineno">  564</span>            <span class="comment">// fflush() during construction-time compaction throws&quot; drives it on</span></div>
-<div class="line"><a id="l00565" name="l00565"></a><span class="lineno">  565</span>            <span class="comment">// every run, which had left 31 stray *.compact-tmp files in /tmp on the</span></div>
-<div class="line"><a id="l00566" name="l00566"></a><span class="lineno">  566</span>            <span class="comment">// machine this was found on. The leaked handle would also block the</span></div>
-<div class="line"><a id="l00567" name="l00567"></a><span class="lineno">  567</span>            <span class="comment">// unlink on Windows.</span></div>
-<div class="line"><a id="l00568" name="l00568"></a><span class="lineno">  568</span>            <span class="keyword">class </span>TempFileGuard {</div>
-<div class="line"><a id="l00569" name="l00569"></a><span class="lineno">  569</span>            <span class="keyword">public</span>:</div>
-<div class="line"><a id="l00570" name="l00570"></a><span class="lineno">  570</span>                TempFileGuard(std::FILE* file, std::string path) : _file{file}, _path{std::move(path)} {}</div>
-<div class="line"><a id="l00571" name="l00571"></a><span class="lineno">  571</span> </div>
-<div class="line"><a id="l00572" name="l00572"></a><span class="lineno">  572</span>                ~TempFileGuard() {</div>
-<div class="line"><a id="l00573" name="l00573"></a><span class="lineno">  573</span>                    <span class="keywordflow">if</span> (_file != <span class="keyword">nullptr</span>) {</div>
-<div class="line"><a id="l00574" name="l00574"></a><span class="lineno">  574</span>                        <span class="comment">// Unwinding already; there is nothing to report a close</span></div>
-<div class="line"><a id="l00575" name="l00575"></a><span class="lineno">  575</span>                        <span class="comment">// failure to.</span></div>
-<div class="line"><a id="l00576" name="l00576"></a><span class="lineno">  576</span>                        <span class="comment">// NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)</span></div>
-<div class="line"><a id="l00577" name="l00577"></a><span class="lineno">  577</span>                        std::fclose(_file);</div>
-<div class="line"><a id="l00578" name="l00578"></a><span class="lineno">  578</span>                    }</div>
-<div class="line"><a id="l00579" name="l00579"></a><span class="lineno">  579</span>                    <span class="keywordflow">if</span> (!_committed) {</div>
-<div class="line"><a id="l00580" name="l00580"></a><span class="lineno">  580</span>                        std::error_code errorCode;</div>
-<div class="line"><a id="l00581" name="l00581"></a><span class="lineno">  581</span>                        std::filesystem::remove(_path, errorCode);</div>
-<div class="line"><a id="l00582" name="l00582"></a><span class="lineno">  582</span>                    }</div>
-<div class="line"><a id="l00583" name="l00583"></a><span class="lineno">  583</span>                }</div>
-<div class="line"><a id="l00584" name="l00584"></a><span class="lineno">  584</span> </div>
-<div class="line"><a id="l00585" name="l00585"></a><span class="lineno">  585</span>                TempFileGuard(<span class="keyword">const</span> TempFileGuard&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00586" name="l00586"></a><span class="lineno">  586</span>                TempFileGuard&amp; operator=(<span class="keyword">const</span> TempFileGuard&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00587" name="l00587"></a><span class="lineno">  587</span>                TempFileGuard(TempFileGuard&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00588" name="l00588"></a><span class="lineno">  588</span>                TempFileGuard&amp; operator=(TempFileGuard&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00589" name="l00589"></a><span class="lineno">  589</span><span class="comment"></span> </div>
-<div class="line"><a id="l00590" name="l00590"></a><span class="lineno">  590</span><span class="comment">                /// @brief Hands the handle back to the caller, which closes it.</span></div>
-<div class="line"><a id="l00591" name="l00591"></a><span class="lineno">  591</span>                <span class="keywordtype">void</span> releaseHandle() noexcept { _file = <span class="keyword">nullptr</span>; }<span class="comment"></span></div>
-<div class="line"><a id="l00592" name="l00592"></a><span class="lineno">  592</span><span class="comment">                /// @brief Marks the temp file as renamed away, so it is not removed.</span></div>
-<div class="line"><a id="l00593" name="l00593"></a><span class="lineno">  593</span>                <span class="keywordtype">void</span> commit() noexcept { _committed = <span class="keyword">true</span>; }</div>
-<div class="line"><a id="l00594" name="l00594"></a><span class="lineno">  594</span> </div>
-<div class="line"><a id="l00595" name="l00595"></a><span class="lineno">  595</span>            <span class="keyword">private</span>:</div>
-<div class="line"><a id="l00596" name="l00596"></a><span class="lineno">  596</span>                std::FILE* _file;</div>
-<div class="line"><a id="l00597" name="l00597"></a><span class="lineno">  597</span>                std::string _path;</div>
-<div class="line"><a id="l00598" name="l00598"></a><span class="lineno">  598</span>                <span class="keywordtype">bool</span> _committed = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00599" name="l00599"></a><span class="lineno">  599</span>            };</div>
-<div class="line"><a id="l00600" name="l00600"></a><span class="lineno">  600</span>            TempFileGuard guard{out, tmp};</div>
-<div class="line"><a id="l00601" name="l00601"></a><span class="lineno">  601</span> </div>
-<div class="line"><a id="l00602" name="l00602"></a><span class="lineno">  602</span>            <span class="keyword">auto</span> writeRecord = [&amp;](<span class="keyword">const</span> detail::FileQueueRecord&amp; record) {</div>
-<div class="line"><a id="l00603" name="l00603"></a><span class="lineno">  603</span>                std::string outLine = detail::toJson(record);</div>
-<div class="line"><a id="l00604" name="l00604"></a><span class="lineno">  604</span>                outLine.push_back(<span class="charliteral">&#39;\n&#39;</span>);</div>
-<div class="line"><a id="l00605" name="l00605"></a><span class="lineno">  605</span>                <span class="keywordflow">if</span> (_io.fwrite(outLine.data(), outLine.size(), out) != outLine.size()) {</div>
-<div class="line"><a id="l00606" name="l00606"></a><span class="lineno">  606</span>                    <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;FileOfflineQueue: short write during compaction of &quot;</span> + _path.string());</div>
-<div class="line"><a id="l00607" name="l00607"></a><span class="lineno">  607</span>                }</div>
-<div class="line"><a id="l00608" name="l00608"></a><span class="lineno">  608</span>            };</div>
-<div class="line"><a id="l00609" name="l00609"></a><span class="lineno">  609</span> </div>
-<div class="line"><a id="l00610" name="l00610"></a><span class="lineno">  610</span>            <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; [entryId, item] : _items) {</div>
-<div class="line"><a id="l00611" name="l00611"></a><span class="lineno">  611</span>                writeRecord(detail::FileQueueRecord{.op = <span class="stringliteral">&quot;put&quot;</span>,</div>
-<div class="line"><a id="l00612" name="l00612"></a><span class="lineno">  612</span>                                                    .id = item.id,</div>
-<div class="line"><a id="l00613" name="l00613"></a><span class="lineno">  613</span>                                                    .payload = item.payload,</div>
-<div class="line"><a id="l00614" name="l00614"></a><span class="lineno">  614</span>                                                    .idempotencyKey = item.idempotencyKey,</div>
-<div class="line"><a id="l00615" name="l00615"></a><span class="lineno">  615</span>                                                    .attempts = item.attempts});</div>
-<div class="line"><a id="l00616" name="l00616"></a><span class="lineno">  616</span>            }</div>
-<div class="line"><a id="l00617" name="l00617"></a><span class="lineno">  617</span> </div>
-<div class="line"><a id="l00618" name="l00618"></a><span class="lineno">  618</span>            <span class="comment">// Carry the id high-water mark across the rewrite. `load()` derives</span></div>
-<div class="line"><a id="l00619" name="l00619"></a><span class="lineno">  619</span>            <span class="comment">// _nextId from the ids it sees, and compaction drops every tombstone, so</span></div>
-<div class="line"><a id="l00620" name="l00620"></a><span class="lineno">  620</span>            <span class="comment">// without this the mark silently regresses to the highest *surviving*</span></div>
-<div class="line"><a id="l00621" name="l00621"></a><span class="lineno">  621</span>            <span class="comment">// id: enqueue 1 and 2, markDone(2), restart (compacts to just id 1),</span></div>
-<div class="line"><a id="l00622" name="l00622"></a><span class="lineno">  622</span>            <span class="comment">// restart again -&gt; _nextId == 1 and the next enqueue reissues id 2, the</span></div>
-<div class="line"><a id="l00623" name="l00623"></a><span class="lineno">  623</span>            <span class="comment">// id of an item that was completed and acknowledged. That breaks the</span></div>
-<div class="line"><a id="l00624" name="l00624"></a><span class="lineno">  624</span>            <span class="comment">// &quot;new ids never collide with an old tombstone&quot; invariant this class</span></div>
-<div class="line"><a id="l00625" name="l00625"></a><span class="lineno">  625</span>            <span class="comment">// documents, and a stale in-flight reference to the old id 2 would then</span></div>
-<div class="line"><a id="l00626" name="l00626"></a><span class="lineno">  626</span>            <span class="comment">// silently address a different item.</span></div>
-<div class="line"><a id="l00627" name="l00627"></a><span class="lineno">  627</span>            <span class="comment">//</span></div>
-<div class="line"><a id="l00628" name="l00628"></a><span class="lineno">  628</span>            <span class="comment">// Recorded as a &quot;done&quot; for the mark itself rather than a new record</span></div>
-<div class="line"><a id="l00629" name="l00629"></a><span class="lineno">  629</span>            <span class="comment">// type: `load()` already raises highestId for every id it reads and</span></div>
-<div class="line"><a id="l00630" name="l00630"></a><span class="lineno">  630</span>            <span class="comment">// erasing an id that is not present is a no-op, so this needs no reader</span></div>
-<div class="line"><a id="l00631" name="l00631"></a><span class="lineno">  631</span>            <span class="comment">// change and stays readable by an older build. Emitted only when the</span></div>
-<div class="line"><a id="l00632" name="l00632"></a><span class="lineno">  632</span>            <span class="comment">// mark exceeds every surviving id -- writing &quot;done&quot; for an id that a</span></div>
-<div class="line"><a id="l00633" name="l00633"></a><span class="lineno">  633</span>            <span class="comment">// &quot;put&quot; line above just restored would delete it on the next load.</span></div>
-<div class="line"><a id="l00634" name="l00634"></a><span class="lineno">  634</span>            uint64_t <span class="keyword">const</span> maxSurviving = _items.empty() ? 0 : _items.rbegin()-&gt;first;</div>
-<div class="line"><a id="l00635" name="l00635"></a><span class="lineno">  635</span>            <span class="keywordflow">if</span> (_nextId &gt; maxSurviving) {</div>
-<div class="line"><a id="l00636" name="l00636"></a><span class="lineno">  636</span>                writeRecord(detail::FileQueueRecord{</div>
-<div class="line"><a id="l00637" name="l00637"></a><span class="lineno">  637</span>                    .op = <span class="stringliteral">&quot;done&quot;</span>, .id = _nextId, .payload = {}, .idempotencyKey = {}, .attempts = 0});</div>
-<div class="line"><a id="l00638" name="l00638"></a><span class="lineno">  638</span>            }</div>
-<div class="line"><a id="l00639" name="l00639"></a><span class="lineno">  639</span> </div>
-<div class="line"><a id="l00640" name="l00640"></a><span class="lineno">  640</span>            syncFile(out, tmp);</div>
-<div class="line"><a id="l00641" name="l00641"></a><span class="lineno">  641</span>            <span class="comment">// NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory) — the data is already fsynced above</span></div>
-<div class="line"><a id="l00642" name="l00642"></a><span class="lineno">  642</span>            std::fclose(out);</div>
-<div class="line"><a id="l00643" name="l00643"></a><span class="lineno">  643</span>            guard.releaseHandle();  <span class="comment">// closed here; the rename needs the handle gone on Windows</span></div>
-<div class="line"><a id="l00644" name="l00644"></a><span class="lineno">  644</span>            std::filesystem::rename(tmp, _path);</div>
-<div class="line"><a id="l00645" name="l00645"></a><span class="lineno">  645</span>            guard.commit();  <span class="comment">// `tmp` no longer exists under that name</span></div>
-<div class="line"><a id="l00646" name="l00646"></a><span class="lineno">  646</span>            <span class="comment">// The rename is a directory mutation, not a file-content one -- fsync</span></div>
-<div class="line"><a id="l00647" name="l00647"></a><span class="lineno">  647</span>            <span class="comment">// on `out` above made the compacted *data* durable, but not the</span></div>
-<div class="line"><a id="l00648" name="l00648"></a><span class="lineno">  648</span>            <span class="comment">// directory entry that now names it `_path` instead of the tmp name</span></div>
-<div class="line"><a id="l00649" name="l00649"></a><span class="lineno">  649</span>            <span class="comment">// durable. Surfaced rather than swallowed, same as every other</span></div>
-<div class="line"><a id="l00650" name="l00650"></a><span class="lineno">  650</span>            <span class="comment">// fsync failure in this class; safe to throw here, since compact()</span></div>
-<div class="line"><a id="l00651" name="l00651"></a><span class="lineno">  651</span>            <span class="comment">// always runs before `_file` is opened -- nothing left dangling.</span></div>
-<div class="line"><a id="l00652" name="l00652"></a><span class="lineno">  652</span>            <span class="keyword">auto</span> <span class="keyword">const</span> dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path()));</div>
-<div class="line"><a id="l00653" name="l00653"></a><span class="lineno">  653</span>            <span class="keywordflow">if</span> (dirSync == ::morph::core::DirectorySync::failed) {</div>
-<div class="line"><a id="l00654" name="l00654"></a><span class="lineno">  654</span>                <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;FileOfflineQueue: failed to fsync directory after compacting &quot;</span> +</div>
-<div class="line"><a id="l00655" name="l00655"></a><span class="lineno">  655</span>                                         _path.string());</div>
-<div class="line"><a id="l00656" name="l00656"></a><span class="lineno">  656</span>            }</div>
-<div class="line"><a id="l00657" name="l00657"></a><span class="lineno">  657</span>            <span class="keywordflow">if</span> (dirSync == ::morph::core::DirectorySync::unsupported) {</div>
-<div class="line"><a id="l00658" name="l00658"></a><span class="lineno">  658</span>                ::morph::log::logWarn(</div>
-<div class="line"><a id="l00659" name="l00659"></a><span class="lineno">  659</span>                    <span class="stringliteral">&quot;FileOfflineQueue: cannot fsync the directory containing {}; the queue&#39;s contents are still &quot;</span></div>
-<div class="line"><a id="l00660" name="l00660"></a><span class="lineno">  660</span>                    <span class="stringliteral">&quot;fsynced, &quot;</span></div>
-<div class="line"><a id="l00661" name="l00661"></a><span class="lineno">  661</span>                    <span class="stringliteral">&quot;but its directory entry is only as durable as this filesystem makes it&quot;</span>,</div>
-<div class="line"><a id="l00662" name="l00662"></a><span class="lineno">  662</span>                    _path.string());</div>
-<div class="line"><a id="l00663" name="l00663"></a><span class="lineno">  663</span>            }</div>
-<div class="line"><a id="l00664" name="l00664"></a><span class="lineno">  664</span>        }</div>
-<div class="line"><a id="l00665" name="l00665"></a><span class="lineno">  665</span> </div>
-<div class="line"><a id="l00666" name="l00666"></a><span class="lineno">  666</span>        std::filesystem::path _path;</div>
-<div class="line"><a id="l00667" name="l00667"></a><span class="lineno">  667</span>        ::morph::core::FileIoOps _io;</div>
-<div class="line"><a id="l00668" name="l00668"></a><span class="lineno">  668</span>        std::FILE* _file = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00669" name="l00669"></a><span class="lineno">  669</span>        <span class="comment">// Set when a failed write could not be rolled back, so a partial record may</span></div>
-<div class="line"><a id="l00670" name="l00670"></a><span class="lineno">  670</span>        <span class="comment">// still sit at the end of `_path`. Every later write on this object is</span></div>
-<div class="line"><a id="l00671" name="l00671"></a><span class="lineno">  671</span>        <span class="comment">// refused, which is what keeps that partial record the trailing line -- the</span></div>
-<div class="line"><a id="l00672" name="l00672"></a><span class="lineno">  672</span>        <span class="comment">// only position `load()` can heal it from. Cleared by construction, since</span></div>
-<div class="line"><a id="l00673" name="l00673"></a><span class="lineno">  673</span>        <span class="comment">// the constructor&#39;s compact() rewrites the file without it.</span></div>
-<div class="line"><a id="l00674" name="l00674"></a><span class="lineno">  674</span>        <span class="keywordtype">bool</span> _tornTail = <span class="keyword">false</span>;</div>
-<div class="line"><a id="l00675" name="l00675"></a><span class="lineno">  675</span>        std::map&lt;uint64_t, QueueItem&gt; _items;</div>
-<div class="line"><a id="l00676" name="l00676"></a><span class="lineno">  676</span>        uint64_t _nextId{0};</div>
-<div class="line"><a id="l00677" name="l00677"></a><span class="lineno">  677</span>    };</div>
-<div class="line"><a id="l00678" name="l00678"></a><span class="lineno">  678</span> </div>
-<div class="line"><a id="l00679" name="l00679"></a><span class="lineno">  679</span>    std::optional&lt;std::size_t&gt; _maxDepth;</div>
-<div class="line"><a id="l00680" name="l00680"></a><span class="lineno">  680</span>    ::morph::exec::detail::OwnedState&lt;State&gt; _owned;</div>
-<div class="line"><a id="l00681" name="l00681"></a><span class="lineno">  681</span>};</div>
+<div class="line"><a id="l00560" name="l00560"></a><span class="lineno">  560</span>            <span class="comment">// committed, removes `tmp`. A throw from `syncFile(out, tmp)` leaves</span></div>
+<div class="line"><a id="l00561" name="l00561"></a><span class="lineno">  561</span>            <span class="comment">// compact() through here too, so it neither leaks the handle nor</span></div>
+<div class="line"><a id="l00562" name="l00562"></a><span class="lineno">  562</span>            <span class="comment">// orphans the temp file; the fault-injection test &quot;a failing fflush()</span></div>
+<div class="line"><a id="l00563" name="l00563"></a><span class="lineno">  563</span>            <span class="comment">// during construction-time compaction throws&quot; drives that path. An</span></div>
+<div class="line"><a id="l00564" name="l00564"></a><span class="lineno">  564</span>            <span class="comment">// open handle would also block the unlink on Windows.</span></div>
+<div class="line"><a id="l00565" name="l00565"></a><span class="lineno">  565</span>            <span class="keyword">class </span>TempFileGuard {</div>
+<div class="line"><a id="l00566" name="l00566"></a><span class="lineno">  566</span>            <span class="keyword">public</span>:</div>
+<div class="line"><a id="l00567" name="l00567"></a><span class="lineno">  567</span>                TempFileGuard(std::FILE* file, std::string path) : _file{file}, _path{std::move(path)} {}</div>
+<div class="line"><a id="l00568" name="l00568"></a><span class="lineno">  568</span> </div>
+<div class="line"><a id="l00569" name="l00569"></a><span class="lineno">  569</span>                ~TempFileGuard() {</div>
+<div class="line"><a id="l00570" name="l00570"></a><span class="lineno">  570</span>                    <span class="keywordflow">if</span> (_file != <span class="keyword">nullptr</span>) {</div>
+<div class="line"><a id="l00571" name="l00571"></a><span class="lineno">  571</span>                        <span class="comment">// Unwinding already; there is nothing to report a close</span></div>
+<div class="line"><a id="l00572" name="l00572"></a><span class="lineno">  572</span>                        <span class="comment">// failure to.</span></div>
+<div class="line"><a id="l00573" name="l00573"></a><span class="lineno">  573</span>                        <span class="comment">// NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)</span></div>
+<div class="line"><a id="l00574" name="l00574"></a><span class="lineno">  574</span>                        std::fclose(_file);</div>
+<div class="line"><a id="l00575" name="l00575"></a><span class="lineno">  575</span>                    }</div>
+<div class="line"><a id="l00576" name="l00576"></a><span class="lineno">  576</span>                    <span class="keywordflow">if</span> (!_committed) {</div>
+<div class="line"><a id="l00577" name="l00577"></a><span class="lineno">  577</span>                        std::error_code errorCode;</div>
+<div class="line"><a id="l00578" name="l00578"></a><span class="lineno">  578</span>                        std::filesystem::remove(_path, errorCode);</div>
+<div class="line"><a id="l00579" name="l00579"></a><span class="lineno">  579</span>                    }</div>
+<div class="line"><a id="l00580" name="l00580"></a><span class="lineno">  580</span>                }</div>
+<div class="line"><a id="l00581" name="l00581"></a><span class="lineno">  581</span> </div>
+<div class="line"><a id="l00582" name="l00582"></a><span class="lineno">  582</span>                TempFileGuard(<span class="keyword">const</span> TempFileGuard&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00583" name="l00583"></a><span class="lineno">  583</span>                TempFileGuard&amp; operator=(<span class="keyword">const</span> TempFileGuard&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00584" name="l00584"></a><span class="lineno">  584</span>                TempFileGuard(TempFileGuard&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00585" name="l00585"></a><span class="lineno">  585</span>                TempFileGuard&amp; operator=(TempFileGuard&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00586" name="l00586"></a><span class="lineno">  586</span><span class="comment"></span> </div>
+<div class="line"><a id="l00587" name="l00587"></a><span class="lineno">  587</span><span class="comment">                /// @brief Hands the handle back to the caller, which closes it.</span></div>
+<div class="line"><a id="l00588" name="l00588"></a><span class="lineno">  588</span>                <span class="keywordtype">void</span> releaseHandle() noexcept { _file = <span class="keyword">nullptr</span>; }<span class="comment"></span></div>
+<div class="line"><a id="l00589" name="l00589"></a><span class="lineno">  589</span><span class="comment">                /// @brief Marks the temp file as renamed away, so it is not removed.</span></div>
+<div class="line"><a id="l00590" name="l00590"></a><span class="lineno">  590</span>                <span class="keywordtype">void</span> commit() noexcept { _committed = <span class="keyword">true</span>; }</div>
+<div class="line"><a id="l00591" name="l00591"></a><span class="lineno">  591</span> </div>
+<div class="line"><a id="l00592" name="l00592"></a><span class="lineno">  592</span>            <span class="keyword">private</span>:</div>
+<div class="line"><a id="l00593" name="l00593"></a><span class="lineno">  593</span>                std::FILE* _file;</div>
+<div class="line"><a id="l00594" name="l00594"></a><span class="lineno">  594</span>                std::string _path;</div>
+<div class="line"><a id="l00595" name="l00595"></a><span class="lineno">  595</span>                <span class="keywordtype">bool</span> _committed = <span class="keyword">false</span>;</div>
+<div class="line"><a id="l00596" name="l00596"></a><span class="lineno">  596</span>            };</div>
+<div class="line"><a id="l00597" name="l00597"></a><span class="lineno">  597</span>            TempFileGuard guard{out, tmp};</div>
+<div class="line"><a id="l00598" name="l00598"></a><span class="lineno">  598</span> </div>
+<div class="line"><a id="l00599" name="l00599"></a><span class="lineno">  599</span>            <span class="keyword">auto</span> writeRecord = [&amp;](<span class="keyword">const</span> detail::FileQueueRecord&amp; record) {</div>
+<div class="line"><a id="l00600" name="l00600"></a><span class="lineno">  600</span>                std::string outLine = detail::toJson(record);</div>
+<div class="line"><a id="l00601" name="l00601"></a><span class="lineno">  601</span>                outLine.push_back(<span class="charliteral">&#39;\n&#39;</span>);</div>
+<div class="line"><a id="l00602" name="l00602"></a><span class="lineno">  602</span>                <span class="keywordflow">if</span> (_io.fwrite(outLine.data(), outLine.size(), out) != outLine.size()) {</div>
+<div class="line"><a id="l00603" name="l00603"></a><span class="lineno">  603</span>                    <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;FileOfflineQueue: short write during compaction of &quot;</span> + _path.string());</div>
+<div class="line"><a id="l00604" name="l00604"></a><span class="lineno">  604</span>                }</div>
+<div class="line"><a id="l00605" name="l00605"></a><span class="lineno">  605</span>            };</div>
+<div class="line"><a id="l00606" name="l00606"></a><span class="lineno">  606</span> </div>
+<div class="line"><a id="l00607" name="l00607"></a><span class="lineno">  607</span>            <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; [entryId, item] : _items) {</div>
+<div class="line"><a id="l00608" name="l00608"></a><span class="lineno">  608</span>                writeRecord(detail::FileQueueRecord{.op = <span class="stringliteral">&quot;put&quot;</span>,</div>
+<div class="line"><a id="l00609" name="l00609"></a><span class="lineno">  609</span>                                                    .id = item.id,</div>
+<div class="line"><a id="l00610" name="l00610"></a><span class="lineno">  610</span>                                                    .payload = item.payload,</div>
+<div class="line"><a id="l00611" name="l00611"></a><span class="lineno">  611</span>                                                    .idempotencyKey = item.idempotencyKey,</div>
+<div class="line"><a id="l00612" name="l00612"></a><span class="lineno">  612</span>                                                    .attempts = item.attempts});</div>
+<div class="line"><a id="l00613" name="l00613"></a><span class="lineno">  613</span>            }</div>
+<div class="line"><a id="l00614" name="l00614"></a><span class="lineno">  614</span> </div>
+<div class="line"><a id="l00615" name="l00615"></a><span class="lineno">  615</span>            <span class="comment">// Carry the id high-water mark across the rewrite. `load()` derives</span></div>
+<div class="line"><a id="l00616" name="l00616"></a><span class="lineno">  616</span>            <span class="comment">// _nextId from the ids it sees, and compaction drops every tombstone, so</span></div>
+<div class="line"><a id="l00617" name="l00617"></a><span class="lineno">  617</span>            <span class="comment">// without this the mark silently regresses to the highest *surviving*</span></div>
+<div class="line"><a id="l00618" name="l00618"></a><span class="lineno">  618</span>            <span class="comment">// id: enqueue 1 and 2, markDone(2), restart (compacts to just id 1),</span></div>
+<div class="line"><a id="l00619" name="l00619"></a><span class="lineno">  619</span>            <span class="comment">// restart again -&gt; _nextId == 1 and the next enqueue reissues id 2, the</span></div>
+<div class="line"><a id="l00620" name="l00620"></a><span class="lineno">  620</span>            <span class="comment">// id of an item that was completed and acknowledged. That breaks the</span></div>
+<div class="line"><a id="l00621" name="l00621"></a><span class="lineno">  621</span>            <span class="comment">// &quot;new ids never collide with an old tombstone&quot; invariant this class</span></div>
+<div class="line"><a id="l00622" name="l00622"></a><span class="lineno">  622</span>            <span class="comment">// documents, and a stale in-flight reference to the old id 2 would then</span></div>
+<div class="line"><a id="l00623" name="l00623"></a><span class="lineno">  623</span>            <span class="comment">// silently address a different item.</span></div>
+<div class="line"><a id="l00624" name="l00624"></a><span class="lineno">  624</span>            <span class="comment">//</span></div>
+<div class="line"><a id="l00625" name="l00625"></a><span class="lineno">  625</span>            <span class="comment">// Recorded as a &quot;done&quot; for the mark itself rather than a new record</span></div>
+<div class="line"><a id="l00626" name="l00626"></a><span class="lineno">  626</span>            <span class="comment">// type: `load()` already raises highestId for every id it reads and</span></div>
+<div class="line"><a id="l00627" name="l00627"></a><span class="lineno">  627</span>            <span class="comment">// erasing an id that is not present is a no-op, so this needs no reader</span></div>
+<div class="line"><a id="l00628" name="l00628"></a><span class="lineno">  628</span>            <span class="comment">// change and stays readable by an older build. Emitted only when the</span></div>
+<div class="line"><a id="l00629" name="l00629"></a><span class="lineno">  629</span>            <span class="comment">// mark exceeds every surviving id -- writing &quot;done&quot; for an id that a</span></div>
+<div class="line"><a id="l00630" name="l00630"></a><span class="lineno">  630</span>            <span class="comment">// &quot;put&quot; line above just restored would delete it on the next load.</span></div>
+<div class="line"><a id="l00631" name="l00631"></a><span class="lineno">  631</span>            uint64_t <span class="keyword">const</span> maxSurviving = _items.empty() ? 0 : _items.rbegin()-&gt;first;</div>
+<div class="line"><a id="l00632" name="l00632"></a><span class="lineno">  632</span>            <span class="keywordflow">if</span> (_nextId &gt; maxSurviving) {</div>
+<div class="line"><a id="l00633" name="l00633"></a><span class="lineno">  633</span>                writeRecord(detail::FileQueueRecord{</div>
+<div class="line"><a id="l00634" name="l00634"></a><span class="lineno">  634</span>                    .op = <span class="stringliteral">&quot;done&quot;</span>, .id = _nextId, .payload = {}, .idempotencyKey = {}, .attempts = 0});</div>
+<div class="line"><a id="l00635" name="l00635"></a><span class="lineno">  635</span>            }</div>
+<div class="line"><a id="l00636" name="l00636"></a><span class="lineno">  636</span> </div>
+<div class="line"><a id="l00637" name="l00637"></a><span class="lineno">  637</span>            syncFile(out, tmp);</div>
+<div class="line"><a id="l00638" name="l00638"></a><span class="lineno">  638</span>            <span class="comment">// NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory) — the data is already fsynced above</span></div>
+<div class="line"><a id="l00639" name="l00639"></a><span class="lineno">  639</span>            std::fclose(out);</div>
+<div class="line"><a id="l00640" name="l00640"></a><span class="lineno">  640</span>            guard.releaseHandle();  <span class="comment">// closed here; the rename needs the handle gone on Windows</span></div>
+<div class="line"><a id="l00641" name="l00641"></a><span class="lineno">  641</span>            std::filesystem::rename(tmp, _path);</div>
+<div class="line"><a id="l00642" name="l00642"></a><span class="lineno">  642</span>            guard.commit();  <span class="comment">// `tmp` no longer exists under that name</span></div>
+<div class="line"><a id="l00643" name="l00643"></a><span class="lineno">  643</span>            <span class="comment">// The rename is a directory mutation, not a file-content one -- fsync</span></div>
+<div class="line"><a id="l00644" name="l00644"></a><span class="lineno">  644</span>            <span class="comment">// on `out` above made the compacted *data* durable, but not the</span></div>
+<div class="line"><a id="l00645" name="l00645"></a><span class="lineno">  645</span>            <span class="comment">// directory entry that now names it `_path` instead of the tmp name</span></div>
+<div class="line"><a id="l00646" name="l00646"></a><span class="lineno">  646</span>            <span class="comment">// durable. Surfaced rather than swallowed, same as every other</span></div>
+<div class="line"><a id="l00647" name="l00647"></a><span class="lineno">  647</span>            <span class="comment">// fsync failure in this class; safe to throw here, since compact()</span></div>
+<div class="line"><a id="l00648" name="l00648"></a><span class="lineno">  648</span>            <span class="comment">// always runs before `_file` is opened -- nothing left dangling.</span></div>
+<div class="line"><a id="l00649" name="l00649"></a><span class="lineno">  649</span>            <span class="keyword">auto</span> <span class="keyword">const</span> dirSync = ::morph::core::classifyDirectorySync(_io.syncPath(_path.parent_path()));</div>
+<div class="line"><a id="l00650" name="l00650"></a><span class="lineno">  650</span>            <span class="keywordflow">if</span> (dirSync == ::morph::core::DirectorySync::failed) {</div>
+<div class="line"><a id="l00651" name="l00651"></a><span class="lineno">  651</span>                <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;FileOfflineQueue: failed to fsync directory after compacting &quot;</span> +</div>
+<div class="line"><a id="l00652" name="l00652"></a><span class="lineno">  652</span>                                         _path.string());</div>
+<div class="line"><a id="l00653" name="l00653"></a><span class="lineno">  653</span>            }</div>
+<div class="line"><a id="l00654" name="l00654"></a><span class="lineno">  654</span>            <span class="keywordflow">if</span> (dirSync == ::morph::core::DirectorySync::unsupported) {</div>
+<div class="line"><a id="l00655" name="l00655"></a><span class="lineno">  655</span>                ::morph::log::logWarn(</div>
+<div class="line"><a id="l00656" name="l00656"></a><span class="lineno">  656</span>                    <span class="stringliteral">&quot;FileOfflineQueue: cannot fsync the directory containing {}; the queue&#39;s contents are still &quot;</span></div>
+<div class="line"><a id="l00657" name="l00657"></a><span class="lineno">  657</span>                    <span class="stringliteral">&quot;fsynced, &quot;</span></div>
+<div class="line"><a id="l00658" name="l00658"></a><span class="lineno">  658</span>                    <span class="stringliteral">&quot;but its directory entry is only as durable as this filesystem makes it&quot;</span>,</div>
+<div class="line"><a id="l00659" name="l00659"></a><span class="lineno">  659</span>                    _path.string());</div>
+<div class="line"><a id="l00660" name="l00660"></a><span class="lineno">  660</span>            }</div>
+<div class="line"><a id="l00661" name="l00661"></a><span class="lineno">  661</span>        }</div>
+<div class="line"><a id="l00662" name="l00662"></a><span class="lineno">  662</span> </div>
+<div class="line"><a id="l00663" name="l00663"></a><span class="lineno">  663</span>        std::filesystem::path _path;</div>
+<div class="line"><a id="l00664" name="l00664"></a><span class="lineno">  664</span>        ::morph::core::FileIoOps _io;</div>
+<div class="line"><a id="l00665" name="l00665"></a><span class="lineno">  665</span>        std::FILE* _file = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00666" name="l00666"></a><span class="lineno">  666</span>        <span class="comment">// Set when a failed write could not be rolled back, so a partial record may</span></div>
+<div class="line"><a id="l00667" name="l00667"></a><span class="lineno">  667</span>        <span class="comment">// still sit at the end of `_path`. Every later write on this object is</span></div>
+<div class="line"><a id="l00668" name="l00668"></a><span class="lineno">  668</span>        <span class="comment">// refused, which is what keeps that partial record the trailing line -- the</span></div>
+<div class="line"><a id="l00669" name="l00669"></a><span class="lineno">  669</span>        <span class="comment">// only position `load()` can heal it from. Cleared by construction, since</span></div>
+<div class="line"><a id="l00670" name="l00670"></a><span class="lineno">  670</span>        <span class="comment">// the constructor&#39;s compact() rewrites the file without it.</span></div>
+<div class="line"><a id="l00671" name="l00671"></a><span class="lineno">  671</span>        <span class="keywordtype">bool</span> _tornTail = <span class="keyword">false</span>;</div>
+<div class="line"><a id="l00672" name="l00672"></a><span class="lineno">  672</span>        std::map&lt;uint64_t, QueueItem&gt; _items;</div>
+<div class="line"><a id="l00673" name="l00673"></a><span class="lineno">  673</span>        uint64_t _nextId{0};</div>
+<div class="line"><a id="l00674" name="l00674"></a><span class="lineno">  674</span>    };</div>
+<div class="line"><a id="l00675" name="l00675"></a><span class="lineno">  675</span> </div>
+<div class="line"><a id="l00676" name="l00676"></a><span class="lineno">  676</span>    std::optional&lt;std::size_t&gt; _maxDepth;</div>
+<div class="line"><a id="l00677" name="l00677"></a><span class="lineno">  677</span>    ::morph::exec::detail::OwnedState&lt;State&gt; _owned;</div>
+<div class="line"><a id="l00678" name="l00678"></a><span class="lineno">  678</span>};</div>
 </div>
-<div class="line"><a id="l00682" name="l00682"></a><span class="lineno">  682</span> </div>
-<div class="line"><a id="l00683" name="l00683"></a><span class="lineno">  683</span>}  <span class="comment">// namespace morph::offline</span></div>
+<div class="line"><a id="l00679" name="l00679"></a><span class="lineno">  679</span> </div>
+<div class="line"><a id="l00680" name="l00680"></a><span class="lineno">  680</span>}  <span class="comment">// namespace morph::offline</span></div>
 <div class="ttc" id="aclassmorph_1_1async_1_1Completion_html"><div class="ttname"><a href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a></div><div class="ttdoc">Move-only handle representing the eventual result of an asynchronous operation.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d76/completion_8hpp_source.html#l00427">completion.hpp:427</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1Attempts_html"><div class="ttname"><a href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html">morph::offline::Attempts</a></div><div class="ttdoc">A replay attempt count, as a type distinct from a queue item id.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00040">offline_queue.hpp:40</a></div></div>
 <div class="ttc" id="aclassmorph_1_1offline_1_1FileOfflineQueue_html_a128b884f80e0ad01d4c5142466b9c0b0"><div class="ttname"><a href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a128b884f80e0ad01d4c5142466b9c0b0">morph::offline::FileOfflineQueue::enqueue</a></div><div class="ttdeci">uint64_t enqueue(std::string payload) override</div><div class="ttdoc">Appends payload with no idempotency key. On the owner.</div><div class="ttdef"><b>Definition</b> <a href="#l00184">file_offline_queue.hpp:184</a></div></div>
