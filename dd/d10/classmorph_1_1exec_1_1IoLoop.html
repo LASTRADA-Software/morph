@@ -163,7 +163,7 @@ Public Member Functions</h2></td></tr>
 <p>Cross-thread surface: <span class="tt"><a class="el" href="#a379935ed8b83aa12760352f5c2ed91f2" title="Queues task to run on the loop thread, in a later turn.">post()</a></span>, <span class="tt"><a class="el" href="#a23bb50515cb350ed430fc99063500853" title="Runs task on the loop and returns once it has run.">runAndWait()</a></span>, <span class="tt"><a class="el" href="#aa324f8ed446c4bef6138604259f16845" title="Whether the calling thread is inside one of the loop&#39;s tasks.">runningHere()</a></span> and <span class="tt"><a class="el" href="#ab121dc0cd51dabc9f178903af472bfdf" title="A handle that posts only while this loop exists.">weak()</a></span>. Everything else about the loop — timers, sockets, flows — is touched only in tasks it runs.</p>
 <dl class="section user"><dt>Lifetime</dt><dd>Must outlive every component built on it: a component's destructor posts its close to the loop and waits for it, which a stopped loop would never run. Destroy the components first, then the <span class="tt"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html" title="Owns a core::net::PlatformLoop and, natively, the one thread that runs it.">IoLoop</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a4756e030c1ce0bdae2eccba1b54314f4" name="a4756e030c1ce0bdae2eccba1b54314f4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4756e030c1ce0bdae2eccba1b54314f4">&#9670;&#160;</a></span>IoLoop()</h2>
@@ -190,7 +190,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Creates the loop and starts the thread that runs it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
 
 </div>
 </div>
@@ -220,7 +220,7 @@ Public Member Functions</h2></td></tr>
 <p>Stops the loop and joins its thread. </p>
 <p>Work still queued is dropped by the loop's own teardown, not run. On the loop's own thread — a task that dropped the last owner — it cannot join: it asks the loop to stop and lets the thread end with the turn it is in, the loop kept alive by the thread's own share of it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
 
 </div>
 </div>
@@ -251,7 +251,7 @@ Public Member Functions</h2></td></tr>
 <p>The loop itself, for a component arming timers or opening sockets from inside one of its tasks. </p>
 <dl class="section return"><dt>Returns</dt><dd>The platform loop; valid for this object's lifetime. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00122">122</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
 
 </div>
 </div>
@@ -281,7 +281,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the calling thread is inside one of the loop's tasks. </p>
 <p>Natively that is the loop's own <span class="tt">ExecutorScope</span>, stated for every turn. Under single-threaded WebAssembly there is one thread, so the answer is always yes. </p><dl class="section return"><dt>Returns</dt><dd>True where the loop's state may be touched directly. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
 
 </div>
 </div>
@@ -324,7 +324,7 @@ template&lt;class F&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
 
 </div>
 </div>
@@ -367,7 +367,7 @@ template&lt;class F&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00165">165</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
 
 </div>
 </div>
@@ -397,7 +397,7 @@ template&lt;class F&gt; </div>
 <p>A handle that posts only while this loop exists. </p>
 <dl class="section return"><dt>Returns</dt><dd>The weak handle. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00186">186</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
 
 </div>
 </div>

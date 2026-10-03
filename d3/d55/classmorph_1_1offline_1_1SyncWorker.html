@@ -174,7 +174,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>One owner</dt><dd>A worker belongs to the executor it is given, which must run one task at a time: the coordinator's offline strand (<span class="tt"><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#af79ee6a2c6badc5f6f2df20661052b40" title="The offline strand, as an executor: what a SyncWorker that replays for this coordinator is given as i...">ReconnectCoordinator::strand()</a></span>), or any other strand. Its queue drain, attempt counts and dead-lettering run only in that owner's tasks. <span class="tt"><a class="el" href="#a655f4426286e89a5e6ec61546a3dcdd3" title="Drains the queue, replaying each item via the replay function, on the owner.">run()</a></span> is callable from any thread: on the owner it drains at once; elsewhere it posts the drain to the owner, so two runs never overlap. Its answer is delivered on the executor the caller names, so a caller attaches to it where it already runs. <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress drain to stop after the current item.">stop()</a></span> is the one cross-thread signal, an atomic.</dd></dl>
 <p>The drain calls the queue's synchronous verbs, which answer only on the queue's own owner (see <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span>, "One owner"): give the queue the worker's owner, or the executor that strand runs over. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a31349dc8d4338512a2ffc2a8fda90996" name="a31349dc8d4338512a2ffc2a8fda90996"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a31349dc8d4338512a2ffc2a8fda90996">&#9670;&#160;</a></span>ReplayFunction</h2>
@@ -191,7 +191,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable that attempts to replay a single queued item, reporting only success or failure. </p>
 <p>Retained unchanged for existing callers, and <span class="tt">false</span> keeps meaning exactly what it always did — <span class="tt">ReplayOutcome::Rejected</span>, i.e. one attempt spent. A caller that can tell an undelivered replay from a refused one should use <span class="tt"><a class="el" href="#a4d41de24c5846fda06cb404e46e71970" title="Callable that attempts to replay a single queued item and reports what it achieved.">DetailedReplayFunction</a></span> instead; this overload cannot express the difference and so cannot avoid the dead-lettering it causes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +210,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable that attempts to replay a single queued item and reports what it achieved. </p>
 <p>The three-outcome counterpart of <span class="tt"><a class="el" href="#a31349dc8d4338512a2ffc2a8fda90996" title="Callable that attempts to replay a single queued item, reporting only success or failure.">ReplayFunction</a></span>: it is the only form that can report <span class="tt">ReplayOutcome::Undelivered</span> and so keep a reconnect flap from spending the item's retry budget. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -229,7 +229,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable invoked when an item exhausts its retry budget, just before it is removed from the queue. </p>
 <p>Receives the exhausted item (payload, idempotencyKey, and its final cumulative attempt count). If unset, <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> keeps the default behavior: log at <span class="tt">morph::log::LogLevel::error</span> and drop. A throwing sink is caught and logged — the item is still removed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00165">165</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +282,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00182">182</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +336,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +376,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the owner with the counts of successful / failed / dead-lettered replays, delivered on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -406,7 +406,7 @@ Public Member Functions</h2></td></tr>
 <p>Signals an in-progress drain to stop after the current item. </p>
 <p>Callable from any thread. The drain clears the flag at its start, so stopping is one-shot — but a <span class="tt"><a class="el" href="#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress drain to stop after the current item.">stop()</a></span> that lands <em>during</em> a drain leaves the flag set on return, so the next drain takes its early-out and drains nothing; work resumes only on the drain after that. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>

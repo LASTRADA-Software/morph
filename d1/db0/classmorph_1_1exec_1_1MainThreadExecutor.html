@@ -163,7 +163,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 <div class="textblock"><p>Single-thread executor intended for use on the calling (main) thread. </p>
 <p>Tasks posted from other threads are collected and dispatched only when the caller invokes <span class="tt"><a class="el" href="#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></span>. Useful in tests or event loops that have no native dispatcher. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00251">251</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00253">253</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a75c70e9c83fbda739ad5f3d93a820e85" name="a75c70e9c83fbda739ad5f3d93a820e85"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a75c70e9c83fbda739ad5f3d93a820e85">&#9670;&#160;</a></span>post()</h2>
@@ -198,7 +198,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 
 <p>Implements <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,7 +234,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -265,7 +265,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 <p>Never waits for a task to appear: if the queue is empty, returns <span class="tt">false</span> immediately. Otherwise pops exactly one task, runs it, and returns <span class="tt">true</span> whether or not that task threw. Unlike <span class="tt"><a class="el" href="#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></span>, there is no wall-clock wait — this is the single-step primitive for callers (e.g. tests or external event loops) that want deterministic, one-task-at-a-time control instead of a timed pump.</p>
 <p>Must be called from the thread that "owns" this executor. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if a task was dequeued and run, <span class="tt">false</span> if the queue was empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00307">307</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -296,7 +296,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 <p>Repeatedly calls the same dequeue-and-invoke step as <span class="tt"><a class="el" href="#a0d4fd8fb8b80488a7a33f3a1100ae39e" title="Dequeues and runs at most one pending task, without blocking.">runOnce()</a></span> until the queue reports empty, then returns. It does <b>not</b> wait for tasks posted after draining begins: a task that posts new work while running extends the drain (the new task is still queued and gets consumed), but <span class="tt"><a class="el" href="#aa176a496a1a032a2e8a24ba56b693186" title="Runs tasks until the queue is empty, with no wall-clock timeout.">drain()</a></span> never blocks waiting for an <em>externally</em> posted task the way <span class="tt"><a class="el" href="#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></span> does — it simply stops once the queue is observed empty.</p>
 <p>Must be called from the thread that "owns" this executor. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

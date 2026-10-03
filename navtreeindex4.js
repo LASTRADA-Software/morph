@@ -1,5 +1,12 @@
 var NAVTREEINDEX4 =
 {
+"dd/de7/classmorph_1_1async_1_1Completion.html#ac3564b8c749d5672ec98acc3aa7d445e":[2,0,0,1,2,1],
+"dd/de7/classmorph_1_1async_1_1Completion.html#ac7fe8818f9e79746106a776255a9a47d":[2,0,0,1,2,2],
+"dd/de7/classmorph_1_1async_1_1Completion.html#acfdbfbb36eadf4b95ae49c52037f6a30":[2,0,0,1,2,3],
+"dd/de7/classmorph_1_1async_1_1Completion.html#adb478319b8a269982c2d4dc2e2a1fb2b":[2,0,0,1,2,12],
+"dd/de7/classmorph_1_1async_1_1Completion.html#af748b7227c5c0c9a4ad674a06dad2187":[2,0,0,1,2,10],
+"dd/dfb/structmorph_1_1bridge_1_1AllowShared.html":[2,0,0,3,3],
+"de/d0d/classmorph_1_1async_1_1CallbackToken.html":[2,0,0,1,1],
 "de/d0d/classmorph_1_1async_1_1CallbackToken.html#a44b61f0a77b70af44a8ee5d27b7722c8":[2,0,0,1,1,1],
 "de/d0d/classmorph_1_1async_1_1CallbackToken.html#a474ac1ae42d4788f6e027667bdcb00b3":[2,0,0,1,1,3],
 "de/d0d/classmorph_1_1async_1_1CallbackToken.html#a4ac17ad8d956cc7df909f482f2c737da":[2,0,0,1,1,5],
@@ -57,8 +64,8 @@ var NAVTREEINDEX4 =
 "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#aeb30cc5b19543d22feef392669c98834":[2,0,0,16,6,6],
 "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#af6e06a0286bf9a348a7b62def318b85d":[2,0,0,16,6,0],
 "de/da8/conceptmorph_1_1model_1_1HasPayloadShapeTag.html":[1,0,1,1],
-"de/dc1/strand_8hpp.html":[3,0,0,0,19],
-"de/dc1/strand_8hpp_source.html":[3,0,0,0,19],
+"de/dc1/strand_8hpp.html":[3,0,0,0,20],
+"de/dc1/strand_8hpp_source.html":[3,0,0,0,20],
 "de/dc5/owner__strand_8hpp.html":[3,0,0,0,14],
 "de/dc5/owner__strand_8hpp_source.html":[3,0,0,0,14],
 "de/dc7/structmorph_1_1backend_1_1LimitPolicy.html":[2,0,0,2,6],
@@ -242,12 +249,5 @@ var NAVTREEINDEX4 =
 "functions_i.html":[2,3,0,8],
 "functions_j.html":[2,3,0,9],
 "functions_k.html":[2,3,0,10],
-"functions_l.html":[2,3,0,11],
-"functions_m.html":[2,3,0,12],
-"functions_n.html":[2,3,0,13],
-"functions_o.html":[2,3,0,14],
-"functions_p.html":[2,3,0,15],
-"functions_q.html":[2,3,0,16],
-"functions_r.html":[2,3,0,17],
-"functions_rela.html":[2,3,5]
+"functions_l.html":[2,3,0,11]
 };

@@ -32,11 +32,12 @@ var searchData=
   ['principal_29',['principal',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30',1,'morph::journal::LogEntry::principal'],['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context::principal'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#a35047bcbf2deef7e0d6295268d09a9b7',1,'morph::session::SessionToken::principal']]],
   ['probefunction_30',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
   ['probeinterval_31',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
-  ['promise_32',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html',1,'morph::async::Completion&lt; T &gt;::Promise'],['../dd/de7/classmorph_1_1async_1_1Completion.html',1,'morph::async::Completion&lt;::morph::exec::detail::ModelId &gt;::Promise&lt; ModelId &gt;'],['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ab4bacd758d6d1b79b345260a76f4dd8b',1,'morph::async::Completion::Promise::Promise()']]],
-  ['promotemodel_33',['promoteModel',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435',1,'morph::backend::SynchronousBackendAdapter::promoteModel()'],['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a39d4848c41081eb7d3c7d8d05e67b04b',1,'morph::net::SocketBackend::promoteModel()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abff050c08a6c5c3ddf90bbdd50bce7c9',1,'morph::qt::QtWebSocketBackend::promoteModel()']]],
-  ['propagation_34',['Error propagation',['../index.html#error-propagation',1,'']]],
-  ['protocol_35',['Wire protocol',['../index.html#wire-protocol',1,'']]],
-  ['protocolrange_36',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
-  ['protocolversion_37',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
-  ['publishresult_38',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
+  ['profiler_2ehpp_32',['profiler.hpp',['../dc/ddc/profiler_8hpp.html',1,'']]],
+  ['promise_33',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html',1,'morph::async::Completion&lt; T &gt;::Promise'],['../dd/de7/classmorph_1_1async_1_1Completion.html',1,'morph::async::Completion&lt;::morph::exec::detail::ModelId &gt;::Promise&lt; ModelId &gt;'],['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ab4bacd758d6d1b79b345260a76f4dd8b',1,'morph::async::Completion::Promise::Promise()']]],
+  ['promotemodel_34',['promoteModel',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a5ac29a531674844be6b60de1ae18e435',1,'morph::backend::SynchronousBackendAdapter::promoteModel()'],['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a39d4848c41081eb7d3c7d8d05e67b04b',1,'morph::net::SocketBackend::promoteModel()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abff050c08a6c5c3ddf90bbdd50bce7c9',1,'morph::qt::QtWebSocketBackend::promoteModel()']]],
+  ['propagation_35',['Error propagation',['../index.html#error-propagation',1,'']]],
+  ['protocol_36',['Wire protocol',['../index.html#wire-protocol',1,'']]],
+  ['protocolrange_37',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
+  ['protocolversion_38',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
+  ['publishresult_39',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
 ];

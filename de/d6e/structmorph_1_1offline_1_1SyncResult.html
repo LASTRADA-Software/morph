@@ -140,7 +140,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Aggregated result returned by <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a655f4426286e89a5e6ec61546a3dcdd3" title="Drains the queue, replaying each item via the replay function, on the owner.">SyncWorker::run()</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="abad0b8cf702ce8d6266cebfb3ab16cfc" name="abad0b8cf702ce8d6266cebfb3ab16cfc"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abad0b8cf702ce8d6266cebfb3ab16cfc">&#9670;&#160;</a></span>successful</h2>
@@ -156,7 +156,7 @@ Public Attributes</h2></td></tr>
 
 <p>Number of items successfully replayed and removed from the queue. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -174,7 +174,7 @@ Public Attributes</h2></td></tr>
 
 <p>Number of items that were delivered, refused, and left in the queue for retry, each having spent one attempt. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +192,7 @@ Public Attributes</h2></td></tr>
 
 <p>Number of items whose replay never reached the peer. They remain in the queue with their attempt count unchanged, so they are neither progress nor a step towards being dead-lettered. Items left queued by this run are <span class="tt"><a class="el" href="#ac961898bd488a98d989a3eb6bdce4d33" title="Number of items that were delivered, refused, and left in the queue for retry, each having spent one ...">failed</a> + <a class="el" href="#a3cc78f3c9d61cd9e106923ac5a2483ef" title="Number of items whose replay never reached the peer. They remain in the queue with their attempt coun...">undelivered</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +210,7 @@ Public Attributes</h2></td></tr>
 
 <p>Number of items that exhausted their retry budget and were dropped from the queue (handed to the <span class="tt">DeadLetterSink</span> if one is set, otherwise logged via <span class="tt">morph::log::logError</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>

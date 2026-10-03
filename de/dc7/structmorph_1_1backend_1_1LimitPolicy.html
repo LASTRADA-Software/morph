@@ -140,7 +140,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Opt-in, connection-agnostic resource limits enforced by <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>. </p>
 <p>Every field defaults to <span class="tt">0</span>, meaning "unbounded": a default-constructed policy applies no limit. Given as <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a8f2301d75b1e9742f2b110a70e035041" title="Opt-in resource limits. Default-constructed: unbounded.">ServerConfig::limits</a></span>, at construction. See <span class="tt">docs/spec/core/backend.md</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="af5dddc630c20f1a242075b6f885a4c9c" name="af5dddc630c20f1a242075b6f885a4c9c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af5dddc630c20f1a242075b6f885a4c9c">&#9670;&#160;</a></span>executeTimeout</h2>
@@ -157,7 +157,7 @@ Public Attributes</h2></td></tr>
 <p>Max wall-clock time a single <span class="tt">execute</span> may take before the server sends an <span class="tt">err "timeout"</span> reply and discards the eventual strand result. <span class="tt">0</span> = no timeout (today's behavior). </p>
 <p>An ordinary handler is never interrupted — it keeps running to completion on its strand, so this bounds the <em>caller's wait</em>, not the model. A handler returning <span class="tt">core::async::Task</span> is also asked to stop: its stop token is requested, and it unwinds at its next stop-aware <span class="tt">co_await</span> (see <span class="tt">docs/spec/core/coroutines.md</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +176,7 @@ Public Attributes</h2></td></tr>
 <p>Max models this <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> will hold live at once, across all callers. A <span class="tt">register</span> beyond this cap replies <span class="tt">err "too many
        models"</span>. <span class="tt">0</span> = unbounded (today's behavior). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +194,7 @@ Public Attributes</h2></td></tr>
 
 <p>Max concurrent in-flight <span class="tt">execute</span> calls this server will accept before replying <span class="tt">err "server busy"</span> instead of dispatching. <span class="tt">0</span> = unbounded (today's behavior). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

@@ -160,7 +160,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 <p>Concrete implementations decide <em>where</em> and <em>when</em> posted tasks run (thread pool, main thread, Qt event loop, …).</p>
 <p>An executor is an identity, so it is neither copyable nor movable: it owns the core-cpp adapter (<span class="tt"><a class="el" href="#a3ae4fce1feb932392828af7438e23067" title="This executor as a core-cpp executor: the identity an core::async::ExecutorScope names.">coreExecutor()</a></span>) that holds a pointer back to it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aba07ebeefeb8222821085e766887f4a5" name="aba07ebeefeb8222821085e766887f4a5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aba07ebeefeb8222821085e766887f4a5">&#9670;&#160;</a></span>post()</h2>
@@ -225,7 +225,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 
 <p>Reimplemented in <a class="el" href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a8cc0d37645e4c7e0e7a3f0d2725cc351">morph::exec::ThreadPoolExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -255,7 +255,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 <p>This executor as a core-cpp executor: the identity an <span class="tt">core::async::ExecutorScope</span> names. </p>
 <dl class="section return"><dt>Returns</dt><dd>The adapter that posts every resumption through <span class="tt"><a class="el" href="#aba07ebeefeb8222821085e766887f4a5" title="Schedules task for asynchronous execution.">post()</a></span>. The same object for the executor's whole life. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

@@ -161,7 +161,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 <div class="textblock"><p>Multi-threaded executor backed by a fixed-size thread pool. </p>
 <p>Tasks are placed in a FIFO queue and consumed by worker threads. Exceptions thrown by tasks are caught and logged via <span class="tt">morph::log</span> (they do not propagate out of the worker or abort sibling tasks). The destructor blocks until all worker threads have exited. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab3b2f3ea1e73b4cc34cc07c0d98dbf09" name="ab3b2f3ea1e73b4cc34cc07c0d98dbf09"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab3b2f3ea1e73b4cc34cc07c0d98dbf09">&#9670;&#160;</a></span>ThreadPoolExecutor()</h2>
@@ -194,7 +194,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00167">167</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +224,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 <p>Signals all workers to stop and joins them. </p>
 <p>Workers drain the queue before exiting: after <span class="tt">_stop</span> is set they keep popping and running already-queued tasks and only return once the queue is empty, so the join blocks until every task queued before destruction has run. Tasks <span class="tt"><a class="el" href="#afead0a3262f89b24d880c22c416911d6" title="Enqueues task for execution on one of the pool threads.">post()</a></span>ed concurrently with or after destruction race this and may be silently lost. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00181">181</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00182">182</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -262,7 +262,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 
 <p>Implements <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +294,7 @@ IExecutor &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IExecutor &
 
 <p>Reimplemented from <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#a40e82378c8523f0274f810f3800ce5ce">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00210">210</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

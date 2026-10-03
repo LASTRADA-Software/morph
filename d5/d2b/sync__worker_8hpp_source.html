@@ -138,365 +138,370 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d2b/sync__w
 <div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#include &quot;../core/executor.hpp&quot;</span></div>
 <div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#include &quot;../core/logger.hpp&quot;</span></div>
 <div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#include &quot;../core/observability.hpp&quot;</span></div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;offline_queue.hpp&quot;</span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span> </div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="keyword">namespace </span>morph::offline {</div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="comment"></span> </div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">/// @brief What one replay attempt actually achieved.</span></div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">///</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">/// The distinction that matters is **delivery**, not success: a replay the</span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">/// server refused and a replay the server never saw both leave the item</span></div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">/// queued, but only the first is evidence about the payload. Charging both to</span></div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">/// the same retry budget means a run of reconnect flaps dead-letters work that</span></div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// was never offered to anyone — reported to the user as a change that could</span></div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">/// not be applied, and dropped. See `SyncWorker`&#39;s retry documentation and</span></div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">/// docs/spec/offline/offline.md.</span></div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="keyword">enum class</span> ReplayOutcome : std::uint8_t {<span class="comment"></span></div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">    /// @brief Delivered and accepted. The item is removed from the queue.</span></div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span>    Succeeded,</div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment"></span> </div>
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment">    /// @brief Delivered, and the peer refused it. Charges one attempt against</span></div>
-<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">    ///        the retry budget; dead-letters the item once the budget is spent.</span></div>
-<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment">    ///        This is what `false` means on the boolean `ReplayFunction`.</span></div>
-<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span>    Rejected,</div>
-<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span><span class="comment"></span> </div>
-<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span><span class="comment">    /// @brief Never reached the peer (the connection was down, or dropped</span></div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="comment">    ///        before anything was committed). Charges **nothing**: the item</span></div>
-<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span><span class="comment">    ///        stays queued with its attempt count untouched, in memory and on</span></div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="comment">    ///        disk alike. Report this only when the payload demonstrably was</span></div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="comment">    ///        not acted on — an outcome that is really &quot;I don&#39;t know&quot; must be</span></div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span><span class="comment">    ///        `Rejected`, or a genuinely poisonous payload is retried forever.</span></div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>    Undelivered,</div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>};</div>
-<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span><span class="comment"></span> </div>
-<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span><span class="comment">/// @brief Aggregated result returned by `SyncWorker::run()`.</span></div>
-<div class="foldopen" id="foldopen00051" data-start="{" data-end="};">
-<div class="line"><a id="l00051" name="l00051"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">   51</a></span><span class="keyword">struct </span><a class="code hl_struct" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> {<span class="comment"></span></div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span><span class="comment">    /// @brief Number of items successfully replayed and removed from the queue.</span></div>
-<div class="line"><a id="l00053" name="l00053"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc">   53</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc">successful</a> = 0;</div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment"></span> </div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">    /// @brief Number of items that were delivered, refused, and left in the</span></div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">    ///        queue for retry, each having spent one attempt.</span></div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">   57</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">failed</a> = 0;</div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment"></span> </div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">    /// @brief Number of items whose replay never reached the peer. They remain</span></div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">    ///        in the queue with their attempt count unchanged, so they are</span></div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">    ///        neither progress nor a step towards being dead-lettered. Items</span></div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="comment">    ///        left queued by this run are `failed + undelivered`.</span></div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef">   63</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef">undelivered</a> = 0;</div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="comment"></span> </div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment">    /// @brief Number of items that exhausted their retry budget and were dropped</span></div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span><span class="comment">    ///        from the queue (handed to the `DeadLetterSink` if one is set,</span></div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment">    ///        otherwise logged via `morph::log::logError`).</span></div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">   68</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">deadLettered</a> = 0;</div>
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span>};</div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;<a class="code" href="../../dc/ddc/profiler_8hpp.html">../core/profiler.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#include &quot;offline_queue.hpp&quot;</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span> </div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="keyword">namespace </span>morph::offline {</div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment"></span> </div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">/// @brief What one replay attempt actually achieved.</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">///</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">/// The distinction that matters is **delivery**, not success: a replay the</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">/// server refused and a replay the server never saw both leave the item</span></div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">/// queued, but only the first is evidence about the payload. Charging both to</span></div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// the same retry budget means a run of reconnect flaps dead-letters work that</span></div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">/// was never offered to anyone — reported to the user as a change that could</span></div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">/// not be applied, and dropped. See `SyncWorker`&#39;s retry documentation and</span></div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// docs/spec/offline/offline.md.</span></div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="keyword">enum class</span> ReplayOutcome : std::uint8_t {<span class="comment"></span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">    /// @brief Delivered and accepted. The item is removed from the queue.</span></div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span>    Succeeded,</div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment"></span> </div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">    /// @brief Delivered, and the peer refused it. Charges one attempt against</span></div>
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment">    ///        the retry budget; dead-letters the item once the budget is spent.</span></div>
+<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span><span class="comment">    ///        This is what `false` means on the boolean `ReplayFunction`.</span></div>
+<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span>    Rejected,</div>
+<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span><span class="comment"></span> </div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="comment">    /// @brief Never reached the peer (the connection was down, or dropped</span></div>
+<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span><span class="comment">    ///        before anything was committed). Charges **nothing**: the item</span></div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="comment">    ///        stays queued with its attempt count untouched, in memory and on</span></div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="comment">    ///        disk alike. Report this only when the payload demonstrably was</span></div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span><span class="comment">    ///        not acted on — an outcome that is really &quot;I don&#39;t know&quot; must be</span></div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span><span class="comment">    ///        `Rejected`, or a genuinely poisonous payload is retried forever.</span></div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>    Undelivered,</div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>};</div>
+<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span><span class="comment"></span> </div>
+<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span><span class="comment">/// @brief Aggregated result returned by `SyncWorker::run()`.</span></div>
+<div class="foldopen" id="foldopen00052" data-start="{" data-end="};">
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">   52</a></span><span class="keyword">struct </span><a class="code hl_struct" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> {<span class="comment"></span></div>
+<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="comment">    /// @brief Number of items successfully replayed and removed from the queue.</span></div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc">   54</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc">successful</a> = 0;</div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment"></span> </div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">    /// @brief Number of items that were delivered, refused, and left in the</span></div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">    ///        queue for retry, each having spent one attempt.</span></div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">   58</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">failed</a> = 0;</div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment"></span> </div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">    /// @brief Number of items whose replay never reached the peer. They remain</span></div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">    ///        in the queue with their attempt count unchanged, so they are</span></div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="comment">    ///        neither progress nor a step towards being dead-lettered. Items</span></div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="comment">    ///        left queued by this run are `failed + undelivered`.</span></div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef">   64</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef">undelivered</a> = 0;</div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment"></span> </div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span><span class="comment">    /// @brief Number of items that exhausted their retry budget and were dropped</span></div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment">    ///        from the queue (handed to the `DeadLetterSink` if one is set,</span></div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment">    ///        otherwise logged via `morph::log::logError`).</span></div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno"><a class="line" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">   69</a></span>    <span class="keywordtype">int</span> <a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">deadLettered</a> = 0;</div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span>};</div>
 </div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment"></span> </div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">/// @brief Replays queued actions from an `IOfflineQueue` on reconnect.</span></div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">///</span></div>
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="comment">/// `SyncWorker` drains the queue and calls a caller-supplied replay function</span></div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment">/// for each item. The framework has no knowledge of what &quot;replay&quot; means —</span></div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment">/// that is entirely the caller&#39;s domain. Retry semantics are baked in with</span></div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">/// hard-coded sensible defaults; there are intentionally no setters.</span></div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">///</span></div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment">/// @par Retry &amp; dead-letter (built-in defaults)</span></div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment">/// - Each item is retried up to **5 cumulative attempts**. The count is seeded</span></div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span><span class="comment">///   from the larger of the drained `QueueItem::attempts` (durable, if the</span></div>
-<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span><span class="comment">///   queue persists it) and this worker&#39;s own in-memory count, so a queue that</span></div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span><span class="comment">///   overrides `IOfflineQueue::setAttempts()` makes the budget survive a</span></div>
-<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span><span class="comment">///   process restart; a queue that does not (the default no-op) keeps the</span></div>
-<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span><span class="comment">///   count purely in-memory, exactly as before.</span></div>
-<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span><span class="comment">/// - **Only a *delivered* failure spends an attempt.** A replay reporting</span></div>
-<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span><span class="comment">///   `ReplayOutcome::Undelivered` leaves the item queued with its count</span></div>
-<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span><span class="comment">///   untouched, in memory and on disk alike, so a run of reconnect flaps</span></div>
-<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span><span class="comment">///   cannot walk queued work to the dead-letter sink. The boolean</span></div>
-<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="comment">///   `ReplayFunction` cannot express that outcome; a caller that can tell the</span></div>
-<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment">///   two apart should use `DetailedReplayFunction`.</span></div>
-<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">/// - After every *charged* failure, the new count is written back through</span></div>
-<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="comment">///   `IOfflineQueue::setAttempts()` (a no-op unless the queue overrides it) so</span></div>
-<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment">///   a persisting queue&#39;s next `drain()` — this run or after a restart — sees</span></div>
-<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">///   the updated value.</span></div>
-<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">/// - Items that fail their 5th cumulative attempt are dropped from the queue.</span></div>
-<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">///   If a `DeadLetterSink` is set, it is invoked with the exhausted item</span></div>
-<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span><span class="comment">///   instead of the default log line; if unset, the item is logged at</span></div>
-<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment">///   `morph::log::LogLevel::error` (the payload appears in the log line) —</span></div>
-<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span><span class="comment">///   today&#39;s behavior, unchanged.</span></div>
-<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span><span class="comment">/// - Items that succeed reset their attempt counter implicitly (they&#39;re removed).</span></div>
-<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span><span class="comment">/// - There is no public knob on the retry cap — if your application needs</span></div>
-<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span><span class="comment">///   different retry math, wrap or replace `SyncWorker`. The framework&#39;s</span></div>
-<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span><span class="comment">///   promise is &quot;obvious, safe defaults that the GUI never has to think about.&quot;</span></div>
-<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span><span class="comment">///</span></div>
-<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span><span class="comment">/// @par Replay contract</span></div>
-<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span><span class="comment">/// `DetailedReplayFunction` (three outcomes — prefer it):</span></div>
-<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span><span class="comment">/// - `ReplayOutcome::Succeeded`   → removed from the queue.</span></div>
-<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span><span class="comment">/// - `ReplayOutcome::Rejected`    → delivered and refused; attempt counter</span></div>
-<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span><span class="comment">///                                  incremented; left in queue if under the</span></div>
-<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span><span class="comment">///                                  cap, otherwise dropped (dead-lettered).</span></div>
-<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span><span class="comment">/// - `ReplayOutcome::Undelivered` → never reached the peer; **nothing is</span></div>
-<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span><span class="comment">///                                  charged** and the item stays queued.</span></div>
-<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="comment">///</span></div>
-<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment">/// `ReplayFunction` (two outcomes — unchanged for existing callers):</span></div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span><span class="comment">/// - Return `true`  → same as `Succeeded`.</span></div>
-<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="comment">/// - Return `false` → same as `Rejected`. It is deliberately *not* read as</span></div>
-<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span><span class="comment">///                    `Undelivered`: every caller written against the boolean</span></div>
-<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span><span class="comment">///                    form means &quot;this attempt failed&quot;, and silently treating</span></div>
-<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span><span class="comment">///                    that as undelivered would retry a poison payload forever.</span></div>
-<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span><span class="comment">///</span></div>
-<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span><span class="comment">/// Either form:</span></div>
-<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span><span class="comment">/// - Throw → treated as `Rejected`. A throw reports failure but not delivery,</span></div>
-<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">///           and an unknown failure has to be charged for the same reason.</span></div>
-<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span><span class="comment">///</span></div>
-<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">/// @par One owner</span></div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">/// A worker belongs to the executor it is given, which must run one task at a</span></div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">/// time: the coordinator&#39;s offline strand (`ReconnectCoordinator::strand()`),</span></div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">/// or any other strand. Its queue drain, attempt counts and dead-lettering run</span></div>
-<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">/// only in that owner&#39;s tasks. `run()` is callable from any thread: on the</span></div>
-<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">/// owner it drains at once; elsewhere it posts the drain to the owner, so two</span></div>
-<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">/// runs never overlap. Its answer is delivered on the executor the caller</span></div>
-<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="comment">/// names, so a caller attaches to it where it already runs. `stop()` is the</span></div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="comment">/// one cross-thread signal, an atomic.</span></div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span><span class="comment">///</span></div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment">/// The drain calls the queue&#39;s synchronous verbs, which answer only on the</span></div>
-<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment">/// queue&#39;s own owner (see `IOfflineQueue`, &quot;One owner&quot;): give the queue the</span></div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">/// worker&#39;s owner, or the executor that strand runs over.</span></div>
-<div class="foldopen" id="foldopen00138" data-start="{" data-end="};">
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html">  138</a></span><span class="keyword">class </span><a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">SyncWorker</a> {</div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span><span class="comment">    /// @brief Callable that attempts to replay a single queued item, reporting</span></div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span><span class="comment">    ///        only success or failure.</span></div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment">    /// Retained unchanged for existing callers, and `false` keeps meaning</span></div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">    /// exactly what it always did — `ReplayOutcome::Rejected`, i.e. one attempt</span></div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">    /// spent. A caller that can tell an undelivered replay from a refused one</span></div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment">    /// should use `DetailedReplayFunction` instead; this overload cannot</span></div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">    /// express the difference and so cannot avoid the dead-lettering it causes.</span></div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996">  148</a></span>    <span class="keyword">using </span><a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996">ReplayFunction</a> = std::function&lt;bool(<span class="keyword">const</span> std::string&amp; payload)&gt;;</div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment"></span> </div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">    /// @brief Callable that attempts to replay a single queued item and reports</span></div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    ///        what it achieved.</span></div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span><span class="comment">    /// The three-outcome counterpart of `ReplayFunction`: it is the only form</span></div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment">    /// that can report `ReplayOutcome::Undelivered` and so keep a reconnect</span></div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">    /// flap from spending the item&#39;s retry budget.</span></div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970">  156</a></span>    <span class="keyword">using </span><a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a> = std::function&lt;ReplayOutcome(<span class="keyword">const</span> std::string&amp; payload)&gt;;</div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment"></span> </div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment">    /// @brief Callable invoked when an item exhausts its retry budget, just</span></div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">    ///        before it is removed from the queue.</span></div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">    /// Receives the exhausted item (payload, idempotencyKey, and its final</span></div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">    /// cumulative attempt count). If unset, `SyncWorker` keeps the default</span></div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment">    /// behavior: log at `morph::log::LogLevel::error` and drop. A throwing</span></div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment">    /// sink is caught and logged — the item is still removed.</span></div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">  165</a></span>    <span class="keyword">using </span><a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> = std::function&lt;void(<span class="keyword">const</span> <a class="code hl_struct" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a>&amp; poisoned)&gt;;</div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment"></span> </div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    /// @brief Constructs a worker that drains @p queue using @p replay, on</span></div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    ///        @p owner.</span></div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// @param owner          The executor every drain runs on; must run one task</span></div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    ///                       at a time (a strand). Borrowed: it must outlive this</span></div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    ///                       worker and keep running tasks until it is destroyed.</span></div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    /// @param queue          Queue to drain on each `run()` call, belonging to</span></div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    ///                       @p owner (or to the executor it runs over).</span></div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">    ///                       Borrowed, not owned: it must outlive this worker.</span></div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">    /// @param replay         Function called for each pending item. Stored and</span></div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">    ///                       invoked for this worker&#39;s whole lifetime, so</span></div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">    ///                       anything the callable refers to must outlive it.</span></div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">    /// @param deadLetterSink Optional hook invoked with the exhausted item</span></div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">    ///                       instead of the default log-and-drop path when an</span></div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment">    ///                       item exhausts its retry budget. Default: unset.</span></div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">    ///                       Retained on the same terms as @p replay.</span></div>
-<div class="foldopen" id="foldopen00182" data-start="{" data-end="}">
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">  182</a></span>    <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">SyncWorker</a>(<a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; owner MORPH_LIFETIMEBOUND, <a class="code hl_struct" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a>&amp; queue MORPH_LIFETIMEBOUND,</div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>               <a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996">ReplayFunction</a> replay MORPH_LIFETIMEBOUND, <a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink MORPH_LIFETIMEBOUND = <span class="keyword">nullptr</span>)</div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>        : <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">SyncWorker</a>{owner, queue,</div>
-<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>                     [replay = std::move(replay)](const std::string&amp; payload) {</div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>                         <span class="keywordflow">return</span> replay(payload) ? ReplayOutcome::Succeeded : ReplayOutcome::Rejected;</div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>                     },</div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>                     std::move(deadLetterSink)} {}</div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment"></span> </div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">/// @brief Replays queued actions from an `IOfflineQueue` on reconnect.</span></div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="comment">///</span></div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment">/// `SyncWorker` drains the queue and calls a caller-supplied replay function</span></div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment">/// for each item. The framework has no knowledge of what &quot;replay&quot; means —</span></div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">/// that is entirely the caller&#39;s domain. Retry semantics are baked in with</span></div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">/// hard-coded sensible defaults; there are intentionally no setters.</span></div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment">///</span></div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment">/// @par Retry &amp; dead-letter (built-in defaults)</span></div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span><span class="comment">/// - Each item is retried up to **5 cumulative attempts**. The count is seeded</span></div>
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span><span class="comment">///   from the larger of the drained `QueueItem::attempts` (durable, if the</span></div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span><span class="comment">///   queue persists it) and this worker&#39;s own in-memory count, so a queue that</span></div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span><span class="comment">///   overrides `IOfflineQueue::setAttempts()` makes the budget survive a</span></div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span><span class="comment">///   process restart; a queue that does not (the default no-op) keeps the</span></div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span><span class="comment">///   count purely in-memory, exactly as before.</span></div>
+<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span><span class="comment">/// - **Only a *delivered* failure spends an attempt.** A replay reporting</span></div>
+<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span><span class="comment">///   `ReplayOutcome::Undelivered` leaves the item queued with its count</span></div>
+<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span><span class="comment">///   untouched, in memory and on disk alike, so a run of reconnect flaps</span></div>
+<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="comment">///   cannot walk queued work to the dead-letter sink. The boolean</span></div>
+<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment">///   `ReplayFunction` cannot express that outcome; a caller that can tell the</span></div>
+<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">///   two apart should use `DetailedReplayFunction`.</span></div>
+<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="comment">/// - After every *charged* failure, the new count is written back through</span></div>
+<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment">///   `IOfflineQueue::setAttempts()` (a no-op unless the queue overrides it) so</span></div>
+<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">///   a persisting queue&#39;s next `drain()` — this run or after a restart — sees</span></div>
+<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">///   the updated value.</span></div>
+<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">/// - Items that fail their 5th cumulative attempt are dropped from the queue.</span></div>
+<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span><span class="comment">///   If a `DeadLetterSink` is set, it is invoked with the exhausted item</span></div>
+<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment">///   instead of the default log line; if unset, the item is logged at</span></div>
+<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span><span class="comment">///   `morph::log::LogLevel::error` (the payload appears in the log line) —</span></div>
+<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span><span class="comment">///   today&#39;s behavior, unchanged.</span></div>
+<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span><span class="comment">/// - Items that succeed reset their attempt counter implicitly (they&#39;re removed).</span></div>
+<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span><span class="comment">/// - There is no public knob on the retry cap — if your application needs</span></div>
+<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span><span class="comment">///   different retry math, wrap or replace `SyncWorker`. The framework&#39;s</span></div>
+<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span><span class="comment">///   promise is &quot;obvious, safe defaults that the GUI never has to think about.&quot;</span></div>
+<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span><span class="comment">///</span></div>
+<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span><span class="comment">/// @par Replay contract</span></div>
+<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span><span class="comment">/// `DetailedReplayFunction` (three outcomes — prefer it):</span></div>
+<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span><span class="comment">/// - `ReplayOutcome::Succeeded`   → removed from the queue.</span></div>
+<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span><span class="comment">/// - `ReplayOutcome::Rejected`    → delivered and refused; attempt counter</span></div>
+<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span><span class="comment">///                                  incremented; left in queue if under the</span></div>
+<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span><span class="comment">///                                  cap, otherwise dropped (dead-lettered).</span></div>
+<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span><span class="comment">/// - `ReplayOutcome::Undelivered` → never reached the peer; **nothing is</span></div>
+<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="comment">///                                  charged** and the item stays queued.</span></div>
+<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment">///</span></div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span><span class="comment">/// `ReplayFunction` (two outcomes — unchanged for existing callers):</span></div>
+<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="comment">/// - Return `true`  → same as `Succeeded`.</span></div>
+<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span><span class="comment">/// - Return `false` → same as `Rejected`. It is deliberately *not* read as</span></div>
+<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span><span class="comment">///                    `Undelivered`: every caller written against the boolean</span></div>
+<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span><span class="comment">///                    form means &quot;this attempt failed&quot;, and silently treating</span></div>
+<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span><span class="comment">///                    that as undelivered would retry a poison payload forever.</span></div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span><span class="comment">///</span></div>
+<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span><span class="comment">/// Either form:</span></div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">/// - Throw → treated as `Rejected`. A throw reports failure but not delivery,</span></div>
+<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span><span class="comment">///           and an unknown failure has to be charged for the same reason.</span></div>
+<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">///</span></div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">/// @par One owner</span></div>
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">/// A worker belongs to the executor it is given, which must run one task at a</span></div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">/// time: the coordinator&#39;s offline strand (`ReconnectCoordinator::strand()`),</span></div>
+<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">/// or any other strand. Its queue drain, attempt counts and dead-lettering run</span></div>
+<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">/// only in that owner&#39;s tasks. `run()` is callable from any thread: on the</span></div>
+<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">/// owner it drains at once; elsewhere it posts the drain to the owner, so two</span></div>
+<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="comment">/// runs never overlap. Its answer is delivered on the executor the caller</span></div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="comment">/// names, so a caller attaches to it where it already runs. `stop()` is the</span></div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span><span class="comment">/// one cross-thread signal, an atomic.</span></div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment">///</span></div>
+<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment">/// The drain calls the queue&#39;s synchronous verbs, which answer only on the</span></div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">/// queue&#39;s own owner (see `IOfflineQueue`, &quot;One owner&quot;): give the queue the</span></div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span><span class="comment">/// worker&#39;s owner, or the executor that strand runs over.</span></div>
+<div class="foldopen" id="foldopen00139" data-start="{" data-end="};">
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html">  139</a></span><span class="keyword">class </span><a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">SyncWorker</a> {</div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span><span class="comment">    /// @brief Callable that attempts to replay a single queued item, reporting</span></div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span><span class="comment">    ///        only success or failure.</span></div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">    /// Retained unchanged for existing callers, and `false` keeps meaning</span></div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">    /// exactly what it always did — `ReplayOutcome::Rejected`, i.e. one attempt</span></div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment">    /// spent. A caller that can tell an undelivered replay from a refused one</span></div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">    /// should use `DetailedReplayFunction` instead; this overload cannot</span></div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">    /// express the difference and so cannot avoid the dead-lettering it causes.</span></div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996">  149</a></span>    <span class="keyword">using </span><a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996">ReplayFunction</a> = std::function&lt;bool(<span class="keyword">const</span> std::string&amp; payload)&gt;;</div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment"></span> </div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    /// @brief Callable that attempts to replay a single queued item and reports</span></div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    ///        what it achieved.</span></div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment">    /// The three-outcome counterpart of `ReplayFunction`: it is the only form</span></div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">    /// that can report `ReplayOutcome::Undelivered` and so keep a reconnect</span></div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">    /// flap from spending the item&#39;s retry budget.</span></div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970">  157</a></span>    <span class="keyword">using </span><a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a> = std::function&lt;ReplayOutcome(<span class="keyword">const</span> std::string&amp; payload)&gt;;</div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment"></span> </div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">    /// @brief Callable invoked when an item exhausts its retry budget, just</span></div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">    ///        before it is removed from the queue.</span></div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">    /// Receives the exhausted item (payload, idempotencyKey, and its final</span></div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment">    /// cumulative attempt count). If unset, `SyncWorker` keeps the default</span></div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment">    /// behavior: log at `morph::log::LogLevel::error` and drop. A throwing</span></div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">    /// sink is caught and logged — the item is still removed.</span></div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">  166</a></span>    <span class="keyword">using </span><a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> = std::function&lt;void(<span class="keyword">const</span> <a class="code hl_struct" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a>&amp; poisoned)&gt;;</div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment"></span> </div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    /// @brief Constructs a worker that drains @p queue using @p replay, on</span></div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    ///        @p owner.</span></div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    /// @param owner          The executor every drain runs on; must run one task</span></div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    ///                       at a time (a strand). Borrowed: it must outlive this</span></div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    ///                       worker and keep running tasks until it is destroyed.</span></div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    /// @param queue          Queue to drain on each `run()` call, belonging to</span></div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">    ///                       @p owner (or to the executor it runs over).</span></div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">    ///                       Borrowed, not owned: it must outlive this worker.</span></div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">    /// @param replay         Function called for each pending item. Stored and</span></div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">    ///                       invoked for this worker&#39;s whole lifetime, so</span></div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">    ///                       anything the callable refers to must outlive it.</span></div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">    /// @param deadLetterSink Optional hook invoked with the exhausted item</span></div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment">    ///                       instead of the default log-and-drop path when an</span></div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">    ///                       item exhausts its retry budget. Default: unset.</span></div>
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span><span class="comment">    ///                       Retained on the same terms as @p replay.</span></div>
+<div class="foldopen" id="foldopen00183" data-start="{" data-end="}">
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">  183</a></span>    <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">SyncWorker</a>(<a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; owner MORPH_LIFETIMEBOUND, <a class="code hl_struct" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a>&amp; queue MORPH_LIFETIMEBOUND,</div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>               <a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996">ReplayFunction</a> replay MORPH_LIFETIMEBOUND, <a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink MORPH_LIFETIMEBOUND = <span class="keyword">nullptr</span>)</div>
+<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>        : <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">SyncWorker</a>{owner, queue,</div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>                     [replay = std::move(replay)](const std::string&amp; payload) {</div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>                         <span class="keywordflow">return</span> replay(payload) ? ReplayOutcome::Succeeded : ReplayOutcome::Rejected;</div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>                     },</div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>                     std::move(deadLetterSink)} {}</div>
 </div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment"></span> </div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="comment">    /// @brief Constructs a worker that drains @p queue using @p replay, which</span></div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">    ///        distinguishes an undelivered replay from a rejected one.</span></div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment">    /// Identical to the overload above except for the replay callable&#39;s return</span></div>
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment">    /// type. Only `ReplayOutcome::Rejected` spends an attempt, so a reconnect</span></div>
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="comment">    /// flap that never reached the peer no longer walks queued work towards the</span></div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span><span class="comment">    /// dead-letter sink.</span></div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span><span class="comment">    /// The two overloads are unambiguous: `ReplayOutcome` is a scoped enum, so</span></div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment">    /// neither return type implicitly converts to the other.</span></div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment">    /// @param owner          The executor every drain runs on; must run one task</span></div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span><span class="comment">    ///                       at a time (a strand). Borrowed: it must outlive this</span></div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment">    ///                       worker and keep running tasks until it is destroyed.</span></div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span><span class="comment">    /// @param queue          Queue to drain on each `run()` call, belonging to</span></div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span><span class="comment">    ///                       @p owner (or to the executor it runs over).</span></div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="comment">    ///                       Borrowed, not owned: it must outlive this worker.</span></div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment">    /// @param replay         Function called for each pending item. Stored and</span></div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span><span class="comment">    ///                       invoked for this worker&#39;s whole lifetime, so</span></div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment">    ///                       anything the callable refers to must outlive it.</span></div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">    /// @param deadLetterSink Optional hook invoked with the exhausted item</span></div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">    ///                       instead of the default log-and-drop path when an</span></div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span><span class="comment">    ///                       item exhausts its retry budget. Default: unset.</span></div>
-<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment">    ///                       Retained on the same terms as @p replay.</span></div>
-<div class="foldopen" id="foldopen00214" data-start="{" data-end="}">
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4297a4dceef75bf1c79fdc8f6f1ab500">  214</a></span>    <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4297a4dceef75bf1c79fdc8f6f1ab500">SyncWorker</a>(<a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; owner MORPH_LIFETIMEBOUND, <a class="code hl_struct" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a>&amp; queue MORPH_LIFETIMEBOUND,</div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>               <a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a> replay MORPH_LIFETIMEBOUND,</div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>               <a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink MORPH_LIFETIMEBOUND = <span class="keyword">nullptr</span>)</div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        : _owner{owner}, _queue{queue}, _replay{std::move(replay)}, _deadLetterSink{std::move(deadLetterSink)} {}</div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="comment"></span> </div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">    /// @brief Constructs a worker that drains @p queue using @p replay, which</span></div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">    ///        distinguishes an undelivered replay from a rejected one.</span></div>
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment">    /// Identical to the overload above except for the replay callable&#39;s return</span></div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="comment">    /// type. Only `ReplayOutcome::Rejected` spends an attempt, so a reconnect</span></div>
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span><span class="comment">    /// flap that never reached the peer no longer walks queued work towards the</span></div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span><span class="comment">    /// dead-letter sink.</span></div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment">    /// The two overloads are unambiguous: `ReplayOutcome` is a scoped enum, so</span></div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment">    /// neither return type implicitly converts to the other.</span></div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span><span class="comment">    /// @param owner          The executor every drain runs on; must run one task</span></div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment">    ///                       at a time (a strand). Borrowed: it must outlive this</span></div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span><span class="comment">    ///                       worker and keep running tasks until it is destroyed.</span></div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span><span class="comment">    /// @param queue          Queue to drain on each `run()` call, belonging to</span></div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="comment">    ///                       @p owner (or to the executor it runs over).</span></div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment">    ///                       Borrowed, not owned: it must outlive this worker.</span></div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span><span class="comment">    /// @param replay         Function called for each pending item. Stored and</span></div>
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment">    ///                       invoked for this worker&#39;s whole lifetime, so</span></div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">    ///                       anything the callable refers to must outlive it.</span></div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">    /// @param deadLetterSink Optional hook invoked with the exhausted item</span></div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span><span class="comment">    ///                       instead of the default log-and-drop path when an</span></div>
+<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment">    ///                       item exhausts its retry budget. Default: unset.</span></div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span><span class="comment">    ///                       Retained on the same terms as @p replay.</span></div>
+<div class="foldopen" id="foldopen00215" data-start="{" data-end="}">
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4297a4dceef75bf1c79fdc8f6f1ab500">  215</a></span>    <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4297a4dceef75bf1c79fdc8f6f1ab500">SyncWorker</a>(<a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; owner MORPH_LIFETIMEBOUND, <a class="code hl_struct" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a>&amp; queue MORPH_LIFETIMEBOUND,</div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>               <a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970">DetailedReplayFunction</a> replay MORPH_LIFETIMEBOUND,</div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>               <a class="code hl_typedef" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">DeadLetterSink</a> deadLetterSink MORPH_LIFETIMEBOUND = <span class="keyword">nullptr</span>)</div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>        : _owner{owner}, _queue{queue}, _replay{std::move(replay)}, _deadLetterSink{std::move(deadLetterSink)} {}</div>
 </div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment"></span> </div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment">    /// @brief Drains the queue, replaying each item via the replay function,</span></div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    ///        on the owner.</span></div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">    /// On the owner the drain runs before this returns; from any other thread</span></div>
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">    /// it is posted there, after any drain posted before it. It processes every</span></div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="comment">    /// pending item, or stops early once `stop()` is signalled.</span></div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment">    /// If `stop()` was called before the drain starts, the drain does nothing,</span></div>
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">    /// resets the stop flag and answers an empty result.</span></div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span><span class="comment">    /// A posted drain refers to this worker, so the worker must outlive every</span></div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment">    /// drain it has posted: destroy it once every `run()` has settled, or</span></div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment">    /// after its owner is closed.</span></div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="comment">    /// @param replyExec Executor the answer is delivered on and the caller</span></div>
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span><span class="comment">    ///        attaches its callbacks on: the caller&#39;s own. Borrowed: it must</span></div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="comment">    ///        outlive the returned `Completion`.</span></div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="comment">    /// @return A `Completion` settled on the owner with the counts of</span></div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span><span class="comment">    ///         successful / failed / dead-lettered replays, delivered on</span></div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span><span class="comment">    ///         @p replyExec.</span></div>
-<div class="foldopen" id="foldopen00239" data-start="{" data-end="}">
-<div class="line"><a id="l00239" name="l00239"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a655f4426286e89a5e6ec61546a3dcdd3">  239</a></span>    <a class="code hl_class" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion&lt;SyncResult&gt;</a> <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a655f4426286e89a5e6ec61546a3dcdd3">run</a>(<a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; replyExec MORPH_LIFETIMEBOUND) {</div>
-<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>        <span class="keyword">auto</span> settleable = <a class="code hl_function" href="../../dd/de7/classmorph_1_1async_1_1Completion.html#a84a09a2d546cb0983d1eca68b4fc97de">::morph::async::Completion&lt;SyncResult&gt;::makeSettleable</a>(&amp;replyExec);</div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>        <span class="keywordflow">if</span> (::morph::exec::runningOn(_owner)) {</div>
-<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>            settleable.second.resolve(drainHere());</div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            <span class="keywordflow">return</span> std::move(settleable.first);</div>
-<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>        }</div>
-<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>        _owner.post([<span class="keyword">this</span>, promise = std::make_shared&lt;<a class="code hl_class" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html">::morph::async::Completion&lt;SyncResult&gt;::Promise</a>&gt;(</div>
-<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>                               std::move(settleable.second))] { promise-&gt;resolve(drainHere()); });</div>
-<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>        <span class="keywordflow">return</span> std::move(settleable.first);</div>
-<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>    }</div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment"></span> </div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// @brief Drains the queue, replaying each item via the replay function,</span></div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    ///        on the owner.</span></div>
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">    /// On the owner the drain runs before this returns; from any other thread</span></div>
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="comment">    /// it is posted there, after any drain posted before it. It processes every</span></div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment">    /// pending item, or stops early once `stop()` is signalled.</span></div>
+<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">    /// If `stop()` was called before the drain starts, the drain does nothing,</span></div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="comment">    /// resets the stop flag and answers an empty result.</span></div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment">    /// A posted drain refers to this worker, so the worker must outlive every</span></div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment">    /// drain it has posted: destroy it once every `run()` has settled, or</span></div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="comment">    /// after its owner is closed.</span></div>
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span><span class="comment">    /// @param replyExec Executor the answer is delivered on and the caller</span></div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="comment">    ///        attaches its callbacks on: the caller&#39;s own. Borrowed: it must</span></div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="comment">    ///        outlive the returned `Completion`.</span></div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span><span class="comment">    /// @return A `Completion` settled on the owner with the counts of</span></div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span><span class="comment">    ///         successful / failed / dead-lettered replays, delivered on</span></div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span><span class="comment">    ///         @p replyExec.</span></div>
+<div class="foldopen" id="foldopen00240" data-start="{" data-end="}">
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a655f4426286e89a5e6ec61546a3dcdd3">  240</a></span>    <a class="code hl_class" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion&lt;SyncResult&gt;</a> <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a655f4426286e89a5e6ec61546a3dcdd3">run</a>(<a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; replyExec MORPH_LIFETIMEBOUND) {</div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>        <span class="keyword">auto</span> settleable = <a class="code hl_function" href="../../dd/de7/classmorph_1_1async_1_1Completion.html#a84a09a2d546cb0983d1eca68b4fc97de">::morph::async::Completion&lt;SyncResult&gt;::makeSettleable</a>(&amp;replyExec);</div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>        <span class="keywordflow">if</span> (::morph::exec::runningOn(_owner)) {</div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            settleable.second.resolve(drainHere());</div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>            <span class="keywordflow">return</span> std::move(settleable.first);</div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>        }</div>
+<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>        _owner.post([<span class="keyword">this</span>, promise = std::make_shared&lt;<a class="code hl_class" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html">::morph::async::Completion&lt;SyncResult&gt;::Promise</a>&gt;(</div>
+<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>                               std::move(settleable.second))] { promise-&gt;resolve(drainHere()); });</div>
+<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>        <span class="keywordflow">return</span> std::move(settleable.first);</div>
+<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>    }</div>
 </div>
-<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span><span class="comment"></span> </div>
-<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span><span class="comment">    /// @brief Signals an in-progress drain to stop after the current item.</span></div>
-<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span><span class="comment">    /// Callable from any thread. The drain clears the flag at its start, so</span></div>
-<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span><span class="comment">    /// stopping is one-shot — but a `stop()` that lands *during* a drain leaves</span></div>
-<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span><span class="comment">    /// the flag set on return, so the next drain takes its early-out and drains</span></div>
-<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span><span class="comment">    /// nothing; work resumes only on the drain after that.</span></div>
-<div class="line"><a id="l00256" name="l00256"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68">  256</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68">stop</a>() { _stopped.store(<span class="keyword">true</span>); }</div>
-<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span> </div>
-<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span><span class="keyword">private</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span><span class="comment">    /// @brief The drain itself. On the owner.</span></div>
-<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span><span class="comment">    /// @return Counts of successful / failed / dead-lettered replays.</span></div>
-<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span>    <a class="code hl_struct" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> drainHere() {</div>
-<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span>        ::morph::exec::detail::noteOwner(<span class="stringliteral">&quot;SyncWorker::run&quot;</span>, _owner.coreExecutor(), ::morph::exec::runningOn(_owner));</div>
-<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span>        <span class="keywordtype">bool</span> <span class="keyword">const</span> wasStoppedBeforeRun = _stopped.exchange(<span class="keyword">false</span>);</div>
-<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span>        <a class="code hl_struct" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> result;</div>
-<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span>        <span class="keywordflow">if</span> (wasStoppedBeforeRun) {</div>
-<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span>            <span class="keywordflow">return</span> result;</div>
-<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span>        }</div>
-<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span> </div>
-<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span>        <span class="keyword">auto</span> items = _queue.drain();</div>
-<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span>        ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueDepth, <span class="keyword">static_cast&lt;</span><span class="keywordtype">double</span><span class="keyword">&gt;</span>(items.size()));</div>
-<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span>&amp; item : items) {</div>
-<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span>            <span class="keywordflow">if</span> (_stopped.load()) {</div>
-<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span>                <span class="keywordflow">break</span>;</div>
-<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span>            }</div>
-<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>            ReplayOutcome outcome = ReplayOutcome::Rejected;</div>
-<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>            <span class="keywordflow">try</span> {</div>
-<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>                outcome = _replay(item.payload);</div>
-<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>            } <span class="keywordflow">catch</span> (...) {</div>
-<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>                <span class="comment">// A throw says the replay failed but not whether it was</span></div>
-<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>                <span class="comment">// delivered, and &quot;I don&#39;t know&quot; has to be charged: treating an</span></div>
-<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>                <span class="comment">// unknown failure as undelivered would retry a genuinely</span></div>
-<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>                <span class="comment">// poisonous payload forever. Same reading `false` has always</span></div>
-<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>                <span class="comment">// had on the boolean overload.</span></div>
-<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>                outcome = ReplayOutcome::Rejected;</div>
-<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>            }</div>
-<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>            <span class="keywordflow">if</span> (outcome == ReplayOutcome::Succeeded) {</div>
-<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>                _queue.markDone(item.id);</div>
-<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>                _attempts.erase(item.id);</div>
-<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>                ++result.<a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc">successful</a>;</div>
-<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>                <span class="keywordflow">continue</span>;</div>
-<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>            }</div>
-<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>            <span class="keywordflow">if</span> (outcome == ReplayOutcome::Undelivered) {</div>
-<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>                <span class="comment">// Nothing reached the peer, so there is no evidence about this</span></div>
-<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span>                <span class="comment">// payload and nothing to charge. Deliberately touches neither</span></div>
-<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span>                <span class="comment">// `_attempts` nor `setAttempts()`: the budget is durable, so</span></div>
-<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>                <span class="comment">// leaving the in-memory count alone while advancing the</span></div>
-<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>                <span class="comment">// persisted one would still walk the item towards the</span></div>
-<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>                <span class="comment">// dead-letter sink across a restart.</span></div>
-<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span>                ++result.<a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef">undelivered</a>;</div>
-<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>                <span class="keywordflow">continue</span>;</div>
-<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>            }</div>
-<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>            <span class="comment">// The effective count is the larger of the persisted item.attempts</span></div>
-<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>            <span class="comment">// (0 unless the queue overrides setAttempts) and this worker&#39;s own</span></div>
-<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span>            <span class="comment">// in-memory count, so a durable queue&#39;s cross-restart count is</span></div>
-<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span>            <span class="comment">// never regressed by a fresh (empty) in-memory map.</span></div>
-<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span>            <span class="keyword">auto</span>&amp; counter = _attempts[item.id];</div>
-<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span>            counter = std::max(counter, item.attempts);</div>
-<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>            ++counter;</div>
-<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>            _queue.setAttempts(item.id, counter);</div>
-<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>            <span class="keywordflow">if</span> (counter &gt;= kMaxAttempts) {</div>
-<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span>                <span class="keywordflow">if</span> (_deadLetterSink) {</div>
-<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span>                    <a class="code hl_struct" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> poisoned = item;</div>
-<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span>                    poisoned.attempts = counter;</div>
-<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span>                    <span class="keywordflow">try</span> {</div>
-<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span>                        _deadLetterSink(poisoned);</div>
-<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span>                    } <span class="keywordflow">catch</span> (...) {</div>
-<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span>                        ::morph::log::logError(<span class="stringliteral">&quot;[sync_worker] dead-letter sink threw while handling payload: &quot;</span> +</div>
-<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>                                               item.payload);</div>
-<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span>                    }</div>
-<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span>                } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span>                    ::morph::log::logError(<span class="stringliteral">&quot;[sync_worker] dropping payload after &quot;</span> + std::to_string(kMaxAttempts) +</div>
-<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span>                                           <span class="stringliteral">&quot; failed attempts: &quot;</span> + item.payload);</div>
-<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>                }</div>
-<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span>                _queue.markDone(item.id);</div>
-<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>                _attempts.erase(item.id);</div>
-<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>                ++result.<a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">deadLettered</a>;</div>
-<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>                ++result.<a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">failed</a>;</div>
-<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>            }</div>
-<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span>        }</div>
-<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span>        <span class="keywordflow">return</span> result;</div>
-<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>    }</div>
-<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span><span class="comment"></span> </div>
-<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span><span class="comment">    /// @brief Cap on per-item cumulative retry attempts. Intentionally</span></div>
-<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span><span class="comment">    ///        hard-coded — see class docs.</span></div>
-<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span>    <span class="keyword">static</span> <span class="keyword">constexpr</span> uint32_t kMaxAttempts = 5;</div>
-<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span> </div>
-<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span>    ::morph::exec::IExecutor&amp; _owner;</div>
-<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span>    <a class="code hl_struct" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a>&amp; _queue;</div>
-<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span>    <span class="comment">// Always the three-outcome form: the boolean constructor adapts into it, so</span></div>
-<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span>    <span class="comment">// `run()` has exactly one contract to implement rather than two.</span></div>
-<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span>    DetailedReplayFunction _replay;</div>
-<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span>    DeadLetterSink _deadLetterSink;</div>
-<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>    std::atomic&lt;bool&gt; _stopped{<span class="keyword">false</span>};</div>
-<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>    std::unordered_map&lt;uint64_t, uint32_t&gt; _attempts;</div>
-<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span>};</div>
+<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span><span class="comment"></span> </div>
+<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span><span class="comment">    /// @brief Signals an in-progress drain to stop after the current item.</span></div>
+<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span><span class="comment">    /// Callable from any thread. The drain clears the flag at its start, so</span></div>
+<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span><span class="comment">    /// stopping is one-shot — but a `stop()` that lands *during* a drain leaves</span></div>
+<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span><span class="comment">    /// the flag set on return, so the next drain takes its early-out and drains</span></div>
+<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span><span class="comment">    /// nothing; work resumes only on the drain after that.</span></div>
+<div class="line"><a id="l00257" name="l00257"></a><span class="lineno"><a class="line" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68">  257</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68">stop</a>() { _stopped.store(<span class="keyword">true</span>); }</div>
+<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span> </div>
+<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span><span class="keyword">private</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span><span class="comment">    /// @brief The drain itself. On the owner.</span></div>
+<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span><span class="comment">    /// @return Counts of successful / failed / dead-lettered replays.</span></div>
+<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span>    <a class="code hl_struct" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> drainHere() {</div>
+<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span>        <a class="code hl_define" href="../../dc/ddc/profiler_8hpp.html#a93ffe544de2fbcdfd94eda78aabfcb71">MORPH_ZONE</a>(<span class="stringliteral">&quot;SyncWorker::drain&quot;</span>);</div>
+<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span>        ::morph::exec::detail::noteOwner(<span class="stringliteral">&quot;SyncWorker::run&quot;</span>, _owner.coreExecutor(), ::morph::exec::runningOn(_owner));</div>
+<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span>        <span class="keywordtype">bool</span> <span class="keyword">const</span> wasStoppedBeforeRun = _stopped.exchange(<span class="keyword">false</span>);</div>
+<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span>        <a class="code hl_struct" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">SyncResult</a> result;</div>
+<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span>        <span class="keywordflow">if</span> (wasStoppedBeforeRun) {</div>
+<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span>            <span class="keywordflow">return</span> result;</div>
+<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span>        }</div>
+<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span> </div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span>        <span class="keyword">auto</span> items = _queue.drain();</div>
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span>        ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueDepth, <span class="keyword">static_cast&lt;</span><span class="keywordtype">double</span><span class="keyword">&gt;</span>(items.size()));</div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span>&amp; item : items) {</div>
+<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span>            <span class="keywordflow">if</span> (_stopped.load()) {</div>
+<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>                <span class="keywordflow">break</span>;</div>
+<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>            }</div>
+<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>            <a class="code hl_define" href="../../dc/ddc/profiler_8hpp.html#a93ffe544de2fbcdfd94eda78aabfcb71">MORPH_ZONE</a>(<span class="stringliteral">&quot;SyncWorker::replay&quot;</span>);</div>
+<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>            ReplayOutcome outcome = ReplayOutcome::Rejected;</div>
+<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>            <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>                outcome = _replay(item.payload);</div>
+<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>            } <span class="keywordflow">catch</span> (...) {</div>
+<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>                <span class="comment">// A throw says the replay failed but not whether it was</span></div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>                <span class="comment">// delivered, and &quot;I don&#39;t know&quot; has to be charged: treating an</span></div>
+<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>                <span class="comment">// unknown failure as undelivered would retry a genuinely</span></div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>                <span class="comment">// poisonous payload forever. Same reading `false` has always</span></div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>                <span class="comment">// had on the boolean overload.</span></div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>                outcome = ReplayOutcome::Rejected;</div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>            }</div>
+<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>            <span class="keywordflow">if</span> (outcome == ReplayOutcome::Succeeded) {</div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>                _queue.markDone(item.id);</div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>                _attempts.erase(item.id);</div>
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>                ++result.<a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc">successful</a>;</div>
+<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>                <span class="keywordflow">continue</span>;</div>
+<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span>            }</div>
+<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span>            <span class="keywordflow">if</span> (outcome == ReplayOutcome::Undelivered) {</div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>                <span class="comment">// Nothing reached the peer, so there is no evidence about this</span></div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>                <span class="comment">// payload and nothing to charge. Deliberately touches neither</span></div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>                <span class="comment">// `_attempts` nor `setAttempts()`: the budget is durable, so</span></div>
+<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span>                <span class="comment">// leaving the in-memory count alone while advancing the</span></div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>                <span class="comment">// persisted one would still walk the item towards the</span></div>
+<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>                <span class="comment">// dead-letter sink across a restart.</span></div>
+<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>                ++result.<a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef">undelivered</a>;</div>
+<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>                <span class="keywordflow">continue</span>;</div>
+<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span>            }</div>
+<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span>            <span class="comment">// The effective count is the larger of the persisted item.attempts</span></div>
+<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span>            <span class="comment">// (0 unless the queue overrides setAttempts) and this worker&#39;s own</span></div>
+<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span>            <span class="comment">// in-memory count, so a durable queue&#39;s cross-restart count is</span></div>
+<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>            <span class="comment">// never regressed by a fresh (empty) in-memory map.</span></div>
+<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>            <span class="keyword">auto</span>&amp; counter = _attempts[item.id];</div>
+<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>            counter = std::max(counter, item.attempts);</div>
+<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span>            ++counter;</div>
+<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span>            _queue.setAttempts(item.id, counter);</div>
+<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span>            <span class="keywordflow">if</span> (counter &gt;= kMaxAttempts) {</div>
+<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span>                <span class="keywordflow">if</span> (_deadLetterSink) {</div>
+<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span>                    <a class="code hl_struct" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> poisoned = item;</div>
+<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span>                    poisoned.attempts = counter;</div>
+<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span>                    <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>                        _deadLetterSink(poisoned);</div>
+<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span>                    } <span class="keywordflow">catch</span> (...) {</div>
+<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span>                        ::morph::log::logError(<span class="stringliteral">&quot;[sync_worker] dead-letter sink threw while handling payload: &quot;</span> +</div>
+<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span>                                               item.payload);</div>
+<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span>                    }</div>
+<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>                } <span class="keywordflow">else</span> {</div>
+<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span>                    ::morph::log::logError(<span class="stringliteral">&quot;[sync_worker] dropping payload after &quot;</span> + std::to_string(kMaxAttempts) +</div>
+<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>                                           <span class="stringliteral">&quot; failed attempts: &quot;</span> + item.payload);</div>
+<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>                }</div>
+<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>                _queue.markDone(item.id);</div>
+<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>                _attempts.erase(item.id);</div>
+<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>                ++result.<a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">deadLettered</a>;</div>
+<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span>            } <span class="keywordflow">else</span> {</div>
+<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span>                ++result.<a class="code hl_variable" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">failed</a>;</div>
+<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>            }</div>
+<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span>        }</div>
+<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span>        <span class="keywordflow">return</span> result;</div>
+<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span>    }</div>
+<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span><span class="comment"></span> </div>
+<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span><span class="comment">    /// @brief Cap on per-item cumulative retry attempts. Intentionally</span></div>
+<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span><span class="comment">    ///        hard-coded — see class docs.</span></div>
+<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span>    <span class="keyword">static</span> <span class="keyword">constexpr</span> uint32_t kMaxAttempts = 5;</div>
+<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span> </div>
+<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span>    ::morph::exec::IExecutor&amp; _owner;</div>
+<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span>    <a class="code hl_struct" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">IOfflineQueue</a>&amp; _queue;</div>
+<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span>    <span class="comment">// Always the three-outcome form: the boolean constructor adapts into it, so</span></div>
+<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>    <span class="comment">// `run()` has exactly one contract to implement rather than two.</span></div>
+<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>    DetailedReplayFunction _replay;</div>
+<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span>    DeadLetterSink _deadLetterSink;</div>
+<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span>    std::atomic&lt;bool&gt; _stopped{<span class="keyword">false</span>};</div>
+<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span>    std::unordered_map&lt;uint64_t, uint32_t&gt; _attempts;</div>
+<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span>};</div>
 </div>
-<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span> </div>
-<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span>}  <span class="comment">// namespace morph::offline</span></div>
+<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span> </div>
+<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span>}  <span class="comment">// namespace morph::offline</span></div>
 <div class="ttc" id="aclassmorph_1_1async_1_1Completion_1_1Promise_html"><div class="ttname"><a href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html">morph::async::Completion::Promise</a></div><div class="ttdoc">Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d76/completion_8hpp_source.html#l00640">completion.hpp:640</a></div></div>
 <div class="ttc" id="aclassmorph_1_1async_1_1Completion_html"><div class="ttname"><a href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a></div><div class="ttdoc">Move-only handle representing the eventual result of an asynchronous operation.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d76/completion_8hpp_source.html#l00427">completion.hpp:427</a></div></div>
 <div class="ttc" id="aclassmorph_1_1async_1_1Completion_html_a84a09a2d546cb0983d1eca68b4fc97de"><div class="ttname"><a href="../../dd/de7/classmorph_1_1async_1_1Completion.html#a84a09a2d546cb0983d1eca68b4fc97de">morph::async::Completion::makeSettleable</a></div><div class="ttdeci">static std::pair&lt; Completion&lt; T &gt;, Promise &gt; makeSettleable(::morph::exec::IExecutor *execPtr)</div><div class="ttdoc">Constructs a Completion&lt;T&gt;/Promise&lt;T&gt; pair sharing one settleable state.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d76/completion_8hpp_source.html#l00699">completion.hpp:699</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a28918d4358866a982f54b1e25baa5043"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">morph::offline::SyncWorker::DeadLetterSink</a></div><div class="ttdeci">std::function&lt; void(const QueueItem &amp;poisoned)&gt; DeadLetterSink</div><div class="ttdoc">Callable invoked when an item exhausts its retry budget, just before it is removed from the queue.</div><div class="ttdef"><b>Definition</b> <a href="#l00165">sync_worker.hpp:165</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a31349dc8d4338512a2ffc2a8fda90996"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996">morph::offline::SyncWorker::ReplayFunction</a></div><div class="ttdeci">std::function&lt; bool(const std::string &amp;payload)&gt; ReplayFunction</div><div class="ttdoc">Callable that attempts to replay a single queued item, reporting only success or failure.</div><div class="ttdef"><b>Definition</b> <a href="#l00148">sync_worker.hpp:148</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a4297a4dceef75bf1c79fdc8f6f1ab500"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4297a4dceef75bf1c79fdc8f6f1ab500">morph::offline::SyncWorker::SyncWorker</a></div><div class="ttdeci">SyncWorker(::morph::exec::IExecutor &amp;owner, IOfflineQueue &amp;queue, DetailedReplayFunction replay, DeadLetterSink deadLetterSink=nullptr)</div><div class="ttdoc">Constructs a worker that drains queue using replay, which distinguishes an undelivered replay from a ...</div><div class="ttdef"><b>Definition</b> <a href="#l00214">sync_worker.hpp:214</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a4d41de24c5846fda06cb404e46e71970"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970">morph::offline::SyncWorker::DetailedReplayFunction</a></div><div class="ttdeci">std::function&lt; ReplayOutcome(const std::string &amp;payload)&gt; DetailedReplayFunction</div><div class="ttdoc">Callable that attempts to replay a single queued item and reports what it achieved.</div><div class="ttdef"><b>Definition</b> <a href="#l00156">sync_worker.hpp:156</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a655f4426286e89a5e6ec61546a3dcdd3"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a655f4426286e89a5e6ec61546a3dcdd3">morph::offline::SyncWorker::run</a></div><div class="ttdeci">::morph::async::Completion&lt; SyncResult &gt; run(::morph::exec::IExecutor &amp;replyExec)</div><div class="ttdoc">Drains the queue, replaying each item via the replay function, on the owner.</div><div class="ttdef"><b>Definition</b> <a href="#l00239">sync_worker.hpp:239</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_abacf4b05a156d5e2664a4fd25bc2cf68"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68">morph::offline::SyncWorker::stop</a></div><div class="ttdeci">void stop()</div><div class="ttdoc">Signals an in-progress drain to stop after the current item.</div><div class="ttdef"><b>Definition</b> <a href="#l00256">sync_worker.hpp:256</a></div></div>
-<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_ae09db9a922cc21d5940ebf23b80ae9db"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">morph::offline::SyncWorker::SyncWorker</a></div><div class="ttdeci">SyncWorker(::morph::exec::IExecutor &amp;owner, IOfflineQueue &amp;queue, ReplayFunction replay, DeadLetterSink deadLetterSink=nullptr)</div><div class="ttdoc">Constructs a worker that drains queue using replay, on owner.</div><div class="ttdef"><b>Definition</b> <a href="#l00182">sync_worker.hpp:182</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a28918d4358866a982f54b1e25baa5043"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a28918d4358866a982f54b1e25baa5043">morph::offline::SyncWorker::DeadLetterSink</a></div><div class="ttdeci">std::function&lt; void(const QueueItem &amp;poisoned)&gt; DeadLetterSink</div><div class="ttdoc">Callable invoked when an item exhausts its retry budget, just before it is removed from the queue.</div><div class="ttdef"><b>Definition</b> <a href="#l00166">sync_worker.hpp:166</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a31349dc8d4338512a2ffc2a8fda90996"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996">morph::offline::SyncWorker::ReplayFunction</a></div><div class="ttdeci">std::function&lt; bool(const std::string &amp;payload)&gt; ReplayFunction</div><div class="ttdoc">Callable that attempts to replay a single queued item, reporting only success or failure.</div><div class="ttdef"><b>Definition</b> <a href="#l00149">sync_worker.hpp:149</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a4297a4dceef75bf1c79fdc8f6f1ab500"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4297a4dceef75bf1c79fdc8f6f1ab500">morph::offline::SyncWorker::SyncWorker</a></div><div class="ttdeci">SyncWorker(::morph::exec::IExecutor &amp;owner, IOfflineQueue &amp;queue, DetailedReplayFunction replay, DeadLetterSink deadLetterSink=nullptr)</div><div class="ttdoc">Constructs a worker that drains queue using replay, which distinguishes an undelivered replay from a ...</div><div class="ttdef"><b>Definition</b> <a href="#l00215">sync_worker.hpp:215</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a4d41de24c5846fda06cb404e46e71970"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a4d41de24c5846fda06cb404e46e71970">morph::offline::SyncWorker::DetailedReplayFunction</a></div><div class="ttdeci">std::function&lt; ReplayOutcome(const std::string &amp;payload)&gt; DetailedReplayFunction</div><div class="ttdoc">Callable that attempts to replay a single queued item and reports what it achieved.</div><div class="ttdef"><b>Definition</b> <a href="#l00157">sync_worker.hpp:157</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_a655f4426286e89a5e6ec61546a3dcdd3"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a655f4426286e89a5e6ec61546a3dcdd3">morph::offline::SyncWorker::run</a></div><div class="ttdeci">::morph::async::Completion&lt; SyncResult &gt; run(::morph::exec::IExecutor &amp;replyExec)</div><div class="ttdoc">Drains the queue, replaying each item via the replay function, on the owner.</div><div class="ttdef"><b>Definition</b> <a href="#l00240">sync_worker.hpp:240</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_abacf4b05a156d5e2664a4fd25bc2cf68"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68">morph::offline::SyncWorker::stop</a></div><div class="ttdeci">void stop()</div><div class="ttdoc">Signals an in-progress drain to stop after the current item.</div><div class="ttdef"><b>Definition</b> <a href="#l00257">sync_worker.hpp:257</a></div></div>
+<div class="ttc" id="aclassmorph_1_1offline_1_1SyncWorker_html_ae09db9a922cc21d5940ebf23b80ae9db"><div class="ttname"><a href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#ae09db9a922cc21d5940ebf23b80ae9db">morph::offline::SyncWorker::SyncWorker</a></div><div class="ttdeci">SyncWorker(::morph::exec::IExecutor &amp;owner, IOfflineQueue &amp;queue, ReplayFunction replay, DeadLetterSink deadLetterSink=nullptr)</div><div class="ttdoc">Constructs a worker that drains queue using replay, on owner.</div><div class="ttdef"><b>Definition</b> <a href="#l00183">sync_worker.hpp:183</a></div></div>
 <div class="ttc" id="aowner__probe_8hpp_html"><div class="ttname"><a href="../../d1/d3e/owner__probe_8hpp.html">owner_probe.hpp</a></div><div class="ttdoc">The check every loop-owned body makes on entry: &quot;am I on my owner?&quot;.</div></div>
-<div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00069">executor.hpp:69</a></div></div>
-<div class="ttc" id="astructmorph_1_1offline_1_1IOfflineQueue_html"><div class="ttname"><a href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">morph::offline::IOfflineQueue</a></div><div class="ttdoc">Interface for durable storage of actions that could not be delivered.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00176">offline_queue.hpp:176</a></div></div>
-<div class="ttc" id="astructmorph_1_1offline_1_1QueueItem_html"><div class="ttname"><a href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">morph::offline::QueueItem</a></div><div class="ttdoc">An item stored in the offline queue.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00084">offline_queue.hpp:84</a></div></div>
-<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">morph::offline::SyncResult</a></div><div class="ttdoc">Aggregated result returned by SyncWorker::run().</div><div class="ttdef"><b>Definition</b> <a href="#l00051">sync_worker.hpp:51</a></div></div>
-<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html_a3cc78f3c9d61cd9e106923ac5a2483ef"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef">morph::offline::SyncResult::undelivered</a></div><div class="ttdeci">int undelivered</div><div class="ttdoc">Number of items whose replay never reached the peer. They remain in the queue with their attempt coun...</div><div class="ttdef"><b>Definition</b> <a href="#l00063">sync_worker.hpp:63</a></div></div>
-<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html_a923a0e48ad45897bfe83ec7cb3419a73"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">morph::offline::SyncResult::deadLettered</a></div><div class="ttdeci">int deadLettered</div><div class="ttdoc">Number of items that exhausted their retry budget and were dropped from the queue (handed to the Dead...</div><div class="ttdef"><b>Definition</b> <a href="#l00068">sync_worker.hpp:68</a></div></div>
-<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html_abad0b8cf702ce8d6266cebfb3ab16cfc"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc">morph::offline::SyncResult::successful</a></div><div class="ttdeci">int successful</div><div class="ttdoc">Number of items successfully replayed and removed from the queue.</div><div class="ttdef"><b>Definition</b> <a href="#l00053">sync_worker.hpp:53</a></div></div>
-<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html_ac961898bd488a98d989a3eb6bdce4d33"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">morph::offline::SyncResult::failed</a></div><div class="ttdeci">int failed</div><div class="ttdoc">Number of items that were delivered, refused, and left in the queue for retry, each having spent one ...</div><div class="ttdef"><b>Definition</b> <a href="#l00057">sync_worker.hpp:57</a></div></div>
+<div class="ttc" id="aprofiler_8hpp_html"><div class="ttname"><a href="../../dc/ddc/profiler_8hpp.html">profiler.hpp</a></div><div class="ttdoc">Compile-time profiler instrumentation: Tracy zones, plots, messages and thread names,...</div></div>
+<div class="ttc" id="aprofiler_8hpp_html_a93ffe544de2fbcdfd94eda78aabfcb71"><div class="ttname"><a href="../../dc/ddc/profiler_8hpp.html#a93ffe544de2fbcdfd94eda78aabfcb71">MORPH_ZONE</a></div><div class="ttdeci">#define MORPH_ZONE(name)</div><div class="ttdoc">Opens a profiler zone named name that ends with the enclosing scope. At most one per scope.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/ddc/profiler_8hpp_source.html#l00118">profiler.hpp:118</a></div></div>
+<div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00070">executor.hpp:70</a></div></div>
+<div class="ttc" id="astructmorph_1_1offline_1_1IOfflineQueue_html"><div class="ttname"><a href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">morph::offline::IOfflineQueue</a></div><div class="ttdoc">Interface for durable storage of actions that could not be delivered.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00177">offline_queue.hpp:177</a></div></div>
+<div class="ttc" id="astructmorph_1_1offline_1_1QueueItem_html"><div class="ttname"><a href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">morph::offline::QueueItem</a></div><div class="ttdoc">An item stored in the offline queue.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d1c/offline__queue_8hpp_source.html#l00085">offline_queue.hpp:85</a></div></div>
+<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html">morph::offline::SyncResult</a></div><div class="ttdoc">Aggregated result returned by SyncWorker::run().</div><div class="ttdef"><b>Definition</b> <a href="#l00052">sync_worker.hpp:52</a></div></div>
+<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html_a3cc78f3c9d61cd9e106923ac5a2483ef"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef">morph::offline::SyncResult::undelivered</a></div><div class="ttdeci">int undelivered</div><div class="ttdoc">Number of items whose replay never reached the peer. They remain in the queue with their attempt coun...</div><div class="ttdef"><b>Definition</b> <a href="#l00064">sync_worker.hpp:64</a></div></div>
+<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html_a923a0e48ad45897bfe83ec7cb3419a73"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">morph::offline::SyncResult::deadLettered</a></div><div class="ttdeci">int deadLettered</div><div class="ttdoc">Number of items that exhausted their retry budget and were dropped from the queue (handed to the Dead...</div><div class="ttdef"><b>Definition</b> <a href="#l00069">sync_worker.hpp:69</a></div></div>
+<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html_abad0b8cf702ce8d6266cebfb3ab16cfc"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc">morph::offline::SyncResult::successful</a></div><div class="ttdeci">int successful</div><div class="ttdoc">Number of items successfully replayed and removed from the queue.</div><div class="ttdef"><b>Definition</b> <a href="#l00054">sync_worker.hpp:54</a></div></div>
+<div class="ttc" id="astructmorph_1_1offline_1_1SyncResult_html_ac961898bd488a98d989a3eb6bdce4d33"><div class="ttname"><a href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">morph::offline::SyncResult::failed</a></div><div class="ttdeci">int failed</div><div class="ttdoc">Number of items that were delivered, refused, and left in the queue for retry, each having spent one ...</div><div class="ttdef"><b>Definition</b> <a href="#l00058">sync_worker.hpp:58</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

@@ -145,7 +145,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Everything about a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> that is configured rather than learned: given once, at construction, and never changed. </p>
 <p>The server reads these fields on its own strand and on its models' strands without a lock, which is sound only because nothing writes them after the constructor. A deployment that wants different limits constructs a different server. See <span class="tt">docs/spec/core/backend.md</span>, "`ServerConfig`". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00212">212</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a8f2301d75b1e9742f2b110a70e035041" name="a8f2301d75b1e9742f2b110a70e035041"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8f2301d75b1e9742f2b110a70e035041">&#9670;&#160;</a></span>limits</h2>
@@ -161,7 +161,7 @@ Public Attributes</h2></td></tr>
 
 <p>Opt-in resource limits. Default-constructed: unbounded. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -180,7 +180,7 @@ Public Attributes</h2></td></tr>
 <p>Consulted whenever an instance is constructed with a non-empty <span class="tt">contextKey</span> — every <span class="tt">register</span> envelope, and every <span class="tt">attach</span> that misses the shared directory and therefore creates the instance. </p>
 <p><span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> owns the model instances of every remote client, so it is the only place that can attach an action log to them. Null: no instance gets a log. Runs on the server's strand. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -199,7 +199,7 @@ Public Attributes</h2></td></tr>
 <p>Called with the server's health: once from the constructor, and again, on the server's strand, whenever readiness changes (<span class="tt">beginShutdown()</span>). Null: nothing is called. </p>
 <p>A deployment's transport can expose it over a probe endpoint; morph does not embed an HTTP server. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -217,7 +217,7 @@ Public Attributes</h2></td></tr>
 
 <p>Oldest protocol version this server accepts in reply to <span class="tt">"hello"</span>. Must not exceed <span class="tt"><a class="el" href="#a274facbfd4d88bdf90b107acd85597a8" title="Newest protocol version this server accepts in reply to &quot;hello&quot;. Widen the range when a kProtocolVers...">maxProtocolVersion</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +235,7 @@ Public Attributes</h2></td></tr>
 
 <p>Newest protocol version this server accepts in reply to <span class="tt">"hello"</span>. Widen the range when a <span class="tt">kProtocolVersion</span> bump must keep serving older clients through their deprecation window (see docs/spec/core/wire.md, "Action-evolution policy"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +253,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether an <span class="tt">execute</span> body must carry every field the action's served schema marks <span class="tt">required</span>. See <span class="tt">PayloadCompleteness</span> for why <span class="tt">Lenient</span> is the default. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00246">246</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

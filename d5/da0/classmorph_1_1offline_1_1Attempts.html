@@ -145,7 +145,7 @@ requires (std::integral&lt;Count&gt; &amp;&amp; !std::same_as&lt;std::remove_cv_
 <p><span class="tt">setAttempts(itemId, attempts)</span> takes two integers that mean entirely different things, and before this type existed both were plain unsigned integers, mutually convertible in either direction. Transposing them compiled, and — because <span class="tt">setAttempts()</span> on an unknown id is a documented no-op — it also <em>ran</em>: the real item's count never advanced, nothing threw, and the defect surfaced much later as a retry budget that never exhausts.</p>
 <p><span class="tt"><a class="el" href="../../d5/da0/classmorph_1_1offline_1_1Attempts.html" title="A replay attempt count, as a type distinct from a queue item id.">Attempts</a></span> removes the hazard rather than suppressing the warning about it. It is implicitly constructible from a narrow integer, so <span class="tt">setAttempts(id, 3)</span> reads exactly as it did before, and <b>deliberately not constructible from a 64-bit integer</b>, which is what a <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84" title="Stable identifier assigned at enqueue time.">QueueItem::id</a></span> is — so the transposed call does not compile. A genuinely 64-bit count is still expressible, with the narrowing spelled out at the call site: <span class="tt">setAttempts(id, static_cast&lt;std::uint32_t&gt;(count))</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a509c605665813050822dca28ee0545a8" name="a509c605665813050822dca28ee0545a8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a509c605665813050822dca28ee0545a8">&#9670;&#160;</a></span>Attempts()</h2>
@@ -188,7 +188,7 @@ requires (std::integral&lt;Count&gt; &amp;&amp; !std::same_as&lt;std::remove_cv_
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -219,7 +219,7 @@ requires (std::integral&lt;Count&gt; &amp;&amp; !std::same_as&lt;std::remove_cv_
 <p>Returns the wrapped count. </p>
 <dl class="section return"><dt>Returns</dt><dd>The attempt count as a plain <span class="tt">uint32_t</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>

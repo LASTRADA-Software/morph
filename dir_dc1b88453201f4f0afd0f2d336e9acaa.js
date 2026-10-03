@@ -17,6 +17,7 @@ var dir_dc1b88453201f4f0afd0f2d336e9acaa =
     [ "owner_strand.hpp", "de/dc5/owner__strand_8hpp.html", "de/dc5/owner__strand_8hpp" ],
     [ "payload_schema.hpp", "dc/d50/payload__schema_8hpp.html", "dc/d50/payload__schema_8hpp" ],
     [ "payload_shape_tag.hpp", "dd/d09/payload__shape__tag_8hpp.html", "dd/d09/payload__shape__tag_8hpp" ],
+    [ "profiler.hpp", "dc/ddc/profiler_8hpp.html", "dc/ddc/profiler_8hpp" ],
     [ "registry.hpp", "d1/da2/registry_8hpp_source.html", null ],
     [ "remote.hpp", "d0/dfc/remote_8hpp_source.html", null ],
     [ "strand.hpp", "de/dc1/strand_8hpp.html", null ],
