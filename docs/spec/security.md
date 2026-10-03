@@ -404,11 +404,14 @@ method:
   principal has been stamped onto the session, `RemoteServer` consults
   `authorizeInstance(session, modelType, actionType, modelId, ownerPrincipal)`.
   A `false` return replies `err "unauthorized"` and the action never dispatches.
-- **On `deregister`** — `RemoteServer` consults
-  `authorizeInstance(session, {}, {}, modelId, ownerPrincipal)` (empty type/action
-  ids) before destroying the instance. A `false` return replies
-  `err "unauthorized"` and the instance is left intact. This is the fix for
-  `deregister` previously being entirely unauthorized.
+- **On `deregister`** — `RemoteServer` first stamps the verified principal onto
+  the session, exactly as for `execute`, then calls `authorize(session, {}, {})`
+  (a deregister names no type, so both ids are empty), then consults
+  `authorizeInstance(session, {}, {}, modelId, ownerPrincipal)` before
+  destroying the instance. A `false` from either replies `err "unauthorized"`
+  and the instance is left intact. The stamp is what makes the ownership
+  comparison sound: without it, a caller could write the owner's name into
+  `principal` and release the owner's instance with any token, or none.
 
 ### Backward compatibility
 

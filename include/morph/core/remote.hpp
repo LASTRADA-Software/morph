@@ -767,7 +767,7 @@ private:
     /// `authenticate()` returns `nullopt` the authorizer cannot vouch for the
     /// caller, so the client-asserted principal is cleared rather than passed
     /// through unverified — every envelope kind this is called for (register,
-    /// attach, assign, instances, schemas, execute) makes an authorization or
+    /// attach, assign, instances, schemas, deregister, execute) makes an authorization or
     /// ownership decision that must key on the verified identity, never the
     /// client's raw claim. See docs/spec/security.md.
     /// @param env Envelope whose `session.principal` is stamped or cleared in place.
@@ -1219,11 +1219,22 @@ private:
             } else if (env.kind == "deregister") {
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
                 ::morph::exec::detail::ModelId const mid{env.modelId};
-                // Per-instance authorization also gates deregister: consult the
-                // hook with the recorded owner before destroying the instance.
-                // The default hook allows all, so unconfigured behaviour is
-                // unchanged; an ownership-enforcing authorizer can reject a
-                // caller tearing down an instance it does not own.
+                // The ownership check below compares the recorded owner against
+                // env.session.principal, so that principal must be the verified
+                // one: without the stamp a caller holding any token, or none,
+                // could claim the owner's name and release the owner's instance.
+                stampVerifiedPrincipal(env);
+                // Type-level gate, as for `instances`/`schemas`. A deregister
+                // names no type, so both ids are empty; it lets a verifying
+                // authorizer refuse a caller with no valid token outright.
+                if (!_authorizer->authorize(env.session, {}, {})) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    return;
+                }
+                // Per-instance authorization: consult the hook with the recorded
+                // owner before destroying the instance. The default hook allows
+                // all; an ownership-enforcing authorizer rejects a caller tearing
+                // down an instance it does not own.
                 if (const auto* inst = _instances.find(mid);
                     inst != nullptr && !_authorizer->authorizeInstance(env.session, {}, {}, mid.v, inst->owner)) {
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));

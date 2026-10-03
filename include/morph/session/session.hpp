@@ -93,7 +93,7 @@ struct Principal {
 
 /// @brief Authorizes incoming actions on a `RemoteServer`.
 ///
-/// Called before dispatch on **three** envelope kinds, not only `execute`. A
+/// Called before dispatch on **four** envelope kinds, not only `execute`. A
 /// `false` return causes the server to reply with `err|unauthorized` (the client
 /// surfaces the error through the `.onError(...)` callback):
 ///
@@ -102,15 +102,20 @@ struct Principal {
 /// | `execute`   | `env.modelType` | `env.actionType` |
 /// | `instances` | `env.typeId`    | **empty** |
 /// | `schemas`   | `env.typeId`    | **empty** |
+/// | `deregister` | **empty**      | **empty** |
+///
+/// A `deregister` names no type, so both ids are empty; its type-level call
+/// is what lets a verifying authorizer refuse a release from a caller with no
+/// valid token before the per-instance `authorizeInstance` check runs.
 ///
 /// The two read channels are gated deliberately, so a deployer can refuse
 /// enumeration or schema disclosure without refusing use -- `schemas` returns
 /// field names, bounds, rules and the payload fingerprint of every action, so it
 /// must not be reachable by a caller the server would not let execute.
 ///
-/// **An implementation that switches or matches on `actionType` must handle the
-/// empty case explicitly**, or it will hit its default arm on exactly those two
-/// disclosure verbs. Whether that fails open or closed is the implementation's
+/// **An implementation that switches or matches on `modelType` or `actionType`
+/// must handle the empty case explicitly**, or it will hit its default arm on
+/// exactly those verbs. Whether that fails open or closed is the implementation's
 /// choice, but it has to be a choice.
 ///
 /// Default implementation supplied by the framework is `AllowAllAuthorizer`. Real
@@ -123,10 +128,11 @@ struct IAuthorizer {
     /// @brief Returns `true` if @p ctx is allowed to invoke @p actionType on @p modelType.
     ///
     /// @param ctx        Per-call session attached by the client.
-    /// @param modelType  String id of the target model type.
+    /// @param modelType  String id of the target model type, or **empty** for the
+    ///                   `deregister` envelope.
     /// @param actionType String id of the action being invoked, or **empty** for
-    ///                   the `instances` and `schemas` envelopes -- see the
-    ///                   table on this interface's own doc comment.
+    ///                   the `instances`, `schemas` and `deregister` envelopes --
+    ///                   see the table on this interface's own doc comment.
     /// @return `true` to allow dispatch, `false` to reject with `err|unauthorized`.
     [[nodiscard]] virtual bool authorize(const Context& ctx,
                                          // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
