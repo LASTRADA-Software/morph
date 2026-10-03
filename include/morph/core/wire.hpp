@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "../session/session.hpp"
+#include "profiler.hpp"
 
 namespace morph::wire {
 
@@ -650,6 +651,8 @@ struct WireCodecOps {
 /// @return The serialized envelope as valid, re-decodable JSON.
 /// @throws std::runtime_error on serialisation failure (should never happen for valid input).
 inline std::string encode(const Envelope& env, const WireCodecOps& ops = defaultWireCodecOps()) {
+    MORPH_ZONE("wire::encode");
+    MORPH_ZONE_TEXT(env.session.requestId);
     std::string out;
     if (auto errCode = ops.writeEnvelope(env, out)) {
         // Unreachable through any `Envelope` value -- see `WireCodecOps` for
@@ -679,6 +682,7 @@ inline std::string encode(const Envelope& env, const WireCodecOps& ops = default
 /// @throws std::runtime_error if @p json exceeds `kMaxEnvelopeBytes` or is not a
 ///         valid envelope.
 inline Envelope decode(std::string_view json) {
+    MORPH_ZONE("wire::decode");
     if (json.size() > kMaxEnvelopeBytes) {
         throw std::runtime_error("envelope decode failed: input exceeds maximum size (" + std::to_string(json.size()) +
                                  " > " + std::to_string(kMaxEnvelopeBytes) + " bytes)");
@@ -699,6 +703,7 @@ inline Envelope decode(std::string_view json) {
     if (auto errCode = glz::read<kLenient>(env, json)) {
         throw std::runtime_error("envelope decode failed: " + glz::format_error(errCode, json));
     }
+    MORPH_ZONE_TEXT(env.session.requestId);
     return env;
 }
 

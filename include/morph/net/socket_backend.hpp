@@ -20,6 +20,7 @@
 #include <morph/core/detail/reply_router.hpp>
 #include <morph/core/io_loop.hpp>
 #include <morph/core/logger.hpp>
+#include <morph/core/profiler.hpp>
 #include <morph/core/wire.hpp>
 #include <optional>
 #include <stdexcept>
@@ -595,6 +596,8 @@ private:
 
         /// Assigns @p env a call id, files @p pending under it and writes it.
         void fileExecute(::morph::wire::Envelope env, PendingExecute pending) {
+            MORPH_ZONE("SocketBackend::fileExecute");
+            MORPH_ZONE_TEXT(env.session.requestId);
             note("SocketBackend::execute");
             if (!connected.load() || !conn) {
                 pending.state->setException(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
@@ -618,6 +621,7 @@ private:
 
         /// The control-call counterpart of `fileExecute`.
         void fileControl(::morph::wire::Envelope env, PendingControl pending) {
+            MORPH_ZONE("SocketBackend::fileControl");
             note("SocketBackend::bindModel");
             if (!connected.load() || !conn) {
                 pending.reject(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
@@ -743,6 +747,7 @@ private:
         }
 
         void dispatchIncomingEnvelope(const std::string& payload) {
+            MORPH_ZONE("SocketBackend::dispatchIncomingEnvelope");
             ::morph::wire::Envelope env;
             try {
                 env = ::morph::wire::decode(payload);
@@ -803,6 +808,7 @@ private:
         ///         Close, a protocol error, or this backend closed meanwhile).
         bool drainFrames(const std::shared_ptr<::morph::net::detail::LoopConnection>& connection,
                          ::morph::net::detail::WsFrameReader& reader) {
+            MORPH_ZONE("SocketBackend::drainFrames");
             using ::morph::net::detail::WsOpcode;
             for (;;) {
                 std::optional<::morph::net::detail::WsFrame> frame;

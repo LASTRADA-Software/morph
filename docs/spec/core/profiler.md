@@ -1,8 +1,9 @@
 # Profiler zones (`MORPH_ZONE` and friends) — design
 
 `include/morph/core/profiler.hpp` gives morph compile-time profiler
-instrumentation: [Tracy](https://github.com/wolfpld/tracy) zones, thread
-names, plots and messages, behind morph's own macro names. It is off by default and costs nothing when off: the
+instrumentation: [Tracy](https://github.com/wolfpld/tracy) zones on the
+framework's hot paths, names for the threads morph owns, and plot and message
+macros for anything else. It is off by default and costs nothing when off: the
 macros are stubs that do not evaluate their arguments, and the build has no
 Tracy dependency.
 
@@ -16,6 +17,8 @@ timeline.
 - [Turning it on](#turning-it-on)
 - [The macros](#the-macros)
 - [Zones, phases and threads](#zones-phases-and-threads)
+- [Zone list](#zone-list)
+- [Thread names](#thread-names)
 - [One definition everywhere](#one-definition-everywhere)
 - [One Tracy client per process](#one-tracy-client-per-process)
 - [Design decisions](#design-decisions)
@@ -81,10 +84,47 @@ callback executor. So:
   hand-off between threads.
 - **No zone stays open across a `co_await`.** A suspended coroutine's thread
   goes on to run other work, whose zones would close out of order with the
-  open one.
+  open one. This is why the WebSocket send side is zoned at `enqueueFrame`, not
+  in the coroutine that writes the frames.
 - **The phases of one call are linked by `session::Context::requestId`,**
   written as zone text where the phase can see the call's session. A request
   that carries no request id leaves its zones without text.
+
+## Zone list
+
+| Zone | Where | Thread | Text |
+|---|---|---|---|
+| `Bridge::executeVia`, `Bridge::executeAttachedVia`, `Bridge::executeCreatingVia` | `bridge.hpp` | the bridge's owner | — |
+| `Bridge::dispatchNow` | `bridge.hpp` | the owner; later than `executeVia` for a call that waited for its bind | the bridge's session's `requestId` |
+| `ActionTraits::toJson`, `ActionTraits::resultFromJson` | the `ActionCall` codec a remote backend calls | the backend's thread | — |
+| `BridgeSink::settleValue`, `BridgeSink::settleException` | `bridge.hpp` | wherever the backend settles | — |
+| `BridgeSink::forward` | `bridge.hpp` | the settling thread, or the owner when bridge-side work is posted there | — |
+| `LocalBackend::executeInto` | `backend.hpp` | the caller | the call's `requestId` |
+| `LocalBackend::startLocal`, `LocalBackend::startTaskLocal`, `LocalBackend::finishLocal` | `backend.hpp` | the model's strand | the call's `requestId` |
+| `ModelStrands::task` | `strand.hpp`, the strands' around-task hook | the pool thread running one strand task | — |
+| `ActionDispatcher::dispatch`, `ActionDispatcher::dispatchAsync` | `registry.hpp` | the model's strand | the installed session's `requestId` |
+| `ActionDispatcher::prepareAction` | `registry.hpp`: decode and the pre-handler gates | the model's strand | — |
+| `recordActionSuccess`, `recordActionFailure` | `registry.hpp`, the journal write of an outcome | the model's strand | — |
+| `wire::encode`, `wire::decode` | `wire.hpp` | the encoding or decoding thread | the envelope's `requestId` |
+| `SocketBackend::fileExecute` | `net/socket_backend.hpp` | the I/O loop | the envelope's `requestId` |
+| `SocketBackend::fileControl`, `SocketBackend::dispatchIncomingEnvelope`, `SocketBackend::drainFrames` | `net/socket_backend.hpp` | the I/O loop | — |
+| `ws::enqueueFrame` | `net/detail/ws_connection.hpp`, the send side | the I/O loop | — |
+| `InMemoryOfflineQueue::enqueue`, `FileOfflineQueue::enqueue` | `offline/` | the queue's owner | — |
+| `SyncWorker::drain`, `SyncWorker::replay` (one per item) | `offline/sync_worker.hpp` | the worker's owner | — |
+
+`RemoteServer`'s own phases (`dispatchMessage`, `dispatchExecute`) are not
+zoned yet; the dispatcher, strand and codec zones inside them are.
+
+## Thread names
+
+| Name | Thread |
+|---|---|
+| `morph.pool` | every `ThreadPoolExecutor` worker |
+| `morph.io` | the thread an `IoLoop` runs; it carries every socket, every `TimeoutScheduler` deadline and the connectivity probe built on that loop |
+
+An application runs one `IoLoop`, so there is one `morph.io` thread; a
+`TimeoutScheduler` constructed without a loop owns one of its own, which is
+named the same.
 
 ## One definition everywhere
 
@@ -135,7 +175,10 @@ installed Tracy.
 
 ## Limitations
 
-- **core-cpp is not instrumented.** Its event loop and strand pump are its own.
+- **No zones in `RemoteServer` yet.** `RemoteServer::dispatchMessage` and
+  `RemoteServer::dispatchExecute` are the obvious next two.
+- **core-cpp is not instrumented.** Its event loop and strand pump are its own;
+  morph's zones start at morph's around-task hook.
 - **No statistics collector and no `morph::observe` → Tracy sink.** Both are
   separate decisions about `morph::observe`, whose spec rules out aggregation
   inside morph.

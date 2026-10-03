@@ -18,6 +18,7 @@
 #include "../core/detail/owned_state.hpp"
 #include "../core/executor.hpp"
 #include "../core/observability.hpp"
+#include "../core/profiler.hpp"
 
 namespace morph::offline {
 
@@ -546,6 +547,7 @@ private:
     /// Inserts one item into @p state, refusing past @p maxDepth.
     static uint64_t insert(State& state, std::optional<std::size_t> maxDepth, std::string payload,
                            std::string idempotencyKey) {
+        MORPH_ZONE("InMemoryOfflineQueue::enqueue");
         if (maxDepth && state.items.size() >= *maxDepth) {
             ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,
                                                  static_cast<double>(state.items.size()));

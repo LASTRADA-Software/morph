@@ -16,6 +16,7 @@
 #include "../core/executor.hpp"
 #include "../core/logger.hpp"
 #include "../core/observability.hpp"
+#include "../core/profiler.hpp"
 #include "offline_queue.hpp"
 
 namespace morph::offline {
@@ -259,6 +260,7 @@ private:
     /// @brief The drain itself. On the owner.
     /// @return Counts of successful / failed / dead-lettered replays.
     SyncResult drainHere() {
+        MORPH_ZONE("SyncWorker::drain");
         ::morph::exec::detail::noteOwner("SyncWorker::run", _owner.coreExecutor(), ::morph::exec::runningOn(_owner));
         bool const wasStoppedBeforeRun = _stopped.exchange(false);
         SyncResult result;
@@ -272,6 +274,7 @@ private:
             if (_stopped.load()) {
                 break;
             }
+            MORPH_ZONE("SyncWorker::replay");
             ReplayOutcome outcome = ReplayOutcome::Rejected;
             try {
                 outcome = _replay(item.payload);
