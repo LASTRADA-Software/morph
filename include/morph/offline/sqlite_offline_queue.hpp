@@ -544,10 +544,10 @@ private:
             int const lookupResult = sqlite3_step(lookupGuard.get());
             if (lookupResult != SQLITE_ROW) {
                 // The conflict proved a row exists, so anything but a row here is a
-                // real failure. Returning the `0` this used to fall through with
-                // would hand the caller an id that matches nothing: `markDone(0)`
-                // silently deletes no row, and the item is stranded in the queue
-                // forever with no error ever reported.
+                // real failure. Falling through to return `0` would hand the
+                // caller an id that matches nothing: `markDone(0)` silently
+                // deletes no row, and the item is stranded in the queue forever
+                // with no error ever reported.
                 //
                 // COVERAGE GAP, documented not closed: reaching this branch needs
                 // a second writer on the same underlying file to delete this

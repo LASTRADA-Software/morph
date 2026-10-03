@@ -267,8 +267,8 @@ over the very record that owns the instance rather than a map beside it: one
 `detail::Instance` per live model carries its holder, its recorded owner
 principal, its attach count, its directory key and its hydration state together,
 so directory membership cannot desync from instance existence. The whole
-structure belongs to its backend's owner — `LocalBackend`'s `_regMtx`,
-`RemoteServer`'s server strand — and `InstanceDirectory` has no
+structure belongs to its backend's owner — the `Bridge`'s owner for
+`LocalBackend`, the server strand for `RemoteServer` — and `InstanceDirectory` has no
 synchronisation of its own, because the `maxLiveModels` admission check and the
 connection-scope update beside it must not be able to straddle a directory
 change ([backend.md](backend.md), "Connection scopes").

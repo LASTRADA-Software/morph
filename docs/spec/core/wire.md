@@ -162,14 +162,13 @@ Two fields are held out of the list, and are each pinned by a case in
 
 - **`kind` is never omitted.** It is the discriminator; an envelope without one
   is malformed. It also keeps `"kind"` the first key of every message.
-- **`callId` is never omitted either, including when it is `0`.** It is a
-  correlation field, and on this wire zero is not an absence but a *live routing
-  instruction*. Both transports discriminate on it: a reply with a non-zero
-  `callId` is matched against the pending-execute map, and one with `callId == 0`
-  is handed to whichever synchronous control call is parked — see
-  `QtWebSocketBackend::onTextMessage` and
+- **`callId` is never omitted either, including when it is `0`.** It is the
+  correlation field. Both transports file every request — execute or control
+  call — under a fresh non-zero `callId` and match each reply to the request
+  filed under its id; a reply whose id matches nothing, `0` included, is
+  dropped. See `QtWebSocketBackend::onTextMessage` and
   `SocketBackend::dispatchIncomingEnvelope`. A peer that never sees the key has
-  to *reconstruct* the sentinel before it can route the frame at all.
+  to *reconstruct* the id before it can match the frame at all.
 
   This was not the original disposition. `callId` was omitted when zero, on the
   argument that morph's `decode` default-initialises and so recovers the value
@@ -275,10 +274,9 @@ be forged from an earlier string field because `encode` escapes any embedded
 quote. An omitted `callId` and a `peekCallId` that finds none both mean `0`, so
 the omission costs this function nothing.
 
-Replying with a zeroed `callId` is not a harmless degradation: `0` is the
-client's *synchronous-reply discriminator*, so such a reply resumes whatever
-`register`/`deregister` happens to be parked and hands it another call's
-result, while the execute it was meant for never resolves at all.
+Replying with a zeroed `callId` is not a harmless degradation: `0` matches no
+pending call, so the client drops the reply and the request it was meant for
+stays pending until the connection ends.
 
 ### The write-failure arm, and how it is covered
 

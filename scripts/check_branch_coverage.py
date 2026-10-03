@@ -272,13 +272,10 @@ def resolve_allowlist_source_line(repo_root, path, hint, wanted, allowlist_path,
     said. `if hint in matches: return hint` accepts *any*
     occurrence of the text, so a hint that names the wrong one of three passes
     exactly as a right one does. That is a gate that stops measuring at the moment
-    someone interacts with it, and it fired twice in one week -- on
-    include/morph/core/backend.hpp's two `emitMetric(registerCount)` arms and on
-    include/morph/core/bridge.hpp's three `if (deadlineHandle && schedulerRef)`
-    sites -- with the entry's own `reason` naming the right site in prose that
-    nothing could check.
+    someone interacts with it, and an entry's own `reason` naming the right site
+    in prose is something nothing can check.
 
-    So an ambiguous `source` is now refused unless the entry supplies a
+    So an ambiguous `source` is refused unless the entry supplies a
     `context`: a second verbatim source line, within CONTEXT_WINDOW lines of the
     occurrence it means, that exactly one occurrence carries. Then "unambiguous"
     is a property of the file rather than of whoever typed the number, and the

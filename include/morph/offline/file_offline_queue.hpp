@@ -557,14 +557,11 @@ private:
             }
 
             // Every exit below this point closes `out` and, unless the rename
-            // committed, removes `tmp`. Before this guard existed only the
-            // short-write branch cleaned up: `syncFile(out, tmp)` threw straight out
-            // of compact(), leaking the handle and orphaning the temp file. That is
-            // not a theoretical path -- the fault-injection test "a failing
-            // fflush() during construction-time compaction throws" drives it on
-            // every run, which had left 31 stray *.compact-tmp files in /tmp on the
-            // machine this was found on. The leaked handle would also block the
-            // unlink on Windows.
+            // committed, removes `tmp`. A throw from `syncFile(out, tmp)` leaves
+            // compact() through here too, so it neither leaks the handle nor
+            // orphans the temp file; the fault-injection test "a failing fflush()
+            // during construction-time compaction throws" drives that path. An
+            // open handle would also block the unlink on Windows.
             class TempFileGuard {
             public:
                 TempFileGuard(std::FILE* file, std::string path) : _file{file}, _path{std::move(path)} {}

@@ -488,12 +488,10 @@ inline constexpr std::array<std::string_view, 11> kOmittableEnvelopeKeys{
 ///
 /// For the one case where a transport must answer a message it has decided
 /// *not* to parse — a frame rejected for exceeding a transport-level size cap,
-/// before `decode` is ever called. Such a reply still has to be addressed:
-/// `callId == 0` is the wire's "this is a reply to a synchronous control call"
-/// discriminator (see `QtWebSocketBackend::onTextMessage`), so an `err` sent
-/// with a zeroed id does not merely fail to resolve the execute it was meant
-/// for — it resumes whatever unrelated `register`/`deregister` happens to be
-/// parked, handing it a reply belonging to another call entirely.
+/// before `decode` is ever called. Such a reply still has to be addressed: a
+/// client files every request under its `callId` and matches the reply to it,
+/// and a reply carrying `0` matches nothing, so the client drops it and the
+/// request it was meant for stays pending until the connection ends.
 ///
 /// Scans at most @p maxScanBytes, so the size cap it serves keeps its value as
 /// a cost bound; `callId` is the second field `encode` writes and is never
@@ -502,16 +500,14 @@ inline constexpr std::array<std::string_view, 11> kOmittableEnvelopeKeys{
 /// forged from within an earlier string field, because `encode` escapes any
 /// embedded quote (yielding `\"callId\":`, which does not match).
 ///
-/// The `0`-on-absence return is still load-bearing rather than vestigial: the
-/// input here is by definition a frame that was *not* produced under morph's
-/// own invariants — it is whatever a peer sent, at a size this side already
-/// refused to parse — so "no `callId` in the first KiB" remains a case that has
-/// to have an answer.
+/// The `0`-on-absence return is load-bearing: the input here is by definition a frame that was *not* produced under
+/// morph's own invariants — it is whatever a peer sent, at a size this side already refused to parse — so "no `callId`
+/// in the first KiB" remains a case that has to have an answer.
 ///
 /// @param json         Raw, undecoded envelope text.
 /// @param maxScanBytes Prefix length to search. Default 1 KiB.
 /// @return The parsed `callId`, or `0` if absent, unparseable, or out of range —
-///         i.e. it degrades to exactly the behavior it replaces.
+///         an id that matches no pending call.
 [[nodiscard]] inline std::uint64_t peekCallId(std::string_view json, std::size_t maxScanBytes = 1024) noexcept {
     static constexpr std::string_view kKey = "\"callId\":";
     const std::string_view window = json.substr(0, std::min(json.size(), maxScanBytes));
