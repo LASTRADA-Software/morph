@@ -27,6 +27,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "test_support.hpp"
@@ -303,6 +304,111 @@ TEST_CASE("with an ownership authorizer, principal B cannot deregister principal
     server->handle(morph::wire::encode(aliceDereg), std::ref(okDereg));
     REQUIRE(okDereg.await());
     REQUIRE(okDereg.env.kind == "ok");
+}
+
+namespace {
+
+// Derives the principal from the TOKEN alone and never reads ctx.principal, so
+// a claimed principal that disagrees with the token is visible: the verified
+// identity is whatever the token says, and only the server's stamp can make the
+// ownership check see it. Type-level `authorize` admits exactly the callers it
+// can authenticate.
+struct TokenOwnershipAuthorizer : morph::session::IAuthorizer {
+    [[nodiscard]] static std::optional<std::string> principalFor(std::string_view token) {
+        if (token == "tok-alice") {
+            return std::string{"alice"};
+        }
+        if (token == "tok-bob") {
+            return std::string{"bob"};
+        }
+        return std::nullopt;
+    }
+    [[nodiscard]] bool authorize(const morph::session::Context& ctx, std::string_view,
+                                 std::string_view) const override {
+        return principalFor(ctx.token).has_value();
+    }
+    [[nodiscard]] std::optional<std::string> authenticate(const morph::session::Context& ctx) const override {
+        return principalFor(ctx.token);
+    }
+    [[nodiscard]] bool authorizeInstance(const morph::session::Context& ctx, std::string_view, std::string_view,
+                                         std::uint64_t, std::string_view ownerPrincipal) const override {
+        return ownerPrincipal.empty() || ownerPrincipal == ctx.principal;
+    }
+};
+
+morph::wire::Envelope withSession(morph::wire::Envelope env, std::string token, std::string claimedPrincipal) {
+    env.session.token = std::move(token);
+    env.session.principal = std::move(claimedPrincipal);
+    return env;
+}
+
+morph::wire::Envelope roundTrip(morph::backend::RemoteServer& server, const morph::wire::Envelope& env) {
+    morph::testing::WaitReply reply;
+    server.handle(morph::wire::encode(env), std::ref(reply));
+    REQUIRE(reply.await());
+    return reply.env;
+}
+
+}  // namespace
+
+TEST_CASE("deregister keys ownership on the verified principal, not the claimed one", "[policy][remote]") {
+    morph::testing::InlineExecutor pool;
+    PolEnv env;
+    auto authz = std::make_shared<TokenOwnershipAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz, env.dispatcher, env.registry);
+
+    const auto reg = roundTrip(*server, withSession(registerAs("alice"), "tok-alice", "alice"));
+    REQUIRE(reg.kind == "ok");
+    const auto mid = reg.modelId;
+
+    SECTION("bob's token claiming to be alice is refused, and alice's instance survives") {
+        const auto forged = roundTrip(*server, withSession(morph::wire::makeDeregister(mid), "tok-bob", "alice"));
+        CHECK(forged.kind == "err");
+        CHECK(forged.message == "unauthorized");
+
+        const auto aliceRuns = roundTrip(*server, withSession(executeAs(mid, "alice"), "tok-alice", "alice"));
+        REQUIRE(aliceRuns.kind == "ok");
+    }
+
+    SECTION("control: bob's token with an honest claim is refused") {
+        const auto honest = roundTrip(*server, withSession(morph::wire::makeDeregister(mid), "tok-bob", "bob"));
+        CHECK(honest.kind == "err");
+        CHECK(honest.message == "unauthorized");
+
+        const auto aliceRuns = roundTrip(*server, withSession(executeAs(mid, "alice"), "tok-alice", "alice"));
+        REQUIRE(aliceRuns.kind == "ok");
+    }
+
+    SECTION("control: alice's own token releases it, whatever she claims") {
+        const auto own = roundTrip(*server, withSession(morph::wire::makeDeregister(mid), "tok-alice", "mallory"));
+        REQUIRE(own.kind == "ok");
+
+        const auto gone = roundTrip(*server, withSession(executeAs(mid, "alice"), "tok-alice", "alice"));
+        CHECK(gone.kind == "err");
+    }
+}
+
+TEST_CASE("deregister is gated by type-level authorize before the ownership check", "[policy][remote]") {
+    morph::testing::InlineExecutor pool;
+    PolEnv env;
+    auto authz = std::make_shared<TokenOwnershipAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz, env.dispatcher, env.registry);
+
+    // Registered without a token, so it is unowned: authorizeInstance admits
+    // everyone, and only `authorize` stands between a tokenless caller and it.
+    const auto reg = roundTrip(*server, withSession(registerAs({}), {}, {}));
+    REQUIRE(reg.kind == "ok");
+    const auto mid = reg.modelId;
+
+    const auto tokenless = roundTrip(*server, withSession(morph::wire::makeDeregister(mid), {}, "alice"));
+    CHECK(tokenless.kind == "err");
+    CHECK(tokenless.message == "unauthorized");
+
+    const auto stillThere = roundTrip(*server, withSession(executeAs(mid, {}), "tok-bob", "bob"));
+    REQUIRE(stillThere.kind == "ok");
+
+    const auto withToken = roundTrip(*server, withSession(morph::wire::makeDeregister(mid), "tok-bob", "bob"));
+    REQUIRE(withToken.kind == "ok");
 }
 
 TEST_CASE("without an ownership authorizer the default allows any principal (backward compatible)",

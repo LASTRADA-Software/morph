@@ -1619,3 +1619,86 @@ TEST_CASE(
     REQUIRE(newExecReply.env.kind == "ok");
     REQUIRE(newExecReply.env.body == "9");
 }
+
+namespace {
+
+morph::wire::Envelope csSquare(std::uint64_t modelId, std::string_view body) {
+    morph::wire::Envelope env;
+    env.kind = "execute";
+    env.modelId = modelId;
+    env.modelType = "CS_SquareModel";
+    env.actionType = "CS_SquareAction";
+    env.body = std::string{body};
+    return env;
+}
+
+std::size_t csLiveModels(morph::backend::RemoteServer& server) {
+    return morph::testing::awaitAnswer([&](auto& owner) { return server.health(owner); }).liveModels;
+}
+
+}  // namespace
+
+TEST_CASE("morph::backend::RemoteServer: a deregister from a connection holding no reference releases nothing",
+          "[remote][connection-scope][shared-instances][regression]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cidA = server->openConnection();
+    auto cidB = server->openConnection();
+    auto bystander = server->openConnection();
+
+    WaitReply regA;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "7")), std::ref(regA), cidA);
+    REQUIRE(regA.await());
+    REQUIRE(regA.env.kind == "ok");
+    WaitReply regB;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "7")), std::ref(regB), cidB);
+    REQUIRE(regB.await());
+    REQUIRE(regB.env.modelId == regA.env.modelId);
+    auto const mid = regA.env.modelId;
+
+    // Two deregisters from a connection that never attached: one per holder,
+    // enough to drop the instance if either were credited to A or B.
+    for (int i = 0; i < 2; ++i) {
+        WaitReply dereg;
+        server->handle(morph::wire::encode(morph::wire::makeDeregister(mid)), std::ref(dereg), bystander);
+        REQUIRE(dereg.await());
+        CHECK(dereg.env.kind == "ok");
+    }
+    REQUIRE(csLiveModels(*server) == 1U);
+
+    for (auto cid : {cidA, cidB}) {
+        WaitReply run;
+        server->handle(morph::wire::encode(csSquare(mid, R"({"x":3})")), std::ref(run), cid);
+        REQUIRE(run.await());
+        CHECK(run.env.kind == "ok");
+        CHECK(run.env.body == "9");
+    }
+
+    // The holders' own references are still intact and still release it.
+    for (auto cid : {cidA, cidB}) {
+        WaitReply dereg;
+        server->handle(morph::wire::encode(morph::wire::makeDeregister(mid)), std::ref(dereg), cid);
+        REQUIRE(dereg.await());
+    }
+    REQUIRE(csLiveModels(*server) == 0U);
+}
+
+TEST_CASE("morph::backend::RemoteServer: an unscoped deregister still releases the instance",
+          "[remote][connection-scope][regression]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(reg));
+    REQUIRE(reg.await());
+    REQUIRE(csLiveModels(*server) == 1U);
+
+    WaitReply dereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(reg.env.modelId)), std::ref(dereg));
+    REQUIRE(dereg.await());
+    CHECK(dereg.env.kind == "ok");
+    REQUIRE(csLiveModels(*server) == 0U);
+}
