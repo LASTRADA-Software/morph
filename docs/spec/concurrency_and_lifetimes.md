@@ -18,6 +18,7 @@ sequence.
 - [The strand model — one strand per `ModelId`](#the-strand-model--one-strand-per-modelid)
 - [Completion callback marshalling](#completion-callback-marshalling)
 - [Destruction ordering — who must outlive whom](#destruction-ordering--who-must-outlive-whom)
+- [Cancellation policy](#cancellation-policy)
 - [Gating callbacks on a receiver's lifetime — `CallbackScope`](#gating-callbacks-on-a-receivers-lifetime--callbackscope)
 - [Synchronisation specifics per subsystem](#synchronisation-specifics-per-subsystem)
 - [`Completion` / `CompletionState` thread-safety](#completion--completionstate-thread-safety)
@@ -357,6 +358,81 @@ cancellation. `tests/test_coroutine_model.cpp` measures the scope's
 suspended on a long delay records its cancellation after the verb. `~Bridge`
 reaches the handler through the same `LocalBackend::cancelPending`; a scope's
 `reset()` and destruction through the same stop request as `requestStop()`.
+
+## Cancellation policy
+
+A verb that abandons work answers two separate questions, and reading the
+answer to one as the answer to the other is how a receiver gets freed under a
+callback that still runs:
+
+- **What it promises about the callbacks** still owed to the caller, at the
+  moment it returns. That is the G-level below.
+- **What it does to the work** it abandons — the model action, the server
+  handler, the timer callback: whether it asks it to stop, and whether it
+  waits for it. That is a separate column, because a verb can be G2 for the
+  callbacks and still return while the work runs.
+
+### The guarantee scale
+
+| Level | On return, the caller may rely on |
+|---|---|
+| **G0** | Nothing about callbacks has changed. At most, new work is refused, or the cancellation itself has only been queued. |
+| **G1** | No further callback will be *scheduled*. One already posted still runs, later, on its own executor. |
+| **G2** | G1, and the terminal outcome — the error the call ends with — is now scheduled: posted, not yet run. |
+| **G3** | No further callback will *start*. |
+| **G4** | G3, and none is still running. |
+
+Every level is stated for a caller on the thread the verb's contract names
+(the owner, for every `Bridge` and backend verb). A `Completion` settle always
+posts its delivery to the completion's `cbExec`, so a verb that ends a call by
+settling its completion is G2 and cannot be stronger — unless `cbExec` runs
+tasks inline, in which case the delivery runs inside the verb. G3 and G4 need
+either the delivery thread itself or a join.
+
+### Every cancel verb, measured
+
+**M** — measured by `tests/test_cancellation_policy.cpp`, which asserts each
+level from below and, where a stronger level is reachable, from above: a verb
+that gets weaker, or silently stronger, turns a case red. **R** — read from the code, not run here: the row needs a transport
+this suite does not build (`MORPH_BUILD_NET`, `MORPH_BUILD_QT`). A Task
+handler's stop is measured separately, in `tests/test_coroutine_model.cpp`;
+the "work" column below is for a synchronous handler unless it says otherwise.
+
+| Verb | G | Callbacks | Work it abandons | |
+|---|---|---|---|---|
+| `LocalBackend::cancelPending` | **G2** | The error is posted to each pending call's `cbExec`; the action's later result reaches nobody | Not waited for: a synchronous action runs to its end. A Task handler is asked to stop | M |
+| `SimulatedRemoteBackend::cancelPending` | **G2** | As above | The server's handler runs to its end; nothing crosses the wire | M |
+| `SynchronousBackendAdapter::cancelPending` | **G2** for the binds and promotes it produced; **G0** on return for the wrapped backend's calls | Its own completions are rejected at once. The wrapped backend's `cancelPending` is queued on the adapter's control strand, behind whatever was queued before it | A bind still queued never reaches the wrapped backend; one already running is not recalled | M |
+| `SocketBackend::cancelPending` | **G0** on return; **G2** once the I/O loop runs it | Posted to the loop, which settles both pending tables | The server keeps executing; its reply finds no pending entry | R |
+| `QtWebSocketBackend::cancelPending` | **G2** | On the Qt thread: executes, control calls and never-sent registrations are settled; fire-and-forget deregisters are dropped, having no one to tell | The server keeps executing | R |
+| `~Bridge` | **G2** for its calls | Calls waiting for a bind and the backend's pending calls end with `BridgeDestroyedError`, posted | **G4** with a `LocalBackend`: the backend is destroyed with the bridge, and drains its strands, so the destructor returns only once the running action has ended. A Task handler is asked to stop first | M |
+| `Bridge::switchBackend` | **G2** for the outgoing backend's calls | `BackendChangedError`, posted | The outgoing backend is destroyed inside the switch: with a `LocalBackend`, the switch waits for its running actions | M |
+| `Bridge::setExecuteDeadline` | **G0** for calls already made | Applies to calls made after it. When a call's deadline fires, the call ends as in G2, with `ClientTimeoutError` | A synchronous action runs to its end; a Task handler is asked to stop | M |
+| `BridgeHandler::unsubscribe<R>()` | **G1** | A delivery already posted still runs after it returns; no new one is scheduled. Pair it with a `CallbackScope` for G3 | n/a | M |
+| `CallbackScope::requestStop()`, `reset()`, `~CallbackScope` | **G3** on the delivery executor; **G1** from another thread | A gated callback posted but not yet run is refused when it runs. From another thread the check and the body are not atomic, so a callback that has passed its check still runs — advisory, and not measured as a race | Never waits for a callback in its body (measured). Stops every call a gated continuation is attached to | M |
+| `TimeoutScheduler::cancel` | **G0** on return; **G3** for a callback not yet started, once the loop has run the cancel | The cancel is posted to the loop: on return the callback still holds its captures | Never waits for a callback already running | M |
+| `~TimeoutScheduler` | **G4** | Every pending callback is dropped unfired | Returns only once no callback of the scheduler is running | M |
+| `LimitPolicy::executeTimeout` (`RemoteServer`) | **G2** for the reply | `err "timeout"` is sent; the handler's own reply, later, is dropped — one reply per call | A synchronous handler runs to its end; a Task handler is asked to stop | M |
+| `RemoteServer::beginShutdown` | **G0** | An `execute` already running answers as usual; a new `register`/`attach`/`execute` handed to `handle()` after it returns is refused | Untouched — `drainedWithin()` observes it | M |
+| `RemoteServer::closeConnection` | **G0** for an `execute` in flight | The running `execute` still answers; the connection's instances are gone for new lookups | Untouched: the model strand's task holds the instance | M |
+| `SocketServer::close` | **G4** for its own loop work | Every client connection is closed and its models reclaimed before it returns | The server's model work is not reached | R |
+| `QtWebSocketServer::closeGracefully(deadline)` | **G4** if the drain finishes in time; otherwise a hard stop, reported by returning `false` | Shutdown, drain, close frames, close | Given up to `deadline` | R |
+| `NetworkMonitor::stop` | **G4** from off the loop; **G3** on it | Off the loop it runs on the loop and waits: no probe or callback is running once it returns. On the loop the running probe or callback finishes, and no further one runs | n/a | M (off the loop) |
+| `SyncWorker::stop` | **G1** | The replay in flight completes; no further item is replayed in this run. The flag is one-shot and sticky: a stop that lands during a run also makes the next run drain nothing | n/a | M |
+
+### What no verb does today
+
+- **No cancel crosses the wire.** A remote call is settled locally only; the
+  server finishes the handler and its reply is dropped. There is no `cancel`
+  envelope.
+- **A `co_await` that is stopped withdraws the await, not the call.** The
+  coroutine resumes with `OperationCancelled`; the call it was waiting on runs
+  on, because the awaiter's stop is not linked to the call's stop source. A
+  continuation attached through a `CallbackScope` *is* linked: stopping the
+  scope stops the call.
+- **A caller has no direct cancel verb on one call.** `Completion` has no
+  cancel API and `execute()` takes no stop token; the scope link above and the
+  execute deadline are the only per-call routes.
 
 ## Gating callbacks on a receiver's lifetime — `CallbackScope`
 

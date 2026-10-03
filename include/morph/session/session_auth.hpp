@@ -521,9 +521,10 @@ public:
     /// @brief Optional per-request policy over verified claims.
     ///
     /// Receives the verified token plus the target ids; return `false` to deny.
-    /// The action id is **empty** for the `instances` and `schemas` envelopes --
-    /// see `IAuthorizer::authorize`'s own doc comment for why, and handle that
-    /// case explicitly rather than letting it reach a default arm.
+    /// The action id is **empty** for the `instances`, `schemas` and
+    /// `deregister` envelopes, and the model type id is empty for `deregister`
+    /// -- see `IAuthorizer::authorize`'s own doc comment for why, and handle
+    /// those cases explicitly rather than letting them reach a default arm.
     /// The default (empty) admits any validly-signed, unexpired token.
     using Policy =
         std::function<bool(const SessionToken& claims, std::string_view modelType, std::string_view actionType)>;
