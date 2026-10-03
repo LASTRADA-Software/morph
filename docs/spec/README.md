@@ -103,7 +103,8 @@ behavioural differences between the two, collected in one table, are in
 [`error_handling.md`](error_handling.md) ·
 [`core/post_commit_tail.md`](core/post_commit_tail.md) ·
 [`core/logger.md`](core/logger.md) ·
-[`core/observability.md`](core/observability.md)
+[`core/observability.md`](core/observability.md) ·
+[`core/profiler.md`](core/profiler.md)
 
 **Working offline**
 [`offline/offline.md`](offline/offline.md) ·

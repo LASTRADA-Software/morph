@@ -198,6 +198,56 @@ if(NOT glaze_FOUND)
         OPTIONS "glaze_ENABLE_TESTS OFF")
 endif()
 
+# ── Tracy (optional) ────────────────────────────────────────────────────────
+# MORPH_ENABLE_TRACY turns morph's MORPH_ZONE/MORPH_PLOT/... macros
+# (include/morph/core/profiler.hpp) into Tracy calls. Found first, as glaze
+# is, and fetched only when no installed Tracy is found.
+#
+# Before core-cpp, because core-cpp has Tracy instrumentation of its own
+# (CORE_CPP_WITH_TRACY) and, with morph passing CORE_CPP_FETCH_DEPS OFF, takes
+# the Tracy::TracyClient its parent has already provided. Added after it, a
+# build with both on would have no client for core-cpp to find.
+#
+# The tag and the CPM name are Lightweight's, deliberately: an application
+# that links both libraries must end up with exactly one TracyClient, because
+# two copies of the client -- let alone two versions -- in one process do not
+# work. With the same NAME, whichever of the two adds Tracy first fetches it
+# and the other's CPMAddPackage reuses that copy; with the same tag, neither
+# side is handed a version it did not ask for. TRACY_ON_DEMAND is
+# Lightweight's choice too, and the one a library should make: without it the
+# client buffers every event from process start until a profiler connects,
+# which in a process nobody profiles is a leak.
+#
+# The define and the link are INTERFACE: morph is header-only, so the macros
+# expand in the consumer's own translation units, and every one of them has
+# to agree on MORPH_TRACY_ENABLED (see profiler.hpp on why that is an ODR
+# matter).
+option(MORPH_ENABLE_TRACY "Instrument morph's hot paths with Tracy profiler zones (fetches Tracy if not installed)" OFF)
+set(MORPH_TRACY_GIT_TAG v0.13.1)
+if(MORPH_ENABLE_TRACY)
+    find_package(Tracy CONFIG QUIET)
+    if(NOT Tracy_FOUND AND NOT TARGET Tracy::TracyClient)
+        morph_use_cpm(Tracy)
+        CPMAddPackage(
+            NAME tracy
+            GITHUB_REPOSITORY wolfpld/tracy
+            GIT_TAG ${MORPH_TRACY_GIT_TAG}
+            EXCLUDE_FROM_ALL YES
+            SYSTEM YES
+            OPTIONS "TRACY_ENABLE ON" "TRACY_ON_DEMAND ON")
+    endif()
+    # A TracyClient built without TRACY_ENABLE compiles every Tracy macro to
+    # nothing: the build would report profiling on and record no zone at all.
+    get_target_property(_morph_tracy_defs Tracy::TracyClient INTERFACE_COMPILE_DEFINITIONS)
+    if(NOT "${_morph_tracy_defs}" MATCHES "TRACY_ENABLE")
+        message(FATAL_ERROR
+            "MORPH_ENABLE_TRACY=ON, but the Tracy::TracyClient this configure found does not define "
+            "TRACY_ENABLE in its interface, so every zone would compile to nothing. Use a Tracy "
+            "built with TRACY_ENABLE=ON, or let morph fetch ${MORPH_TRACY_GIT_TAG}.")
+    endif()
+    unset(_morph_tracy_defs)
+endif()
+
 # ── core-cpp ────────────────────────────────────────────────────────────────
 # The shared C++23 foundation of the Contour Terminal projects: morph takes
 # its event loop and timers, base64 and the wakeup primitive from it. Only the
@@ -310,6 +360,10 @@ endif()
 if(MORPH_CLIENT_ONLY)
     target_compile_definitions(morph INTERFACE MORPH_CLIENT_ONLY)
 endif()
+if(MORPH_ENABLE_TRACY)
+    target_compile_definitions(morph INTERFACE MORPH_TRACY_ENABLED)
+    target_link_libraries(morph INTERFACE Tracy::TracyClient)
+endif()
 
 set_target_properties(morph PROPERTIES
     VERIFY_INTERFACE_HEADER_SETS ON
@@ -324,6 +378,7 @@ target_sources(morph
         include/morph/attributes.hpp
         include/morph/core/logger.hpp
         include/morph/core/observability.hpp
+        include/morph/core/profiler.hpp
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
         include/morph/core/owner_strand.hpp

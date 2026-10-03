@@ -39,6 +39,13 @@ if(NOT WIN32 AND NOT EMSCRIPTEN)
     find_dependency(Threads)
 endif()
 
+# An install built with MORPH_ENABLE_TRACY=ON carries MORPH_TRACY_ENABLED and
+# Tracy::TracyClient in morph::morph's interface, so the consumer links the
+# same one client the build did.
+if(@MORPH_ENABLE_TRACY@)
+    find_dependency(Tracy CONFIG)
+endif()
+
 # Optional components, each present only if its MORPH_BUILD_* option was on
 # for the build that produced this install. A component that was not built is
 # absent here, so find_package(morph COMPONENTS qt REQUIRED) fails with

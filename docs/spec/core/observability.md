@@ -279,3 +279,7 @@ See [backend.md](backend.md)'s `RemoteServer` API reference table.
   `reconnectOutcome` metrics report on.
 - [session.md](../session/session.md) — `Context::requestId`, reused as the
   trace correlation id.
+- [profiler.md](profiler.md) — compile-time Tracy instrumentation behind
+  `MORPH_ENABLE_TRACY`. A build option rather than a sink: it is not wired
+  through this seam, and it links the phases of one call by the same
+  `requestId`.
