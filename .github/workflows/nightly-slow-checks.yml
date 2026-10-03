@@ -392,7 +392,7 @@ jobs:
           bash scripts/check_tracy_capture.sh capture \
             /home/runner/tracy-tools/tracy-capture /home/runner/tracy-tools/tracy-csvexport \
             build/tracy/capture \
-            "wire::encode,wire::decode,ModelStrands::task,ActionDispatcher::dispatch,ActionDispatcher::prepareAction" \
+            "RemoteServer::dispatchMessage,RemoteServer::dispatchExecute,RemoteServer::startRemote,RemoteServer::finishRemote,wire::encode,wire::decode,ModelStrands::task,ActionDispatcher::dispatch,ActionDispatcher::prepareAction" \
             -- build/tracy/tests/bench/morph_bench
 
       - name: Capture morph_bench_alloc (Bridge over LocalBackend)

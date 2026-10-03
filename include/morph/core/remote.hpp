@@ -32,6 +32,7 @@
 #include "logger.hpp"
 #include "observability.hpp"
 #include "owner_strand.hpp"
+#include "profiler.hpp"
 #include "timeout_scheduler.hpp"
 #include "wire.hpp"
 
@@ -1060,11 +1061,13 @@ private:
     ///                `execute`) from the model's strand.
     /// @param cid     Connection scope; `0` means unscoped.
     void dispatchDecoded(Decoded decoded, std::function<void(std::string)>& reply, ConnectionId cid) {
+        MORPH_ZONE("RemoteServer::dispatchMessage");
         noteOwner("RemoteServer::dispatch");
         if (!decoded.env) {
             replyUndecodable(decoded.raw, decoded.error, reply, cid);
             return;
         }
+        MORPH_ZONE_TEXT(decoded.env->session.requestId);
         dispatchEnvelope(std::move(*decoded.env), reply, cid);
     }
 
@@ -1296,6 +1299,10 @@ private:
     // server strand; the admitted run is posted to the model's strand.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply) {
+        // The admission phase only, on the server strand: the run itself is
+        // posted to the model's strand and zoned there, in startRemote.
+        MORPH_ZONE("RemoteServer::dispatchExecute");
+        MORPH_ZONE_TEXT(env.session.requestId);
         noteOwner("RemoteServer::admitExecute");
         auto reject = [&env, &reply](const char* message) {
             reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
@@ -1524,6 +1531,8 @@ private:
     /// Runs an ordinary handler's execute once it holds its instance's action
     /// gate, on the strand, and replies.
     static void startRemote(RemoteRun& run) {
+        MORPH_ZONE("RemoteServer::startRemote");
+        MORPH_ZONE_TEXT(run.env.session.requestId);
         admitRemote(run);
         std::string result;
         std::exception_ptr error;
@@ -1539,6 +1548,8 @@ private:
     /// Starts a Task handler's execute once it holds its instance's action
     /// gate, on the strand. It replies when its Task completes.
     static void startTaskRemote(const std::shared_ptr<RemoteRun>& run) {
+        MORPH_ZONE("RemoteServer::startTaskRemote");
+        MORPH_ZONE_TEXT(run->env.session.requestId);
         admitRemote(*run);
         std::shared_ptr<::morph::exec::detail::TaskResumer> executor;
         try {
@@ -1569,6 +1580,8 @@ private:
     /// Records a finished execute, replies, and leaves the action gate so the
     /// next execute on the instance can start. On the strand.
     static void finishRemote(RemoteRun& run, std::string result, const std::exception_ptr& error) {
+        MORPH_ZONE("RemoteServer::finishRemote");
+        MORPH_ZONE_TEXT(run.env.session.requestId);
         auto& self = *run.self;
         if (self._executeTimeouts) {
             self._executeTimeouts->cancel(run.timeoutHandle);

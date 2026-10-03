@@ -114,9 +114,9 @@ callback executor. So:
 | `ws::enqueueFrame` | `net/detail/ws_connection.hpp`, the send side | the I/O loop | — |
 | `InMemoryOfflineQueue::enqueue`, `FileOfflineQueue::enqueue` | `offline/` | the queue's owner | — |
 | `SyncWorker::drain`, `SyncWorker::replay` (one per item) | `offline/sync_worker.hpp` | the worker's owner | — |
-
-`RemoteServer`'s own phases (`dispatchMessage`, `dispatchExecute`) are not
-zoned yet; the dispatcher, strand and codec zones inside them are.
+| `RemoteServer::dispatchMessage` | `remote.hpp`, every message after its decode | the server strand | the envelope's `requestId` |
+| `RemoteServer::dispatchExecute` | `remote.hpp`, an `execute`'s admission gates | the server strand | the envelope's `requestId` |
+| `RemoteServer::startRemote`, `RemoteServer::startTaskRemote`, `RemoteServer::finishRemote` | `remote.hpp` | the model's strand | the envelope's `requestId` |
 
 ## Thread names
 
@@ -172,7 +172,7 @@ The nightly workflow's `tracy-capture` job builds `morph_bench` and
 `TRACY_NO_EXIT=1`, exports zone statistics with `tracy-csvexport`, and fails
 unless every named zone has a non-zero count
 (`scripts/check_tracy_capture.sh`). `morph_bench` drives `RemoteServer`'s
-dispatch and so the codec, dispatcher and strand zones; `morph_bench_alloc`
+dispatch and so its own zones and the codec, dispatcher and strand zones; `morph_bench_alloc`
 drives `Bridge` over `LocalBackend`.
 
 The check fails closed. No CSV, a CSV with no rows, a column layout other than
@@ -195,8 +195,6 @@ assertion each of those as a synthetic CSV and runs first in the job.
 
 ## Limitations
 
-- **No zones in `RemoteServer` yet.** `RemoteServer::dispatchMessage` and
-  `RemoteServer::dispatchExecute` are the obvious next two.
 - **core-cpp is not instrumented.** Its event loop and strand pump are its own;
   morph's zones start at morph's around-task hook.
 - **No statistics collector and no `morph::observe` → Tracy sink.** Both are
