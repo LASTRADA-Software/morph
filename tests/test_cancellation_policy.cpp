@@ -12,15 +12,20 @@
 //   G3  no further callback will start
 //   G4  G3, plus none is still running
 //
-// "Work" is the model action or server handler the verb abandons. Whether a
-// Task handler is asked to stop is measured in test_coroutine_model.cpp; these
-// cases use a synchronous handler, which nothing can stop, so they measure
-// what each verb does to the callbacks and whether it waits for that work.
+// "Work" is the model action or server handler the verb abandons. Most cases
+// use a synchronous handler, which nothing can stop, so they measure what each
+// verb does to the callbacks and whether it waits for that work. The verbs
+// whose point is to stop the work -- a stopped co_await -- are measured
+// against a Task handler, which can observe a stop; the other verbs' Task
+// handler stops are measured in test_coroutine_model.cpp.
 
 #include <any>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <core/async/Cancellation.hpp>
+#include <core/async/StopToken.hpp>
+#include <core/async/Task.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -30,6 +35,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/callback_scope.hpp>
 #include <morph/core/completion.hpp>
+#include <morph/core/coroutine.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/io_loop.hpp>
 #include <morph/core/registry.hpp>
@@ -60,6 +66,10 @@ struct CPBlock {
 struct CPFast {
     int tag = 0;
 };
+/// Handled by a Task handler that sleeps until it is stopped.
+struct CPSleep {
+    int ms = 0;
+};
 
 namespace {
 
@@ -81,6 +91,39 @@ CPGate& gate() {
     static CPGate instance;
     return instance;
 }
+
+/// The Task handler's progress, and the scheduler it sleeps on.
+struct CPSleeper {
+    std::atomic<int> started{0};
+    std::atomic<int> cancelled{0};
+    std::atomic<int> finished{0};
+    morph::async::detail::TimeoutScheduler* scheduler = nullptr;
+};
+
+CPSleeper& sleeper() {
+    static CPSleeper instance;
+    return instance;
+}
+
+/// Owns the scheduler `CPSleep` waits on for one test, and joins its thread
+/// when the test ends rather than keeping it for the rest of the run.
+class SleeperScope {
+public:
+    SleeperScope() {
+        sleeper().started = 0;
+        sleeper().cancelled = 0;
+        sleeper().finished = 0;
+        sleeper().scheduler = &_scheduler;
+    }
+    SleeperScope(const SleeperScope&) = delete;
+    SleeperScope& operator=(const SleeperScope&) = delete;
+    SleeperScope(SleeperScope&&) = delete;
+    SleeperScope& operator=(SleeperScope&&) = delete;
+    ~SleeperScope() { sleeper().scheduler = nullptr; }
+
+private:
+    morph::async::detail::TimeoutScheduler _scheduler;
+};
 
 template <typename Error>
 [[nodiscard]] bool holds(const std::exception_ptr& error) {
@@ -116,12 +159,24 @@ struct CPModel {
         return action.tag;
     }
     int execute(CPFast action) { return action.tag; }
+    core::async::Task<int> execute(CPSleep action) {
+        sleeper().started.fetch_add(1);
+        try {
+            co_await morph::async::delay(*sleeper().scheduler, std::chrono::milliseconds{action.ms});
+        } catch (const core::async::OperationCancelled&) {
+            sleeper().cancelled.fetch_add(1);
+            throw;
+        }
+        sleeper().finished.fetch_add(1);
+        co_return action.ms;
+    }
     // NOLINTEND(readability-convert-member-functions-to-static)
 };
 
 BRIDGE_REGISTER_MODEL(CPModel, "CP_Model")
 BRIDGE_REGISTER_ACTION(CPModel, CPBlock, "CP_Block")
 BRIDGE_REGISTER_ACTION(CPModel, CPFast, "CP_Fast")
+BRIDGE_REGISTER_ACTION(CPModel, CPSleep, "CP_Sleep")
 
 namespace {
 
@@ -476,6 +531,88 @@ TEST_CASE("CallbackScope stop is G3 on the delivery executor, and never waits fo
         letGo = true;
         REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
     }
+}
+
+// ── A stopped co_await ──────────────────────────────────────────────────────
+
+namespace {
+
+/// What reached a coroutine awaiting one call, on the owner.
+struct AwaitSeen {
+    /// Set in the step that suspends, just before the `co_await`.
+    std::atomic<bool> suspending{false};
+    std::atomic<bool> finished{false};
+    bool cancelled = false;
+    /// Anything other than the cancellation: a value, or another error.
+    bool settled = false;
+};
+
+core::async::Task<void> awaitCall(morph::async::Completion<int> call, std::shared_ptr<AwaitSeen> seen) {
+    try {
+        seen->suspending = true;
+        static_cast<void>(co_await std::move(call));
+        seen->settled = true;
+    } catch (const core::async::OperationCancelled&) {
+        seen->cancelled = true;
+    } catch (...) {
+        seen->settled = true;
+    }
+    seen->finished = true;
+}
+
+}  // namespace
+
+TEST_CASE("A stopped co_await is G2 for the await, and stops the Task handler it was waiting on", "[cancel-policy]") {
+    SleeperScope const sleeping;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<CPModel> handler{bridge, &owner};
+
+    auto seen = std::make_shared<AwaitSeen>();
+    auto task = awaitCall(handler.execute(CPSleep{.ms = 60'000}), seen);
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource stop;
+    task.handle().promise().setStopToken(stop.get_token());
+    morph::async::spawn(owner, std::move(task));
+    REQUIRE(pumpUntil(owner, [&] { return seen->suspending.load() && sleeper().started.load() == 1; }));
+
+    static_cast<void>(stop.request_stop());
+
+    // Not G3: the coroutine has not resumed on return.
+    CHECK_FALSE(seen->finished.load());
+    // G2: its resumption with OperationCancelled is posted, and runs on a pump.
+    REQUIRE(pumpUntil(owner, [&] { return seen->finished.load(); }));
+    CHECK(seen->cancelled);
+    // The work: the handler the await was waiting on is asked to stop.
+    REQUIRE(pumpUntil(owner, [] { return sleeper().cancelled.load() == 1; }));
+    CHECK(sleeper().finished.load() == 0);
+    // G1: the call's own outcome, settled by the stopped handler, reaches
+    // nothing.
+    owner.runFor(30ms);
+    CHECK_FALSE(seen->settled);
+}
+
+TEST_CASE("A co_await under a stop already requested stops the Task handler it would have waited on",
+          "[cancel-policy]") {
+    SleeperScope const sleeping;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<CPModel> handler{bridge, &owner};
+
+    auto seen = std::make_shared<AwaitSeen>();
+    auto task = awaitCall(handler.execute(CPSleep{.ms = 60'000}), seen);
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource stop;
+    static_cast<void>(stop.request_stop());
+    task.handle().promise().setStopToken(stop.get_token());
+    morph::async::spawn(owner, std::move(task));
+
+    REQUIRE(pumpUntil(owner, [&] { return seen->finished.load(); }));
+    CHECK(seen->cancelled);
+    REQUIRE(pumpUntil(owner, [] { return sleeper().cancelled.load() == 1; }));
+    CHECK(sleeper().finished.load() == 0);
 }
 
 // ── TimeoutScheduler ────────────────────────────────────────────────────────

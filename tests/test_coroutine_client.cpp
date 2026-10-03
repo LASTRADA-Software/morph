@@ -191,6 +191,29 @@ TEST_CASE("co_await under a stop already requested does not suspend", "[coroutin
     REQUIRE_FALSE(seen->value.has_value());
 }
 
+TEST_CASE("a stop already requested at co_await off the completion's executor stops the call there",
+          "[coroutine][client]") {
+    morph::exec::MainThreadExecutor exec;
+    auto const state = std::make_shared<morph::async::detail::CompletionState<int>>();
+    state->stopSource = std::make_shared<core::async::StopSource>();
+    auto const seen = std::make_shared<Observed>();
+
+    auto const task = awaitInto(Completion<int>{state, &exec}, seen);
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource stop;
+    static_cast<void>(stop.request_stop());
+    task.handle().promise().setStopToken(stop.get_token());
+    // Resumed by hand, outside every executor's task: the await answers at
+    // once, and the stop is relayed to the call through the completion's
+    // executor, not here.
+    task.handle().resume();
+    REQUIRE(seen->finished.load());
+    REQUIRE(seen->cancelled);
+    CHECK_FALSE(state->stopSource->stop_requested());
+
+    REQUIRE(pumpUntil(exec, [&] { return state->stopSource->stop_requested(); }));
+}
+
 TEST_CASE("a rejection after a stop withdrew the await reaches nothing", "[coroutine][client]") {
     morph::exec::MainThreadExecutor exec;
     auto [completion, promise] = Completion<int>::makeSettleable(&exec);

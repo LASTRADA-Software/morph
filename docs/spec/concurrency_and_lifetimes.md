@@ -410,6 +410,7 @@ the "work" column below is for a synchronous handler unless it says otherwise.
 | `Bridge::setExecuteDeadline` | **G0** for calls already made | Applies to calls made after it. When a call's deadline fires, the call ends as in G2, with `ClientTimeoutError` | A synchronous action runs to its end; a Task handler is asked to stop | M |
 | `BridgeHandler::unsubscribe<R>()` | **G1** | A delivery already posted still runs after it returns; no new one is scheduled. Pair it with a `CallbackScope` for G3 | n/a | M |
 | `CallbackScope::requestStop()`, `reset()`, `~CallbackScope` | **G3** on the delivery executor; **G1** from another thread | A gated callback posted but not yet run is refused when it runs. From another thread the check and the body are not atomic, so a callback that has passed its check still runs — advisory, and not measured as a race | Never waits for a callback in its body (measured). Stops every call a gated continuation is attached to | M |
+| A stop on a coroutine suspended in `co_await completion` | **G2** for the await | The coroutine's resumption with `OperationCancelled` is posted to the executor it suspended on; the await's handlers are refused, so the call's own outcome, later, does not reach it | The call is asked to stop, through the awaiter's scope linked to its stop source: a Task handler on a `LocalBackend` sees the stop (measured). Not waited for. A synchronous action runs to its end; a remote server's handler runs on | M |
 | `TimeoutScheduler::cancel` | **G0** on return; **G3** for a callback not yet started, once the loop has run the cancel | The cancel is posted to the loop: on return the callback still holds its captures | Never waits for a callback already running | M |
 | `~TimeoutScheduler` | **G4** | Every pending callback is dropped unfired | Returns only once no callback of the scheduler is running | M |
 | `LimitPolicy::executeTimeout` (`RemoteServer`) | **G2** for the reply | `err "timeout"` is sent; the handler's own reply, later, is dropped — one reply per call | A synchronous handler runs to its end; a Task handler is asked to stop | M |
@@ -425,14 +426,10 @@ the "work" column below is for a synchronous handler unless it says otherwise.
 - **No cancel crosses the wire.** A remote call is settled locally only; the
   server finishes the handler and its reply is dropped. There is no `cancel`
   envelope.
-- **A `co_await` that is stopped withdraws the await, not the call.** The
-  coroutine resumes with `OperationCancelled`; the call it was waiting on runs
-  on, because the awaiter's stop is not linked to the call's stop source. A
-  continuation attached through a `CallbackScope` *is* linked: stopping the
-  scope stops the call.
 - **A caller has no direct cancel verb on one call.** `Completion` has no
-  cancel API and `execute()` takes no stop token; the scope link above and the
-  execute deadline are the only per-call routes.
+  cancel API and `execute()` takes no stop token; a stopped scope a
+  continuation is gated by, a stopped `co_await`, and the execute deadline are
+  the only per-call routes.
 
 ## Gating callbacks on a receiver's lifetime — `CallbackScope`
 
