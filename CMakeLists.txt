@@ -216,13 +216,20 @@ endif()
 # side is handed a version it did not ask for. TRACY_ON_DEMAND is
 # Lightweight's choice too, and the one a library should make: without it the
 # client buffers every event from process start until a profiler connects,
-# which in a process nobody profiles is a leak.
+# which in a process nobody profiles is a leak. MORPH_TRACY_ON_DEMAND=OFF is
+# for a capture that must see a program from its first zone -- the nightly
+# capture job -- and, like the tag, applies only when morph is the one that
+# fetches Tracy. It is a morph option rather than TRACY_ON_DEMAND itself
+# because CPM passes OPTIONS as normal variables, which a -D on the command
+# line cannot override.
 #
 # The define and the link are INTERFACE: morph is header-only, so the macros
 # expand in the consumer's own translation units, and every one of them has
 # to agree on MORPH_TRACY_ENABLED (see profiler.hpp on why that is an ODR
 # matter).
 option(MORPH_ENABLE_TRACY "Instrument morph's hot paths with Tracy profiler zones (fetches Tracy if not installed)" OFF)
+option(MORPH_TRACY_ON_DEMAND "Build a fetched Tracy client that records only while a profiler is connected" ON)
+mark_as_advanced(MORPH_TRACY_ON_DEMAND)
 set(MORPH_TRACY_GIT_TAG v0.13.1)
 if(MORPH_ENABLE_TRACY)
     find_package(Tracy CONFIG QUIET)
@@ -234,7 +241,7 @@ if(MORPH_ENABLE_TRACY)
             GIT_TAG ${MORPH_TRACY_GIT_TAG}
             EXCLUDE_FROM_ALL YES
             SYSTEM YES
-            OPTIONS "TRACY_ENABLE ON" "TRACY_ON_DEMAND ON")
+            OPTIONS "TRACY_ENABLE ON" "TRACY_ON_DEMAND ${MORPH_TRACY_ON_DEMAND}")
     endif()
     # A TracyClient built without TRACY_ENABLE compiles every Tracy macro to
     # nothing: the build would report profiling on and record no zone at all.

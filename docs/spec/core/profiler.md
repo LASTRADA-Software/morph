@@ -21,6 +21,7 @@ timeline.
 - [Thread names](#thread-names)
 - [One definition everywhere](#one-definition-everywhere)
 - [One Tracy client per process](#one-tracy-client-per-process)
+- [The capture check](#the-capture-check)
 - [Design decisions](#design-decisions)
 - [Limitations](#limitations)
 
@@ -40,7 +41,9 @@ recording no zone.
 
 A fetched client is built with `TRACY_ON_DEMAND`, so a process records only
 while a profiler is connected; without it, the client buffers every event from
-process start until one connects.
+process start until one connects. `MORPH_TRACY_ON_DEMAND=OFF` (advanced)
+builds it to record from the first zone, which is what a capture of a
+short-lived program needs.
 
 An installed morph built with Tracy on carries both properties in its exported
 target, and its package config finds Tracy for the consumer.
@@ -161,6 +164,23 @@ cannot also install morph with a fetched Tracy — core-cpp's install rules do
 not export a client it did not install — so it needs `MORPH_INSTALL=OFF` or an
 installed Tracy.
 
+## The capture check
+
+The nightly workflow's `tracy-capture` job builds `morph_bench` and
+`morph_bench_alloc` with `MORPH_ENABLE_TRACY=ON` and
+`MORPH_TRACY_ON_DEMAND=OFF`, runs each under `tracy-capture` with
+`TRACY_NO_EXIT=1`, exports zone statistics with `tracy-csvexport`, and fails
+unless every named zone has a non-zero count
+(`scripts/check_tracy_capture.sh`). `morph_bench` drives `RemoteServer`'s
+dispatch and so the codec, dispatcher and strand zones; `morph_bench_alloc`
+drives `Bridge` over `LocalBackend`.
+
+The check fails closed. No CSV, a CSV with no rows, a column layout other than
+the one it reads, a named zone absent or counted zero, a program that was built
+without Tracy (the capture never connects), and a program or capture that does
+not exit are all failures. `scripts/test_check_tracy_capture.sh` feeds the
+assertion each of those as a synthetic CSV and runs first in the job.
+
 ## Design decisions
 
 | Decision | Choice | Why |
@@ -171,7 +191,7 @@ installed Tracy.
 | `MORPH_ZONE` on Tracy | `ZoneNamedN` with morph's own shadow suppression, followed by `static_assert(true)` | Tracy's `ZoneScopedN` ends in a `;` on some compilers and not on others, so the call site's `;` would be an empty statement on some. The `static_assert` consumes it on all. |
 | Linking phases | `Context::requestId` as zone text | It is already the correlation id `morph::observe`'s trace sink uses, and every phase that can see the call can see it. |
 | Tracy version | `v0.13.1`, Lightweight's tag and CPM name | One client per process. |
-| Fetched client mode | `TRACY_ON_DEMAND` | A library must not make an unprofiled process buffer events forever. |
+| Fetched client mode | `TRACY_ON_DEMAND` by default | A library must not make an unprofiled process buffer events forever. |
 
 ## Limitations
 
@@ -183,3 +203,8 @@ installed Tracy.
   separate decisions about `morph::observe`, whose spec rules out aggregation
   inside morph.
 - **The ODR rule is enforced only under MSVC and clang-cl.**
+- **macOS captures of a short program can be empty.** Tracy's client on Apple
+  starts lazily and is never destroyed, so `TRACY_NO_EXIT` does not hold the
+  process open for the capture; a program that finishes before
+  `tracy-capture` connects is lost. The nightly check runs on Linux, where the
+  client is a static object and waits.
