@@ -3,6 +3,7 @@
 #pragma once
 #include <atomic>
 #include <concepts>
+#include <core/async/Cancellation.hpp>
 #include <core/async/ExecutorContext.hpp>
 #include <core/async/StopToken.hpp>
 #include <exception>
@@ -143,6 +144,44 @@ struct CompletionState : std::enable_shared_from_this<CompletionState<T>> {
         checkOwner("Completion::linkStop");
         stopLinks.push_back(std::make_shared<::core::async::StopCallback<StopRelay>>(
             std::move(scopeStop), StopRelay{std::weak_ptr<::core::async::StopSource>{stopSource}}));
+    }
+
+    // Relays a caller's cancel to the call: settles it with `OperationCancelled`
+    // first, so that outcome wins over the one the stopped work produces, then
+    // requests stop on its stop source. Holds both weakly. Runs on whichever
+    // thread requested the stop; a settle only posts its delivery.
+    struct CancelRelay {
+        std::weak_ptr<CompletionState> state;
+        std::weak_ptr<::core::async::StopSource> source;
+        void operator()() const noexcept {
+            if (auto const strong = state.lock()) {
+                try {
+                    strong->setException(std::make_exception_ptr(::core::async::OperationCancelled{}));
+                } catch (...) {  // NOLINT(bugprone-empty-catch): a stop callback must not throw
+                    // An executor that refuses the delivery leaves nothing to tell.
+                }
+            }
+            if (auto const strong = source.lock()) {
+                static_cast<void>(strong->request_stop());
+            }
+        }
+    };
+
+    // Links @p cancel to this call until the state is delivered: a stop on it
+    // settles the call with `OperationCancelled` and stops its stop source, if
+    // it has one. A no-op for a token that can never be stopped, a state
+    // already delivered, or one with no executor. A token already stopped
+    // cancels the call here. Runs on the owner.
+    void linkCancel(::core::async::StopToken cancel) {
+        if (cbExec == nullptr || delivered.load(std::memory_order_relaxed) || !cancel.stop_possible()) {
+            return;
+        }
+        checkOwner("Completion::linkCancel");
+        stopLinks.push_back(std::make_shared<::core::async::StopCallback<CancelRelay>>(
+            std::move(cancel), CancelRelay{
+                                   .state = this->weak_from_this(),
+                                   .source = std::weak_ptr<::core::async::StopSource>{stopSource},
+                               }));
     }
 
     void setValue(T val) {

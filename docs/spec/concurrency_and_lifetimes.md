@@ -408,6 +408,7 @@ the "work" column below is for a synchronous handler unless it says otherwise.
 | `~Bridge` | **G2** for its calls | Calls waiting for a bind and the backend's pending calls end with `BridgeDestroyedError`, posted | **G4** with a `LocalBackend`: the backend is destroyed with the bridge, and drains its strands, so the destructor returns only once the running action has ended. A Task handler is asked to stop first | M |
 | `Bridge::switchBackend` | **G2** for the outgoing backend's calls | `BackendChangedError`, posted | The outgoing backend is destroyed inside the switch: with a `LocalBackend`, the switch waits for its running actions | M |
 | `Bridge::setExecuteDeadline` | **G0** for calls already made | Applies to calls made after it. When a call's deadline fires, the call ends as in G2, with `ClientTimeoutError` | A synchronous action runs to its end; a Task handler is asked to stop | M |
+| A stop on `BridgeHandler::execute(action, stop)`'s token | **G2**, from any thread | `OperationCancelled` is posted to the call's `cbExec` by the thread that requested the stop; the call's own outcome, later, reaches nobody. A token already stopped rejects the call the same way without dispatching it | Asked to stop, not waited for: a Task handler on a `LocalBackend` sees the stop. A synchronous action runs to its end. **On a remote backend the call is only abandoned**: no `cancel` crosses the wire, so the server's handler runs to its end and its reply is dropped (measured with `SimulatedRemoteBackend`). The call stays counted as pending until that reply, as for a fired deadline | M |
 | `BridgeHandler::unsubscribe<R>()` | **G1** | A delivery already posted still runs after it returns; no new one is scheduled. Pair it with a `CallbackScope` for G3 | n/a | M |
 | `CallbackScope::requestStop()`, `reset()`, `~CallbackScope` | **G3** on the delivery executor; **G1** from another thread | A gated callback posted but not yet run is refused when it runs. From another thread the check and the body are not atomic, so a callback that has passed its check still runs — advisory, and not measured as a race | Never waits for a callback in its body (measured). Stops every call a gated continuation is attached to | M |
 | A stop on a coroutine suspended in `co_await completion` | **G2** for the await | The coroutine's resumption with `OperationCancelled` is posted to the executor it suspended on; the await's handlers are refused, so the call's own outcome, later, does not reach it | The call is asked to stop, through the awaiter's scope linked to its stop source: a Task handler on a `LocalBackend` sees the stop (measured). Not waited for. A synchronous action runs to its end; a remote server's handler runs on | M |
@@ -426,10 +427,9 @@ the "work" column below is for a synchronous handler unless it says otherwise.
 - **No cancel crosses the wire.** A remote call is settled locally only; the
   server finishes the handler and its reply is dropped. There is no `cancel`
   envelope.
-- **A caller has no direct cancel verb on one call.** `Completion` has no
-  cancel API and `execute()` takes no stop token; a stopped scope a
-  continuation is gated by, a stopped `co_await`, and the execute deadline are
-  the only per-call routes.
+- **`Completion` has no cancel API of its own.** A call is cancelled through
+  the token given to `execute(action, stop)`, a stopped scope a continuation is
+  gated by, a stopped `co_await`, or the execute deadline.
 
 ## Gating callbacks on a receiver's lifetime — `CallbackScope`
 

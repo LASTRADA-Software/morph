@@ -15,7 +15,8 @@
 // "Work" is the model action or server handler the verb abandons. Most cases
 // use a synchronous handler, which nothing can stop, so they measure what each
 // verb does to the callbacks and whether it waits for that work. The verbs
-// whose point is to stop the work -- a stopped co_await -- are measured
+// whose point is to stop the work -- a stopped co_await, a stopped execute
+// token -- are measured
 // against a Task handler, which can observe a stop; the other verbs' Task
 // handler stops are measured in test_coroutine_model.cpp.
 
@@ -456,6 +457,179 @@ TEST_CASE("Bridge::setExecuteDeadline is G0 for calls already made; a fired dead
     REQUIRE(morph::testing::waitUntil([] { return gate().finished.load() == 1; }));
     owner.runFor(30ms);
     CHECK(after.ok == 0);
+}
+
+TEST_CASE("execute with a stop token is G2 when stopped, and stops the Task handler running the call",
+          "[cancel-policy]") {
+    SleeperScope const sleeping;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<CPModel> handler{bridge, &owner};
+
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource stop;
+    Outcome outcome;
+    auto completion = handler.execute(CPSleep{.ms = 60'000}, stop.get_token());
+    outcome.attach(completion);
+    REQUIRE(pumpUntil(owner, [] { return sleeper().started.load() == 1; }));
+
+    static_cast<void>(stop.request_stop());
+
+    // Not G3: the terminal callback has not run on return.
+    CHECK(outcome.err == 0);
+    // G2: OperationCancelled is posted, and runs on the next pump.
+    REQUIRE(pumpUntil(owner, [&] { return outcome.err == 1; }));
+    CHECK(holds<core::async::OperationCancelled>(outcome.error));
+    // The work: the Task handler is asked to stop.
+    REQUIRE(pumpUntil(owner, [] { return sleeper().cancelled.load() == 1; }));
+    CHECK(sleeper().finished.load() == 0);
+    // G1: the stopped handler's own outcome reaches nobody.
+    owner.runFor(30ms);
+    CHECK(outcome.ok == 0);
+    CHECK(outcome.err == 1);
+}
+
+TEST_CASE("execute with a stop token stopped from another thread settles the call; a synchronous action runs on",
+          "[cancel-policy]") {
+    gate().reset();
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<CPModel> handler{bridge, &owner};
+
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource stop;
+    Outcome outcome;
+    auto completion = handler.execute(CPBlock{.tag = 1}, stop.get_token());
+    outcome.attach(completion);
+    REQUIRE(pumpUntil(owner, [] { return gate().started.load() == 1; }));
+
+    std::thread{[&stop] { static_cast<void>(stop.request_stop()); }}.join();
+
+    CHECK(outcome.err == 0);
+    REQUIRE(pumpUntil(owner, [&] { return outcome.err == 1; }));
+    CHECK(holds<core::async::OperationCancelled>(outcome.error));
+    // No join, and nothing can stop a synchronous action: it is still running.
+    CHECK(gate().finished.load() == 0);
+    gate().released = true;
+    REQUIRE(morph::testing::waitUntil([] { return gate().finished.load() == 1; }));
+    owner.runFor(30ms);
+    CHECK(outcome.ok == 0);
+    CHECK(outcome.err == 1);
+}
+
+TEST_CASE("execute with a stop token already stopped rejects the call without dispatching it", "[cancel-policy]") {
+    gate().reset();
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<CPModel> handler{bridge, &owner};
+
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource stop;
+    static_cast<void>(stop.request_stop());
+    Outcome outcome;
+    auto completion = handler.execute(CPBlock{.tag = 1}, stop.get_token());
+    outcome.attach(completion);
+
+    REQUIRE(pumpUntil(owner, [&] { return outcome.err == 1; }));
+    CHECK(holds<core::async::OperationCancelled>(outcome.error));
+    owner.runFor(30ms);
+    CHECK(gate().started.load() == 0);
+}
+
+TEST_CASE("execute with a stop token on SimulatedRemoteBackend abandons the call; the server's handler runs on",
+          "[cancel-policy]") {
+    gate().reset();
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server), owner};
+    morph::bridge::BridgeHandler<CPModel> handler{bridge, &owner};
+    REQUIRE(pumpUntil(owner, [&] { return handler.isBound(); }));
+
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource stop;
+    Outcome outcome;
+    auto completion = handler.execute(CPBlock{.tag = 1}, stop.get_token());
+    outcome.attach(completion);
+    REQUIRE(pumpUntil(owner, [] { return gate().started.load() == 1; }));
+
+    static_cast<void>(stop.request_stop());
+
+    CHECK(outcome.err == 0);
+    REQUIRE(pumpUntil(owner, [&] { return outcome.err == 1; }));
+    CHECK(holds<core::async::OperationCancelled>(outcome.error));
+    // Nothing crossed the wire: the server's handler finishes, and its reply
+    // is dropped.
+    CHECK(gate().finished.load() == 0);
+    gate().released = true;
+    REQUIRE(morph::testing::waitUntil([] { return gate().finished.load() == 1; }));
+    owner.runFor(30ms);
+    CHECK(outcome.ok == 0);
+    CHECK(outcome.err == 1);
+}
+
+TEST_CASE("a cancel token links nothing to a call with no executor, one already delivered, or when it cannot stop",
+          "[cancel-policy]") {
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource stop;
+
+    // No executor: nothing could ever deliver the cancellation.
+    auto const unowned = std::make_shared<morph::async::detail::CompletionState<int>>();
+    unowned->linkCancel(stop.get_token());
+    CHECK(unowned->stopLinks.empty());
+
+    morph::exec::MainThreadExecutor owner;
+    auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&owner);
+    auto const state = completion.state();
+    Outcome outcome;
+    outcome.attach(completion);
+
+    // A token no source can stop: there is nothing to link.
+    state->linkCancel(core::async::StopToken{});
+    CHECK(state->stopLinks.empty());
+
+    // Delivered: the call has nothing left to cancel, and its outcome stands.
+    promise.resolve(1);
+    REQUIRE(pumpUntil(owner, [&] { return outcome.ok == 1; }));
+    state->linkCancel(stop.get_token());
+    CHECK(state->stopLinks.empty());
+    static_cast<void>(stop.request_stop());
+    owner.runFor(20ms);
+    CHECK(outcome.ok == 1);
+    CHECK(outcome.err == 0);
+}
+
+TEST_CASE("a cancel link that outlives its call still stops the call's stop source, and settles nothing",
+          "[cancel-policy]") {
+    morph::exec::MainThreadExecutor owner;
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const
+    core::async::StopSource cancel;
+    auto const callStop = std::make_shared<core::async::StopSource>();
+    std::shared_ptr<void> link;
+    std::weak_ptr<morph::async::detail::CompletionState<int>> gone;
+    {
+        auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&owner);
+        auto const state = completion.state();
+        state->stopSource = callStop;
+        state->linkCancel(cancel.get_token());
+        REQUIRE(state->stopLinks.size() == 1);
+        // Held past the state, as a stop callback running while the state
+        // is released would be.
+        link = state->stopLinks.front();
+        gone = state;
+    }
+    REQUIRE(gone.expired());
+    REQUIRE(link != nullptr);
+
+    static_cast<void>(cancel.request_stop());
+
+    // The relay holds the state weakly: with it gone there is nothing to
+    // settle, and the call's stop source is still asked to stop.
+    CHECK(callStop->stop_requested());
+    owner.runFor(20ms);
 }
 
 namespace {
