@@ -905,7 +905,15 @@ nothing for a caller that never uses it.
   happened to attach the instance last. A shared instance can have several
   owning connections at once; crediting the release to the wrong one would
   either strand a reference no one will ever decrement, or let one
-  connection's deregister silently consume another's hold.
+  connection's deregister silently consume another's hold. A connection that
+  holds no reference to the id — it never attached it, has already released
+  every reference it had, or its scope is closed — releases nothing, and is
+  answered `ok`, as an unknown id is. Every shipped client sends `deregister`
+  fire-and-forget and reads no reply, and an `err` there would only let a
+  caller tell a live id it does not hold from one that is gone. The same rule
+  covers the instance an `attach` re-point gives up: it is released only if
+  the requesting connection holds it. The unscoped path (`ConnectionId` `0`)
+  records no references, so its `deregister` always releases one.
 - `closeConnection(cid)` posts, to the server strand, the erasure of every model
   still recorded in `cid`'s scope (its directory record and the per-instance
   connection entry) exactly as the `deregister` path does, then drops the scope

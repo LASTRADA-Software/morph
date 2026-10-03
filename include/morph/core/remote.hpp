@@ -789,19 +789,30 @@ private:
     /// @param mid Instance to release.
     void releaseInstance(::morph::exec::detail::ModelId mid) { (void)_instances.release(mid); }
 
-    /// @brief Drops one of @p cid's references to @p mid, then releases the
-    ///        instance. On the server strand.
+    /// @brief Drops one of @p cid's references to @p mid and releases the
+    ///        instance by that one reference. On the server strand.
+    ///
+    /// A scoped connection releases only a reference it holds: if @p cid's
+    /// scope records none for @p mid — it never attached it, already released
+    /// every reference it had, or its scope is closed — nothing is released,
+    /// because the reference that would go belongs to another connection.
+    /// The unscoped path (`cid == 0`) records no references, so it always
+    /// releases.
     /// @param mid Instance to release.
     /// @param cid Connection whose reference is being dropped; `0` for unscoped.
     void releaseScoped(::morph::exec::detail::ModelId mid, ConnectionId cid) {
         if (cid != 0) {
-            if (auto scopeIter = _connectionScopes.find(cid); scopeIter != _connectionScopes.end()) {
-                if (auto refIter = scopeIter->second.find(mid); refIter != scopeIter->second.end()) {
-                    refIter->second -= 1;
-                    if (refIter->second == 0) {
-                        scopeIter->second.erase(refIter);
-                    }
-                }
+            auto scopeIter = _connectionScopes.find(cid);
+            if (scopeIter == _connectionScopes.end()) {
+                return;
+            }
+            auto refIter = scopeIter->second.find(mid);
+            if (refIter == scopeIter->second.end()) {
+                return;
+            }
+            refIter->second -= 1;
+            if (refIter->second == 0) {
+                scopeIter->second.erase(refIter);
             }
         }
         releaseInstance(mid);
@@ -1246,7 +1257,10 @@ private:
                 // a shared instance may have several owning connections at once,
                 // and crediting the release to the wrong one either strands a
                 // reference nobody will ever decrement, or lets one connection's
-                // deregister silently consume another's hold.
+                // deregister silently consume another's hold. A connection
+                // holding no reference releases nothing and is still answered
+                // `ok`, the reply an unknown id gets, so it does not tell a live
+                // id this connection does not hold apart from one that is gone.
                 releaseScoped(mid, cid);
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
