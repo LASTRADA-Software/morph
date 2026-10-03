@@ -17,6 +17,7 @@
 
 #include "../attributes.hpp"
 #include "logger.hpp"
+#include "profiler.hpp"
 
 namespace morph::exec {
 
@@ -210,6 +211,7 @@ public:
 
 private:
     void loop() {
+        MORPH_THREAD_NAME("morph.pool");
         for (;;) {
             std::function<void()> task;
             {

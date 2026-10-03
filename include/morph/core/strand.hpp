@@ -24,6 +24,7 @@
 #include "../session/session.hpp"
 #include "executor.hpp"
 #include "logger.hpp"
+#include "profiler.hpp"
 
 /// @file
 /// @brief morph's strands: one per model instance, from core-cpp's
@@ -383,6 +384,9 @@ private:
 };
 
 inline void ModelStrands::AroundTask::operator()(const ModelId& key, ::core::async::RunTask run) const {
+    // Every task a model strand runs passes through here, on the thread that
+    // runs it, so this zone is one strand task and nothing more.
+    MORPH_ZONE("ModelStrands::task");
     if (run.kind() != ::core::async::TaskKind::Resumption ||
         self->_enrolledCount.load(std::memory_order_acquire) == 0) {
         run();

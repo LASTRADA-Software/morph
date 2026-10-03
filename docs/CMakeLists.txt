@@ -58,6 +58,8 @@ set(DOXYGEN_EXCLUDE_SYMBOLS
     "morph::log::detail::*"
     "morph::observe::detail"
     "morph::observe::detail::*"
+    "morph::profiler::detail"
+    "morph::profiler::detail::*"
     "morph::exec::detail"
     "morph::exec::detail::*"
     "morph::async::detail"

@@ -23,6 +23,10 @@ name: Nightly slow checks
 # `github.event_name` is `schedule`/`workflow_dispatch`, never `push`, so the
 # unmodified "Save sccache" `if:` condition they inherit is always false and
 # they only ever restore what the last push already wrote.
+#
+# A third job, `tracy-capture`, is not a copy of anything in ci.yml: it is
+# the check that morph's profiler zones fire under a real capture. See its
+# own comment.
 
 on:
   schedule:
@@ -309,9 +313,132 @@ jobs:
           path: /tmp/failure-excerpt-all-features-${{ matrix.compiler }}.txt
           retention-days: 7
 
+  # ── Tracy capture: the profiler zones fire ────────────────────────────
+  # Builds the benchmarks with MORPH_ENABLE_TRACY=ON, runs each under
+  # tracy-capture, exports the zone statistics with tracy-csvexport, and
+  # fails unless every named zone has a non-zero count. A capture that
+  # "succeeds" with no zones would prove nothing, so
+  # scripts/check_tracy_capture.sh fails closed: no CSV, no rows, a zone
+  # missing or counted zero, or a capture that never connected is a failure.
+  #
+  # morph_bench drives RemoteServer's dispatch (the wire codec, the
+  # dispatcher, the model strands); morph_bench_alloc drives Bridge over
+  # LocalBackend. Between them they reach the zones named below. Nightly,
+  # not on pull_request: it builds Tracy's tools and a release morph, and a
+  # missing zone is a slow regression, not one a PR needs to wait on.
+  #
+  # MORPH_TRACY_ON_DEMAND=OFF and TRACY_NO_EXIT=1 make the result
+  # independent of when tracy-capture connects: the client records from the
+  # first zone and waits, at exit, until the capture has drained it.
+  tracy-capture:
+    name: Tracy capture (nightly)
+    runs-on: ubuntu-24.04
+    env:
+      TRACY_TAG: v0.13.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang, ninja, catch2
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build catch2
+          curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          test -s /tmp/llvm.sh
+          sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
+
+      - name: Self-test the capture checker
+        run: bash scripts/test_check_tracy_capture.sh
+
+      - name: Restore Tracy's tools
+        id: tracy-tools
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/tracy-tools
+          key: tracy-tools-${{ env.TRACY_TAG }}-ubuntu-24.04-clang-${{ env.CLANG_VERSION }}
+
+      # The tag morph's own CMake fetches the client at, so the capture
+      # protocol matches the client the benchmarks link.
+      - name: Build tracy-capture and tracy-csvexport
+        if: steps.tracy-tools.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$TRACY_TAG" https://github.com/wolfpld/tracy.git /tmp/tracy
+          for tool in capture csvexport; do
+            cmake -S "/tmp/tracy/${tool}" -B "/tmp/tracy-build/${tool}" -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release -DNO_ISA_EXTENSIONS=ON \
+              -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+              -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
+            cmake --build "/tmp/tracy-build/${tool}"
+          done
+          mkdir -p /home/runner/tracy-tools
+          cp /tmp/tracy-build/capture/tracy-capture /tmp/tracy-build/csvexport/tracy-csvexport \
+            /home/runner/tracy-tools/
+
+      - name: Configure (Tracy on, recording from the first zone)
+        run: |
+          cmake -S . -B build/tracy -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            -DMORPH_ENABLE_TRACY=ON \
+            -DMORPH_TRACY_ON_DEMAND=OFF \
+            -DMORPH_BUILD_LOAD_TESTS=ON \
+            -DMORPH_BUILD_EXAMPLES=OFF
+
+      - name: Build the benchmarks
+        run: cmake --build build/tracy --target morph_bench morph_bench_alloc -- -j 4
+
+      - name: Capture morph_bench (RemoteServer dispatch)
+        run: |
+          bash scripts/check_tracy_capture.sh capture \
+            /home/runner/tracy-tools/tracy-capture /home/runner/tracy-tools/tracy-csvexport \
+            build/tracy/capture \
+            "RemoteServer::dispatchMessage,RemoteServer::dispatchExecute,RemoteServer::startRemote,RemoteServer::finishRemote,wire::encode,wire::decode,ModelStrands::task,ActionDispatcher::dispatch,ActionDispatcher::prepareAction" \
+            -- build/tracy/tests/bench/morph_bench
+
+      - name: Capture morph_bench_alloc (Bridge over LocalBackend)
+        run: |
+          bash scripts/check_tracy_capture.sh capture \
+            /home/runner/tracy-tools/tracy-capture /home/runner/tracy-tools/tracy-csvexport \
+            build/tracy/capture \
+            "Bridge::executeVia,Bridge::dispatchNow,LocalBackend::executeInto,LocalBackend::startLocal,LocalBackend::finishLocal,BridgeSink::settleValue,ModelStrands::task" \
+            -- build/tracy/tests/bench/morph_bench_alloc
+
+      - name: Upload the zone tables
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracy-capture-zones
+          path: |
+            build/tracy/capture/*.csv
+            build/tracy/capture/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Capture a failure excerpt for the issue filer
+        if: failure()
+        run: |
+          {
+            echo "Job: Tracy capture (nightly)"
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Commit: ${{ github.sha }}"
+            for log in build/tracy/capture/*.log; do
+              [ -f "$log" ] || continue
+              echo "── ${log} (last 30 lines) ──"
+              tail -n 30 "$log"
+            done
+          } > /tmp/failure-excerpt-tracy-capture.txt
+
+      - name: Upload failure excerpt
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-excerpt-tracy-capture
+          path: /tmp/failure-excerpt-tracy-capture.txt
+          retention-days: 7
+
   # ── Reconcile GitHub issues against tonight's result ──────────────────
   #
-  # Runs regardless of the two jobs above (`if: always()`), because a
+  # Runs regardless of the jobs above (`if: always()`), because a
   # recovery (a previously-red job going green) has to close a stale issue
   # just as reliably as a new failure has to open one -- an `if: failure()`
   # gate here would only ever open issues and never close them.
@@ -330,7 +457,7 @@ jobs:
   # same auth every workflow already has; no new secret.
   reconcile-issues:
     name: File or close issues for tonight's result
-    needs: [valgrind, linux-all-features]
+    needs: [valgrind, linux-all-features, tracy-capture]
     if: always()
     runs-on: ubuntu-24.04
     permissions:
@@ -362,6 +489,9 @@ jobs:
           gh label create "nightly-check:all-features" --repo "$REPO" \
             --description "Auto-filed by nightly-slow-checks.yml for the all-optional-features leg" \
             --color BFDADC 2>/dev/null || true
+          gh label create "nightly-check:tracy-capture" --repo "$REPO" \
+            --description "Auto-filed by nightly-slow-checks.yml for the Tracy capture leg" \
+            --color BFDADC 2>/dev/null || true
 
       - name: Reconcile
         env:
@@ -371,6 +501,7 @@ jobs:
           SHA: ${{ github.sha }}
           VALGRIND_RESULT: ${{ needs.valgrind.result }}
           ALL_FEATURES_RESULT: ${{ needs.linux-all-features.result }}
+          TRACY_CAPTURE_RESULT: ${{ needs.tracy-capture.result }}
         run: |
           set -euo pipefail
 
@@ -451,3 +582,5 @@ jobs:
             "/tmp/excerpts/failure-excerpt-valgrind.txt"
           reconcile_one "nightly-check:all-features" "Linux / all optional features" "$ALL_FEATURES_RESULT" \
             "/tmp/excerpts/failure-excerpt-all-features-clang.txt"
+          reconcile_one "nightly-check:tracy-capture" "Tracy capture" "$TRACY_CAPTURE_RESULT" \
+            "/tmp/excerpts/failure-excerpt-tracy-capture.txt"

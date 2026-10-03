@@ -16,6 +16,7 @@
 #include <string_view>
 #include <utility>
 
+#include "../../core/profiler.hpp"
 #include "ws_handshake.hpp"
 
 /// @file
@@ -124,6 +125,10 @@ inline ::core::async::Task<void> writerFlow(std::shared_ptr<LoopConnection> conn
 /// @param frame One complete, encoded WebSocket frame.
 /// @return `false` if the connection is closed and the frame was dropped.
 inline bool enqueueFrame(std::shared_ptr<LoopConnection> const& conn, std::string frame) {
+    // The send side's zone is here and not in `writerFlow`: a zone must not
+    // stay open across a `co_await`, where the loop runs other work on the
+    // same thread before the writer resumes.
+    MORPH_ZONE("ws::enqueueFrame");
     if (conn->closed || conn->closeWhenFlushed) {
         return false;
     }

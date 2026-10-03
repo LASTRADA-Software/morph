@@ -21,6 +21,7 @@
 #include "../forms/forms.hpp"
 #include "model.hpp"
 #include "payload_schema.hpp"
+#include "profiler.hpp"
 
 namespace morph::model {
 
@@ -445,6 +446,15 @@ inline std::string actionPayloadSchema() {
     }
 }
 
+/// @brief The request id of the session installed on the calling thread, or
+///        empty when there is none: the text that links one dispatch's
+///        profiler zones across the threads it crosses.
+/// @return A view into the installed session, valid while it stays installed.
+[[nodiscard]] inline std::string_view currentRequestId() noexcept {
+    auto const* const ctx = ::morph::session::current();
+    return ctx != nullptr ? std::string_view{ctx->requestId} : std::string_view{};
+}
+
 /// @brief Records one executed action's *successful* outcome to @p holder's
 ///        attached action log, if any (`IModelHolder::recordIfAttached` is
 ///        itself a no-op with none attached).
@@ -467,6 +477,7 @@ inline std::string actionPayloadSchema() {
 /// @param result     JSON-encoded result (`ActionTraits<Action>::resultToJson`).
 inline void recordActionSuccess(IModelHolder& holder, std::string modelType, std::string actionType,
                                 std::string payload, std::string schema, std::string result) {
+    MORPH_ZONE("recordActionSuccess");
     holder.recordIfAttached(::morph::journal::LogEntry{
         .seq = 0,
         .modelType = std::move(modelType),
@@ -493,6 +504,7 @@ inline void recordActionSuccess(IModelHolder& holder, std::string modelType, std
 /// @param error      `std::exception::what()`.
 inline void recordActionFailure(IModelHolder& holder, std::string modelType, std::string actionType,
                                 std::string payload, std::string schema, std::string error) {
+    MORPH_ZONE("recordActionFailure");
     holder.recordIfAttached(::morph::journal::LogEntry{
         .seq = 0,
         .modelType = std::move(modelType),
@@ -734,6 +746,7 @@ private:
     /// @throws ValidationError if the action fails `ActionValidator<Action>::ready`.
     template <typename Model, typename Action>
     static Action prepareAction(std::string_view payloadJson) {
+        MORPH_ZONE("ActionDispatcher::prepareAction");
         auto action = ActionTraits<Action>::fromJson(payloadJson);
         // Retag any Quantity fields to their declared precision so a
         // hand-built wire payload matches the schema's advertised
@@ -938,6 +951,8 @@ public:
     /// @brief Dispatches an action against @p holder and returns the JSON-encoded result.
     std::string dispatch(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
                          std::string_view payload) {
+        MORPH_ZONE("ActionDispatcher::dispatch");
+        MORPH_ZONE_TEXT(detail::currentRequestId());
         // A dispatch means the maps are being read, which in the registration
         // model means the registration phase is over. Debug builds only; see
         // `detail::noteRegistryRead`.
@@ -972,6 +987,8 @@ public:
     void dispatchAsync(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
                        std::string_view payload, const std::shared_ptr<::morph::exec::detail::TaskResumer>& executor,
                        ::core::async::StopToken token, DispatchDone done) {
+        MORPH_ZONE("ActionDispatcher::dispatchAsync");
+        MORPH_ZONE_TEXT(detail::currentRequestId());
         const ActionEntry* entry = nullptr;
         try {
             detail::noteRegistryRead(this == &defaultDispatcher());

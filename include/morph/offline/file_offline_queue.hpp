@@ -24,6 +24,7 @@
 #include "../core/file_io_ops.hpp"
 #include "../core/logger.hpp"
 #include "../core/observability.hpp"
+#include "../core/profiler.hpp"
 #include "offline_queue.hpp"
 
 #ifdef _WIN32
@@ -327,6 +328,7 @@ private:
         State& operator=(State&&) = delete;
 
         uint64_t enqueue(std::string payload, std::string idempotencyKey, std::optional<std::size_t> maxDepth) {
+            MORPH_ZONE("FileOfflineQueue::enqueue");
             if (!idempotencyKey.empty()) {
                 for (const auto& [existingId, item] : _items) {
                     if (item.idempotencyKey == idempotencyKey) {

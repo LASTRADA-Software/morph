@@ -11,6 +11,7 @@
 
 #include "executor.hpp"
 #include "logger.hpp"
+#include "profiler.hpp"
 
 #if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
 #define MORPH_IO_LOOP_HOST_DRIVEN 1
@@ -87,7 +88,13 @@ public:
 
 #ifndef MORPH_IO_LOOP_HOST_DRIVEN
     /// @brief Creates the loop and starts the thread that runs it.
-    IoLoop() : _impl{std::make_shared<Impl>()}, _thread{[impl = _impl] { impl->loop.run(); }} {}
+    IoLoop()
+        : _impl{std::make_shared<Impl>()}, _thread{[impl = _impl] {
+              // One name for every IoLoop thread: an application runs one, and
+              // its sockets, deadlines and probe all turn on it.
+              MORPH_THREAD_NAME("morph.io");
+              impl->loop.run();
+          }} {}
 
     /// @brief Stops the loop and joins its thread.
     ///

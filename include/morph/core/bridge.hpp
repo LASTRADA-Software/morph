@@ -32,6 +32,7 @@
 #include "detail/owner_affinity.hpp"
 #include "detail/subscription_registry.hpp"
 #include "model_key.hpp"
+#include "profiler.hpp"
 #include "registry.hpp"
 #include "timeout_scheduler.hpp"
 
@@ -471,6 +472,7 @@ public:
     ///        `opaque` rather than `value` only because `CompletionState`
     ///        already has a member of that name, and -Wshadow-field is on.
     void settleValue(std::shared_ptr<void> opaque) override {
+        MORPH_ZONE("BridgeSink::settleValue");
         if (!settleOnce()) {
             return;
         }
@@ -494,6 +496,7 @@ public:
     /// @brief Settles with a failure from the backend.
     /// @param exc The exception to deliver to the caller's `.onError`.
     void settleException(const std::exception_ptr& exc) override {
+        MORPH_ZONE("BridgeSink::settleException");
         if (settleOnce()) {
             _pendingCalls->fetch_sub(1, std::memory_order_relaxed);
         }
@@ -508,6 +511,9 @@ private:
     /// @param opaque  The backend's result.
     /// @param onOwner Whether this runs on the bridge's owner.
     void forward(const std::shared_ptr<void>& opaque, bool onOwner) {
+        // Its own zone: when the bridge has work to do, this runs on the owner
+        // in a task `settleValue` posted, not inside `settleValue`'s zone.
+        MORPH_ZONE("BridgeSink::forward");
         try {
             auto* const typedResult = static_cast<R*>(opaque.get());
             if (onOwner && _liveness.active()) {
@@ -1274,6 +1280,7 @@ public:
         const std::shared_ptr<detail::HandlerBinding>& binding, Action action, ::morph::exec::IExecutor* cbExec,
         std::function<void(const typename ::morph::model::ActionTraits<Action>::Result&)> onResult = {}) {
         using R = ::morph::model::ActionTraits<Action>::Result;
+        MORPH_ZONE("Bridge::executeVia");
         note("Bridge::executeVia");
         auto sink = makeSink<Model, Action>(std::move(onResult));
         ::morph::async::Completion<R> typed{sink, cbExec};
@@ -1314,6 +1321,7 @@ public:
         const std::shared_ptr<detail::HandlerBinding>& binding, Action action, ::morph::exec::IExecutor* cbExec,
         std::string key) {
         using R = ::morph::model::ActionTraits<Action>::Result;
+        MORPH_ZONE("Bridge::executeAttachedVia");
         note("Bridge::executeVia");
         auto sink = makeSink<Model, Action>({});
         ::morph::async::Completion<R> typed{sink, cbExec};
@@ -1359,6 +1367,7 @@ public:
     ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> executeCreatingVia(
         const std::shared_ptr<detail::HandlerBinding>& binding, Action action, ::morph::exec::IExecutor* cbExec) {
         using R = ::morph::model::ActionTraits<Action>::Result;
+        MORPH_ZONE("Bridge::executeCreatingVia");
         note("Bridge::executeVia");
         std::weak_ptr<detail::HandlerBinding> const weak{binding};
         auto sink = makeSink<Model, Action>([this, weak](const R& result) {
@@ -1807,6 +1816,10 @@ private:
         detail::HandlerBinding& binding,
         const std::shared_ptr<detail::BridgeSink<typename ::morph::model::ActionTraits<Action>::Result>>& sink,
         Action action, ::morph::exec::IExecutor* cbExec, bool held) {
+        // Its own zone, not part of `executeVia`'s: a call that waited for a
+        // bind is dispatched later, from the bind's settle.
+        MORPH_ZONE("Bridge::dispatchNow");
+        MORPH_ZONE_TEXT(_defaultSession.requestId);
         note("Bridge::dispatch");
         auto const raw = binding.currentId.load();
         if (raw == 0U) {
@@ -1863,9 +1876,11 @@ private:
         auto sharedAction = std::make_shared<Action>(std::move(action));
         call.action = sharedAction;
         call.serializeAction = [](const void* actionPtr) {
+            MORPH_ZONE("ActionTraits::toJson");
             return ::morph::model::ActionTraits<Action>::toJson(*static_cast<const Action*>(actionPtr));
         };
         call.deserializeResult = [](std::string_view jsonStr) -> std::shared_ptr<void> {
+            MORPH_ZONE("ActionTraits::resultFromJson");
             return std::make_shared<R>(::morph::model::ActionTraits<Action>::resultFromJson(jsonStr));
         };
         if constexpr (taskHandler) {

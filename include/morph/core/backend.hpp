@@ -28,6 +28,7 @@
 #include "detail/owner_affinity.hpp"
 #include "model.hpp"
 #include "observability.hpp"
+#include "profiler.hpp"
 #include "registry.hpp"
 #include "strand.hpp"
 
@@ -1262,6 +1263,8 @@ public:
     void executeInto(::morph::exec::detail::ModelId mid, detail::ActionCall call, ::morph::exec::IExecutor* cbExec,
                      std::shared_ptr<::morph::async::detail::ISettleSink> sink) override {
         (void)cbExec;
+        MORPH_ZONE("LocalBackend::executeInto");
+        MORPH_ZONE_TEXT(call.session.requestId);
         note("LocalBackend::executeInto");
 
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
@@ -1567,6 +1570,8 @@ private:
     /// Runs an ordinary handler's dispatch once it holds its instance's action
     /// gate, on the strand, and finishes it.
     static void startLocal(LocalRun& run) {
+        MORPH_ZONE("LocalBackend::startLocal");
+        MORPH_ZONE_TEXT(run.session.requestId);
         if (!admitLocal(run)) {
             return;
         }
@@ -1594,6 +1599,8 @@ private:
     /// gate, on the strand. It finishes when its Task completes, through the
     /// callback it is handed.
     static void startTaskLocal(const std::shared_ptr<LocalRun>& run) {
+        MORPH_ZONE("LocalBackend::startTaskLocal");
+        MORPH_ZONE_TEXT(run->session.requestId);
         if (!admitLocal(*run)) {
             return;
         }
@@ -1624,6 +1631,8 @@ private:
     /// Records a finished dispatch and settles its sink, then leaves the action
     /// gate so the next action on the instance can start. On the strand.
     static void finishLocal(LocalRun& run, std::shared_ptr<void> value, const std::exception_ptr& error) {
+        MORPH_ZONE("LocalBackend::finishLocal");
+        MORPH_ZONE_TEXT(run.session.requestId);
         bool const succeeded = error == nullptr;
         // Resolve the sink only after every metric and `endSpan` below are
         // recorded — nothing synchronizes a `.then()`/`.onError()` callback

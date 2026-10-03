@@ -38,6 +38,7 @@ add_executable(morph_tests
     test_post_commit_tail.cpp
     test_logger.cpp
     test_observability.cpp
+    test_profiler.cpp
     test_backend_extra.cpp
     test_backend_registration_surface.cpp
     test_registry_extra.cpp
