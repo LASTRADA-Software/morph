@@ -14,6 +14,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "test_support.hpp"
@@ -499,6 +500,10 @@ struct ParkedTaskHandler {
     std::atomic<bool> started{false};
     core::async::StopToken token;
     morph::backend::detail::ActionCall::LocalDone done;
+
+    /// Ends the handler. The callback is taken out before it runs: it holds the
+    /// call, the call holds this handler, and leaving it stored keeps both alive.
+    void finish(std::exception_ptr error) { std::exchange(done, nullptr)(nullptr, std::move(error)); }
 };
 
 /// A Task-handler call that starts and then stays suspended: it records its
@@ -540,7 +545,7 @@ TEST_CASE("morph::backend::LocalBackend: destruction requests stop on a Task han
     CHECK(slot->token.stop_requested());
 
     // The handler unwinds after its backend is gone, as a stopped one would.
-    slot->done(nullptr, std::make_exception_ptr(std::runtime_error{"stopped"}));
+    slot->finish(std::make_exception_ptr(std::runtime_error{"stopped"}));
 }
 
 TEST_CASE("morph::backend::LocalBackend: a call cancelled while it waited behind a Task handler finishes as a failure",
@@ -569,7 +574,7 @@ TEST_CASE("morph::backend::LocalBackend: a call cancelled while it waited behind
 
     // The Task handler finishes successfully, handing the gate to the waiting
     // call: it is recorded as the failure `cancelPending` made it, not run.
-    slot->done(nullptr, nullptr);
+    slot->finish(nullptr);
     REQUIRE(morph::testing::waitUntil([&] { return errors.load() == 1; }));
     CHECK_FALSE(queuedRan.load());
 }

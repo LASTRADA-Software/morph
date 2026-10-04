@@ -845,9 +845,11 @@ TEST_CASE("A superseded bind that replies with no instance releases nothing", "[
 TEST_CASE("An attach held behind a bind is dropped, not issued, when its handler is destroyed",
           "[bridge][bind][teardown]") {
     Rig rig;
+    // Outlives the handler: the keyed call is rejected with its destruction,
+    // and that failure is delivered on the owner afterwards.
+    Failure keyed;
     {
         BridgeHandler<BbpModel, AllowShared> handler{*rig.bridge, &rig.owner};
-        Failure keyed;
         recordFailure(handler.execute(BbpLoad{.id = 1}), keyed);
         REQUIRE(rig.gate->heldBinds() == 1);
         handler.attach(2);  // waits behind the keyed call's bind
