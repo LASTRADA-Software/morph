@@ -66,7 +66,7 @@ by `std::make_shared`, which every site in the tree does
 | `onErrAttached` | `std::atomic<bool>` | `cbExec`, or a synchronous taker | Suppresses orphan logging; set by an `onError` attach on a state with an executor, and by `bridge::detail::takeSettled` |
 | `presumedOwnerThread`, `deliveredOn` | `std::atomic<std::thread::id>` | — | The debug check of an attach made outside every executor's task; see [Thread safety](#thread-safety) |
 | `cbExec` | `::morph::exec::IExecutor*` | set before publication | The owner; may be `nullptr` |
-| `stopSource`, `stopLinks` | | `cbExec` | The call's stop source and the scope links relaying to it; released by `deliver()` |
+| `stopSource`, `stopLinks` | | `cbExec` | The call's stop source, and the links relaying a stop to it — a scope's, an await's, or a caller's cancel token, which also settles the call; released by `deliver()` |
 
 **Setting a value or exception.** `setValue(T)` and `setException(exception_ptr)`
 are called by the producer, on any thread. The first claims `settled` with an
@@ -664,16 +664,19 @@ future/promise or a monadic async type. Its scope is narrow by design:
   `T → U` mapping and no way to chain one asynchronous step onto another. To
   sequence work, the consumer must start a fresh operation from inside the
   handler.
-- **No *work* cancellation.** There is no handle to cancel an outstanding
-  operation; once started, it runs to completion (or is abandoned).
-  `Bridge::setExecuteDeadline` (see
-  [Client-side execute deadline](#client-side-execute-deadline)) is not an
-  exception to this: it bounds how long the *caller* waits by resolving the
-  state early, and does nothing to the work still in flight underneath.
-  **Delivery**, by contrast, *can* be stopped — see
-  [Lifetime and stop gating](#lifetime-and-stop-gating). The distinction is
-  sharp and deliberate: a `CallbackScope` says "do not hand me this result",
-  never "stop producing it". Work-side cancellation is not offered at all.
+- **No cancel API on `Completion` itself.** A `Completion` cannot cancel the
+  operation it reports on. The call's producer can link a cancel to it: a
+  `Bridge` call whose handler returns a `Task` carries a stop source, which a
+  stopped `CallbackScope` a callback was attached through, a stopped
+  `co_await`, the execute deadline and the token given to
+  `BridgeHandler::execute(action, stop)` all request. That token also settles
+  the call with `core::async::OperationCancelled`; the deadline settles it with
+  `ClientTimeoutError`. A synchronous handler, or a server across the wire, is
+  not reached by any of them: the token and the deadline settle the state
+  early, and the work runs on underneath (see
+  [Client-side execute deadline](#client-side-execute-deadline) and the
+  cancellation policy in
+  [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#cancellation-policy)).
 - **Single consumer handle, but multiple handlers per outcome.** The
   `Completion<T>` handle itself is move-only — only one owner at a time — but
   each state's `onOk`/`onErr` are vectors, so repeated `then()`/`onError()`
@@ -694,9 +697,9 @@ state; the log is emitted only when the state itself is finally destroyed with a
 
 ## Out of scope
 
-- Work cancellation — there is no mechanism to cancel an outstanding
-  *operation*. Stopping *delivery* of its result is
-  [`CallbackScope`](callback_scope.md); the two are different things.
+- A cancel on the `Completion` handle — cancelling the operation belongs to
+  whoever produced it (see [Limitations](#limitations)). Stopping *delivery*
+  of its result is [`CallbackScope`](callback_scope.md).
 - Multiple values — `Completion<T>` is a single-result primitive.
 - Synchronous blocking — there is no `wait()` or `get()`; the API is
   callback-only.

@@ -7,6 +7,7 @@
 #include <cassert>
 #include <chrono>
 #include <concepts>
+#include <core/async/Cancellation.hpp>
 #include <core/async/StopToken.hpp>
 #include <deque>
 #include <exception>
@@ -2224,6 +2225,43 @@ public:
         } else {
             return _bridge.template executeVia<Model, Action>(_binding, std::move(action), _guiExec);
         }
+    }
+
+    /// @brief Dispatches @p action as `execute(action)` does, cancellable through @p stop.
+    ///
+    /// A stop on @p stop before the call settles cancels it: the returned
+    /// `Completion` is rejected with `core::async::OperationCancelled`, posted
+    /// to the GUI executor from the thread that requested the stop, and the
+    /// call's stop source is asked to stop. A handler returning a `Task`, on a
+    /// `LocalBackend`, sees that stop at its next stop-aware `co_await`; a
+    /// synchronous handler runs to its end, and a remote server's handler runs
+    /// on, since no cancel crosses the wire. Either way the call's own outcome,
+    /// later, reaches nobody. A token already stopped rejects the call the same
+    /// way without dispatching it.
+    ///
+    /// The call stays counted as pending until the backend settles it, as a
+    /// call the execute deadline settled does.
+    ///
+    /// @tparam Action Concrete action type registered with `BRIDGE_REGISTER_ACTION`.
+    /// @param action Action to execute (moved into the dispatch).
+    /// @param stop   The caller's cancel. Observed until the call settles; a
+    ///               token that can never be stopped makes this `execute(action)`.
+    /// @return Completion that resolves on the GUI executor, or rejects with
+    ///         `core::async::OperationCancelled` once @p stop is stopped.
+    template <typename Action>
+    ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> execute(
+        Action action, ::core::async::StopToken stop) {
+        using R = ::morph::model::ActionTraits<Action>::Result;
+        if (stop.stop_requested()) {
+            auto [cancelled, promise] = ::morph::async::Completion<R>::makeSettleable(_guiExec);
+            promise.reject(std::make_exception_ptr(::core::async::OperationCancelled{}));
+            return std::move(cancelled);
+        }
+        auto completion = execute(std::move(action));
+        // Never empty: every path of `execute(action)` returns a completion
+        // built on a state, a rejected one included.
+        completion.state()->linkCancel(std::move(stop));
+        return completion;
     }
 
     /// @brief Attaches (or re-points) this handler to the instance for @p key.

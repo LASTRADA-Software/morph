@@ -167,10 +167,20 @@ a stop callback for the duration of the suspension:
   executor it suspended on, or on the completion's executor.
 - **A token already stopped at `co_await`** resumes with
   `OperationCancelled` without attaching anything to the completion.
+- **A stop also stops the call.** The await owns the call it waits on, the way
+  a continuation attached through a `CallbackScope` does: the awaiter's scope
+  is linked to the call's stop source when the handlers are attached
+  (`CompletionState::linkStop`), so the stop that withdraws the await — or the
+  frame destroyed while suspended — asks the call to stop too. A stop that
+  lands before the handlers are attached, a token already stopped included,
+  is relayed to the call on the completion's executor. Only a call that
+  carries a stop source can be stopped: a `Bridge` call whose handler returns
+  a `Task`, on a `LocalBackend`. Its handler sees `OperationCancelled` at its
+  next stop-aware `co_await`.
 
-The completion itself is not cancelled: it is still settled by whatever
-produces it, and its other handlers still run. Cancellation withdraws this one
-await.
+The completion itself is still settled by whatever produces it — a stopped
+Task handler rejects it with `OperationCancelled` — and its other handlers
+still run; the withdrawn await's own handlers do not.
 
 ### `spawn` — the entry point from non-coroutine code
 

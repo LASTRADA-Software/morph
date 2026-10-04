@@ -913,20 +913,23 @@ TEST_CASE("Bridge::assignHandlerPrimary: a promotion reply after the handler or 
     Owner owner;
     morph::exec::ThreadPoolExecutor pool{2};
     auto async = std::make_shared<AsyncAssignPrimaryBackend>(pool);
+    // The outcomes outlive every pump below: their handlers are not
+    // scope-gated, so a reply settling inside a later runFor() is delivered
+    // into them after the handler or the bridge that made the call is gone.
+    Outcome<ARCreated> afterHandler;
+    Outcome<ARCreated> afterBridge;
     {
         morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
         bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(async));
         {
             morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &owner};
-            Outcome<ARCreated> outcome;
-            track(outcome, handler.execute(ARCreate{.initial = 3}));
+            track(afterHandler, handler.execute(ARCreate{.initial = 3}));
             REQUIRE(pumpOwnerUntil(owner, [&] { return async->pendingCount() == 1; }));
         }
         async->completeNext();  // the handler is gone
         owner.runFor(std::chrono::milliseconds{5});
         morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &owner};
-        Outcome<ARCreated> outcome;
-        track(outcome, handler.execute(ARCreate{.initial = 4}));
+        track(afterBridge, handler.execute(ARCreate{.initial = 4}));
         REQUIRE(pumpOwnerUntil(owner, [&] { return async->pendingCount() == 1; }));
     }
     async->completeNext();  // the bridge is gone

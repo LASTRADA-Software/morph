@@ -37,7 +37,8 @@ struct CompletionState;
 /// `CallbackToken`. With a stoppable token on the awaiting promise it also
 /// registers a stop callback. Exactly one of *the completion's handler* and
 /// *the stop callback* moves `Shared::outcome` off `Pending`, and only that one
-/// resumes the coroutine.
+/// resumes the coroutine. A stop that withdraws the await also stops the call
+/// the completion reports on, when that call carries a stop source.
 ///
 /// The pair is attached on the completion's executor, which owns its handler
 /// lists: directly when the awaiting coroutine is running there, otherwise by
@@ -169,6 +170,7 @@ public:
             ::core::async::StopToken const token = awaiting.promise().stopToken();
             if (token.stop_requested()) {
                 shared->outcome.store(Outcome::Cancelled);
+                stopUnattached(state, token);
                 return false;
             }
             if (token.stop_possible()) {
@@ -177,6 +179,7 @@ public:
                 if (shared->outcome.load(std::memory_order_seq_cst) == Outcome::Cancelled) {
                     // A stop landed while registering. Whoever claims answers
                     // it; if onStop claimed first it is resuming us already.
+                    stopUnattached(state, token);
                     return shared->claimed.exchange(true, std::memory_order_acq_rel);
                 }
             }
@@ -241,8 +244,15 @@ public:
 
 private:
     /// Attaches the await's handler pair to @p state; runs on its executor.
+    ///
+    /// The await owns the call it waits on, as a scope-gated continuation
+    /// does: the scope's stop -- a stop that withdraws the await, or the frame
+    /// destroyed while suspended -- is linked to the call's stop source, so
+    /// withdrawing the await also asks the call to stop. Linked after the
+    /// scope has stopped, it stops the call at once.
     static void attach(CompletionState<T>& state, const std::shared_ptr<Shared>& shared) {
         auto const token = shared->scope.token();
+        state.linkStop(token.stopToken());
         state.attachThen([token, shared](const T& settled) {
             if (token.active() && shared->decide(Outcome::Settled)) {
                 shared->value.emplace(settled);
@@ -255,6 +265,23 @@ private:
                 shared->resumeSettled();
             }
         });
+    }
+
+    /// Stops the call @p state reports on, for an await a stop withdrew before
+    /// it attached, so no link carries that stop to the call. @p stopped,
+    /// already stopped, is linked on the completion's executor, which stops the
+    /// call there. Best effort: an executor that refuses the task leaves the
+    /// call running; the coroutine resumes with the cancellation either way.
+    static void stopUnattached(const std::shared_ptr<CompletionState<T>>& state,
+                               const ::core::async::StopToken& stopped) noexcept {
+        try {
+            if (::morph::exec::runningOn(*state->cbExec)) {
+                state->linkStop(stopped);
+                return;
+            }
+            state->cbExec->post([state, stopped] { state->linkStop(stopped); });
+        } catch (...) {  // NOLINT(bugprone-empty-catch): the await is answered already
+        }
     }
 
     std::shared_ptr<CompletionState<T>> _state;
