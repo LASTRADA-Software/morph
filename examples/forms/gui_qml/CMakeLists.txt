@@ -12,9 +12,19 @@
 
 qt_add_library(lab_forms_demo_module STATIC)
 
+# The module's .qml files live in qml/, so it needs a qmldir there too for
+# them to resolve the module's own types; Qt versions that predate the policy
+# do not know it.
+if(QT_KNOWN_POLICY_QTP0004)
+    qt_policy(SET QTP0004 NEW)
+endif()
+
+# The output directory ends in the URI so the build tree is a valid QML import
+# path for this module, which qmllint relies on.
 qt_add_qml_module(lab_forms_demo_module
     URI LabFormsDemo
     VERSION 1.0
+    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/LabFormsDemo"
     QML_FILES
         qml/Main.qml
         qml/AppShell.qml
