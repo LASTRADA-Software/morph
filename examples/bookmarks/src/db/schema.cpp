@@ -2,25 +2,19 @@
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlMigration.hpp>
 #include <Lightweight/SqlQuery/Migrate.hpp>
-#include <db/pool_transaction_audit.hpp>
 
 #include "bookmarks/db/database.hpp"
 
 namespace bookmarks::db {
 
 void setup(const std::string& connectionString) {
-    // Nothing in Lightweight stops a pooled DataMapper from being returned with
-    // a transaction still open on it -- `DataMapperPool::Return` does no
-    // transaction cleanup, and the cost lands on the next, unrelated borrower
-    // as a 60s stall and a `database is locked` it did not cause. Installing
-    // the audit here, at the one point every rung's process configures its
-    // database, turns that into an abort at the leak. See
-    // examples/common/db/pool_transaction_audit.hpp.
-    (void)::morph::ladder::db::installPoolTransactionAudit();
-
     Lightweight::SqlConnection::SetDefaultConnectionString(Lightweight::SqlConnectionString{connectionString});
     Lightweight::SqlMigration::MigrationManager::GetInstance().CreateMigrationHistory();
     Lightweight::SqlMigration::MigrationManager::GetInstance().ApplyPendingMigrations();
+    // The migration manager is a static that keeps a DataMapper open between calls;
+    // one still open at exit is destroyed after Lightweight's default logger and
+    // aborts the process. Close it once the migrations are applied.
+    Lightweight::SqlMigration::MigrationManager::GetInstance().CloseDataMapper();
 }
 
 }  // namespace bookmarks::db

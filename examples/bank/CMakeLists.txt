@@ -57,7 +57,7 @@ morph_use_cpm(Lightweight)
 CPMAddPackage(
     NAME Lightweight
     GITHUB_REPOSITORY LASTRADA-Software/Lightweight
-    GIT_TAG bbb972a78e1962b968a2c6ad93f7dade736eaa01)
+    GIT_TAG 17c4e70d7fb4ead01376be0f46f201ad41c9a701)
 set(CMAKE_SKIP_INSTALL_RULES ${_morph_saved_skip_install_rules})
 unset(_morph_saved_skip_install_rules)
 
@@ -208,10 +208,6 @@ if(MORPH_BUILD_TESTS)
             tests/test_lightweight_offline_queue.cpp
             tests/test_relations.cpp
             tests/test_stateful_account.cpp
-            # Not a behavioural test of bank: the record of why
-            # examples/common/db/pool_transaction_audit.hpp is deliberately
-            # not linked here. See the file's own header.
-            tests/test_pool_scope.cpp
         )
         # ${PROJECT_SOURCE_DIR}/tests is morph's own test directory, and it is
         # on the include path for exactly one header:

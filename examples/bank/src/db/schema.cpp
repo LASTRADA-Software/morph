@@ -31,6 +31,10 @@ void applyMigrations() {
     auto& migrations = Lightweight::SqlMigration::MigrationManager::GetInstance();
     migrations.CreateMigrationHistory();
     migrations.ApplyPendingMigrations();
+    // The migration manager is a static that keeps a DataMapper open between calls;
+    // one still open at exit is destroyed after Lightweight's default logger and
+    // aborts the process. Close it once the migrations are applied.
+    migrations.CloseDataMapper();
 }
 
 void setup(const std::string& connectionString) {

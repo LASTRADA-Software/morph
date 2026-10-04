@@ -26,7 +26,7 @@ dto::Statement StatementModel::execute(const dto::GenerateStatement& action) {
     // Reach the owner's accounts through the `UserRecord::accounts` relation.
     const auto userId = db::requireUserId(mapper(), owner);
     auto user = mapper().QuerySingle<db::UserRecord>(userId).value();
-    const auto& accounts = user.accounts.All();
+    const auto& accounts = db::requireLoaded(user.accounts.All(), "user accounts").get();
 
     dto::Statement statement;
     statement.owner = owner;

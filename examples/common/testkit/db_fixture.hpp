@@ -16,7 +16,6 @@
 #include <system_error>
 #include <vector>
 
-#include "db/pool_transaction_audit.hpp"
 
 /// @file
 /// Real on-disk SQLite database, shared per test binary — mirrors
@@ -48,6 +47,10 @@ public:
             clearAndReport("a non-std::exception was thrown");  // never returns
         }
         ::Lightweight::SqlMigration::MigrationManager::GetInstance().ApplyPendingMigrations();
+        // The migration manager is a static that keeps a DataMapper open between calls;
+        // one still open at exit is destroyed after Lightweight's default logger and
+        // aborts the process. Close it once the migrations are applied.
+        ::Lightweight::SqlMigration::MigrationManager::GetInstance().CloseDataMapper();
     }
 
     DbFixture(const DbFixture&) = delete;
@@ -159,14 +162,6 @@ private:
     ///        no branch of its own left to miss.
     static void ensureConnectionConfigured() {
         static const bool once = [] {
-            // Installed here as well as in every rung's own
-            // `db::setup()`/`db::configure()`, because no ladder test goes
-            // through those -- this fixture points Lightweight at the test
-            // database itself. Without it the audit would be live only in
-            // binaries the suite never runs, which is a control that measures
-            // nothing. With it, every ladder test case in the suite runs under
-            // the check.
-            (void)::morph::ladder::db::installPoolTransactionAudit();
             ::Lightweight::SqlConnection::SetDefaultConnectionString(
                 ::Lightweight::SqlConnectionString{activeConnectionString()});
             ::Lightweight::SqlMigration::MigrationManager::GetInstance().CreateMigrationHistory();

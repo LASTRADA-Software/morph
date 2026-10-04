@@ -151,7 +151,7 @@ morph_use_cpm(Lightweight)
 CPMAddPackage(
     NAME Lightweight
     GITHUB_REPOSITORY LASTRADA-Software/Lightweight
-    GIT_TAG bbb972a78e1962b968a2c6ad93f7dade736eaa01)
+    GIT_TAG 17c4e70d7fb4ead01376be0f46f201ad41c9a701)
 set(CMAKE_SKIP_INSTALL_RULES ${_morph_saved_skip_install_rules})
 unset(_morph_saved_skip_install_rules)
 
@@ -247,19 +247,12 @@ endif()
 # ── ladder_common_tests: the testkit's own self-test suite ──────────────────
 add_executable(ladder_common_tests
     testkit/testkit_main.cpp
-    # Not a test: the self-containment check for db/pool_transaction_audit.hpp,
-    # and the translation unit that gives examples/common/db/ a compile command
-    # for the clang-tidy-diff gate to interpolate from. See its own @file
-    # comment. It rides in this target because this is the only one that
-    # already links Lightweight and compiles everything under examples/common.
-    db/pool_transaction_audit.cpp
     testkit/test_pump.cpp
     testkit/test_clock.cpp
     testkit/test_db_fixture.cpp
     testkit/test_db_fault_fixture.cpp
     testkit/test_db_busy_fixture.cpp
     testkit/test_db_pool_drain.cpp
-    testkit/test_pool_transaction_audit.cpp
     testkit/test_backend_rig.cpp
     testkit/test_presenter.cpp
     testkit/test_error_text.cpp

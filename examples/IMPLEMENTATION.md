@@ -10,13 +10,11 @@ could have provided is a defect in the stress test.** If the framework can't
 provide it, that inability is a *finding* — record it per
 [`AGENTS.md`](../AGENTS.md)'s filing bar, don't quietly code around it.
 
-**Before you design around a Lightweight limitation, read
-[`docs/LIGHTWEIGHT-CONSTRAINTS.md`](../docs/LIGHTWEIGHT-CONSTRAINTS.md)** — one
-page, one entry per constraint, each with the pinned revision it was verified
-at and what would retire it. It exists because three rungs in a row
-rediscovered the same limits and recorded them in their own plan documents,
-where the next rung could not find them and where two of them quietly went
-stale. If you hit a new one, add it there rather than to your plan.
+**Before you design around a Lightweight limitation, check
+[Lightweight's issues](https://github.com/LASTRADA-Software/Lightweight/issues)**,
+and file one there if it is not already recorded. A limitation written into a
+plan document goes stale the moment the pin moves; one filed upstream is fixed
+or stays visible.
 
 **The promotion rule (rule-of-three, from the round-7 review):** an
 app-built answer to a framework gap (the polling helper with its timeout,
