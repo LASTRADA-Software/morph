@@ -341,7 +341,11 @@ jobs:
       - name: Install clang, ninja, catch2
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ninja-build catch2
+          # libdbus-1-dev: tracy-capture's build pulls in nfd (native file
+          # dialog), whose CMake requires dbus-1 through pkg-config. Tracy's
+          # other optional libraries (capstone, freetype2, bzip2) fall back to
+          # its own fetched copies, so they are left to Tracy's pinned versions.
+          sudo apt-get install -y ninja-build catch2 pkg-config libdbus-1-dev
           curl -sSL --fail -o /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           test -s /tmp/llvm.sh
           sudo bash /tmp/llvm.sh ${{ env.CLANG_VERSION }}
