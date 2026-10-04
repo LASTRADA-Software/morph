@@ -432,3 +432,142 @@ TEST_CASE("morph::backend::LocalBackend: amortised pending compaction bounds the
 
     CHECK(cancelledCount == kRounds);
 }
+
+TEST_CASE("morph::backend::LocalBackend: trackedPendingCount counts every call still in flight",
+          "[backend][local][pending]") {
+    // Declared before the pool and the backend: the parked ops read it until
+    // the backend's teardown has drained them.
+    std::atomic<bool> release{false};
+    std::atomic<int> ran{0};
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+    CHECK(backend.trackedPendingCount() == 0);
+
+    std::vector<morph::async::Completion<std::shared_ptr<void>>> live;
+    for (int i = 0; i < 3; ++i) {
+        live.push_back(backend.execute(mid, pendingCall([&release, &ran] {
+                                           while (!release.load(std::memory_order_acquire)) {
+                                               std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                                           }
+                                           ran.fetch_add(1);
+                                       }),
+                                       &cbExec));
+    }
+    CHECK(backend.trackedPendingCount() == 3);
+
+    release.store(true, std::memory_order_release);
+    REQUIRE(morph::testing::waitUntil([&] { return ran.load() == 3; }));
+}
+
+TEST_CASE("morph::backend::LocalBackend: executeLatencyMs covers the time the handler ran",
+          "[backend][local][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+
+    std::mutex sampleMtx;
+    std::vector<double> latencies;
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeLatencyMs) {
+            std::scoped_lock const lock{sampleMtx};
+            latencies.push_back(evt.value);
+        }
+    });
+
+    std::atomic<bool> done{false};
+    backend.execute(mid, pendingCall([] { std::this_thread::sleep_for(std::chrono::milliseconds(20)); }), &cbExec)
+        .then([&](const std::shared_ptr<void>&) { done = true; });
+    REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
+
+    std::scoped_lock const lock{sampleMtx};
+    REQUIRE(latencies.size() == 1);
+    // A lower bound only: the handler slept 20 ms inside the measured span,
+    // and how much longer the span took depends on the machine.
+    CHECK(latencies.front() >= 20.0);
+}
+
+namespace {
+
+/// What a hand-built Task handler kept when it started: the token it was given
+/// and the callback that ends it.
+struct ParkedTaskHandler {
+    std::atomic<bool> started{false};
+    core::async::StopToken token;
+    morph::backend::detail::ActionCall::LocalDone done;
+};
+
+/// A Task-handler call that starts and then stays suspended: it records its
+/// token and its completion callback in the `ParkedTaskHandler` the call
+/// carries, and returns without finishing.
+morph::backend::detail::ActionCall parkedTaskCall(const std::shared_ptr<ParkedTaskHandler>& slot) {
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "BE_CounterModel";
+    call.actionTypeId = "BE_CounterAction";
+    call.action = slot;
+    call.localOpAsync = [](morph::model::detail::IModelHolder& /*holder*/, std::shared_ptr<void> action,
+                           const std::shared_ptr<morph::exec::detail::TaskResumer>& /*executor*/,
+                           core::async::StopToken token, morph::backend::detail::ActionCall::LocalDone done) {
+        auto* parked = static_cast<ParkedTaskHandler*>(action.get());
+        parked->token = std::move(token);
+        parked->done = std::move(done);
+        parked->started.store(true);
+    };
+    return call;
+}
+
+}  // namespace
+
+TEST_CASE("morph::backend::LocalBackend: destruction requests stop on a Task handler still running",
+          "[backend][local][lifetime]") {
+    auto slot = std::make_shared<ParkedTaskHandler>();
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    {
+        morph::backend::LocalBackend backend{pool};
+        auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+        auto pending = backend.execute(mid, parkedTaskCall(slot), &cbExec);
+        REQUIRE(morph::testing::waitUntil([&] { return slot->started.load(); }));
+        CHECK_FALSE(slot->token.stop_requested());
+    }
+    // Nothing cancelled the call before the backend went: only its destructor
+    // could have asked the handler to stop.
+    CHECK(slot->token.stop_requested());
+
+    // The handler unwinds after its backend is gone, as a stopped one would.
+    slot->done(nullptr, std::make_exception_ptr(std::runtime_error{"stopped"}));
+}
+
+TEST_CASE("morph::backend::LocalBackend: a call cancelled while it waited behind a Task handler finishes as a failure",
+          "[backend][local][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    std::atomic<int> errors{0};
+    morph::observe::setMetricSink([&errors](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeErrors) {
+            errors.fetch_add(1);
+        }
+    });
+    auto slot = std::make_shared<ParkedTaskHandler>();
+    std::atomic<bool> queuedRan{false};
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+
+    // The Task handler holds the instance's action gate; the ordinary call
+    // waits behind it, and is failed there by the cancellation.
+    auto task = backend.execute(mid, parkedTaskCall(slot), &cbExec);
+    REQUIRE(morph::testing::waitUntil([&] { return slot->started.load(); }));
+    auto queued = backend.execute(mid, pendingCall([&queuedRan] { queuedRan.store(true); }), &cbExec);
+    backend.cancelPending(std::make_exception_ptr(morph::backend::BackendChangedError{}));
+    REQUIRE(errors.load() == 0);
+
+    // The Task handler finishes successfully, handing the gate to the waiting
+    // call: it is recorded as the failure `cancelPending` made it, not run.
+    slot->done(nullptr, nullptr);
+    REQUIRE(morph::testing::waitUntil([&] { return errors.load() == 1; }));
+    CHECK_FALSE(queuedRan.load());
+}

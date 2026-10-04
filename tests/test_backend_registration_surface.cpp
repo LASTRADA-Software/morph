@@ -25,6 +25,7 @@
 #include <condition_variable>
 #include <exception>
 #include <functional>
+#include <future>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -783,4 +784,49 @@ TEST_CASE(
     CHECK(okRan.load() == 0);
     CHECK(errRan.load() == 2);
     CHECK(inner->cancels.load() == 1);
+}
+
+// ── A synchronous verb re-entered from the control strand ───────────────────
+
+namespace {
+
+/// @brief A wrapped backend whose `listInstances("outer")` calls back into the
+///        adapter's own synchronous `listInstances` — from inside the strand
+///        task the adapter is running it in.
+struct ReentrantBackend : RecordingBackend {
+    SynchronousBackendAdapter* adapter = nullptr;
+    std::vector<std::string> nested;
+
+    std::vector<std::string> listInstances(const std::string& typeId) override {
+        if (typeId == "outer" && adapter != nullptr) {
+            nested = adapter->listInstances("inner");
+        }
+        return {typeId};
+    }
+};
+
+}  // namespace
+
+TEST_CASE("morph::backend::SynchronousBackendAdapter: a synchronous verb called on its own strand runs inline",
+          "[backend][registration-surface][threading]") {
+    // Waiting for the strand from inside the strand would never return, so the
+    // outer call is made from a detached thread and waited for with a budget:
+    // a deadlock fails the case instead of hanging the suite. The adapter and
+    // its executor are leaked on that path, since both have a thread stuck in
+    // them that teardown would wait for.
+    auto pool = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
+    auto inner = std::make_shared<ReentrantBackend>();
+    auto adapter = std::make_unique<SynchronousBackendAdapter>(inner, *pool);
+    inner->adapter = adapter.get();
+
+    auto outcome = std::make_shared<std::promise<std::vector<std::string>>>();
+    auto answer = outcome->get_future();
+    std::thread{[outer = adapter.get(), outcome] { outcome->set_value(outer->listInstances("outer")); }}.detach();
+    if (answer.wait_for(morph::testing::kDefaultWaitBudget) != std::future_status::ready) {
+        static_cast<void>(adapter.release());
+        static_cast<void>(pool.release());
+        FAIL("listInstances re-entered from the control strand never returned");
+    }
+    REQUIRE(answer.get() == std::vector<std::string>{"outer"});
+    REQUIRE(inner->nested == std::vector<std::string>{"inner"});
 }

@@ -686,6 +686,11 @@ TEST_CASE("assignPrimary promotes an anonymous instance and ignores unusable inp
         std::string{});
     REQUIRE(backend.listInstances("SHI_CounterModel").empty());
 
+    // An empty key names nothing, so the instance stays anonymous and is still
+    // free to take a real one below.
+    backend.assignPrimary(mid, "SHI_CounterModel", "");
+    REQUIRE(backend.listInstances("SHI_CounterModel").empty());
+
     backend.assignPrimary(mid, "SHI_CounterModel", "new");
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
 
@@ -969,6 +974,23 @@ TEST_CASE("a change-aware model is tracked when registered shared", "[shared-ins
     // the same strand, so it is ordered strictly after — a poll here would
     // merely hide a real ordering bug behind a retry.
     REQUIRE(settle(exec, handler.execute(ShiAwareRead{.id = 900})).value == 1);
+}
+
+TEST_CASE("a change-aware instance stays notified after one of its two handlers releases it", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    auto backend = std::make_unique<morph::backend::LocalBackend>(exec);
+    auto* local = backend.get();
+    Bridge bridge{std::move(backend), exec};
+
+    BridgeHandler<ShiAwareModel, AllowShared> survivor{bridge, &exec};
+    settle(survivor.execute(ShiAwareRead{.id = 901}));
+    {
+        BridgeHandler<ShiAwareModel, AllowShared> transient{bridge, &exec};
+        settle(transient.execute(ShiAwareRead{.id = 901}));
+    }  // one attachment released; the instance lives on for `survivor`
+
+    local->notifyBackendChanged();
+    REQUIRE(settle(survivor.execute(ShiAwareRead{.id = 901})).value == 1);
 }
 
 TEST_CASE("the server refuses to re-file an already-keyed instance onto a different key", "[shared-instances]") {
