@@ -31,9 +31,10 @@ TEST_CASE("morph::exec::MainThreadExecutor: tasks posted before runFor are all d
     REQUIRE(count.load() == numTasks);
 }
 
-TEST_CASE("morph::exec::ThreadPoolExecutor: stop with queued tasks does not deadlock", "[executor]") {
-    // Post many tasks and immediately destroy the pool — destructor must join cleanly.
-    // Some tasks may not run; the important invariant is no deadlock/crash.
+TEST_CASE("morph::exec::ThreadPoolExecutor: destruction runs every task queued before it, then joins", "[executor]") {
+    // Post many tasks and immediately destroy the pool: the workers drain the
+    // queue before they exit, so the join neither deadlocks nor drops a task
+    // that was queued in time.
     std::atomic<int> ran{0};
     {
         morph::exec::ThreadPoolExecutor pool{1};
@@ -43,10 +44,8 @@ TEST_CASE("morph::exec::ThreadPoolExecutor: stop with queued tasks does not dead
                 ran.fetch_add(1);
             });
         }
-        // pool destructor joins here — workers drain remaining tasks before exit
     }
-    // After join, whatever ran is fine; the test verifies it did not hang.
-    REQUIRE(ran.load() >= 0);
+    REQUIRE(ran.load() == 100);
 }
 
 TEST_CASE("morph::exec::ThreadPoolExecutor: exception in one task does not kill worker", "[executor]") {
