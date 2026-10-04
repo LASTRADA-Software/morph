@@ -1,5 +1,6 @@
 var NAVTREEINDEX3 =
 {
+"da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333":[2,0,0,9,12,5],
 "da/d23/classmorph_1_1journal_1_1SessionLog.html#a9ad9e5de29db7de80fdfc8cf1df6a7dc":[2,0,0,9,12,0],
 "da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa":[2,0,0,9,12,6],
 "da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90":[2,0,0,9,12,1],
@@ -248,6 +249,5 @@ var NAVTREEINDEX3 =
 "dd/de7/classmorph_1_1async_1_1Completion.html#a1488ba469044eff69471123f51a69e71":[2,0,0,1,2,13],
 "dd/de7/classmorph_1_1async_1_1Completion.html#a1f7255483840e4f83c5d26403b62a68e":[2,0,0,1,2,5],
 "dd/de7/classmorph_1_1async_1_1Completion.html#a27fcb0841f4763225331bd5405ed94c9":[2,0,0,1,2,11],
-"dd/de7/classmorph_1_1async_1_1Completion.html#a3becd6006babdc54444b20d0b5b074a8":[2,0,0,1,2,6],
-"dd/de7/classmorph_1_1async_1_1Completion.html#a49bb64dd60ef3d17baf9a36e7b5f1481":[2,0,0,1,2,14]
+"dd/de7/classmorph_1_1async_1_1Completion.html#a3becd6006babdc54444b20d0b5b074a8":[2,0,0,1,2,6]
 };
