@@ -85,9 +85,9 @@ same:
   so a behavior change that contradicts a spec is a major even when the C++
   signature is unchanged.
 - **Minor (`x`.Y.0):** additive and source-compatible — a new public symbol, a
-  new optional parameter with a default, new opt-in behavior. Every item in
-  [todo.md](../todo.md)'s roadmap is deliberately "opt-in or backward
-  compatible by default," so the entire planned roadmap fits inside 1.x.
+  new optional parameter with a default, new opt-in behavior. New features are
+  required to be opt-in or backward compatible by default, so they fit inside
+  1.x.
 - **Patch (`x`.`y`.Z):** bug fixes and doc corrections that touch neither the
   stable surface nor its documented behavior.
 
@@ -190,8 +190,8 @@ piece of the policy is enforced by review discipline alone.
 - **Not a promise about `detail`.** See "The stable surface" above.
 - **Not a feature freeze.** The policy governs *how* the surface evolves
   (additive in minors, breaking only in majors with a deprecation window), not
-  *whether* it evolves — the entire [todo.md](../todo.md) roadmap is
-  1.x-compatible by its own "opt-in or backward compatible by default" rule.
+  *whether* it evolves — new features stay 1.x-compatible by the "opt-in or
+  backward compatible by default" rule.
 - **No existing behavior changes.** This policy is governance plus tooling — a
   version header, a policy document, `[[deprecated]]` discipline, and CI
   enforcement — not a change to any existing public symbol's behavior.

@@ -28,10 +28,6 @@ type or subsystem. The rules, from `AGENTS.md`:
 - **If a change invalidates any part of a spec, update the spec in the same
   change** — never the other way around. Where `docs/ARCHITECTURE.md` (the
   cross-cutting map) and a spec disagree, the spec wins.
-- **Planned work** lives in `docs/planned/`, one spec per feature, each with a
-  `Status: planned — not yet implemented` banner; `docs/todo.md` is the
-  prioritised index. When you implement one: build against the spec, then flip
-  its banner and rewrite it to present tense, and update `ARCHITECTURE.md`.
 - **Feature docs** (`docs/superpowers/`) are compressed reference docs — one
   file per feature, under 500 lines, present tense only, no changelogs or
   migration notes (git history covers that).

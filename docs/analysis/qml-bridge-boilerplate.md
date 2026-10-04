@@ -35,7 +35,7 @@ Instead do the small, boring thing the measurements actually point at:
    the drift guard, and it is worth having *whether or not* anything is ever
    generated — it is what caught the `Q_MOC_RUN` hazard in PR #155.
 3. **Close #86** with the measurements below, and record in
-   `docs/todo.md`'s "Considered and refused" table that the projection half
+   the non-goals table in `docs/ARCHITECTURE.md` that the projection half
    is per-model by construction.
 
 The reasoning is that the premise the issue rests on does not survive
@@ -392,7 +392,7 @@ keys the UI needs, would silently unmask a PII field, and pushes formatting
 into a layer the project's own rules forbid it in.** The cost side is
 overstated in the issue and the benefit side is smaller still.
 
-Note also that `docs/todo.md`'s "Considered and refused" table already
+Note also that the non-goals table in `docs/ARCHITECTURE.md` already
 carries this judgment: *"Result-type presentation metadata (money, enum
 labels, badge severity) — every GUI controller hand-writes a `toMap()`
 projection. Genuine duplication, but it is a forms-layer concern."*

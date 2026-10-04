@@ -761,3 +761,23 @@ documented behavior.
 | `required` derived from types + one opt-out list | The same declaration drives the schema, the client submit gate, and `validate()` — required-ness cannot drift between server and GUI. |
 | Combo-box options declared as an action reference (`Choice<T, "ListX">`) | Option lists are living data, so the single source is the action that serves them; the schema only carries the *reference*, and every renderer resolves it through the same dispatch seam as submits. |
 | Strict (non-clamping) datetime codec | `Rational` clamps hostile input because any int pair still denotes a value; a malformed timestamp denotes nothing — rejecting the read beats fabricating an epoch. |
+
+## Non-goals
+
+What morph deliberately does not build, and why. morph is a UI bridge with one server that owns neither the store nor the tooling; each row below follows from that.
+
+| Not building | Why |
+|---|---|
+| **Entity metamodel / naked objects** (Causeway) | morph's unit is the *action*, deliberately. Rows plus row-bound actions already are an object UI; what is missing is metadata on the row, not a second parallel metamodel. |
+| **Server-authoritative per-instance action availability** ("see it, use it, do it") | A real gap — a client cannot ask "may I?" before invoking an action — but not worth the surface area it would add. |
+| **Query invalidation / live lists** | Instance subscriptions already give shared instances a change channel, without a query-invalidation vocabulary. |
+| **Paging / sorting contract on view schemas** | `views.md` already records "no server-side query language" as a non-goal; paging stays a field on the query action. |
+| **Result-type presentation metadata** (money, enum labels, badge severity) | Every GUI controller hand-writes a `toMap()` projection. Genuine duplication, but it is a forms-layer concern, not a model-layer one. |
+| **Field- and row-level permissions** (Jmix, Causeway SecMan) | They own the ORM and the whole app; morph owns a seam. Per-principal schema redaction would break the one-cached-schema-per-type design. The model is the right place, and `bank`'s `loadOwned` guard shows it works. |
+| **BPM / BPMN engine** (Axelor, Jmix) | A process engine without a store is meaningless, and morph does not own the store. |
+| **Grain call filters / interceptor pipeline** (Orleans) | morph already has validator + authorizer + `observe` + journal on every dispatch path. No observed friction. |
+| **Clustering, silos, placement, grain versioning, stateless workers, distributed ACID transactions** (Orleans) | morph is a UI bridge with one server, not a distributed runtime. |
+| **Managed streams with cursors and checkpoints** (Orleans) | Instance subscriptions are best-effort and unbuffered by design; durability here is a distributed-runtime concern. |
+| **Reporting engine** (BIRT, JasperReports), **ORM + schema migration**, **IDE Studio** | Out of identity. morph owns neither the store nor the tooling. |
+| **Runtime custom fields / dynamic attributes** (Axelor, Jmix) | Hard against compile-time reflection, and no observed need. |
+| **REST / GraphQL facade, blob transfer, tabular export, multi-tenancy discriminator** | Plausible, no observed need. Revisit when one exists. |

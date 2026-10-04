@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for journal format versioning & retention (todo.md B4):
+// Coverage for journal format versioning & retention:
 // journal::fromJson's reader leniency, LogEntry::v / kLogFormatVersion, and
 // FileActionLog::rotate(). Companion to test_action_log.cpp and
 // test_action_log_phase2.cpp, which cover the rest of action_log.hpp and
