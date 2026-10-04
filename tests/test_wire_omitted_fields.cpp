@@ -58,6 +58,7 @@ morph::wire::Envelope fullyPopulated() {
     env.session.locale = "fr-FR";
     env.session.metadata["flag"] = "on";
     env.protocolVersion = 7U;
+    env.cancelCallId = 11U;
     return env;
 }
 
@@ -79,6 +80,7 @@ void requireEqual(const morph::wire::Envelope& lhs, const morph::wire::Envelope&
     CHECK(lhs.session.locale == rhs.session.locale);
     CHECK(lhs.session.metadata == rhs.session.metadata);
     CHECK(lhs.protocolVersion == rhs.protocolVersion);
+    CHECK(lhs.cancelCallId == rhs.cancelCallId);
 }
 
 }  // namespace

@@ -589,7 +589,8 @@ external reference is dropped.
 | `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Authenticates the caller (`_authorizer->authenticate(env.session)`), stamping the verified principal onto `env.session.principal` (clearing it when unauthenticated) exactly as `execute` does, then consults `_authorizer->authorizeRegister(env.session, typeId)` — a `false` reply is `err "unauthorized"` and **no instance is created**. Only then creates the model via the `ModelRegistryFactory` and records the (already-verified) principal as its owner. Empty `typeId` → `err "register requires a typeId"` (checked before authorization). If `contextKey` is non-empty, consults `ServerConfig::logProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. The assigned `modelId` is an **opaque** (non-sequential) value — see below. |
 | `deregister` | `modelId` | `ok` or `err` | Consults `authorizeInstance` against the recorded owner (denied → `err "unauthorized"`); otherwise erases the model and its owner entry from the registry. |
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
-| `hello` | `protocolVersion` | `ok` with `body` = `ProtocolRange`, or `err "protocol version unsupported"` | Protocol-version negotiation, exchanged once per connection before any `register`/`execute`. Carries no `session` and is not authorized — orthogonal to `IAuthorizer`. See [wire.md](wire.md#protocol-version-negotiation). |
+| `hello` | `protocolVersion` | `ok` with `body` = `ProtocolRange`, or `err "protocol version unsupported"` | Protocol-version negotiation, exchanged once per connection before any `register`/`execute`. Carries no `session` and is not authorized — orthogonal to `IAuthorizer`. The range's `capabilities` lists `"cancel"`. See [wire.md](wire.md#protocol-version-negotiation). |
+| `cancel` | `cancelCallId`, `session` | `ok` (the cancel's own `callId`), always | Stamps the verified principal, then requests stop on the run of the `execute` filed under `cancelCallId` **on the same connection**, if the cancel's verified principal is the execute's and the cancel passes the execute's own `authorize` and `authorizeInstance`. Anything else — unknown, finished, another connection's, another principal's, refused, unscoped — is the same `ok` and changes nothing. See [wire.md](wire.md#cancelling-a-call). |
 | `schemas` | `typeId`, `session` | `ok` with `body` = `{actionType: schema}`, or `err` | Empty `typeId` → `err "schemas requires a typeId"` (checked before authorization). Authenticates, then consults `_authorizer->authorize(env.session, typeId, {})` — the same type-level read hook `instances` uses; denied → `err "unauthorized"`. Answers from `ActionDispatcher::schemasJson(typeId)`; a type with no registered actions yields `{}`, not an error. See [Serving action schemas](#serving-action-schemas). |
 
 **Execute flow.** Admission runs on the server strand (`dispatchExecute`), the
@@ -630,7 +631,9 @@ action on the model's strand. Admission, in order:
 6. **Payload completeness** (opt-in; see
    [`PayloadCompleteness`](#payloadcompleteness--enforcing-the-action-evolution-policy)).
 7. **Reserve the in-flight slot**, arm `LimitPolicy::executeTimeout` if one is
-   configured, and **post to the model's strand** a task that enters the
+   configured, file the call as cancellable if its handler is a Task and it
+   arrived on a connection scope (see the `cancel` row above), and **post to
+   the model's strand** a task that enters the
    instance's action gate, installs a `ScopedContext` from the (now possibly
    rewritten) `env.session`, calls `dispatch(modelType, actionType, *holder,
    body)` on the server's dispatcher, and replies `ok` with the serialised
@@ -642,7 +645,8 @@ action on the model's strand. Admission, in order:
 
 The reply is sent exactly once, by whichever of the model strand's finish and
 the `executeTimeout` gets there first. Before sending it, that path posts the
-in-flight decrement back to the server strand, so a `health()` or
+in-flight decrement — and the call's withdrawal from the cancellable calls —
+back to the server strand, so a `health()` or
 `drainedWithin()` asked by someone who has seen the reply already counts it as
 finished.
 
@@ -682,7 +686,7 @@ connection scope — see "Connection scopes" below.
 
 **`handleInline(msg)`** — synchronous entry point for control envelopes
 (`register`, `deregister`, `attach`, `assign`, `instances`, `schemas`,
-`hello`), the path `SimulatedRemoteBackend` uses. It posts the envelope to the
+`hello`, `cancel`), the path `SimulatedRemoteBackend` uses. It posts the envelope to the
 server strand and blocks until the reply is written; when the caller is
 already on the server strand — host code the strand itself is running, such as
 a model constructor or a `LogProvider` that registers another model — it runs

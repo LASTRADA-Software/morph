@@ -759,6 +759,88 @@ private:
         }
     }
 
+    /// One admitted execute, as `callFinished` and a cancel's lookup know it.
+    struct CallTag {
+        /// Connection the execute arrived on; `0` for unscoped.
+        ConnectionId cid{0};
+        /// The execute's own `callId`, as the client chose it.
+        std::uint64_t callId{0};
+        /// The run's stop source when the call is filed as cancellable, else
+        /// null. Held, not just compared: it is what tells this call's entry
+        /// from a later call's under a reused `callId`.
+        std::shared_ptr<::core::async::StopSource> stop;
+    };
+
+    /// Ends one admitted execute's bookkeeping once its reply has been sent:
+    /// withdraws it from the cancellable calls, then counts it finished. On
+    /// the server strand.
+    /// @param tag The finished call.
+    void callFinished(const CallTag& tag) {
+        if (tag.stop) {
+            auto const found = _cancellable.find(CancelKey{.cid = tag.cid, .callId = tag.callId});
+            if (found != _cancellable.end() && found->second.stop == tag.stop) {
+                _cancellable.erase(found);
+            }
+        }
+        executeFinished();
+    }
+
+    /// Files an admitted Task execute so the caller that made it can cancel
+    /// it. On the server strand, after the execute's own authorization.
+    ///
+    /// Keeps what that authorization decided on — the verified principal, the
+    /// model and action types, the instance and its recorded owner — so a
+    /// cancel is judged by the same gates, against the same facts, as the
+    /// execute it stops. A second execute under the same `callId` on the same
+    /// connection replaces the first's entry; `callFinished` removes only its
+    /// own.
+    /// @param tag   The call, with its stop source.
+    /// @param env   The admitted execute, its principal already stamped.
+    /// @param owner The instance's recorded owner.
+    void fileCancellable(const CallTag& tag, const ::morph::wire::Envelope& env, const std::string& owner) {
+        _cancellable.insert_or_assign(CancelKey{.cid = tag.cid, .callId = tag.callId},
+                                      CancelTarget{.stop = tag.stop,
+                                                   .principal = env.session.principal,
+                                                   .modelType = env.modelType,
+                                                   .actionType = env.actionType,
+                                                   .modelId = env.modelId,
+                                                   .owner = owner});
+    }
+
+    /// Requests stop on the execute a `cancel` names, if the cancel may stop
+    /// it; otherwise does nothing. On the server strand.
+    ///
+    /// The call is looked up under the connection the cancel arrived on, so a
+    /// connection reaches only its own calls. The cancel must then carry the
+    /// execute's verified principal, and pass the execute's own gates —
+    /// `authorize` for its types and `authorizeInstance` for its instance —
+    /// as the cancel's caller. Every refusal is silent: the reply is the same
+    /// `ok` an unknown or finished call gets.
+    /// @param env The cancel, its principal already stamped.
+    /// @param cid Connection it arrived on; `0` reaches no call.
+    void cancelCall(const ::morph::wire::Envelope& env, ConnectionId cid) {
+        if (cid == 0) {
+            return;
+        }
+        auto const found = _cancellable.find(CancelKey{.cid = cid, .callId = env.cancelCallId});
+        if (found == _cancellable.end()) {
+            return;
+        }
+        CancelTarget const& target = found->second;
+        if (env.session.principal != target.principal ||
+            !_authorizer->authorize(env.session, target.modelType, target.actionType) ||
+            !_authorizer->authorizeInstance(env.session, target.modelType, target.actionType, target.modelId,
+                                            target.owner)) {
+            return;
+        }
+        auto const stop = target.stop;
+        _cancellable.erase(found);
+        // Runs the handler's stop callbacks here, on the server strand; each
+        // resumes its coroutine through the handler's own resumer, on the
+        // model's strand, as the execute timeout's stop does from its thread.
+        static_cast<void>(stop->request_stop());
+    }
+
     /// @brief Authenticates @p env's session and makes the verified identity
     ///        authoritative on it.
     ///
@@ -1267,7 +1349,17 @@ private:
                 releaseScoped(mid, cid);
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
-                dispatchExecute(std::move(env), reply);
+                dispatchExecute(std::move(env), reply, cid);
+            } else if (env.kind == "cancel") {
+                // Stamped before the ownership comparison in cancelCall, for
+                // the reason deregister is: the comparison keys on the
+                // verified principal, never on the client's claim.
+                stampVerifiedPrincipal(env);
+                cancelCall(env, cid);
+                // One answer whatever became of the call -- stopped, unknown,
+                // finished, or another caller's -- so a cancel cannot be used
+                // to learn which calls exist.
+                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "hello") {
                 const std::uint32_t minV = _config.minProtocolVersion;
                 const std::uint32_t maxV = _config.maxProtocolVersion;
@@ -1275,7 +1367,10 @@ private:
                     reply(::morph::wire::encode(::morph::wire::makeErr("protocol version unsupported", env.callId)));
                 } else {
                     std::string body;
-                    (void)glz::write_json(::morph::wire::ProtocolRange{.min = minV, .max = maxV}, body);
+                    (void)glz::write_json(
+                        ::morph::wire::ProtocolRange{
+                            .min = minV, .max = maxV, .capabilities = {std::string{::morph::wire::kCapabilityCancel}}},
+                        body);
                     reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(body))));
                 }
             } else {
@@ -1298,7 +1393,7 @@ private:
     // docs/spec/security.md), so it is deliberately not broken up. On the
     // server strand; the admitted run is posted to the model's strand.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply) {
+    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply, ConnectionId cid) {
         // The admission phase only, on the server strand: the run itself is
         // posted to the model's strand and zoned there, in startRemote.
         MORPH_ZONE("RemoteServer::dispatchExecute");
@@ -1371,6 +1466,21 @@ private:
         _inFlight += 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(_inFlight));
+        // The stop source a Task handler's token comes from. Requested by the
+        // timeout alongside its reply, so a Task handler still suspended when
+        // the caller is answered unwinds and leaves the action gate rather than
+        // holding the model until its await completes; and by a `cancel` from
+        // the caller that made the call. A call is cancellable only when its
+        // handler is a Task, the one kind a stop reaches, and only on a
+        // connection scope: an unscoped message has no connection to name the
+        // call by, and callIds are the client's own, not unique across clients.
+        bool const taskHandler = _dispatcher.dispatchesAsync(env.modelType, env.actionType);
+        bool const cancellable = taskHandler && cid != 0;
+        std::shared_ptr<::core::async::StopSource> stopSource;
+        if (_executeTimeouts || cancellable) {
+            stopSource = std::make_shared<::core::async::StopSource>();
+        }
+        CallTag const tag{.cid = cid, .callId = env.callId, .stop = cancellable ? stopSource : nullptr};
         auto self = shared_from_this();
         auto finished = std::make_shared<std::atomic_flag>();
         // Gives the slot back if this frame leaves by exception before the run
@@ -1380,39 +1490,38 @@ private:
         struct Reservation {
             RemoteServer& server;
             std::shared_ptr<std::atomic_flag> finished;
+            CallTag tag;
             bool handedOff = false;
-            Reservation(RemoteServer& owner, std::shared_ptr<std::atomic_flag> flag)
-                : server{owner}, finished{std::move(flag)} {}
+            Reservation(RemoteServer& owner, std::shared_ptr<std::atomic_flag> flag, CallTag call)
+                : server{owner}, finished{std::move(flag)}, tag{std::move(call)} {}
             Reservation(const Reservation&) = delete;
             Reservation& operator=(const Reservation&) = delete;
             Reservation(Reservation&&) = delete;
             Reservation& operator=(Reservation&&) = delete;
-            // NOLINTNEXTLINE(bugprone-exception-escape): executeFinished runs the server's drain bookkeeping on its owner; a failure there has no recovery in a destructor.
+            // NOLINTNEXTLINE(bugprone-exception-escape): callFinished runs the server's drain bookkeeping on its owner; a failure there has no recovery in a destructor.
             ~Reservation() {
                 if (!handedOff && !finished->test_and_set()) {
-                    server.executeFinished();
+                    server.callFinished(tag);
                 }
             }
-        } reservation{*this, finished};
+        } reservation{*this, finished, tag};
+        if (cancellable) {
+            fileCancellable(tag, env, inst->owner);
+        }
 
         std::uint64_t const callId = env.callId;
         auto replySlot = std::make_shared<std::function<void(std::string)>>(std::move(reply));
         // The decrement is posted before the reply goes out, so anything posted
         // to the server strand by someone who has seen the reply runs after it.
-        auto complete = [self, finished, replySlot](std::string msg) {
+        auto const complete = [self, finished, replySlot, tag](std::string msg) {
             if (!finished->test_and_set()) {
-                self->_strand.postTask([self] { self->executeFinished(); });
+                self->_strand.postTask([self, tag] { self->callFinished(tag); });
                 (*replySlot)(std::move(msg));
             }
         };
 
         ::morph::async::detail::TimeoutScheduler::Handle timeoutHandle{};
-        // Requested by the timeout alongside its reply, so a Task handler still
-        // suspended when the caller is answered unwinds and leaves the action
-        // gate rather than holding the model until its await completes.
-        std::shared_ptr<::core::async::StopSource> stopSource;
         if (_executeTimeouts) {
-            stopSource = std::make_shared<::core::async::StopSource>();
             // Safe to fire after its own `cancel()`, which the model strand's
             // finish issues on both its success and its failure arm:
             // `TimeoutScheduler::cancel` stops a callback that has not started
@@ -1443,7 +1552,7 @@ private:
         // Through the instance's action gate: an action starts only once the one
         // before it has finished, which a Task handler does when its Task
         // completes rather than when the strand task that started it returns.
-        if (_dispatcher.dispatchesAsync(run.env.modelType, run.env.actionType)) {
+        if (taskHandler) {
             // A Task run is shared: its completion callback outlives the strand
             // task.
             auto shared = std::make_shared<RemoteRun>(std::move(run));
@@ -1655,6 +1764,34 @@ private:
     std::unordered_map<ConnectionId, std::unordered_map<::morph::exec::detail::ModelId, std::size_t,
                                                         ::morph::exec::detail::ModelIdHash>>
         _connectionScopes;
+    /// Names one cancellable call: the connection it arrived on and the
+    /// `callId` its client chose.
+    struct CancelKey {
+        ConnectionId cid{0};
+        std::uint64_t callId{0};
+        bool operator==(const CancelKey&) const = default;
+    };
+    struct CancelKeyHash {
+        std::size_t operator()(const CancelKey& key) const noexcept {
+            // Golden-ratio multiply spreads the connection id before the mix,
+            // so two connections' runs of small callIds do not collide.
+            constexpr std::uint64_t kSpread = 0x9E3779B97F4A7C15ULL;
+            return std::hash<std::uint64_t>{}((key.cid * kSpread) ^ key.callId);
+        }
+    };
+    /// What a cancel is judged against: the facts the execute was admitted on.
+    struct CancelTarget {
+        std::shared_ptr<::core::async::StopSource> stop;
+        std::string principal;
+        std::string modelType;
+        std::string actionType;
+        std::uint64_t modelId{0};
+        std::string owner;
+    };
+    // Admitted Task executes on a connection scope that have not replied yet,
+    // filed by `fileCancellable` and withdrawn by `callFinished` or the cancel
+    // that stops them.
+    std::unordered_map<CancelKey, CancelTarget, CancelKeyHash> _cancellable;
     std::uint64_t _nextId{0};
     detail::OpaqueIdGenerator _idGen;
     // Admitted executes whose reply has not been sent: incremented at
