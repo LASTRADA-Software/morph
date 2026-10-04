@@ -1344,7 +1344,10 @@ public:
                                         if (rejectIfGone(sink, bound, settled)) {
                                             return;
                                         }
-                                        if (bound->primary != key || bound->currentId.load() == 0U) {
+                                        // An attach that left the binding on another key must not
+                                        // dispatch there. One that kept the key but bound no
+                                        // instance is rejected by `dispatchNow` itself.
+                                        if (bound->primary != key) {
                                             sink->settleException(bound->bindFailure ? bound->bindFailure
                                                                                      : notBound());
                                             return;

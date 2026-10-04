@@ -14,6 +14,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <stdexcept>
 #include <string>
 
 #include "test_support.hpp"
@@ -101,6 +102,20 @@ TEST_CASE("interpretHelloReply: 'unknown envelope kind: hello' is classified Leg
 TEST_CASE("interpretHelloReply: any other err throws instead of proceeding", "[wire][protocol]") {
     auto reply = makeErr("protocol version unsupported");
     REQUIRE_THROWS_AS(interpretHelloReply(reply), std::runtime_error);
+}
+
+TEST_CASE("interpretHelloReply: the refusal carries the peer's own message", "[wire][protocol]") {
+    auto messageOf = [](const morph::wire::Envelope& reply) {
+        try {
+            (void)interpretHelloReply(reply);
+        } catch (const std::runtime_error& exc) {
+            return std::string{exc.what()};
+        }
+        return std::string{};
+    };
+    CHECK(messageOf(makeErr("protocol version unsupported")) ==
+          "protocol negotiation failed: protocol version unsupported");
+    CHECK(messageOf(makeErr("")) == "protocol negotiation failed: malformed reply");
 }
 
 TEST_CASE("interpretHelloReply: an empty-message err still throws (does not misclassify)", "[wire][protocol]") {

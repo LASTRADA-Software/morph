@@ -60,10 +60,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/wire.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -121,6 +124,17 @@ TEST_CASE("decode's size cap is exact at kMaxEnvelopeBytes", "[wire][hardening]"
     const std::string oneOver = envelopeOfExactly(kMaxEnvelopeBytes + 1);
     REQUIRE(oneOver.size() == kMaxEnvelopeBytes + 1);
     REQUIRE_THROWS_AS(decode(oneOver), std::runtime_error);
+}
+
+TEST_CASE("decode's size refusal names the size it refused", "[wire][hardening]") {
+    const std::string oversized(kMaxEnvelopeBytes + 7, ' ');
+    std::string message;
+    try {
+        (void)decode(oversized);
+    } catch (const std::runtime_error& exc) {
+        message = exc.what();
+    }
+    CHECK(message.contains("(" + std::to_string(kMaxEnvelopeBytes + 7) + " > " + std::to_string(kMaxEnvelopeBytes)));
 }
 
 TEST_CASE("decode rejects an oversized envelope before parsing", "[wire][hardening]") {
@@ -348,6 +362,15 @@ TEST_CASE("wire::detail::peekCallId degrades to 0 rather than guessing", "[wire]
     CHECK(morph::wire::detail::peekCallId(padded) == 0U);
     // Out of range must not wrap around into a plausible-looking id.
     CHECK(morph::wire::detail::peekCallId(R"({"callId":99999999999999999999999})") == 0U);
+}
+
+TEST_CASE("wire::detail::peekCallId reads zero digits and the full uint64 range", "[wire][hardening]") {
+    CHECK(morph::wire::detail::peekCallId(R"({"callId":10})") == 10U);
+    CHECK(morph::wire::detail::peekCallId(R"({"callId":1000000007})") == 1000000007U);
+    // The largest id still fits: only a value that would wrap is refused.
+    CHECK(morph::wire::detail::peekCallId(R"({"callId":18446744073709551615})") ==
+          std::numeric_limits<std::uint64_t>::max());
+    CHECK(morph::wire::detail::peekCallId(R"({"callId":18446744073709551616})") == 0U);
 }
 
 TEST_CASE("wire::detail::peekCallId cannot be spoofed from an earlier string field", "[wire][hardening]") {

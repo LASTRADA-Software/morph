@@ -549,6 +549,27 @@ TEST_CASE("ModelStrands teardown: a handler's end arriving after the seal never 
     CHECK(ActionGate::overlapsObserved() == overlapsBefore);
 }
 
+TEST_CASE("ActionGate: an action started by a leave() and still running starts the next one when it leaves",
+          "[strand][gate]") {
+    // B is started by A's leave() and does not finish inside it, as a Task
+    // handler that suspends does not. Its own later leave() is what starts C.
+    morph::model::detail::ActionGate gate;
+    std::vector<std::string> started;
+    REQUIRE(gate.tryEnter());  // A
+    gate.enter([&] { started.emplace_back("B"); });
+    gate.enter([&] {
+        started.emplace_back("C");
+        gate.leave();
+    });
+
+    gate.leave();  // A finishes
+    REQUIRE(started == std::vector<std::string>{"B"});
+
+    gate.leave();  // B finishes
+    CHECK(started == std::vector<std::string>{"B", "C"});
+    CHECK(gate.tryEnter());
+}
+
 // Regression test for ThreadPoolExecutor(0): a zero-worker pool used to accept
 // tasks that could never run, hanging every post() forever. The constructor now
 // clamps the worker count to at least 1, so a pool built with 0 is still usable.

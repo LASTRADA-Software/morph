@@ -571,8 +571,8 @@ inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
     while (idx < window.size() && (window[idx] == ' ' || window[idx] == '\t')) {
         ++idx;
     }
+    // No digits leaves `value` at 0, which is already the "no id" answer.
     std::uint64_t value = 0;
-    bool sawDigit = false;
     for (; idx < window.size(); ++idx) {
         // idx is bounded by the loop condition.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
@@ -585,9 +585,8 @@ inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
             return 0;  // out of range — treat as unrecoverable rather than wrap
         }
         value = (value * 10U) + digit;
-        sawDigit = true;
     }
-    return sawDigit ? value : 0;
+    return value;
 }
 
 }  // namespace detail

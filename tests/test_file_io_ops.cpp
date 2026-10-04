@@ -13,12 +13,26 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <morph/core/file_io_ops.hpp>
+#include <morph/core/logger.hpp>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace {
+
+std::string readAll(const std::filesystem::path& path) {
+    std::ifstream in{path, std::ios::binary};
+    return {std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
+}
+
+void writeAll(const std::filesystem::path& path, std::string_view bytes) {
+    std::ofstream out{path, std::ios::binary};
+    out << bytes;
+}
 
 std::filesystem::path tempIoPath(const std::string& tag) {
     static int counter = 0;
@@ -342,3 +356,107 @@ TEST_CASE("morph::core::repairTornTail: a read error leaves the file untouched",
     std::filesystem::remove_all(dir);
 }
 #endif
+
+TEST_CASE("morph::core::rollBackShortWrite: a short first write into an empty file is trimmed to nothing",
+          "[file_io_ops]") {
+    // Offset zero is a real offset -- the start of an empty file -- not the
+    // "could not query" sentinel, which is negative.
+    auto const path = tempIoPath("offset_zero");
+    writeAll(path, "");
+
+    morph::core::FileIoOps ioOps;
+    {
+        auto const file = openForAppend(path);
+        REQUIRE(file != nullptr);
+        morph::core::positionAtEnd(file.get());
+        long long const offsetBeforeWrite = morph::core::wideFtell(file.get());
+        REQUIRE(offsetBeforeWrite == 0);
+        REQUIRE(std::fwrite("{\"tw", 1, 4, file.get()) == 4);
+
+        CHECK(morph::core::rollBackShortWrite(ioOps, file.get(), path, offsetBeforeWrite) ==
+              morph::core::RollBack::clean);
+    }
+
+    CHECK(std::filesystem::file_size(path) == 0);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::core::rollBackShortWrite: a second short write on the same handle rolls back too", "[file_io_ops]") {
+    // The caller takes each rollback's offset from `wideFtell` just before the
+    // write, so after one rollback the handle's position has to describe the
+    // shortened file. A stale position would hand the second rollback an
+    // offset past the second partial record, and leave it on disk.
+    auto const path = tempIoPath("second_rollback");
+    writeAll(path, "{\"one\":1}\n");
+
+    morph::core::FileIoOps ioOps;
+    {
+        auto const file = openForAppend(path);
+        REQUIRE(file != nullptr);
+        morph::core::positionAtEnd(file.get());
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            long long const offsetBeforeWrite = morph::core::wideFtell(file.get());
+            CHECK(offsetBeforeWrite == 10);
+            REQUIRE(std::fwrite("{\"tw", 1, 4, file.get()) == 4);
+            CHECK(morph::core::rollBackShortWrite(ioOps, file.get(), path, offsetBeforeWrite) ==
+                  morph::core::RollBack::clean);
+        }
+    }
+
+    CHECK(readAll(path) == "{\"one\":1}\n");
+    std::filesystem::remove(path);
+}
+
+// ── repairTornTail ──────────────────────────────────────────────────────────
+
+namespace {
+
+struct WarningCapture {
+    std::vector<std::string> warnings;
+    morph::log::ScopedLoggerOverride guard{[this](morph::log::LogLevel level, std::string_view msg) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(msg);
+        }
+    }};
+};
+
+}  // namespace
+
+TEST_CASE("morph::core::repairTornTail: a file holding only a torn record is emptied", "[file_io_ops]") {
+    // No newline anywhere: there is no complete record, so everything goes.
+    auto const path = tempIoPath("only_torn");
+    writeAll(path, "{\"tw");
+
+    morph::core::FileIoOps ioOps;
+    morph::core::repairTornTail(ioOps, path, "TestComponent");
+
+    CHECK(std::filesystem::file_size(path) == 0);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::core::repairTornTail: an intact file is left alone and reported as nothing", "[file_io_ops]") {
+    auto const path = tempIoPath("intact");
+    writeAll(path, "{\"one\":1}\n{\"two\":2}\n");
+
+    WarningCapture const capture;
+    morph::core::FileIoOps ioOps;
+    morph::core::repairTornTail(ioOps, path, "TestComponent");
+
+    CHECK(readAll(path) == "{\"one\":1}\n{\"two\":2}\n");
+    CHECK(capture.warnings.empty());
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::core::repairTornTail: a trimmed tail is reported with the bytes it discarded", "[file_io_ops]") {
+    auto const path = tempIoPath("trim_reported");
+    writeAll(path, "{\"one\":1}\n{\"tw");
+
+    WarningCapture capture;
+    morph::core::FileIoOps ioOps;
+    morph::core::repairTornTail(ioOps, path, "TestComponent");
+
+    CHECK(readAll(path) == "{\"one\":1}\n");
+    REQUIRE(capture.warnings.size() == 1);
+    CHECK(capture.warnings[0].starts_with("TestComponent: discarded 4 byte(s) of a torn trailing record in "));
+    std::filesystem::remove(path);
+}

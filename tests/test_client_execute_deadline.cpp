@@ -13,6 +13,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstddef>
+#include <exception>
+#include <filesystem>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -399,3 +402,52 @@ TEST_CASE(
     // deadline.
     CHECK(stateWatch.expired());
 }
+
+TEST_CASE("Bridge::setExecuteDeadline(0) after a positive deadline disarms it for calls made afterwards",
+          "[core][bridge][client-deadline]") {
+    // The scheduler a positive deadline created stays for the bridge's
+    // lifetime; disabling the deadline must still leave new calls unarmed
+    // rather than arming them with a zero-length one.
+    morph::exec::MainThreadExecutor exec;
+    morph::bridge::Bridge bridge{std::make_unique<NeverRepliesBackend>(), exec};
+    bridge.setExecuteDeadline(std::chrono::milliseconds{50});
+    bridge.setExecuteDeadline(std::chrono::milliseconds{0});
+    morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &exec};
+
+    bool resolved = false;
+    handler.execute(DeadlineCount{.x = 1})
+        .then([&resolved](int) { resolved = true; })
+        .onError([&resolved](const std::exception_ptr&) { resolved = true; });
+    exec.runFor(std::chrono::milliseconds{200});
+    CHECK_FALSE(resolved);
+}
+
+#ifdef __linux__
+namespace {
+
+/// Threads in this process, one directory entry each under /proc/self/task.
+std::size_t liveThreadCount() {
+    std::size_t count = 0;
+    for ([[maybe_unused]] auto const& entry : std::filesystem::directory_iterator{"/proc/self/task"}) {
+        ++count;
+    }
+    return count;
+}
+
+}  // namespace
+
+TEST_CASE("Bridge::setExecuteDeadline(0) starts no timer thread", "[core][bridge][client-deadline]") {
+    // The scheduler, and the one thread its loop owns, are created by the
+    // first call that enables a deadline -- never by one that leaves it off.
+    // `<=` rather than `==`: a thread from an earlier case still exiting can
+    // only lower the second count, never raise it.
+    morph::exec::MainThreadExecutor exec;
+    morph::bridge::Bridge bridge{std::make_unique<NeverRepliesBackend>(), exec};
+    auto const before = liveThreadCount();
+    bridge.setExecuteDeadline(std::chrono::milliseconds{0});
+    CHECK(liveThreadCount() <= before);
+
+    bridge.setExecuteDeadline(std::chrono::milliseconds{50});
+    CHECK(liveThreadCount() > before);
+}
+#endif  // __linux__

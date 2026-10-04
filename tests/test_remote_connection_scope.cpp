@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 #include "bind_support.hpp"
 #include "test_support.hpp"
@@ -195,6 +196,21 @@ struct morph::model::ModelTraits<CsReentrantAttachModel> {
     static constexpr std::string_view typeId() { return "CS_ReentrantAttachModel"; }
 };
 
+// A model whose factory counts its constructions and, while `server` is set,
+// first registers one plain CS_SquareModel through `handleInline` -- host code
+// that fills a live-model slot during this model's own construction.
+struct CsCountedModel {
+    static inline std::atomic<int> constructions{0};
+    static inline morph::backend::RemoteServer* server = nullptr;
+
+    int execute(const CsSquareAction& act) { return act.x * act.x; }
+};
+
+template <>
+struct morph::model::ModelTraits<CsCountedModel> {
+    static constexpr std::string_view typeId() { return "CS_CountedModel"; }
+};
+
 static CsEnv& csEnv() {
     static CsEnv env = [] {
         CsEnv env2;
@@ -221,6 +237,15 @@ static CsEnv& csEnv() {
             });
         env2.dispatcher.registerAction<CsReentrantAttachModel, CsSquareAction>("CS_ReentrantAttachModel",
                                                                                "CS_SquareAction");
+        env2.registry.registerModel<CsCountedModel>(
+            "CS_CountedModel", [] -> std::unique_ptr<::morph::model::detail::IModelHolder> {
+                CsCountedModel::constructions.fetch_add(1);
+                if (auto* server = std::exchange(CsCountedModel::server, nullptr)) {
+                    (void)server->handleInline(::morph::wire::encode(::morph::wire::makeRegister("CS_SquareModel")));
+                }
+                return std::make_unique<morph::model::detail::ModelHolder<CsCountedModel>>();
+            });
+        env2.dispatcher.registerAction<CsCountedModel, CsSquareAction>("CS_CountedModel", "CS_SquareAction");
         return env2;
     }();
     return env;
@@ -910,6 +935,94 @@ TEST_CASE(
     server->closeConnection(cidB);
     REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels ==
             1U);  // only key 2's instance remains
+}
+
+TEST_CASE("morph::backend::RemoteServer: attach re-pointing onto a key that is already live releases the old instance",
+          "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto const cidA = server->openConnection();
+    auto const cidB = server->openConnection();
+
+    WaitReply regA;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "old")), std::ref(regA),
+                   cidA);
+    REQUIRE(regA.await());
+    REQUIRE(regA.env.kind == "ok");
+    WaitReply regB;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "target")), std::ref(regB),
+                   cidB);
+    REQUIRE(regB.await());
+    REQUIRE(regB.env.kind == "ok");
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 2U);
+
+    // cidA was the sole holder of "old"; moving it onto the live "target"
+    // attaches to that instance and leaves nothing holding "old".
+    WaitReply moved;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_SquareModel", "target", regA.env.modelId)),
+                   std::ref(moved), cidA);
+    REQUIRE(moved.await());
+    REQUIRE(moved.env.kind == "ok");
+    REQUIRE(moved.env.modelId == regB.env.modelId);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
+
+    morph::wire::Envelope execOld;
+    execOld.kind = "execute";
+    execOld.modelId = regA.env.modelId;
+    execOld.modelType = "CS_SquareModel";
+    execOld.actionType = "CS_SquareAction";
+    execOld.body = R"({"x":2})";
+    WaitReply gone;
+    server->handle(morph::wire::encode(execOld), std::ref(gone), cidA);
+    REQUIRE(gone.await());
+    REQUIRE(gone.env.kind == "err");
+    REQUIRE(gone.env.message == "model not found");
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: a connection that has released its one reference cannot release another "
+    "connection's",
+    "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto const cidA = server->openConnection();
+    auto const cidB = server->openConnection();
+
+    WaitReply regA;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "held")), std::ref(regA),
+                   cidA);
+    REQUIRE(regA.await());
+    REQUIRE(regA.env.kind == "ok");
+    WaitReply regB;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "held")), std::ref(regB),
+                   cidB);
+    REQUIRE(regB.await());
+    REQUIRE(regB.env.modelId == regA.env.modelId);
+
+    // cidA held one reference. Its second deregister, and its close, find
+    // nothing of its own left to release, so cidB's reference stands.
+    for (int round = 0; round < 2; ++round) {
+        WaitReply dereg;
+        server->handle(morph::wire::encode(morph::wire::makeDeregister(regA.env.modelId)), std::ref(dereg), cidA);
+        REQUIRE(dereg.await());
+        REQUIRE(dereg.env.kind == "ok");
+    }
+    server->closeConnection(cidA);
+    REQUIRE(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
+
+    morph::wire::Envelope execReq;
+    execReq.kind = "execute";
+    execReq.modelId = regB.env.modelId;
+    execReq.modelType = "CS_SquareModel";
+    execReq.actionType = "CS_SquareAction";
+    execReq.body = R"({"x":3})";
+    WaitReply exec;
+    server->handle(morph::wire::encode(execReq), std::ref(exec), cidB);
+    REQUIRE(exec.await());
+    REQUIRE(exec.env.kind == "ok");
+    REQUIRE(exec.env.body == "9");
 }
 
 TEST_CASE("morph::backend::RemoteServer: assign files a live instance under a key",
@@ -1701,4 +1814,46 @@ TEST_CASE("morph::backend::RemoteServer: an unscoped deregister still releases t
     REQUIRE(dereg.await());
     CHECK(dereg.env.kind == "ok");
     REQUIRE(csLiveModels(*server) == 0U);
+}
+
+// ── maxLiveModels around a register's own construction ─────────────────────
+
+TEST_CASE("morph::backend::RemoteServer: a register at the live-model cap is refused before constructing a model",
+          "[remote][limits]") {
+    auto& env = csEnv();
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits.maxLiveModels = 1;
+    auto const server =
+        std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, env.dispatcher, env.registry);
+
+    auto first =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel"))));
+    REQUIRE(first.kind == "ok");
+
+    CsCountedModel::constructions.store(0);
+    auto refused =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("CS_CountedModel"))));
+    REQUIRE(refused.kind == "err");
+    REQUIRE(refused.message == "too many models");
+    CHECK(CsCountedModel::constructions.load() == 0);
+}
+
+TEST_CASE("morph::backend::RemoteServer: a register whose construction fills the last slot is refused",
+          "[remote][limits]") {
+    auto& env = csEnv();
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits.maxLiveModels = 1;
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig, env.dispatcher, env.registry);
+
+    // The slot is free when the register is admitted; the model's own
+    // construction takes it by registering another model inline.
+    CsCountedModel::server = server.get();
+    auto outer =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("CS_CountedModel"))));
+    CsCountedModel::server = nullptr;
+    REQUIRE(outer.kind == "err");
+    REQUIRE(outer.message == "too many models");
+    CHECK(morph::testing::awaitAnswer([&](auto& owner) { return server->health(owner); }).liveModels == 1U);
 }

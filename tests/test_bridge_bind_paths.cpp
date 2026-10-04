@@ -6,6 +6,7 @@
 // follows. Every test drives a backend whose bind and promote replies the test
 // settles by hand, so each ordering is exact rather than a race.
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -16,11 +17,15 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -328,6 +333,9 @@ TEST_CASE("Bridge destruction rejects a call still waiting for its bind", "[brid
     recordFailure(bridge->executeVia<BbpModel, BbpPlain>(binding, BbpPlain{.value = 1}, &owner), failure);
     bridge.reset();
     REQUIRE(pumpOwnerUntil(owner, [&] { return failure.settled; }));
+    // The bridge's own error, not the one a destroyed handler gives: the
+    // binding is still alive, so the reason is that the bridge went away.
+    REQUIRE(failure.what == morph::backend::BridgeDestroyedError{}.what());
 }
 
 TEST_CASE("A bind reply landing after the bridge is gone releases its instance on a backend the caller kept",
@@ -529,7 +537,16 @@ TEST_CASE("A promote that lands after an attach already keyed the binding keeps 
     REQUIRE(rig.bridge->bindingPrimary(handler.binding()) == "9");
 }
 
-TEST_CASE("A failed promote leaves the binding unkeyed", "[bridge][promote]") {
+TEST_CASE("A failed promote leaves the binding unkeyed and logs the backend's reason", "[bridge][promote]") {
+    std::mutex logMtx;
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride const guard{
+        [&](morph::log::LogLevel, std::string_view msg) {
+            std::scoped_lock const lock{logMtx};
+            logged.emplace_back(msg);
+        },
+        morph::log::LogLevel::error,
+    };
     Rig rig;
     rig.gate->bindMode = Reply::Inline;
     BridgeHandler<BbpModel, AllowShared> handler{*rig.bridge, &rig.owner};
@@ -537,7 +554,12 @@ TEST_CASE("A failed promote leaves the binding unkeyed", "[bridge][promote]") {
     handler.execute(BbpMake{}).then([&](const BbpMade&) { done.store(true); });
     REQUIRE(pumpOwnerUntil(rig.owner, [&] { return done.load(); }));
     rig.gate->rejectPromote();
-    rig.owner.runFor(std::chrono::milliseconds{5});
+    REQUIRE(pumpOwnerUntil(rig.owner, [&] {
+        std::scoped_lock const lock{logMtx};
+        return std::ranges::any_of(logged, [](const std::string& line) {
+            return line.contains("promotion of 'BBP_Model' failed: promote refused");
+        });
+    }));
     REQUIRE(rig.bridge->bindingPrimary(handler.binding()).empty());
 }
 
@@ -560,6 +582,19 @@ TEST_CASE("A keyed call whose bind is refused is rejected with the bind's error"
     rig.gate->rejectBind("attach refused");
     REQUIRE(pumpOwnerUntil(rig.owner, [&] { return failure.settled; }));
     REQUIRE(failure.what == "attach refused");
+}
+
+TEST_CASE("A keyed call whose attach settles with no instance is rejected as not bound", "[bridge][bind]") {
+    Rig rig;
+    BridgeHandler<BbpModel, AllowShared> handler{*rig.bridge, &rig.owner};
+    Failure failure;
+    recordFailure(handler.execute(BbpLoad{.id = 3}), failure);
+    REQUIRE(rig.gate->heldBinds() == 1);
+
+    GateBackend::resolveFirst(*rig.gate->bindStash(), ModelId{});
+    REQUIRE(pumpOwnerUntil(rig.owner, [&] { return failure.settled; }));
+    REQUIRE(failure.what == "handler not bound");
+    REQUIRE(rig.bridge->pendingCalls() == 0);
 }
 
 // ── Binds that never produce an outcome, and the calls queued behind them ────
@@ -735,6 +770,58 @@ TEST_CASE("A handler registration posted to the owner is dropped when the bridge
     SUCCEED();
 }
 
+// A superseded reply must stay superseded however many binds follow it: the
+// count that marks it stale must never come back round to the value it carries.
+
+TEST_CASE("An attach superseded by a switch stays superseded once a newer attach is issued",
+          "[bridge][bind][switch]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    auto old = std::make_shared<GateBackend>(pool);
+    Bridge bridge{std::make_unique<GateBackend>(pool), owner};
+    bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(old));
+    BridgeHandler<BbpModel, AllowShared> handler{bridge, &owner};
+    handler.attach(1);
+    REQUIRE(old->heldBinds() == 1);
+
+    auto next = std::make_unique<GateBackend>(pool);
+    auto* nextGate = next.get();
+    bridge.switchBackend(std::move(next));
+    handler.attach(2);
+    REQUIRE(nextGate->heldBinds() == 1);
+
+    // The first attach's reply lands last: it is released, and binds nothing.
+    old->resolveBind();
+    owner.runFor(std::chrono::milliseconds{5});
+    REQUIRE(*old->releasedCounter() == 1);
+    REQUIRE_FALSE(handler.isBound());
+    REQUIRE(bridge.bindingPrimary(handler.binding()).empty());
+}
+
+TEST_CASE("A bind superseded by a switch stays superseded once a reconnect issues another",
+          "[bridge][bind][switch][reconnect]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    auto old = std::make_shared<GateBackend>(pool);
+    Bridge bridge{std::make_unique<GateBackend>(pool), owner};
+    bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(old));
+    BridgeHandler<BbpModel> const handler{bridge, &owner};
+    REQUIRE(old->heldBinds() == 1);
+
+    auto next = std::make_unique<GateBackend>(pool);
+    auto* nextGate = next.get();
+    bridge.switchBackend(std::move(next));
+    REQUIRE(nextGate->heldBinds() == 1);
+    nextGate->fireReconnect();
+    REQUIRE(pumpOwnerUntil(owner, [&] { return nextGate->heldBinds() == 2; }));
+
+    // The first bind's reply lands last: it is released, and binds nothing.
+    old->resolveBind();
+    owner.runFor(std::chrono::milliseconds{5});
+    REQUIRE(*old->releasedCounter() == 1);
+    REQUIRE_FALSE(handler.isBound());
+}
+
 TEST_CASE("A superseded bind that replies with no instance releases nothing", "[bridge][bind][switch]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor owner;
@@ -751,4 +838,79 @@ TEST_CASE("A superseded bind that replies with no instance releases nothing", "[
     GateBackend::resolveFirst(*old->bindStash(), ModelId{});
     owner.runFor(std::chrono::milliseconds{5});
     REQUIRE(*old->releasedCounter() == 0);
+}
+
+// ── What a rejected or released operation leaves behind ──────────────────────
+
+TEST_CASE("An attach held behind a bind is dropped, not issued, when its handler is destroyed",
+          "[bridge][bind][teardown]") {
+    Rig rig;
+    // Outlives the handler: the keyed call is rejected with its destruction,
+    // and that failure is delivered on the owner afterwards.
+    Failure keyed;
+    {
+        BridgeHandler<BbpModel, AllowShared> handler{*rig.bridge, &rig.owner};
+        recordFailure(handler.execute(BbpLoad{.id = 1}), keyed);
+        REQUIRE(rig.gate->heldBinds() == 1);
+        handler.attach(2);  // waits behind the keyed call's bind
+    }
+    rig.owner.runFor(std::chrono::milliseconds{5});
+    // Only the keyed call's bind was ever issued: the attach was rejected with
+    // the handler's destruction rather than run against a deregistered binding.
+    REQUIRE(rig.gate->heldBinds() == 1);
+}
+
+TEST_CASE("Bridge::assignHandlerPrimary with an empty key promotes nothing", "[bridge][promote]") {
+    Rig rig;
+    rig.gate->bindMode = Reply::Inline;
+    auto binding = rig.bridge->registerHandler<BbpModel>();
+    REQUIRE(Bridge::isBound(binding));
+
+    rig.bridge->assignHandlerPrimary<BbpModel>(binding, "");
+    REQUIRE(rig.gate->heldPromotes() == 0);
+    REQUIRE(rig.bridge->bindingPrimary(binding).empty());
+}
+
+TEST_CASE("Destroying one handler leaves the bridge tracking the others", "[bridge][bind][switch]") {
+    Rig rig;
+    rig.gate->bindMode = Reply::Inline;
+    BridgeHandler<BbpModel> const survivor{*rig.bridge, &rig.owner};
+    {
+        BridgeHandler<BbpModel> const dropped{*rig.bridge, &rig.owner};
+    }
+
+    // A switch re-binds every handler the bridge still tracks: the survivor,
+    // and only the survivor.
+    auto next = std::make_unique<GateBackend>(rig.pool);
+    auto* nextGate = next.get();
+    rig.bridge->switchBackend(std::move(next));
+    REQUIRE(nextGate->heldBinds() == 1);
+}
+
+TEST_CASE("A call made on the owner before a posted handler registration runs is held, not refused",
+          "[bridge][bind]") {
+    Rig rig;
+    rig.gate->bindMode = Reply::Inline;
+
+    // Constructed off the owner, so its registration is posted there.
+    std::unique_ptr<BridgeHandler<BbpModel>> handler;
+    std::thread constructor{[&] { handler = std::make_unique<BridgeHandler<BbpModel>>(*rig.bridge, &rig.owner); }};
+    constructor.join();
+    REQUIRE_FALSE(handler->isBound());
+
+    std::atomic<int> result{-1};
+    Failure failure;
+    handler->execute(BbpPlain{.value = 3})
+        .then([&](const BbpValue& val) { result.store(val.value); })
+        .onError([&](const std::exception_ptr& err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const std::exception& exc) {
+                failure.what = exc.what();
+            }
+            failure.settled = true;
+        });
+    REQUIRE(pumpOwnerUntil(rig.owner, [&] { return result.load() != -1 || failure.settled; }));
+    REQUIRE(failure.what.empty());
+    REQUIRE(result.load() == 3);
 }

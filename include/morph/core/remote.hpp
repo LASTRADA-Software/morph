@@ -1588,11 +1588,11 @@ private:
     /// random key; guarded defensively rather than ever handed out.
     /// @return A freshly-generated, non-zero, opaque `ModelId`.
     [[nodiscard]] ::morph::exec::detail::ModelId nextOpaqueId() {
-        uint64_t id = 0;
-        do {
-            id = _idGen.permute(++_nextId);
-        } while (id == 0);
-        return ::morph::exec::detail::ModelId{id};
+        for (;;) {
+            if (uint64_t const opaque = _idGen.permute(++_nextId); opaque != 0) {
+                return ::morph::exec::detail::ModelId{opaque};
+            }
+        }
     }
 
     /// Everything one dispatched execute carries from `dispatchExecute` to its

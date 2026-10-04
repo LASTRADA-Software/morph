@@ -7,6 +7,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -248,6 +249,38 @@ TEST_CASE("LimitPolicy: an executeTimeout longer than the action lets the action
     server->handle(morph::wire::encode(req), std::ref(execReply));
     REQUIRE(execReply.await());
     REQUIRE(execReply.env.kind == "ok");
+}
+
+TEST_CASE("LimitPolicy: an execute that answers before its executeTimeout retires its deadline",
+          "[limits][limit-policy]") {
+    // The armed deadline holds the server, so one left armed after the reply
+    // would keep the server alive until it fires -- here, for an hour.
+    gLPSlowStarted.store(0, std::memory_order_relaxed);
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::ServerConfig serverConfig;
+    serverConfig.limits.executeTimeout = std::chrono::hours{1};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, serverConfig);
+
+    morph::testing::WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("LP_SlowModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 1;
+    req.modelId = regReply.env.modelId;
+    req.modelType = "LP_SlowModel";
+    req.actionType = "LP_SlowAction";
+    req.body = R"({"ms":0})";
+
+    morph::testing::WaitReply execReply;
+    server->handle(morph::wire::encode(req), std::ref(execReply));
+    REQUIRE(execReply.await());
+    REQUIRE(execReply.env.kind == "ok");
+
+    std::weak_ptr<morph::backend::RemoteServer> const weak = server;
+    server.reset();
+    CHECK(morph::testing::waitUntil([&weak] { return weak.expired(); }));
 }
 
 TEST_CASE("LimitPolicy: default executeTimeout (0) never times out a slow action (regression)",

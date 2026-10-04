@@ -11,6 +11,7 @@
 #include <memory>
 #include <morph/core/completion.hpp>
 #include <morph/core/coroutine.hpp>
+#include <morph/core/detail/owned_state.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/owner_strand.hpp>
@@ -285,4 +286,22 @@ TEST_CASE("Completion: an owner that does not run one task at a time is refused 
         auto const nowhere = morph::async::Completion<int>::makeSettleable(nullptr);
         CHECK(recorder.count("Completion: an owner that is not serial") == 0U);
     }
+}
+
+TEST_CASE("OwnedState::ask from off the owner posts its body to the owner", "[completion][owner]") {
+    morph::exec::MainThreadExecutor owner;
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::exec::detail::OwnedState<int> owned{owner, std::make_shared<int>(3)};
+
+    Completion<bool> answer;
+    onPool(pool, [&] {
+        answer = owned.ask<bool>("OwnedStateTest::ask", owner,
+                                 [&owner](int& state) { return state == 3 && morph::exec::runningOn(owner); });
+    });
+
+    std::optional<bool> ranOnOwner;
+    owner.post([&] { answer.then([&](bool value) { ranOnOwner = value; }); });
+    drainCounting(owner);
+    REQUIRE(ranOnOwner.has_value());
+    CHECK(*ranOnOwner);
 }

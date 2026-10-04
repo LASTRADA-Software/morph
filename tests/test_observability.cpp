@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/core/observability.hpp>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -190,6 +191,35 @@ TEST_CASE("morph::observe::ScopedObserveOverride: restores previous sinks on sco
     }
     REQUIRE_FALSE(morph::observe::metricsEnabled());
     REQUIRE(morph::observe::detail::beginSpan("r", "m", "a") == 0);
+}
+
+TEST_CASE("morph::observe::ScopedObserveOverride: works in a process that never installed a sink", "[observability]") {
+    // Until the first setMetricSink/setTraceSink the state holds no sink
+    // object at all, not an empty one -- the state a test run filtered down to
+    // one case starts in. Reset to it here, since earlier cases installed some.
+    auto& state = morph::observe::detail::observeState();
+    {
+        std::scoped_lock const lock{state.metricMtx};
+        state.metricSink.reset();
+        state.metricsOn = false;
+    }
+    {
+        std::scoped_lock const lock{state.traceMtx};
+        state.traceSink.reset();
+        state.traceOn = false;
+    }
+    {
+        ObserveGuard const guard;
+        morph::observe::setMetricSink([](const morph::observe::MetricEvent&) {});
+        morph::observe::setTraceSink(morph::observe::TraceSink{
+            .beginSpan = [](std::string_view, std::string_view,
+                            std::string_view) { return morph::observe::SpanId{1}; },
+            .endSpan = [](morph::observe::SpanId, bool) {},
+        });
+        REQUIRE(morph::observe::metricsEnabled());
+    }
+    CHECK_FALSE(morph::observe::metricsEnabled());
+    CHECK(morph::observe::detail::beginSpan("r", "m", "a") == 0);
 }
 
 // ── Thread safety ─────────────────────────────────────────────────────────────

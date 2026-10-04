@@ -14,6 +14,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstddef>
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/io_loop.hpp>
@@ -308,4 +309,51 @@ TEST_CASE("TimeoutScheduler: destroyed with a timer still armed, it retires the 
         REQUIRE(morph::testing::waitUntil([&] { return armed.load(); }));
     }
     REQUIRE_FALSE(ran.load());
+}
+
+namespace {
+
+// Timers armed on @p loop's event loop, read on the loop's own thread.
+std::size_t armedTimers(morph::exec::IoLoop& loop) {
+    std::size_t count = 0;
+    loop.runAndWait([&loop, &count] { count = loop.loop().pendingTimerCount(); });
+    return count;
+}
+
+}  // namespace
+
+TEST_CASE("TimeoutScheduler: cancel() retires the loop's timer, not only the callback", "[timeout_scheduler]") {
+    morph::exec::IoLoop loop;
+    TimeoutScheduler scheduler{loop};
+    auto const before = armedTimers(loop);
+
+    auto const handle = scheduler.schedule(1h, [] {});
+    REQUIRE(armedTimers(loop) == before + 1);
+
+    scheduler.cancel(handle);
+    CHECK(armedTimers(loop) == before);
+}
+
+TEST_CASE("TimeoutScheduler: destruction retires every loop timer it armed", "[timeout_scheduler]") {
+    morph::exec::IoLoop loop;
+    auto const before = armedTimers(loop);
+    {
+        TimeoutScheduler scheduler{loop};
+        static_cast<void>(scheduler.schedule(1h, [] {}));
+        static_cast<void>(scheduler.schedule(2h, [] {}));
+        REQUIRE(armedTimers(loop) == before + 2);
+    }
+    CHECK(armedTimers(loop) == before);
+}
+
+TEST_CASE("TimeoutScheduler: 0 is never a handle, so cancel(0) cancels nothing", "[timeout_scheduler]") {
+    // `delay()` cancels its handle on a stop without knowing whether its timer
+    // was armed yet, and 0 is the value it holds until then.
+    TimeoutScheduler scheduler;
+    std::atomic<int> fired{0};
+    for (int i = 0; i < 3; ++i) {
+        CHECK(scheduler.schedule(1ms, [&fired] { fired.fetch_add(1); }) != 0);
+    }
+    scheduler.cancel(0);
+    REQUIRE(waitFor([&] { return fired.load() == 3; }));
 }

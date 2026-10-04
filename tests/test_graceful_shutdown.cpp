@@ -238,6 +238,52 @@ TEST_CASE("RemoteServer::drainedWithin with no time to wait answers false while 
     REQUIRE(execReply.await(2s));
 }
 
+TEST_CASE(
+    "RemoteServer::drainedWithin with no time to wait answers from the count its request finds, "
+    "not from a later one",
+    "[shutdown][graceful][drain]") {
+    gGSSlowStarted.store(0, std::memory_order_relaxed);
+    morph::exec::ThreadPoolExecutor pool{4};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    morph::testing::WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("GS_SlowModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 1;
+    req.modelId = regReply.env.modelId;
+    req.modelType = "GS_SlowModel";
+    req.actionType = "GS_SlowAction";
+    req.body = R"({"ms":50})";
+    morph::testing::WaitReply execReply;
+    server->handle(morph::wire::encode(req), std::ref(execReply));
+    REQUIRE(morph::testing::waitUntil([] { return gGSSlowStarted.load(std::memory_order_relaxed) >= 1; }));
+
+    // Hold the server strand, so the drain request and the execute's
+    // completion queue on it in that order: the request is answered while the
+    // execute is still counted, and the completion right behind it must not
+    // turn that answer into `true`.
+    std::atomic<bool> release{false};
+    std::atomic<bool> holding{false};
+    server->strand().post([&release, &holding] {
+        holding.store(true);
+        while (!release.load()) {
+            std::this_thread::sleep_for(1ms);
+        }
+    });
+    REQUIRE(morph::testing::waitUntil([&holding] { return holding.load(); }));
+
+    morph::exec::MainThreadExecutor owner;
+    auto drained = server->drainedWithin(0ms, owner);
+    REQUIRE(execReply.await(2s));
+    release.store(true);
+
+    bool const answer = morph::testing::awaitValueOn(owner, std::move(drained));
+    CHECK_FALSE(answer);
+}
+
 TEST_CASE("RemoteServer::drainedWithin times out while a slower-than-deadline execute is still running",
           "[shutdown][graceful][drain]") {
     gGSSlowStarted.store(0, std::memory_order_relaxed);

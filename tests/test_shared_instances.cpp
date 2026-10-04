@@ -23,6 +23,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -608,6 +609,14 @@ TEST_CASE("primary keys round-trip through their canonical encoding", "[shared-i
     REQUIRE_THROWS(morph::model::keyFromString<std::int64_t>(""));
 }
 
+TEST_CASE("a numeric key decodes only the characters its view spans", "[shared-instances]") {
+    // A decoded wire field is a view into a larger buffer; the digits that
+    // follow it there are not part of the key.
+    std::string_view const buffer = "12345";
+    CHECK(morph::model::keyFromString<std::int64_t>(buffer.substr(0, 2)) == 12);
+    CHECK(morph::model::keyFromString<std::uint32_t>(buffer.substr(1, 3)) == 234U);
+}
+
 TEST_CASE("keyed models and keyed actions are detected structurally", "[shared-instances]") {
     STATIC_REQUIRE(morph::model::KeyedModel<ShiCounterModel>);
     STATIC_REQUIRE_FALSE(morph::model::KeyedModel<ShiAddTo>);
@@ -686,6 +695,11 @@ TEST_CASE("assignPrimary promotes an anonymous instance and ignores unusable inp
         std::string{});
     REQUIRE(backend.listInstances("SHI_CounterModel").empty());
 
+    // An empty key names nothing, so the instance stays anonymous and is still
+    // free to take a real one below.
+    backend.assignPrimary(mid, "SHI_CounterModel", "");
+    REQUIRE(backend.listInstances("SHI_CounterModel").empty());
+
     backend.assignPrimary(mid, "SHI_CounterModel", "new");
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
 
@@ -698,6 +712,22 @@ TEST_CASE("assignPrimary promotes an anonymous instance and ignores unusable inp
     backend.assignPrimary(mid, "SHI_CounterModel", "");
     backend.assignPrimary(morph::exec::detail::ModelId{99999}, "SHI_CounterModel", "ghost");
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
+}
+
+TEST_CASE("a promoted instance is held by its one handler and dies with it", "[shared-instances][backend]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto mid = morph::testing::bindShared(
+        backend, "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        std::string{});
+    backend.assignPrimary(mid, "SHI_CounterModel", "promoted");
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"promoted"});
+
+    // The handler that created it is its only attachment, so releasing that
+    // handler destroys it and frees the key.
+    backend.deregisterModel(mid);
+    CHECK(backend.listInstances("SHI_CounterModel").empty());
 }
 
 // `listInstances` had never been driven with two distinct registered types in
@@ -969,6 +999,23 @@ TEST_CASE("a change-aware model is tracked when registered shared", "[shared-ins
     // the same strand, so it is ordered strictly after — a poll here would
     // merely hide a real ordering bug behind a retry.
     REQUIRE(settle(exec, handler.execute(ShiAwareRead{.id = 900})).value == 1);
+}
+
+TEST_CASE("a change-aware instance stays notified after one of its two handlers releases it", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    auto backend = std::make_unique<morph::backend::LocalBackend>(exec);
+    auto* local = backend.get();
+    Bridge bridge{std::move(backend), exec};
+
+    BridgeHandler<ShiAwareModel, AllowShared> survivor{bridge, &exec};
+    settle(survivor.execute(ShiAwareRead{.id = 901}));
+    {
+        BridgeHandler<ShiAwareModel, AllowShared> transient{bridge, &exec};
+        settle(transient.execute(ShiAwareRead{.id = 901}));
+    }  // one attachment released; the instance lives on for `survivor`
+
+    local->notifyBackendChanged();
+    REQUIRE(settle(survivor.execute(ShiAwareRead{.id = 901})).value == 1);
 }
 
 TEST_CASE("the server refuses to re-file an already-keyed instance onto a different key", "[shared-instances]") {

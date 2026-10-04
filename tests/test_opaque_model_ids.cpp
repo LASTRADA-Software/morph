@@ -8,6 +8,7 @@
 // bijection) but are not sequential or predictable from a previously
 // observed id. See docs/spec/core/backend.md and docs/spec/security.md.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <vector>
 
 #include "test_support.hpp"
 
@@ -124,6 +126,27 @@ TEST_CASE("OpaqueIdGenerator is a bijection over counters that exercise the high
     // must not map to the same id.
     REQUIRE(gen.permute(1U) != gen.permute((1ULL << 32U) + 1U));
     REQUIRE(gen.permute(0U) != gen.permute(1ULL << 32U));
+}
+
+// A permutation that drops either half's contribution, or folds its 64-bit
+// state into a 32-bit result, still maps the two samples above to distinct
+// ids: each varies only one half, and a 32-bit round function is itself a
+// bijection on that half. Counters spread across both halves at once expose
+// it: 2^19 of them into a 32-bit image collide ~32 times on average, so a
+// sample this size passes a lossy permutation with probability ~e^-32.
+TEST_CASE("OpaqueIdGenerator is a bijection over counters that vary both halves at once", "[opaque_id][unit]") {
+    morph::backend::detail::OpaqueIdGenerator const gen;
+    constexpr std::size_t n = std::size_t{1} << 19U;
+    // An odd multiplier is a bijection modulo 2^64, so these counters are
+    // distinct, and each one differs from the next in both words.
+    constexpr uint64_t kSpread = 0x9e3779b97f4a7c15ULL;
+    std::vector<uint64_t> ids;
+    ids.reserve(n);
+    for (uint64_t i = 1; i <= n; ++i) {
+        ids.push_back(gen.permute(i * kSpread));
+    }
+    std::ranges::sort(ids);
+    REQUIRE(std::ranges::adjacent_find(ids) == ids.end());
 }
 
 TEST_CASE("OpaqueIdGenerator output is not sequential", "[opaque_id][unit]") {
