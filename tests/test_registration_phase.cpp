@@ -24,6 +24,7 @@
 // wired to a condition that is always true -- would look identical.
 
 #include <catch2/catch_test_macros.hpp>
+#include <exception>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 #include <stdexcept>
@@ -147,6 +148,43 @@ TEST_CASE("morph::model: ActionExecuteRegistry closes the latch on the process r
     REQUIRE_THROWS_AS(local.execute<NoSharing>("RegPhase_Model", "RegPhase_NoSuchAction", nullptr, "{}"),
                       std::runtime_error);
     CHECK_FALSE(morph::model::registrationPhaseClosed());
+
+    morph::model::detail::reopenRegistrationPhaseForTesting();
+}
+
+TEST_CASE("morph::model: dispatching through the process dispatcher closes the latch; a local one does not",
+          "[registry][registration-phase]") {
+    auto holder = morph::model::detail::ModelFactory::create<RegPhaseModel>();
+    auto& processDispatcher = morph::model::detail::ActionDispatcher::instance();
+    morph::model::detail::ActionDispatcher localDispatcher;
+    // An unknown action: each call throws or reports through `done` before it
+    // runs anything -- what matters is that the map was read.
+    auto dispatchAsync = [&holder](morph::model::detail::ActionDispatcher& dispatcher) {
+        bool reported = false;
+        dispatcher.dispatchAsync(
+            "RegPhase_Model", "RegPhase_NoSuchAction", *holder, "{}", nullptr, core::async::StopToken{},
+            [&reported](const std::string&, const std::exception_ptr& error) { reported = error != nullptr; });
+        return reported;
+    };
+
+    SECTION("dispatch") {
+        morph::model::detail::reopenRegistrationPhaseForTesting();
+        REQUIRE_THROWS_AS(localDispatcher.dispatch("RegPhase_Model", "RegPhase_NoSuchAction", *holder, "{}"),
+                          std::runtime_error);
+        CHECK_FALSE(morph::model::registrationPhaseClosed());
+
+        REQUIRE_THROWS_AS(processDispatcher.dispatch("RegPhase_Model", "RegPhase_NoSuchAction", *holder, "{}"),
+                          std::runtime_error);
+        CHECK(morph::model::registrationPhaseClosed());
+    }
+    SECTION("dispatchAsync") {
+        morph::model::detail::reopenRegistrationPhaseForTesting();
+        REQUIRE(dispatchAsync(localDispatcher));
+        CHECK_FALSE(morph::model::registrationPhaseClosed());
+
+        REQUIRE(dispatchAsync(processDispatcher));
+        CHECK(morph::model::registrationPhaseClosed());
+    }
 
     morph::model::detail::reopenRegistrationPhaseForTesting();
 }

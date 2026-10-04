@@ -705,6 +705,22 @@ TEST_CASE("assignPrimary promotes an anonymous instance and ignores unusable inp
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
 }
 
+TEST_CASE("a promoted instance is held by its one handler and dies with it", "[shared-instances][backend]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto mid = morph::testing::bindShared(
+        backend, "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        std::string{});
+    backend.assignPrimary(mid, "SHI_CounterModel", "promoted");
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"promoted"});
+
+    // The handler that created it is its only attachment, so releasing that
+    // handler destroys it and frees the key.
+    backend.deregisterModel(mid);
+    CHECK(backend.listInstances("SHI_CounterModel").empty());
+}
+
 // `listInstances` had never been driven with two distinct registered types in
 // the directory at once -- every prior call in this suite populated it with one
 // type, so nothing ever had to discriminate. The mechanism it discriminates
