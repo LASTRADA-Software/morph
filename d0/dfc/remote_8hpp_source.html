@@ -1743,11 +1743,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/dfc/remote_
 <div class="line"><a id="l01588" name="l01588"></a><span class="lineno"> 1588</span><span class="comment">    /// random key; guarded defensively rather than ever handed out.</span></div>
 <div class="line"><a id="l01589" name="l01589"></a><span class="lineno"> 1589</span><span class="comment">    /// @return A freshly-generated, non-zero, opaque `ModelId`.</span></div>
 <div class="line"><a id="l01590" name="l01590"></a><span class="lineno"> 1590</span>    [[nodiscard]] ::morph::exec::detail::ModelId nextOpaqueId() {</div>
-<div class="line"><a id="l01591" name="l01591"></a><span class="lineno"> 1591</span>        uint64_t <span class="keywordtype">id</span> = 0;</div>
-<div class="line"><a id="l01592" name="l01592"></a><span class="lineno"> 1592</span>        <span class="keywordflow">do</span> {</div>
-<div class="line"><a id="l01593" name="l01593"></a><span class="lineno"> 1593</span>            <span class="keywordtype">id</span> = _idGen.permute(++_nextId);</div>
-<div class="line"><a id="l01594" name="l01594"></a><span class="lineno"> 1594</span>        } <span class="keywordflow">while</span> (<span class="keywordtype">id</span> == 0);</div>
-<div class="line"><a id="l01595" name="l01595"></a><span class="lineno"> 1595</span>        return ::morph::exec::detail::ModelId{<span class="keywordtype">id</span>};</div>
+<div class="line"><a id="l01591" name="l01591"></a><span class="lineno"> 1591</span>        <span class="keywordflow">for</span> (;;) {</div>
+<div class="line"><a id="l01592" name="l01592"></a><span class="lineno"> 1592</span>            <span class="keywordflow">if</span> (uint64_t <span class="keyword">const</span> opaque = _idGen.permute(++_nextId); opaque != 0) {</div>
+<div class="line"><a id="l01593" name="l01593"></a><span class="lineno"> 1593</span>                return ::morph::exec::detail::ModelId{opaque};</div>
+<div class="line"><a id="l01594" name="l01594"></a><span class="lineno"> 1594</span>            }</div>
+<div class="line"><a id="l01595" name="l01595"></a><span class="lineno"> 1595</span>        }</div>
 <div class="line"><a id="l01596" name="l01596"></a><span class="lineno"> 1596</span>    }</div>
 <div class="line"><a id="l01597" name="l01597"></a><span class="lineno"> 1597</span><span class="comment"></span> </div>
 <div class="line"><a id="l01598" name="l01598"></a><span class="lineno"> 1598</span><span class="comment">    /// Everything one dispatched execute carries from `dispatchExecute` to its</span></div>
