@@ -123,6 +123,33 @@ TEST_CASE("morph::model: reading a process-level registry closes the latch by it
 
     morph::model::detail::reopenRegistrationPhaseForTesting();
 }
+
+TEST_CASE("morph::model: ActionExecuteRegistry closes the latch on the process registry only",
+          "[registry][registration-phase]") {
+    using morph::bridge::ActionExecuteRegistry;
+    using morph::bridge::NoSharing;
+
+    // `contains` and `execute` are both reads of the executor map; an unknown
+    // action still reads it.
+    morph::model::detail::reopenRegistrationPhaseForTesting();
+    CHECK_FALSE(ActionExecuteRegistry::instance().contains<NoSharing>("RegPhase_Model", "RegPhase_NoSuchAction"));
+    CHECK(morph::model::registrationPhaseClosed());
+
+    morph::model::detail::reopenRegistrationPhaseForTesting();
+    REQUIRE_THROWS_AS(
+        ActionExecuteRegistry::instance().execute<NoSharing>("RegPhase_Model", "RegPhase_NoSuchAction", nullptr, "{}"),
+        std::runtime_error);
+    CHECK(morph::model::registrationPhaseClosed());
+
+    morph::model::detail::reopenRegistrationPhaseForTesting();
+    ActionExecuteRegistry const local;
+    CHECK_FALSE(local.contains<NoSharing>("RegPhase_Model", "RegPhase_NoSuchAction"));
+    REQUIRE_THROWS_AS(local.execute<NoSharing>("RegPhase_Model", "RegPhase_NoSuchAction", nullptr, "{}"),
+                      std::runtime_error);
+    CHECK_FALSE(morph::model::registrationPhaseClosed());
+
+    morph::model::detail::reopenRegistrationPhaseForTesting();
+}
 #endif  // !NDEBUG
 
 // ── The violating case ───────────────────────────────────────────────────────

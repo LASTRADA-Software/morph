@@ -302,6 +302,23 @@ TEST_CASE("Bridge: the subscription fan-out of a result settled on a pool thread
     REQUIRE(recorder.allPosted("Bridge::publishResult"));
 }
 
+TEST_CASE("Bridge: a result the backend settles on the owner is published before execute returns",
+          "[bridge][owner][subscription]") {
+    // A backend whose strands run inline settles on the calling thread, which
+    // is the owner here: the bridge-side work runs there at once rather than
+    // as a later owner task. The owner is never pumped.
+    morph::testing::InlineExecutor inlinePool;
+    morph::testing::InlineExecutor gui;
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(inlinePool), owner};
+    morph::bridge::BridgeHandler<PingModel> handler{bridge, &gui};
+
+    int seen = 0;
+    handler.subscribe<Pong>([&](Pong pong) { seen = pong.value; });
+    handler.execute(Ping{.value = 3});
+    REQUIRE(seen == 6);
+}
+
 // ── Owner-only verbs ─────────────────────────────────────────────────────────
 
 TEST_CASE("Bridge: owner-only verbs run inside the owner's task, and are caught off it", "[bridge][owner]") {
@@ -392,6 +409,29 @@ TEST_CASE("BridgeHandler: teardown runs on the owner, and a destruction off it i
         REQUIRE(recorder.count("Bridge::deregisterHandler") == 0);
     }
 }
+
+#ifndef NDEBUG
+TEST_CASE("BridgeHandler: a guiExec other than the owner is checked once, where it runs its tasks",
+          "[bridge][owner]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    OwnerProbeRecorder const recorder{owner.coreExecutor()};
+
+    SECTION("the owner itself needs no check") {
+        morph::bridge::BridgeHandler<PingModel> const handler{bridge, &owner};
+        owner.runFor(std::chrono::milliseconds{5});
+        REQUIRE(recorder.count("BridgeHandler::guiExec") == 0);
+    }
+
+    SECTION("another executor is checked inside one of its own tasks") {
+        morph::exec::MainThreadExecutor gui;
+        morph::bridge::BridgeHandler<PingModel> const handler{bridge, &gui};
+        REQUIRE(pumpOwnerUntil(gui, [&] { return recorder.count("BridgeHandler::guiExec") == 1; }));
+        REQUIRE_FALSE(recorder.at("BridgeHandler::guiExec").front().onOwner);
+    }
+}
+#endif
 
 // ── Backends below the bridge ────────────────────────────────────────────────
 
