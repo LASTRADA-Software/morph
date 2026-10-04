@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <core/async/Cancellation.hpp>
+#include <core/async/ExecutorContext.hpp>
 #include <core/async/StopToken.hpp>
 #include <core/async/Task.hpp>
 #include <functional>
@@ -388,4 +389,54 @@ TEST_CASE("co_await whose handler cannot be attached rethrows at the co_await an
     REQUIRE(seen->error == "executor refused the task");
     REQUIRE_FALSE(seen->value.has_value());
     REQUIRE_FALSE(seen->cancelled);
+}
+
+namespace {
+
+/// Runs every task inline, then -- once armed -- reports the outermost post as
+/// failed anyway, after the task has run: a queue that accepted the work and
+/// then threw on its way out.
+class RunsThenThrowsExecutor : public morph::exec::IExecutor {
+public:
+    bool throwAfterRunning = false;
+
+    void post(std::function<void()> task) override {
+        ++_depth;
+        {
+            // The task runs as one of this executor's, as a real queue's would.
+            ::core::async::ExecutorScope const scope{coreExecutor()};
+            task();
+        }
+        --_depth;
+        if (throwAfterRunning && _depth == 0) {
+            throw std::runtime_error{"post failed after running the task"};
+        }
+    }
+
+private:
+    int _depth = 0;
+};
+
+}  // namespace
+
+TEST_CASE("co_await whose attach settles the await before its post fails resumes with the value, once",
+          "[coroutine][client]") {
+    // The attach is posted to the completion's executor, which runs it inline:
+    // the completion is already settled, so the attached handler settles the
+    // await and queues the resumption on `exec` -- and only then does the post
+    // throw. The await is already answered, so the throw must not reach the
+    // coroutine as well.
+    RunsThenThrowsExecutor executor;
+    auto [completion, promise] = Completion<int>::makeSettleable(&executor);
+    promise.resolve(5);
+    executor.throwAfterRunning = true;
+    morph::exec::MainThreadExecutor exec;
+    auto seen = std::make_shared<Observed>();
+
+    morph::async::spawn(exec, awaitInto(std::move(completion), seen));
+
+    REQUIRE(pumpUntil(exec, [&] { return seen->finished.load(); }));
+    CHECK(seen->value == 5);
+    CHECK(seen->error.empty());
+    CHECK_FALSE(seen->cancelled);
 }
