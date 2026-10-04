@@ -823,8 +823,8 @@ TEST_CASE("morph::backend::SynchronousBackendAdapter: a synchronous verb called 
     auto answer = outcome->get_future();
     std::thread{[outer = adapter.get(), outcome] { outcome->set_value(outer->listInstances("outer")); }}.detach();
     if (answer.wait_for(morph::testing::kDefaultWaitBudget) != std::future_status::ready) {
-        static_cast<void>(adapter.release());
-        static_cast<void>(pool.release());
+        [[maybe_unused]] auto const* const leakedAdapter = adapter.release();
+        [[maybe_unused]] auto const* const leakedPool = pool.release();
         FAIL("listInstances re-entered from the control strand never returned");
     }
     REQUIRE(answer.get() == std::vector<std::string>{"outer"});

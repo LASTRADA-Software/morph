@@ -438,7 +438,7 @@ TEST_CASE("morph::core::repairTornTail: an intact file is left alone and reporte
     auto const path = tempIoPath("intact");
     writeAll(path, "{\"one\":1}\n{\"two\":2}\n");
 
-    WarningCapture capture;
+    WarningCapture const capture;
     morph::core::FileIoOps ioOps;
     morph::core::repairTornTail(ioOps, path, "TestComponent");
 

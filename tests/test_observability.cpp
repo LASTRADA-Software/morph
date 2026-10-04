@@ -209,7 +209,7 @@ TEST_CASE("morph::observe::ScopedObserveOverride: works in a process that never 
         state.traceOn = false;
     }
     {
-        ObserveGuard guard;
+        ObserveGuard const guard;
         morph::observe::setMetricSink([](const morph::observe::MetricEvent&) {});
         morph::observe::setTraceSink(morph::observe::TraceSink{
             .beginSpan = [](std::string_view, std::string_view,

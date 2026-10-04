@@ -398,7 +398,7 @@ namespace {
 /// then threw on its way out.
 class RunsThenThrowsExecutor : public morph::exec::IExecutor {
 public:
-    bool throwAfterRunning = false;
+    void armThrowAfterRunning() { _throwAfterRunning = true; }
 
     void post(std::function<void()> task) override {
         ++_depth;
@@ -408,12 +408,13 @@ public:
             task();
         }
         --_depth;
-        if (throwAfterRunning && _depth == 0) {
+        if (_throwAfterRunning && _depth == 0) {
             throw std::runtime_error{"post failed after running the task"};
         }
     }
 
 private:
+    bool _throwAfterRunning = false;
     int _depth = 0;
 };
 
@@ -429,7 +430,7 @@ TEST_CASE("co_await whose attach settles the await before its post fails resumes
     RunsThenThrowsExecutor executor;
     auto [completion, promise] = Completion<int>::makeSettleable(&executor);
     promise.resolve(5);
-    executor.throwAfterRunning = true;
+    executor.armThrowAfterRunning();
     morph::exec::MainThreadExecutor exec;
     auto seen = std::make_shared<Observed>();
 

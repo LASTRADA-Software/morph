@@ -557,7 +557,7 @@ TEST_CASE("A failed promote leaves the binding unkeyed and logs the backend's re
     REQUIRE(pumpOwnerUntil(rig.owner, [&] {
         std::scoped_lock const lock{logMtx};
         return std::ranges::any_of(logged, [](const std::string& line) {
-            return line.find("promotion of 'BBP_Model' failed: promote refused") != std::string::npos;
+            return line.contains("promotion of 'BBP_Model' failed: promote refused");
         });
     }));
     REQUIRE(rig.bridge->bindingPrimary(handler.binding()).empty());

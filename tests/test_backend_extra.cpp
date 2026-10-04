@@ -446,6 +446,7 @@ TEST_CASE("morph::backend::LocalBackend: trackedPendingCount counts every call s
     CHECK(backend.trackedPendingCount() == 0);
 
     std::vector<morph::async::Completion<std::shared_ptr<void>>> live;
+    live.reserve(3);
     for (int i = 0; i < 3; ++i) {
         live.push_back(backend.execute(mid, pendingCall([&release, &ran] {
                                            while (!release.load(std::memory_order_acquire)) {
@@ -463,7 +464,7 @@ TEST_CASE("morph::backend::LocalBackend: trackedPendingCount counts every call s
 
 TEST_CASE("morph::backend::LocalBackend: executeLatencyMs covers the time the handler ran",
           "[backend][local][observability]") {
-    morph::observe::ScopedObserveOverride guard;
+    morph::observe::ScopedObserveOverride const guard;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor cbExec;
     morph::backend::LocalBackend backend{pool};
@@ -508,6 +509,7 @@ morph::backend::detail::ActionCall parkedTaskCall(const std::shared_ptr<ParkedTa
     call.modelTypeId = "BE_CounterModel";
     call.actionTypeId = "BE_CounterAction";
     call.action = slot;
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): ActionCall::localOpAsync fixes the by-value signature
     call.localOpAsync = [](morph::model::detail::IModelHolder& /*holder*/, std::shared_ptr<void> action,
                            const std::shared_ptr<morph::exec::detail::TaskResumer>& /*executor*/,
                            core::async::StopToken token, morph::backend::detail::ActionCall::LocalDone done) {
@@ -543,7 +545,7 @@ TEST_CASE("morph::backend::LocalBackend: destruction requests stop on a Task han
 
 TEST_CASE("morph::backend::LocalBackend: a call cancelled while it waited behind a Task handler finishes as a failure",
           "[backend][local][observability]") {
-    morph::observe::ScopedObserveOverride guard;
+    morph::observe::ScopedObserveOverride const guard;
     std::atomic<int> errors{0};
     morph::observe::setMetricSink([&errors](const morph::observe::MetricEvent& evt) {
         if (evt.metric == morph::observe::Metric::executeErrors) {
