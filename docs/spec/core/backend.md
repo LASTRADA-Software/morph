@@ -1627,30 +1627,15 @@ when it does (measured on both backends). `QtWebSocketBackend` sends nothing fro
 destructor's sweep — its socket is already aborted there — so a backend
 destroyed without its owner's `cancelPending` cancels nothing.
 
-### Cancellation-policy rows for the remote backends
+### Where the remote backends' cancel rows are measured
 
 The policy table in
 [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#every-cancel-verb-measured)
-marks the remote backends' rows read, not measured, and gives "the server
-keeps executing" for the work they abandon. What those rows are, and which
-parts are measured, is:
-
-- `SocketBackend::cancelPending` — **G0** on return; **G2** once the I/O loop
-  runs it (unchanged). Work: a Task handler on a server that advertised
-  `"cancel"` is asked to stop; otherwise the server keeps executing.
-  **Measured** over a real loopback (`SocketServer` with `SocketBackend`) for
-  the stop, through `~Bridge`.
-- `QtWebSocketBackend::cancelPending` — **G2** (unchanged). Work: as above.
-  **Measured** in the Qt suite against a real `QtWebSocketServer`, through
-  `~Bridge`.
-- `Bridge::setExecuteDeadline` over either backend — the deadline's stop
-  reaches the server's Task handler through a cancel. **Measured** for both
-  over a real loopback.
-
-The G-levels of these verbs are unchanged and are still read, not measured:
-the tests above measure the work column only. The measuring tests are in
+gives the remote backends' rows. Their *work* column — a Task handler on a
+server that advertised `"cancel"` is asked to stop — is measured over a real
+loopback, through `~Bridge` and through the execute deadline, in
 `tests/net/test_socket_backend.cpp` and `tests/qt/test_qt_websocket.cpp`
-(`[cancel]`).
+(`[cancel]`). Their G-levels are read, not measured.
 
 ## Lifetime & ownership
 
