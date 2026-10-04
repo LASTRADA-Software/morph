@@ -9,9 +9,11 @@
 #include <core/async/Cancellation.hpp>
 #include <core/async/StopToken.hpp>
 #include <core/async/Task.hpp>
+#include <cstddef>
 #include <memory>
 #include <morph/core/coroutine.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/io_loop.hpp>
 #include <morph/core/timeout_scheduler.hpp>
 #include <thread>
 
@@ -147,4 +149,52 @@ TEST_CASE("a delay whose coroutine is destroyed while it waits withdraws its tim
     static_cast<void>(scheduler.schedule(60ms, [&] { past = true; }));
     REQUIRE(morph::testing::waitUntil([&] { return past.load(); }));
     REQUIRE_FALSE(seen->finished.load());
+}
+
+namespace {
+
+// Timers armed on @p loop's event loop, read on the loop's own thread -- which
+// also means every schedule or cancel posted to it before has been applied.
+std::size_t armedTimers(morph::exec::IoLoop& loop) {
+    std::size_t count = 0;
+    loop.runAndWait([&loop, &count] { count = loop.loop().pendingTimerCount(); });
+    return count;
+}
+
+}  // namespace
+
+TEST_CASE("a stop that cancels a delay also retires its timer", "[coroutine][delay]") {
+    morph::exec::IoLoop loop;
+    morph::async::detail::TimeoutScheduler scheduler{loop};
+    morph::exec::MainThreadExecutor exec;
+    auto seen = std::make_shared<DelayObserved>();
+    auto const before = armedTimers(loop);
+
+    auto task = waitFor(&scheduler, 1h, seen);
+    // NOLINTNEXTLINE(misc-const-correctness): request_stop() is non-const in the standard.
+    core::async::StopSource stop;
+    task.handle().promise().setStopToken(stop.get_token());
+    morph::async::spawn(exec, std::move(task));
+    REQUIRE(pumpUntil(exec, [&] { return seen->reachedAwait.load(); }));
+    REQUIRE(armedTimers(loop) == before + 1);
+
+    stop.request_stop();
+    REQUIRE(pumpUntil(exec, [&] { return seen->finished.load(); }));
+    REQUIRE(seen->cancelled);
+    CHECK(armedTimers(loop) == before);
+}
+
+TEST_CASE("a delay whose coroutine is destroyed while it waits retires its timer", "[coroutine][delay]") {
+    morph::exec::IoLoop loop;
+    morph::async::detail::TimeoutScheduler scheduler{loop};
+    auto seen = std::make_shared<DelayObserved>();
+    auto const before = armedTimers(loop);
+    {
+        auto task = waitFor(&scheduler, 1h, seen);
+        task.handle().resume();
+        REQUIRE(seen->reachedAwait.load());
+        REQUIRE(armedTimers(loop) == before + 1);
+    }
+    CHECK(armedTimers(loop) == before);
+    CHECK_FALSE(seen->finished.load());
 }

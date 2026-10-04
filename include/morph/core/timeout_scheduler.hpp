@@ -55,7 +55,8 @@ namespace morph::async::detail {
 /// thread, so it is known before the loop has armed anything.
 class TimeoutScheduler {
 public:
-    /// @brief Opaque identifier for one scheduled callback.
+    /// @brief Opaque identifier for one scheduled callback. Never `0`, so a
+    ///        holder may keep `0` for "nothing scheduled" and cancel it safely.
     using Handle = std::uint64_t;
 
     /// @brief Builds the scheduler on @p loop, whose thread runs every callback.
