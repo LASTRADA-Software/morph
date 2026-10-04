@@ -5,6 +5,7 @@
 #include <chrono>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
@@ -13,6 +14,8 @@
 #include <morph/session/session_auth.hpp>
 #include <mutex>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -28,9 +31,16 @@ struct SquareAction {
     int x = 0;
 };
 struct SquareFail {};
+struct SquareSlow {
+    int ms = 0;
+};
 struct SquareModel {
     int execute(const SquareAction& act) { return act.x * act.x; }
     int execute(const SquareFail&) { throw std::runtime_error("square failed"); }
+    int execute(const SquareSlow& act) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{act.ms});
+        return act.ms;
+    }
 };
 
 template <>
@@ -72,12 +82,39 @@ struct morph::model::ActionTraits<SquareFail> {
     static int resultFromJson(std::string_view) { return 0; }
 };
 
+template <>
+struct morph::model::ActionTraits<SquareSlow> {
+    using Result = int;
+    static constexpr std::string_view typeId() { return "RX_SquareSlow"; }
+    static std::string toJson(const SquareSlow& act) {
+        std::string out;
+        (void)glz::write_json(act, out);
+        return out;
+    }
+    static SquareSlow fromJson(std::string_view json) {
+        SquareSlow action{};
+        (void)glz::read_json(action, json);
+        return action;
+    }
+    static std::string resultToJson(const int& res) {
+        std::string out;
+        (void)glz::write_json(res, out);
+        return out;
+    }
+    static int resultFromJson(std::string_view json) {
+        int result{};
+        (void)glz::read_json(result, json);
+        return result;
+    }
+};
+
 static Env& sharedEnv() {
     static Env env = [] {
         Env env2;
         env2.registry.registerModel<SquareModel>("RX_SquareModel");
         env2.dispatcher.registerAction<SquareModel, SquareAction>("RX_SquareModel", "RX_SquareAction");
         env2.dispatcher.registerAction<SquareModel, SquareFail>("RX_SquareModel", "RX_SquareFail");
+        env2.dispatcher.registerAction<SquareModel, SquareSlow>("RX_SquareModel", "RX_SquareSlow");
         return env2;
     }();
     return env;
@@ -297,6 +334,87 @@ TEST_CASE(
     REQUIRE(reply.kind == "err");
 }
 
+namespace {
+/// Collects every log line whose text contains @p marker, from any thread.
+struct LogLines {
+    std::mutex mtx;
+    std::vector<std::string> lines;
+
+    std::vector<std::string> matching(std::string_view marker) {
+        std::scoped_lock const lock{mtx};
+        std::vector<std::string> out;
+        for (const auto& line : lines) {
+            if (line.contains(marker)) {
+                out.push_back(line);
+            }
+        }
+        return out;
+    }
+};
+
+/// The one "undecodable envelope" error line @p server logs for @p raw.
+std::string undecodableLogLine(morph::backend::RemoteServer& server, const std::string& raw) {
+    LogLines captured;
+    morph::log::ScopedLoggerOverride const guard{[&captured](morph::log::LogLevel, std::string_view msg) {
+        std::scoped_lock const lock{captured.mtx};
+        captured.lines.emplace_back(msg);
+    }};
+    auto reply = morph::wire::decode(server.handleInline(raw));
+    REQUIRE(reply.kind == "err");
+    auto lines = captured.matching("undecodable envelope");
+    REQUIRE(lines.size() == 1);
+    return lines.front();
+}
+}  // namespace
+
+TEST_CASE("morph::backend::RemoteServer: the undecodable-envelope log line reports the full size and a capped prefix",
+          "[remote][handleInline][log]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    SECTION("a short message is logged whole, with no ellipsis") {
+        const std::string line = undecodableLogLine(*server, "not json");
+        CHECK(line.contains("(8 bytes, payload prefix: not json)"));
+    }
+    SECTION("a message of exactly the preview cap is logged whole, with no ellipsis") {
+        const std::string exact(256, 'x');
+        const std::string line = undecodableLogLine(*server, exact);
+        CHECK(line.contains("(256 bytes, payload prefix: " + exact + ")"));
+    }
+    SECTION("a message over the cap is logged as its first 256 bytes and an ellipsis") {
+        const std::string line = undecodableLogLine(*server, std::string(300, 'x'));
+        CHECK(line.contains("(300 bytes, payload prefix: " + std::string(256, 'x') + "...)"));
+        CHECK_FALSE(line.contains(std::string(257, 'x')));
+    }
+}
+
+TEST_CASE("morph::backend::RemoteServer: the per-request debug log line reports the body's size", "[remote][log]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    LogLines captured;
+    morph::log::ScopedLoggerOverride const guard{[&captured](morph::log::LogLevel, std::string_view msg) {
+        std::scoped_lock const lock{captured.mtx};
+        captured.lines.emplace_back(msg);
+    }};
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 7;
+    req.modelId = 9999;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareAction";
+    req.body = R"({"x":5})";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    REQUIRE(waiter.await());
+
+    auto lines = captured.matching("kind=execute callId=7");
+    REQUIRE(lines.size() == 1);
+    CHECK(lines.front().contains("bodyBytes=7"));
+}
+
 TEST_CASE(
     "morph::backend::RemoteServer::handleImpl: a well-formed execute naming modelId 0 reports \"model not found\"",
     "[remote][handleImpl]") {
@@ -430,6 +548,47 @@ TEST_CASE("morph::backend::RemoteServer: execute emits executeLatencyMs and togg
     REQUIRE(inFlightSamples.size() == 2);
     REQUIRE(inFlightSamples[0] == 1.0);
     REQUIRE(inFlightSamples[1] == 0.0);
+}
+
+TEST_CASE("morph::backend::RemoteServer: executeLatencyMs measures the handler's run time",
+          "[remote][observability]") {
+    morph::observe::ScopedObserveOverride const guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    REQUIRE(reg.await());
+    REQUIRE(reg.env.kind == "ok");
+
+    std::mutex sampleMtx;
+    std::vector<double> latencies;
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeLatencyMs) {
+            std::scoped_lock const lock{sampleMtx};
+            latencies.push_back(evt.value);
+        }
+    });
+
+    constexpr int kHandlerMs = 60;
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 1;
+    req.modelId = reg.env.modelId;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareSlow";
+    req.body = R"({"ms":60})";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "ok");
+
+    std::scoped_lock const lock{sampleMtx};
+    REQUIRE(latencies.size() == 1);
+    // A lower bound only: the measurement spans the handler, which sleeps at
+    // least this long. No upper bound, so a loaded machine cannot fail it.
+    CHECK(latencies.front() >= static_cast<double>(kHandlerMs));
 }
 
 TEST_CASE("morph::backend::RemoteServer: an erroring execute emits executeErrors", "[remote][observability]") {
