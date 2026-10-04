@@ -16,7 +16,6 @@
 #include <system_error>
 #include <vector>
 
-
 /// @file
 /// Real on-disk SQLite database, shared per test binary — mirrors
 /// Lightweight's own `SqlTestFixture` (Lightweight/src/tests/Utils.hpp) and
