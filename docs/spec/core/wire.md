@@ -12,6 +12,7 @@ carries all request and reply variants, discriminated by a `kind` string field.
   - [Omitted default fields](#omitted-default-fields)
 - [Parsing guarantees and hardening](#parsing-guarantees-and-hardening)
 - [Protocol version negotiation](#protocol-version-negotiation)
+- [Cancelling a call](#cancelling-a-call)
 - [Serving action schemas](#serving-action-schemas)
 - [Action-evolution policy](#action-evolution-policy)
 - [API reference](#api-reference)
@@ -35,6 +36,7 @@ their `kind` needs and leave the rest as default-constructed values.
 | `"deregister"` | request | Client destroys an instance. | `modelId` |
 | `"execute"`  | request   | Client dispatches an action. | `callId`, `modelId`, `modelType`, `actionType`, `body`, `session` |
 | `"hello"`    | request   | Client announces its protocol version, once per connection, before any `register`/`execute`. See [Protocol version negotiation](#protocol-version-negotiation). | `protocolVersion` |
+| `"cancel"`   | request   | Client asks the server to stop one of its own in-flight `execute` calls. Replies `ok` whatever became of the call. Sent only to a server whose `hello` reply advertised `"cancel"`. See [Cancelling a call](#cancelling-a-call). | `callId` (the cancel's own), `cancelCallId` (the execute's), `session` |
 | `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result, or — for a `"hello"` reply — the server's `ProtocolRange`), `modelId` (for register-replies) |
 | `"err"`      | reply     | Server failure. | `callId`, `message` |
 
@@ -62,7 +64,7 @@ session — they round-trip it verbatim; enforcement lives in the server.
 
 ## Factory functions
 
-Ten free functions construct `Envelope` instances with the correct `kind` and
+Eleven free functions construct `Envelope` instances with the correct `kind` and
 relevant fields. Callers never set `kind` manually.
 
 | Function | `kind` | Parameters |
@@ -75,6 +77,7 @@ relevant fields. Callers never set `kind` manually.
 | `makeSchemas(typeId)` | `"schemas"` | Model type id whose action descriptions are wanted. See [Serving action schemas](#serving-action-schemas). |
 | `makeDeregister(modelId)` | `"deregister"` | Instance id to destroy. |
 | `makeHello(protocolVersion = kProtocolVersion)` | `"hello"` | Protocol version the sender speaks. See [Protocol version negotiation](#protocol-version-negotiation). |
+| `makeCancel(targetCallId)` | `"cancel"` | `callId` of the `execute` to stop, stored in `cancelCallId`. The caller assigns the cancel's own `callId` and `session`. See [Cancelling a call](#cancelling-a-call). |
 | `makeOk(callId = 0, body = {}, modelId = 0)` | `"ok"` | Correlation id, serialized result (stored in the `body` field), optional model id (for register-replies). |
 | `makeErr(message, callId = 0)` | `"err"` | Error message, optional correlation id. |
 
@@ -90,8 +93,9 @@ it internally.
 | `decode` | `Envelope decode(std::string_view)` | Deserializes from JSON via `glz::read<{.error_on_unknown_keys = false}>`. Rejects input longer than `kMaxEnvelopeBytes` and throws `std::runtime_error` on an oversized or syntactically malformed envelope. **Ignores unknown/extra keys** (forward compatibility) and **does not reject duplicate JSON keys** — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 
 glaze reflects the struct's public members, so the JSON object keys are exactly
-the C++ field names (`kind`, `callId`, `typeId`, `contextKey`, `modelId`,
-`modelType`, `actionType`, `body`, `message`, `session`). `decode` starts from a
+the C++ field names (`kind`, `callId`, `typeId`, `contextKey`, `primary`,
+`shared`, `modelId`, `modelType`, `actionType`, `body`, `message`, `session`,
+`protocolVersion`, `cancelCallId`). `decode` starts from a
 default-constructed `Envelope`, so any key absent from the input JSON keeps its
 default value — omitting fields a given `kind` does not use is expected and does
 not throw. `decode` reads with `error_on_unknown_keys = false`, so an
@@ -104,7 +108,7 @@ turn it into an `"err"` reply rather than propagating it (see
 
 ### Omitted default fields
 
-`Envelope` is a union of all kinds: an `ok` reply uses three of its thirteen
+`Envelope` is a union of all kinds: an `ok` reply uses three of its fourteen
 members and a `deregister` request uses two. glaze writes every member of a
 struct it is handed, so without the omission rule below a minimal `ok` reply
 carrying an 8-byte payload is **255 bytes, 213 of them fields the kind does not
@@ -213,7 +217,7 @@ notice", and a second implementation is the thing that finds the difference.
 
 The failure mode the design has to survive is a member being added or renamed
 without this list following it. Both are compile errors:
-`detail::defaultValuedKeys` `static_assert`s that `Envelope` still has thirteen
+`detail::defaultValuedKeys` `static_assert`s that `Envelope` still has fourteen
 reflected members, and that every name in `detail::kOmittableEnvelopeKeys` is
 one of the reflected keys — a rename would otherwise make glaze report
 `unknown_key` and turn *every* `encode` call into a throw at runtime.
@@ -433,6 +437,112 @@ no version check, `protocolVersion` stays `0` on every envelope.
   `kProtocolVersion` bump and a deprecation window); a client outside it gets a
   clear `"protocol version unsupported"` refusal at connect time instead of a
   confusing failure on the first `execute`.
+
+## Cancelling a call
+
+A client that stops waiting for an `execute` — its deadline passed, its caller
+was stopped, its bridge went away — tells the server with a `"cancel"`, so a
+handler that can stop does, rather than running on for a reply nobody reads.
+
+| `kind` | Direction | Fields used | Reply |
+|---|---|---|---|
+| `"cancel"` | request | `callId` (the cancel's own), `cancelCallId` (the `execute`'s `callId`), `session` | `"ok"` with the cancel's own `callId`, always |
+
+### Negotiated through `"hello"`, not through a version bump
+
+A server that honours `"cancel"` lists it in the `capabilities` array of the
+`ProtocolRange` its `"hello"` reply carries:
+
+```
+{"min":1,"max":1,"capabilities":["cancel"]}
+```
+
+A client sends `"cancel"` only after a `"hello"` reply whose list names it
+(`wire::helloAdvertises(reply, wire::kCapabilityCancel)`). Every other answer
+— a legacy peer's `err "unknown envelope kind: hello"`, an `ok` whose body has
+no `capabilities` key, a client that never negotiated — means it never sends
+one. So a server that predates `"cancel"` never receives one, and keeps working
+exactly as before with a client that knows the kind.
+
+This is a capability, not a `kProtocolVersion` bump, for the reason the
+[Action-evolution policy](#action-evolution-policy) sets the bar where it does:
+nothing is removed or retyped. The new `Envelope` member (`cancelCallId`) and
+the new `ProtocolRange` member (`capabilities`) are both additive, and an
+older decoder that ignores unknown keys reads either message unchanged. A
+version bump would also have refused every client still announcing version
+`1` under the default `{kProtocolVersion, kProtocolVersion}` range, which a
+feature an old client simply does not use gives no reason to do.
+
+### Why the target travels in `cancelCallId`
+
+A `"cancel"` is a request with a reply of its own, and every reply is routed by
+its `callId` (see [Omitted default fields](#omitted-default-fields)). Had the
+target's id travelled in `callId`, the server's `ok` to the cancel would be
+matched by the client against the execute still pending under that id and
+settle it with an empty result. With its own `callId` the cancel's reply is
+routed like any other: a client that files nothing under that id drops it.
+
+`cancelCallId` is payload, not identity, so `encode` omits it at its default
+`0`, like every other addressing field the kind does not use.
+
+### What the server does with it
+
+`RemoteServer` keeps, for each admitted `execute` whose handler returns
+`core::async::Task` and which arrived on a connection scope
+([backend.md](backend.md#connection-scopes)), the run's stop source together
+with what the execute was authorized on: its verified principal, its model and
+action types, its instance and that instance's recorded owner. On a
+`"cancel"`, on the server strand:
+
+1. It stamps the verified principal onto the cancel's session
+   (`stampVerifiedPrincipal`), exactly as for `execute` and `deregister`.
+2. It looks the call up under **the connection the cancel arrived on** and
+   `cancelCallId`. A connection reaches only its own calls: `callId`s are
+   chosen by each client and are not unique across clients.
+3. It requires the cancel's verified principal to equal the execute's, then
+   runs the execute's own gates as the cancel's caller —
+   `authorize(session, modelType, actionType)` and
+   `authorizeInstance(session, modelType, actionType, modelId, owner)`.
+4. Only if all of that holds does it request stop on the run's stop source
+   and forget the call.
+
+Then it replies `ok` with the cancel's `callId` — **the same reply in every
+case**: the call was stopped, the id was never used, the call already
+finished, the call belongs to another connection or another principal, or a
+gate refused. A cancel therefore cannot be used to learn which calls exist or
+whose they are.
+
+The stop is the same one `LimitPolicy::executeTimeout` requests: a Task
+handler unwinds at its next stop-aware `co_await` with
+`core::async::OperationCancelled`, and the call replies `err` with that
+exception's message, which a client that already gave up on the call drops. A
+handler that is not a Task cannot be stopped, so its call is never filed; a
+cancel naming it is a no-op like any other. A call still queued behind another
+on its instance's action gate is stopped before it starts: its handler's token
+is already stopped when it runs.
+
+Two clients send it: `SocketBackend` and `QtWebSocketBackend`, after their
+opt-in `negotiateProtocolVersion` has found the capability — see
+[backend.md](backend.md#cancelling-a-remote-call-on-the-server) for when each
+sends one.
+
+An unscoped message (`ConnectionId` `0`, the two-argument `handle()`) names no
+call: the server files no unscoped call as cancellable, because unscoped
+callers share one id space and could not be told apart.
+
+### Why the principal check, on top of the connection
+
+The connection alone would let one principal stop another's call on a
+connection several principals share — a gateway multiplexing its users onto
+one socket — wherever `authorizeInstance` admits both, as it does for an
+unowned or shared instance. Stamping alone would not close that either: the
+comparison has to be with the principal *the execute* was admitted under,
+which is why it is recorded at admission rather than recomputed. This is the
+shape of the two `deregister` holes the server already closes: a request
+checked against the client's claimed identity, and a connection reaching a
+hold that is not its own. `tests/test_remote_cancel.cpp` pins both directions:
+a cancel from another connection, and a cancel carrying a forged claim on the
+owning connection, each leave the call to complete with its result.
 
 ## Serving action schemas
 
@@ -680,6 +790,7 @@ client.
 | `message` | `std::string` | `""` | `"err"` — free-text error message. |
 | `session` | `::morph::session::Context` | default | `"execute"` — authorization and routing context. |
 | `protocolVersion` | `uint32_t` | `0` | `"hello"` — protocol version the sender speaks. `0` means unspecified/legacy peer; not otherwise inspected. |
+| `cancelCallId` | `uint64_t` | `0` | `"cancel"` — the `callId` of the `execute` to stop. `0` names no call. |
 
 ### Factory functions
 
@@ -693,6 +804,7 @@ client.
 | `makeSchemas` | `Envelope makeSchemas(std::string typeId)` |
 | `makeDeregister` | `Envelope makeDeregister(uint64_t modelId)` |
 | `makeHello` | `Envelope makeHello(uint32_t protocolVersion = kProtocolVersion)` |
+| `makeCancel` | `Envelope makeCancel(uint64_t targetCallId)` |
 | `makeOk` | `Envelope makeOk(uint64_t callId = 0, std::string body = {}, uint64_t modelId = 0)` |
 | `makeErr` | `Envelope makeErr(std::string message, uint64_t callId = 0)` |
 
@@ -700,16 +812,18 @@ client.
 
 | Symbol | Signature / shape | Notes |
 |---|---|---|
-| `ProtocolRange` | `struct { uint32_t min = kProtocolVersion; uint32_t max = kProtocolVersion; }` | A server's supported version range; serialized into a `"hello"` `"ok"` reply's `body`. |
+| `ProtocolRange` | `struct { uint32_t min = kProtocolVersion; uint32_t max = kProtocolVersion; std::vector<std::string> capabilities; }` | A server's supported version range and the optional kinds it honours; serialized into a `"hello"` `"ok"` reply's `body`. |
 | `ProtocolNegotiationResult` | `enum class : uint8_t { Negotiated, LegacyPeer }` | Outcome of `interpretHelloReply`. |
 | `interpretHelloReply` | `ProtocolNegotiationResult interpretHelloReply(const Envelope& reply)` | Throws `std::runtime_error` if `reply` is an `"err"` other than `"unknown envelope kind: hello"`. |
+| `helloAdvertises` | `bool helloAdvertises(const Envelope& reply, std::string_view capability)` | `true` only for an `"ok"` whose `ProtocolRange` lists `capability`; never throws on a body it cannot read. |
+| `kCapabilityCancel` | `std::string_view` = `"cancel"` | The capability a server lists when it honours `"cancel"`. |
 
 ### Serialization
 
 | Symbol | Signature | Throws |
 |---|---|---|
 | `encode` | `std::string encode(const Envelope&)` | `std::runtime_error` on serialisation failure |
-| `detail::kOmittableEnvelopeKeys` | `constexpr std::array<std::string_view, 12>` | — the envelope keys `encode` leaves out when the member is at its default (everything but `kind`). |
+| `detail::kOmittableEnvelopeKeys` | `constexpr std::array<std::string_view, 12>` | — the envelope keys `encode` leaves out when the member is at its default (everything but `kind` and `callId`). |
 | `detail::defaultValuedKeys` | `std::span<const std::string_view> defaultValuedKeys(const Envelope&, std::array<std::string_view, 12>&)` | — which of those keys this envelope omits; writes into the caller's array so the per-message path allocates nothing. |
 | `detail::isDefaultSession` | `bool isDefaultSession(const ::morph::session::Context&)` | — whether the whole `session` object can be left out. |
 | `decode` | `Envelope decode(std::string_view)` | `std::runtime_error` if the input exceeds `kMaxEnvelopeBytes` or is a syntactically malformed envelope. Unknown/extra keys are **ignored** (`error_on_unknown_keys = false`); duplicate keys do **not** throw (last-wins) — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |

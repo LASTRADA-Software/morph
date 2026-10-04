@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "../session/session.hpp"
 #include "profiler.hpp"
@@ -74,6 +75,12 @@ inline constexpr std::uint32_t kProtocolVersion = 1;
 ///                   see `makeHello()` and `interpretHelloReply()`. A peer
 ///                   predating negotiation answers `err "unknown envelope kind:
 ///                   hello"`, which is how a legacy server is detected.
+/// - `"cancel"`    — client asks the server to stop one of its own in-flight
+///                   `execute` calls. Uses `cancelCallId` (the execute's
+///                   `callId`) and `session`; its own `callId` correlates the
+///                   `ok` reply, which is the same whatever became of the call.
+///                   Sent only to a server whose `hello` reply advertised
+///                   `kCapabilityCancel`; see `makeCancel()`.
 struct Envelope {
     /// @brief Discriminator — see class docstring for valid values.
     std::string kind;
@@ -143,7 +150,24 @@ struct Envelope {
     /// false`). Populated by `makeHello()` on `"hello"`; not otherwise
     /// inspected by other `kind`s today.
     std::uint32_t protocolVersion = 0;
+
+    /// @brief The `callId` of the `execute` a `"cancel"` asks the server to stop.
+    ///
+    /// Carried in its own field rather than in `callId` because a `cancel` is
+    /// a request with a reply of its own: were the target's id in `callId`, the
+    /// server's `ok` to the cancel would be matched by the client against the
+    /// still-pending `execute` and settle it with an empty result. `0` names no
+    /// call. Ignored on every other kind.
+    std::uint64_t cancelCallId = 0;
 };
+
+/// @brief The capability a server's `"hello"` reply lists when it honours
+///        `"cancel"` envelopes.
+///
+/// A client sends `"cancel"` only to a server that advertised this; a server
+/// that predates it never sees one. See "Cancelling a call" in
+/// docs/spec/core/wire.md.
+inline constexpr std::string_view kCapabilityCancel = "cancel";
 
 /// @brief Inclusive protocol-version range a server advertises in reply to
 ///        `"hello"`.
@@ -156,6 +180,13 @@ struct ProtocolRange {
 
     /// @brief Newest protocol version the server accepts.
     std::uint32_t max = kProtocolVersion;
+
+    /// @brief Optional envelope kinds the server honours, beyond those every
+    ///        server of this protocol version does (e.g. `kCapabilityCancel`).
+    ///
+    /// Additive: a reply from a server that predates the list has no such key,
+    /// and decodes to an empty list — "nothing optional is supported".
+    std::vector<std::string> capabilities;
 };
 
 /// @brief Builds a `register` envelope.
@@ -262,6 +293,21 @@ inline Envelope makeSchemas(std::string typeId) {
     Envelope env;
     env.kind = "schemas";
     env.typeId = std::move(typeId);
+    return env;
+}
+
+/// @brief Builds a `cancel` envelope asking the server to stop the in-flight
+///        `execute` filed under @p targetCallId on the sender's connection.
+///
+/// The caller still assigns the envelope's own `callId` and `session` — the
+/// same session the `execute` carried, since the server honours a cancel only
+/// from the principal and connection that made the call.
+/// @param targetCallId `callId` of the `execute` to stop.
+/// @return The envelope, with `cancelCallId` set.
+inline Envelope makeCancel(uint64_t targetCallId) {
+    Envelope env;
+    env.kind = "cancel";
+    env.cancelCallId = targetCallId;
     return env;
 }
 
@@ -398,9 +444,9 @@ struct EscapingWriteOpts : glz::opts {
 /// The general form of the rule, for anyone adding a member: **elide payload,
 /// never elide identity.** If a peer has to know the field's value to decide
 /// where the message goes, it is written even at its default.
-inline constexpr std::array<std::string_view, 11> kOmittableEnvelopeKeys{
-    "typeId",     "contextKey", "primary", "shared",  "modelId",        "modelType",
-    "actionType", "body",       "message", "session", "protocolVersion"};
+inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
+    "typeId",     "contextKey", "primary", "shared",  "modelId",         "modelType",
+    "actionType", "body",       "message", "session", "protocolVersion", "cancelCallId"};
 
 /// @brief Whether a session context carries nothing worth sending.
 ///
@@ -431,7 +477,7 @@ inline constexpr std::array<std::string_view, 11> kOmittableEnvelopeKeys{
     // exclude-write reports `unknown_key` for one that is not, which would turn
     // a member rename into a throw from *every* `encode` call at runtime. This
     // makes it a compile error instead.
-    static_assert(glz::reflect<Envelope>::size == 13,
+    static_assert(glz::reflect<Envelope>::size == 14,
                   "Envelope gained or lost a member: decide whether it is omittable when default "
                   "and update kOmittableEnvelopeKeys. A new member left off that list is always "
                   "written, which is merely the old behaviour; one added with a wrong spelling is "
@@ -481,6 +527,9 @@ inline constexpr std::array<std::string_view, 11> kOmittableEnvelopeKeys{
     }
     if (env.protocolVersion == 0) {
         omit("protocolVersion");
+    }
+    if (env.cancelCallId == 0) {
+        omit("cancelCallId");
     }
     return std::span<const std::string_view>{out.data(), count};
 }
@@ -740,6 +789,29 @@ inline ProtocolNegotiationResult interpretHelloReply(const Envelope& reply) {
     }
     throw std::runtime_error("protocol negotiation failed: " +
                              (reply.message.empty() ? std::string{"malformed reply"} : reply.message));
+}
+
+/// @brief Whether a reply to `"hello"` advertises @p capability.
+///
+/// Reads the `ProtocolRange` in an `"ok"` reply's `body`, ignoring keys it does
+/// not know. Anything else — an `"err"`, a legacy peer's refusal, a body that
+/// does not parse, a server that predates the capability list — advertises
+/// nothing, so a client falls back to not using the capability rather than to
+/// sending a kind the server may not understand.
+/// @param reply      Decoded reply to a `"hello"` envelope.
+/// @param capability Capability to look for, e.g. `kCapabilityCancel`.
+/// @return `true` only when the reply is `"ok"` and its capability list names
+///         @p capability.
+[[nodiscard]] inline bool helloAdvertises(const Envelope& reply, std::string_view capability) {
+    if (reply.kind != "ok") {
+        return false;
+    }
+    ProtocolRange range;
+    static constexpr glz::opts kLenient{.null_terminated = false, .error_on_unknown_keys = false};
+    if (glz::read<kLenient>(range, reply.body)) {
+        return false;
+    }
+    return std::ranges::find(range.capabilities, capability) != range.capabilities.end();
 }
 
 }  // namespace morph::wire

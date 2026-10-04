@@ -412,6 +412,15 @@ method:
   and the instance is left intact. The stamp is what makes the ownership
   comparison sound: without it, a caller could write the owner's name into
   `principal` and release the owner's instance with any token, or none.
+- **On `cancel`** — `RemoteServer` stamps the verified principal onto the
+  cancel's session and looks the target `execute` up only among the calls
+  **of the connection the cancel arrived on**. It then requires the cancel's
+  verified principal to equal the one the `execute` was admitted under, and
+  runs the execute's own `authorize(session, modelType, actionType)` and
+  `authorizeInstance(session, modelType, actionType, modelId, ownerPrincipal)`
+  as the cancel's caller. Only then is the call stopped. Every refusal answers
+  the same `ok` an unknown or finished call gets, so a cancel cannot probe for
+  other callers' calls. See [wire.md](core/wire.md#cancelling-a-call).
 
 ### Backward compatibility
 

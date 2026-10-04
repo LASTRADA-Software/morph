@@ -8,6 +8,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
+#include <core/async/AsyncQueue.hpp>
+#include <core/async/Cancellation.hpp>
+#include <core/async/StopToken.hpp>
+#include <core/async/Task.hpp>
+#include <core/async/ThreadPoolExecutor.hpp>
 #include <cstdint>
 #include <functional>
 #include <future>
@@ -29,6 +34,7 @@
 #include <morph/net/socket_server.hpp>
 #include <morph/session/session.hpp>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -2429,4 +2435,204 @@ TEST_CASE("SocketBackend: a synchronous verb called on the loop's own thread fai
         }
     });
     CHECK_THAT(message, Catch::Matchers::ContainsSubstring("cannot wait on the I/O loop's own thread"));
+}
+
+// ── Cancelling a call on the server ─────────────────────────────────────────
+//
+// A client that gives up on a call -- its deadline passed, its bridge went
+// away -- sends `cancel` to a server that advertised it, so the server's Task
+// handler is stopped rather than left running for a reply nobody reads.
+
+struct ScPark {
+    int tag = 0;
+};
+
+/// What the server-side handler reports back, read by the test thread.
+struct ScParkProbe {
+    std::atomic<int> started{0};
+    std::atomic<int> stopped{0};
+    std::atomic<int> finished{0};
+    std::unique_ptr<core::async::AsyncQueue<int>> queue;
+};
+
+inline ScParkProbe& scParkProbe() {
+    static ScParkProbe instance;
+    return instance;
+}
+
+/// A Task handler that blocks until an item arrives, or until it is stopped.
+struct ScParkModel {
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+    core::async::Task<int> execute(ScPark action) {
+        scParkProbe().started.fetch_add(1);
+        try {
+            auto const item = co_await scParkProbe().queue->pop();
+            scParkProbe().finished.fetch_add(1);
+            co_return item.value_or(0) + action.tag;
+        } catch (const core::async::OperationCancelled&) {
+            scParkProbe().stopped.fetch_add(1);
+            scParkProbe().finished.fetch_add(1);
+            throw;
+        }
+    }
+};
+
+BRIDGE_REGISTER_MODEL(ScParkModel, "ScParkModel")
+BRIDGE_REGISTER_ACTION(ScParkModel, ScPark, "ScPark")
+
+namespace {
+
+/// A real SocketServer over a RemoteServer, and the queue the parking handler
+/// waits on. Unparks a handler a failed case leaves behind before the queue goes.
+struct ParkServer {
+    core::async::ThreadPoolExecutor foreign{1};
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{*server, 0};
+
+    ParkServer() {
+        scParkProbe().started = 0;
+        scParkProbe().stopped = 0;
+        scParkProbe().finished = 0;
+        scParkProbe().queue =
+            std::make_unique<core::async::AsyncQueue<int>>(foreign, core::async::AsyncQueueOptions{});
+        REQUIRE(wsServer.listen());
+    }
+    ParkServer(const ParkServer&) = delete;
+    ParkServer& operator=(const ParkServer&) = delete;
+    ParkServer(ParkServer&&) = delete;
+    ParkServer& operator=(ParkServer&&) = delete;
+    // NOLINTNEXTLINE(bugprone-exception-escape): a teardown failure here has no recovery; terminating is the outcome.
+    ~ParkServer() {
+        scParkProbe().queue->close();
+        static_cast<void>(
+            morph::testing::waitUntil([] { return scParkProbe().finished.load() == scParkProbe().started.load(); }));
+        wsServer.close();
+        scParkProbe().queue.reset();
+    }
+
+    [[nodiscard]] std::string url() const {
+        return "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
+    }
+};
+
+/// Negotiates on @p backend, pumping @p owner for the answer.
+morph::wire::ProtocolNegotiationResult negotiate(morph::net::SocketBackend& backend,
+                                                 morph::exec::MainThreadExecutor& owner) {
+    std::optional<morph::wire::ProtocolNegotiationResult> result;
+    auto completion = backend.negotiateProtocolVersion(owner);
+    std::move(completion)
+        .then([&](morph::wire::ProtocolNegotiationResult value) { result = value; })
+        .onError([](const std::exception_ptr&) {});
+    spinUntil(owner, [&] { return result.has_value(); });
+    REQUIRE(result.has_value());
+    return *result;
+}
+
+}  // namespace
+
+TEST_CASE("SocketBackend: a client deadline stops the server's Task handler", "[net][socket_backend][cancel]") {
+    ParkServer const park;
+    auto backendPtr = std::make_unique<morph::net::SocketBackend>(park.url());
+    REQUIRE(backendPtr->waitForConnected());
+    morph::exec::MainThreadExecutor owner;
+    REQUIRE(negotiate(*backendPtr, owner) == morph::wire::ProtocolNegotiationResult::Negotiated);
+    morph::bridge::Bridge bridge{std::move(backendPtr), owner};
+    bridge.setExecuteDeadline(std::chrono::milliseconds{100});
+    morph::bridge::BridgeHandler<ScParkModel> handler{bridge, &owner};
+
+    std::atomic<bool> timedOut{false};
+    handler.execute(ScPark{}).then([](int) {}).onError([&](const std::exception_ptr& error) {
+        try {
+            std::rethrow_exception(error);
+        } catch (const morph::backend::ClientTimeoutError&) {
+            timedOut = true;
+        } catch (...) {  // NOLINT(bugprone-empty-catch): any other failure leaves timedOut false
+        }
+    });
+
+    // Nothing but the client's cancel can end the server's handler: its queue
+    // is never pushed to.
+    spinUntil(owner, [&] { return timedOut.load() && scParkProbe().stopped.load() == 1; });
+    CHECK(timedOut.load());
+    CHECK(scParkProbe().stopped.load() == 1);
+}
+
+TEST_CASE("SocketBackend: destroying the bridge cancels its calls on the server", "[net][socket_backend][cancel]") {
+    ParkServer const park;
+    auto backendPtr = std::make_unique<morph::net::SocketBackend>(park.url());
+    REQUIRE(backendPtr->waitForConnected());
+    morph::exec::MainThreadExecutor owner;
+    REQUIRE(negotiate(*backendPtr, owner) == morph::wire::ProtocolNegotiationResult::Negotiated);
+    {
+        morph::bridge::Bridge bridge{std::move(backendPtr), owner};
+        morph::bridge::BridgeHandler<ScParkModel> handler{bridge, &owner};
+        handler.execute(ScPark{}).then([](int) {}).onError([](const std::exception_ptr&) {});
+        spinUntil(owner, [] { return scParkProbe().started.load() == 1; });
+        REQUIRE(scParkProbe().started.load() == 1);
+    }
+    // ~Bridge calls cancelPending, which sends the cancel from the loop before
+    // the backend's own close.
+    spinUntil([] { return scParkProbe().stopped.load() == 1; });
+    CHECK(scParkProbe().stopped.load() == 1);
+}
+
+TEST_CASE("SocketBackend: without a negotiated cancel, a deadline leaves the server's handler running",
+          "[net][socket_backend][cancel]") {
+    ParkServer const park;
+    auto backendPtr = std::make_unique<morph::net::SocketBackend>(park.url());
+    REQUIRE(backendPtr->waitForConnected());
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::move(backendPtr), owner};
+    bridge.setExecuteDeadline(std::chrono::milliseconds{50});
+    morph::bridge::BridgeHandler<ScParkModel> handler{bridge, &owner};
+
+    std::atomic<bool> failed{false};
+    handler.execute(ScPark{}).then([](int) {}).onError([&](const std::exception_ptr&) { failed = true; });
+    spinUntil(owner, [&] { return failed.load(); });
+    REQUIRE(failed.load());
+    // The deadline has fired client-side; the server's handler is still
+    // parked, and ends with the item rather than a stop.
+    spinUntil(owner, [] { return scParkProbe().started.load() == 1; });
+    static_cast<void>(scParkProbe().queue->push(41));
+    spinUntil([] { return scParkProbe().finished.load() == 1; });
+    CHECK(scParkProbe().finished.load() == 1);
+    CHECK(scParkProbe().stopped.load() == 0);
+}
+
+TEST_CASE("SocketBackend: never sends cancel to a server that did not advertise it", "[net][socket_backend][cancel]") {
+    FakeWsServer fake;
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(fake.port()))};
+    fake.acceptAndHandshake();
+    REQUIRE(backend.waitForConnected());
+    morph::exec::MainThreadExecutor owner;
+
+    // A legacy server: it does not know "hello".
+    std::optional<morph::wire::ProtocolNegotiationResult> result;
+    backend.negotiateProtocolVersion(owner)
+        .then([&](morph::wire::ProtocolNegotiationResult value) { result = value; })
+        .onError([](const std::exception_ptr&) {});
+    auto const hello = fake.receiveEnvelope();
+    REQUIRE(hello.kind == "hello");
+    fake.sendFrame(morph::net::detail::WsOpcode::kText,
+                   morph::wire::encode(morph::wire::makeErr("unknown envelope kind: hello", hello.callId)));
+    spinUntil(owner, [&] { return result.has_value(); });
+    REQUIRE(result == morph::wire::ProtocolNegotiationResult::LegacyPeer);
+
+    // A stoppable execute, stopped, then swept by cancelPending: either would
+    // send a cancel to a server that advertised one.
+    auto const stop = std::make_shared<core::async::StopSource>();
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "ScParkModel";
+    call.actionTypeId = "ScPark";
+    call.action = std::make_shared<int>(0);
+    call.serializeAction = [](const void*) { return std::string{"{}"}; };
+    call.stopSource = stop;
+    auto const completion = backend.execute(morph::exec::detail::ModelId{7}, std::move(call), &owner);
+    CHECK(fake.receiveEnvelope().kind == "execute");
+    static_cast<void>(stop->request_stop());
+    backend.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled"}));
+    // A marker the backend sends after both: the next frame the server reads.
+    backend.deregisterModel(morph::exec::detail::ModelId{7});
+    CHECK(fake.receiveEnvelope().kind == "deregister");
 }

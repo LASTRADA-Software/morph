@@ -5,6 +5,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <core/async/StopToken.hpp>
 #include <core/async/Task.hpp>
 #include <core/net/EventLoop.hpp>
 #include <core/net/IConnector.hpp>
@@ -316,6 +317,32 @@ public:
         return keys;
     }
 
+    /// @brief Sends a `"hello"` envelope and classifies the server's reply.
+    ///
+    /// Opt-in, as on the other backends: a backend that never calls it sends
+    /// no `"hello"`. Calling it also learns whether the server honours
+    /// `"cancel"` (`wire::kCapabilityCancel`), which is the only way this
+    /// backend ever sends one; and it re-sends `"hello"` on every reconnect,
+    /// since a new connection may reach a different server.
+    /// @param replyExec Executor the answer is delivered on. Borrowed: it must
+    ///        outlive the returned `Completion`.
+    /// @return A `Completion` resolved with `Negotiated` or `LegacyPeer`;
+    ///         rejected with a `std::runtime_error` if the server refuses the
+    ///         version, and with `backend::DisconnectedError` if the socket is
+    ///         down or drops before the reply.
+    [[nodiscard]] ::morph::async::Completion<::morph::wire::ProtocolNegotiationResult> negotiateProtocolVersion(
+        ::morph::exec::IExecutor& replyExec MORPH_LIFETIMEBOUND) {
+        using Result = ::morph::wire::ProtocolNegotiationResult;
+        auto const state = std::make_shared<::morph::async::detail::CompletionState<Result>>();
+        ::morph::async::Completion<Result> comp{state, &replyExec};
+        _loop->post([core = _core, state] {
+            core->note("SocketBackend::negotiateProtocolVersion");
+            core->negotiate = true;
+            core->fileHello(state);
+        });
+        return comp;
+    }
+
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
     /// Posted to the loop, which gives it a real, non-zero `callId` drawn from
@@ -364,8 +391,14 @@ public:
         env.body = call.serializeBody();
         env.session = std::move(call.session);
 
-        _loop->post([core = _core, env,
-                     pending = PendingExecute{.state = compState, .deserialize = call.deserializeResult}]() mutable {
+        PendingExecute pending{.state = compState, .deserialize = call.deserializeResult};
+        if (call.stopSource) {
+            // Kept for the cancel a stop sends: the server honours it only
+            // under the principal the execute was admitted with.
+            pending.stop = call.stopSource;
+            pending.session = env.session;
+        }
+        _loop->post([core = _core, env, pending = std::move(pending)] mutable {
             core->fileExecute(std::move(env), std::move(pending));
         });
         return comp;
@@ -380,13 +413,15 @@ public:
     /// runs posts in order. Covers both in-flight tables: the `execute` calls
     /// and the `bindModel`/`promoteModel` control calls. A bind left out of
     /// this sweep would hang forever on a disconnect, since its reply can now
-    /// only arrive on a connection that is gone.
+    /// only arrive on a connection that is gone. When the server advertised
+    /// `"cancel"`, each abandoned `execute` is also cancelled on the server,
+    /// from the loop, behind whatever the loop had queued before.
     /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
         _loop->post([core = _core, exc] {
             ::morph::exec::detail::noteOwner("SocketBackend::cancelPending", core->loop.loop(),
                                              core->loop.runningHere());
-            core->cancelAll(exc);
+            core->cancelAll(exc, CancelOnServer::Yes);
         });
     }
 
@@ -485,9 +520,43 @@ private:
         return std::move(*value);
     }
 
+    struct Core;
+
+    /// Whether settling the pending calls also tells the server to stop them.
+    enum class CancelOnServer : std::uint8_t { No, Yes };
+
+    /// The stop callback a stoppable execute registers: hands the cancel to
+    /// the loop, which owns the socket and the pending table. Runs on whichever
+    /// thread requested the stop, so it only posts.
+    struct CancelOnStop {
+        std::weak_ptr<Core> core;
+        ::morph::exec::IoLoop* loop{nullptr};
+        std::uint64_t callId{0};
+        void operator()() const noexcept {
+            try {
+                loop->post([weak = core, target = callId] {
+                    if (auto const live = weak.lock()) {
+                        live->requestCancel(target);
+                    }
+                });
+            } catch (...) {  // NOLINT(bugprone-empty-catch): a stop callback must not throw
+                // The loop could not take the task: the server is not told,
+                // and the call runs to its end there, as without a cancel.
+            }
+        }
+    };
+
     struct PendingExecute {
         std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
         std::shared_ptr<void> (*deserialize)(std::string_view json){nullptr};
+        /// The call's stop source, or null for a call nothing can stop.
+        std::shared_ptr<::core::async::StopSource> stop;
+        /// The execute's session, for the cancel; empty without `stop`.
+        ::morph::session::Context session;
+        /// Registered on `stop` once the call has its id; deregistered when the
+        /// entry goes, so a stop after the reply sends nothing. Shared, not
+        /// unique, because the entry travels in a copyable loop task.
+        std::shared_ptr<::core::async::StopCallback<CancelOnStop>> watch;
     };
 
     /// @brief One in-flight control call issued through `bindModel`/`promoteModel`.
@@ -510,6 +579,12 @@ private:
         /// @brief State of a call answered with the reply's body
         ///        (`instances`), or null.
         std::shared_ptr<::morph::async::detail::CompletionState<std::string>> body;
+        /// @brief Whether this is a `"hello"`, whose reply says whether the
+        ///        server honours `"cancel"`.
+        bool hello = false;
+        /// @brief State of a `negotiateProtocolVersion` call, or null — null
+        ///        for the `"hello"` a reconnect re-sends.
+        std::shared_ptr<::morph::async::detail::CompletionState<::morph::wire::ProtocolNegotiationResult>> negotiation;
 
         /// @brief Rejects whichever state this call settles.
         /// @param failure The failure.
@@ -519,6 +594,9 @@ private:
             }
             if (body) {
                 body->setException(failure);
+            }
+            if (negotiation) {
+                negotiation->setException(failure);
             }
         }
     };
@@ -548,6 +626,18 @@ private:
     /// @param pending Entry taken out of the control table.
     /// @param reply   Decoded reply carrying the same `callId`.
     static void settleControl(const PendingControl& pending, const ::morph::wire::Envelope& reply) {
+        if (pending.hello) {
+            // A legacy peer's refusal is an answer, not a failure: classified,
+            // never prefixed with "hello failed".
+            if (pending.negotiation) {
+                try {
+                    pending.negotiation->setValue(::morph::wire::interpretHelloReply(reply));
+                } catch (...) {
+                    pending.negotiation->setException(std::current_exception());
+                }
+            }
+            return;
+        }
         if (reply.kind != "ok") {
             pending.reject(std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + reply.message)));
             return;
@@ -613,10 +703,68 @@ private:
                 pending.state->setException(std::current_exception());
                 return;
             }
+            auto const stop = pending.stop;
             executes.insert(callId, std::move(pending));
             // A refused frame is left filed: the connection is closing, and
             // the disconnect that follows sweeps it with `DisconnectedError`.
             static_cast<void>(send(std::move(frame)));
+            if (stop) {
+                // After the frame is queued, so a cancel never precedes its
+                // execute on the wire. A stop already requested runs the
+                // callback here, which posts the cancel behind this task.
+                auto watch = std::make_shared<::core::async::StopCallback<CancelOnStop>>(
+                    stop->get_token(), CancelOnStop{.core = weak_from_this(), .loop = &loop, .callId = callId});
+                if (auto entry = executes.take(callId)) {
+                    entry->watch = std::move(watch);
+                    executes.insert(callId, std::move(*entry));
+                }
+            }
+        }
+
+        /// The stop of the call filed under @p callId was requested: tells the
+        /// server, if the call is still waiting for its reply and the server
+        /// advertised `"cancel"`. On the loop.
+        void requestCancel(std::uint64_t callId) {
+            note("SocketBackend::requestCancel");
+            if (!cancelAdvertised) {
+                return;
+            }
+            // Taken and put back: the entry stays pending, its reply still
+            // settles it, and this is the table's one way to read an entry.
+            auto entry = executes.take(callId);
+            if (!entry) {
+                return;
+            }
+            sendCancel(callId, entry->stop ? entry->session : session);
+            executes.insert(callId, std::move(*entry));
+        }
+
+        /// Writes a fire-and-forget `cancel` for @p target. Its reply is
+        /// filed nowhere, so the router drops it. On the loop.
+        void sendCancel(std::uint64_t target, const ::morph::session::Context& callerSession) {
+            auto env = ::morph::wire::makeCancel(target);
+            env.callId = executes.nextCallId();
+            env.session = callerSession;
+            try {
+                static_cast<void>(send(::morph::net::detail::encodeWsFrame(
+                    ::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env), /*mask=*/true)));
+            } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
+                // Best effort, like a deregister: without the cancel the
+                // server's handler runs to its end, as it did before cancels.
+            }
+        }
+
+        /// Files a `"hello"`, settling @p negotiation (null for a reconnect's
+        /// re-send) from its reply. On the loop.
+        void fileHello(
+            std::shared_ptr<::morph::async::detail::CompletionState<::morph::wire::ProtocolNegotiationResult>>
+                negotiation) {
+            fileControl(::morph::wire::makeHello(), PendingControl{.state = nullptr,
+                                                                   .what = "hello",
+                                                                   .echo = std::nullopt,
+                                                                   .body = nullptr,
+                                                                   .hello = true,
+                                                                   .negotiation = std::move(negotiation)});
         }
 
         /// The control-call counterpart of `fileExecute`.
@@ -672,10 +820,16 @@ private:
 
         /// Settles every pending call, of both kinds, with @p exc. The tables
         /// are emptied first, so a settle that re-enters the backend files
-        /// into empty tables.
-        void cancelAll(const std::exception_ptr& exc) {
+        /// into empty tables. With @p onServer, each abandoned execute is
+        /// also cancelled on the server, when it advertised `"cancel"`.
+        void cancelAll(const std::exception_ptr& exc, CancelOnServer onServer = CancelOnServer::No) {
             auto drained = executes.drain();
             auto drainedControl = controls.drain();
+            if (onServer == CancelOnServer::Yes && cancelAdvertised) {
+                for (auto const& [callId, pending] : drained) {
+                    sendCancel(callId, pending.stop ? pending.session : session);
+                }
+            }
             for (auto& entry : drained) {
                 if (entry.second.state) {
                     entry.second.state->setException(exc);
@@ -694,6 +848,11 @@ private:
             for (auto const& waiter : std::exchange(connectWaiters, {})) {
                 waiter->set_value();
             }
+            if (negotiate) {
+                // A new connection may reach another server: learn again
+                // whether it honours `"cancel"`.
+                fileHello(nullptr);
+            }
             if (isReconnect && reconnectHandler && reconnectExec != nullptr) {
                 // Posted, never run here: the handler re-registers through
                 // `bindModel`, whose replies this loop delivers.
@@ -703,6 +862,7 @@ private:
 
         void onDisconnected() {
             connected.store(false);
+            cancelAdvertised = false;
             if (conn) {
                 ::morph::net::detail::closeAfterFlush(conn);
                 conn.reset();
@@ -738,7 +898,13 @@ private:
             connected.store(false);
             static_cast<void>(loop.loop().cancelTimer(backoffTimer));
             if (conn) {
-                ::morph::net::detail::closeConnection(*conn);
+                // After the frames already queued are written, not instead of
+                // them: the owner's `cancelPending` runs just before this
+                // close, and the cancels and deregisters it queued are what
+                // tell the server to stop work nobody will read. The read flow
+                // sees `closed` and stops dispatching meanwhile; the write is
+                // still bounded by `sendTimeout`.
+                ::morph::net::detail::closeAfterFlush(conn);
                 conn.reset();
             }
             connectWaiters.clear();
@@ -769,6 +935,9 @@ private:
                 // Not an execute: it may be a control reply for a `bindModel`/
                 // `promoteModel` in flight, which shares this id space.
                 if (auto control = controls.take(env.callId)) {
+                    if (control->hello) {
+                        cancelAdvertised = ::morph::wire::helloAdvertises(env, ::morph::wire::kCapabilityCancel);
+                    }
                     settleControl(*control, env);
                 }
                 return;  // otherwise a late/cancelled reply, dropped silently
@@ -922,6 +1091,11 @@ private:
         ::morph::exec::IExecutor* reconnectExec{nullptr};
         bool everConnected{false};
         bool closed{false};
+        /// Set by `negotiateProtocolVersion`: re-send `"hello"` on each connect.
+        bool negotiate{false};
+        /// Whether this connection's server advertised `"cancel"`. Cleared on
+        /// every disconnect, learned again from the next `"hello"` reply.
+        bool cancelAdvertised{false};
         std::chrono::milliseconds reconnectDelay;
         ::core::net::TimerId backoffTimer{};
         std::shared_ptr<::morph::net::detail::LoopConnection> conn;

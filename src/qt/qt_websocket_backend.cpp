@@ -35,12 +35,20 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
 #endif
     _reconnectTimer.setSingleShot(true);
     QObject::connect(&_reconnectTimer, &QTimer::timeout, [this] { attemptReconnect(); });
+    _cancelWake.setSingleShot(true);
+    _cancelWake.setInterval(0);
+    QObject::connect(&_cancelWake, &QTimer::timeout, [this] { drainCancels(); });
 
     QObject::connect(&_socket, &QWebSocket::connected, [this]() {
         const bool isReconnect = _everConnected;
         _connected = true;
         _everConnected = true;
         _currentReconnectDelay = _cfg.initialReconnectDelay;
+        if (_negotiate) {
+            // A new connection may reach another server: learn again whether
+            // it honours "cancel".
+            resendHello();
+        }
         // Fires on every successful connect, first included -- the general
         // "transport is up" notification a status indicator wants.
         if (_connectHandler) {
@@ -59,6 +67,7 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
     });
     QObject::connect(&_socket, &QWebSocket::disconnected, [this]() {
         _connected = false;
+        _cancelAdvertised = false;
         // Fires before reconnect scheduling below, so an observer sees the
         // disconnected state even when a retry follows immediately.
         if (_disconnectHandler) {
@@ -77,8 +86,13 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
 QtWebSocketBackend::~QtWebSocketBackend() {  // NOLINT(modernize-use-equals-default)
     _shuttingDown = true;
     _reconnectTimer.stop();
+    _cancelWake.stop();
     // Disconnect all signals first so no slot tries to access our members after they destruct.
     _socket.disconnect();
+    // Hands the frames already queued -- the cancels the owner's cancelPending
+    // sent just before -- to the TCP socket before the abort discards them.
+    // Never blocks: what the kernel will not take now is lost, as before.
+    _socket.flush();
     // Abort cleanly: sends TCP RST without attempting close handshake.
     _socket.abort();
     // Safety net: if the owner did not run cancelPending() first (e.g. backend used
@@ -214,10 +228,13 @@ void QtWebSocketBackend::flushQueuedRegistrations() {
         promise.reject(std::make_exception_ptr(std::runtime_error{"protocol negotiation failed: disconnected"}));
         return std::move(completion);
     }
+    _negotiate = true;
     auto shared = std::make_shared<::morph::async::Completion<Result>::Promise>(std::move(promise));
     sendControl(::morph::wire::makeHello(),
                 PendingControl{.reply =
-                                   [shared](const ::morph::wire::Envelope& env) {
+                                   [this, shared](const ::morph::wire::Envelope& env) {
+                                       _cancelAdvertised =
+                                           ::morph::wire::helloAdvertises(env, ::morph::wire::kCapabilityCancel);
                                        try {
                                            shared->resolve(::morph::wire::interpretHelloReply(env));
                                        } catch (...) {
@@ -226,6 +243,46 @@ void QtWebSocketBackend::flushQueuedRegistrations() {
                                    },
                                .fail = [shared](const std::exception_ptr& exc) { shared->reject(exc); }});
     return std::move(completion);
+}
+
+void QtWebSocketBackend::resendHello() {
+    sendControl(::morph::wire::makeHello(), PendingControl{.reply =
+                                                               [this](const ::morph::wire::Envelope& env) {
+                                                                   _cancelAdvertised = ::morph::wire::helloAdvertises(
+                                                                       env, ::morph::wire::kCapabilityCancel);
+                                                               },
+                                                           .fail = [](const std::exception_ptr&) {}});
+}
+
+void QtWebSocketBackend::CancelOnStop::operator()() const noexcept {
+    requested->store(true, std::memory_order_release);
+    // The member-name overload, not a functor: it allocates nothing, and the
+    // timer's `start` slot runs on the timer's own thread, the socket's.
+    static_cast<void>(QMetaObject::invokeMethod(wake, "start", Qt::QueuedConnection));
+}
+
+void QtWebSocketBackend::drainCancels() {
+    checkThread("QtWebSocketBackend::drainCancels");
+    if (_shuttingDown || !_connected || !_cancelAdvertised) {
+        return;
+    }
+    for (auto const& [callId, pending] : _pending) {
+        if (pending.stopRequested && pending.stopRequested->exchange(false, std::memory_order_acquire)) {
+            sendCancel(callId, pending.session);
+        }
+    }
+}
+
+void QtWebSocketBackend::sendCancel(uint64_t target, const ::morph::session::Context& callerSession) {
+    auto env = ::morph::wire::makeCancel(target);
+    env.callId = ++_nextCallId;
+    env.session = callerSession;
+    try {
+        _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
+        // Best effort, like a deregister: without the cancel the server's
+        // handler runs to its end, as it did before cancels.
+    }
 }
 
 void QtWebSocketBackend::checkThread(char const* site) const noexcept {
@@ -330,9 +387,28 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     env.session = std::move(call.session);
 
     checkThread("QtWebSocketBackend::execute");
-    _pending[callId] = PendingExecute{.state = compState, .deserialize = call.deserializeResult, .cbExec = cbExec};
+    auto& pending = _pending[callId];
+    pending = PendingExecute{.state = compState, .deserialize = call.deserializeResult, .cbExec = cbExec};
+    if (call.stopSource) {
+        // Kept for the cancel a stop sends: the server honours it only under
+        // the principal the execute was admitted with.
+        pending.stop = call.stopSource;
+        pending.session = env.session;
+    }
+    auto const stop = pending.stop;
 
     _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    if (stop) {
+        // After the frame is sent, so a cancel never precedes its execute. A
+        // stop already requested runs the callback here; it queues the drain.
+        auto requested = std::make_shared<std::atomic<bool>>(false);
+        auto watch = std::make_shared<::core::async::StopCallback<CancelOnStop>>(
+            stop->get_token(), CancelOnStop{.requested = requested, .wake = &_cancelWake});
+        if (auto const iter = _pending.find(callId); iter != _pending.end()) {
+            iter->second.stopRequested = std::move(requested);
+            iter->second.watch = std::move(watch);
+        }
+    }
     return comp;
 }
 
@@ -343,6 +419,13 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     auto drainedExecutes = std::exchange(_pending, {});
     auto drainedControl = std::exchange(_pendingControl, {});
     auto drainedQueue = std::exchange(_queuedRegistrations, {});
+    // Each abandoned execute is cancelled on the server while the socket is
+    // up. Not from the destructor: its socket is already aborted.
+    if (_connected && _cancelAdvertised && !_shuttingDown) {
+        for (auto const& [callId, pending] : drainedExecutes) {
+            sendCancel(callId, pending.stop ? pending.session : _session);
+        }
+    }
     // _pendingDeregisters tracks fire-and-forget requests nobody awaits --
     // just drop the bookkeeping, there is no callback to invoke.
     _pendingDeregisters.clear();

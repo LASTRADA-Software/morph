@@ -55,6 +55,7 @@ add_executable(morph_tests
     test_remote_extra.cpp
     test_remote_server_strand.cpp
     test_remote_connection_scope.cpp
+    test_remote_cancel.cpp
     test_remote_step_interleaving.cpp
     test_remote_execute_ordering.cpp
     test_action_validation.cpp

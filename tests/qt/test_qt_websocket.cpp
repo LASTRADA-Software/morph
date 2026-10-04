@@ -18,6 +18,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <chrono>
+#include <core/async/AsyncQueue.hpp>
+#include <core/async/Cancellation.hpp>
+#include <core/async/Task.hpp>
+#include <core/async/ThreadPoolExecutor.hpp>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -2754,4 +2758,121 @@ TEST_CASE("morph::qt::QtWebSocketBackend: the non-blocking control envelopes car
     // no `env.session = _session`, so the server received a default-constructed
     // session and could not authenticate the caller at all.
     CHECK(authorizer->registerTokens.back() == "tok-495");
+}
+
+// ── Cancelling a call on the server ─────────────────────────────────────────
+//
+// A client that gives up on a call sends `cancel` to a server that advertised
+// it, so the server's Task handler is stopped rather than left running.
+
+struct WsPark {
+    int tag = 0;
+};
+
+/// What the server-side handler reports back, read by the test thread.
+struct WsParkProbe {
+    std::atomic<int> started{0};
+    std::atomic<int> stopped{0};
+    std::atomic<int> finished{0};
+    std::unique_ptr<core::async::AsyncQueue<int>> queue;
+};
+
+inline WsParkProbe& wsParkProbe() {
+    static WsParkProbe instance;
+    return instance;
+}
+
+/// A Task handler that blocks until an item arrives, or until it is stopped.
+struct WsParkModel {
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+    core::async::Task<int> execute(WsPark action) {
+        wsParkProbe().started.fetch_add(1);
+        try {
+            auto const item = co_await wsParkProbe().queue->pop();
+            wsParkProbe().finished.fetch_add(1);
+            co_return item.value_or(0) + action.tag;
+        } catch (const core::async::OperationCancelled&) {
+            wsParkProbe().stopped.fetch_add(1);
+            wsParkProbe().finished.fetch_add(1);
+            throw;
+        }
+    }
+};
+
+BRIDGE_REGISTER_MODEL(WsParkModel, "WsParkModel")
+BRIDGE_REGISTER_ACTION(WsParkModel, WsPark, "WsPark")
+
+namespace {
+
+/// A real QtWebSocketServer over a RemoteServer, and the queue the parking
+/// handler waits on. Unparks a handler a failed case leaves behind.
+struct WsParkServer {
+    core::async::ThreadPoolExecutor foreign{1};
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+
+    WsParkServer() {
+        wsParkProbe().started = 0;
+        wsParkProbe().stopped = 0;
+        wsParkProbe().finished = 0;
+        wsParkProbe().queue =
+            std::make_unique<core::async::AsyncQueue<int>>(foreign, core::async::AsyncQueueOptions{});
+        REQUIRE(wsServer.listen());
+    }
+    WsParkServer(const WsParkServer&) = delete;
+    WsParkServer& operator=(const WsParkServer&) = delete;
+    WsParkServer(WsParkServer&&) = delete;
+    WsParkServer& operator=(WsParkServer&&) = delete;
+    ~WsParkServer() {
+        wsParkProbe().queue->close();
+        pumpUntil([] { return wsParkProbe().finished.load() == wsParkProbe().started.load(); }, 300);
+        wsParkProbe().queue.reset();
+    }
+
+    [[nodiscard]] QUrl url() const { return QUrl{QString("ws://127.0.0.1:%1").arg(wsServer.port())}; }
+};
+
+}  // namespace
+
+TEST_CASE("morph::qt::QtWebSocketBackend: a client deadline stops the server's Task handler", "[qt][ws][cancel]") {
+    ensureApp();
+    WsParkServer const park;
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(park.url());
+    REQUIRE(backendPtr->waitForConnected());
+    morph::exec::MainThreadExecutor cbExec;
+    REQUIRE(awaitOn(cbExec, backendPtr->negotiateProtocolVersion(cbExec)) ==
+            morph::wire::ProtocolNegotiationResult::Negotiated);
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
+    bridge.setExecuteDeadline(std::chrono::milliseconds{100});
+    std::atomic<bool> failed{false};
+    morph::bridge::BridgeHandler<WsParkModel> handler{bridge, &qtExec};
+    handler.execute(WsPark{}).then([](int) {}).onError([&](const std::exception_ptr&) { failed = true; });
+
+    // Nothing but the client's cancel can end the server's handler.
+    pumpUntil([&] { return failed.load() && wsParkProbe().stopped.load() == 1; }, 300);
+    CHECK(failed.load());
+    CHECK(wsParkProbe().stopped.load() == 1);
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend: destroying the bridge cancels its calls on the server", "[qt][ws][cancel]") {
+    ensureApp();
+    WsParkServer const park;
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(park.url());
+    REQUIRE(backendPtr->waitForConnected());
+    morph::exec::MainThreadExecutor cbExec;
+    REQUIRE(awaitOn(cbExec, backendPtr->negotiateProtocolVersion(cbExec)) ==
+            morph::wire::ProtocolNegotiationResult::Negotiated);
+    {
+        morph::qt::QtExecutor qtExec;
+        morph::bridge::Bridge bridge{std::move(backendPtr), qtExec};
+        morph::bridge::BridgeHandler<WsParkModel> handler{bridge, &qtExec};
+        handler.execute(WsPark{}).then([](int) {}).onError([](const std::exception_ptr&) {});
+        pumpUntil([] { return wsParkProbe().started.load() == 1; }, 300);
+        REQUIRE(wsParkProbe().started.load() == 1);
+    }
+    pumpUntil([] { return wsParkProbe().stopped.load() == 1; }, 300);
+    CHECK(wsParkProbe().stopped.load() == 1);
 }
