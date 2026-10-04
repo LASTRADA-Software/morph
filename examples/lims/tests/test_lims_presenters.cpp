@@ -18,6 +18,7 @@
 #include <morph/session/session.hpp>
 #include <string>
 
+#include "desktop_session.hpp"
 #include "result_presenter.hpp"
 #include "sample_presenter.hpp"
 #include "testkit/backend_rig.hpp"
@@ -128,6 +129,19 @@ TEST_CASE("SamplePresenter routes registration and every lifecycle transition", 
 
     // Settled, not merely finished: rule 3's observable quiescence.
     CHECK_FALSE(presenter.busy());
+}
+
+TEST_CASE("The local desktop session registers a client and a sample", "[lims][gui][presenter]") {
+    // The bridge is set up exactly as gui/main.cpp sets up its own in local
+    // mode, so a client that ships without a session fails here.
+    DbFixture fixture;
+    auto rig = std::make_unique<BackendRig>(Mode::Local, 1);
+    lims::gui::installDesktopSession(rig->bridge(0));
+    lims::gui::SamplePresenter presenter{rig->bridge(0), rig->executor()};
+
+    const auto registered = registerSampleVia(presenter);
+    CHECK(registered.state == lims::SampleState::Registered);
+    CHECK(registered.id.hasValue());
 }
 
 TEST_CASE("SamplePresenter surfaces a model refusal as a displayable message", "[lims][gui][presenter]") {
