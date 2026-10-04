@@ -285,6 +285,68 @@ TEST_CASE("payloadShapeString: the deepest level that still renders is kPayloadS
     REQUIRE(payloadFingerprint<PEDepthAtLimit>() != payloadFingerprint<PEDepthPastLimit>());
 }
 
+// Every other nesting form costs one level per wrapper too, so nine of any of
+// them put the leaf past the limit.
+
+/// One reflected member wrapped around @p T.
+template <typename T>
+struct PEBox {
+    T v;
+};
+
+/// A custom-codec wrapper around @p T that declares its inner shape.
+template <typename T>
+struct PEWrap {
+    T inner;
+};
+
+template <typename T>
+struct morph::model::PayloadShapeTag<PEWrap<T>> {
+    using Inner = T;
+    static constexpr std::string_view name() { return "w"; }
+};
+
+/// @p Wrap applied @p N times around `std::int32_t`.
+template <template <typename> class Wrap, int N>
+struct PENest {
+    using type = Wrap<typename PENest<Wrap, N - 1>::type>;
+};
+
+template <template <typename> class Wrap>
+struct PENest<Wrap, 0> {
+    using type = std::int32_t;
+};
+
+template <typename T>
+using PEOptionalOf = std::optional<T>;
+template <typename T>
+using PEMapTo = std::map<std::int32_t, T>;
+template <typename T>
+using PEMapFrom = std::map<T, std::int32_t>;
+
+TEST_CASE("payloadShapeString: every nesting form stops at kPayloadShapeMaxDepth",
+          "[journal][payload_evolution][issue174]") {
+    STATIC_REQUIRE(morph::model::detail::kPayloadShapeMaxDepth == 8);
+
+    CHECK(payloadShapeString<PENest<PEOptionalOf, 9>::type>() == "?????????x");
+    // A map renders its key and its value one level down, so the innermost
+    // map's key is past the limit too.
+    CHECK(payloadShapeString<PENest<PEMapTo, 9>::type>() == "{i4>{i4>{i4>{i4>{i4>{i4>{i4>{i4>{x>x}}}}}}}}}");
+    CHECK(payloadShapeString<PENest<PEMapFrom, 9>::type>() == "{{{{{{{{{x>x}>i4}>i4}>i4}>i4}>i4}>i4}>i4}>i4}");
+    CHECK(payloadShapeString<PENest<PEBox, 9>::type>() == "(v:(v:(v:(v:(v:(v:(v:(v:(v:x)))))))))");
+    CHECK(payloadShapeString<PENest<PEWrap, 9>::type>() == "x{w:x{w:x{w:x{w:x{w:x{w:x{w:x{w:x{w:x}}}}}}}}}");
+}
+
+TEST_CASE("payloadFingerprint: the digest is 64-bit FNV-1a, so it matches across builds and versions",
+          "[journal][payload_evolution][issue174]") {
+    // Published FNV-1a test vectors. A fingerprint stamped into a journal is
+    // compared against one computed by a later build, so the function itself
+    // must never drift.
+    CHECK(morph::model::detail::fnv1a64("") == 0xcbf29ce484222325ULL);
+    CHECK(morph::model::detail::fnv1a64("a") == 0xaf63dc4c8601ec8cULL);
+    CHECK(morph::model::detail::fnv1a64("foobar") == 0x85944171f73967e8ULL);
+}
+
 TEST_CASE("payloadFingerprint: renders nested shape and carries the scheme prefix",
           "[journal][payload_evolution][issue174]") {
     REQUIRE(payloadShapeString<PEShapeNested>() == "(inner:(count:i4,state:s),lookup:{s>i4},note:?s,xs:[i4])");

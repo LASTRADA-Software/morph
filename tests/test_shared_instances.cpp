@@ -23,6 +23,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -606,6 +607,14 @@ TEST_CASE("primary keys round-trip through their canonical encoding", "[shared-i
     // to 0 would silently route the caller to the wrong instance.
     REQUIRE_THROWS(morph::model::keyFromString<std::int64_t>("12x"));
     REQUIRE_THROWS(morph::model::keyFromString<std::int64_t>(""));
+}
+
+TEST_CASE("a numeric key decodes only the characters its view spans", "[shared-instances]") {
+    // A decoded wire field is a view into a larger buffer; the digits that
+    // follow it there are not part of the key.
+    std::string_view const buffer = "12345";
+    CHECK(morph::model::keyFromString<std::int64_t>(buffer.substr(0, 2)) == 12);
+    CHECK(morph::model::keyFromString<std::uint32_t>(buffer.substr(1, 3)) == 234U);
 }
 
 TEST_CASE("keyed models and keyed actions are detected structurally", "[shared-instances]") {
