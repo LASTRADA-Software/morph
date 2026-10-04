@@ -7,8 +7,12 @@
 #include <QTimer>
 #include <QUrl>
 #include <QWebSocket>
+#include <atomic>
 #include <chrono>
+#include <core/async/StopToken.hpp>
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/registry.hpp>
@@ -173,7 +177,10 @@ public:
     /// @brief Sends a `"hello"` envelope to the server and classifies its reply.
     ///
     /// Intended to be sent once, after the socket connects and before any
-    /// `bindModel`/`execute`; nothing enforces that ordering.
+    /// `bindModel`/`execute`; nothing enforces that ordering. The reply also
+    /// says whether the server honours `"cancel"`, which is the only way this
+    /// backend ever sends one; once called, `"hello"` is re-sent on every
+    /// reconnect, since a new connection may reach a different server.
     ///
     /// @param replyExec Executor the answer is delivered on. Borrowed: it must
     ///        outlive the returned `Completion`.
@@ -414,6 +421,21 @@ private:
     ///        before the reconnect handler fires.
     void flushQueuedRegistrations();
 
+    /// @brief Sends a `cancel` for every pending execute whose stop was
+    ///        requested since the last drain, if the server advertised
+    ///        `"cancel"`. On the socket's thread, from `_cancelWake`.
+    void drainCancels();
+
+    /// @brief Sends a fire-and-forget `cancel` for @p target; its reply is
+    ///        filed nowhere and dropped.
+    /// @param target        Id of the execute to stop.
+    /// @param callerSession Session the execute carried.
+    void sendCancel(uint64_t target, const ::morph::session::Context& callerSession);
+
+    /// @brief Re-sends `"hello"` after a reconnect, recording only whether the
+    ///        server advertises `"cancel"`.
+    void resendHello();
+
     /// @brief Asserts, in a debug build, that @p site runs on the socket's
     ///        thread — where every table this backend keeps belongs.
     /// @param site Name of the calling body.
@@ -426,6 +448,10 @@ private:
     Config _cfg;
     QWebSocket _socket;
     QTimer _reconnectTimer;
+    /// Zero-interval single shot whose `timeout` runs `drainCancels` on the
+    /// socket's thread. A stop callback, on any thread, starts it through a
+    /// queued `QMetaObject::invokeMethod(&_cancelWake, "start")`.
+    QTimer _cancelWake;
     std::chrono::milliseconds _currentReconnectDelay;
     bool _connected{false};
     bool _everConnected{false};
@@ -435,11 +461,36 @@ private:
     std::function<void()> _connectHandler;
     std::function<void()> _disconnectHandler;
     ::morph::session::Context _session;
+    /// Set by `negotiateProtocolVersion`: re-send `"hello"` on each connect.
+    bool _negotiate{false};
+    /// Whether this connection's server advertised `"cancel"`. Cleared on
+    /// every disconnect, learned again from the next `"hello"` reply.
+    bool _cancelAdvertised{false};
+
+    /// The stop callback a stoppable execute registers. Runs on whichever
+    /// thread requested the stop, so it touches no table: it marks its call
+    /// and queues a start of `_cancelWake`, whose drain runs on the socket's
+    /// thread. A start queued for a destroyed timer is dropped with it.
+    struct CancelOnStop {
+        std::shared_ptr<std::atomic<bool>> requested;
+        QTimer* wake{nullptr};
+        void operator()() const noexcept;
+    };
 
     struct PendingExecute {
         std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
         std::function<std::shared_ptr<void>(std::string_view)> deserialize;
         ::morph::exec::IExecutor* cbExec{nullptr};
+        /// The call's stop source, or null for a call nothing can stop.
+        std::shared_ptr<::core::async::StopSource> stop;
+        /// The execute's session, for the cancel; empty without `stop`.
+        ::morph::session::Context session;
+        /// Set by the stop callback, cleared by the drain that sends the
+        /// cancel; null without `stop`.
+        std::shared_ptr<std::atomic<bool>> stopRequested;
+        /// Registered on `stop`; deregistered when the entry goes, so a stop
+        /// after the reply sends nothing.
+        std::shared_ptr<::core::async::StopCallback<CancelOnStop>> watch;
     };
     uint64_t _nextCallId{0};
     // Every table below is touched only on the socket's thread: by the verbs,

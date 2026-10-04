@@ -1218,7 +1218,9 @@ socket connects and before any `bindModel`/`execute`, but nothing enforces that
 ordering and nothing sends it automatically. Rejects with `std::runtime_error`
 if the server explicitly rejects the version or the socket is not connected,
 and with `DisconnectedError` if it drops before the reply. See
-[wire.md](wire.md#protocol-version-negotiation).
+[wire.md](wire.md#protocol-version-negotiation). The reply also tells the
+backend whether the server honours `"cancel"`; see
+[Cancelling a remote call on the server](#cancelling-a-remote-call-on-the-server).
 
 **TLS.** Pass a `QSslConfiguration` to enable `wss://`. Build it with
 `tlsVerifyingConfig()` (CA-verified, the recommended production default) or
@@ -1558,6 +1560,98 @@ listening socket's `O_NONBLOCK` onto the sockets `accept(2)` returns (POSIX
 permits this; Linux does not do it), and a blocking reader of such a socket
 fails on `EAGAIN` before its peer has written.
 
+## Cancelling a remote call on the server
+
+`SocketBackend` and `QtWebSocketBackend` tell the server when they abandon an
+`execute`, by sending `cancel {cancelCallId}` (see
+[wire.md](wire.md#cancelling-a-call)), so a server-side Task handler stops
+instead of running on for a reply nobody reads. Each sends one only to a
+server that advertised `"cancel"` in its `"hello"` reply, so each sends none
+until the application has called `negotiateProtocolVersion` — opt-in, like
+the handshake itself. Once called, the backend re-sends `"hello"` after every
+reconnect and forgets the capability on every disconnect: a new connection may
+reach a different server.
+
+A call is cancelled on the server when:
+
+- **Its stop is requested** — an execute deadline (`Bridge::setExecuteDeadline`)
+  or any other holder of the call's `ActionCall::stopSource`. The backend
+  registers a stop callback on that source once the call has its `callId` and
+  its frame is queued. The callback runs on whichever thread requested the
+  stop, so it touches no table: `SocketBackend`'s posts `requestCancel(callId)`
+  to the I/O loop; `QtWebSocketBackend`'s sets the call's flag and starts a
+  zero-interval single-shot wake timer through the member-name
+  `QMetaObject::invokeMethod(&timer, "start", Qt::QueuedConnection)` — which
+  allocates nothing, unlike the functor overload — and the timer's drain, on
+  the Qt thread, sends a cancel for each flagged call. Either way the owner
+  sends the cancel only if the call is still waiting for its reply, and the
+  pending table stays the owner's alone, with no lock. A stop after the reply sends
+  nothing: the callback is deregistered with the pending entry. A call with no
+  stop source — `Bridge` gives one only to a call whose handler is a Task,
+  the one kind a server can stop — never registers one.
+- **`cancelPending` sweeps it** — `~Bridge` and `Bridge::switchBackend` call it.
+  Every drained execute is cancelled, with or without a stop source: in a
+  client-only build `Bridge` cannot tell a Task handler from an ordinary one,
+  and the server answers a cancel for an unstoppable call with the same
+  no-op `ok`.
+
+The cancel carries the session the `execute` carried (kept with the pending
+entry for a stoppable call; the backend's control session otherwise), since
+the server honours it only under the execute's verified principal. It is sent
+fire-and-forget under a fresh `callId` filed nowhere, so its `ok` is dropped
+by the reply router.
+
+**Ordering, and why `SocketBackend::cancelPending` being posted is acceptable.**
+`SocketBackend::cancelPending` is posted to the I/O loop (**G0** on return), so
+the cancels it sends sit behind whatever the loop already had queued. That is
+acceptable, for three reasons. The cancel can never overtake the execute it
+names: the execute was posted to the same loop before it, the loop runs its
+tasks in order and writes one connection's frames in order, and the server
+handles one connection's messages in order, so the execute is always admitted
+before its cancel is read. What waits is only the server's handler, which
+runs on for at most as long as the loop takes to drain its queue — work that
+never blocks — and which already ran to its end before cancels existed. And
+the caller's own guarantee does not depend on it: the calls are settled with
+the cancel's exception in the same loop task, before any reply to them can be
+delivered. A stop-triggered cancel is posted in the same way, from the stopping
+thread, and is ordered the same.
+
+**Teardown.** `~Bridge` calls `cancelPending` and then destroys the backend,
+so the cancels are queued just before the backend closes its socket. Each
+backend's close therefore lets queued frames out first: `SocketBackend`'s
+close is a close-after-flush on the loop (the write still bounded by
+`sendTimeout`), and `QtWebSocketBackend`'s destructor flushes its socket,
+without blocking, before the abort. A close that discarded queued frames
+would drop exactly these cancels; the `~Bridge` tests in both suites fail
+when it does (measured on both backends). `QtWebSocketBackend` sends nothing from its own
+destructor's sweep — its socket is already aborted there — so a backend
+destroyed without its owner's `cancelPending` cancels nothing.
+
+### Cancellation-policy rows for the remote backends
+
+The policy table in
+[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#every-cancel-verb-measured)
+marks the remote backends' rows read, not measured, and gives "the server
+keeps executing" for the work they abandon. What those rows are, and which
+parts are measured, is:
+
+- `SocketBackend::cancelPending` — **G0** on return; **G2** once the I/O loop
+  runs it (unchanged). Work: a Task handler on a server that advertised
+  `"cancel"` is asked to stop; otherwise the server keeps executing.
+  **Measured** over a real loopback (`SocketServer` with `SocketBackend`) for
+  the stop, through `~Bridge`.
+- `QtWebSocketBackend::cancelPending` — **G2** (unchanged). Work: as above.
+  **Measured** in the Qt suite against a real `QtWebSocketServer`, through
+  `~Bridge`.
+- `Bridge::setExecuteDeadline` over either backend — the deadline's stop
+  reaches the server's Task handler through a cancel. **Measured** for both
+  over a real loopback.
+
+The G-levels of these verbs are unchanged and are still read, not measured:
+the tests above measure the work column only. The measuring tests are in
+`tests/net/test_socket_backend.cpp` and `tests/qt/test_qt_websocket.cpp`
+(`[cancel]`).
+
 ## Lifetime & ownership
 
 The backends hold *references*, not owning pointers, to the resources they run
@@ -1861,12 +1955,12 @@ server: each call is a loop task, so the loop serialises them.
 | `promoteModel(request, cbExec)` | Sends `assign` through the same path. An empty `primary` or zero `mid` resolves with `request.mid` without sending. |
 | `instances(typeId, cbExec)` | Sends `instances` through the same path; the reply's body is decoded into the key list. Rejects with `"disconnected"` when not connected. |
 | `waitForConnected(timeoutMs = 5000)` | Pumps a local `QEventLoop` until connected or timeout; returns `_connected`. Not for a WASM main thread. |
-| `negotiateProtocolVersion(replyExec)` | Opt-in: sends `hello` through the same path and settles the returned `Completion` with `wire::interpretHelloReply`'s classification. Rejects on an explicit version rejection, when not connected, or on a drop. |
+| `negotiateProtocolVersion(replyExec)` | Opt-in: sends `hello` through the same path and settles the returned `Completion` with `wire::interpretHelloReply`'s classification; records whether the server advertised `"cancel"`, and re-sends `hello` after every reconnect. Rejects on an explicit version rejection, when not connected, or on a drop. |
 | `registerModel(typeId, factory)`, `assignPrimary(...)`, `listInstances(typeId)` | Throw `std::logic_error`: each would have to wait for a reply. `registerModelWithContext` is `IBackend`'s default, which forwards to `registerModel`. |
 | `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. Carries a non-zero `callId` from the same counter `execute` uses, recorded in `_pendingDeregisters` so `onTextMessage` recognises the reply and drops it. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. |
 | `notifyBackendChanged()` | No-op. |
-| `cancelPending(exc)` | On the socket's thread, takes `_pending`, `_pendingControl` and `_queuedRegistrations` out, then delivers `exc` to each — the exception itself, so a request rejected by a dropped socket carries the same `DisconnectedError` an `execute` does. |
+| `cancelPending(exc)` | On the socket's thread, takes `_pending`, `_pendingControl` and `_queuedRegistrations` out, sends a `cancel` for each `execute` when connected to a server that advertised `"cancel"`, then delivers `exc` to each — the exception itself, so a request rejected by a dropped socket carries the same `DisconnectedError` an `execute` does. |
 | `setReconnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every *subsequent* connect. `nullptr` clears. |
 | `setConnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every successful connect, first included. `nullptr` clears. |
 | `setDisconnectHandler(handler)` | Stores the handler; invoked on the Qt thread whenever the socket drops, before reconnect scheduling. `nullptr` clears. |
@@ -1917,7 +2011,7 @@ not a behavior change to the existing loopback-only default.
 |---|---|
 | `SocketBackend(loop, serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and posts the first connection attempt to `loop`, an `exec::IoLoop` that must outlive the backend. |
 | `explicit SocketBackend(serverUrl, cfg = Config{})` | The same, on a private `IoLoop` the backend owns. The URL is parsed before that loop is started. |
-| `~SocketBackend()` | Runs its close on the loop — inline on the loop's own thread, posted and waited for otherwise: closes the connection, retires the backoff timer, rejects every pending call — a waiting synchronous verb's included — with `DisconnectedError`. Never waits for a dial in progress. |
+| `~SocketBackend()` | Runs its close on the loop — inline on the loop's own thread, posted and waited for otherwise: closes the connection, retires the backoff timer, rejects every pending call — a waiting synchronous verb's included — with `DisconnectedError`. Frames already queued — the cancels and deregisters of a `cancelPending` just before — are written before the socket closes, bounded by `sendTimeout`. Never waits for a dial in progress. |
 | `waitForConnected(timeout = 5000ms)` | Posts a waiter the loop releases on the next completed connection, and blocks the calling thread on it until then or the timeout; returns the current connected state. On the loop's own thread it answers at once. The backend must outlive the call — destroying it while a thread is parked here is undefined, and there is no cancel (see Lifetime & ownership). |
 | `registerModel(typeId, factory)` | Forwards to `registerModelWithContext` with an empty `contextKey`; `factory` ignored. |
 | `registerModelWithContext(typeId, factory, contextKey)` | Synchronous: posts `register` carrying `contextKey` and waits on a future for the loop to settle the reply, so the server's `LogProvider` is consulted for a private registration exactly as it is for a shared one. `factory` ignored. Throws on `err` reply or disconnect, and on the loop's own thread. Any number may be in flight, matched by `callId`. |
@@ -1926,7 +2020,8 @@ not a behavior change to the existing loopback-only default.
 | `deregisterModel(mid)` | **Fire-and-forget** — posted only if connected, does not wait for the ack. The loop gives it a non-zero `callId` from the same counter `execute` uses, so its unawaited `ok` is never taken for another call's reply. Needs no pending-id bookkeeping of its own: the reply router already drops a non-zero `callId` that is not pending. |
 | `execute(mid, call, cbExec)` | Serialises the action on the calling thread and posts the envelope; the loop assigns a `callId`, files the pending record and writes the frame. Returns a `Completion`, already rejected with `DisconnectedError` if not connected. Callable from any thread; any number may be in flight. |
 | `notifyBackendChanged()` | No-op. |
-| `cancelPending(exc)` | Posted: the loop drains **both** pending tables — the `execute` calls and the `bindModel`/`promoteModel` control calls — and delivers `exc` to each state. Covers every call issued before it. |
+| `cancelPending(exc)` | Posted: the loop drains **both** pending tables — the `execute` calls and the `bindModel`/`promoteModel` control calls — and delivers `exc` to each state. Covers every call issued before it. When the server advertised `"cancel"`, sends one for each drained `execute` first. |
+| `negotiateProtocolVersion(replyExec)` | Opt-in: posts a `hello` on the callId-multiplexed path and settles the returned `Completion` with `wire::interpretHelloReply`'s classification; records whether the server advertised `"cancel"`, and re-sends `hello` after every reconnect. Rejects on an explicit version rejection, and with `DisconnectedError` when the socket is down or drops. |
 | `setReconnectHandler(handler, exec)` | Posted: the loop stores the handler and its executor, and after every *subsequent* connect posts the handler to `exec` — never runs it on the loop. `nullptr` clears. |
 | `setSession(session)` | Posted: the loop stores the session it stamps onto every control envelope it builds afterwards. |
 

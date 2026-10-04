@@ -521,6 +521,11 @@ cancel naming it is a no-op like any other. A call still queued behind another
 on its instance's action gate is stopped before it starts: its handler's token
 is already stopped when it runs.
 
+Two clients send it: `SocketBackend` and `QtWebSocketBackend`, after their
+opt-in `negotiateProtocolVersion` has found the capability — see
+[backend.md](backend.md#cancelling-a-remote-call-on-the-server) for when each
+sends one.
+
 An unscoped message (`ConnectionId` `0`, the two-argument `handle()`) names no
 call: the server files no unscoped call as cancellable, because unscoped
 callers share one id space and could not be told apart.
