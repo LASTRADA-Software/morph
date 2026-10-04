@@ -198,7 +198,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>SSL-less Qt builds (<span class="tt">QT_NO_SSL</span>, including the standard Qt-for-WebAssembly build)</dt><dd>The constructor's <span class="tt">tls</span> parameter (and the <span class="tt">_tls</span> member) does not exist at all when Qt itself was configured without SSL — <span class="tt">QSslConfiguration</span> isn't a type Qt provides in that configuration, so there is no value to accept or ignore. <span class="tt">wss://</span> still works on such a build regardless: in a WASM/browser deployment the browser terminates TLS before Qt's <span class="tt">QWebSocket</span> ever sees the connection, so the only thing genuinely unavailable is the ability to <em>configure</em> TLS from C++ (client certificates, pinning, etc.) — plain <span class="tt">wss://</span> and <span class="tt">ws://</span> both still connect normally.</dd></dl>
 <dl class="section user"><dt>Threading</dt><dd>Must be used from the Qt event loop thread. Every verb and the internal message handler are called on that thread. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="abb613465047676a5ca37e4c1962efc7c" name="abb613465047676a5ca37e4c1962efc7c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abb613465047676a5ca37e4c1962efc7c">&#9670;&#160;</a></span>Config</h2>
@@ -214,7 +214,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +317,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -357,7 +357,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -413,7 +413,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Sends a <span class="tt">"hello"</span> envelope to the server and classifies its reply. </p>
-<p>Intended to be sent once, after the socket connects and before any <span class="tt"><a class="el" href="#af7f1479bb3386567b6082d6fdfeb9b35" title="Acquires a model instance over the wire, settled by the server&#39;s reply.">bindModel</a></span>/<span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute</a></span>; nothing enforces that ordering.</p>
+<p>Intended to be sent once, after the socket connects and before any <span class="tt"><a class="el" href="#af7f1479bb3386567b6082d6fdfeb9b35" title="Acquires a model instance over the wire, settled by the server&#39;s reply.">bindModel</a></span>/<span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute</a></span>; nothing enforces that ordering. The reply also says whether the server honours <span class="tt">"cancel"</span>, which is the only way this backend ever sends one; once called, <span class="tt">"hello"</span> is re-sent on every reconnect, since a new connection may reach a different server.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">replyExec</td><td>Executor the answer is delivered on. Borrowed: it must outlive the returned <span class="tt">Completion</span>. </td></tr>
@@ -798,7 +798,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00315">315</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

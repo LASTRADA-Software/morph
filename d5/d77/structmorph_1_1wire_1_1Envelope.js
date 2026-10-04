@@ -12,5 +12,6 @@ var structmorph_1_1wire_1_1Envelope =
     [ "body", "d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326", null ],
     [ "message", "d5/d77/structmorph_1_1wire_1_1Envelope.html#a31e1d8eb0773faa7d75539ef8da14584", null ],
     [ "session", "d5/d77/structmorph_1_1wire_1_1Envelope.html#a873839ca79760b994eee91b5fb516c18", null ],
-    [ "protocolVersion", "d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750", null ]
+    [ "protocolVersion", "d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750", null ],
+    [ "cancelCallId", "d5/d77/structmorph_1_1wire_1_1Envelope.html#a2c93cc9166932d5dc32dcbdc8fdc3237", null ]
 ];

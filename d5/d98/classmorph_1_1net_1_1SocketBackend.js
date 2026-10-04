@@ -11,6 +11,7 @@ var classmorph_1_1net_1_1SocketBackend =
     [ "bindModel", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a23344886fdc9f1679083d4f88be1a7e3", null ],
     [ "promoteModel", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a39d4848c41081eb7d3c7d8d05e67b04b", null ],
     [ "listInstances", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#aa8b1294c215041aadde4f2345237c074", null ],
+    [ "negotiateProtocolVersion", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#aad7beb8fc323e3a487bfe2fcc8c07e0c", null ],
     [ "deregisterModel", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#ac24914155bba1992eb56f3bf9a50a06d", null ],
     [ "execute", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#adccec9d533fd8021f3f6634df007c19a", null ],
     [ "notifyBackendChanged", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#ae8e21983e5044036264ad910f43e40b6", null ],
