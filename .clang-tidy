@@ -49,3 +49,8 @@ CheckOptions:
     value: "^[ijk]$|^[xy]$|^lk$|^cb$|^op$|^fn$"
   - key:   readability-identifier-length.IgnoredLoopCounterNames
     value: "^[ijk]$"
+  # libc++'s exception_ptr declares only copy operations, so moving one copies it and a by-value
+  # parameter is reported as "only used as a const reference". It is a refcounted pointer: by value is
+  # the idiom.
+  - key:   performance-unnecessary-value-param.AllowedTypes
+    value: "^std::exception_ptr$"

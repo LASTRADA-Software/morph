@@ -17,7 +17,9 @@
 //    symbol to static_assert against).
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -26,9 +28,13 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/offline/reconnect_coordinator.hpp>
+#include <morph/reactive/control.hpp>
+#include <morph/reactive/detail/graph.hpp>
+#include <morph/reactive/runtime.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
+#include <string>
 #include <string_view>
 
 #include "pinned_facts_generated.hpp"
@@ -295,4 +301,22 @@ TEST_CASE("pinned-facts: wire::decode accepts a duplicate top-level key, last-wi
     morph::wire::Envelope env;
     REQUIRE_NOTHROW(env = morph::wire::decode(json));
     REQUIRE(env.kind == "err");
+}
+
+// ── morph::reactive ──────────────────────────────────────────────────────────
+//
+// The default flush bound is a constant and is pinned at compile time; RuntimeOptions holds a std::function,
+// so it is not a literal type, and that it reads the constant is checked at run time. errorMessage() builds
+// a std::string, which is checked at run time too.
+
+static_assert(morph::reactive::detail::kDefaultMaxEffectRunsPerFlush ==
+                  static_cast<std::size_t>(morph::pinned_facts::kExpected_REACTIVE_MAX_EFFECT_RUNS_PER_FLUSH),
+              "morph::reactive::detail::kDefaultMaxEffectRunsPerFlush drifted from docs/spec/pinned_facts.toml "
+              "(see docs/spec/reactive/signals.md)");
+
+TEST_CASE("pinned-facts: morph::reactive defaults", "[pinned-facts]") {
+    REQUIRE(morph::reactive::RuntimeOptions{}.maxEffectRunsPerFlush ==
+            static_cast<std::size_t>(morph::pinned_facts::kExpected_REACTIVE_MAX_EFFECT_RUNS_PER_FLUSH));
+    REQUIRE(morph::reactive::errorMessage(std::make_exception_ptr(42)) ==
+            morph::pinned_facts::kExpected_REACTIVE_UNKNOWN_ERROR_TEXT);
 }

@@ -124,6 +124,12 @@ before writing a durability test
 [`forms/widget_hints.md`](forms/widget_hints.md) ·
 [`forms/workflows_navigation.md`](forms/workflows_navigation.md)
 
+**Reactive state and control**
+[`reactive/signals.md`](reactive/signals.md) ·
+[`reactive/store.md`](reactive/store.md) ·
+[`reactive/control.md`](reactive/control.md) — signals, view state, and server
+interaction a controller declares instead of sequencing
+
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·
 [`util/quantity_type.md`](util/quantity_type.md) ·

@@ -179,6 +179,22 @@ API surface).
 
 ### Added
 
+- **`morph::reactive`: a signal graph, view state and declarative control.** Header-only, in the
+  base `morph` target.
+  - `Signal<T>`, `Computed<T>`, `Effect` and `Scope` over a `Runtime` bound to an owner executor:
+    glitch-free, batched, one posted flush per change, a `RuntimeOptions::afterFlush` hook for a
+    frontend's redraw, and misuse reported through the owner probe and then refused in every build.
+  - `Store<ViewState, Msg>` with a compile-time exhaustive update (`ExhaustiveUpdate`), and
+    `request()`.
+  - `Query` (a latest-wins async resource keyed on tracked state, with an optional timed refresh
+    through `QueryOptions`), `Mutation` (a tracked command that refetches the queries it invalidates
+    in one batch, through `MutationOptions` and `Refetchable`) and `Subscription`, over a
+    `BridgeHandler` or any `Completion`-returning fetcher; `errorMessage`.
+  - `Scheduler` and `TimerHandle`, the timer seam a frontend implements on its event loop, and
+    `testing::ManualScheduler` for deterministic tests.
+
+  See `docs/spec/reactive/signals.md`, `store.md` and `control.md`.
+
 - **Coroutines on `core::async`.**
   - `Completion<T>` is awaitable: `co_await std::move(completion)` yields `T`
     or rethrows, resumes on the executor the coroutine suspended on (core-cpp's

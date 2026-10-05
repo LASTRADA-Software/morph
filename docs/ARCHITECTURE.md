@@ -49,6 +49,7 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitAlternative<E>`, `HasUnitAlternatives`, `UnitEnum`, `isQuantity` |
 | `morph::time` | UTC timestamps for actions | `DateTime`, `Timestamp` |
 | `morph::forms` | JSON-Schema generation for auto-built GUIs | `schemaJson<A>()`, `allRequiredEngaged()`, `Choice<T, ...>`, `FixedString`, `isChoice`, `EmptyCapableField` |
+| `morph::reactive` | Signal graph, view state and declarative control (see `docs/spec/reactive/`) | `Runtime`, `RuntimeOptions`, `Signal<T>`, `Computed<T>`, `Effect`, `Scope`, `Store<ViewState, Msg>`, `ExhaustiveUpdate`, `request()`, `Query<A, R>`, `QueryOptions`, `Mutation<A, R>`, `MutationOptions`, `Subscription<R>`, `Refetchable`, `errorMessage`, `Scheduler`, `TimerHandle`; `testing::ManualScheduler` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
@@ -691,6 +692,19 @@ folder.
 | `util/rational.hpp` | `Rational`, `DecimalPlaces`, `RationalError` (`morph::math::`) — exact int64 rational arithmetic with a decimal-precision tag; Glaze wire codec (`{"num","den","dp"}`, canonicalised on read) and `std::formatter` |
 | `util/quantity.hpp` | `Quantity<U>`, `UnitMeta`, `UnitTraits` (`morph::units::`) — unit-tagged optional value over `Rational`; units are application enum NTTPs, schemas get `ExtUnits` automatically. See `docs/spec/util/quantity_type.md` for the full design. |
 | `util/datetime.hpp` | `DateTime`, `Timestamp` (`morph::time::`) — UTC instant (ms precision) with a strict ISO-8601 wire codec (malformed input is a read *error*) and the optionally-empty field wrapper; schemas carry `"format": "date-time"` |
+
+#### `reactive/` — signal graph, view state, declarative control
+
+| Header | Responsibility |
+|---|---|
+| `reactive/runtime.hpp` | `Runtime`, `RuntimeOptions` (`morph::reactive::`) — the owner, batching, one posted flush per change. See `docs/spec/reactive/signals.md`. |
+| `reactive/signal.hpp` | `Signal<T>`, `Computed<T>`, `Effect` — the graph's nodes |
+| `reactive/scope.hpp` | `Scope` — owns nodes and objects, destroys them newest first |
+| `reactive/store.hpp` | `Store<ViewState, Msg>`, `ExhaustiveUpdate`, `request()` — user-intent view state changed only by messages. See `docs/spec/reactive/store.md`. |
+| `reactive/control.hpp` | `Query`, `QueryOptions`, `Mutation`, `MutationOptions`, `Subscription`, `Refetchable`, `errorMessage` — server interaction as reactive state. See `docs/spec/reactive/control.md`. |
+| `reactive/scheduler.hpp` | `Scheduler`, `TimerHandle` — timers a frontend runs on the owner, for a query's timed refresh |
+| `reactive/testing/manual_scheduler.hpp` | `testing::ManualScheduler` — a `Scheduler` whose clock moves only when a test advances it |
+| `reactive/detail/graph.hpp` | `RuntimeCore`, `Node`, `TrackingFrame`, `Colour`, the misuse site names, `kDefaultMaxEffectRunsPerFlush` (`morph::reactive::detail::`) |
 
 ### Qt integration headers (`include/morph/qt/`)
 
