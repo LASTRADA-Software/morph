@@ -424,6 +424,12 @@ target_sources(morph
         include/morph/reactive/control.hpp
         include/morph/reactive/scheduler.hpp
         include/morph/reactive/testing/manual_scheduler.hpp
+        include/morph/ui/view.hpp
+        include/morph/ui/backend.hpp
+        include/morph/ui/mount.hpp
+        include/morph/ui/frontend.hpp
+        include/morph/ui/testing/recording_backend.hpp
+        include/morph/ui/testing/backend_conformance.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
         include/morph/core/file_io_ops.hpp

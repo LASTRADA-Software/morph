@@ -130,6 +130,13 @@ before writing a durability test
 [`reactive/control.md`](reactive/control.md) — signals, view state, and server
 interaction a controller declares instead of sequencing
 
+**Declarative UI**
+[`ui/view_tree.md`](ui/view_tree.md) ·
+[`ui/backend_contract.md`](ui/backend_contract.md) ·
+[`ui/frontend.md`](ui/frontend.md) — a view described once as nodes and bindings,
+the widget contract every backend implements, and the frontend `main` picks at
+runtime
+
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·
 [`util/quantity_type.md`](util/quantity_type.md) ·

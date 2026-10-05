@@ -50,6 +50,7 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::time` | UTC timestamps for actions | `DateTime`, `Timestamp` |
 | `morph::forms` | JSON-Schema generation for auto-built GUIs | `schemaJson<A>()`, `allRequiredEngaged()`, `Choice<T, ...>`, `FixedString`, `isChoice`, `EmptyCapableField` |
 | `morph::reactive` | Signal graph, view state and declarative control (see `docs/spec/reactive/`) | `Runtime`, `RuntimeOptions`, `Signal<T>`, `Computed<T>`, `Effect`, `Scope`, `Store<ViewState, Msg>`, `ExhaustiveUpdate`, `request()`, `Query<A, R>`, `QueryOptions`, `Mutation<A, R>`, `MutationOptions`, `Subscription<R>`, `Refetchable`, `errorMessage`, `Scheduler`, `TimerHandle`; `testing::ManualScheduler` |
+| `morph::ui` | Toolkit-agnostic view tree, its mount, and the frontend seam (see `docs/spec/ui/`) | `Prop<T>`, `Key`, `Action`, `Common`, `Sizing`, `LayoutHints`, `Node`, `NodeData`, the node types and their builders (`text`, `button`, `textInput`, `checkbox`, `select`, `menu`, `column`, `row`, `grid`, `spacer`, `panel`, `scroll`, `switchOf`, `switchOn<E>`, `tabs`, `dialog`, `busy`, `forEach<RowT>`, `table<RowT>`, `dateTimeInput`, `slider`, `filePicker`), `TableOptions`, `TextRole`, `TextInputMode`, `SelectStyle`, `Axis`, `DateMode`, `FilePickerMode`, `SelectionMode`, `Widget`, `ContainerWidget` and one widget interface per kind, `IViewBackend`, `Mounted`, `AppContext`, `Application`, `ApplicationFactory`, `Frontend`, `FrontendOption`, `FrontendSelectionError`, `EnvironmentReader`, `processEnvironment`, `selectFrontend`, `runApplication`, `Scheduler`, `TimerHandle`; `testing::RecordingBackend`, `testing::ConformanceProbe`, `testing::ConformanceCase`, `testing::conformanceCases()` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
@@ -705,6 +706,17 @@ folder.
 | `reactive/scheduler.hpp` | `Scheduler`, `TimerHandle` — timers a frontend runs on the owner, for a query's timed refresh |
 | `reactive/testing/manual_scheduler.hpp` | `testing::ManualScheduler` — a `Scheduler` whose clock moves only when a test advances it |
 | `reactive/detail/graph.hpp` | `RuntimeCore`, `Node`, `TrackingFrame`, `Colour`, the misuse site names, `kDefaultMaxEffectRunsPerFlush` (`morph::reactive::detail::`) |
+
+#### `ui/` — view tree, mount, frontend seam
+
+| Header | Responsibility |
+|---|---|
+| `ui/view.hpp` | `Prop<T>`, `Key`, `Common`, every node type and its builder, `forEach`, `table` (`morph::ui::`), and the type-erased row model (`detail::ForEachModel`, `ForEachSession`, `RowSlot`). See `docs/spec/ui/view_tree.md`. |
+| `ui/backend.hpp` | `Widget`, `ContainerWidget`, one widget interface per node kind, `IViewBackend`. See `docs/spec/ui/backend_contract.md`. |
+| `ui/mount.hpp` | `Mounted` — builds a tree's widgets once and keeps them current through bindings; keyed-row reconciliation and the misuse site names in `detail` |
+| `ui/frontend.hpp` | `AppContext`, `Application`, `ApplicationFactory`, `Frontend`, `FrontendOption`, `selectFrontend`, `runApplication`. See `docs/spec/ui/frontend.md`. |
+| `ui/testing/recording_backend.hpp` | `testing::RecordingBackend` — headless widgets, operation log, golden dump, interaction helpers |
+| `ui/testing/backend_conformance.hpp` | `testing::ConformanceProbe`, `testing::conformanceCases()` — the cases every backend passes |
 
 ### Qt integration headers (`include/morph/qt/`)
 

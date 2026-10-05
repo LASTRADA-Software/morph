@@ -195,6 +195,24 @@ API surface).
 
   See `docs/spec/reactive/signals.md`, `store.md` and `control.md`.
 
+- **`morph::ui`: a toolkit-agnostic view tree, its mount and the frontend seam.** Header-only, in
+  the base `morph` target.
+  - Immutable nodes — text, buttons, text inputs, check boxes, selects, menus, stacks, grids,
+    panels (collapsible), scroll areas, Switch, Tabs, Dialog, busy indicators, keyed `forEach`
+    lists, tables, date-time inputs, sliders and file pickers — whose properties are constants or
+    reactive bindings (`Prop<T>`), with drag-and-drop on every node.
+  - `Mounted` builds retained widgets through an `IViewBackend` once and keeps them current through
+    equality-gated bindings. Keyed rows are updated in place and reordered by moving only the rows
+    outside a longest run already in order; content a binding mounts is all or nothing; a callback
+    that throws is reported, not passed to the backend.
+  - `AppContext`, `Application`, `Frontend`, `runApplication` (the teardown order every frontend
+    keeps) and `selectFrontend` (`--ui=`, `MORPH_UI`, then the first usable frontend) let `main`
+    pick a frontend at runtime.
+  - `ui::testing::RecordingBackend` and the backend-conformance cases (`ConformanceProbe`,
+    `conformanceCases()`) fix the contract every backend implements.
+
+  See `docs/spec/ui/view_tree.md`, `backend_contract.md` and `frontend.md`.
+
 - **Coroutines on `core::async`.**
   - `Completion<T>` is awaitable: `co_await std::move(completion)` yields `T`
     or rethrows, resumes on the executor the coroutine suspended on (core-cpp's
