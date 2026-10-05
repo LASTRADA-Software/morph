@@ -290,7 +290,7 @@ endif()
 # is off while morph installs: CMake leaves an excluded subdirectory's install
 # rules out of the parent's install, so `cmake --install` would install
 # morph's package without the core-cpp package it depends on.
-set(MORPH_CORE_CPP_VERSION 0.5)
+set(MORPH_CORE_CPP_VERSION 0.7)
 option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
 if(NOT DEFINED AF_SANITIZER)
     find_package(core-cpp ${MORPH_CORE_CPP_VERSION} CONFIG QUIET)
@@ -309,8 +309,8 @@ if(NOT core-cpp_FOUND)
     CPMAddPackage(
         NAME core-cpp
         GITHUB_REPOSITORY contour-terminal/core-cpp
-        GIT_TAG v0.5.0
-        VERSION 0.5.0
+        GIT_TAG v0.7.0
+        VERSION 0.7.0
         SYSTEM YES
         EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
         OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF" "CORE_CPP_WITH_TUI OFF"

@@ -11,6 +11,13 @@ API surface).
 
 ### Changed
 
+- **morph builds against core-cpp 0.7.** `MORPH_CORE_CPP_VERSION` is 0.7 and CPM fetches `v0.7.0`, so a
+  configure no longer accepts an installed core-cpp 0.5, and an installed morph finds its core-cpp through
+  `find_dependency(core-cpp 0.7)`. Nothing morph calls changed signature in core-cpp 0.5.1, 0.6.0 or 0.7.0.
+  `morph::net::SocketServer`'s accept loop stops when the server closes its listener and backs off on every
+  other failed accept, which now includes a registration the event loop refuses, where core-cpp 0.5 threw out
+  of `accept()`. core-cpp 0.7 adds standard mouse tracking, pointer capture and a public `Screen::componentAt`
+  to `core::tui`, for the terminal frontend.
 - **Action-log and offline-queue timestamps come from an injected wall clock.**
   `IModelHolder::attachActionLog` takes an optional third parameter, a
   `core::platform::WallClockRef`, and `LogEntry::timestampMs` is read from it.
