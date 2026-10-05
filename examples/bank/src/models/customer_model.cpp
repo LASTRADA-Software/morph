@@ -74,8 +74,9 @@ dto::AccountList CustomerModel::execute(const dto::ListAccounts& action) {
     }
 
     dto::AccountList out;
-    out.accounts.reserve(user->accounts.Count());
-    for (const auto& account : user->accounts.All()) {
+    const auto& accounts = db::requireLoaded(user->accounts.All(), "user accounts").get();
+    out.accounts.reserve(accounts.size());
+    for (const auto& account : accounts) {
         out.accounts.push_back(db::toAccountInfo(*account, owner));
     }
     return out;

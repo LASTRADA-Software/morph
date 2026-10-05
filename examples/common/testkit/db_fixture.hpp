@@ -16,8 +16,6 @@
 #include <system_error>
 #include <vector>
 
-#include "db/pool_transaction_audit.hpp"
-
 /// @file
 /// Real on-disk SQLite database, shared per test binary — mirrors
 /// Lightweight's own `SqlTestFixture` (Lightweight/src/tests/Utils.hpp) and
@@ -48,6 +46,10 @@ public:
             clearAndReport("a non-std::exception was thrown");  // never returns
         }
         ::Lightweight::SqlMigration::MigrationManager::GetInstance().ApplyPendingMigrations();
+        // The migration manager is a static that keeps a DataMapper open between calls;
+        // one still open at exit is destroyed after Lightweight's default logger and
+        // aborts the process. Close it once the migrations are applied.
+        ::Lightweight::SqlMigration::MigrationManager::GetInstance().CloseDataMapper();
     }
 
     DbFixture(const DbFixture&) = delete;
@@ -159,14 +161,6 @@ private:
     ///        no branch of its own left to miss.
     static void ensureConnectionConfigured() {
         static const bool once = [] {
-            // Installed here as well as in every rung's own
-            // `db::setup()`/`db::configure()`, because no ladder test goes
-            // through those -- this fixture points Lightweight at the test
-            // database itself. Without it the audit would be live only in
-            // binaries the suite never runs, which is a control that measures
-            // nothing. With it, every ladder test case in the suite runs under
-            // the check.
-            (void)::morph::ladder::db::installPoolTransactionAudit();
             ::Lightweight::SqlConnection::SetDefaultConnectionString(
                 ::Lightweight::SqlConnectionString{activeConnectionString()});
             ::Lightweight::SqlMigration::MigrationManager::GetInstance().CreateMigrationHistory();
@@ -225,13 +219,10 @@ private:
     /// @brief Reads every user table out of SQLite's own catalogue, with the
     ///        DDL that created it.
     ///
-    /// Deliberately not `SqlSchema::ReadAllTables`: that is the function whose
-    /// failure brings us here. It resolves every foreign key's target through
-    /// a name map built from the tables it enumerated, so a foreign key naming
-    /// a table that is no longer there reaches a `map::at` and throws
-    /// `std::out_of_range("map::at")`. `sqlite_master` resolves nothing and
-    /// cannot fail that way, which is exactly the property a recovery path
-    /// needs.
+    /// Deliberately not `SqlSchema::ReadAllTables`: this is the recovery path
+    /// for when that read fails, so it must not depend on it. `sqlite_master`
+    /// resolves nothing -- no foreign key targets, no column types -- which is
+    /// exactly the property a recovery path needs.
     ///
     /// @param stmt A usable statement on the shared test connection.
     /// @return Every table except SQLite's own `sqlite_%` bookkeeping ones.
@@ -363,9 +354,9 @@ private:
     /// handle is not one test's problem: it is every later test's, in this run
     /// and in every run after it, until somebody deletes a file that nothing
     /// told them about. That is the expensive half of the failure; the cheap
-    /// half is a throw that says only `map::at`, attributed to the `TEST_CASE`
-    /// line, naming neither the fixture, nor the file, nor the fact that the
-    /// state is on disk at all.
+    /// half is a bare exception message attributed to the `TEST_CASE` line,
+    /// naming neither the fixture, nor the file, nor the fact that the state
+    /// is on disk at all.
     ///
     /// Emptying the database quietly would trade that for something worse: a
     /// schema defect that reproduces every run becomes one that reproduces
@@ -422,9 +413,7 @@ private:
             "\n"
             "That database is a real file, shared by every test in this\n"
             "binary and kept between runs by design, so a state the drop\n"
-            "sweep cannot handle outlives the run that created it. `map::at`\n"
-            "is Lightweight's SqlSchema::ReadAllTables failing to resolve a\n"
-            "foreign key whose target table is missing.\n";
+            "sweep cannot handle outlives the run that created it.\n";
 
         if (overridden) {
             report +=

@@ -95,10 +95,14 @@ TEST_CASE("ORM relations: BelongsTo navigation and HasMany inverses", "[relation
 
     SECTION("HasMany: user.accounts contains the opened accounts") {
         auto user = dm.QuerySingle<bank::db::UserRecord>(userId).value();
-        REQUIRE(user.accounts.Count() >= 2);
+        const auto count = user.accounts.Count();
+        REQUIRE(count.has_value());
+        REQUIRE(*count >= 2);
+        auto accounts = user.accounts.All();
+        REQUIRE(accounts.has_value());
         bool sawChecking = false;
         bool sawSavings = false;
-        for (const auto& acct : user.accounts.All()) {
+        for (const auto& acct : accounts->get()) {
             const auto id = static_cast<std::int64_t>(acct->id.Value());
             sawChecking = sawChecking || id == checking.id;
             sawSavings = sawSavings || id == savings.id;

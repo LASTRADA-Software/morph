@@ -10,7 +10,7 @@
 #
 # ── Why this exists ──────────────────────────────────────────────────────────
 #
-# The pinned Lightweight (bbb972a78e1962b968a2c6ad93f7dade736eaa01) resolves
+# The pinned Lightweight (17c4e70d7fb4ead01376be0f46f201ad41c9a701) resolves
 # unixODBC with `pkg_check_modules(ODBC REQUIRED odbc)` and then propagates the
 # result as a PUBLIC *compile option*:
 #

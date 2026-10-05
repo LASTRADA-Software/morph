@@ -2,7 +2,6 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlMigration.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
 #include <exception>
 #include <filesystem>
 #include <string>
@@ -115,66 +114,27 @@ TEST_CASE("DbFixture::computeConnectionString uses ODBC_CONNECTION_STRING verbat
             "DRIVER=PostgreSQL;Database=whatever");
 }
 
-// When the shared database holds a foreign key whose target table is gone,
-// Lightweight's SqlSchema::ReadAllTables throws std::out_of_range("map::at")
-// out of DbFixture's constructor — before anything has been dropped, so the bad
-// state survives the run that reported it and every test after it fails the
-// same way, across invocations, until somebody deletes a file nothing names.
-//
-// Two test cases below, because the requirement has two halves and either can
-// hold without the other: the message has to name the fixture, the file and
-// the remedy, *and* the database has to be usable afterwards. A fixture that
-// only improved the message would satisfy the first and fail the second.
-namespace {
-
-/// @brief Leaves the shared database holding a foreign key whose target table
-///        does not exist, constructs a `DbFixture` over it, and returns what
-///        that constructor threw.
-/// @return The exception's text, or an empty string if it did not throw —
-///         which is itself a failure, and each caller asserts on it.
-std::string reportFromPoisonedDatabase() {
+// SQLite accepts a foreign key naming a table that does not exist -- the
+// target is resolved at DML time, not at CREATE time -- so a test can leave
+// one behind in the shared database file, where it survives into the next
+// run. The fixture has to clear it rather than carry it into the next test.
+TEST_CASE("DbFixture clears a dangling foreign key, so the next test is not a casualty of it",
+          "[ladder][testkit][db]") {
     {
         const morph::ladder::testkit::DbFixture fixture;
         Lightweight::SqlStatement stmt;
-        // SQLite accepts a foreign key naming a table that does not exist:
-        // the target is resolved at DML time, not at CREATE time. That is why
-        // this state is reachable at all, and why it survives on disk.
         (void)stmt.ExecuteDirect(
             "CREATE TABLE ladder_dangling_child "
             "(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES ladder_absent_parent(id))");
     }
-    try {
-        const morph::ladder::testkit::DbFixture poisoned;
-    } catch (const std::exception& error) {
-        return error.what();
-    }
-    return {};
-}
-
-}  // namespace
-
-TEST_CASE("DbFixture names itself, the database file and the remedy when the schema is unusable",
-          "[ladder][testkit][db]") {
-    const std::string reported = reportFromPoisonedDatabase();
-    // Names the fixture, so the report is not read as the test's own fault...
-    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("DbFixture"));
-    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("NOT a failure of the test case"));
-    // ...names the file, which is the thing a reader has to act on...
-    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("morph_ladder_test.db"));
-    // ...names what was wrong, and what it destroyed in saying so...
-    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("ladder_dangling_child -> ladder_absent_parent"));
-    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("CREATE TABLE ladder_dangling_child"));
-    // ...and names the remedy.
-    CHECK_THAT(reported, Catch::Matchers::ContainsSubstring("Remedy:"));
-}
-
-TEST_CASE("DbFixture leaves an unusable database usable, so the next test is not a casualty of it",
-          "[ladder][testkit][db]") {
-    REQUIRE_FALSE(reportFromPoisonedDatabase().empty());
-    // The half that costs the most when it is missing: the next fixture
-    // constructs, because the bad state is gone rather than still on disk.
     REQUIRE_NOTHROW([] { const morph::ladder::testkit::DbFixture fixture; }());
     const morph::ladder::testkit::DbFixture fixture;
+    {
+        Lightweight::SqlStatement stmt;
+        auto cursor = stmt.ExecuteDirect("SELECT COUNT(*) FROM sqlite_master WHERE name = 'ladder_dangling_child'");
+        REQUIRE(cursor.FetchRow());
+        CHECK(cursor.GetColumn<int>(1) == 0);
+    }
     Lightweight::DataMapper mapper;
     LadderTestkitProbe row;
     row.label = "usable again";

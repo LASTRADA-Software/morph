@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for the transactional outbox (todo.md B2, docs/planned/outbox.md):
+// Coverage for the transactional outbox:
 // LogEntry::idempotencyKey dedup in InMemoryActionLog/FileActionLog,
 // IModelHolder::setOutboxManaged/isOutboxManaged suppressing recordIfAttached,
 // and journal::OutboxRelay.
