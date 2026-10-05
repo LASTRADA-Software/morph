@@ -726,6 +726,39 @@ Key design decisions</h1>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone">Strict (non-clamping) datetime codec  </td><td class="markdownTableBodyNone"><span class="tt">Rational</span> clamps hostile input because any int pair still denotes a value; a malformed timestamp denotes nothing — rejecting the read beats fabricating an epoch.  </td></tr>
 </table>
+<h1 class="doxsection"><a class="anchor" id="non-goals"></a>
+Non-goals</h1>
+<p>What morph deliberately does not build, and why. morph is a UI bridge with one server that owns neither the store nor the tooling; each row below follows from that.</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Not building  </th><th class="markdownTableHeadNone">Why  </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Entity metamodel / naked objects</b> (Causeway)  </td><td class="markdownTableBodyNone">morph's unit is the <em>action</em>, deliberately. Rows plus row-bound actions already are an object UI; what is missing is metadata on the row, not a second parallel metamodel.  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Server-authoritative per-instance action availability</b> ("see it, use it, do it")  </td><td class="markdownTableBodyNone">A real gap — a client cannot ask "may I?" before invoking an action — but not worth the surface area it would add.  </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Query invalidation / live lists</b>  </td><td class="markdownTableBodyNone">Instance subscriptions already give shared instances a change channel, without a query-invalidation vocabulary.  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Paging / sorting contract on view schemas</b>  </td><td class="markdownTableBodyNone"><span class="tt">views.md</span> already records "no server-side query language" as a non-goal; paging stays a field on the query action.  </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Result-type presentation metadata</b> (money, enum labels, badge severity)  </td><td class="markdownTableBodyNone">Every GUI controller hand-writes a <span class="tt">toMap()</span> projection. Genuine duplication, but it is a forms-layer concern, not a model-layer one.  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Field- and row-level permissions</b> (Jmix, Causeway SecMan)  </td><td class="markdownTableBodyNone">They own the ORM and the whole app; morph owns a seam. Per-principal schema redaction would break the one-cached-schema-per-type design. The model is the right place, and <span class="tt">bank</span>'s <span class="tt">loadOwned</span> guard shows it works.  </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>BPM / BPMN engine</b> (Axelor, Jmix)  </td><td class="markdownTableBodyNone">A process engine without a store is meaningless, and morph does not own the store.  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Grain call filters / interceptor pipeline</b> (Orleans)  </td><td class="markdownTableBodyNone">morph already has validator + authorizer + <span class="tt">observe</span> + journal on every dispatch path. No observed friction.  </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Clustering, silos, placement, grain versioning, stateless workers, distributed ACID transactions</b> (Orleans)  </td><td class="markdownTableBodyNone">morph is a UI bridge with one server, not a distributed runtime.  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Managed streams with cursors and checkpoints</b> (Orleans)  </td><td class="markdownTableBodyNone">Instance subscriptions are best-effort and unbuffered by design; durability here is a distributed-runtime concern.  </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Reporting engine</b> (BIRT, JasperReports), <b>ORM + schema migration</b>, <b>IDE Studio</b>  </td><td class="markdownTableBodyNone">Out of identity. morph owns neither the store nor the tooling.  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Runtime custom fields / dynamic attributes</b> (Axelor, Jmix)  </td><td class="markdownTableBodyNone">Hard against compile-time reflection, and no observed need.  </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>REST / GraphQL facade, blob transfer, tabular export, multi-tenancy discriminator</b>  </td><td class="markdownTableBodyNone">Plausible, no observed need. Revisit when one exists.  </td></tr>
+</table>
 </div></div><!-- PageDoc -->
 <a href="doxygen_crawl.html"></a>
 </div><!-- contents -->

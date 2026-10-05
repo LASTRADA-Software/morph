@@ -55,5 +55,6 @@ var index =
       [ "<span class=\"tt\">MainThreadExecutor::runFor</span> does not drain on timeout", "index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout", null ]
     ] ],
     [ "Versioning &amp; compatibility", "index.html#versioning--compatibility", null ],
-    [ "Key design decisions", "index.html#key-design-decisions", null ]
+    [ "Key design decisions", "index.html#key-design-decisions", null ],
+    [ "Non-goals", "index.html#non-goals", null ]
 ];

@@ -83,6 +83,7 @@ var NAVTREEINDEX5 =
 "index.html#namespace-map":[0,1],
 "index.html#networkmonitor":[0,5,7],
 "index.html#networkmonitor-callbacks-must-not-block":[0,13,1],
+"index.html#non-goals":[0,16],
 "index.html#offline--connectivity--replay":[0,12,0,2],
 "index.html#overview":[0,0],
 "index.html#qt-integration-headers-includemorphqt":[0,12,1],
