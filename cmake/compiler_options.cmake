@@ -230,6 +230,20 @@ elseif(MORPH_COMPILER_FAMILY STREQUAL "Clang")
         #     headers.
         -Wno-thread-safety-negative
     )
+    #     Clang 23's lifetime-safety analysis, which -Weverything enables. It
+    #     raises three kinds of diagnostic here, none a defect: suggestions to
+    #     annotate a declaration (including in Qt's generated moc code, which
+    #     we cannot annotate), reports that an existing MORPH_LIFETIMEBOUND
+    #     cannot be verified, and false invalidations -- `out.push_back(...)`
+    #     on a `std::vector<T>& out` parameter is reported as using `out`
+    #     after invalidating it. The analysis is new and does not yet follow
+    #     this code; MORPH_LIFETIMEBOUND keeps stating the contracts for the
+    #     call-site checks that predate it. Older clang has none of these
+    #     groups. -Wno-lifetime-safety alone is not enough: the suggestions
+    #     and the lifetimebound check are separate groups under -Weverything.
+    _morph_clang_suppression_if_supported(-Wno-lifetime-safety)
+    _morph_clang_suppression_if_supported(-Wno-lifetime-safety-suggestions)
+    _morph_clang_suppression_if_supported(-Wno-lifetime-safety-lifetimebound-violation)
 
     # (g) AppleClang only, deliberately: the one place where the macOS
     #     toolchain's -Weverything set diverges from the Clang the CI legs use,

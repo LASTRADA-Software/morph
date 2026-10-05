@@ -264,9 +264,12 @@ function(morph_add_rung)
             set_source_files_properties("${_qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${_qml_name}")
         endforeach()
         qt_add_library(ladder_${_rung}_qml STATIC)
+        # The output directory ends in the URI so the build tree is a valid
+        # QML import path for this module, which qmllint relies on.
         qt_add_qml_module(ladder_${_rung}_qml
             URI ${_qml_uri}
             VERSION 1.0
+            OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_qml_uri}"
             QML_FILES ${_qml_files}
         )
         target_link_libraries(ladder_${_rung}_qml PUBLIC morph_forms_moduleplugin Qt6::Quick Qt6::Qml)

@@ -53,6 +53,13 @@ qt_add_executable(bank_gui
     main.cpp
 )
 
+# The module's .qml files live in qml/, so it needs a qmldir there too for
+# them to resolve the module's own types; Qt versions that predate the policy
+# do not know it.
+if(QT_KNOWN_POLICY_QTP0004)
+    qt_policy(SET QTP0004 NEW)
+endif()
+
 qt_add_qml_module(bank_gui
     URI BankGui
     VERSION 1.0

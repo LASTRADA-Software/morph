@@ -42,6 +42,7 @@
 #include <memory>
 #include <optional>
 
+#include "desktop_session.hpp"
 #include "gui/app_context.hpp"
 #include "lims/db/database.hpp"
 #include "result_qml_bridge.hpp"
@@ -88,6 +89,9 @@ int main(int argc, char** argv) {
         // between them — are built here, once, and live until the process
         // exits. A `Remote` context is not usable the line after its
         // constructor returns, which is what `onReady` is for.
+        if (!serverUrl) {
+            ::lims::gui::installDesktopSession(ctx.bridge());
+        }
         sampleBridge = std::make_unique<lims::gui::SampleBridge>(ctx.bridge(), ctx.executor());
         resultBridge = std::make_unique<lims::gui::ResultBridge>(ctx.bridge(), ctx.executor());
 
