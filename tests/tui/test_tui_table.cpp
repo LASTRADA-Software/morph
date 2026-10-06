@@ -11,7 +11,6 @@
 #include <morph/ui/view.hpp>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "tui/container_widgets.hpp"
@@ -314,12 +313,37 @@ TEST_CASE("tui table: two clicks on a row far apart in time are two clicks, not 
     int activations = 0;
     fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
     fruit.table->setOnActivate([&](ui::Key const& /*key*/) { ++activations; });
+    auto now = std::chrono::steady_clock::time_point{};
+    harness.context().now = [&now] { return now; };
     static_cast<void>(harness.draw());
     CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
-    std::this_thread::sleep_for(std::chrono::milliseconds{700});
+    now += std::chrono::milliseconds{501};
     CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
     CHECK(selections == std::vector<std::vector<ui::Key>>{{key(1)}, {}});
     CHECK(activations == 0);
+    // Within the double-click time, measured on the same clock, the second click activates.
+    now += std::chrono::milliseconds{1000};
+    CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
+    now += std::chrono::milliseconds{500};
+    CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
+    CHECK(activations == 1);
+}
+
+TEST_CASE("tui table: a key between two clicks on a row makes them two clicks, not a double click",
+          "[tui][table][click]") {
+    Harness harness{30, 4};
+    Fruit fruit{harness, ui::SelectionMode::None};
+    int activations = 0;
+    fruit.table->setOnActivate([&](ui::Key const& /*key*/) { ++activations; });
+    auto const now = std::chrono::steady_clock::time_point{};
+    harness.context().now = [now] { return now; };
+    static_cast<void>(harness.draw());
+    CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
+    CHECK(harness.key(KeyCode::Down) == EventResult::Handled);
+    CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
+    CHECK(activations == 0);
+    CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
+    CHECK(activations == 1);
 }
 
 TEST_CASE("tui table: Space and Enter in a None table select nothing; Enter still activates", "[tui][table]") {
@@ -415,12 +439,14 @@ TEST_CASE("tui table: a focused widget inside a row keeps that row in view", "[t
 
 TEST_CASE("tui table: a table inside a disabled container two levels up takes no key, click or wheel",
           "[tui][table][gating]") {
-    Harness harness{30, 6};
+    using Type = core::tui::MouseEvent::Type;
+    Harness harness{30, 3};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
     auto const outer = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
     auto const inner = harness.make<StackImpl>(outer.get(), ui::Axis::Vertical);
     {
         Fruit fruit{harness, ui::SelectionMode::Multiple, inner.get()};
+        fruit.addRow(harness, key(3), "fig", "7");  // one row more than there is room for, so the wheel can scroll
         int calls = 0;
         fruit.table->setOnSelectionChange([&](std::vector<ui::Key> const& /*keys*/) { ++calls; });
         fruit.table->setOnActivate([&](ui::Key const& /*key*/) { ++calls; });
@@ -434,6 +460,8 @@ TEST_CASE("tui table: a table inside a disabled container two levels up takes no
         harness.screen().setFocus(nullptr);
         CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Ignored);
         CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Ignored);
+        CHECK(harness.send(mouse(Type::ScrollDown, {.x = 3, .y = 1})) == EventResult::Ignored);
+        CHECK(harness.draw() == Rows{"  Name  Qty", "  apple 3", "  kiwi  12"});
         CHECK(calls == 0);
         CHECK(fruit.table->markedRows().empty());
 
@@ -441,6 +469,8 @@ TEST_CASE("tui table: a table inside a disabled container two levels up takes no
         static_cast<void>(harness.draw());
         CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
         CHECK(calls == 1);
+        CHECK(harness.send(mouse(Type::ScrollDown, {.x = 3, .y = 1})) == EventResult::Handled);
+        CHECK(harness.draw() == Rows{"  Name  Qty", "  kiwi  12", "  fig   7"});
     }
 }
 
@@ -597,4 +627,32 @@ TEST_CASE("tui table: setRowKey of a widget that is not one of its rows throws",
     auto const table = harness.make<TableImpl>(nullptr);
     auto const stranger = harness.make<TextImpl>(nullptr);
     CHECK_THROWS_AS(table->setRowKey(*stranger, key(1)), std::logic_error);
+}
+
+TEST_CASE("tui table: PageUp and PageDown move the cursor by a view of lines, not of rows", "[tui][table][scroll]") {
+    Harness harness{30, 5};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name"}});
+    std::vector<std::unique_ptr<StackImpl>> rows;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    for (std::int64_t index = 0; index < 6; ++index) {
+        rows.push_back(harness.make<StackImpl>(table.get(), ui::Axis::Horizontal));
+        cells.push_back(harness.make<TextImpl>(rows.back().get()));
+        cells.back()->setText("row" + std::to_string(index) + "\n.");
+        table->setRowKey(*rows.back(), key(index));
+    }
+    std::vector<ui::Key> activated;
+    table->setOnActivate([&](ui::Key activatedKey) { activated.push_back(std::move(activatedKey)); });
+    harness.focus(*table);
+    CHECK(harness.draw() == Rows{"  Name", " >row0", "  .", "  row1", "  ."});
+    // Four lines below the header hold two rows of two lines: a page moves two rows.
+    static_cast<void>(harness.key(KeyCode::PageDown));
+    CHECK(harness.draw() == Rows{"  Name", "  row1", "  .", " >row2", "  ."});
+    static_cast<void>(harness.key(KeyCode::PageDown));
+    static_cast<void>(harness.key(KeyCode::Enter));
+    static_cast<void>(harness.key(KeyCode::PageUp));
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(activated == std::vector<ui::Key>{key(4), key(2)});
+    cells.clear();
+    rows.clear();
 }

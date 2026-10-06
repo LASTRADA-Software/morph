@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <chrono>
 #include <core/tui/Component.hpp>
 #include <core/tui/Screen.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
@@ -48,6 +50,9 @@ struct Context {
     /// Widgets that have a popup open (a dropdown's list), which close it once the user cannot reach them (see
     /// `closeUnreachablePopups`).
     std::vector<WidgetBase*> popups;
+    /// The clock every widget reads the time from (a table telling a double click from two clicks); a test may
+    /// replace it.
+    std::function<std::chrono::steady_clock::time_point()> now = [] { return std::chrono::steady_clock::now(); };
 
     /// The widget owning @p view, or null for a component no widget registered (an overlay, the root).
     [[nodiscard]] WidgetBase* ownerOf(::core::tui::Component const* view) const;

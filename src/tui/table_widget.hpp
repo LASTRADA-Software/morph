@@ -25,11 +25,12 @@ namespace morph::tui::detail {
 /// cells after it stay under their own headers. A two-cell gutter marks selected rows `*` and, while the table has
 /// focus, the cursor row `>`.
 ///
-/// Up, Down, PageUp, PageDown, Home and End move the cursor; Space selects the cursor row (Single) or toggles it
-/// (Multiple); Enter selects it in Single mode and activates it in every mode. A click moves the cursor to a row and
-/// selects or toggles it as Space does; a second click on the same row within half a second is a double click, which
-/// activates the row and leaves the selection as the first click left it. A row the user cannot reach (disabled) is
-/// neither selected nor activated.
+/// Up, Down, Home and End move the cursor, and PageUp and PageDown by as many rows as fill the room below the header;
+/// Space selects the cursor row (Single) or toggles it (Multiple); Enter selects it in Single mode and activates it in
+/// every mode. A click moves the cursor to a row and selects or toggles it as Space does; a second click on the same
+/// row within half a second (on `Context::now`), with no key between, is a double click, which activates the row and
+/// leaves the selection as the first click left it. A row the user cannot reach (disabled) is neither selected nor
+/// activated.
 ///
 /// The table keeps the keys last requested by `setSelection` or selected by the user, and marks every row that has
 /// one of them: a key with no row marks nothing and stays requested, a row that goes is unmarked and is marked again
@@ -79,6 +80,10 @@ private:
     void moveCursor(std::span<WidgetBase* const> rows, std::size_t place);
     /// The first of @p rows to draw so that the last ones fill the room below the header.
     [[nodiscard]] std::size_t lastTop(std::span<WidgetBase* const> rows) const;
+    /// The row a page away from @p place among @p rows in @p direction: as far as the rows passed fit in the room
+    /// below the header, and at least one row on while there is one.
+    [[nodiscard]] std::size_t pageFrom(std::span<WidgetBase* const> rows, std::size_t place,
+                                       Direction direction) const;
     /// Moves the cursor into the row holding the focus when the focus moved there, and has the view follow it when
     /// the focus moved to the table or into a row.
     void followFocus(std::span<WidgetBase* const> rows);

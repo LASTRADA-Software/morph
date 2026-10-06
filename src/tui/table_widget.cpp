@@ -181,6 +181,21 @@ std::size_t TableImpl::lastTop(std::span<WidgetBase* const> rows) const {
     return rows.empty() ? 0 : std::min(top, rows.size() - 1);
 }
 
+// At least one row, so a row taller than the room still moves.
+std::size_t TableImpl::pageFrom(std::span<WidgetBase* const> rows, std::size_t place, Direction direction) const {
+    int used = 0;
+    std::size_t target = place;
+    while (direction == Direction::Forward ? target + 1 < rows.size() : target > 0) {
+        auto const next = direction == Direction::Forward ? target + 1 : target - 1;
+        used += rowHeight(*rows.subspan(next).front());
+        if (used > _rowRoom && target != place) {
+            break;
+        }
+        target = next;
+    }
+    return target;
+}
+
 void TableImpl::followFocus(std::span<WidgetBase* const> rows) {
     auto const* const focused = context().screen->focusedComponent();
     if (focused == _focusSeen) {
@@ -283,22 +298,23 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     }
 }
 
+// Any key ends a double click: the click after it is a first click.
 EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
+    _lastClick = {};
     if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
         return EventResult::Ignored;
     }
     auto const rows = shownChildren();
     auto const place = cursorPlace(rows);
     auto const last = rows.empty() ? std::size_t{0} : rows.size() - 1;
-    auto const page = static_cast<std::size_t>(std::max(1, _rowRoom));
     if (isKey(key, KeyCode::Up)) {
         moveCursor(rows, place > 0 ? place - 1 : 0);
     } else if (isKey(key, KeyCode::Down)) {
         moveCursor(rows, std::min(place + 1, last));
     } else if (isKey(key, KeyCode::PageUp)) {
-        moveCursor(rows, place - std::min(place, page));
+        moveCursor(rows, pageFrom(rows, place, Direction::Backward));
     } else if (isKey(key, KeyCode::PageDown)) {
-        moveCursor(rows, std::min(place + page, last));
+        moveCursor(rows, pageFrom(rows, place, Direction::Forward));
     } else if (isKey(key, KeyCode::Home)) {
         moveCursor(rows, 0);
     } else if (isKey(key, KeyCode::End)) {
@@ -338,7 +354,7 @@ void TableImpl::click(::core::tui::Point cell) {
     if (row == nullptr) {
         return;
     }
-    auto const now = std::chrono::steady_clock::now();
+    auto const now = context().now();
     bool const twice = _lastClick.row == row && now - _lastClick.at <= kDoubleClick;
     _lastClick = twice ? LastClick{} : LastClick{.row = row, .at = now};
     auto const rows = shownChildren();
@@ -351,6 +367,8 @@ void TableImpl::click(::core::tui::Point cell) {
     }
 }
 
+// A move the user asked for counts as having followed the cursor and the focus as they are now, so the next frame
+// does not undo it when either moved since the last one.
 bool TableImpl::wheel(int delta) {
     auto const rows = shownChildren();
     auto const target = delta < 0 ? _top - std::min(_top, static_cast<std::size_t>(-delta))
@@ -359,6 +377,8 @@ bool TableImpl::wheel(int delta) {
         return false;
     }
     _top = target;
+    _follow = false;
+    _focusSeen = context().screen->focusedComponent();
     refresh();
     return true;
 }
