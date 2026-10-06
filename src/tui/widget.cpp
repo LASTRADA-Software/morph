@@ -25,7 +25,12 @@ namespace {
 class View final : public Hosted<::core::tui::Component> {
 public:
     using Hosted::Hosted;
-    void render(::core::tui::Canvas& canvas) override { owner().paint(canvas); }
+    void render(::core::tui::Canvas& canvas) override {
+        if (owner().container() == nullptr) {
+            forgetDrawnBounds(*this);
+        }
+        owner().paint(canvas);
+    }
     /// Hands the event to the owner. A handler may destroy the owner meanwhile, and this view with it, so nothing is
     /// touched after the call.
     [[nodiscard]] EventResult onEvent(::core::tui::InputEvent const& event) override {
@@ -159,16 +164,18 @@ EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
     if (mouse.type == Type::Release) {
         return release(mouse);
     }
-    return _pressed ? EventResult::Handled : EventResult::Ignored;
+    return _context->pressed == this ? EventResult::Handled : EventResult::Ignored;
 }
 
+// Any press ends an earlier gesture whose release never arrived, whether or not this widget takes the new one.
 // Handling the press makes this view the screen's pointer capture target, so the moves and the release that follow
 // come here wherever the pointer goes.
 EventResult WidgetBase::press(::core::tui::MouseEvent const& mouse) {
+    _context->pressed = nullptr;
     if (mouse.button != 0 || !actionable() || !(wantsFocus() || _dragKey)) {
         return EventResult::Ignored;
     }
-    _pressed = true;
+    _context->pressed = this;
     if (wantsFocus()) {
         _context->screen->setFocus(_view.get());
     }
@@ -178,10 +185,10 @@ EventResult WidgetBase::press(::core::tui::MouseEvent const& mouse) {
 // A release clicks only inside the view and only while the widget is still actionable: its container may have been
 // disabled or hidden since the press.
 EventResult WidgetBase::release(::core::tui::MouseEvent const& mouse) {
-    if (!_pressed) {
+    if (_context->pressed != this) {
         return EventResult::Ignored;
     }
-    _pressed = false;
+    _context->pressed = nullptr;
     ::core::tui::Point const cell{.x = mouse.x - 1, .y = mouse.y - 1};
     auto const bounds = _view->screenBounds();
     bool const inside = cell.x >= 0 && cell.y >= 0 && cell.x < bounds.width && cell.y < bounds.height;
@@ -402,6 +409,18 @@ void collectFocusable(WidgetBase& root, std::vector<::core::tui::Component*>& ou
             auto const children = container->children();
             pending.insert(pending.end(), children.rbegin(), children.rend());
         }
+    }
+}
+
+void forgetDrawnBounds(::core::tui::Component& top) {
+    auto const below = top.children();
+    std::vector<::core::tui::Component*> pending{below.begin(), below.end()};
+    while (!pending.empty()) {
+        auto* const component = pending.back();
+        pending.pop_back();
+        component->setScreenBounds({});
+        auto const children = component->children();
+        pending.insert(pending.end(), children.begin(), children.end());
     }
 }
 

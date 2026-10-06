@@ -5,6 +5,7 @@
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Rect.hpp>
 #include <cstdint>
+#include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
 #include <string>
@@ -25,6 +26,7 @@ using morph::tui::detail::SpacerImpl;
 using morph::tui::detail::StackImpl;
 using morph::tui::detail::TextImpl;
 using morph::tui::testing::Harness;
+using morph::tui::testing::ResizableOutput;
 using Rows = std::vector<std::string>;
 
 TEST_CASE("tui widgets: a column renders its children top to bottom", "[tui][widgets]") {
@@ -482,4 +484,98 @@ TEST_CASE("tui widgets: Tab order follows the children's order after moves in bo
     CHECK(harness.focused(*first));
     backward();
     CHECK(harness.focused(*second));
+}
+
+TEST_CASE("tui widgets: a child squeezed out of a column takes no click at its old place", "[tui][widgets][drawn]") {
+    Harness harness{10, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("t");
+    auto const row = harness.make<StackImpl>(column.get(), ui::Axis::Horizontal);
+    auto const button = harness.make<ButtonImpl>(row.get());
+    button->setLabel("B");
+    int clicks = 0;
+    button->setOnClick([&] { ++clicks; });
+    CHECK(harness.draw() == Rows{"t", "[ B ]"});
+
+    text->setText("1\n2\n3");
+    CHECK(harness.draw() == Rows{"1", "2"});
+    CHECK(WidgetBase::of(*button).view().screenBounds().empty());
+    static_cast<void>(harness.click({.x = 1, .y = 1}));
+    CHECK(clicks == 0);
+
+    text->setText("t");
+    CHECK(harness.draw() == Rows{"t", "[ B ]"});
+    CHECK(harness.click({.x = 1, .y = 1}) == EventResult::Handled);
+    CHECK(clicks == 1);
+}
+
+TEST_CASE("tui widgets: a child skipped or squeezed out of a row takes no click at its old place",
+          "[tui][widgets][drawn]") {
+    Harness harness{8, 1};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    int clicks = 0;
+    SECTION("skipped, as by a scroll") {
+        auto const button = harness.make<ButtonImpl>(row.get());
+        button->setLabel("A");
+        button->setOnClick([&] { ++clicks; });
+        auto const text = harness.make<TextImpl>(row.get());
+        text->setText("t");
+        CHECK(harness.draw() == Rows{"[ A ]t"});
+        row->setSkip(1);
+        CHECK(harness.draw() == Rows{"t"});
+        CHECK(WidgetBase::of(*button).view().screenBounds().empty());
+        static_cast<void>(harness.click({.x = 3, .y = 0}));
+    }
+    SECTION("squeezed by a sibling that grew") {
+        auto const text = harness.make<TextImpl>(row.get());
+        text->setText("ab");
+        auto const button = harness.make<ButtonImpl>(row.get());
+        button->setLabel("B");
+        button->setOnClick([&] { ++clicks; });
+        CHECK(harness.draw() == Rows{"ab[ B ]"});
+        text->setText("abcdefgh");
+        CHECK(harness.draw() == Rows{"abcdefgh"});
+        CHECK(WidgetBase::of(*button).view().screenBounds().empty());
+        static_cast<void>(harness.click({.x = 4, .y = 0}));
+    }
+    CHECK(clicks == 0);
+}
+
+TEST_CASE("tui widgets: a child that falls off a shrinking terminal keeps no drawn bounds", "[tui][widgets][drawn]") {
+    auto output = std::make_unique<ResizableOutput>(core::tui::Size{.width = 10, .height = 2});
+    auto& terminal = *output;
+    Harness harness{std::move(output)};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("t");
+    auto const button = harness.make<ButtonImpl>(column.get());
+    button->setLabel("B");
+    CHECK(harness.draw() == Rows{"t", "[ B ]"});
+    REQUIRE_FALSE(WidgetBase::of(*button).view().screenBounds().empty());
+
+    terminal.resize({.width = 10, .height = 1});
+    static_cast<void>(harness.send(core::tui::ResizeEvent{.columns = 10, .rows = 1}));
+    CHECK(harness.draw() == Rows{"t"});
+    CHECK(WidgetBase::of(*button).view().screenBounds().empty());
+    CHECK(harness.screen().componentAt(1, 1) == nullptr);
+}
+
+TEST_CASE("tui widgets: a press that lost its release is ended by the next press", "[tui][widgets]") {
+    Harness harness{10, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const button = harness.make<ButtonImpl>(column.get());
+    button->setLabel("A");
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("text");
+    int clicks = 0;
+    button->setOnClick([&] { ++clicks; });
+    CHECK(harness.draw() == Rows{"[ A ]", "text"});
+
+    CHECK(harness.send(pressAt({.x = 1, .y = 0})) == EventResult::Handled);
+    static_cast<void>(harness.send(pressAt({.x = 1, .y = 1})));
+    static_cast<void>(harness.send(releaseAt({.x = 1, .y = 0})));
+    CHECK(clicks == 0);
+    CHECK(harness.click({.x = 1, .y = 0}) == EventResult::Handled);
+    CHECK(clicks == 1);
 }

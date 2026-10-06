@@ -31,6 +31,9 @@ struct Context {
     std::vector<::core::tui::Component*> openDialogs;                       ///< Open dialog frames, innermost last.
     std::size_t activeBusy = 0;                                             ///< Busy widgets that are spinning.
     std::size_t animationFrame = 0;                                         ///< The spinner frame to draw.
+    /// The widget whose press is waiting for its release, or null. Every press a widget sees clears it first: a new
+    /// press ends any gesture whose release never arrived, as it ends the screen's pointer capture.
+    WidgetBase* pressed = nullptr;
 
     /// The widget owning @p view, or null for a component no widget registered (an overlay, the root).
     [[nodiscard]] WidgetBase* ownerOf(::core::tui::Component const* view) const;

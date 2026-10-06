@@ -122,7 +122,6 @@ private:
     bool _userVisible = true;
     bool _structuralVisible = true;
     bool _enabled = true;
-    bool _pressed = false;
     ui::LayoutHints _layout{};
     std::optional<ui::Key> _dragKey;
     std::function<bool(ui::Key const&)> _accepts;
@@ -234,11 +233,12 @@ struct StackSpec {
 /// The natural size of @p children stacked along @p axis with @p gap between them; hidden children count nothing.
 [[nodiscard]] ::core::tui::Size stackNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap);
 /// Places @p children inside @p area (parent-relative). Hidden and skipped children get an empty area, so they
-/// neither render nor take a click.
+/// neither render nor take a click (see `forgetDrawnBounds`).
 ///
 /// With no extents the layout solver sizes the shown children, and a hidden one takes no space. With extents every
 /// child takes the next one, in order, so a hidden child keeps its slot and the children after it stay in their
-/// columns; a child past the last extent takes its natural extent. A skipped child takes no space in either mode.
+/// columns; a child past the last extent takes its natural extent. A skipped child takes no space in either mode;
+/// with extents it still uses up its extent, so each later child keeps its own column's.
 void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area, StackSpec const& spec);
 /// @p text split at '\n'.
 [[nodiscard]] std::vector<std::string_view> splitLines(std::string_view text);
@@ -248,6 +248,13 @@ void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area,
 [[nodiscard]] bool isActivation(::core::tui::KeyEvent const& key) noexcept;
 /// Appends the view of every focusable widget at or below @p root, depth first in `children()` order: Tab order.
 void collectFocusable(WidgetBase& root, std::vector<::core::tui::Component*>& out);
+/// Empties the screen bounds of every component below @p top, which a drawn tree's top component (a root widget's
+/// view) calls as it renders, before its descendants render.
+///
+/// core::tui leaves a component's screen bounds as they were when it is not drawn: one whose area is empty or lies
+/// outside its parent's. Hit-testing reads those bounds, so a widget squeezed or scrolled out of a frame would still
+/// take clicks at the place it last had. Emptied first, the bounds after a frame are those of what it drew.
+void forgetDrawnBounds(::core::tui::Component& top);
 /// Whether @p node is @p root or one of its descendants.
 [[nodiscard]] bool isWithin(::core::tui::Component const* node, ::core::tui::Component const& root) noexcept;
 /// Puts @p widget under @p parent, or at the screen's root when @p parent is null.

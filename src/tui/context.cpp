@@ -15,6 +15,11 @@ WidgetBase* Context::ownerOf(::core::tui::Component const* view) const {
     return found == owners.end() ? nullptr : found->second;
 }
 
-void Context::forget(WidgetBase& widget) { std::erase(roots, &widget); }
+void Context::forget(WidgetBase& widget) {
+    std::erase(roots, &widget);
+    if (pressed == &widget) {
+        pressed = nullptr;
+    }
+}
 
 }  // namespace morph::tui::detail
