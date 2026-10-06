@@ -113,9 +113,11 @@ public:
     /// `Context::popups` the user can no longer reach; it runs no handler.
     virtual void closePopup() {}
 
-    /// Routes one event of this widget's view: mouse to `pointer()`, keys to `key()` while actionable.
+    /// Routes one event of this widget's view: mouse to `pointer()`, keys to `key()` while actionable and not behind
+    /// an open dialog (see `activeDialog`).
     [[nodiscard]] ::core::tui::EventResult dispatch(::core::tui::InputEvent const& event);
-    /// Press, motion, release and wheel on this widget's view.
+    /// Press, motion, release and wheel on this widget's view. Behind an open dialog they are swallowed, and a press
+    /// there still ends a press whose release never came.
     [[nodiscard]] ::core::tui::EventResult pointer(::core::tui::MouseEvent const& mouse);
     [[nodiscard]] bool focusable() const { return wantsFocus() && actionable(); }
     [[nodiscard]] bool hasFocus() const noexcept { return _view != nullptr && _view->focused(); }
@@ -134,6 +136,8 @@ protected:
 
 private:
     void syncVisible();
+    /// Whether an open dialog the user sees lies over this widget: its view is outside that dialog's frame.
+    [[nodiscard]] bool blockedByDialog() const;
     void paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size laidOut);
     [[nodiscard]] ::core::tui::EventResult press(::core::tui::MouseEvent const& mouse);
     [[nodiscard]] ::core::tui::EventResult release(::core::tui::MouseEvent const& mouse);
@@ -297,8 +301,17 @@ void forgetDrawnBounds(::core::tui::Component& top);
 [[nodiscard]] bool isWithin(::core::tui::Component const* node, ::core::tui::Component const& root) noexcept;
 /// Puts @p widget under @p parent, or at the screen's root when @p parent is null.
 void attach(Context& context, ui::ContainerWidget* parent, WidgetBase& widget);
-/// Sizes every root widget to the viewport.
+/// The top-left corner that centres an overlay of @p size on @p screen's viewport.
+[[nodiscard]] ::core::tui::Point centredIn(::core::tui::Screen const& screen, ::core::tui::Size size);
+/// Sizes every root widget to the viewport and centres every open dialog's frame; runs before every frame.
+///
+/// It also empties the screen bounds of each root view, and of each open dialog's frame and everything in it, which
+/// the frame that follows sets again for what it draws. core::tui draws neither a hidden view nor one with no room
+/// on the screen, and leaves its bounds as they were; shown again, it would take clicks at its old place until the
+/// next frame.
 void fit(Context& context);
+/// The open dialog the user sees whose frame is on top, or null: the one that is modal.
+[[nodiscard]] ContainerBase* activeDialog(Context const& context);
 /// Moves keyboard focus to @p target, or nowhere for null; returns whether @p target has the focus afterwards.
 ///
 /// The focus leaves the old widget on its own first. A field commits what was typed when it loses the focus, and the
@@ -316,8 +329,15 @@ bool focusPopup(Context& context, WidgetBase& owner, ::core::tui::Component& pop
 /// when one of them is hidden, disabled or collapsed. Hiding, showing, disabling and enabling a widget calls this; a
 /// container that stops letting its children act by other means (`letsChildrenAct`) must call it too.
 void closeUnreachablePopups(Context& context);
-/// Moves keyboard focus to the next or previous focusable widget of the roots, in `collectFocusable` order,
-/// wrapping around at either end; through `focusWidget`, so a widget destroyed meanwhile gets nothing.
+/// Moves keyboard focus to the next or previous focusable widget, in `collectFocusable` order, wrapping around at
+/// either end: of the roots, or inside the `activeDialog` while there is one, whose frame takes the focus when it
+/// holds nothing focusable. Through `focusWidget`, so a widget destroyed meanwhile gets nothing.
 void moveFocus(Context& context, Direction direction);
+/// Moves keyboard focus into the `activeDialog`: to its first focusable widget, or to its frame when it holds none.
+///
+/// The old focus leaves first, and the dialog and the widget are picked only then: a field committing what was
+/// typed runs a handler, which may destroy widgets, a dialog among them. With no dialog open by then the focus
+/// stays nowhere.
+void enterDialog(Context& context);
 
 }  // namespace morph::tui::detail

@@ -10,6 +10,7 @@
 
 namespace morph::tui::detail {
 
+class ContainerBase;
 class WidgetBase;
 
 /// Which way keyboard focus moves.
@@ -28,14 +29,16 @@ struct Context {
     ::core::tui::Screen* screen;                                            ///< Where every view renders.
     std::unordered_map<::core::tui::Component const*, WidgetBase*> owners;  ///< Each registered view's widget.
     std::vector<WidgetBase*> roots;                                         ///< Widgets created with no parent.
-    std::vector<::core::tui::Component*> openDialogs;                       ///< Open dialog frames, innermost last.
-    std::size_t activeBusy = 0;                                             ///< Busy widgets that are spinning.
-    std::size_t animationFrame = 0;                                         ///< The spinner frame to draw.
+    /// Open dialogs, in the order their frames (each one's `ContainerBase::host()`) are shown: the last one shown is
+    /// drawn on top.
+    std::vector<ContainerBase*> openDialogs;
+    std::size_t activeBusy = 0;      ///< Busy widgets that are spinning.
+    std::size_t animationFrame = 0;  ///< The spinner frame to draw.
     /// The widget whose press is waiting for its release, or null. Every press a widget sees clears it first: a new
     /// press ends any gesture whose release never arrived, as it ends the screen's pointer capture.
     WidgetBase* pressed = nullptr;
-    /// Widgets that code running a handler is waiting on, each through a pointer `forget` sets to null when that
-    /// widget is destroyed (see `focusWidget`).
+    /// Widgets that code is waiting on — code running a handler (see `focusWidget`), an open dialog that will hand
+    /// the focus back — each through a pointer `forget` sets to null when that widget is destroyed.
     std::vector<WidgetBase**> watches;
     /// Widgets that have a popup open (a dropdown's list), which close it once the user cannot reach them (see
     /// `closeUnreachablePopups`).

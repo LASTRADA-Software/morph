@@ -7,6 +7,7 @@
 #include <core/tui/Rect.hpp>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
@@ -167,6 +168,68 @@ private:
         bool operator==(Followed const&) const = default;
     };
     Followed _followed;
+};
+
+/// Dialog: a box with a title, centred on the screen over everything else, holding the dialog's children; its place
+/// in the tree is an empty anchor. A new dialog is closed.
+///
+/// The box is an overlay (`host()`), shown while the dialog is open and the user could see it: the dialog and every
+/// container around it shown, and no dialog around it closed. A dialog opened inside a closed one therefore shows
+/// once that one opens, and then on top of it. The box on top is modal (`activeDialog`): Tab cycles inside it, and
+/// neither the pointer nor a key reaches anything behind it.
+///
+/// Opening moves the focus inside, to the first focusable widget of the box on top, or to the box itself when it
+/// holds none. Closing hands the focus back to the widget that had it when the dialog opened, when the focus was
+/// inside or nowhere by then (the mount destroys a dialog's content before closing it, and the focused content
+/// clears the focus as it goes), and that widget is still there and can take it; else into the box now on top, or
+/// nowhere. Esc inside the open, actionable dialog calls onDismiss; no setter does.
+class DialogImpl final : public TuiContainer<ui::DialogWidget> {
+public:
+    explicit DialogImpl(Context& context) : TuiContainer{context}, _frame{makeFrame()} { adopt(makeView(*this)); }
+    /// @brief Closes the dialog, handing the focus back as closing does.
+    ~DialogImpl() override;
+    DialogImpl(DialogImpl const&) = delete;
+    DialogImpl& operator=(DialogImpl const&) = delete;
+    DialogImpl(DialogImpl&&) = delete;
+    DialogImpl& operator=(DialogImpl&&) = delete;
+
+    void setOpen(bool open) override;
+    void setTitle(std::string_view title) override;
+    void setOnDismiss(ui::Action onDismiss) override;
+    [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }
+    [[nodiscard]] std::string probeText() const override { return _title; }
+    /// The box, where the children's views sit.
+    [[nodiscard]] ::core::tui::Component& host() override { return *_frame; }
+    [[nodiscard]] bool letsChildrenAct() const override { return _open; }
+    /// Where the children go inside the box when it is @p size large, in the box's coordinates.
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    [[nodiscard]] bool isOpen() const noexcept { return _open; }
+
+private:
+    class Frame;
+    [[nodiscard]] std::unique_ptr<::core::tui::Component> makeFrame();
+    /// Whether the box shows: open, and the dialog and the containers around it shown and letting their children act.
+    [[nodiscard]] bool showsFrame() const;
+    [[nodiscard]] ::core::tui::Size frameSize() const;
+    void paintFrame(::core::tui::Canvas& canvas);
+    [[nodiscard]] ::core::tui::EventResult frameEvent(::core::tui::InputEvent const& event);
+    /// Whether the focus is nowhere, or on this dialog's box or inside it, nested dialogs included.
+    [[nodiscard]] bool holdsFocus() const;
+    /// Shows again, on top of this one's box, the boxes of the open dialogs inside this dialog.
+    void raiseNested();
+    /// Makes @p widget the one the focus goes back to, watched so that it reads null once that widget is gone.
+    void returnFocusTo(WidgetBase* widget);
+    /// Makes no widget the one the focus goes back to.
+    void forgetRestore() noexcept;
+    void openFrame();
+    void closeFrame();
+
+    std::unique_ptr<::core::tui::Component> _frame;  ///< A Frame.
+    std::string _title;
+    ui::Action _onDismiss;
+    bool _open = false;
+    /// The widget that had the focus when this dialog took it, while it lives; an open dialog stands for its box.
+    WidgetBase* _restore = nullptr;
 };
 
 }  // namespace morph::tui::detail

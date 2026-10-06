@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <core/tui/Box.hpp>
+#include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
@@ -17,6 +18,8 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
+#include <vector>
 
 namespace morph::tui::detail {
 
@@ -417,6 +420,213 @@ bool ScrollImpl::wantsFocus() const {
         cells = _extent - _viewport - _offset;
     }
     return cells != 0 && scrollBy(cells) ? ::core::tui::EventResult::Handled : ::core::tui::EventResult::Ignored;
+}
+
+namespace {
+
+/// The widget @p component belongs to: the one whose view it is, or the open dialog whose box it is; null for any
+/// other component (a dropdown's list).
+WidgetBase* focusOwner(Context const& context, ::core::tui::Component const* component) {
+    if (auto* const owner = context.ownerOf(component)) {
+        return owner;
+    }
+    auto const found = std::ranges::find_if(
+        context.openDialogs, [component](ContainerBase* dialog) { return &dialog->host() == component; });
+    return found == context.openDialogs.end() ? nullptr : *found;
+}
+
+/// Whether @p widget is @p outer or lies inside it.
+bool isInside(WidgetBase const* widget, WidgetBase const& outer) {
+    for (; widget != nullptr; widget = widget->container()) {
+        if (widget == &outer) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Hands the focus to @p target when it is still there and can take it, and is not behind the open dialog on top;
+/// else into that dialog, or nowhere. A dialog as @p target, which stands for its box, never takes the focus itself:
+/// the focus goes into the dialog on top, which is that one when it is still open and nothing lies over it.
+void returnFocus(Context& context, WidgetBase* target) {
+    auto* const dialog = activeDialog(context);
+    bool const reachable = target != nullptr && (dialog == nullptr || isWithin(&target->view(), dialog->host()));
+    if (reachable && focusWidget(context, target)) {
+        return;
+    }
+    enterDialog(context);
+}
+
+}  // namespace
+
+/// The dialog's box: an overlay that paints the border and the title and holds the children's views. Focusable, so
+/// that Esc reaches it while the dialog holds nothing focusable.
+class DialogImpl::Frame final : public ::core::tui::Component {
+public:
+    explicit Frame(DialogImpl& owner) : _owner{&owner} {}
+    void render(::core::tui::Canvas& canvas) override { _owner->paintFrame(canvas); }
+    [[nodiscard]] ::core::tui::Size preferredSize() const override { return _owner->frameSize(); }
+    [[nodiscard]] bool visible() const noexcept override { return Component::visible() && _owner->showsFrame(); }
+    [[nodiscard]] bool focusable() const override { return true; }
+    /// onDismiss may destroy the dialog and this box with it, so nothing is touched after the call.
+    [[nodiscard]] ::core::tui::EventResult onEvent(::core::tui::InputEvent const& event) override {
+        return _owner->frameEvent(event);
+    }
+
+private:
+    DialogImpl* _owner;
+};
+
+std::unique_ptr<::core::tui::Component> DialogImpl::makeFrame() { return std::make_unique<Frame>(*this); }
+
+DialogImpl::~DialogImpl() { closeFrame(); }
+
+void DialogImpl::setOpen(bool open) {
+    if (open) {
+        openFrame();
+    } else {
+        closeFrame();
+    }
+}
+
+void DialogImpl::setTitle(std::string_view title) {
+    _title = std::string{title};
+    refresh();
+}
+
+void DialogImpl::setOnDismiss(ui::Action onDismiss) { _onDismiss = std::move(onDismiss); }
+
+std::vector<::core::tui::Rect> DialogImpl::childAreas(::core::tui::Size size) const {
+    return stackAreas(children(),
+                      {.x = 2, .y = 1, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2)},
+                      StackSpec{.axis = ui::Axis::Vertical});
+}
+
+bool DialogImpl::showsFrame() const {
+    if (!_open || !shown()) {
+        return false;
+    }
+    for (ContainerBase const* outer = container(); outer != nullptr; outer = outer->container()) {
+        if (!outer->shown() || !outer->letsChildrenAct()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+::core::tui::Size DialogImpl::frameSize() const {
+    auto const inner = stackNaturalSize(children(), ui::Axis::Vertical, 0);
+    auto const area = context().screen->viewportArea();
+    int const width = std::max(inner.width + 4, displayWidth(_title) + 4);
+    return {.width = std::min(width, area.width), .height = std::min(inner.height + 2, area.height)};
+}
+
+// The title is written into a canvas of its own between the corners, as a panel's is: drawBox shortens a title by
+// bytes and so can cut a UTF-8 sequence in two.
+void DialogImpl::paintFrame(::core::tui::Canvas& canvas) {
+    auto const& theme = canvas.theme();
+    canvas.fill(canvas.area(), ' ', theme.dialogBackground);
+    canvas.drawBox(canvas.area(), ::core::tui::BorderStyle::Single, theme.dialogBorder);
+    auto title = canvas.subcanvas({.x = 2, .y = 0, .width = std::max(0, canvas.width() - 4), .height = 1});
+    title.putString(0, 0, _title, theme.dialogTitle);
+    placeChildren(childAreas(canvas.size()));
+}
+
+// A pointer event here reached no widget inside: it goes nowhere, and in particular not to the tree behind. A
+// press still ends a press whose release never came, as a press on a widget does.
+::core::tui::EventResult DialogImpl::frameEvent(::core::tui::InputEvent const& event) {
+    if (auto const* const mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
+        if (mouse->type == ::core::tui::MouseEvent::Type::Press) {
+            context().pressed = nullptr;
+        }
+        return ::core::tui::EventResult::Handled;
+    }
+    auto const* const key = std::get_if<::core::tui::KeyEvent>(&event);
+    if (key == nullptr || key->key != ::core::tui::KeyCode::Escape || !_open || !actionable()) {
+        return ::core::tui::EventResult::Ignored;
+    }
+    auto const handler = _onDismiss;
+    if (handler) {
+        handler();
+    }
+    return ::core::tui::EventResult::Handled;
+}
+
+bool DialogImpl::holdsFocus() const {
+    auto const* const focused = context().screen->focusedComponent();
+    return focused == nullptr || focused == _frame.get() || isInside(focusOwner(context(), focused), *this);
+}
+
+// Hidden and shown again, a box is drawn after every box shown before it; the dialogs keep the order of their boxes.
+void DialogImpl::raiseNested() {
+    auto& dialogs = context().openDialogs;
+    auto& screen = *context().screen;
+    std::vector<ContainerBase*> nested;
+    std::ranges::copy_if(dialogs, std::back_inserter(nested),
+                         [this](ContainerBase const* dialog) { return dialog != this && isInside(dialog, *this); });
+    for (auto* dialog : nested) {
+        std::erase(dialogs, dialog);
+        dialogs.push_back(dialog);
+        auto& frame = dialog->host();
+        screen.hideOverlay(frame);
+        screen.showOverlay(frame, centredIn(screen, frame.preferredSize()));
+    }
+}
+
+void DialogImpl::returnFocusTo(WidgetBase* widget) {
+    forgetRestore();
+    if (widget != nullptr) {
+        _restore = widget;
+        context().watches.push_back(&_restore);
+    }
+}
+
+void DialogImpl::forgetRestore() noexcept {
+    std::erase(context().watches, &_restore);
+    _restore = nullptr;
+}
+
+// The box's bounds are emptied before it shows: it was last drawn wherever it was then, with whatever it held.
+// A dialog opened inside a closed one takes no focus until that one opens. The focus moves last: the old focus
+// leaving runs a handler when it is a field with typed text, and that handler may destroy this dialog.
+void DialogImpl::openFrame() {
+    if (_open) {
+        return;
+    }
+    auto& screen = *context().screen;
+    _open = true;
+    context().openDialogs.push_back(this);
+    _frame->setScreenBounds({});
+    forgetDrawnBounds(*_frame);
+    screen.showOverlay(*_frame, centredIn(screen, frameSize()));
+    raiseNested();
+    refresh();
+    if (!_frame->visible()) {
+        return;
+    }
+    auto* const owner = focusOwner(context(), screen.focusedComponent());
+    returnFocusTo(isInside(owner, *this) ? nullptr : owner);
+    enterDialog(context());
+}
+
+// Nothing here runs a handler: a dropdown inside closes its list quietly, and a field inside commits nothing as the
+// focus leaves it, the dialog being closed by then. The focus moves last all the same.
+void DialogImpl::closeFrame() {
+    if (!_open) {
+        return;
+    }
+    auto& shared = context();
+    _open = false;
+    closeUnreachablePopups(shared);
+    bool const focusInside = holdsFocus();
+    std::erase(shared.openDialogs, this);
+    shared.screen->hideOverlay(*_frame);
+    refresh();
+    auto* const restore = _restore;
+    forgetRestore();
+    if (focusInside) {
+        returnFocus(shared, restore);
+    }
 }
 
 }  // namespace morph::tui::detail

@@ -238,7 +238,8 @@ EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
     if (auto const* mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
         return pointer(*mouse);
     }
-    if (auto const* pressed = std::get_if<::core::tui::KeyEvent>(&event); pressed != nullptr && actionable()) {
+    if (auto const* pressed = std::get_if<::core::tui::KeyEvent>(&event);
+        pressed != nullptr && actionable() && !blockedByDialog()) {
         return key(*pressed);
     }
     return EventResult::Ignored;
@@ -246,6 +247,12 @@ EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
 
 EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
     using Type = ::core::tui::MouseEvent::Type;
+    if (blockedByDialog()) {
+        if (mouse.type == Type::Press || _context->pressed == this) {
+            _context->pressed = nullptr;
+        }
+        return EventResult::Handled;
+    }
     if (mouse.type == Type::ScrollUp || mouse.type == Type::ScrollDown) {
         bool const handled = actionable() && wheel(mouse.type == Type::ScrollUp ? -1 : 1);
         return handled ? EventResult::Handled : EventResult::Ignored;
@@ -293,6 +300,11 @@ EventResult WidgetBase::release(::core::tui::MouseEvent const& mouse) {
 }
 
 void WidgetBase::refresh() const { _context->screen->invalidate(); }
+
+bool WidgetBase::blockedByDialog() const {
+    auto* const dialog = activeDialog(*_context);
+    return dialog != nullptr && !isWithin(_view.get(), dialog->host());
+}
 
 ContainerBase::~ContainerBase() {
     for (auto* child : _children) {
@@ -564,21 +576,56 @@ void attach(Context& context, ui::ContainerWidget* parent, WidgetBase& widget) {
     ContainerBase::of(*parent).attach(widget);
 }
 
+::core::tui::Point centredIn(::core::tui::Screen const& screen, ::core::tui::Size size) {
+    auto const area = screen.viewportArea();
+    return {.x = area.x + std::max(0, (area.width - size.width) / 2),
+            .y = area.y + std::max(0, (area.height - size.height) / 2)};
+}
+
+// A root view's own bounds are enough: hit-testing descends only into a view whose bounds hold the point, and a
+// root that is drawn empties those of its descendants itself (see View). A frame is no widget's view, so its
+// descendants are emptied here.
 void fit(Context& context) {
-    auto const area = context.screen->viewportArea();
+    auto& screen = *context.screen;
+    auto const area = screen.viewportArea();
     for (auto* root : context.roots) {
-        root->view().setArea(area);
+        auto& view = root->view();
+        view.setArea(area);
+        view.setScreenBounds({});
+    }
+    for (auto* dialog : context.openDialogs) {
+        auto& frame = dialog->host();
+        frame.setScreenBounds({});
+        forgetDrawnBounds(frame);
+        screen.positionOverlay(frame, centredIn(screen, frame.preferredSize()));
     }
 }
 
-// core::tui's own focusNext walks its child lists, which keep attach order (see ContainerBase); Tab follows
-// morph's order instead.
+ContainerBase* activeDialog(Context const& context) {
+    for (auto* dialog : context.openDialogs | std::views::reverse) {
+        if (dialog->host().visible()) {
+            return dialog;
+        }
+    }
+    return nullptr;
+}
+
+// core::tui's own focusNext walks its child lists, which keep attach order (see ContainerBase), and knows nothing
+// of overlays; Tab follows morph's order instead.
 void moveFocus(Context& context, Direction direction) {
+    auto* const dialog = activeDialog(context);
     std::vector<::core::tui::Component*> order;
-    for (auto* root : context.roots) {
-        collectFocusable(*root, order);
+    if (dialog != nullptr) {
+        collectFocusable(*dialog, order);
+    } else {
+        for (auto* root : context.roots) {
+            collectFocusable(*root, order);
+        }
     }
     if (order.empty()) {
+        if (dialog != nullptr) {
+            enterDialog(context);
+        }
         return;
     }
     auto const current = std::ranges::find(order, context.screen->focusedComponent());
@@ -607,6 +654,19 @@ WidgetBase* blurWatching(Context& context, WidgetBase* watched) {
 }
 
 }  // namespace
+
+// Focusing after the blur runs no handler: only a view losing the focus does.
+void enterDialog(Context& context) {
+    auto* const screen = context.screen;
+    screen->setFocus(nullptr);
+    auto* const dialog = activeDialog(context);
+    if (dialog == nullptr) {
+        return;
+    }
+    std::vector<::core::tui::Component*> order;
+    collectFocusable(*dialog, order);
+    screen->setFocus(order.empty() ? &dialog->host() : order.front());
+}
 
 bool focusWidget(Context& context, WidgetBase* target) {
     auto* const screen = context.screen;
