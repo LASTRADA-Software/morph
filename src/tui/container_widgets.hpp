@@ -79,7 +79,9 @@ private:
 /// Panel: a box with a title around its children, inset by padding; a collapsible panel folds to its title line.
 ///
 /// Collapsing hides the children, so they neither draw nor take input; the panel itself, focusable while
-/// collapsible, toggles on Enter or Space while it holds the focus, and on a click on its title line.
+/// collapsible, toggles on Enter or Space while it holds the focus, and on a click on its title line, which also
+/// focuses it. A press elsewhere on the panel that no child takes leaves the focus where it was. Collapsing a panel
+/// that holds the focus inside moves the focus to the panel, or clears it when the panel cannot take it.
 class PanelImpl final : public TuiContainer<ui::PanelWidget> {
 public:
     explicit PanelImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
@@ -90,6 +92,7 @@ public:
     void setOnToggle(std::function<void(bool)> onToggle) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return _collapsible; }
+    [[nodiscard]] bool focusesOnPress() const override { return false; }
     [[nodiscard]] std::string probeText() const override { return _title; }
     [[nodiscard]] bool letsChildrenAct() const override { return !_collapsed; }
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;

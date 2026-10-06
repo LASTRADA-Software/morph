@@ -264,7 +264,7 @@ EventResult WidgetBase::press(::core::tui::MouseEvent const& mouse) {
         return EventResult::Ignored;
     }
     _context->pressed = this;
-    if (wantsFocus()) {
+    if (focusesOnPress()) {
         _context->screen->setFocus(_view.get());
     }
     return EventResult::Handled;

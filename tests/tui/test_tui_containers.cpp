@@ -186,6 +186,27 @@ TEST_CASE("tui containers: a narrow panel shortens its title by whole characters
     CHECK(harness.draw().front() == "┌─▾ ─┐");
 }
 
+TEST_CASE("tui containers: a panel shortens a wide or combining title by whole characters", "[tui][containers]") {
+    SECTION("wide characters") {
+        Harness harness{9, 3};
+        auto const panel = harness.make<PanelImpl>(nullptr);
+        panel->setTitle("日本語");
+        CHECK(harness.draw().front() == "┌─日本──┐");
+    }
+    SECTION("a combining mark stays with its letter") {
+        Harness harness{6, 3};
+        auto const panel = harness.make<PanelImpl>(nullptr);
+        panel->setTitle("e\u0301te");
+        CHECK(harness.draw().front() == "┌─e\u0301t─┐");
+    }
+    SECTION("a title that fits is drawn whole") {
+        Harness harness{8, 3};
+        auto const panel = harness.make<PanelImpl>(nullptr);
+        panel->setTitle("e\u0301te");
+        CHECK(harness.draw().front() == "┌─e\u0301te──┐");
+    }
+}
+
 TEST_CASE("tui containers: inside a collapsed panel nothing takes input, and the panel's own control still works",
           "[tui][containers][gating]") {
     Harness harness{14, 4};
@@ -204,6 +225,8 @@ TEST_CASE("tui containers: inside a collapsed panel nothing takes input, and the
 
     panel->setCollapsed(true);
     CHECK(harness.draw() == Rows{"▸ Info"});
+    // Even with the focus forced back onto it, the hidden button takes no key.
+    harness.focus(*button);
     CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
     WidgetBase::of(*button).activate();
     CHECK_FALSE(WidgetBase::of(*button).view().focusable());
@@ -223,6 +246,73 @@ TEST_CASE("tui containers: inside a collapsed panel nothing takes input, and the
     CHECK(harness.focused(*button));
     CHECK(harness.key(KeyCode::Enter) == EventResult::Handled);
     CHECK(clicks == 1);
+}
+
+TEST_CASE("tui containers: collapsing a panel that holds the focus moves it to the panel",
+          "[tui][containers][focus]") {
+    Harness harness{14, 4};
+    auto const panel = harness.make<PanelImpl>(nullptr);
+    panel->setTitle("Info");
+    panel->setCollapsible(true);
+    std::vector<bool> toggles;
+    panel->setOnToggle([&](bool collapsed) { toggles.push_back(collapsed); });
+    auto const column = harness.make<StackImpl>(panel.get(), ui::Axis::Vertical);
+    auto const button = harness.make<ButtonImpl>(column.get());
+    button->setLabel("Go");
+    static_cast<void>(harness.draw());
+    harness.focus(*button);
+    SECTION("by setCollapsed") {
+        panel->setCollapsed(true);
+        CHECK(toggles.empty());
+    }
+    SECTION("by a click on its title line") {
+        CHECK(harness.click({.x = 3, .y = 0}) == EventResult::Handled);
+        CHECK(toggles == std::vector<bool>{true});
+    }
+    CHECK(harness.focused(*panel));
+    CHECK(harness.draw() == Rows{"▸ Info"});
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Handled);
+    CHECK(harness.draw().at(1) == "│[ Go ]      │");
+}
+
+TEST_CASE("tui containers: collapsing a panel that cannot take the focus clears it", "[tui][containers][focus]") {
+    Harness harness{14, 4};
+    auto const panel = harness.make<PanelImpl>(nullptr);
+    panel->setTitle("Info");
+    auto const button = harness.make<ButtonImpl>(panel.get());
+    button->setLabel("Go");
+    static_cast<void>(harness.draw());
+    harness.focus(*button);
+    SECTION("one that is not collapsible") {}
+    SECTION("a collapsible one that is disabled") {
+        panel->setCollapsible(true);
+        panel->setEnabled(false);
+    }
+    panel->setCollapsed(true);
+    CHECK(harness.screen().focusedComponent() == nullptr);
+}
+
+TEST_CASE("tui containers: a click on a panel's body leaves the focus where it was", "[tui][containers][focus]") {
+    Harness harness{14, 5};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const button = harness.make<ButtonImpl>(column.get());
+    button->setLabel("B");
+    auto const panel = harness.make<PanelImpl>(column.get());
+    panel->setTitle("Info");
+    panel->setCollapsible(true);
+    std::vector<bool> toggles;
+    panel->setOnToggle([&](bool collapsed) { toggles.push_back(collapsed); });
+    auto const body = harness.make<TextImpl>(panel.get());
+    body->setText("hi");
+    CHECK(harness.draw() == Rows{"[ B ]", "┌─▾ Info─────┐", "│hi          │", "└────────────┘"});
+    harness.focus(*button);
+    static_cast<void>(harness.click({.x = 1, .y = 2}));
+    static_cast<void>(harness.click({.x = 8, .y = 3}));
+    CHECK(harness.focused(*button));
+    CHECK(toggles.empty());
+    CHECK(harness.click({.x = 5, .y = 1}) == EventResult::Handled);
+    CHECK(harness.focused(*panel));
+    CHECK(toggles == std::vector<bool>{true});
 }
 
 TEST_CASE("tui containers: a disabled collapsible panel does not toggle", "[tui][containers][gating]") {

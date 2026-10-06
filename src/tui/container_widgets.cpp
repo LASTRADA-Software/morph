@@ -170,6 +170,11 @@ void PanelImpl::syncChildren() {
     for (auto* child : children()) {
         child->setStructuralVisible(!_collapsed);
     }
+    auto* const screen = context().screen;
+    auto const* const focused = screen->focusedComponent();
+    if (_collapsed && focused != nullptr && focused != &view() && isWithin(focused, view())) {
+        screen->setFocus(focusable() ? &view() : nullptr);
+    }
     refresh();
 }
 
@@ -230,9 +235,10 @@ void PanelImpl::activate() {
     }
 }
 
-// A press anywhere in the panel that no child takes bubbles here, so only the title line toggles.
+// A press anywhere in the panel that no child takes bubbles here, so only the title line focuses and toggles.
 void PanelImpl::click(::core::tui::Point cell) {
     if (cell.y == 0) {
+        context().screen->setFocus(&view());
         activate();
     }
 }

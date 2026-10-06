@@ -78,6 +78,8 @@ public:
     [[nodiscard]] virtual ::core::tui::Size naturalSize() const = 0;
     /// Whether keyboard focus may land here (and, while actionable, does).
     [[nodiscard]] virtual bool wantsFocus() const { return false; }
+    /// Whether a press on this widget moves the focus to it; by default, whenever it wants the focus at all.
+    [[nodiscard]] virtual bool focusesOnPress() const { return wantsFocus(); }
     /// Whether a Content main-axis size means Stretch(1) in a stack (a Spacer).
     [[nodiscard]] virtual bool expandsByDefault() const { return false; }
     /// The text a conformance probe reads.
