@@ -237,7 +237,7 @@ void PanelImpl::activate() {
 
 // A press anywhere in the panel that no child takes bubbles here, so only the title line focuses and toggles.
 void PanelImpl::click(::core::tui::Point cell) {
-    if (cell.y == 0) {
+    if (cell.y == 0 && focusable()) {
         context().screen->setFocus(&view());
         activate();
     }
@@ -319,18 +319,21 @@ std::optional<::core::tui::Rect> ScrollImpl::focusedArea(::core::tui::Size viewp
     return area;
 }
 
+// Moving the view where the user asked does not count as a change: the focused widget's place in the content and
+// the view's size are what is compared.
 void ScrollImpl::followFocus(::core::tui::Size viewport) {
     auto const* const focused = context().screen->focusedComponent();
     bool const inside = focused != nullptr && focused != &view() && isWithin(focused, view());
     if (!inside) {
-        _followed = nullptr;
+        _followed = {};
         return;
     }
-    if (focused == _followed) {
-        return;
-    }
-    _followed = focused;
     auto const area = focusedArea(viewport);
+    Followed const now{.view = focused, .area = area.value_or(::core::tui::Rect{}), .viewport = viewport};
+    if (now == _followed) {
+        return;
+    }
+    _followed = now;
     if (!area) {
         return;
     }
@@ -345,6 +348,7 @@ void ScrollImpl::followFocus(::core::tui::Size viewport) {
 
 void ScrollImpl::paint(::core::tui::Canvas& canvas) {
     auto const viewport = canvas.size();
+    _viewportSize = viewport;
     bool const vertical = _axis == ui::Axis::Vertical;
     auto const natural = naturalSize();
     _viewport = vertical ? viewport.height : viewport.width;
@@ -354,15 +358,17 @@ void ScrollImpl::paint(::core::tui::Canvas& canvas) {
     placeChildren(childAreas(viewport));
 }
 
-// A move the user asked for counts as having followed the focus where it is now, so the next frame does not undo
-// it when the focus moved since the last one.
+// A move the user asked for counts as having followed the focus as it is now, so the next frame does not undo it
+// when the focus moved since the last one.
 bool ScrollImpl::scrollBy(int cells) {
     int const target = std::clamp(_offset + cells, 0, std::max(0, _extent - _viewport));
     if (target == _offset) {
         return false;
     }
     _offset = target;
-    _followed = context().screen->focusedComponent();
+    auto const* const focused = context().screen->focusedComponent();
+    _followed = {
+        .view = focused, .area = focusedArea(_viewportSize).value_or(::core::tui::Rect{}), .viewport = _viewportSize};
     refresh();
     return true;
 }

@@ -4,6 +4,7 @@
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Rect.hpp>
+#include <cstdint>
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
@@ -27,6 +28,7 @@ using morph::tui::detail::StackImpl;
 using morph::tui::detail::TextImpl;
 using morph::tui::detail::WidgetBase;
 using morph::tui::testing::Harness;
+using morph::tui::testing::ResizableOutput;
 using Rows = std::vector<std::string>;
 
 namespace {
@@ -315,6 +317,22 @@ TEST_CASE("tui containers: a click on a panel's body leaves the focus where it w
     CHECK(toggles == std::vector<bool>{true});
 }
 
+TEST_CASE("tui containers: a click on the title of a panel that cannot take the focus leaves the focus alone",
+          "[tui][containers][focus]") {
+    Harness harness{14, 5};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const button = harness.make<ButtonImpl>(column.get());
+    button->setLabel("B");
+    auto const panel = harness.make<PanelImpl>(column.get());
+    panel->setTitle("Info");
+    // A drag key makes the panel take the press, though it is not collapsible and so not focusable.
+    panel->setDragKey(ui::Key{std::int64_t{1}});
+    CHECK(harness.draw().at(1) == "┌─Info───────┐");
+    harness.focus(*button);
+    CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
+    CHECK(harness.focused(*button));
+}
+
 TEST_CASE("tui containers: a disabled collapsible panel does not toggle", "[tui][containers][gating]") {
     Harness harness{14, 4};
     auto const panel = harness.make<PanelImpl>(nullptr);
@@ -524,6 +542,47 @@ TEST_CASE("tui containers: the wheel scrolls past the focused child, and moving 
     harness.focus(*buttons.at(1));
     CHECK(harness.draw() == Rows{"[ 1 ]", "[ 2 ]"});
     buttons.clear();
+}
+
+TEST_CASE("tui containers: a scroll keeps the focused child in view when the terminal shrinks", "[tui][containers]") {
+    auto output = std::make_unique<ResizableOutput>(core::tui::Size{.width = 10, .height = 6});
+    auto& terminal = *output;
+    Harness harness{std::move(output)};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(scroll.get(), ui::Axis::Vertical);
+    std::vector<std::unique_ptr<ButtonImpl>> buttons;
+    std::vector<int> clicked;
+    for (int i = 0; i < 12; ++i) {
+        buttons.push_back(harness.make<ButtonImpl>(column.get()));
+        buttons.back()->setLabel(std::to_string(i));
+        buttons.back()->setOnClick([&clicked, i] { clicked.push_back(i); });
+    }
+    harness.focus(*buttons.at(10));
+    CHECK(harness.draw().back() == "[ 10 ]");
+
+    terminal.resize({.width = 10, .height = 2});
+    static_cast<void>(harness.send(core::tui::ResizeEvent{.columns = 10, .rows = 2}));
+    auto const rows = harness.draw();
+    REQUIRE(rows.size() == 2);
+    CHECK(rows.back() == "[ 10 ]");
+    CHECK(harness.click({.x = 1, .y = 1}) == EventResult::Handled);
+    CHECK(clicked == std::vector<int>{10});
+    buttons.clear();
+}
+
+TEST_CASE("tui containers: a scroll keeps the focused child in view when the content above it grows",
+          "[tui][containers]") {
+    Harness harness{10, 3};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(scroll.get(), ui::Axis::Vertical);
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("t");
+    auto const button = harness.make<ButtonImpl>(column.get());
+    button->setLabel("B");
+    harness.focus(*button);
+    CHECK(harness.draw() == Rows{"t", "[ B ]"});
+    text->setText("1\n2\n3\n4");
+    CHECK(harness.draw() == Rows{"3", "4", "[ B ]"});
 }
 
 TEST_CASE("tui containers: a child scrolled out of view takes no click at its old place", "[tui][containers][drawn]") {

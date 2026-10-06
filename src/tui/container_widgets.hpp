@@ -119,8 +119,10 @@ private:
 /// the viewport's) and at the viewport's across it, and drawn moved back by the scroll position.
 ///
 /// A widget scrolled wholly out of view is given no area, so it neither draws nor takes a click; one scrolled partly
-/// out of view draws the part that shows (see `WidgetBase::render`). Whenever the focus moves to a widget inside,
-/// the scroll brings it into view, its top edge first when it is taller than the view. The wheel moves the view one
+/// out of view draws the part that shows (see `WidgetBase::render`). Whenever the focus moves to a widget inside, or
+/// that widget's place in the content or the view's size changes (new content, a resized terminal), the scroll
+/// brings it into view, its top edge first when it is taller than the view. The wheel and the keys may move the view
+/// away from it until then. The wheel moves the view one
 /// cell, and is left to whatever lies around the scroll when the view cannot move that way.
 ///
 /// While nothing inside can take the focus (read-only content), the scroll takes it itself, so the keyboard reaches
@@ -143,17 +145,28 @@ private:
     /// Where the widget owning the focused view lies in the content at scroll position 0, as far as the containers
     /// on the way to it say; nothing when the focus is not inside.
     [[nodiscard]] std::optional<::core::tui::Rect> focusedArea(::core::tui::Size viewport) const;
-    /// Moves the view to the focused widget when the focus has moved to one inside since the last frame.
+    /// Moves the view to the focused widget inside when it, its place in the content or the view's size changed
+    /// since the scroll last followed it.
     void followFocus(::core::tui::Size viewport);
     /// Moves the view by @p cells along the axis, within the content; whether it moved.
     bool scrollBy(int cells);
 
     ui::Axis _axis;
-    int _offset = 0;    ///< The scroll position: content cells before the view.
-    int _extent = 0;    ///< The content's extent along the axis, as of the last frame.
-    int _viewport = 0;  ///< The view's extent along the axis, as of the last frame.
-    /// The focused view the scroll last moved to, compared by address only: it may be gone by the next frame.
-    ::core::tui::Component const* _followed = nullptr;
+    int _offset = 0;                    ///< The scroll position: content cells before the view.
+    int _extent = 0;                    ///< The content's extent along the axis, as of the last frame.
+    int _viewport = 0;                  ///< The view's extent along the axis, as of the last frame.
+    ::core::tui::Size _viewportSize{};  ///< The view's size, as of the last frame.
+
+    /// What the scroll last followed.
+    struct Followed {
+        /// The focused view, compared by address only: it may be gone by the next frame.
+        ::core::tui::Component const* view = nullptr;
+        ::core::tui::Rect area{};      ///< Where its widget lay in the content.
+        ::core::tui::Size viewport{};  ///< The view's size then.
+
+        bool operator==(Followed const&) const = default;
+    };
+    Followed _followed;
 };
 
 }  // namespace morph::tui::detail
