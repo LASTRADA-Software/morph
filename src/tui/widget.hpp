@@ -192,6 +192,11 @@ private:
 [[nodiscard]] std::unique_ptr<::core::tui::Component> makeView(WidgetBase& owner);
 
 /// Implements the Common setters of ui interface @p Interface over WidgetBase.
+///
+/// A widget deriving from this (or from TuiContainer) defines its constructor inside its class. A translation unit
+/// that sees the class then instantiates this template's virtual members along with its vtable; with the
+/// constructor out of line, a unit that only uses the widget instantiates the class but not its virtual members,
+/// which compilers are free to do differently (MSVC instantiates them all).
 template <class Interface>
 class TuiWidget : public Interface, public WidgetBase {
 public:

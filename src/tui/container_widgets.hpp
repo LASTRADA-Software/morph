@@ -24,7 +24,7 @@ namespace morph::tui::detail {
 /// Column or Row (and ForEach, and a Table row): children along one axis, with a gap.
 class StackImpl final : public TuiContainer<ui::StackWidget> {
 public:
-    StackImpl(Context& context, ui::Axis axis);
+    StackImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _axis{axis} { adopt(makeView(*this)); }
     void setGap(int gap) override;
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
     [[nodiscard]] int gap() const noexcept { return _gap; }
@@ -47,7 +47,7 @@ private:
 /// The slot a Switch case or a Tabs page mounts into: its children stacked vertically, no gap.
 class SlotImpl final : public TuiContainer<ui::SlotWidget> {
 public:
-    explicit SlotImpl(Context& context);
+    explicit SlotImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     void paint(::core::tui::Canvas& canvas) override;
 };
@@ -56,7 +56,7 @@ public:
 /// after it move up one place, as a null cell of the view tree leaves none.
 class GridImpl final : public TuiContainer<ui::GridWidget> {
 public:
-    explicit GridImpl(Context& context);
+    explicit GridImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     void setColumns(int columns) override;
     void setGap(int gap) override;
     /// Throws std::logic_error when @p child is not one of this grid's children.
@@ -82,7 +82,7 @@ private:
 /// collapsible, toggles on Enter or Space while it holds the focus, and on a click on its title line.
 class PanelImpl final : public TuiContainer<ui::PanelWidget> {
 public:
-    explicit PanelImpl(Context& context);
+    explicit PanelImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     void setTitle(std::string_view title) override;
     void setPadding(int padding) override;
     void setCollapsible(bool collapsible) override;
@@ -118,7 +118,7 @@ private:
 /// A child scrolled out of view is given no area, so it neither draws nor takes a click.
 class ScrollImpl final : public TuiContainer<ui::ScrollWidget> {
 public:
-    ScrollImpl(Context& context, ui::Axis axis);
+    ScrollImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _axis{axis} { adopt(makeView(*this)); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] bool wheel(int delta) override;

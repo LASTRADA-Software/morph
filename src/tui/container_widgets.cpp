@@ -18,8 +18,6 @@
 
 namespace morph::tui::detail {
 
-StackImpl::StackImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _axis{axis} { adopt(makeView(*this)); }
-
 void StackImpl::setGap(int gap) {
     _gap = gap;
     refresh();
@@ -48,8 +46,6 @@ void StackImpl::paint(::core::tui::Canvas& canvas) {
         children(), canvas.area(),
         StackSpec{.axis = _axis, .gap = _extents.empty() ? _gap : _extentGap, .skip = _skip, .extents = _extents});
 }
-
-SlotImpl::SlotImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
 
 ::core::tui::Size SlotImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0); }
 
@@ -104,8 +100,6 @@ std::optional<std::size_t> indexHoldingFocus(std::span<WidgetBase* const> items,
 }
 
 }  // namespace
-
-GridImpl::GridImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
 
 void GridImpl::setColumns(int columns) {
     _columns = columns;
@@ -173,8 +167,6 @@ void GridImpl::paint(::core::tui::Canvas& canvas) {
         child->view().setArea(area);
     }
 }
-
-PanelImpl::PanelImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
 
 void PanelImpl::setTitle(std::string_view title) {
     _title = std::string{title};
@@ -269,10 +261,6 @@ void PanelImpl::click(::core::tui::Point cell) {
     if (cell.y == 0) {
         activate();
     }
-}
-
-ScrollImpl::ScrollImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _axis{axis} {
-    adopt(makeView(*this));
 }
 
 ::core::tui::Size ScrollImpl::naturalSize() const { return stackNaturalSize(children(), _axis, 0); }

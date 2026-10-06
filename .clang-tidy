@@ -20,7 +20,10 @@ Checks: >
 
 WarningsAsErrors: "*"
 
-HeaderFilterRegex: "include/morph/.*"
+# The public headers, and the TUI backend's private ones: those hold class
+# templates and inline code whose findings surface only in the units that
+# include them.
+HeaderFilterRegex: "(include/morph|src/tui)/.*"
 
 CheckOptions:
   - key:   readability-identifier-naming.ClassCase
