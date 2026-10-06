@@ -5,9 +5,11 @@
 #include <libunicode/convert.h>
 
 #include <algorithm>
+#include <chrono>
 #include <core/tui/Buffer.hpp>
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Theme.hpp>
+#include <cstdlib>
 #include <format>
 #include <memory>
 #include <string>
@@ -27,12 +29,18 @@ bool isPlain(::core::tui::KeyEvent const& key) noexcept {
     return ::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None;
 }
 
-/// @p event as the InputField should see it. InputField inserts a typed character only when its KeyCode lies below
-/// U+10000, the range where core::tui keeps its special keys, so it would drop a character above the Basic
-/// Multilingual Plane (most emoji); such a character goes in as a one-character paste instead.
+/// Whether InputField would drop @p codepoint typed as a key: it takes a character only below U+10000, where
+/// core::tui's special keys start, and outside the private-use area, which the kitty keyboard protocol uses for keys.
+constexpr bool isDroppedCharacter(char32_t codepoint) noexcept {
+    return codepoint >= 0x10000 || (codepoint >= 0xE000 && codepoint <= 0xF8FF);
+}
+
+/// @p event as the field should see it: a character InputField would drop (most emoji, private-use characters) goes
+/// in as a one-character paste. A typed character has its codepoint as its KeyCode, which can equal a special key's
+/// (U+10001 is Tab's), so this comes before anything looks at the KeyCode.
 ::core::tui::InputEvent asFieldInput(::core::tui::InputEvent const& event) {
     auto const* const key = std::get_if<::core::tui::KeyEvent>(&event);
-    if (key == nullptr || key->codepoint < 0x10000 || static_cast<char32_t>(key->key) != key->codepoint) {
+    if (key == nullptr || !isDroppedCharacter(key->codepoint) || static_cast<char32_t>(key->key) != key->codepoint) {
         return event;
     }
     auto const modifiers = ::core::tui::withoutLockKeys(key->modifiers);
@@ -60,15 +68,16 @@ public:
             return EventResult::Ignored;
         }
         auto* const fields = _fields;
-        if (auto const* key = std::get_if<::core::tui::KeyEvent>(&event)) {
-            if (key->key == KeyCode::Tab || key->key == KeyCode::Escape) {
+        auto const input = asFieldInput(event);
+        if (auto const* key = std::get_if<::core::tui::KeyEvent>(&input)) {
+            if (key->codepoint == 0 && (key->key == KeyCode::Tab || key->key == KeyCode::Escape)) {
                 return EventResult::Ignored;
             }
             if (auto const handled = fields->intercept(*key)) {
                 return *handled;
             }
         }
-        auto const action = processEvent(asFieldInput(event));
+        auto const action = processEvent(input);
         if (action == ::core::tui::InputFieldAction::Changed) {
             invalidate();
             fields->edited();
@@ -80,6 +89,15 @@ public:
         }
         // None, and the agent-shell actions (Ctrl+T, Ctrl+G, …) that mean nothing here, bubble on.
         return EventResult::Ignored;
+    }
+
+    /// Completes what was typed, unless the owner is being destroyed (it unregisters this view before clearing the
+    /// focus) or the user cannot reach it. The owner's handler may destroy it, so nothing is touched afterwards.
+    void onBlur() override {
+        if (owner().context().ownerOf(this) != &owner() || !owner().actionable()) {
+            return;
+        }
+        _fields->left();
     }
 
 private:
@@ -120,8 +138,9 @@ std::string formatLocal(morph::time::DateTime instant, ui::DateMode mode, int of
     auto const local = std::chrono::floor<std::chrono::minutes>(instant.value + std::chrono::minutes{offsetMinutes});
     auto const days = std::chrono::floor<std::chrono::days>(local);
     std::chrono::year_month_day const date{days};
-    auto text = std::format("{:04}-{:02}-{:02}", static_cast<int>(date.year()), static_cast<unsigned>(date.month()),
-                            static_cast<unsigned>(date.day()));
+    int const year = static_cast<int>(date.year());
+    auto text = std::format("{}{:04}-{:02}-{:02}", year < 0 ? "-" : "", std::abs(year),
+                            static_cast<unsigned>(date.month()), static_cast<unsigned>(date.day()));
     if (mode == ui::DateMode::DateTime) {
         std::chrono::hh_mm_ss const clock{local - days};
         text += std::format(" {:02}:{:02}", clock.hours().count(), clock.minutes().count());
@@ -129,21 +148,85 @@ std::string formatLocal(morph::time::DateTime instant, ui::DateMode mode, int of
     return text;
 }
 
-std::optional<morph::time::DateTime> parseLocal(std::string_view text, ui::DateMode mode, int offsetMinutes) {
-    std::string iso;
-    if (mode == ui::DateMode::Date) {
-        if (text.size() != 10) {
-            return std::nullopt;
-        }
-        iso = std::string{text} + "T00:00:00";
-    } else {
-        if (text.size() != 16 || (text.at(10) != ' ' && text.at(10) != 'T')) {
-            return std::nullopt;
-        }
-        iso = std::string{text.substr(0, 10)} + "T" + std::string{text.substr(11, 5)} + ":00";
+namespace {
+
+/// @p text as a number, when it is one to nine ASCII digits.
+std::optional<int> digitsValue(std::string_view text) {
+    if (text.empty() || text.size() > 9) {
+        return std::nullopt;
     }
-    return morph::time::DateTime::fromIso8601(iso).transform(
-        [offsetMinutes](morph::time::DateTime local) { return local - std::chrono::minutes{offsetMinutes}; });
+    int value = 0;
+    for (char const digit : text) {
+        if (digit < '0' || digit > '9') {
+            return std::nullopt;
+        }
+        value = (value * 10) + (digit - '0');
+    }
+    return value;
+}
+
+/// The day @p text names as `formatLocal` writes it: at least four year digits, `-` before a year below zero, then
+/// `-MM-DD`; a date the calendar does not have is none.
+std::optional<std::chrono::sys_days> parseDay(std::string_view text) {
+    if (text.size() < 10 || text.at(text.size() - 3) != '-' || text.at(text.size() - 6) != '-') {
+        return std::nullopt;
+    }
+    auto yearText = text.substr(0, text.size() - 6);
+    bool const negative = yearText.starts_with('-');
+    if (negative) {
+        yearText.remove_prefix(1);
+    }
+    auto const year = yearText.size() >= 4 ? digitsValue(yearText) : std::nullopt;
+    auto const month = digitsValue(text.substr(text.size() - 5, 2));
+    auto const day = digitsValue(text.substr(text.size() - 2));
+    if (!year || !month || !day) {
+        return std::nullopt;
+    }
+    std::chrono::year_month_day const date{std::chrono::year{negative ? -*year : *year},
+                                           std::chrono::month{static_cast<unsigned>(*month)},
+                                           std::chrono::day{static_cast<unsigned>(*day)}};
+    if (!date.ok()) {
+        return std::nullopt;
+    }
+    return std::chrono::sys_days{date};
+}
+
+/// The time of day @p text names as `HH:MM`.
+std::optional<std::chrono::minutes> parseClock(std::string_view text) {
+    if (text.size() != 5 || text.at(2) != ':') {
+        return std::nullopt;
+    }
+    auto const hours = digitsValue(text.substr(0, 2));
+    auto const minutes = digitsValue(text.substr(3, 2));
+    if (!hours || !minutes || *hours > 23 || *minutes > 59) {
+        return std::nullopt;
+    }
+    return std::chrono::hours{*hours} + std::chrono::minutes{*minutes};
+}
+
+}  // namespace
+
+// The year may be wider than four digits, as `formatLocal` writes it past 9999, so the fields are found from the end.
+std::optional<morph::time::DateTime> parseLocal(std::string_view text, ui::DateMode mode, int offsetMinutes) {
+    auto dayText = text;
+    std::chrono::minutes clock{0};
+    if (mode == ui::DateMode::DateTime) {
+        if (text.size() < 16) {
+            return std::nullopt;
+        }
+        auto const separator = text.at(text.size() - 6);
+        auto const time = parseClock(text.substr(text.size() - 5));
+        if ((separator != ' ' && separator != 'T') || !time) {
+            return std::nullopt;
+        }
+        clock = *time;
+        dayText = text.substr(0, text.size() - 6);
+    }
+    auto const day = parseDay(dayText);
+    if (!day) {
+        return std::nullopt;
+    }
+    return morph::time::DateTime{*day + clock - std::chrono::minutes{offsetMinutes}};
 }
 
 // The guard is what keeps a controlled input usable: a binding that writes back the text the user just typed must
@@ -199,6 +282,7 @@ void DateTimeInputImpl::setValue(std::optional<morph::time::Timestamp> const& va
     if (text != _field->text()) {
         _field->setText(text);
     }
+    _committed = text;
     _invalid = false;
     refresh();
 }
@@ -217,7 +301,15 @@ void DateTimeInputImpl::paint(::core::tui::Canvas& canvas) { paintField(*_field,
 
 void DateTimeInputImpl::edited() { _invalid = false; }
 
-void DateTimeInputImpl::submitted() {
+void DateTimeInputImpl::submitted() { commitTyped(); }
+
+void DateTimeInputImpl::left() {
+    if (_field->text() != _committed) {
+        commitTyped();
+    }
+}
+
+void DateTimeInputImpl::commitTyped() {
     if (_field->text().empty()) {
         commit(std::nullopt);
         return;
@@ -269,6 +361,7 @@ void DateTimeInputImpl::commit(std::optional<morph::time::DateTime> value) {
     auto const shown = parseLocal(text, _mode, _offsetMinutes);
     _invalid = false;
     _field->setText(text);
+    _committed = text;
     refresh();
     auto const handler = _onChange;
     if (handler) {
@@ -281,6 +374,7 @@ void FilePickerImpl::setPath(std::string_view path) {
         _field->setText(path);
         refresh();
     }
+    _committed = std::string{_field->text()};
 }
 
 void FilePickerImpl::setOnPicked(std::function<void(std::string)> onPicked) { _onPicked = std::move(onPicked); }
@@ -293,10 +387,23 @@ std::string FilePickerImpl::probeText() const { return std::string{_field->text(
 
 void FilePickerImpl::paint(::core::tui::Canvas& canvas) { paintField(*_field, *this, actionable(), canvas); }
 
-void FilePickerImpl::submitted() {
+void FilePickerImpl::submitted() { pick(); }
+
+void FilePickerImpl::left() {
+    if (_field->text() != _committed) {
+        pick();
+    }
+}
+
+void FilePickerImpl::pick() {
+    std::string path{_field->text()};
+    if (path.empty()) {
+        return;
+    }
+    _committed = path;
     auto const handler = _onPicked;
-    if (handler && !_field->text().empty()) {
-        handler(std::string{_field->text()});
+    if (handler) {
+        handler(std::move(path));
     }
 }
 

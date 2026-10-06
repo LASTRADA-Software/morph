@@ -36,6 +36,9 @@ public:
     virtual void edited() = 0;
     /// Enter was pressed. Like `edited`, it may end in a handler that destroys the widget.
     virtual void submitted() = 0;
+    /// The focus left the field while the user could reach it. Like `edited`, it may end in a handler that destroys
+    /// the widget.
+    virtual void left() = 0;
     /// A key the owner handles before the field does; nullopt lets the field have it. Like `edited`, it may end in a
     /// handler that destroys the widget.
     [[nodiscard]] virtual std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& key) = 0;
@@ -46,7 +49,9 @@ public:
 };
 
 /// The view of a field widget: a core::tui::InputField that @p owner paints and whose input reaches it only while it
-/// is actionable, and that reports edits, Enter and the keys it lets the owner intercept to @p fields.
+/// is actionable, and that reports edits, Enter, the keys it lets the owner intercept and the focus leaving to
+/// @p fields. The focus leaving reports nothing while @p owner is being destroyed or cannot be reached: a closed
+/// dialog's field is abandoned, not committed.
 ///
 /// It leaves Tab, Shift+Tab and Esc to the frontend and to dialogs: InputField would clear its buffer on Esc and
 /// cycle an agent mode on Shift+Tab. Its class lives in field_widgets.cpp, for the reason `makeView` gives.
@@ -90,6 +95,7 @@ public:
 private:
     void edited() override;
     void submitted() override;
+    void left() override {}
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& /*key*/) override {
         return std::nullopt;
     }
@@ -105,8 +111,10 @@ private:
 };
 
 /// DateTimeInput: an ISO-style field in a display zone. Up/Down step by a day (Date) or a minute (DateTime),
-/// PageUp/PageDown by a day; Enter commits what was typed, or clears the value when the field is empty. What it
-/// reports is the instant its text names: local midnight in Date mode, a whole minute in DateTime mode.
+/// PageUp/PageDown by a day. Enter commits what was typed, or clears the value when the field is empty; so does the
+/// focus leaving, when the text differs from what was last set or committed. Text that does not parse is marked
+/// with a `!` and reported as nothing. What it reports is the instant its text names: local midnight in Date mode, a
+/// whole minute in DateTime mode.
 class DateTimeInputImpl final : public TuiWidget<ui::DateTimeInputWidget>, private FieldOwner {
 public:
     DateTimeInputImpl(Context& context, ui::DateMode mode, int offsetMinutes)
@@ -124,21 +132,25 @@ public:
 private:
     void edited() override;
     void submitted() override;
+    void left() override;
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& key) override;
     [[nodiscard]] std::string_view placeholder() const override { return {}; }
     [[nodiscard]] bool invalid() const override { return _invalid; }
     void step(std::chrono::minutes delta);
+    void commitTyped();
     void commit(std::optional<morph::time::DateTime> value);
 
     ui::DateMode _mode;
     int _offsetMinutes;
     ::core::tui::InputField* _field;
+    std::string _committed;  ///< The text last set or committed.
     bool _invalid = false;
     std::function<void(std::optional<morph::time::Timestamp>)> _onChange;
 };
 
-/// FilePicker: a path field (a terminal has no file dialog), prompted `Open: ` or `Save: `; Enter reports a
-/// non-empty path.
+/// FilePicker: a path field (a terminal has no file dialog), prompted `Open: ` or `Save: `. Enter reports a
+/// non-empty path; so does the focus leaving, when the path differs from what was last set or picked. Whether the
+/// file exists is for the application to check.
 class FilePickerImpl final : public TuiWidget<ui::FilePickerWidget>, private FieldOwner {
 public:
     FilePickerImpl(Context& context, ui::FilePickerMode mode)
@@ -155,13 +167,16 @@ public:
 private:
     void edited() override {}
     void submitted() override;
+    void left() override;
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& /*key*/) override {
         return std::nullopt;
     }
     [[nodiscard]] std::string_view placeholder() const override { return {}; }
     [[nodiscard]] bool invalid() const override { return false; }
+    void pick();
 
     ::core::tui::InputField* _field;
+    std::string _committed;  ///< The path last set or picked.
     std::function<void(std::string)> _onPicked;
 };
 

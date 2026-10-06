@@ -46,12 +46,14 @@ std::unique_ptr<::core::tui::Component> makeView(WidgetBase& owner) { return std
 
 WidgetBase::WidgetBase(Context& context) noexcept : _context{&context} {}
 
+// The view is unregistered before the focus is cleared: clearing it calls the view's onBlur, which runs while the
+// widget's own class is already destroyed and tells that apart by the view having no owner.
 WidgetBase::~WidgetBase() {
     if (_view != nullptr) {
+        _context->owners.erase(_view.get());
         if (_context->screen->focusedComponent() == _view.get()) {
             _context->screen->setFocus(nullptr);
         }
-        _context->owners.erase(_view.get());
     }
     _context->forget(*this);
     if (_container != nullptr) {
