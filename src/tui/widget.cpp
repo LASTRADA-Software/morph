@@ -269,6 +269,9 @@ void WidgetBase::dragTo(::core::tui::Point /*cell*/) {}
 bool WidgetBase::wheel(int /*delta*/) { return false; }
 
 EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
+    if (escapeEndsDrag(*_context, event)) {
+        return EventResult::Handled;
+    }
     if (auto const* mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
         return pointer(*mouse);
     }

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <core/tui/InputEvent.hpp>
 #include <core/tui/Rect.hpp>
 #include <memory>
 #include <morph/ui/view.hpp>
 #include <optional>
+#include <string>
 
 #include "tui/context.hpp"
 
@@ -62,6 +64,9 @@ private:
     [[nodiscard]] WidgetBase* findTarget(::core::tui::Point point);
     void setTarget(WidgetBase* target);
     void start();
+    /// What the label shows: the first line of the first text in the source or a shown widget inside it, in
+    /// `children()` order, or else its key.
+    [[nodiscard]] std::string labelText() const;
 
     Context* _context;
     WidgetBase* _source = nullptr;
@@ -72,5 +77,10 @@ private:
     std::unique_ptr<Label> _label;
     std::unique_ptr<Outline> _outline;
 };
+
+/// Ends the drag in progress, as a native drag ends, when @p event is Esc: no drop, and the press, its pointer
+/// capture, the label and the outline are gone. Every component of the backend that takes keys asks this first, so
+/// Esc ends a drag wherever the focus is, as long as some view of this backend has it; true when it did.
+[[nodiscard]] bool escapeEndsDrag(Context& context, ::core::tui::InputEvent const& event);
 
 }  // namespace morph::tui::detail

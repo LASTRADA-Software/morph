@@ -11,6 +11,8 @@
 #include <utility>
 #include <variant>
 
+#include "tui/drag.hpp"
+
 namespace morph::tui::detail {
 
 using ::core::tui::EventResult;
@@ -129,6 +131,9 @@ public:
     /// A key the owner takes may end in a handler that destroys the owner and this view with it, so nothing is
     /// touched after that call.
     [[nodiscard]] EventResult onEvent(::core::tui::InputEvent const& event) override {
+        if (escapeEndsDrag(owner().context(), event)) {
+            return EventResult::Handled;
+        }
         if (auto const* mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
             return owner().pointer(*mouse);
         }
@@ -247,6 +252,9 @@ public:
     /// Choosing may end in a handler that destroys the owner and this list with it, so nothing is touched after it.
     [[nodiscard]] EventResult onEvent(::core::tui::InputEvent const& event) override {
         auto* const owner = _owner;
+        if (escapeEndsDrag(owner->context(), event)) {
+            return EventResult::Handled;
+        }
         if (!owner->listUsable()) {
             owner->close();
             return EventResult::Ignored;

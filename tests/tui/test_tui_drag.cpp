@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <core/tui/KeyCode.hpp>
 #include <core/tui/Rect.hpp>
 #include <cstdint>
 #include <memory>
@@ -16,16 +17,21 @@
 
 #include "tui/container_widgets.hpp"
 #include "tui/drag.hpp"
+#include "tui/field_widgets.hpp"
 #include "tui/leaf_widgets.hpp"
+#include "tui/list_widgets.hpp"
 #include "tui/widget.hpp"
 #include "tui_harness.hpp"
 
 namespace ui = morph::ui;
 using morph::tui::detail::ButtonImpl;
 using morph::tui::detail::DialogImpl;
+using morph::tui::detail::DropdownSelectImpl;
+using morph::tui::detail::MenuImpl;
 using morph::tui::detail::SliderImpl;
 using morph::tui::detail::StackImpl;
 using morph::tui::detail::TextImpl;
+using morph::tui::detail::TextInputImpl;
 using morph::tui::detail::WidgetBase;
 using morph::tui::testing::Harness;
 
@@ -509,4 +515,141 @@ TEST_CASE("tui drag: a draggable slider takes its press, and the motion drags it
         CHECK(values == std::vector<std::int64_t>{6});
         CHECK(dropped == std::vector<ui::Key>{key(5)});
     }
+}
+
+TEST_CASE("tui drag: a container source is labelled with the first text inside it", "[tui][drag]") {
+    Harness harness{30, 6};
+    Board board{harness};
+    auto const card = harness.make<StackImpl>(board.todo.get(), ui::Axis::Vertical);
+    auto const title = harness.make<TextImpl>(card.get());
+    auto const detail = harness.make<TextImpl>(card.get());
+    board.card->setVisible(false);
+    title->setText("title");
+    detail->setText("detail");
+    card->setDragKey(key(42));
+    board.done->setDropHandler([](ui::Key const&) { return true; }, [](ui::Key const&) {});
+
+    SECTION("its first text") {
+        static_cast<void>(harness.draw());
+        press(harness, {.x = 0, .y = 0});
+        motion(harness, {.x = 13, .y = 0});
+        auto const rows = harness.draw();
+        CHECK(contains(rows, "[title]"));
+        CHECK_FALSE(contains(rows, "[42]"));
+    }
+    SECTION("a hidden child's text does not count") {
+        title->setVisible(false);
+        static_cast<void>(harness.draw());
+        press(harness, {.x = 0, .y = 0});
+        motion(harness, {.x = 13, .y = 0});
+        CHECK(contains(harness.draw(), "[detail]"));
+    }
+    SECTION("its key when nothing inside has text") {
+        title->setText("");
+        detail->setText("");
+        card->setLayout({.width = {}, .height = ui::Sizing::fixed(1)});
+        static_cast<void>(harness.draw());
+        press(harness, {.x = 0, .y = 0});
+        motion(harness, {.x = 13, .y = 0});
+        CHECK(contains(harness.draw(), "[42]"));
+    }
+    release(harness, {.x = 13, .y = 0});
+}
+
+// A key the focused view ignores bubbles to the views above it, so a widget inside the board is reached through its
+// own view or the board's; a root view and an overlay (a dropdown's list) have no morph view above them.
+TEST_CASE("tui drag: Esc ends a drag with no drop, wherever the focus is", "[tui][drag]") {
+    Harness harness{30, 6};
+    std::unique_ptr<ui::Widget> root;  // made before the board, which is drawn over it
+    std::optional<Board> board;
+    std::unique_ptr<ui::Widget> inside;
+    DropdownSelectImpl* dropdown = nullptr;
+    int clicks = 0;
+    SECTION("on a button inside the board") {
+        board.emplace(harness);
+        auto button = harness.make<ButtonImpl>(board->todo.get());
+        button->setLabel("Go");
+        button->setOnClick([&] { ++clicks; });
+        inside = std::move(button);
+    }
+    SECTION("in a root text field") {
+        root = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+        board.emplace(harness);
+    }
+    SECTION("in a root menu") {
+        auto menu = harness.make<MenuImpl>(nullptr);
+        menu->setItems({"One", "Two"});
+        root = std::move(menu);
+        board.emplace(harness);
+    }
+    SECTION("in an open dropdown list") {
+        board.emplace(harness);
+        auto select = harness.make<DropdownSelectImpl>(board->todo.get());
+        select->setOptions({{.key = key(1), .label = "Red"}, {.key = key(2), .label = "Green"}});
+        dropdown = select.get();
+        inside = std::move(select);
+    }
+    int dropped = 0;
+    board->done->setDropHandler([](ui::Key const&) { return true; }, [&](ui::Key const&) { ++dropped; });
+    auto const& focused = root != nullptr ? *root : *inside;
+    static_cast<void>(harness.draw());
+    harness.focus(focused);
+    if (dropdown != nullptr) {
+        static_cast<void>(harness.key(core::tui::KeyCode::Enter));
+        static_cast<void>(harness.draw());
+        REQUIRE(dropdown->isOpen());
+    }
+    press(harness, {.x = 0, .y = 0});
+    motion(harness, {.x = 13, .y = 0});
+    REQUIRE(harness.context().drag->target() == &WidgetBase::of(*board->done));
+
+    CHECK(harness.key(core::tui::KeyCode::Escape) == core::tui::EventResult::Handled);
+    CHECK_FALSE(harness.context().drag->dragging());
+    CHECK(harness.context().drag->source() == nullptr);
+    CHECK(harness.context().pressed == nullptr);
+    CHECK(harness.screen().pointerCapture() == nullptr);
+    auto const rows = harness.draw();
+    CHECK_FALSE(contains(rows, "[task]"));
+    CHECK_FALSE(contains(rows, "╔"));
+    motion(harness, {.x = 14, .y = 0});
+    release(harness, {.x = 14, .y = 0});
+    CHECK(dropped == 0);
+    CHECK(clicks == 0);
+    if (dropdown != nullptr) {
+        CHECK(dropdown->isOpen());
+    } else {
+        CHECK(harness.focused(focused));
+    }
+}
+
+TEST_CASE("tui drag: Esc inside an open dialog ends the drag, and only the next Esc dismisses the dialog",
+          "[tui][drag]") {
+    Harness harness{30, 10};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const dialog = harness.make<DialogImpl>(column.get());
+    auto const body = harness.make<StackImpl>(dialog.get(), ui::Axis::Vertical);
+    auto const card = harness.make<TextImpl>(body.get());
+    auto const inside = harness.make<StackImpl>(body.get(), ui::Axis::Vertical);
+    inside->setLayout({.width = ui::Sizing::fixed(6), .height = ui::Sizing::fixed(1)});
+    card->setText("task");
+    card->setDragKey(key(7));
+    int dropped = 0;
+    int dismissals = 0;
+    inside->setDropHandler([](ui::Key const&) { return true; }, [&](ui::Key const&) { ++dropped; });
+    dialog->setOnDismiss([&] { ++dismissals; });
+    dialog->setOpen(true);
+    static_cast<void>(harness.draw());
+    REQUIRE(harness.screen().focusedComponent() == &dialog->host());
+    auto const into = cornerOf(*inside);
+
+    press(harness, cornerOf(*card));
+    motion(harness, into);
+    REQUIRE(harness.context().drag->target() == &WidgetBase::of(*inside));
+    CHECK(harness.key(core::tui::KeyCode::Escape) == core::tui::EventResult::Handled);
+    CHECK_FALSE(harness.context().drag->dragging());
+    CHECK(dismissals == 0);
+    release(harness, into);
+    CHECK(dropped == 0);
+    static_cast<void>(harness.key(core::tui::KeyCode::Escape));
+    CHECK(dismissals == 1);
 }

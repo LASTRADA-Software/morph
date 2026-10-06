@@ -21,6 +21,8 @@
 #include <variant>
 #include <vector>
 
+#include "tui/drag.hpp"
+
 namespace morph::tui::detail {
 
 void StackImpl::setGap(int gap) {
@@ -556,6 +558,9 @@ void DialogImpl::paintFrame(::core::tui::Canvas& canvas) {
 // A pointer event here reached no widget inside: it goes nowhere, and in particular not to the tree behind. A
 // press still ends a press whose release never came, as a press on a widget does.
 ::core::tui::EventResult DialogImpl::frameEvent(::core::tui::InputEvent const& event) {
+    if (escapeEndsDrag(context(), event)) {
+        return ::core::tui::EventResult::Handled;
+    }
     if (auto const* const mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
         if (mouse->type == ::core::tui::MouseEvent::Type::Press) {
             context().endPress();

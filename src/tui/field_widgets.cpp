@@ -16,6 +16,8 @@
 #include <utility>
 #include <variant>
 
+#include "tui/drag.hpp"
+
 namespace morph::tui::detail {
 
 using ::core::tui::EventResult;
@@ -61,6 +63,9 @@ public:
     /// An edit, Enter or an intercepted key may end in a handler that destroys the owner and this view with it, so
     /// nothing is touched after those calls.
     [[nodiscard]] EventResult onEvent(::core::tui::InputEvent const& event) override {
+        if (escapeEndsDrag(owner().context(), event)) {
+            return EventResult::Handled;
+        }
         if (auto const* mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
             return owner().pointer(*mouse);
         }

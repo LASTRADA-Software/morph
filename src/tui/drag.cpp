@@ -5,6 +5,7 @@
 #include <core/tui/Box.hpp>
 #include <core/tui/Canvas.hpp>
 #include <core/tui/Component.hpp>
+#include <core/tui/KeyCode.hpp>
 #include <core/tui/Screen.hpp>
 #include <core/tui/Theme.hpp>
 #include <cstdlib>
@@ -215,17 +216,50 @@ void DragController::setTarget(WidgetBase* target) {
     }
 }
 
-// The outline is shown first, so the label, shown after it, is drawn over it. The source's text is held while its
-// first line is read: `splitLines` returns views into it.
+// The outline is shown first, so the label, shown after it, is drawn over it.
 void DragController::start() {
     _dragging = true;
-    auto const text = _source->probeText();
-    std::string shown{splitLines(text).front()};
-    if (shown.empty() && _key) {
-        shown = keyText(*_key);
-    }
-    _label->setText("[" + shown + "]");
+    _label->setText("[" + labelText() + "]");
     _context->screen->showOverlay(*_outline, {});
+}
+
+// Depth first, the source before what it holds: a card that is a column of a title and a detail shows its title. Each
+// text is held while its first line is read, as `splitLines` returns views into it.
+std::string DragController::labelText() const {
+    std::vector<WidgetBase const*> pending{_source};
+    while (!pending.empty()) {
+        auto const* const widget = pending.back();
+        pending.pop_back();
+        if (widget != _source && !widget->shown()) {
+            continue;
+        }
+        auto const text = widget->probeText();
+        if (auto const line = splitLines(text).front(); !line.empty()) {
+            return std::string{line};
+        }
+        if (auto const* const container = dynamic_cast<ContainerBase const*>(widget)) {
+            auto const children = container->children();
+            pending.insert(pending.end(), children.rbegin(), children.rend());
+        }
+    }
+    return _key ? keyText(*_key) : std::string{};
+}
+
+// The capture is the source's view while it drags; released here, the moves and the release that follow are
+// hit-tested and belong to no press.
+bool escapeEndsDrag(Context& context, ::core::tui::InputEvent const& event) {
+    auto const* const key = std::get_if<::core::tui::KeyEvent>(&event);
+    if (key == nullptr || key->codepoint != 0 || key->key != ::core::tui::KeyCode::Escape ||
+        !context.drag->dragging()) {
+        return false;
+    }
+    auto& screen = *context.screen;
+    if (auto const* const source = context.drag->source();
+        source != nullptr && screen.pointerCapture() == &source->view()) {
+        screen.releasePointer();
+    }
+    context.endPress();
+    return true;
 }
 
 }  // namespace morph::tui::detail
