@@ -109,6 +109,9 @@ public:
     virtual void click(::core::tui::Point cell);
     /// A wheel notch, -1 up and +1 down; true when handled.
     [[nodiscard]] virtual bool wheel(int delta);
+    /// Closes the popup this widget has open (a dropdown's list), as `closeUnreachablePopups` asks of a widget in
+    /// `Context::popups` the user can no longer reach; it runs no handler.
+    virtual void closePopup() {}
 
     /// Routes one event of this widget's view: mouse to `pointer()`, keys to `key()` while actionable.
     [[nodiscard]] ::core::tui::EventResult dispatch(::core::tui::InputEvent const& event);
@@ -302,6 +305,17 @@ void fit(Context& context);
 /// handler that runs may destroy widgets, @p target or the whole view among them; core::tui would go on to focus
 /// a destroyed target. So @p target takes the focus only if it is still alive and focusable once that is done.
 bool focusWidget(Context& context, WidgetBase* target);
+/// Moves keyboard focus to @p popup, a component @p owner shows outside its own view (a dropdown's list), as
+/// `focusWidget` moves it: the old focus leaves first, and @p popup takes the focus only if @p owner is then still
+/// alive and actionable and @p popup still shown. Returns whether @p popup has the focus afterwards; when it does
+/// not, @p owner may be gone.
+bool focusPopup(Context& context, WidgetBase& owner, ::core::tui::Component& popup);
+/// Closes the popup of every widget in `Context::popups` the user can no longer reach.
+///
+/// A popup is an overlay, outside the tree of the containers that gate its widget, so it would stay open and focused
+/// when one of them is hidden, disabled or collapsed. Hiding, showing, disabling and enabling a widget calls this; a
+/// container that stops letting its children act by other means (`letsChildrenAct`) must call it too.
+void closeUnreachablePopups(Context& context);
 /// Moves keyboard focus to the next or previous focusable widget of the roots, in `collectFocusable` order,
 /// wrapping around at either end; through `focusWidget`, so a widget destroyed meanwhile gets nothing.
 void moveFocus(Context& context, Direction direction);

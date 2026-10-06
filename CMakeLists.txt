@@ -560,6 +560,8 @@ if(MORPH_BUILD_TUI)
         src/tui/layout.hpp
         src/tui/leaf_widgets.cpp
         src/tui/leaf_widgets.hpp
+        src/tui/list_widgets.cpp
+        src/tui/list_widgets.hpp
         src/tui/loop_executor.cpp
         src/tui/widget.cpp
         src/tui/widget.hpp

@@ -92,11 +92,13 @@ void WidgetBase::syncVisible() {
         _view->setVisible(shown());
     }
     refresh();
+    closeUnreachablePopups(*_context);
 }
 
 void WidgetBase::applyEnabled(bool enabled) {
     _enabled = enabled;
     refresh();
+    closeUnreachablePopups(*_context);
 }
 
 bool WidgetBase::actionable() const {
@@ -593,20 +595,57 @@ void moveFocus(Context& context, Direction direction) {
     static_cast<void>(focusWidget(context, context.ownerOf(*target)));
 }
 
+namespace {
+
+/// Clears the focus, which runs the old focus's blur, and returns @p watched, or null when that destroyed it.
+WidgetBase* blurWatching(Context& context, WidgetBase* watched) {
+    WidgetBase* alive = watched;
+    context.watches.push_back(&alive);
+    context.screen->setFocus(nullptr);
+    std::erase(context.watches, &alive);
+    return alive;
+}
+
+}  // namespace
+
 bool focusWidget(Context& context, WidgetBase* target) {
     auto* const screen = context.screen;
     if (target != nullptr && screen->focusedComponent() == &target->view()) {
         return true;
     }
-    WidgetBase* alive = target;
-    context.watches.push_back(&alive);
-    screen->setFocus(nullptr);
-    std::erase(context.watches, &alive);
+    auto* const alive = blurWatching(context, target);
     if (alive == nullptr || !alive->focusable()) {
         return false;
     }
     screen->setFocus(&alive->view());
     return true;
+}
+
+bool focusPopup(Context& context, WidgetBase& owner, ::core::tui::Component& popup) {
+    auto* const screen = context.screen;
+    if (screen->focusedComponent() == &popup) {
+        return true;
+    }
+    auto* const alive = blurWatching(context, &owner);
+    if (alive == nullptr || !alive->actionable() || !screen->isOverlayVisible(popup)) {
+        return false;
+    }
+    screen->setFocus(&popup);
+    return true;
+}
+
+// The widget leaves the list before it is asked, so a widget that would not take itself off cannot loop this.
+void closeUnreachablePopups(Context& context) {
+    for (;;) {
+        auto const found =
+            std::ranges::find_if(context.popups, [](WidgetBase const* owner) { return !owner->actionable(); });
+        if (found == context.popups.end()) {
+            return;
+        }
+        auto* const owner = *found;
+        context.popups.erase(found);
+        owner->closePopup();
+    }
 }
 
 }  // namespace morph::tui::detail

@@ -37,6 +37,9 @@ struct Context {
     /// Widgets that code running a handler is waiting on, each through a pointer `forget` sets to null when that
     /// widget is destroyed (see `focusWidget`).
     std::vector<WidgetBase**> watches;
+    /// Widgets that have a popup open (a dropdown's list), which close it once the user cannot reach them (see
+    /// `closeUnreachablePopups`).
+    std::vector<WidgetBase*> popups;
 
     /// The widget owning @p view, or null for a component no widget registered (an overlay, the root).
     [[nodiscard]] WidgetBase* ownerOf(::core::tui::Component const* view) const;
