@@ -240,10 +240,14 @@ public:
 
     [[nodiscard]] ::core::tui::Size preferredSize() const override { return _owner->popupSize(); }
 
+    /// Not drawn, and not hit by the pointer, while the list cannot be used. Closing it here would change the overlay
+    /// list the screen is drawing from, so it closes at the next input that reaches it.
+    [[nodiscard]] bool visible() const noexcept override { return List::visible() && _owner->listUsable(); }
+
     /// Choosing may end in a handler that destroys the owner and this list with it, so nothing is touched after it.
     [[nodiscard]] EventResult onEvent(::core::tui::InputEvent const& event) override {
         auto* const owner = _owner;
-        if (!owner->actionable()) {
+        if (!owner->listUsable()) {
             owner->close();
             return EventResult::Ignored;
         }
@@ -275,6 +279,15 @@ private:
     // here chooses the option under it.
     [[nodiscard]] EventResult pointer(::core::tui::MouseEvent const& mouse) {
         using Type = ::core::tui::MouseEvent::Type;
+        if (mouse.type == Type::ScrollUp || mouse.type == Type::ScrollDown) {
+            if (mouse.type == Type::ScrollUp) {
+                selectPrevious();
+            } else {
+                selectNext();
+            }
+            invalidate();
+            return EventResult::Handled;
+        }
         if (mouse.type == Type::Press) {
             _owner->context().pressed = nullptr;
             _pressed = mouse.button == 0;
@@ -321,6 +334,9 @@ void DropdownSelectImpl::setOptions(std::vector<ui::SelectOption> const& options
 
 void DropdownSelectImpl::setSelected(std::optional<ui::Key> const& selected) {
     _selected = selected;
+    if (auto const index = indexOf(_options, _selected); index && _open) {
+        _popup->setSelectedIndex(*index);
+    }
     refresh();
 }
 
@@ -345,29 +361,34 @@ void DropdownSelectImpl::paint(::core::tui::Canvas& canvas) {
 
 EventResult DropdownSelectImpl::key(::core::tui::KeyEvent const& key) {
     if (isActivation(key) || (isPlain(key) && isKey(key, KeyCode::Down))) {
-        open();
-        return EventResult::Handled;
+        return open() ? EventResult::Handled : EventResult::Ignored;
     }
     return EventResult::Ignored;
 }
 
-void DropdownSelectImpl::activate() { open(); }
+void DropdownSelectImpl::activate() { static_cast<void>(open()); }
 
 void DropdownSelectImpl::closePopup() { close(); }
 
 // The list takes the focus last: the focus leaving its old place may run a handler (a field committing what was
 // typed), which may destroy this select, or close the list by putting the select out of reach.
-void DropdownSelectImpl::open() {
-    if (_open || _options.empty() || !actionable()) {
-        return;
+bool DropdownSelectImpl::open() {
+    if (_open || _options.empty() || !actionable() || !fieldDrawn()) {
+        return false;
+    }
+    auto const place = placement();
+    if (place.rows == 0) {
+        return false;
     }
     fillPopup();
     _popupTop = 0;
+    _popupRows = place.rows;
+    _popupAt = place.origin;
     _open = true;
     context().popups.push_back(this);
-    placePopup();
+    context().screen->showOverlay(*_popup, place.origin);
     refresh();
-    static_cast<void>(focusPopup(context(), *this, *_popup));
+    return focusPopup(context(), *this, *_popup);
 }
 
 // Nothing here runs a handler: the focus going back to the field leaves only the list, whose blur ends here at once.
@@ -382,7 +403,7 @@ void DropdownSelectImpl::close() {
     screen.hideOverlay(*_popup);
     refresh();
     if (hadFocus) {
-        static_cast<void>(focusWidget(context(), this));
+        static_cast<void>(focusWidget(context(), view().screen() != nullptr ? this : nullptr));
     }
 }
 
@@ -413,22 +434,31 @@ void DropdownSelectImpl::fillPopup() {
     }
 }
 
-void DropdownSelectImpl::placePopup() {
-    auto& screen = *context().screen;
+DropdownSelectImpl::Placement DropdownSelectImpl::placement() const {
     auto const field = view().screenBounds();
-    auto const viewport = screen.viewportArea();
+    auto const viewport = context().screen->viewportArea();
     int const count = static_cast<int>(_options.size());
+    // The field draws on its first row, whatever height it was laid out at.
     int const below = std::max(0, viewport.y + viewport.height - (field.y + 1));
     int const above = std::max(0, field.y - viewport.y);
-    ::core::tui::Point origin{.x = field.x, .y = field.y + 1};
-    _popupRows = std::min(count, below);
+    int const width = popupSize().width;
+    Placement place{.origin = {.x = std::max(viewport.x, std::min(field.x, viewport.x + viewport.width - width)),
+                               .y = field.y + 1},
+                    .rows = std::min(count, below)};
     if (below < count && above > below) {
-        _popupRows = std::min(count, above);
-        origin.y = field.y - _popupRows;
+        place.rows = std::min(count, above);
+        place.origin.y = field.y - place.rows;
     }
-    if (origin != _popupAt || !screen.isOverlayVisible(*_popup)) {
-        _popupAt = origin;
-        screen.showOverlay(*_popup, origin);
+    return place;
+}
+
+void DropdownSelectImpl::placePopup() {
+    auto& screen = *context().screen;
+    auto const place = placement();
+    _popupRows = place.rows;
+    if (place.origin != _popupAt || !screen.isOverlayVisible(*_popup)) {
+        _popupAt = place.origin;
+        screen.showOverlay(*_popup, place.origin);
     }
 }
 
@@ -436,6 +466,10 @@ void DropdownSelectImpl::placePopup() {
 ::core::tui::Size DropdownSelectImpl::popupSize() const {
     return {.width = std::max(widestLabel(_options) + 2, view().screenBounds().width), .height = _popupRows};
 }
+
+bool DropdownSelectImpl::fieldDrawn() const { return view().screen() != nullptr && !view().screenBounds().empty(); }
+
+bool DropdownSelectImpl::listUsable() const { return actionable() && fieldDrawn() && _popupRows > 0; }
 
 void MenuImpl::setItems(std::vector<std::string> const& items) {
     _labels = items;
@@ -591,9 +625,10 @@ void TabsImpl::click(::core::tui::Point cell) {
 
 // Optimistic, like the other choosers: the bar shows the choice at once, and the mount swaps the pages. The mount may
 // set the highlight back from inside the handler, when the new page fails to mount; nothing here touches the tabs
-// after the handler.
+// after the handler. It is reached only from `key`, which `dispatch` calls only while the tabs are actionable, and
+// from `click`, after the release has checked that and `focusWidget` has refused tabs that are not.
 void TabsImpl::select(std::size_t index) {
-    if (index >= _labels.size() || index == _selected || !actionable()) {
+    if (index >= _labels.size() || index == _selected) {
         return;
     }
     _selected = index;

@@ -32,12 +32,14 @@ using morph::tui::detail::FilePickerImpl;
 using morph::tui::detail::MenuImpl;
 using morph::tui::detail::PanelImpl;
 using morph::tui::detail::RadioSelectImpl;
+using morph::tui::detail::ScrollImpl;
 using morph::tui::detail::SpacerImpl;
 using morph::tui::detail::StackImpl;
 using morph::tui::detail::TabsImpl;
 using morph::tui::detail::TextImpl;
 using morph::tui::detail::WidgetBase;
 using morph::tui::testing::Harness;
+using morph::tui::testing::ResizableOutput;
 using Rows = std::vector<std::string>;
 
 namespace {
@@ -115,8 +117,10 @@ TEST_CASE("tui lists: Esc closes a dropdown without choosing", "[tui][lists]") {
     int chosen = 0;
     select->setOptions(colours());
     select->setOnSelect([&](ui::Key const&) { ++chosen; });
+    static_cast<void>(harness.draw());
     harness.focus(*select);
     static_cast<void>(harness.key(KeyCode::Enter));
+    REQUIRE(select->isOpen());
     static_cast<void>(harness.key(KeyCode::Escape));
     CHECK_FALSE(select->isOpen());
     CHECK(chosen == 0);
@@ -249,6 +253,7 @@ TEST_CASE("tui lists: no setter calls a handler, and an open list follows new op
     tabs->setOnSelect([&](std::size_t /*index*/) { ++calls; });
     dropdown->setOptions(colours());
     dropdown->setSelected(key(2));
+    static_cast<void>(harness.draw());
     harness.focus(*dropdown);
     static_cast<void>(harness.key(KeyCode::Enter));
     REQUIRE(dropdown->isOpen());
@@ -263,7 +268,7 @@ TEST_CASE("tui lists: no setter calls a handler, and an open list follows new op
     CHECK(calls == 0);
     CHECK(chosen.empty());
     CHECK(dropdown->isOpen());
-    CHECK(harness.draw() == Rows{"[Blue ▾]", "▶ Green", "  Blue", " One  Two"});
+    CHECK(harness.draw() == Rows{"[Blue ▾]", "  Green", "▶ Blue", " One  Two"});
 
     static_cast<void>(harness.key(KeyCode::Down));
     static_cast<void>(harness.key(KeyCode::Enter));
@@ -809,4 +814,169 @@ TEST_CASE("tui lists: no list handler runs after its widget was destroyed", "[tu
     CHECK(harness.key(KeyCode::Right) == EventResult::Ignored);
     CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Ignored);
     CHECK(calls == 0);
+}
+
+TEST_CASE("tui lists: an open list closes, and chooses nothing, once its field scrolls out of view",
+          "[tui][lists][drawn]") {
+    using Type = core::tui::MouseEvent::Type;
+    Harness harness{20, 4};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(scroll.get(), ui::Axis::Vertical);
+    auto const select = harness.make<DropdownSelectImpl>(column.get());
+    std::vector<std::unique_ptr<TextImpl>> lines;
+    for (int line = 0; line < 10; ++line) {
+        lines.push_back(harness.make<TextImpl>(column.get()));
+        lines.back()->setText("line" + std::to_string(line));
+    }
+    int chosen = 0;
+    select->setOnSelect([&](ui::Key const&) { ++chosen; });
+    select->setOptions(colours());
+    static_cast<void>(harness.draw());
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    REQUIRE(shows(harness.draw(), "Green"));
+    for (int notch = 0; notch < 3; ++notch) {
+        static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::ScrollDown, .button = 0, .x = 18, .y = 4}));
+    }
+    CHECK(harness.draw() == Rows{"line2", "line3", "line4", "line5"});
+    CHECK(harness.key(KeyCode::Down) == EventResult::Ignored);
+    CHECK_FALSE(select->isOpen());
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    CHECK_FALSE(select->isOpen());
+    CHECK(chosen == 0);
+    // The field holds the focus again, so the scroll brings it back into view, and it opens from there.
+    CHECK(harness.focused(*select));
+    CHECK(harness.draw().front() == "[ ▾]");
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Handled);
+    CHECK(select->isOpen());
+}
+
+TEST_CASE("tui lists: a dropdown opens no list where there is no room for one", "[tui][lists][drawn]") {
+    int chosen = 0;
+    SECTION("its field squeezed to nothing") {
+        Harness harness{20, 6};
+        auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+        auto const above = harness.make<TextImpl>(column.get());
+        above->setText("x");
+        auto const select = harness.make<DropdownSelectImpl>(column.get());
+        select->setOnSelect([&](ui::Key const&) { ++chosen; });
+        select->setOptions(colours());
+        select->setLayout({.width = ui::Sizing::content(), .height = ui::Sizing::fixed(0)});
+        CHECK(harness.draw() == Rows{"x"});
+        harness.focus(*select);
+        CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+        CHECK_FALSE(select->isOpen());
+        CHECK(harness.draw() == Rows{"x"});
+    }
+    SECTION("a screen one row high") {
+        Harness harness{20, 1};
+        auto const select = harness.make<DropdownSelectImpl>(nullptr);
+        select->setOnSelect([&](ui::Key const&) { ++chosen; });
+        select->setOptions(colours());
+        CHECK(harness.draw() == Rows{"[ ▾]"});
+        harness.focus(*select);
+        CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+        CHECK_FALSE(select->isOpen());
+        static_cast<void>(harness.key(KeyCode::Down));
+        static_cast<void>(harness.key(KeyCode::Enter));
+        CHECK_FALSE(select->isOpen());
+    }
+    CHECK(chosen == 0);
+}
+
+TEST_CASE("tui lists: an open list whose container is destroyed first shows nothing and chooses nothing",
+          "[tui][lists][drawn][lifetime]") {
+    Harness harness{20, 4};
+    auto column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const select = harness.make<DropdownSelectImpl>(column.get());
+    int chosen = 0;
+    select->setOnSelect([&](ui::Key const&) { ++chosen; });
+    select->setOptions(colours());
+    static_cast<void>(harness.draw());
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    REQUIRE(select->isOpen());
+    column.reset();
+    CHECK(harness.draw().empty());
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    CHECK_FALSE(select->isOpen());
+    // The focus does not go back to a field that is off the screen.
+    CHECK(harness.screen().focusedComponent() == nullptr);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(chosen == 0);
+    CHECK(harness.draw().empty());
+}
+
+TEST_CASE("tui lists: setSelected on an open dropdown moves its list's highlight", "[tui][lists][selection]") {
+    Harness harness{20, 4};
+    auto const select = harness.make<DropdownSelectImpl>(nullptr);
+    std::vector<ui::Key> chosen;
+    select->setOnSelect([&](ui::Key picked) { chosen.push_back(std::move(picked)); });
+    select->setOptions(colours());
+    select->setSelected(key(1));
+    static_cast<void>(harness.draw());
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    select->setSelected(key(2));
+    CHECK(harness.draw() == Rows{"[Green ▾]", "  Red", "▶ Green"});
+    CHECK(chosen.empty());
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(chosen == std::vector<ui::Key>{key(2)});
+}
+
+TEST_CASE("tui lists: the wheel over an open list moves its highlight", "[tui][lists][click]") {
+    using Type = core::tui::MouseEvent::Type;
+    Harness harness{20, 5};
+    auto const select = harness.make<DropdownSelectImpl>(nullptr);
+    std::vector<ui::Key> chosen;
+    select->setOnSelect([&](ui::Key picked) { chosen.push_back(std::move(picked)); });
+    select->setOptions(
+        {{.key = key(1), .label = "Red"}, {.key = key(2), .label = "Green"}, {.key = key(3), .label = "Blue"}});
+    static_cast<void>(harness.draw());
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    static_cast<void>(harness.draw());
+    auto const wheel = [&](Type type) {
+        return harness.send(core::tui::MouseEvent{.type = type, .button = 0, .x = 3, .y = 3});
+    };
+    CHECK(wheel(Type::ScrollDown) == EventResult::Handled);
+    CHECK(wheel(Type::ScrollDown) == EventResult::Handled);
+    CHECK(wheel(Type::ScrollUp) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"[ ▾]", "  Red", "▶ Green", "  Blue"});
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(chosen == std::vector<ui::Key>{key(2)});
+}
+
+TEST_CASE("tui lists: a list wider than the room right of its field moves left to fit", "[tui][lists]") {
+    Harness harness{14, 4};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const before = harness.make<TextImpl>(row.get());
+    before->setText("abcdefgh");
+    auto const select = harness.make<DropdownSelectImpl>(row.get());
+    select->setOptions({{.key = key(1), .label = "A"}, {.key = key(2), .label = "Long option"}});
+    CHECK(harness.draw() == Rows{"abcdefgh[ ▾]"});
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(harness.draw() == Rows{"abcdefgh[ ▾]", " ▶ A", "   Long option"});
+}
+
+TEST_CASE("tui lists: an open list that loses its room to a shrinking terminal closes and chooses nothing",
+          "[tui][lists][drawn]") {
+    auto output = std::make_unique<ResizableOutput>(core::tui::Size{.width = 20, .height = 4});
+    auto& terminal = *output;
+    Harness harness{std::move(output)};
+    auto const select = harness.make<DropdownSelectImpl>(nullptr);
+    int chosen = 0;
+    select->setOnSelect([&](ui::Key const&) { ++chosen; });
+    select->setOptions(colours());
+    static_cast<void>(harness.draw());
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    REQUIRE(harness.draw() == Rows{"[ ▾]", "▶ Red", "  Green"});
+    terminal.resize({.width = 20, .height = 1});
+    CHECK(harness.draw() == Rows{"[ ▾]"});
+    CHECK(harness.key(KeyCode::Down) == EventResult::Ignored);
+    CHECK_FALSE(select->isOpen());
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    CHECK(chosen == 0);
 }

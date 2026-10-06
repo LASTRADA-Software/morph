@@ -71,12 +71,15 @@ private:
 };
 
 /// Select, dropdown style: one row `[label ▾]`; Enter, Space, Down or a click opens the options as a list overlay
-/// below it (above it, when there is more room there), which takes the focus.
+/// below it (above it, when there is more room there), which takes the focus. It opens only from a field drawn in the
+/// last frame and only where there is room for a row.
 ///
-/// In the list Enter, Space or a click on an option chooses it, Esc closes it, and Tab closes it and leaves the key to
-/// the frontend; the focus then goes back to the field. The list closes as well when the focus leaves it, and when the
-/// user can no longer reach the select (see `closeUnreachablePopups`); it then takes no input. Like the radio style it
-/// keeps the key requested apart from the option it marks.
+/// In the list Enter, Space or a click on an option chooses it, the wheel moves the highlight, Esc closes it, and Tab
+/// closes it and leaves the key to the frontend; the focus then goes back to the field. The list closes as well when
+/// the focus leaves it, and when the user can no longer reach the select (see `closeUnreachablePopups`); it then takes
+/// no input. While its field is not drawn (scrolled out of view, squeezed, taken off the screen) the list is not shown
+/// and takes no input, and the next input that reaches it closes it. Like the radio style it keeps the key requested
+/// apart from the option it marks.
 class DropdownSelectImpl final : public TuiWidget<ui::SelectWidget> {
 public:
     explicit DropdownSelectImpl(Context& context) : TuiWidget{context}, _popup{makePopup()} { adopt(makeView(*this)); }
@@ -89,6 +92,7 @@ public:
 
     /// Replaces the options; an open list shows the new ones, and closes when there are none.
     void setOptions(std::vector<ui::SelectOption> const& options) override;
+    /// Requests the option with @p selected; an open list highlights it when it is among the options.
     void setSelected(std::optional<ui::Key> const& selected) override;
     void setOnSelect(std::function<void(ui::Key)> onSelect) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
@@ -104,15 +108,28 @@ public:
 
 private:
     class Popup;
+    /// Where the list goes: its top left corner, in screen cells, and how many rows it may take there.
+    struct Placement {
+        ::core::tui::Point origin{};  ///< The top left corner.
+        int rows = 0;                 ///< The rows it may take; none when there is no room.
+    };
     [[nodiscard]] std::unique_ptr<::core::tui::List> makePopup();
-    void open();
+    /// Opens the list; whether it is open and has the focus afterwards. When it is not, this select may be gone.
+    bool open();
     void close();
     void choose(std::size_t index);
     /// Gives the list the options and highlights the marked one.
     void fillPopup();
-    /// Puts the list below the field, or above it where there is more room; shows it when it is not shown yet.
+    /// Below the field, or above it where there is more room; moved left as far as it takes to fit the screen.
+    [[nodiscard]] Placement placement() const;
+    /// Moves the open list to `placement()`, and shows it when it is not shown yet.
     void placePopup();
     [[nodiscard]] ::core::tui::Size popupSize() const;
+    /// Whether the field was drawn in the last frame, on the screen.
+    [[nodiscard]] bool fieldDrawn() const;
+    /// Whether the open list can be used: the user can reach the select, its field was drawn in the last frame, and
+    /// the list has room for a row.
+    [[nodiscard]] bool listUsable() const;
 
     std::vector<ui::SelectOption> _options;
     std::optional<ui::Key> _selected;
