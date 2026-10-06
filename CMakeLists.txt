@@ -563,6 +563,8 @@ if(MORPH_BUILD_TUI)
         src/tui/list_widgets.cpp
         src/tui/list_widgets.hpp
         src/tui/loop_executor.cpp
+        src/tui/table_widget.cpp
+        src/tui/table_widget.hpp
         src/tui/widget.cpp
         src/tui/widget.hpp
     )

@@ -5,6 +5,7 @@ add_executable(morph_tui_tests
     test_tui_fields.cpp
     test_tui_lists.cpp
     test_tui_dialog.cpp
+    test_tui_table.cpp
     test_tui_loop_executor.cpp
 )
 
