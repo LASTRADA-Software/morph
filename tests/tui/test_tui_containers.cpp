@@ -516,6 +516,68 @@ TEST_CASE("tui containers: a scroll whose content shrinks moves back to keep its
     lines.clear();
 }
 
+TEST_CASE("tui containers: a scroll with nothing focusable inside takes the focus, and the keys scroll it",
+          "[tui][containers][keys]") {
+    Harness harness{10, 3};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const text = harness.make<TextImpl>(scroll.get());
+    text->setText("0\n1\n2\n3\n4\n5");
+    CHECK(harness.draw() == Rows{"0", "1", "2"});
+    morph::tui::detail::moveFocus(harness.context(), Direction::Forward);
+    REQUIRE(harness.focused(*scroll));
+    CHECK(harness.key(KeyCode::PageDown) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"2", "3", "4"});
+    CHECK(harness.key(KeyCode::End) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"3", "4", "5"});
+    CHECK(harness.key(KeyCode::Down) == EventResult::Ignored);
+    CHECK(harness.key(KeyCode::Up) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"2", "3", "4"});
+    CHECK(harness.key(KeyCode::Home) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"0", "1", "2"});
+    CHECK(harness.key(KeyCode::PageUp) == EventResult::Ignored);
+    CHECK(harness.key(KeyCode::Down) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"1", "2", "3"});
+    CHECK(harness.key(KeyCode::Right) == EventResult::Ignored);
+}
+
+TEST_CASE(
+    "tui containers: a scroll with a focusable widget inside is no Tab stop, and a key the widget leaves "
+    "scrolls it",
+    "[tui][containers][keys]") {
+    Harness harness{10, 2};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(scroll.get(), ui::Axis::Vertical);
+    auto const button = harness.make<ButtonImpl>(column.get());
+    button->setLabel("B");
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("a\nb\nc");
+    CHECK(harness.draw() == Rows{"[ B ]", "a"});
+    CHECK_FALSE(WidgetBase::of(*scroll).view().focusable());
+    morph::tui::detail::moveFocus(harness.context(), Direction::Forward);
+    morph::tui::detail::moveFocus(harness.context(), Direction::Forward);
+    REQUIRE(harness.focused(*button));
+    CHECK(harness.key(KeyCode::PageDown) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"a", "b"});
+
+    // Once nothing inside can take the focus, the scroll takes it itself.
+    button->setEnabled(false);
+    CHECK(WidgetBase::of(*scroll).view().focusable());
+}
+
+TEST_CASE("tui containers: a horizontal scroll moves on Left and Right", "[tui][containers][keys]") {
+    Harness harness{3, 1};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Horizontal);
+    auto const text = harness.make<TextImpl>(scroll.get());
+    text->setText("abcde");
+    CHECK(harness.draw() == Rows{"abc"});
+    harness.focus(*scroll);
+    CHECK(harness.key(KeyCode::Down) == EventResult::Ignored);
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"bcd"});
+    CHECK(harness.key(KeyCode::Left) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"abc"});
+}
+
 TEST_CASE("tui containers: a scroll scrolls a long text line by line", "[tui][containers]") {
     Harness harness{10, 2};
     auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);

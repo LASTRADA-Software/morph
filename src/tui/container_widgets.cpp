@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <core/tui/Box.hpp>
+#include <core/tui/KeyCode.hpp>
+#include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
 #include <core/tui/Theme.hpp>
 #include <cstdint>
@@ -346,16 +348,62 @@ void ScrollImpl::paint(::core::tui::Canvas& canvas) {
     placeChildren(childAreas(viewport));
 }
 
+// A move the user asked for counts as having followed the focus where it is now, so the next frame does not undo
+// it when the focus moved since the last one.
 bool ScrollImpl::scrollBy(int cells) {
     int const target = std::clamp(_offset + cells, 0, std::max(0, _extent - _viewport));
     if (target == _offset) {
         return false;
     }
     _offset = target;
+    _followed = context().screen->focusedComponent();
     refresh();
     return true;
 }
 
 bool ScrollImpl::wheel(int delta) { return scrollBy(delta); }
+
+// Each widget below says whether it wants the focus; a scroll among them asks its own content in turn.
+bool ScrollImpl::wantsFocus() const {
+    std::vector<WidgetBase const*> pending{children().begin(), children().end()};
+    while (!pending.empty()) {
+        auto const* const widget = pending.back();
+        pending.pop_back();
+        if (!widget->actionable()) {
+            continue;
+        }
+        if (widget->wantsFocus()) {
+            return false;
+        }
+        if (auto const* const container = dynamic_cast<ContainerBase const*>(widget)) {
+            pending.insert(pending.end(), container->children().begin(), container->children().end());
+        }
+    }
+    return true;
+}
+
+::core::tui::EventResult ScrollImpl::key(::core::tui::KeyEvent const& key) {
+    using ::core::tui::KeyCode;
+    if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
+        return ::core::tui::EventResult::Ignored;
+    }
+    bool const vertical = _axis == ui::Axis::Vertical;
+    int const page = std::max(1, _viewport - 1);
+    int cells = 0;
+    if (key.key == (vertical ? KeyCode::Up : KeyCode::Left)) {
+        cells = -1;
+    } else if (key.key == (vertical ? KeyCode::Down : KeyCode::Right)) {
+        cells = 1;
+    } else if (key.key == KeyCode::PageUp) {
+        cells = -page;
+    } else if (key.key == KeyCode::PageDown) {
+        cells = page;
+    } else if (key.key == KeyCode::Home) {
+        cells = -_offset;
+    } else if (key.key == KeyCode::End) {
+        cells = _extent - _viewport - _offset;
+    }
+    return cells != 0 && scrollBy(cells) ? ::core::tui::EventResult::Handled : ::core::tui::EventResult::Ignored;
+}
 
 }  // namespace morph::tui::detail

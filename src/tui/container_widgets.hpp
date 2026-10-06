@@ -119,12 +119,19 @@ private:
 /// out of view draws the part that shows (see `WidgetBase::render`). Whenever the focus moves to a widget inside,
 /// the scroll brings it into view, its top edge first when it is taller than the view. The wheel moves the view one
 /// cell, and is left to whatever lies around the scroll when the view cannot move that way.
+///
+/// While nothing inside can take the focus (read-only content), the scroll takes it itself, so the keyboard reaches
+/// it. Up and Down (Left and Right across a horizontal scroll) move the view one cell, PageUp and PageDown one view
+/// less a cell, Home and End to either end; they work too when they bubble up from a focused widget inside that
+/// leaves them, and like the wheel they are left to the scroll's surroundings when the view cannot move.
 class ScrollImpl final : public TuiContainer<ui::ScrollWidget> {
 public:
     ScrollImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _axis{axis} { adopt(makeView(*this)); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    [[nodiscard]] bool wantsFocus() const override;
     void paint(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     [[nodiscard]] bool wheel(int delta) override;
 
 private:
