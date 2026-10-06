@@ -1123,7 +1123,7 @@ main thread cannot spin.
   key list. `BridgeHandler::instances()` reaches it through
   `Bridge::instancesOf`.
 - `negotiateProtocolVersion(replyExec)` — sends `hello` and classifies the
-  reply (see [Protocol negotiation](#protocol-negotiation)).
+  reply (see [Protocol-version negotiation](#protocol-version-negotiation)).
 - `registerModel` (and so `registerModelWithContext`, which `IBackend` forwards
   to it), `assignPrimary`, `listInstances` — the synchronous `IBackend` verbs
   that would have to wait for a reply — throw `std::logic_error` naming their
@@ -1413,7 +1413,8 @@ wrapped in [`SynchronousBackendAdapter`](#synchronousbackendadapter--a-blocking-
 The synchronous control verbs (`registerModel`, `registerModelWithContext`,
 `assignPrimary`, `listInstances`) post the same request and wait on a future
 for its reply, so several may be in flight at once, each matched by `callId`;
-on the loop's own thread they throw instead of waiting on themselves.
+where `IoLoop::runningHere()` holds — the loop's own thread, or a `Caller` loop's
+driving thread — they throw instead of waiting on themselves.
 `cancelPending` sweeps both tables, so a disconnect rejects an in-flight bind
 with `DisconnectedError` and a waiting synchronous verb with `"<verb> failed:
 disconnected"`.
@@ -1427,22 +1428,26 @@ the loop.
 `SocketServer` owns a thread for its I/O. Every socket, every connection,
 every pending call, the reconnect backoff and the accept flow live on an
 `morph::exec::IoLoop` (`include/morph/core/io_loop.hpp`): one
-`core::net::PlatformLoop` and, natively, the one thread that runs it. An
-application constructs one `IoLoop` and passes it to every component built on
-it — `SocketBackend(loop, url)`, `SocketServer(loop, server, port)`,
+`core::net::PlatformLoop`, turned by its own thread (`IoLoopDriver::OwnThread`)
+or by the thread that constructed it (`IoLoopDriver::Caller`, how a terminal
+application shares one thread between its UI and its sockets; see
+[`executor.md`](executor.md#the-io-loop--ioloop)). An application constructs
+one `IoLoop` and passes it to every component built on it —
+`SocketBackend(loop, url)`, `SocketServer(loop, server, port)`,
 `TimeoutScheduler(loop)`, `NetworkMonitor(loop, …)` — the way `LocalBackend`
 takes its pool. The loop is injected rather than a process-wide singleton the
 framework starts on first use: the dependency is then visible in every
 constructor, there is no global to reset between tests, and an application
 decides how many loops it runs (one, normally). Each component also keeps its
-old constructor, which builds a private `IoLoop` — one loop, and one thread,
-for a caller with no loop to share.
+old constructor, which builds a private `OwnThread` `IoLoop` — one loop, and one
+thread, for a caller with no loop to share.
 
 Each component's state is touched only in tasks its loop runs. Its public verbs
 post to the loop and return; the ones that must answer do so from an atomic
 (`connected`, `port`) or an id allocated before the post (`TimeoutScheduler`'s
-handle). Its destructor runs its close on the loop — inline when it runs on
-the loop's own thread, posted and waited for otherwise — so it never waits on
+handle). Its destructor runs its close on the loop — inline where
+`IoLoop::runningHere()` holds (the loop's own thread, or a `Caller` loop's
+driving thread), posted and waited for otherwise — so it never waits on
 itself.
 
 | Component | Cross-thread surface | Everything else |
@@ -1469,8 +1474,9 @@ handshake header read.
 Because the loop is shared, a callback that runs on it — a
 `TimeoutScheduler` callback, a `NetworkMonitor` probe or callback, a
 completion delivered on `inlineExecutor()` — must not block. The synchronous
-control verbs throw when called on the loop's thread (the reply they would
-wait for is read by that thread), so that mistake fails rather than hangs.
+control verbs throw when called on the loop's thread, or a `Caller` loop's
+driving thread (the reply they would wait for is read by that thread), so that
+mistake fails rather than hangs.
 
 Blocking calls like `SocketBackend::waitForConnected()`/the synchronous
 `registerModel` genuinely block the calling thread with no event-loop pumping
@@ -1650,7 +1656,7 @@ apply, plus transport-level failures the in-process backends cannot hit:
 | Socket drops with execute calls in flight | The loop's disconnect handling sweeps both pending tables, resolving every pending completion with `DisconnectedError`. |
 | Reply arrives for an unknown/cancelled `callId` | Dropped silently. |
 | `register` reply is `err` (e.g. unknown model type) | `registerModel` throws `std::runtime_error("register failed: " + message)`. |
-| `register` reply never arrives (never connected, or disconnects mid-call) | The posted request is rejected with `DisconnectedError` when the connection drops or the backend closes; the waiting verb rethrows it as `std::runtime_error("register failed: disconnected")` — never hangs. Called on the loop's own thread, or after the loop has stopped, it throws at once instead of waiting. |
+| `register` reply never arrives (never connected, or disconnects mid-call) | The posted request is rejected with `DisconnectedError` when the connection drops or the backend closes; the waiting verb rethrows it as `std::runtime_error("register failed: disconnected")` — never hangs. Called where `IoLoop::runningHere()` holds (the loop's own thread, or a `Caller` loop's driving thread), or after the loop has stopped, it throws at once instead of waiting. |
 
 There is **no typed "model not found" exception** on either path — callers that
 need to distinguish it from any other `std::runtime_error` have only the message
@@ -1913,10 +1919,10 @@ not a behavior change to the existing loopback-only default.
 |---|---|
 | `SocketBackend(loop, serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and posts the first connection attempt to `loop`, an `exec::IoLoop` that must outlive the backend. |
 | `explicit SocketBackend(serverUrl, cfg = Config{})` | The same, on a private `IoLoop` the backend owns. The URL is parsed before that loop is started. |
-| `~SocketBackend()` | Runs its close on the loop — inline on the loop's own thread, posted and waited for otherwise: closes the connection, retires the backoff timer, rejects every pending call — a waiting synchronous verb's included — with `DisconnectedError`. Never waits for a dial in progress. |
-| `waitForConnected(timeout = 5000ms)` | Posts a waiter the loop releases on the next completed connection, and blocks the calling thread on it until then or the timeout; returns the current connected state. On the loop's own thread it answers at once. The backend must outlive the call — destroying it while a thread is parked here is undefined, and there is no cancel (see Lifetime & ownership). |
+| `~SocketBackend()` | Runs its close on the loop — inline where `runningHere()` holds, posted and waited for otherwise: closes the connection, retires the backoff timer, rejects every pending call — a waiting synchronous verb's included — with `DisconnectedError`. Never waits for a dial in progress. |
+| `waitForConnected(timeout = 5000ms)` | Posts a waiter the loop releases on the next completed connection, and blocks the calling thread on it until then or the timeout; returns the current connected state. Where `runningHere()` holds (the loop's own thread, a `Caller` loop's driving thread) it answers at once. The backend must outlive the call — destroying it while a thread is parked here is undefined, and there is no cancel (see Lifetime & ownership). |
 | `registerModel(typeId, factory)` | Forwards to `registerModelWithContext` with an empty `contextKey`; `factory` ignored. |
-| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous: posts `register` carrying `contextKey` and waits on a future for the loop to settle the reply, so the server's `LogProvider` is consulted for a private registration exactly as it is for a shared one. `factory` ignored. Throws on `err` reply or disconnect, and on the loop's own thread. Any number may be in flight, matched by `callId`. |
+| `registerModelWithContext(typeId, factory, contextKey)` | Synchronous: posts `register` carrying `contextKey` and waits on a future for the loop to settle the reply, so the server's `LogProvider` is consulted for a private registration exactly as it is for a shared one. `factory` ignored. Throws on `err` reply or disconnect, and where `runningHere()` holds (the loop's own thread, or a `Caller` loop's driving thread). Any number may be in flight, matched by `callId`. |
 | `bindModel(request, cbExec)` | Native override of the structural surface. Posts the envelope `request`'s shape names and returns immediately; the loop gives it a non-zero `callId`, files it and writes it; every shape carries `request.contextKey`, the private one included; the loop settles the `Completion` when the reply arrives, delivered on `cbExec`. Any number may be in flight. Rejects with `DisconnectedError` when the socket is down or drops first, or with `std::runtime_error{"<verb> failed: <server message>"}`. |
 | `promoteModel(request, cbExec)` | The `assign` counterpart of `bindModel`, on the same path; resolves with `request.mid` echoed back. An empty `primary` or a zero `mid` resolves without sending, matching `assignPrimary`'s guards. |
 | `deregisterModel(mid)` | **Fire-and-forget** — posted only if connected, does not wait for the ack. The loop gives it a non-zero `callId` from the same counter `execute` uses, so its unawaited `ok` is never taken for another call's reply. Needs no pending-id bookkeeping of its own: the reply router already drops a non-zero `callId` that is not pending. |
@@ -1957,7 +1963,7 @@ keepalive to tell "idle" from "dead" apart).
 | `SocketServer(server, port = 0, cfg = Config{})` | The same, on a private `IoLoop` the first `listen()` creates. |
 | `listen()` | On the loop, and waited for: binds `127.0.0.1:port` with `SO_REUSEADDR`, hands the listener to the loop and starts the accept flow; returns success. `false` if the port cannot be bound or, for the loop-less constructor, the loop cannot be created (a process out of descriptors). |
 | `port()` | Bound port (OS-assigned when constructed with `0`), or `0` when not listening. Atomic; callable from any thread. |
-| `close()` | On the loop, and waited for (inline on the loop's own thread): closes the listener, reclaims every connection's models (`closeConnection`) and closes its socket. `port()` reads `0` afterwards and the port is free to rebind. Idempotent; also run by the destructor. Concurrent callers on a **live** object are safe — each call is one loop task, run one at a time. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
+| `close()` | On the loop, and waited for (inline where `runningHere()` holds): closes the listener, reclaims every connection's models (`closeConnection`) and closes its socket. `port()` reads `0` afterwards and the port is free to rebind. Idempotent; also run by the destructor. Concurrent callers on a **live** object are safe — each call is one loop task, run one at a time. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## `executeInto` — settling the caller's own completion
 
@@ -2029,7 +2035,7 @@ implementation to absorb — see
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill; on empty the frame is refused with an `err` reply, and the connection is left open | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Refusing rather than closing keeps a transient burst from taking down the connection. The frame is *answered* rather than discarded because a reply costs nothing at the protocol level and is the difference between a caller's `Completion` failing and it hanging: the id is recovered by the same bounded prefix scan (`peekCallId`) the `maxMessageBytes` branch uses, so no decode of a frame that will not run is needed. |
 | Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
 | Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models). No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
-| `morph::net`'s I/O model | One `exec::IoLoop` (a core-cpp `PlatformLoop` and its one thread) injected into every component, instead of a thread per component or the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and puts every socket, timer and probe of a process on one owner: the components' state needs no lock, and a process runs one I/O thread rather than one per connection. Injected rather than a framework-owned singleton so the dependency is visible in each constructor and nothing global outlives a test. `SocketBackend` stays callable from any thread (`QtWebSocketBackend` is pinned to its event-loop thread) because every verb posts to the loop. |
+| `morph::net`'s I/O model | One `exec::IoLoop` (a core-cpp `PlatformLoop`, turned by its own thread or the constructing one) injected into every component, instead of a thread per component or the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and puts every socket, timer and probe of a process on one owner: the components' state needs no lock, and a process runs one I/O thread rather than one per connection. Injected rather than a framework-owned singleton so the dependency is visible in each constructor and nothing global outlives a test. `SocketBackend` stays callable from any thread (`QtWebSocketBackend` is pinned to its event-loop thread) because every verb posts to the loop. |
 | `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + HTTP Upgrade + frame codec), with base64 from core-cpp, not a WebSocket library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency beyond core-cpp, which morph links anyway, and RFC 6455's core (handshake + frame codec, including fragment reassembly) is a small, bounded surface. |
 | `WsFrameReader` reassembles fragments | Accumulates continuation frames and returns only the completed message | Fragmentation is not an exotic case: a peer fragments whenever a message exceeds its outgoing frame size, and Qt's `QWebSocket` defaults that to 512 KiB. Rejecting fragments broke interop with the transport this project ships, for every payload past that size. Control frames interleaved between fragments pass through untouched, and the reassembled total is bounded by `wire::kMaxEnvelopeBytes` so a stream of tiny continuations cannot grow the buffer without limit. |
 | `WsFrameReader` rejects RFC 6455-illegal frames instead of tolerating them | Masking direction, RSV bits, opcode range, control-frame framing, Close status code, minimal length encoding and text-payload UTF-8 are all checked; a violation throws out of `tryExtractFrame()` and the call site drops the connection | The interop requirement above makes what the reader *refuses* part of the transport's contract rather than an implementation detail: a tolerant reader accepts ten classes of illegal frame, and a peer that sends one here gets disconnected instead. The reader is given its role at construction (`expectMasked`) because §5.1 is directional — a server MUST reject an unmasked client frame and a client MUST reject a masked server frame, and that rule is the anti-cache-poisoning defence, not a formality. Text UTF-8 is validated incrementally, since a multi-byte sequence may straddle a fragment boundary. On the sending side the mask key is drawn per frame from a thread-local `std::random_device` rather than a thread-local `std::mt19937`, whose state a peer can reconstruct from 624 observed keys (§5.3); `random_device` has no reproducible state to recover, and holding it thread-local keeps the entropy source open instead of reacquiring it on every outbound message. |
@@ -2126,8 +2132,8 @@ it. See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lif
   built on one `IoLoop` shares its thread, so a `TimeoutScheduler` callback, a
   `NetworkMonitor` probe or callback, or a completion delivered on
   `inlineExecutor()` that blocks, stalls every connection on that loop until it
-  returns. The synchronous control verbs throw on the loop's thread; anything
-  else is the caller's to keep short.
+  returns. The synchronous control verbs throw on the loop's thread, or a
+  `Caller` loop's driving thread; anything else is the caller's to keep short.
 - **A hostname is resolved off the loop, on core-cpp's resolver pool.** A
   numeric address never leaves the loop's thread; a name goes to
   `core::net::defaultAsyncResolver()`, a small fixed pool core-cpp owns

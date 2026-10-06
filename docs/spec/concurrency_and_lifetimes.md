@@ -40,7 +40,7 @@ is the concrete executor's job:
 | `QtExecutor` | The Qt GUI thread | Real GUI executor; posts via `QMetaObject::invokeMethod(Qt::QueuedConnection)`. |
 | `ModelStrands` | *Borrows* a base `IExecutor` (usually the pool) | Serialises tasks per `ModelId` on top of the base executor: core-cpp's `KeyedStrands`, which reaches the base through the base's `coreExecutor()`. It owns no thread. |
 | `OwnerStrand` | *Borrows* a base `IExecutor` | One core-cpp `Strand` over the base that is itself a morph executor: the owner of one component's state. `RemoteServer` owns one over its pool (the server strand), `ReconnectCoordinator` one over the executor it is given (the offline strand). It owns no thread. |
-| `exec::IoLoop` | One thread natively; host-pumped under single-threaded WebAssembly | The I/O loop (`io_loop.hpp`): a core-cpp `PlatformLoop` that owns every `morph::net` socket, every `TimeoutScheduler` timer and `NetworkMonitor`'s probe. The application constructs one and injects it into each; `IoLoop::post` is the one way in from another thread. |
+| `exec::IoLoop` | One thread natively (`IoLoopDriver::OwnThread`), or the constructing thread (`IoLoopDriver::Caller`); host-pumped under single-threaded WebAssembly | The I/O loop (`io_loop.hpp`): a core-cpp `PlatformLoop` that owns every `morph::net` socket, every `TimeoutScheduler` timer and `NetworkMonitor`'s probe. The application constructs one and injects it into each; `IoLoop::post` is the one way in from another thread. A `Caller` loop is turned by the thread that built it — a terminal UI's input pump — and is that thread's between turns too. |
 
 A strand's own unit of work is a coroutine resumption, not a callable: it
 queues its pump on the base once per turn, through the adapter, and a posted
@@ -78,10 +78,13 @@ pool to `LocalBackend`; the framework keeps no process-wide loop of its own.
 The dependency is then visible in each constructor, a test builds and tears
 down its own loop with nothing global left behind, and one thread carries every
 socket, timer and probe of a process — the components' state is touched only in
-the loop's tasks, so it needs no lock. Each of those components still has a
-loop-less constructor that builds a private `IoLoop`: one loop, and one thread,
-for a caller with nothing to share it with (`Bridge` and `RemoteServer` build
-their `TimeoutScheduler` that way).
+the loop's tasks, so it needs no lock. Who turns the loop is the application's
+choice too: an `OwnThread` loop runs on a thread of its own, and a `Caller` loop
+on the thread that built it, so a terminal UI's input handling, sockets and
+timers are one thread. Each of those components still has a loop-less
+constructor that builds a private `OwnThread` `IoLoop`: one loop, and one
+thread, for a caller with nothing to share it with (`Bridge` and `RemoteServer`
+build their `TimeoutScheduler` that way).
 
 Key consequences:
 
@@ -197,7 +200,7 @@ rules encode recent fixes to real deadlocks and use-after-frees.
 | worker pool | the backend that posts to it (`LocalBackend`, `RemoteServer`) | Same deadlock/UAF family as the strand rule |
 | `session::Context` passed to `ScopedContext` | the scope in which the model runs | Dangling thread-local `Context*` |
 | a storage object's owner executor (an action log's, an offline queue's, a replay ledger's) | the storage object, and running what it posted | Every verb may post to the owner, so a post after it is gone is a use-after-free. A write posted but never run — the owner closed or dropped its queue first — is lost; posted tasks hold the storage's state, not the object, so the object itself may be destroyed on any thread, before them |
-| `exec::IoLoop` | every component built on it: `SocketBackend`, `SocketServer`, `TimeoutScheduler`, `NetworkMonitor` | **Hang** in the component's destructor, which waits for a close the stopped loop never runs; the same rule as the pool and its backends |
+| `exec::IoLoop` | every component built on it: `SocketBackend`, `SocketServer`, `TimeoutScheduler`, `NetworkMonitor` | Use-after-free: the component's destructor runs its close through a destroyed loop. A thread already blocked in `runAndWait` when the loop is destroyed is released rather than hung, but its close never ran |
 
 ### base `IExecutor` must outlive its strands — and keep running
 
@@ -734,6 +737,10 @@ One-liners to remember:
 - Never block from anything the I/O loop runs: a `NetworkMonitor` probe or
   callback, a `TimeoutScheduler` callback.
 - Never destroy an `IoLoop` before the components built on it.
+- Turn a `Caller` loop only on the thread that built it, and destroy it, and the
+  components built on it, there and outside one of its turns.
+- Let no exception escape a callback a component's close can reach: the close
+  runs in a `noexcept` destructor, which terminates on a throw.
 - Never log from inside a log sink (non-recursive mutex).
 - Never read `session::current()` off the dispatch thread or after `execute()`
   returns.

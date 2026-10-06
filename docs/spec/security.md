@@ -625,14 +625,14 @@ transport above is not a matter of degree:
   two transports are comparable; it is also the only one.
 - **Socket errors are rendered with a thread-safe formatter.** Every throw
   site in `net/detail/tcp_socket.hpp` builds its message on whichever thread
-  hit the error. This transport's sockets run on an `exec::IoLoop`'s thread,
-  but an application may run several loops, and the socket helpers can be
-  called from the caller's own thread, so more than one thread can be
-  rendering an `errno` at the same moment. They go through
-  `std::system_category().message()`, which returns an owned `std::string` and
-  carries the library's ordinary "shall not introduce a data race" guarantee,
-  rather than `std::strerror`, which is permitted to hand every caller a
-  pointer to one shared static buffer. Stated precisely, because the
+  hit the error. This transport's sockets run on an `exec::IoLoop`'s thread
+  (a `Caller` loop's driving thread), but an application may run several
+  loops, and the socket helpers can be called from the caller's own thread, so
+  more than one thread can be rendering an `errno` at the same moment. They go
+  through `std::system_category().message()`, which returns an owned
+  `std::string` and carries the library's ordinary "shall not introduce a data
+  race" guarantee, rather than `std::strerror`, which is permitted to hand
+  every caller a pointer to one shared static buffer. Stated precisely, because the
   distinction matters: what this avoids is the data race the specification of
   `std::strerror` permits, inferred from that specification rather than
   observed. No interleaved or corrupted message has been seen, and on the

@@ -29,7 +29,7 @@ threading, and serialisation semantics differ per implementation.
 
 ## Type overview
 
-There are eleven types and one free function (with two overloads), split across
+There are thirteen types and one free function (with two overloads), split across
 `morph::exec` and `morph::exec::detail` (in `executor.hpp`, `strand.hpp`,
 `owner_strand.hpp` and `io_loop.hpp`), and `morph::qt` (in `qt/qt_executor.hpp`):
 
@@ -46,7 +46,8 @@ There are eleven types and one free function (with two overloads), split across
 | `TaskResumer` | `morph::exec::detail` | A Task handler's resumer: the current executor while the handler runs, queuing its resumptions on its model's strand (see [`coroutines.md`](coroutines.md)). |
 | `OwnerStrand` | `morph::exec` (in `owner_strand.hpp`) | One strand over a morph executor that is itself a morph executor: the owner a framework component's state belongs to. See [owner strands](#owner-strands--ownerstrand). |
 | `OwnedState<State>` | `morph::exec::detail` (in `core/detail/owned_state.hpp`) | A component's state behind a `shared_ptr`, and the owner executor every access to it runs on: write inline-or-posted, owner-only read, or a read answered with a `Completion`. What the storage types are built on. See [owned state](#owned-state--ownedstate). |
-| `IoLoop` | `morph::exec` (in `io_loop.hpp`) | The I/O loop: a core-cpp `PlatformLoop` and, natively, its one thread. Owns every `morph::net` socket, `TimeoutScheduler` timer and `NetworkMonitor` probe built on it; see [the I/O loop](#the-io-loop--ioloop). |
+| `IoLoop` | `morph::exec` (in `io_loop.hpp`) | The I/O loop: a core-cpp `PlatformLoop`, turned by its own thread or by the constructing thread. Owns every `morph::net` socket, `TimeoutScheduler` timer and `NetworkMonitor` probe built on it; see [the I/O loop](#the-io-loop--ioloop). |
+| `IoLoopDriver` | `morph::exec` (in `io_loop.hpp`) | Who turns an `IoLoop`: `OwnThread` (its own thread) or `Caller` (the constructing thread); see [the I/O loop](#the-io-loop--ioloop). |
 
 `IExecutor` and the two thread-based concrete executors live in the public
 `morph::exec` namespace. `QtExecutor` lives in `morph::qt` (in the separate
@@ -409,7 +410,8 @@ assert(morph::exec::runningOn(_owner) && "touched off its owner");
 `runningOn` has a second overload for an owner that is a core-cpp executor
 rather than a morph one — `core::net::EventLoop` states an `ExecutorScope`
 naming itself for each turn, so `runningOn(ioLoop.loop())` is true in every
-task, timer callback and flow the loop runs. The components on an `IoLoop`
+task, timer callback and flow the loop runs, and in the inline body of a
+`runAndWait` on a `Caller` loop's driving thread. The components on an `IoLoop`
 make that check through `detail::noteOwner(site, owner, onOwner)`
 (`core/detail/owner_probe.hpp`): a debug-build assertion, which a test
 replaces with a probe that records the site and reads the scope itself. That
@@ -506,26 +508,96 @@ The owner must outlive the component and keep running what it posted.
 
 ## The I/O loop — `IoLoop`
 
-`IoLoop` owns a `core::net::PlatformLoop`. Natively it starts one thread that
-runs the loop, and its destructor stops the loop and joins that thread; under
-single-threaded WebAssembly it starts none, and the browser's timer pumps the
-loop. An application constructs one and passes it to every component that does
-I/O or keeps time — `morph::net::SocketBackend`, `morph::net::SocketServer`,
-`TimeoutScheduler`, `offline::NetworkMonitor` — each of which keeps its state
-on the loop and touches it only in the loop's tasks.
+`IoLoop` owns a `core::net::PlatformLoop`. Who turns it is fixed at construction
+by an `IoLoopDriver`:
+
+- **`OwnThread`** (the default): the `IoLoop` starts one thread that runs the
+  loop; its destructor stops the loop and joins that thread.
+- **`Caller`**: no thread is started. The constructing thread is the loop's and
+  turns it — `loop().runOnce()`, `loop().runUntilIdle()`, or a `blockOn()`. A
+  terminal application runs this way, so its UI, sockets, timers and bridge
+  callbacks share one thread. No other thread may turn it.
+- Under single-threaded WebAssembly no thread exists to start, whichever driver
+  is asked for: the browser's timer pumps the loop, `driver()` reports what was
+  asked for, and both drivers behave alike.
+
+An application constructs one and passes it to every component that does I/O or
+keeps time — `morph::net::SocketBackend`, `morph::net::SocketServer`,
+`TimeoutScheduler`, `offline::NetworkMonitor` — each of which keeps its state on
+the loop and touches it only in the loop's tasks. A component built without a
+loop builds a private `OwnThread` one.
 
 | Member | Cross-thread? | What it does |
 |---|---|---|
-| `loop()` | returns a reference | The `core::net::EventLoop`, for timers, sockets and flows armed from inside a task of it. |
+| `IoLoop(driver = OwnThread)` | — | Creates the loop; `OwnThread` also starts its thread, and `Caller` records the constructing thread as the driving one. |
+| `driver()` | yes | The `IoLoopDriver` it was built with. |
+| `loop()` | returns a reference | The `core::net::EventLoop`, for timers, sockets and flows armed from inside a task of it, and for a `Caller` loop's driving thread to turn it. |
 | `post(task)` | yes | Queues `task` for a later turn. A throw out of it is logged and swallowed: one escaping a turn would end the loop's thread. |
-| `runAndWait(task)` | yes | Runs `task` on the loop and returns once it has run — inline when the caller is already on the loop, so a task never waits on itself. A task the loop drops unrun ends the wait. Components use it for teardown and for the verbs that must answer (`SocketServer::listen`). |
-| `runningHere()` | yes | Whether the caller is inside one of the loop's tasks; always true under single-threaded WebAssembly, where there is one thread. |
+| `runAndWait(task)` | yes | Runs `task` on the loop and returns once it has run — inline where `runningHere()` holds, so a task never waits on itself. A throw out of `task` reaches the caller. A task the loop drops unrun ends the wait, and the call returns without `task` having run. Components use it for teardown and for the verbs that must answer (`SocketServer::listen`). |
+| `runningHere()` | yes | Whether the caller may touch the loop's state: inside one of the loop's tasks, or — for a `Caller` loop — anywhere on the driving thread, between turns included. Always true under single-threaded WebAssembly. |
 | `weak()` | yes | A handle whose `post` is a no-op returning `false` once the loop is gone — for a callback another executor runs, such as a `RemoteServer` reply. |
 
 **It must outlive every component built on it.** Their destructors run their
 close on the loop and wait for it. Destroyed on its own thread (a task dropped
-the last owner), `~IoLoop` cannot join: it stops the loop and detaches, and the
-thread's own share of the loop keeps it alive until the turn it is in ends.
+the last owner), an `OwnThread` loop cannot join: it stops the loop and detaches,
+and the thread's own share of the loop keeps it alive until the turn it is in
+ends. Work still queued when a loop is destroyed is dropped, not run.
+
+**`runAndWait` always ends.** The posted task is the only holder of the promise
+the caller waits on, so a task the loop destroys unrun breaks it, and the wait
+returns instead of hanging. A task that throws is caught on the loop and its
+exception rethrown to the waiter, inline or not. A caller that must know the
+task ran sets a flag in it, as `SocketBackend`'s synchronous verbs do before
+turning a dropped wait into an error.
+
+**A close must not throw.** `~SocketBackend`, `~SocketServer`,
+`~TimeoutScheduler` and `~NetworkMonitor` close through `runAndWait`, so a
+throw out of the close reaches the destructor, which is `noexcept`: the process
+terminates. The close bodies do not throw; the one way out is user code they
+reach. `SocketBackend`'s close rejects every pending call, and a continuation
+whose callback executor is inline runs inside the close instead of being posted
+to its owner; such a continuation must not let an exception escape. Nothing
+else in the four closes runs user code: `SocketServer`'s only posts
+`RemoteServer::closeConnection` to the server's strand.
+
+**A `Caller` loop.** The driving thread is the loop's between turns, because
+nothing else can be running the loop then: core-cpp's
+`EventLoop::teardownIsSerialisedWithDispatch()` holds, so the loop's state may be
+touched directly. So `runningHere()` holds there, and `runAndWait` and a
+component's close run inline instead of waiting for a turn only the waiting
+thread could drive. Inline between turns, the body runs inside an
+`ExecutorScope` naming the loop, so `runningOn(loop)`, the owner probes
+(`detail::noteOwner`) and `Completion::checkOwner` see the loop as the current
+executor there, as they would in a task, and agree with `runningHere()`.
+
+Other threads still `post()`, `weak().post()` and `runAndWait()`; what they
+queue runs on the driving thread's next turn, and a `runAndWait` from another
+thread waits for it.
+
+Three checks guard the one-driving-thread rule, all assertions and so debug
+builds only:
+
+- A task posted through `IoLoop::post`, `Weak::post` or `runAndWait` asserts that
+  it runs on the thread that constructed the loop. A turn on another thread
+  would race every component's state, which `runningHere()` tells the driving
+  thread it owns. This check wraps tasks, so it does not catch a foreign turn
+  that only fires timers or resumes flows, nor a task posted straight to
+  `loop()`.
+- core-cpp's own turn entry asserts `teardownIsSerialisedWithDispatch()`, which
+  catches a second thread entering a turn while the driving thread is inside
+  one. It misses a foreign turn made while the driving thread is idle between
+  turns.
+- Destroying a `Caller` loop where `runningOn(loop)` holds — inside one of its
+  own turns, or in the inline body of a `runAndWait` — is refused: a turn
+  would return into a destroyed loop.
+
+The loop and its components are destroyed on the driving thread, outside a
+turn: a component's close runs inline, and the loop's own teardown drops
+whatever is still queued without running it — and ends the wait of any other
+thread blocked in `runAndWait` on it. A synchronous `SocketBackend` verb called
+on the driving thread throws, as it does on an `OwnThread` loop's thread: it
+would wait for a reply only that thread can deliver. `waitForConnected` called
+there answers at once with the current state.
 
 ## Failure modes
 
@@ -535,6 +607,7 @@ thread's own share of the loop keeps it alive until the turn it is in ends.
 | `ModelStrands` | `LoggedTask`, around every posted callable, catches it. `std::exception` is logged as `"[strand] task threw: " + what()`; any other type is logged as `"[strand] task threw unknown exception"`. The next task for the key proceeds. |
 | `MainThreadExecutor` | `runFor` catches **only** `std::exception`, logged as `"[main-thread] callback threw: " + what()`, then continues with the next task. **Any non-`std::exception` type propagates out of `runFor()`** and is the caller's problem. |
 | `QtExecutor` | No `try`/`catch` of its own. A throwing task propagates into whoever drives the target thread's event loop (`QCoreApplication::exec` by default, or the worker thread's loop for a custom context); Qt's default behaviour is to `std::terminate`. Tasks posted through it must not let exceptions escape. |
+| `IoLoop` | A task posted with `post()` or `weak().post()` is caught on the loop and logged as `"[io-loop] task threw: " + what()` (or `"[io-loop] task threw an unknown exception"`); the loop goes on. `runAndWait()` catches it on the loop and rethrows it to the waiter instead, inline or not. |
 
 All logging goes through `morph::log::logError`. The design principle: a task
 failure must never kill a worker/strand or abort sibling tasks, but it must also

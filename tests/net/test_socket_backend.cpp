@@ -29,6 +29,7 @@
 #include <morph/net/socket_server.hpp>
 #include <morph/session/session.hpp>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -2429,4 +2430,69 @@ TEST_CASE("SocketBackend: a synchronous verb called on the loop's own thread fai
         }
     });
     CHECK_THAT(message, Catch::Matchers::ContainsSubstring("cannot wait on the I/O loop's own thread"));
+}
+
+// ── A client on a caller-driven loop ────────────────────────────────────────
+//
+// The client's IoLoop has no thread: this test thread turns it, the way a TUI
+// application's one loop is turned by its input pump. The server keeps a loop
+// of its own, so only the client side is caller-driven.
+
+TEST_CASE("SocketBackend: on a caller-driven loop, an asynchronous round trip completes in the driving thread's turns",
+          "[net][socket_backend][caller]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    morph::exec::IoLoop loop{morph::exec::IoLoopDriver::Caller};
+    morph::exec::MainThreadExecutor cbOwner;
+    auto backend = std::make_unique<morph::net::SocketBackend>(
+        loop, "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port())));
+    auto const drive = [&](auto done) {
+        auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+        while (!done()) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                return false;
+            }
+            static_cast<void>(loop.loop().runOnce(std::chrono::milliseconds{5}));
+            static_cast<void>(cbOwner.runOnce());
+        }
+        return true;
+    };
+
+    // On the driving thread waitForConnected cannot wait for the loop: it answers at once.
+    REQUIRE(drive([&] { return backend->waitForConnected(); }));
+
+    std::optional<morph::exec::detail::ModelId> mid;
+    auto bound = backend->bindModel(privateBind("SbEchoModel"), cbOwner);
+    bound.then([&](morph::exec::detail::ModelId boundId) { mid = boundId; }).onError([](const std::exception_ptr&) {});
+    REQUIRE(drive([&] { return mid.has_value(); }));
+
+    std::optional<std::string> reply;
+    std::thread::id repliedOn;
+    auto executed = backend->execute(*mid, echoCall(), &cbOwner);
+    executed
+        .then([&](const std::shared_ptr<void>& result) {
+            reply = *std::static_pointer_cast<std::string>(result);
+            repliedOn = std::this_thread::get_id();
+        })
+        .onError([](const std::exception_ptr&) {});
+    REQUIRE(drive([&] { return reply.has_value(); }));
+    CHECK(*reply == "7");
+    CHECK(repliedOn == std::this_thread::get_id());
+
+    // The close runs inline on the driving thread, outside a turn, with the
+    // reader flow still parked; the loop's teardown unwinds it afterwards.
+    backend.reset();
+}
+
+TEST_CASE("SocketBackend: on a caller-driven loop, a synchronous verb on the driving thread throws instead of waiting",
+          "[net][socket_backend][caller]") {
+    morph::exec::IoLoop loop{morph::exec::IoLoopDriver::Caller};
+    // Never driven: the throw comes before any I/O, and the destructor's close
+    // runs inline with the connect still queued.
+    morph::net::SocketBackend backend{loop, "ws://127.0.0.1:9"};
+    CHECK_THROWS_WITH(static_cast<void>(backend.registerModel("SbEchoModel", nullptr)),
+                      Catch::Matchers::ContainsSubstring("cannot wait on the I/O loop's own thread"));
 }
