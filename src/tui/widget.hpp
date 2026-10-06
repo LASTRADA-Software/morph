@@ -63,6 +63,9 @@ public:
     /// those containers lets its children act (a collapsed panel and a closed dialog do not). Every input path asks
     /// this, because core::tui sends keys to the focused view however its ancestors changed since it took focus.
     [[nodiscard]] bool actionable() const;
+    /// Whether the user could see this widget: it and every container around it are shown, and none of those
+    /// containers holds its children out of reach (a closed dialog shows nothing of them).
+    [[nodiscard]] bool displayed() const;
     void applyLayout(ui::LayoutHints const& hints);
     [[nodiscard]] ui::LayoutHints const& layout() const noexcept { return _layout; }
     void applyDragKey(std::optional<ui::Key> const& key);
@@ -107,11 +110,19 @@ public:
     virtual void activate() {}
     /// A click on @p cell (0-based, relative to this widget); runs `activate()` unless overridden.
     virtual void click(::core::tui::Point cell);
+    /// A left press on @p cell (0-based, relative to this widget) that this widget took, after it took the focus
+    /// when it takes it on a press. It may destroy the widget.
+    virtual void pressAt(::core::tui::Point cell);
+    /// The pointer moved to @p cell (relative to this widget, and possibly outside it) while a press this widget took
+    /// lasts and the widget is actionable. It may destroy the widget.
+    virtual void dragTo(::core::tui::Point cell);
     /// A wheel notch, -1 up and +1 down; true when handled.
     [[nodiscard]] virtual bool wheel(int delta);
     /// Closes the popup this widget has open (a dropdown's list), as `closeUnreachablePopups` asks of a widget in
     /// `Context::popups` the user can no longer reach; it runs no handler.
     virtual void closePopup() {}
+    /// The popup this widget has open (a dropdown's list), or null.
+    [[nodiscard]] virtual ::core::tui::Component const* openPopup() const { return nullptr; }
 
     /// Routes one event of this widget's view: mouse to `pointer()`, keys to `key()` while actionable and not behind
     /// an open dialog (see `activeDialog`).
@@ -141,6 +152,9 @@ private:
     void paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size laidOut);
     [[nodiscard]] ::core::tui::EventResult press(::core::tui::MouseEvent const& mouse);
     [[nodiscard]] ::core::tui::EventResult release(::core::tui::MouseEvent const& mouse);
+    [[nodiscard]] ::core::tui::EventResult move(::core::tui::MouseEvent const& mouse);
+    /// The cell of this widget's laid-out area a pointer event relative to its view lies on.
+    [[nodiscard]] ::core::tui::Point cellOf(::core::tui::MouseEvent const& mouse) const noexcept;
 
     Context* _context;
     ContainerBase* _container = nullptr;
@@ -312,6 +326,13 @@ void attach(Context& context, ui::ContainerWidget* parent, WidgetBase& widget);
 void fit(Context& context);
 /// The open dialog the user sees whose frame is on top, or null: the one that is modal.
 [[nodiscard]] ContainerBase* activeDialog(Context const& context);
+/// Counts the active Busy widgets the user could see into `Context::activeBusy`. Showing or hiding any widget, and
+/// opening or closing a dialog, calls it, as does `fit`.
+void countSpinners(Context& context);
+/// Lets the focus follow an open dialog's box that showed or vanished because a widget was shown or hidden: a box
+/// that vanished with the focus inside hands it back as closing does, and the box on top that showed takes it. It
+/// lives with the dialogs (container_widgets.cpp); showing or hiding any widget calls it.
+void followDialogs(Context& context);
 /// Moves keyboard focus to @p target, or nowhere for null; returns whether @p target has the focus afterwards.
 ///
 /// The focus leaves the old widget on its own first. A field commits what was typed when it loses the focus, and the

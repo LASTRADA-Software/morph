@@ -77,9 +77,12 @@ WidgetBase const& WidgetBase::of(ui::Widget const& widget) {
     return *base;
 }
 
+// Last, as the focus following a dialog may run a handler (a field committing as it loses the focus) that destroys
+// this widget.
 void WidgetBase::applyVisible(bool visible) {
     _userVisible = visible;
     syncVisible();
+    followDialogs(*_context);
 }
 
 void WidgetBase::setStructuralVisible(bool visible) {
@@ -93,6 +96,7 @@ void WidgetBase::syncVisible() {
     }
     refresh();
     closeUnreachablePopups(*_context);
+    countSpinners(*_context);
 }
 
 void WidgetBase::applyEnabled(bool enabled) {
@@ -107,6 +111,18 @@ bool WidgetBase::actionable() const {
     }
     for (ContainerBase const* outer = _container; outer != nullptr; outer = outer->container()) {
         if (!outer->shown() || !outer->enabled() || !outer->letsChildrenAct()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool WidgetBase::displayed() const {
+    if (!shown()) {
+        return false;
+    }
+    for (ContainerBase const* outer = _container; outer != nullptr; outer = outer->container()) {
+        if (!outer->shown() || !outer->letsChildrenAct()) {
             return false;
         }
     }
@@ -232,6 +248,10 @@ EventResult WidgetBase::key(::core::tui::KeyEvent const& /*key*/) { return Event
 
 void WidgetBase::click(::core::tui::Point /*cell*/) { activate(); }
 
+void WidgetBase::pressAt(::core::tui::Point /*cell*/) {}
+
+void WidgetBase::dragTo(::core::tui::Point /*cell*/) {}
+
 bool WidgetBase::wheel(int /*delta*/) { return false; }
 
 EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
@@ -263,7 +283,11 @@ EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
     if (mouse.type == Type::Release) {
         return release(mouse);
     }
-    return _context->pressed == this ? EventResult::Handled : EventResult::Ignored;
+    return move(mouse);
+}
+
+::core::tui::Point WidgetBase::cellOf(::core::tui::MouseEvent const& mouse) const noexcept {
+    return {.x = mouse.x - 1 + _drawShift.x, .y = mouse.y - 1 + _drawShift.y};
 }
 
 // Any press ends an earlier gesture whose release never arrived, whether or not this widget takes the new one.
@@ -275,10 +299,26 @@ EventResult WidgetBase::press(::core::tui::MouseEvent const& mouse) {
         return EventResult::Ignored;
     }
     _context->pressed = this;
+    auto* const context = _context;
+    auto const cell = cellOf(mouse);
     if (focusesOnPress()) {
-        // Moving the focus may run a handler that destroys this widget; then `pressed` is cleared and the release
-        // clicks nothing.
-        static_cast<void>(focusWidget(*_context, this));
+        // Moving the focus may run a handler that destroys this widget; then `pressed` is cleared, nothing more of
+        // the press happens and the release clicks nothing.
+        static_cast<void>(focusWidget(*context, this));
+    }
+    if (context->pressed == this && actionable()) {
+        pressAt(cell);
+    }
+    return EventResult::Handled;
+}
+
+// A move belongs to the press this widget took, wherever the pointer is: the press made this view the capture.
+EventResult WidgetBase::move(::core::tui::MouseEvent const& mouse) {
+    if (_context->pressed != this) {
+        return EventResult::Ignored;
+    }
+    if (mouse.type == ::core::tui::MouseEvent::Type::Move && actionable()) {
+        dragTo(cellOf(mouse));
     }
     return EventResult::Handled;
 }
@@ -593,12 +633,18 @@ void fit(Context& context) {
         view.setArea(area);
         view.setScreenBounds({});
     }
+    countSpinners(context);
     for (auto* dialog : context.openDialogs) {
         auto& frame = dialog->host();
         frame.setScreenBounds({});
         forgetDrawnBounds(frame);
         screen.positionOverlay(frame, centredIn(screen, frame.preferredSize()));
     }
+}
+
+void countSpinners(Context& context) {
+    context.activeBusy = static_cast<std::size_t>(
+        std::ranges::count_if(context.busy, [](WidgetBase const* busy) { return busy->displayed(); }));
 }
 
 ContainerBase* activeDialog(Context const& context) {

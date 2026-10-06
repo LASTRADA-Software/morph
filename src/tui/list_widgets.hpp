@@ -103,6 +103,7 @@ public:
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
     void closePopup() override;
+    [[nodiscard]] ::core::tui::Component const* openPopup() const override { return _open ? _popup.get() : nullptr; }
     /// Whether the option list is open.
     [[nodiscard]] bool isOpen() const noexcept { return _open; }
 

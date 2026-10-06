@@ -29,6 +29,7 @@ using morph::tui::detail::Direction;
 using morph::tui::detail::DropdownSelectImpl;
 using morph::tui::detail::FilePickerImpl;
 using morph::tui::detail::moveFocus;
+using morph::tui::detail::PanelImpl;
 using morph::tui::detail::SliderImpl;
 using morph::tui::detail::StackImpl;
 using morph::tui::detail::TextImpl;
@@ -592,8 +593,10 @@ TEST_CASE("tui dialog: a handler run by the focus leaving for an opening dialog 
     CHECK(picked == 1);
 }
 
-TEST_CASE("tui dialog: closing after the widget it would hand the focus back to is gone focuses nothing",
-          "[tui][dialog][lifetime]") {
+TEST_CASE(
+    "tui dialog: closing after the widget it would hand the focus back to is gone focuses nothing when nothing "
+    "else can take it",
+    "[tui][dialog][lifetime]") {
     Harness harness{30, 10};
     Scene scene{harness, {"OK"}};
     harness.focus(*scene.behind);
@@ -657,6 +660,292 @@ TEST_CASE("tui dialog: a dialog closing under another open one hands the focus i
     REQUIRE(harness.screen().focusedComponent() == nullptr);
     lower.dialog->setOpen(false);
     CHECK(harness.screen().focusedComponent() == &upper->host());
+    // The widget it would hand the focus back to is inside the closed lower dialog: the first focusable widget of
+    // the roots takes it instead.
     upper->setOpen(false);
-    CHECK(harness.screen().focusedComponent() == nullptr);
+    CHECK(harness.focused(*lower.behind));
+}
+
+TEST_CASE(
+    "tui dialog: closing after the widget it would hand the focus back to is gone focuses the first one there is",
+    "[tui][dialog][lifetime]") {
+    Harness harness{30, 10};
+    Scene scene{harness, {"OK"}};
+    auto const other = harness.make<ButtonImpl>(scene.column.get());
+    other->setLabel("Other");
+    harness.focus(*scene.behind);
+    scene.dialog->setOpen(true);
+    scene.behind.reset();
+    scene.dialog->setOpen(false);
+    CHECK(harness.focused(*other));
+}
+
+TEST_CASE("tui dialog: a dialog opened over an open dropdown list hands the focus back to the select",
+          "[tui][dialog][popup]") {
+    Harness harness{30, 10};
+    Scene scene{harness, {"OK"}};
+    auto const select = harness.make<DropdownSelectImpl>(scene.column.get());
+    select->setOptions(
+        {{.key = ui::Key{std::int64_t{1}}, .label = "Red"}, {.key = ui::Key{std::int64_t{2}}, .label = "Green"}});
+    static_cast<void>(harness.draw());
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    REQUIRE(select->isOpen());
+    scene.dialog->setOpen(true);
+    CHECK_FALSE(select->isOpen());
+    CHECK(harness.focused(*scene.buttons.at(0)));
+    scene.dialog->setOpen(false);
+    CHECK(harness.focused(*select));
+}
+
+TEST_CASE("tui dialog: an open dialog hidden hands the focus back, and takes it again once shown",
+          "[tui][dialog][gating]") {
+    Harness harness{30, 10};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const first = harness.make<ButtonImpl>(column.get());
+    first->setLabel("First");
+    auto const behind = harness.make<ButtonImpl>(column.get());
+    behind->setLabel("Behind");
+    auto const holder = harness.make<PanelImpl>(column.get());
+    holder->setCollapsible(true);
+    auto const dialog = harness.make<DialogImpl>(holder.get());
+    auto ok = harness.make<ButtonImpl>(dialog.get());
+    ok->setLabel("OK");
+    int behindClicks = 0;
+    int okClicks = 0;
+    behind->setOnClick([&] { ++behindClicks; });
+    ok->setOnClick([&] { ++okClicks; });
+    // The dialog itself hidden, the container around it hidden, or that container (a panel) collapsed.
+    auto const hide = GENERATE(0, 1, 2);
+    auto const setShown = [&](bool shown) {
+        if (hide == 0) {
+            dialog->setVisible(shown);
+        } else if (hide == 1) {
+            holder->setVisible(shown);
+        } else {
+            holder->setCollapsed(!shown);
+        }
+    };
+    harness.focus(*behind);
+    dialog->setOpen(true);
+    REQUIRE(harness.focused(*ok));
+    setShown(false);
+    CHECK(harness.focused(*behind));
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(behindClicks == 1);
+    setShown(true);
+    CHECK(harness.focused(*ok));
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(okClicks == 1);
+    CHECK(behindClicks == 1);
+    dialog->setOpen(false);
+    CHECK(harness.focused(*behind));
+    ok.reset();
+}
+
+TEST_CASE("tui dialog: a dialog opened by the handler the focus leaving runs hands the focus back to that field",
+          "[tui][dialog][lifetime]") {
+    Harness harness{40, 12};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const first = harness.make<ButtonImpl>(column.get());
+    first->setLabel("First");
+    auto const picker = harness.make<FilePickerImpl>(column.get(), ui::FilePickerMode::Save);
+    auto const dialog = harness.make<DialogImpl>(column.get());
+    auto const ok = harness.make<ButtonImpl>(dialog.get());
+    ok->setLabel("OK");
+    auto const second = harness.make<DialogImpl>(column.get());
+    auto const two = harness.make<ButtonImpl>(second.get());
+    two->setLabel("Two");
+    picker->setOnPicked([&](std::string const& /*path*/) { second->setOpen(true); });
+    static_cast<void>(harness.draw());
+    harness.focus(*picker);
+    static_cast<void>(harness.type("/p"));
+    dialog->setOpen(true);
+    CHECK(harness.focused(*two));
+    auto const lowerFirst = GENERATE(false, true);
+    if (lowerFirst) {
+        dialog->setOpen(false);
+        CHECK(harness.focused(*two));
+        second->setOpen(false);
+    } else {
+        second->setOpen(false);
+        CHECK(harness.focused(*ok));
+        dialog->setOpen(false);
+    }
+    CHECK(harness.focused(*picker));
+}
+
+TEST_CASE("tui busy: a hidden busy, or one inside a hidden container, does not count as spinning", "[tui][busy]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const busy = harness.make<BusyImpl>(column.get());
+    busy->setActive(true);
+    REQUIRE(harness.context().activeBusy == 1);
+    busy->setVisible(false);
+    CHECK(harness.context().activeBusy == 0);
+    busy->setVisible(true);
+    CHECK(harness.context().activeBusy == 1);
+    column->setVisible(false);
+    CHECK(harness.context().activeBusy == 0);
+    static_cast<void>(harness.draw());
+    CHECK(harness.context().activeBusy == 0);
+    column->setVisible(true);
+    CHECK(harness.context().activeBusy == 1);
+    busy->setActive(false);
+    CHECK(harness.context().activeBusy == 0);
+}
+
+TEST_CASE("tui busy: a busy inside a closed dialog does not count as spinning", "[tui][busy]") {
+    Harness harness{20, 6};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const dialog = harness.make<DialogImpl>(column.get());
+    auto const busy = harness.make<BusyImpl>(dialog.get());
+    busy->setActive(true);
+    CHECK(harness.context().activeBusy == 0);
+    dialog->setOpen(true);
+    CHECK(harness.context().activeBusy == 1);
+    dialog->setOpen(false);
+    CHECK(harness.context().activeBusy == 0);
+}
+
+namespace {
+
+/// A move of the pointer, with the left button held, to a 0-based viewport cell.
+core::tui::MouseEvent moveTo(core::tui::Point cell) {
+    return core::tui::MouseEvent{
+        .type = core::tui::MouseEvent::Type::Move, .button = 0, .x = cell.x + 1, .y = cell.y + 1};
+}
+
+/// A left-button release on a 0-based viewport cell.
+core::tui::MouseEvent releaseAt(core::tui::Point cell) {
+    return core::tui::MouseEvent{
+        .type = core::tui::MouseEvent::Type::Release, .button = 0, .x = cell.x + 1, .y = cell.y + 1};
+}
+
+/// A slider 24 cells wide at column 2 of a row (behind the text "ab"), ranging 0..100 by 10.
+struct SliderRow {
+    explicit SliderRow(Harness& harness)
+        : row{harness.make<StackImpl>(nullptr, ui::Axis::Horizontal)},
+          text{harness.make<TextImpl>(row.get())},
+          slider{harness.make<SliderImpl>(row.get())} {
+        text->setText("ab");
+        slider->setRange(0, 100, 10);
+    }
+
+    std::unique_ptr<StackImpl> row;
+    std::unique_ptr<TextImpl> text;
+    std::unique_ptr<SliderImpl> slider;
+};
+
+}  // namespace
+
+// The track starts one cell into the slider, past its "[", so the slider's track cell n lies at viewport column 3 + n.
+TEST_CASE("tui slider: a press on the track sets the value there, by step, and a drag follows it to either end",
+          "[tui][slider][pointer]") {
+    Harness harness{30, 1};
+    SliderRow scene{harness};
+    std::vector<std::int64_t> changes;
+    scene.slider->setValue(50);
+    scene.slider->setOnChange([&](std::int64_t value) { changes.push_back(value); });
+    CHECK(harness.draw() == Rows{"ab[=========|---------] 50"});
+    CHECK(harness.send(pressAt({.x = 3, .y = 0})) == EventResult::Handled);
+    CHECK(harness.focused(*scene.slider));
+    CHECK(changes == std::vector<std::int64_t>{0});
+    CHECK(harness.draw() == Rows{"ab[|-------------------] 0"});
+    static_cast<void>(harness.send(moveTo({.x = 3, .y = 0})));
+    CHECK(changes == std::vector<std::int64_t>{0});  // no change, no report
+    static_cast<void>(harness.send(moveTo({.x = 29, .y = 0})));
+    CHECK(changes == std::vector<std::int64_t>{0, 100});
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.send(moveTo({.x = 0, .y = 0})));
+    CHECK(changes == std::vector<std::int64_t>{0, 100, 0});
+    static_cast<void>(harness.draw());
+    // Track cell 9 of 20 lies at 47 of 100, which the step takes to 50.
+    static_cast<void>(harness.send(moveTo({.x = 12, .y = 0})));
+    CHECK(changes == std::vector<std::int64_t>{0, 100, 0, 50});
+    static_cast<void>(harness.send(releaseAt({.x = 12, .y = 0})));
+    static_cast<void>(harness.send(moveTo({.x = 29, .y = 0})));
+    CHECK(changes == std::vector<std::int64_t>{0, 100, 0, 50});
+    CHECK(scene.slider->probeText() == "50");
+}
+
+TEST_CASE("tui slider: a press off the track moves nothing, and neither does its drag", "[tui][slider][pointer]") {
+    Harness harness{30, 1};
+    SliderRow scene{harness};
+    std::vector<std::int64_t> changes;
+    scene.slider->setValue(50);
+    scene.slider->setOnChange([&](std::int64_t value) { changes.push_back(value); });
+    CHECK(harness.draw() == Rows{"ab[=========|---------] 50"});
+    CHECK(harness.send(pressAt({.x = 25, .y = 0})) == EventResult::Handled);  // on the label
+    static_cast<void>(harness.send(moveTo({.x = 3, .y = 0})));
+    static_cast<void>(harness.send(releaseAt({.x = 3, .y = 0})));
+    CHECK(changes.empty());
+}
+
+TEST_CASE("tui slider: a slider the user cannot reach takes no press, and a drag stops once it cannot",
+          "[tui][slider][pointer][gating]") {
+    Harness harness{30, 1};
+    SliderRow scene{harness};
+    std::vector<std::int64_t> changes;
+    scene.slider->setValue(50);
+    scene.slider->setOnChange([&](std::int64_t value) { changes.push_back(value); });
+    static_cast<void>(harness.draw());
+    SECTION("disabled before the press") {
+        scene.row->setEnabled(false);
+        static_cast<void>(harness.send(pressAt({.x = 3, .y = 0})));
+        static_cast<void>(harness.send(moveTo({.x = 29, .y = 0})));
+        CHECK(changes.empty());
+    }
+    SECTION("disabled during the drag") {
+        static_cast<void>(harness.send(pressAt({.x = 3, .y = 0})));
+        REQUIRE(changes == std::vector<std::int64_t>{0});
+        scene.row->setEnabled(false);
+        static_cast<void>(harness.send(moveTo({.x = 29, .y = 0})));
+        static_cast<void>(harness.send(releaseAt({.x = 29, .y = 0})));
+        CHECK(changes == std::vector<std::int64_t>{0});
+    }
+}
+
+TEST_CASE("tui slider: onChange may destroy its own slider in the middle of a drag",
+          "[tui][slider][pointer][lifetime]") {
+    Harness harness{30, 1};
+    SliderRow scene{harness};
+    std::vector<std::int64_t> changes;
+    scene.slider->setValue(50);
+    auto const onPress = GENERATE(false, true);
+    scene.slider->setOnChange([&](std::int64_t value) {
+        if (value == (onPress ? 0 : 100)) {
+            scene.slider.reset();
+        }
+        changes.push_back(value);
+    });
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.send(pressAt({.x = 3, .y = 0})));
+    static_cast<void>(harness.send(moveTo({.x = 29, .y = 0})));
+    static_cast<void>(harness.send(moveTo({.x = 3, .y = 0})));
+    static_cast<void>(harness.send(releaseAt({.x = 3, .y = 0})));
+    CHECK(scene.slider == nullptr);
+    CHECK(changes == (onPress ? std::vector<std::int64_t>{0} : std::vector<std::int64_t>{0, 100}));
+    CHECK(harness.draw() == Rows{"ab"});
+}
+
+TEST_CASE("tui slider: a handler run by the focus a press takes may destroy the slider pressed",
+          "[tui][slider][pointer][lifetime]") {
+    Harness harness{30, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto picker = harness.make<FilePickerImpl>(column.get(), ui::FilePickerMode::Save);
+    auto slider = harness.make<SliderImpl>(column.get());
+    slider->setRange(0, 100, 10);
+    slider->setValue(50);
+    std::vector<std::int64_t> changes;
+    slider->setOnChange([&](std::int64_t value) { changes.push_back(value); });
+    picker->setOnPicked([&](std::string const& /*path*/) { slider.reset(); });
+    static_cast<void>(harness.draw());
+    harness.focus(*picker);
+    static_cast<void>(harness.type("/p"));
+    CHECK(harness.send(pressAt({.x = 1, .y = 1})) == EventResult::Handled);
+    static_cast<void>(harness.send(moveTo({.x = 20, .y = 1})));
+    static_cast<void>(harness.send(releaseAt({.x = 20, .y = 1})));
+    CHECK(slider == nullptr);
+    CHECK(changes.empty());
 }

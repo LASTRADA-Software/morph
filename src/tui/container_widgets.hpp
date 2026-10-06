@@ -181,8 +181,10 @@ private:
 /// Opening moves the focus inside, to the first focusable widget of the box on top, or to the box itself when it
 /// holds none. Closing hands the focus back to the widget that had it when the dialog opened, when the focus was
 /// inside or nowhere by then (the mount destroys a dialog's content before closing it, and the focused content
-/// clears the focus as it goes), and that widget is still there and can take it; else into the box now on top, or
-/// nowhere. Esc inside the open, actionable dialog calls onDismiss; no setter does.
+/// clears the focus as it goes), and that widget is still there and can take it; else to the first focusable widget
+/// of the box now on top, or of the roots, and nowhere only when nothing can take it. A box that vanishes while the
+/// dialog stays open (the dialog or a container around it hidden) hands the focus back the same way, and takes it
+/// again when it shows. Esc inside the open, actionable dialog calls onDismiss; no setter does.
 class DialogImpl final : public TuiContainer<ui::DialogWidget> {
 public:
     explicit DialogImpl(Context& context) : TuiContainer{context}, _frame{makeFrame()} { adopt(makeView(*this)); }
@@ -204,6 +206,9 @@ public:
     /// Where the children go inside the box when it is @p size large, in the box's coordinates.
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     [[nodiscard]] bool isOpen() const noexcept { return _open; }
+    /// What `followDialogs` does: for each open dialog whose box showed or vanished since it was last seen, the box
+    /// on top that showed takes the focus, and one that vanished with the focus inside hands it back.
+    static void followFrames(Context& context);
 
 private:
     class Frame;
@@ -221,6 +226,12 @@ private:
     void returnFocusTo(WidgetBase* widget);
     /// Makes no widget the one the focus goes back to.
     void forgetRestore() noexcept;
+    /// Records whether the box of this dialog, and of each open dialog inside it, shows now.
+    void markFramed();
+    /// The box showed: when it is on top and the focus is outside, the focus moves inside.
+    void regainFocus();
+    /// The box vanished: when the focus was inside, it goes back as closing hands it back.
+    void releaseFocus();
     void openFrame();
     void closeFrame();
 
@@ -228,6 +239,7 @@ private:
     std::string _title;
     ui::Action _onDismiss;
     bool _open = false;
+    bool _framed = false;  ///< Whether the box showed when last seen.
     /// The widget that had the focus when this dialog took it, while it lives; an open dialog stands for its box.
     WidgetBase* _restore = nullptr;
 };

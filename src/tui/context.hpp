@@ -32,7 +32,8 @@ struct Context {
     /// Open dialogs, in the order their frames (each one's `ContainerBase::host()`) are shown: the last one shown is
     /// drawn on top.
     std::vector<ContainerBase*> openDialogs;
-    std::size_t activeBusy = 0;      ///< Busy widgets that are spinning.
+    std::vector<WidgetBase*> busy;   ///< Busy widgets that are active.
+    std::size_t activeBusy = 0;      ///< How many of `busy` the user could see: while any, the spinner animates.
     std::size_t animationFrame = 0;  ///< The spinner frame to draw.
     /// The widget whose press is waiting for its release, or null. Every press a widget sees clears it first: a new
     /// press ends any gesture whose release never arrived, as it ends the screen's pointer capture.
@@ -40,6 +41,10 @@ struct Context {
     /// Widgets that code is waiting on — code running a handler (see `focusWidget`), an open dialog that will hand
     /// the focus back — each through a pointer `forget` sets to null when that widget is destroyed.
     std::vector<WidgetBase**> watches;
+    /// While a dialog that is opening moves the focus inside, the widget the focus is leaving, or null: a dialog that
+    /// the handler run by that leaving opens hands the focus back there too. Points into the opening call, where it
+    /// is watched.
+    WidgetBase** focusLeaving = nullptr;
     /// Widgets that have a popup open (a dropdown's list), which close it once the user cannot reach them (see
     /// `closeUnreachablePopups`).
     std::vector<WidgetBase*> popups;

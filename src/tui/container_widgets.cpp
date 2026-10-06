@@ -173,13 +173,16 @@ void PanelImpl::syncChildren() {
     for (auto* child : children()) {
         child->setStructuralVisible(!_collapsed);
     }
-    auto* const screen = context().screen;
-    auto const* const focused = screen->focusedComponent();
+    auto& shared = context();
+    auto const* const focused = shared.screen->focusedComponent();
     refresh();
     // The focused widget is inside, so out of reach by now: losing the focus commits nothing and runs no handler.
     if (_collapsed && focused != nullptr && focused != &view() && isWithin(focused, view())) {
-        static_cast<void>(focusWidget(context(), focusable() ? this : nullptr));
+        static_cast<void>(focusWidget(shared, focusable() ? this : nullptr));
     }
+    // Last: a dialog inside that shows again takes the focus, and a field losing it may run a handler that destroys
+    // this panel.
+    followDialogs(shared);
 }
 
 ::core::tui::Size PanelImpl::naturalSize() const {
@@ -424,11 +427,16 @@ bool ScrollImpl::wantsFocus() const {
 
 namespace {
 
-/// The widget @p component belongs to: the one whose view it is, or the open dialog whose box it is; null for any
-/// other component (a dropdown's list).
+/// The widget @p component belongs to: the one whose view it is, the one whose open popup it is (a dropdown's
+/// list), or the open dialog whose box it is; null for any other component.
 WidgetBase* focusOwner(Context const& context, ::core::tui::Component const* component) {
     if (auto* const owner = context.ownerOf(component)) {
         return owner;
+    }
+    auto const popup = std::ranges::find_if(
+        context.popups, [component](WidgetBase const* owner) { return owner->openPopup() == component; });
+    if (popup != context.popups.end()) {
+        return *popup;
     }
     auto const found = std::ranges::find_if(
         context.openDialogs, [component](ContainerBase* dialog) { return &dialog->host() == component; });
@@ -446,15 +454,28 @@ bool isInside(WidgetBase const* widget, WidgetBase const& outer) {
 }
 
 /// Hands the focus to @p target when it is still there and can take it, and is not behind the open dialog on top;
-/// else into that dialog, or nowhere. A dialog as @p target, which stands for its box, never takes the focus itself:
-/// the focus goes into the dialog on top, which is that one when it is still open and nothing lies over it.
+/// else to the first focusable widget of that dialog, or of the roots when none is open — nowhere only when nothing
+/// can take it. A dialog as @p target, which stands for its box, never takes the focus itself: the focus goes into
+/// the dialog on top, which is that one when it is still open and nothing lies over it.
 void returnFocus(Context& context, WidgetBase* target) {
     auto* const dialog = activeDialog(context);
     bool const reachable = target != nullptr && (dialog == nullptr || isWithin(&target->view(), dialog->host()));
     if (reachable && focusWidget(context, target)) {
         return;
     }
+    static_cast<void>(focusWidget(context, nullptr));
+    moveFocus(context, Direction::Forward);
+}
+
+/// `enterDialog`, telling a dialog that the handler run by the old focus leaving opens which widget the focus left:
+/// @p leaving, watched meanwhile.
+void enterFrom(Context& context, WidgetBase* leaving) {
+    WidgetBase* watched = leaving;
+    context.watches.push_back(&watched);
+    auto* const outer = std::exchange(context.focusLeaving, &watched);
     enterDialog(context);
+    context.focusLeaving = outer;
+    std::erase(context.watches, &watched);
 }
 
 }  // namespace
@@ -587,27 +608,94 @@ void DialogImpl::forgetRestore() noexcept {
 }
 
 // The box's bounds are emptied before it shows: it was last drawn wherever it was then, with whatever it held.
-// A dialog opened inside a closed one takes no focus until that one opens. The focus moves last: the old focus
-// leaving runs a handler when it is a field with typed text, and that handler may destroy this dialog.
+// A dialog opened inside a closed or hidden one takes no focus until its box shows. With the focus nowhere, it is
+// on its way out of a widget for a dialog opening further out, whose handler opened this one: that widget is the
+// one to go back to. The focus moves last: the old focus leaving runs a handler when it is a field with typed
+// text, and that handler may destroy this dialog.
 void DialogImpl::openFrame() {
     if (_open) {
         return;
     }
-    auto& screen = *context().screen;
+    auto& shared = context();
+    auto& screen = *shared.screen;
     _open = true;
-    context().openDialogs.push_back(this);
+    shared.openDialogs.push_back(this);
     _frame->setScreenBounds({});
     forgetDrawnBounds(*_frame);
     screen.showOverlay(*_frame, centredIn(screen, frameSize()));
     raiseNested();
+    markFramed();
+    countSpinners(shared);
     refresh();
-    if (!_frame->visible()) {
+    if (!_framed) {
         return;
     }
-    auto* const owner = focusOwner(context(), screen.focusedComponent());
+    auto* owner = focusOwner(shared, screen.focusedComponent());
+    if (owner == nullptr && shared.focusLeaving != nullptr) {
+        owner = *shared.focusLeaving;
+    }
     returnFocusTo(isInside(owner, *this) ? nullptr : owner);
-    enterDialog(context());
+    enterFrom(shared, _restore);
 }
+
+void DialogImpl::markFramed() {
+    for (auto* const entry : context().openDialogs) {
+        auto* const dialog = dynamic_cast<DialogImpl*>(entry);
+        if (dialog != nullptr && dialog != this && isInside(dialog, *this)) {
+            dialog->_framed = dialog->_frame->visible();
+        }
+    }
+    _framed = _open && _frame->visible();
+}
+
+// The widget the focus leaves is the one to go back to, unless the dialog knows one from when it opened. The focus
+// moves last, as when opening.
+void DialogImpl::regainFocus() {
+    auto& shared = context();
+    if (activeDialog(shared) != this) {
+        return;
+    }
+    auto* const owner = focusOwner(shared, shared.screen->focusedComponent());
+    if (owner != nullptr && isInside(owner, *this)) {
+        return;
+    }
+    if (_restore == nullptr) {
+        returnFocusTo(owner);
+    }
+    enterFrom(shared, _restore);
+}
+
+// The dialog keeps the widget to go back to: closing hands the focus there again.
+void DialogImpl::releaseFocus() {
+    if (holdsFocus()) {
+        returnFocus(context(), _restore);
+    }
+}
+
+// Each step may run a handler that destroys dialogs, so the list is searched afresh after each.
+void DialogImpl::followFrames(Context& context) {
+    for (;;) {
+        DialogImpl* changed = nullptr;
+        for (auto* const entry : context.openDialogs) {
+            auto* const dialog = dynamic_cast<DialogImpl*>(entry);
+            if (dialog != nullptr && dialog->_framed != dialog->_frame->visible()) {
+                changed = dialog;
+                break;
+            }
+        }
+        if (changed == nullptr) {
+            return;
+        }
+        changed->_framed = !changed->_framed;
+        if (changed->_framed) {
+            changed->regainFocus();
+        } else {
+            changed->releaseFocus();
+        }
+    }
+}
+
+void followDialogs(Context& context) { DialogImpl::followFrames(context); }
 
 // Nothing here runs a handler: a dropdown inside closes its list quietly, and a field inside commits nothing as the
 // focus leaves it, the dialog being closed by then. The focus moves last all the same.
@@ -617,6 +705,8 @@ void DialogImpl::closeFrame() {
     }
     auto& shared = context();
     _open = false;
+    markFramed();
+    countSpinners(shared);
     closeUnreachablePopups(shared);
     bool const focusInside = holdsFocus();
     std::erase(shared.openDialogs, this);

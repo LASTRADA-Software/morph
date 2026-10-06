@@ -73,11 +73,12 @@ public:
 };
 
 /// Busy: a spinner and its label while active, nothing at all otherwise. Each `Context::animationFrame` draws the
-/// next spinner frame; the frontend advances it on a timer while `Context::activeBusy` counts any active Busy.
+/// next spinner frame; the frontend advances it on a timer while `Context::activeBusy` counts an active Busy the user
+/// could see.
 class BusyImpl final : public TuiWidget<ui::BusyWidget> {
 public:
     explicit BusyImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
-    /// @brief Stops counting as active.
+    /// @brief Leaves the active Busy widgets.
     ~BusyImpl() override;
     BusyImpl(BusyImpl const&) = delete;
     BusyImpl& operator=(BusyImpl const&) = delete;
@@ -95,8 +96,10 @@ private:
     std::string _label;
 };
 
-/// Slider: `[====|----] value`. Left and Right move by one step, Home and End to the ends, each reporting the new
-/// value once it changed; no setter reports.
+/// Slider: `[====|----] value`. Left and Right move by one step, Home and End to the ends. A press on the track
+/// moves to the value at that cell, to the nearest step, and while the press lasts the value follows the pointer
+/// along the track, held at either end past it; a press elsewhere moves nothing. Each move reports the new value once
+/// it changed; no setter reports.
 class SliderImpl final : public TuiWidget<ui::SliderWidget> {
 public:
     explicit SliderImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
@@ -108,8 +111,12 @@ public:
     [[nodiscard]] std::string probeText() const override;
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
+    void pressAt(::core::tui::Point cell) override;
+    void dragTo(::core::tui::Point cell) override;
 
 private:
+    /// The value at track cell @p position (0-based, held to the track), to the nearest step from the minimum.
+    [[nodiscard]] std::int64_t valueAt(int position) const;
     /// The value one step above the current one, or the maximum when that is closer.
     [[nodiscard]] std::int64_t stepAbove() const;
     /// The value one step below the current one, or the minimum when that is closer.
@@ -122,6 +129,8 @@ private:
     std::int64_t _maximum = 100;
     std::int64_t _step = 1;
     std::int64_t _value = 0;
+    int _track = 0;           ///< How many cells the track had in the last frame.
+    bool _following = false;  ///< Whether the press that lasts began on the track.
     std::function<void(std::int64_t)> _onChange;
 };
 

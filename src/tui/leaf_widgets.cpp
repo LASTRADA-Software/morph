@@ -170,9 +170,8 @@ std::uint64_t distance(std::int64_t lower, std::int64_t upper) noexcept {
 }  // namespace
 
 BusyImpl::~BusyImpl() {
-    if (_active) {
-        --context().activeBusy;
-    }
+    std::erase(context().busy, this);
+    countSpinners(context());
 }
 
 void BusyImpl::setActive(bool active) {
@@ -181,10 +180,11 @@ void BusyImpl::setActive(bool active) {
     }
     _active = active;
     if (active) {
-        ++context().activeBusy;
+        context().busy.push_back(this);
     } else {
-        --context().activeBusy;
+        std::erase(context().busy, this);
     }
+    countSpinners(context());
     refresh();
 }
 
@@ -254,6 +254,7 @@ int SliderImpl::knobCell(int cells) const {
 void SliderImpl::paint(::core::tui::Canvas& canvas) {
     auto const label = std::to_string(_value);
     int const track = std::max(3, canvas.width() - static_cast<int>(label.size()) - 3);
+    _track = track;
     int const knob = knobCell(track);
     std::string bar = "[";
     bar.append(static_cast<std::size_t>(knob), '=');
@@ -281,6 +282,45 @@ void SliderImpl::paint(::core::tui::Canvas& canvas) {
         return ::core::tui::EventResult::Ignored;
     }
     return ::core::tui::EventResult::Handled;
+}
+
+// The track starts one cell in, past the "[".
+void SliderImpl::pressAt(::core::tui::Point cell) {
+    int const position = cell.x - 1;
+    _following = position >= 0 && position < _track;
+    if (_following) {
+        moveTo(valueAt(position));
+    }
+}
+
+void SliderImpl::dragTo(::core::tui::Point cell) {
+    if (_following) {
+        moveTo(valueAt(cell.x - 1));
+    }
+}
+
+// The offset along the range is rounded to the nearest cell's worth and then to the nearest step, unsigned, as the
+// range may span all of int64; exact while the product fits in 64 bits. A step past the maximum stops there.
+std::int64_t SliderImpl::valueAt(int position) const {
+    auto const last = static_cast<std::uint64_t>(std::max(1, _track - 1));
+    auto const cell = static_cast<std::uint64_t>(std::clamp(position, 0, std::max(0, _track - 1)));
+    auto const span = distance(_minimum, _maximum);
+    std::uint64_t offset = 0;
+    if (span <= (std::numeric_limits<std::uint64_t>::max() - last) / std::max<std::uint64_t>(cell, 1)) {
+        offset = ((span * cell) + (last / 2)) / last;
+    } else {
+        offset = static_cast<std::uint64_t>(static_cast<long double>(span) * static_cast<long double>(cell) /
+                                            static_cast<long double>(last));
+    }
+    offset = std::min(offset, span);
+    auto const step = static_cast<std::uint64_t>(_step);
+    auto const below = offset / step * step;
+    auto const rest = offset - below;
+    auto snapped = below;
+    if (rest >= step - rest) {
+        snapped = step > span - below ? span : below + step;
+    }
+    return static_cast<std::int64_t>(static_cast<std::uint64_t>(_minimum) + snapped);
 }
 
 // The handler may destroy this slider, so nothing is touched after it.
