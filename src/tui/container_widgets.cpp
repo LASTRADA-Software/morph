@@ -172,10 +172,11 @@ void PanelImpl::syncChildren() {
     }
     auto* const screen = context().screen;
     auto const* const focused = screen->focusedComponent();
-    if (_collapsed && focused != nullptr && focused != &view() && isWithin(focused, view())) {
-        screen->setFocus(focusable() ? &view() : nullptr);
-    }
     refresh();
+    // The focused widget is inside, so out of reach by now: losing the focus commits nothing and runs no handler.
+    if (_collapsed && focused != nullptr && focused != &view() && isWithin(focused, view())) {
+        static_cast<void>(focusWidget(context(), focusable() ? this : nullptr));
+    }
 }
 
 ::core::tui::Size PanelImpl::naturalSize() const {
@@ -237,8 +238,8 @@ void PanelImpl::activate() {
 
 // A press anywhere in the panel that no child takes bubbles here, so only the title line focuses and toggles.
 void PanelImpl::click(::core::tui::Point cell) {
-    if (cell.y == 0 && focusable()) {
-        context().screen->setFocus(&view());
+    // Taking the focus may run a handler (a field elsewhere committing) that destroys this panel.
+    if (cell.y == 0 && focusable() && focusWidget(context(), this)) {
         activate();
     }
 }

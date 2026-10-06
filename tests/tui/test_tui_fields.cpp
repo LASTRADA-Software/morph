@@ -6,6 +6,7 @@
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
+#include <cstdint>
 #include <memory>
 #include <morph/ui/view.hpp>
 #include <morph/util/datetime.hpp>
@@ -820,4 +821,137 @@ TEST_CASE("tui fields: local date-time text round-trips past year 9999, before y
     REQUIRE(changes.size() == 1);
     REQUIRE(changes.back().has_value());
     CHECK(changes.back()->value == at(10000, 1, 2, 0, 0));
+}
+
+namespace {
+
+/// How a test moves the focus off a field.
+enum class Leave : std::uint8_t { Tab, ShiftTab, Press };
+
+/// What a field's commit handler destroys while the focus is moving off it.
+enum class Victim : std::uint8_t { Target, Self, Everything };
+
+/// A field (row 0) above buttons A and B in a column, where committing the field destroys @p victim while the focus
+/// leaves it @p leave: Tab moves to A, Shift+Tab wraps to B, a press lands on A. Checks that the handler runs once,
+/// the focus lands only on a widget that is still there, a destroyed button is not clicked, and the screen stays
+/// usable.
+void leaveDestroying(Leave leave, Victim victim, bool picker) {
+    Harness harness{30, 3};
+    auto column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    std::unique_ptr<DateTimeInputImpl> date;
+    std::unique_ptr<FilePickerImpl> path;
+    if (picker) {
+        path = harness.make<FilePickerImpl>(column.get(), ui::FilePickerMode::Open);
+    } else {
+        date = harness.make<DateTimeInputImpl>(column.get(), ui::DateMode::Date, 0);
+    }
+    auto first = harness.make<ButtonImpl>(column.get());
+    first->setLabel("A");
+    auto second = harness.make<ButtonImpl>(column.get());
+    second->setLabel("B");
+    int changes = 0;
+    int clicks = 0;
+    first->setOnClick([&] { ++clicks; });
+    second->setOnClick([&] { ++clicks; });
+    auto const destroy = [&] {
+        ++changes;
+        if (victim == Victim::Target) {
+            (leave == Leave::ShiftTab ? second : first).reset();
+            return;
+        }
+        date.reset();
+        path.reset();
+        if (victim == Victim::Everything) {
+            first.reset();
+            second.reset();
+            column.reset();
+        }
+    };
+    if (picker) {
+        path->setOnPicked([&](std::string const& /*path*/) { destroy(); });
+        harness.focus(*path);
+    } else {
+        date->setOnChange([&](std::optional<Timestamp> const& /*value*/) { destroy(); });
+        harness.focus(*date);
+    }
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.type(picker ? "/p" : "2026-05-05"));
+
+    // Only a press on a button that survives clicks it.
+    bool const clicked = leave == Leave::Press && victim == Victim::Self;
+    if (leave == Leave::Press) {
+        CHECK(harness.click({.x = 1, .y = 1}) == (clicked ? EventResult::Handled : EventResult::Ignored));
+    } else {
+        auto const direction = leave == Leave::Tab ? Direction::Forward : Direction::Backward;
+        morph::tui::detail::moveFocus(harness.context(), direction);
+    }
+    CHECK(changes == 1);
+    CHECK(clicks == (clicked ? 1 : 0));
+    if (victim == Victim::Self) {
+        auto* const survivor = (leave == Leave::ShiftTab ? second : first).get();
+        CHECK(harness.focused(*survivor));
+    } else {
+        CHECK(harness.screen().focusedComponent() == nullptr);
+    }
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.click({.x = 1, .y = 2}));
+    CHECK(changes == 1);
+}
+
+}  // namespace
+
+TEST_CASE("tui fields: a commit handler may destroy the widget the focus is moving to, or the whole view",
+          "[tui][fields][leave][lifetime]") {
+    auto const picker = GENERATE(false, true);
+    auto const victim = GENERATE(Victim::Target, Victim::Self, Victim::Everything);
+    SECTION("by Tab") { leaveDestroying(Leave::Tab, victim, picker); }
+    SECTION("by Shift+Tab") { leaveDestroying(Leave::ShiftTab, victim, picker); }
+    SECTION("by a press") { leaveDestroying(Leave::Press, victim, picker); }
+}
+
+TEST_CASE("tui fields: a date retyped as the same instant is not reported again when the focus leaves",
+          "[tui][fields][leave]") {
+    Harness harness{30, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const field = harness.make<DateTimeInputImpl>(column.get(), ui::DateMode::DateTime, 0);
+    auto const save = harness.make<ButtonImpl>(column.get());
+    int changes = 0;
+    field->setOnChange([&](std::optional<Timestamp> const&) { ++changes; });
+    field->setValue(Timestamp{at(2026, 5, 5, 10, 0) + std::chrono::seconds{30}});  // shown to the minute
+    harness.focus(*field);
+    harness.focus(*save);
+    CHECK(changes == 0);
+    harness.focus(*field);
+    static_cast<void>(harness.key(KeyCode::End, Modifier::Ctrl));
+    static_cast<void>(harness.send(chord('u', Modifier::Ctrl)));
+    static_cast<void>(harness.type("2026-05-05T10:00"));
+    harness.focus(*save);
+    CHECK(changes == 0);
+    CHECK(harness.draw().front() == "2026-05-05 10:00");
+}
+
+TEST_CASE("tui fields: a commit handler may destroy the panel whose title took the click",
+          "[tui][fields][leave][lifetime]") {
+    Harness harness{30, 4};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const field = harness.make<DateTimeInputImpl>(column.get(), ui::DateMode::Date, 0);
+    auto panel = harness.make<morph::tui::detail::PanelImpl>(column.get());
+    panel->setTitle("Info");
+    panel->setCollapsible(true);
+    int toggles = 0;
+    panel->setOnToggle([&](bool /*collapsed*/) { ++toggles; });
+    int changes = 0;
+    field->setOnChange([&](std::optional<Timestamp> const& /*value*/) {
+        panel.reset();
+        ++changes;
+    });
+    static_cast<void>(harness.draw());
+    harness.focus(*field);
+    static_cast<void>(harness.type("2026-05-05"));
+    static_cast<void>(harness.click({.x = 3, .y = 1}));
+    CHECK(changes == 1);
+    CHECK(panel == nullptr);
+    CHECK(toggles == 0);
+    CHECK(harness.screen().focusedComponent() == nullptr);
+    CHECK(harness.draw() == Rows{"2026-05-05"});
 }

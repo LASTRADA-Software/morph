@@ -296,8 +296,14 @@ void forgetDrawnBounds(::core::tui::Component& top);
 void attach(Context& context, ui::ContainerWidget* parent, WidgetBase& widget);
 /// Sizes every root widget to the viewport.
 void fit(Context& context);
+/// Moves keyboard focus to @p target, or nowhere for null; returns whether @p target has the focus afterwards.
+///
+/// The focus leaves the old widget on its own first. A field commits what was typed when it loses the focus, and the
+/// handler that runs may destroy widgets, @p target or the whole view among them; core::tui would go on to focus
+/// a destroyed target. So @p target takes the focus only if it is still alive and focusable once that is done.
+bool focusWidget(Context& context, WidgetBase* target);
 /// Moves keyboard focus to the next or previous focusable widget of the roots, in `collectFocusable` order,
-/// wrapping around at either end.
+/// wrapping around at either end; through `focusWidget`, so a widget destroyed meanwhile gets nothing.
 void moveFocus(Context& context, Direction direction);
 
 }  // namespace morph::tui::detail

@@ -112,7 +112,8 @@ private:
 
 /// DateTimeInput: an ISO-style field in a display zone. Up/Down step by a day (Date) or a minute (DateTime),
 /// PageUp/PageDown by a day. Enter commits what was typed, or clears the value when the field is empty; so does the
-/// focus leaving, when the text differs from what was last set or committed. Text that does not parse is marked
+/// focus leaving, when the text names another instant than the one last set or committed (the same instant spelt
+/// differently is only rewritten). Text that does not parse is marked
 /// with a `!` and reported as nothing. What it reports is the instant its text names: local midnight in Date mode, a
 /// whole minute in DateTime mode.
 class DateTimeInputImpl final : public TuiWidget<ui::DateTimeInputWidget>, private FieldOwner {
@@ -143,7 +144,7 @@ private:
     ui::DateMode _mode;
     int _offsetMinutes;
     ::core::tui::InputField* _field;
-    std::string _committed;  ///< The text last set or committed.
+    std::optional<morph::time::DateTime> _committed;  ///< The instant last set or committed; none for an empty field.
     bool _invalid = false;
     std::function<void(std::optional<morph::time::Timestamp>)> _onChange;
 };

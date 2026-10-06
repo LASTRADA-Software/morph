@@ -34,6 +34,9 @@ struct Context {
     /// The widget whose press is waiting for its release, or null. Every press a widget sees clears it first: a new
     /// press ends any gesture whose release never arrived, as it ends the screen's pointer capture.
     WidgetBase* pressed = nullptr;
+    /// Widgets that code running a handler is waiting on, each through a pointer `forget` sets to null when that
+    /// widget is destroyed (see `focusWidget`).
+    std::vector<WidgetBase**> watches;
 
     /// The widget owning @p view, or null for a component no widget registered (an overlay, the root).
     [[nodiscard]] WidgetBase* ownerOf(::core::tui::Component const* view) const;

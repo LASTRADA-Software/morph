@@ -267,7 +267,9 @@ EventResult WidgetBase::press(::core::tui::MouseEvent const& mouse) {
     }
     _context->pressed = this;
     if (focusesOnPress()) {
-        _context->screen->setFocus(_view.get());
+        // Moving the focus may run a handler that destroys this widget; then `pressed` is cleared and the release
+        // clicks nothing.
+        static_cast<void>(focusWidget(*_context, this));
     }
     return EventResult::Handled;
 }
@@ -588,7 +590,23 @@ void moveFocus(Context& context, Direction direction) {
     } else {
         target = std::prev(current);
     }
-    context.screen->setFocus(*target);
+    static_cast<void>(focusWidget(context, context.ownerOf(*target)));
+}
+
+bool focusWidget(Context& context, WidgetBase* target) {
+    auto* const screen = context.screen;
+    if (target != nullptr && screen->focusedComponent() == &target->view()) {
+        return true;
+    }
+    WidgetBase* alive = target;
+    context.watches.push_back(&alive);
+    screen->setFocus(nullptr);
+    std::erase(context.watches, &alive);
+    if (alive == nullptr || !alive->focusable()) {
+        return false;
+    }
+    screen->setFocus(&alive->view());
+    return true;
 }
 
 }  // namespace morph::tui::detail

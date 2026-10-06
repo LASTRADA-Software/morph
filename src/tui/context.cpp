@@ -20,6 +20,11 @@ void Context::forget(WidgetBase& widget) {
     if (pressed == &widget) {
         pressed = nullptr;
     }
+    for (auto** const watch : watches) {
+        if (*watch == &widget) {
+            *watch = nullptr;
+        }
+    }
 }
 
 }  // namespace morph::tui::detail

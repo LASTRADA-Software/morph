@@ -282,7 +282,7 @@ void DateTimeInputImpl::setValue(std::optional<morph::time::Timestamp> const& va
     if (text != _field->text()) {
         _field->setText(text);
     }
-    _committed = text;
+    _committed = parseLocal(text, _mode, _offsetMinutes);
     _invalid = false;
     refresh();
 }
@@ -303,9 +303,23 @@ void DateTimeInputImpl::edited() { _invalid = false; }
 
 void DateTimeInputImpl::submitted() { commitTyped(); }
 
+// What is compared is the instant, not the text: what was set is shown to the minute, and `T` and a space spell the
+// same instant.
 void DateTimeInputImpl::left() {
-    if (_field->text() != _committed) {
+    auto const text = _field->text();
+    auto const typed = text.empty() ? std::nullopt : parseLocal(text, _mode, _offsetMinutes);
+    if (!text.empty() && !typed) {
         commitTyped();
+        return;
+    }
+    if (typed != _committed) {
+        commit(typed);
+        return;
+    }
+    auto const shown = typed ? formatLocal(*typed, _mode, _offsetMinutes) : std::string{};
+    if (shown != text) {
+        _field->setText(shown);
+        refresh();
     }
 }
 
@@ -361,7 +375,7 @@ void DateTimeInputImpl::commit(std::optional<morph::time::DateTime> value) {
     auto const shown = parseLocal(text, _mode, _offsetMinutes);
     _invalid = false;
     _field->setText(text);
-    _committed = text;
+    _committed = shown;
     refresh();
     auto const handler = _onChange;
     if (handler) {
