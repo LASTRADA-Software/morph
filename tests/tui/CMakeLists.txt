@@ -1,5 +1,6 @@
 add_executable(morph_tui_tests
     test_tui_layout.cpp
+    test_tui_widgets.cpp
     test_tui_loop_executor.cpp
 )
 

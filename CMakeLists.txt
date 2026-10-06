@@ -550,9 +550,17 @@ set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 # section, which provides Catch2.
 if(MORPH_BUILD_TUI)
     add_library(morph_tui STATIC
+        src/tui/container_widgets.cpp
+        src/tui/container_widgets.hpp
+        src/tui/context.cpp
+        src/tui/context.hpp
         src/tui/layout.cpp
         src/tui/layout.hpp
+        src/tui/leaf_widgets.cpp
+        src/tui/leaf_widgets.hpp
         src/tui/loop_executor.cpp
+        src/tui/widget.cpp
+        src/tui/widget.hpp
     )
     add_library(morph::tui ALIAS morph_tui)
     target_sources(morph_tui
