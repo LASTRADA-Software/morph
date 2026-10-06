@@ -550,6 +550,7 @@ set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 # section, which provides Catch2.
 if(MORPH_BUILD_TUI)
     add_library(morph_tui STATIC
+        src/tui/backend.cpp
         src/tui/container_widgets.cpp
         src/tui/container_widgets.hpp
         src/tui/context.cpp
@@ -574,6 +575,7 @@ if(MORPH_BUILD_TUI)
         FILE_SET HEADERS
         BASE_DIRS include
         FILES
+            include/morph/tui/backend.hpp
             include/morph/tui/loop_executor.hpp
     )
     # Same standalone-compile check the core target gets.

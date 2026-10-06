@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <core/tui/Buffer.hpp>
 #include <core/tui/Cell.hpp>
+#include <core/tui/HoverState.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
@@ -48,7 +49,16 @@ WidgetBase::WidgetBase(Context& context) noexcept : _context{&context} {}
 
 // The view is unregistered before the focus is cleared: clearing it calls the view's onBlur, which runs while the
 // widget's own class is already destroyed and tells that apart by the view having no owner.
+//
+// core::tui's hover state keeps a raw pointer to the component last under the pointer, and its timer
+// (`Screen::tickHover`) calls that component. The component may be this widget's view or one the widget owns (a
+// dropdown's list), already gone by now, so any hover target is dropped. morph shows no tooltips, so losing a hover
+// costs nothing.
 WidgetBase::~WidgetBase() {
+    auto& hover = _context->screen->hoverState();
+    if (auto const current = hover.currentHover(); current.has_value() && current->target != nullptr) {
+        hover.reset();
+    }
     if (_view != nullptr) {
         _context->owners.erase(_view.get());
         if (_context->screen->focusedComponent() == _view.get()) {
