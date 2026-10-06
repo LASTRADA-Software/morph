@@ -244,6 +244,7 @@ jobs:
           # shellcheck disable=SC2086
           cmake --preset ${{ matrix.preset }} \
             -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_FORMS_QML=ON \
             -DMORPH_BUILD_LADDER=ON \
@@ -271,6 +272,14 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset ${{ matrix.preset }} --parallel 4 --output-on-failure
+
+      # The tui suite ran at all. The step above passes just as well when
+      # MORPH_BUILD_TUI was dropped from the configure, or quietly turned off,
+      # and morph_tui and its tests were never built: `-L tui` selects only the
+      # tui cases, and `--no-tests=error` turns "selected nothing" red.
+      - name: The tui suite was built and ran
+        if: "!cancelled()"
+        run: ctest --preset ${{ matrix.preset }} -L tui --no-tests=error --output-on-failure
 
       - name: Verify the fuzz replay covered the committed reproducers
         if: "!cancelled() && matrix.fuzzers == 'ON'"

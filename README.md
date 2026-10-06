@@ -485,6 +485,11 @@ The components are `net` (`MORPH_BUILD_NET`, POSIX only), `tui`
 `qt_forms` and `forms_qml` (both `MORPH_BUILD_FORMS_QML`). Asking for one that
 was not installed fails at `find_package` and says which.
 
+An install that carries `tui` needs libunicode findable by every consumer, even
+one that does not ask for `tui`: the core-cpp package installed with it was
+built with its TUI, and its own config finds libunicode. Put the libunicode
+prefix the build found on `CMAKE_PREFIX_PATH` next to morph's.
+
 `forms_qml` is the `MorphForms` QML module (`DynamicForm`, `SlotRegistry`,
 `CollectionView`, …), built as a static QML module. Link its plugin and import
 it; `qt_forms` is the header-only `FormsControllerCore` an app's controller

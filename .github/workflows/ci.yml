@@ -712,6 +712,14 @@ jobs:
           fi
           ctest --preset ${{ matrix.preset }} "${EXCLUDE_ARGS[@]}"
 
+      # The tui suite ran at all. The step above passes just as well when
+      # MORPH_BUILD_TUI was dropped from the configure, or quietly turned off,
+      # and morph_tui and its tests were never built: `-L tui` selects only the
+      # tui cases, and `--no-tests=error` turns "selected nothing" red.
+      - name: The tui suite was built and ran
+        if: "!cancelled()"
+        run: ctest --preset ${{ matrix.preset }} -L tui --no-tests=error --output-on-failure
+
       # Cache statistics for this leg. The `sccache stats` step is skipped
       # whenever the probe put this job on the self-hosted fleet, because
       # sccache is not the launcher there -- fastcache-cc is. Nothing replaced
@@ -2546,6 +2554,14 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset ${{ matrix.preset }} --parallel "$(nproc)" --output-on-failure
+
+      # The tui suite ran at all. The step above passes just as well when
+      # MORPH_BUILD_TUI was dropped from the configure, or quietly turned off,
+      # and morph_tui and its tests were never built: `-L tui` selects only the
+      # tui cases, and `--no-tests=error` turns "selected nothing" red.
+      - name: The tui suite was built and ran
+        if: "!cancelled()"
+        run: ctest --preset ${{ matrix.preset }} -L tui --no-tests=error --output-on-failure
 
       # A guard that never fires is indistinguishable from one that works, so
       # assert the fuzz replay actually ran the committed crash reproducers

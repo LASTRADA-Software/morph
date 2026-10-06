@@ -99,9 +99,9 @@ unset(_morph_component)
 # name a target nobody created.
 if("tui" IN_LIST morph_KNOWN_COMPONENTS AND NOT TARGET core::tui)
     set(morph_FOUND FALSE)
-    string(CONCAT morph_NOT_FOUND_MESSAGE
-        "this morph install has the tui component, but the core-cpp package found at '${core-cpp_DIR}' "
-        "provides no core::tui.")
+    string(APPEND morph_NOT_FOUND_MESSAGE
+        "This morph install has the tui component, but the core-cpp package found at '${core-cpp_DIR}' "
+        "provides no core::tui. ")
     return()
 endif()
 
