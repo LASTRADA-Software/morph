@@ -94,6 +94,17 @@ endif()
 unset(_morph_added_prefix)
 unset(_morph_component)
 
+# morph::tui links core::tui, which the core-cpp package found above provides
+# only when it was installed with its TUI. Without it morphTargets.cmake would
+# name a target nobody created.
+if("tui" IN_LIST morph_KNOWN_COMPONENTS AND NOT TARGET core::tui)
+    set(morph_FOUND FALSE)
+    string(CONCAT morph_NOT_FOUND_MESSAGE
+        "this morph install has the tui component, but the core-cpp package found at '${core-cpp_DIR}' "
+        "provides no core::tui.")
+    return()
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/morphTargets.cmake")
 
 check_required_components(morph)

@@ -2,13 +2,18 @@
 
 ## Toolchain
 
-morph is a header-only C++23 library. You need a C++23 compiler, CMake with
-Ninja, and the dependencies declared in `vcpkg.json` (Glaze, Catch2; Qt 6 only
-when building the optional Qt integration, `-DMORPH_BUILD_QT=ON`). CMake
-presets are provided — `cmake --list-presets` shows the configured matrix; the
-README documents the full set of build options
-(`MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`, `MORPH_BUILD_QT`,
-`MORPH_BUILD_FORMS_QML`, …).
+morph is a header-only C++23 library. One kind of component is compiled: an
+optional frontend that wraps a compiled toolkit — `morph::tui`
+(`MORPH_BUILD_TUI`) over core-cpp's `core::tui`, like `morph_qt_impl` for Qt's
+MOC — is a static library, so its widgets compile once rather than in every
+consumer.
+
+You need a C++23 compiler, CMake with Ninja, and the dependencies declared in
+`vcpkg.json` (Glaze, Catch2; Qt 6 only when building the optional Qt
+integration, `-DMORPH_BUILD_QT=ON`). CMake presets are provided — `cmake
+--list-presets` shows the configured matrix; the README documents the full set
+of build options (`MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
+`MORPH_BUILD_QT`, `MORPH_BUILD_TUI`, `MORPH_BUILD_FORMS_QML`, …).
 
 A plain configure/build/test loop:
 

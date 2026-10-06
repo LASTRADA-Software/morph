@@ -1187,6 +1187,33 @@ if(MORPH_INSTALL)
         )
     endif()
 
+    # morph::tui is a compiled archive, like morph_qt_impl: it installs its
+    # headers and its library. It links core::tui, which core-cpp installs only
+    # when libunicode was found rather than fetched -- a fetched dependency is in
+    # no export set, so core-cpp leaves core::tui out of its package and says
+    # why. Exporting morph::tui then would name a target no installed package
+    # provides, so it is left out too, and says so.
+    if(TARGET morph_tui)
+        get_target_property(_morph_core_tui_imported core::tui IMPORTED)
+        get_target_property(_morph_unicode_imported unicode::unicode IMPORTED)
+        if(_morph_core_tui_imported OR _morph_unicode_imported)
+            set_target_properties(morph_tui PROPERTIES EXPORT_NAME tui)
+            install(TARGETS morph_tui
+                EXPORT morphTargets
+                FILE_SET HEADERS DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+                ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+            )
+            list(APPEND MORPH_INSTALLED_COMPONENTS tui)
+        else()
+            message(STATUS
+                "morph: the tui component is not installed: libunicode was fetched, so core-cpp cannot "
+                "install core::tui for it to link. Install libunicode ${MORPH_LIBUNICODE_VERSION} and put "
+                "it on CMAKE_PREFIX_PATH to install morph::tui.")
+        endif()
+        unset(_morph_core_tui_imported)
+        unset(_morph_unicode_imported)
+    endif()
+
     # The MorphForms QML module (MORPH_BUILD_FORMS_QML): its backing library,
     # its plugin, and the object libraries a static QML module carries --
     # without the latter an installed module links but registers no QML types
@@ -1252,15 +1279,23 @@ if(MORPH_INSTALL)
     # SameMajorVersion follows docs/spec/VERSIONING.md, which is what decides
     # this: there, minor releases are "additive and source-compatible" and
     # only a major breaks the stable surface, so an install of 0.2 does
-    # satisfy a consumer asking for 0.1. ARCH_INDEPENDENT because a
-    # header-only package has no ABI to match -- without it CMake rejects an
-    # install made on a differently-sized-void* machine.
+    # satisfy a consumer asking for 0.1. ARCH_INDEPENDENT only while every
+    # installed component is header-only: without it CMake rejects an install
+    # made on a differently-sized-void* machine, which is exactly right once a
+    # compiled archive (morph_qt_impl, the MorphForms module, morph::tui) is in
+    # the package.
+    set(_morph_arch_independent ARCH_INDEPENDENT)
+    if(TARGET morph_qt_impl OR "forms_qml" IN_LIST MORPH_INSTALLED_COMPONENTS
+       OR "tui" IN_LIST MORPH_INSTALLED_COMPONENTS)
+        set(_morph_arch_independent "")
+    endif()
     write_basic_package_version_file(
         "${CMAKE_CURRENT_BINARY_DIR}/morphConfigVersion.cmake"
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion
-        ARCH_INDEPENDENT
+        ${_morph_arch_independent}
     )
+    unset(_morph_arch_independent)
 
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/morphConfig.cmake"

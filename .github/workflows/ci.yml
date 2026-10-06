@@ -601,6 +601,8 @@ jobs:
       # silently skip them. QML, the fuzzers, and the ladder stay out of
       # this matrix entirely — they are covered by linux-coverage and
       # linux-all-features, and "a GUI stack under TSan is mostly noise".
+      # morph::tui is built too: its event pump, its posted redraws and its
+      # loop executor are where a terminal application's threading lives.
       #
       # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers' Configure
       # steps for why leaving it unset is what lets fastcache-cc be selected.
@@ -608,6 +610,7 @@ jobs:
         run: |
           cmake --preset ${{ matrix.preset }} \
             -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
@@ -2450,6 +2453,7 @@ jobs:
           # fastcache-cc be selected.
           cmake --preset ${{ matrix.preset }} \
             -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_FORMS_QML=ON \
             -DMORPH_BUILD_LADDER=ON \
@@ -3034,6 +3038,7 @@ jobs:
         run: |
           cmake --preset clang-debug \
             -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_TUI=ON \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_FORMS_QML=ON \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
