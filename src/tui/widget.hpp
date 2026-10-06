@@ -128,8 +128,11 @@ public:
     /// an open dialog (see `activeDialog`).
     [[nodiscard]] ::core::tui::EventResult dispatch(::core::tui::InputEvent const& event);
     /// Press, motion, release and wheel on this widget's view. Behind an open dialog they are swallowed, and a press
-    /// there still ends a press whose release never came.
+    /// there still ends a press whose release never came. A widget with a drag key is dragged by the motion that
+    /// follows its press (see `DragController`), and a release that ends a drag is no click.
     [[nodiscard]] ::core::tui::EventResult pointer(::core::tui::MouseEvent const& mouse);
+    /// Whether an open dialog the user sees lies over this widget: its view is outside that dialog's frame.
+    [[nodiscard]] bool blockedByDialog() const;
     [[nodiscard]] bool focusable() const { return wantsFocus() && actionable(); }
     [[nodiscard]] bool hasFocus() const noexcept { return _view != nullptr && _view->focused(); }
     /// Asks the screen for a full repaint on the next draw.
@@ -147,14 +150,14 @@ protected:
 
 private:
     void syncVisible();
-    /// Whether an open dialog the user sees lies over this widget: its view is outside that dialog's frame.
-    [[nodiscard]] bool blockedByDialog() const;
     void paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size laidOut);
     [[nodiscard]] ::core::tui::EventResult press(::core::tui::MouseEvent const& mouse);
     [[nodiscard]] ::core::tui::EventResult release(::core::tui::MouseEvent const& mouse);
     [[nodiscard]] ::core::tui::EventResult move(::core::tui::MouseEvent const& mouse);
     /// The cell of this widget's laid-out area a pointer event relative to its view lies on.
     [[nodiscard]] ::core::tui::Point cellOf(::core::tui::MouseEvent const& mouse) const noexcept;
+    /// The viewport cell a pointer event relative to this widget's view lies on.
+    [[nodiscard]] ::core::tui::Point viewportCellOf(::core::tui::MouseEvent const& mouse) const noexcept;
 
     Context* _context;
     ContainerBase* _container = nullptr;
@@ -318,6 +321,9 @@ void attach(Context& context, ui::ContainerWidget* parent, WidgetBase& widget);
 /// The top-left corner that centres an overlay of @p size on @p screen's viewport.
 [[nodiscard]] ::core::tui::Point centredIn(::core::tui::Screen const& screen, ::core::tui::Size size);
 /// Sizes every root widget to the viewport and centres every open dialog's frame; runs before every frame.
+///
+/// It first ends a press whose pointer capture ended without its release (see `Context::endPress`): core::tui ends the
+/// capture on a press that reaches no widget, which no widget sees, or when the pressed view leaves the screen.
 ///
 /// It also empties the screen bounds of each root view, and of each open dialog's frame and everything in it, which
 /// the frame that follows sets again for what it draws. core::tui draws neither a hidden view nor one with no room

@@ -558,7 +558,7 @@ void DialogImpl::paintFrame(::core::tui::Canvas& canvas) {
 ::core::tui::EventResult DialogImpl::frameEvent(::core::tui::InputEvent const& event) {
     if (auto const* const mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
         if (mouse->type == ::core::tui::MouseEvent::Type::Press) {
-            context().pressed = nullptr;
+            context().endPress();
         }
         return ::core::tui::EventResult::Handled;
     }

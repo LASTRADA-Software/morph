@@ -200,6 +200,12 @@ core::tui::MouseEvent releaseAt(core::tui::Point cell) {
         .type = core::tui::MouseEvent::Type::Release, .button = 0, .x = cell.x + 1, .y = cell.y + 1};
 }
 
+/// A motion to a 0-based viewport cell with the left button held.
+core::tui::MouseEvent moveTo(core::tui::Point cell) {
+    return core::tui::MouseEvent{
+        .type = core::tui::MouseEvent::Type::Move, .button = 0, .x = cell.x + 1, .y = cell.y + 1};
+}
+
 }  // namespace
 
 TEST_CASE("tui widgets: a widget inside a disabled container two levels up takes no key, click or focus",
@@ -571,6 +577,29 @@ TEST_CASE("tui widgets: a press that lost its release is ended by the next press
 
     CHECK(harness.send(pressAt({.x = 1, .y = 0})) == EventResult::Handled);
     static_cast<void>(harness.send(pressAt({.x = 1, .y = 1})));
+    static_cast<void>(harness.send(releaseAt({.x = 1, .y = 0})));
+    CHECK(clicks == 0);
+    CHECK(harness.click({.x = 1, .y = 0}) == EventResult::Handled);
+    CHECK(clicks == 1);
+}
+
+// The second press hits no widget's view: the only root is hidden, so it reaches the screen's own root. core::tui
+// still ends the first press's pointer capture.
+TEST_CASE("tui widgets: a press that reaches no widget ends a press that lost its release", "[tui][widgets]") {
+    Harness harness{10, 2};
+    auto const button = harness.make<ButtonImpl>(nullptr);
+    button->setLabel("A");
+    int clicks = 0;
+    button->setOnClick([&] { ++clicks; });
+    static_cast<void>(harness.draw());
+
+    CHECK(harness.send(pressAt({.x = 1, .y = 0})) == EventResult::Handled);
+    button->setVisible(false);
+    CHECK(harness.send(pressAt({.x = 1, .y = 0})) == EventResult::Ignored);
+    REQUIRE(harness.screen().pointerCapture() == nullptr);
+    button->setVisible(true);
+    SECTION("a frame drawn in between ends it") { static_cast<void>(harness.draw()); }
+    SECTION("a motion over the widget ends it") { static_cast<void>(harness.send(moveTo({.x = 2, .y = 0}))); }
     static_cast<void>(harness.send(releaseAt({.x = 1, .y = 0})));
     CHECK(clicks == 0);
     CHECK(harness.click({.x = 1, .y = 0}) == EventResult::Handled);

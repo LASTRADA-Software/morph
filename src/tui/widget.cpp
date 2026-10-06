@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <variant>
 
+#include "tui/drag.hpp"
 #include "tui/layout.hpp"
 
 namespace morph::tui::detail {
@@ -144,7 +145,10 @@ void WidgetBase::applyLayout(ui::LayoutHints const& hints) {
     refresh();
 }
 
-void WidgetBase::applyDragKey(std::optional<ui::Key> const& key) { _dragKey = key; }
+void WidgetBase::applyDragKey(std::optional<ui::Key> const& key) {
+    _dragKey = key;
+    _context->drag->keyChanged(*this, key);
+}
 
 void WidgetBase::applyDropHandler(std::function<bool(ui::Key const&)> accepts, std::function<void(ui::Key)> onDrop) {
     _accepts = std::move(accepts);
@@ -279,7 +283,7 @@ EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
     using Type = ::core::tui::MouseEvent::Type;
     if (blockedByDialog()) {
         if (mouse.type == Type::Press || _context->pressed == this) {
-            _context->pressed = nullptr;
+            _context->endPress();
         }
         return EventResult::Handled;
     }
@@ -300,46 +304,70 @@ EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
     return {.x = mouse.x - 1 + _drawShift.x, .y = mouse.y - 1 + _drawShift.y};
 }
 
-// Any press ends an earlier gesture whose release never arrived, whether or not this widget takes the new one.
-// Handling the press makes this view the screen's pointer capture target, so the moves and the release that follow
-// come here wherever the pointer goes.
+// core::tui made the event relative to the view's screen bounds, so adding them back gives the cell the terminal
+// reported, even for a view that has moved or was not drawn since.
+::core::tui::Point WidgetBase::viewportCellOf(::core::tui::MouseEvent const& mouse) const noexcept {
+    auto const bounds = _view->screenBounds();
+    return {.x = bounds.x + mouse.x - 1, .y = bounds.y + mouse.y - 1};
+}
+
+// Any press ends an earlier gesture whose release never arrived, whether or not this widget takes the new one, and
+// the drag it started. Handling the press makes this view the screen's pointer capture target, so the moves and the
+// release that follow come here wherever the pointer goes. A widget with a drag key arms a drag, and still takes the
+// press as any other (a slider's thumb jumps to it).
 EventResult WidgetBase::press(::core::tui::MouseEvent const& mouse) {
-    _context->pressed = nullptr;
+    _context->endPress();
     if (mouse.button != 0 || !actionable() || !(wantsFocus() || _dragKey)) {
         return EventResult::Ignored;
     }
     _context->pressed = this;
     auto* const context = _context;
     auto const cell = cellOf(mouse);
+    auto const point = viewportCellOf(mouse);
     if (focusesOnPress()) {
         // Moving the focus may run a handler that destroys this widget; then `pressed` is cleared, nothing more of
         // the press happens and the release clicks nothing.
         static_cast<void>(focusWidget(*context, this));
     }
     if (context->pressed == this && actionable()) {
+        if (_dragKey) {
+            context->drag->press(*this, *_dragKey, point);
+        }
         pressAt(cell);
     }
     return EventResult::Handled;
 }
 
-// A move belongs to the press this widget took, wherever the pointer is: the press made this view the capture.
+// A move belongs to the press this widget took, wherever the pointer is: the press made this view the capture. One
+// that reaches it by hit-testing instead finds the capture ended without a release (a press that reached no widget
+// ends it), so that press is over. A drag source's moves drag it, not its own content.
 EventResult WidgetBase::move(::core::tui::MouseEvent const& mouse) {
     if (_context->pressed != this) {
         return EventResult::Ignored;
     }
-    if (mouse.type == ::core::tui::MouseEvent::Type::Move && actionable()) {
+    if (_context->screen->pointerCapture() != _view.get()) {
+        _context->endPress();
+        return EventResult::Ignored;
+    }
+    if (auto& drag = *_context->drag; drag.source() == this) {
+        drag.move(viewportCellOf(mouse));
+    } else if (actionable()) {
         dragTo(cellOf(mouse));
     }
     return EventResult::Handled;
 }
 
-// A release clicks only inside the view and only while the widget is still actionable: its container may have been
+// A release that ends a drag is no click, and its drop handler, run last, may have destroyed this widget. Otherwise a
+// release clicks only inside the view and only while the widget is still actionable: its container may have been
 // disabled or hidden since the press.
 EventResult WidgetBase::release(::core::tui::MouseEvent const& mouse) {
     if (_context->pressed != this) {
         return EventResult::Ignored;
     }
     _context->pressed = nullptr;
+    if (auto& drag = *_context->drag; drag.source() == this && drag.release(viewportCellOf(mouse))) {
+        return EventResult::Handled;
+    }
     ::core::tui::Point const cell{.x = mouse.x - 1, .y = mouse.y - 1};
     auto const bounds = _view->screenBounds();
     bool const inside = cell.x >= 0 && cell.y >= 0 && cell.x < bounds.width && cell.y < bounds.height;
@@ -637,6 +665,9 @@ void attach(Context& context, ui::ContainerWidget* parent, WidgetBase& widget) {
 // descendants are emptied here.
 void fit(Context& context) {
     auto& screen = *context.screen;
+    if (context.pressed != nullptr && screen.pointerCapture() != &context.pressed->view()) {
+        context.endPress();
+    }
     auto const area = screen.viewportArea();
     for (auto* root : context.roots) {
         auto& view = root->view();

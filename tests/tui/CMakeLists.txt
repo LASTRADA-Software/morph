@@ -8,6 +8,7 @@ add_executable(morph_tui_tests
     test_tui_table.cpp
     test_tui_loop_executor.cpp
     test_tui_backend.cpp
+    test_tui_drag.cpp
 )
 
 target_link_libraries(morph_tui_tests

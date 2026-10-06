@@ -289,7 +289,7 @@ private:
             return EventResult::Handled;
         }
         if (mouse.type == Type::Press) {
-            _owner->context().pressed = nullptr;
+            _owner->context().endPress();
             _pressed = mouse.button == 0;
             return EventResult::Handled;
         }

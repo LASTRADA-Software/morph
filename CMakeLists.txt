@@ -555,6 +555,8 @@ if(MORPH_BUILD_TUI)
         src/tui/container_widgets.hpp
         src/tui/context.cpp
         src/tui/context.hpp
+        src/tui/drag.cpp
+        src/tui/drag.hpp
         src/tui/field_widgets.cpp
         src/tui/field_widgets.hpp
         src/tui/layout.cpp

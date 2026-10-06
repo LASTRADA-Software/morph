@@ -7,12 +7,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
 namespace morph::tui::detail {
 
 class ContainerBase;
+class DragController;
 class WidgetBase;
 
 /// Which way keyboard focus moves.
@@ -37,8 +39,9 @@ struct Context {
     std::vector<WidgetBase*> busy;   ///< Busy widgets that are active.
     std::size_t activeBusy = 0;      ///< How many of `busy` the user could see: while any, the spinner animates.
     std::size_t animationFrame = 0;  ///< The spinner frame to draw.
-    /// The widget whose press is waiting for its release, or null. Every press a widget sees clears it first: a new
-    /// press ends any gesture whose release never arrived, as it ends the screen's pointer capture.
+    /// The widget whose press is waiting for its release, or null. Its view holds the screen's pointer capture while
+    /// it is set: every press a widget sees, and the first frame or motion after the capture ended otherwise, end it
+    /// (see `endPress`), so a press whose release never arrived clicks nothing later.
     WidgetBase* pressed = nullptr;
     /// Widgets that code is waiting on — code running a handler (see `focusWidget`), an open dialog that will hand
     /// the focus back — each through a pointer `forget` sets to null when that widget is destroyed.
@@ -53,11 +56,16 @@ struct Context {
     /// The clock every widget reads the time from (a table telling a double click from two clicks); a test may
     /// replace it.
     std::function<std::chrono::steady_clock::time_point()> now = [] { return std::chrono::steady_clock::now(); };
+    /// The one drag gesture; last, so it is destroyed first and hides its overlays while the screen is still there.
+    std::unique_ptr<DragController> drag;
 
     /// The widget owning @p view, or null for a component no widget registered (an overlay, the root).
     [[nodiscard]] WidgetBase* ownerOf(::core::tui::Component const* view) const;
     /// Drops every reference to a widget being destroyed.
     void forget(WidgetBase& widget);
+    /// Ends the press waiting for its release, if any, and the drag it started: nothing of that gesture happens
+    /// afterwards. A new press calls it, as does a press whose pointer capture ended without its release.
+    void endPress();
 };
 
 }  // namespace morph::tui::detail

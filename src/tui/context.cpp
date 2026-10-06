@@ -2,11 +2,14 @@
 
 #include "tui/context.hpp"
 
+#include <memory>
 #include <vector>
+
+#include "tui/drag.hpp"
 
 namespace morph::tui::detail {
 
-Context::Context(::core::tui::Screen& target) : screen{&target} {}
+Context::Context(::core::tui::Screen& target) : screen{&target}, drag{std::make_unique<DragController>(*this)} {}
 
 Context::~Context() = default;
 
@@ -26,6 +29,12 @@ void Context::forget(WidgetBase& widget) {
             *watch = nullptr;
         }
     }
+    drag->forget(widget);
+}
+
+void Context::endPress() {
+    pressed = nullptr;
+    drag->cancel();
 }
 
 }  // namespace morph::tui::detail
