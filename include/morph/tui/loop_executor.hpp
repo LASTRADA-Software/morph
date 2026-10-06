@@ -21,6 +21,11 @@ namespace morph::tui {
 /// it as its callback executor, so model replies, timers, sockets and input all run on the thread that turns the
 /// loop. `post()` may be called from any thread. A task still queued when the executor is destroyed is dropped,
 /// and a task that throws is logged and does not stop the loop.
+///
+/// Destroy it on the thread that turns the loop, between turns or from inside one of its own tasks, never from
+/// another thread: a task already running there would go on using an owner (the reactive `Runtime`) that is gone.
+/// Nothing guards against that, because a lock held across a task would deadlock a task that destroys its own
+/// executor.
 class LoopExecutor final : public exec::IExecutor {
 public:
     /// @param loop The loop to post to. Borrowed: it must outlive this executor.

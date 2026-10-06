@@ -32,6 +32,29 @@ TEST_CASE("tui::LoopExecutor: a posted task runs in a later loop turn, with the 
     CHECK(current);
 }
 
+TEST_CASE("tui::LoopExecutor: tasks run in the order they were posted", "[tui][loop_executor]") {
+    core::net::PlatformLoop loop;
+    LoopExecutor executor{loop};
+    std::vector<int> order;
+    executor.post([&] { order.push_back(1); });
+    executor.post([&] { order.push_back(2); });
+    static_cast<void>(loop.runUntilIdle());
+    CHECK(order == std::vector<int>{1, 2});
+}
+
+TEST_CASE("tui::LoopExecutor: a post from inside a task runs after that task returns", "[tui][loop_executor]") {
+    core::net::PlatformLoop loop;
+    LoopExecutor executor{loop};
+    std::vector<std::string> order;
+    executor.post([&] {
+        order.emplace_back("outer begins");
+        executor.post([&] { order.emplace_back("inner"); });
+        order.emplace_back("outer ends");
+    });
+    static_cast<void>(loop.runUntilIdle());
+    CHECK(order == std::vector<std::string>{"outer begins", "outer ends", "inner"});
+}
+
 TEST_CASE("tui::LoopExecutor: a task still queued when the executor is destroyed is dropped", "[tui][loop_executor]") {
     core::net::PlatformLoop loop;
     bool ran = false;
