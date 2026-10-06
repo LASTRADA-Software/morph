@@ -14,6 +14,10 @@ namespace morph::tui::detail {
 /// reactive::Scheduler on a core::net::EventLoop's timers: each callback runs in a loop turn with the owner
 /// executor current, so it may write the reactive state of a runtime that executor owns. Used on the loop's
 /// thread only.
+///
+/// A periodic timer is re-armed one period from the loop clock's `now` at each firing, not from the deadline it
+/// fired for: an owner blocked past several periods fires once, and the period drifts by each firing's dispatch
+/// latency. Destroy it before its EventLoop: the destructor retires its armed timers on that loop.
 class LoopScheduler final : public reactive::Scheduler {
 public:
     LoopScheduler(::core::net::EventLoop& loop, exec::IExecutor& owner);

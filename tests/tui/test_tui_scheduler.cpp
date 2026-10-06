@@ -7,9 +7,13 @@
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/io_loop.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/tui/loop_executor.hpp>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "tui/scheduler.hpp"
 
@@ -74,38 +78,52 @@ TEST_CASE("tui::LoopScheduler: after fires once, in a loop turn, with the owner 
 }
 
 TEST_CASE("tui::LoopScheduler: every repeats until its handle is cancelled", "[tui][scheduler]") {
-    Loop loop;
+    ManualLoop manual;
     int fired = 0;
-    TimerHandle handle = loop.scheduler.every(3ms, [&] { ++fired; });
-    REQUIRE(loop.turnUntil([&] { return fired >= 3; }));
+    bool onOwner = true;
+    TimerHandle handle = manual.scheduler.every(3ms, [&] {
+        ++fired;
+        onOwner = onOwner && morph::exec::runningOn(manual.executor);
+    });
+    for (int expected = 1; expected <= 3; ++expected) {
+        manual.clock.advance(3ms);
+        static_cast<void>(manual.loop.drain());
+        CHECK(fired == expected);
+    }
+    CHECK(onOwner);
     handle.cancel();
-    int const atCancel = fired;
-    loop.turnFor(20ms);
-    CHECK(fired == atCancel);
-    CHECK(loop.scheduler.pendingTimers() == 0);
+    manual.clock.advance(20ms);
+    static_cast<void>(manual.loop.drain());
+    CHECK(fired == 3);
+    CHECK(manual.scheduler.pendingTimers() == 0);
 }
 
 TEST_CASE("tui::LoopScheduler: destroying the handle cancels the timer", "[tui][scheduler]") {
-    Loop loop;
+    ManualLoop manual;
     int fired = 0;
     {
-        TimerHandle const transient = loop.scheduler.after(2ms, [&] { ++fired; });
+        TimerHandle const transient = manual.scheduler.after(2ms, [&] { ++fired; });
     }
-    loop.turnFor(20ms);
+    manual.clock.advance(20ms);
+    static_cast<void>(manual.loop.drain());
     CHECK(fired == 0);
-    CHECK(loop.scheduler.pendingTimers() == 0);
+    CHECK(manual.scheduler.pendingTimers() == 0);
 }
 
 TEST_CASE("tui::LoopScheduler: a callback may cancel its own timer", "[tui][scheduler]") {
-    Loop loop;
+    ManualLoop manual;
     int fired = 0;
     TimerHandle handle;
-    handle = loop.scheduler.every(2ms, [&] {
+    handle = manual.scheduler.every(2ms, [&] {
         ++fired;
         handle.cancel();
     });
-    loop.turnFor(30ms);
+    for (int step = 0; step < 15; ++step) {
+        manual.clock.advance(2ms);
+        static_cast<void>(manual.loop.drain());
+    }
     CHECK(fired == 1);
+    CHECK(manual.scheduler.pendingTimers() == 0);
 }
 
 TEST_CASE("tui::LoopScheduler: a handle outliving its scheduler is safe", "[tui][scheduler]") {
@@ -119,8 +137,55 @@ TEST_CASE("tui::LoopScheduler: a handle outliving its scheduler is safe", "[tui]
 }
 
 TEST_CASE("tui::LoopScheduler: every refuses a non-positive period", "[tui][scheduler]") {
-    Loop loop;
-    CHECK_THROWS_AS(static_cast<void>(loop.scheduler.every(0ms, [] {})), std::invalid_argument);
+    ManualLoop manual;
+    CHECK_THROWS_AS(static_cast<void>(manual.scheduler.every(0ms, [] {})), std::invalid_argument);
+    CHECK_THROWS_AS(static_cast<void>(manual.scheduler.every(-1ms, [] {})), std::invalid_argument);
+    CHECK(manual.scheduler.pendingTimers() == 0);
+}
+
+TEST_CASE("tui::LoopScheduler: a non-positive delay fires once, in a later turn", "[tui][scheduler]") {
+    ManualLoop manual;
+    int zero = 0;
+    int negative = 0;
+    TimerHandle const now = manual.scheduler.after(0ms, [&] { ++zero; });
+    TimerHandle const past = manual.scheduler.after(-5ms, [&] { ++negative; });
+    CHECK(zero == 0);
+    CHECK(negative == 0);
+    // The first turn finds both due and queues them; the callbacks run in the turn after.
+    static_cast<void>(manual.loop.tick());
+    CHECK(zero == 0);
+    CHECK(negative == 0);
+    static_cast<void>(manual.loop.drain());
+    CHECK(zero == 1);
+    CHECK(negative == 1);
+    manual.clock.advance(20ms);
+    static_cast<void>(manual.loop.drain());
+    CHECK(zero == 1);
+    CHECK(negative == 1);
+    CHECK(manual.scheduler.pendingTimers() == 0);
+}
+
+TEST_CASE("tui::LoopScheduler: a throwing callback is logged, and its periodic timer fires again",
+          "[tui][scheduler]") {
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride const capture{
+        [&](morph::log::LogLevel, std::string_view message) { logged.emplace_back(message); }};
+    ManualLoop manual;
+    int fired = 0;
+    TimerHandle const handle = manual.scheduler.every(5ms, [&] {
+        ++fired;
+        throw std::runtime_error{"boom"};
+    });
+    manual.clock.advance(5ms);
+    REQUIRE_NOTHROW(manual.loop.drain());
+    CHECK(fired == 1);
+    REQUIRE(logged.size() == 1);
+    CHECK(logged.front().contains("boom"));
+    manual.clock.advance(5ms);
+    REQUIRE_NOTHROW(manual.loop.drain());
+    CHECK(fired == 2);
+    CHECK(logged.size() == 2);
+    CHECK(manual.scheduler.pendingTimers() == 1);
 }
 
 TEST_CASE("tui::LoopScheduler: a callback cancelling a sibling due in the same turn stops it", "[tui][scheduler]") {
@@ -141,6 +206,8 @@ TEST_CASE("tui::LoopScheduler: a callback cancelling a sibling due in the same t
     // This turn finds both due and queues them; the next turn runs them.
     static_cast<void>(manual.loop.tick());
     REQUIRE(fired == 0);
+    // readyCount counts queued timer callbacks as well as coroutines: two here means both timers were found
+    // due in that turn and are queued, not merely armed.
     REQUIRE(manual.loop.readyCount() == 2);
     static_cast<void>(manual.loop.drain());
     CHECK(fired == 1);
