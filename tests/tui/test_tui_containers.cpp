@@ -328,6 +328,61 @@ TEST_CASE("tui containers: no toggle handler runs after its panel was destroyed"
     CHECK(calls == 0);
 }
 
+namespace {
+
+/// A widget four rows tall that puts the cursor on one of its own cells.
+class CursorProbe final : public morph::tui::detail::TuiWidget<ui::SpacerWidget> {
+public:
+    CursorProbe(morph::tui::detail::Context& context, core::tui::Point cell) : TuiWidget{context}, _cell{cell} {
+        adopt(morph::tui::detail::makeView(*this));
+    }
+    [[nodiscard]] core::tui::Size naturalSize() const override { return {.width = 4, .height = 4}; }
+    void paint(core::tui::Canvas& canvas) override {
+        canvas.putString(0, 0, "top", canvas.theme().textNormal);
+        canvas.setCursor(_cell.y, _cell.x);
+    }
+
+private:
+    core::tui::Point _cell;
+};
+
+}  // namespace
+
+TEST_CASE("tui containers: a widget scrolled partly out of view keeps its cursor on its own cell",
+          "[tui][containers]") {
+    Harness harness{10, 2};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    using Type = core::tui::MouseEvent::Type;
+    SECTION("a cursor inside the drawn part moves with the widget") {
+        auto const probe = harness.make<CursorProbe>(scroll.get(), core::tui::Point{.x = 1, .y = 2});
+        CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Ignored);
+        CHECK(harness.draw() == Rows{"top"});
+        CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Handled);
+        CHECK(harness.draw().empty());
+        auto const& frame = harness.screen().renderedBuffer();
+        CHECK(frame.cursorVisible());
+        CHECK(frame.cursor() == core::tui::Point{.x = 1, .y = 1});
+    }
+    SECTION("a cursor in the part scrolled away is hidden") {
+        auto const probe = harness.make<CursorProbe>(scroll.get(), core::tui::Point{.x = 1, .y = 0});
+        CHECK(harness.draw() == Rows{"top"});
+        CHECK(harness.screen().renderedBuffer().cursorVisible());
+        CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Handled);
+        static_cast<void>(harness.draw());
+        CHECK_FALSE(harness.screen().renderedBuffer().cursorVisible());
+    }
+}
+
+TEST_CASE("tui containers: a wide character cut at a scroll's left edge leaves a blank", "[tui][containers]") {
+    Harness harness{3, 1};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Horizontal);
+    auto const text = harness.make<TextImpl>(scroll.get());
+    text->setText("日本");
+    CHECK(harness.draw() == Rows{"日"});
+    CHECK(harness.send(mouseAt(core::tui::MouseEvent::Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{" 本"});
+}
+
 TEST_CASE("tui containers: a scroll keeps the focused child in view", "[tui][containers]") {
     Harness harness{10, 3};
     auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
@@ -358,6 +413,27 @@ TEST_CASE("tui containers: a scroll keeps a fixed-height child's whole extent in
     bottom->setLabel("2");
     harness.focus(*bottom);
     CHECK(harness.draw() == Rows{"t", "", "[ 2 ]"});
+}
+
+TEST_CASE("tui containers: the wheel scrolls past the focused child, and moving the focus brings it back",
+          "[tui][containers]") {
+    Harness harness{10, 2};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(scroll.get(), ui::Axis::Vertical);
+    std::vector<std::unique_ptr<ButtonImpl>> buttons;
+    for (int i = 0; i < 4; ++i) {
+        buttons.push_back(harness.make<ButtonImpl>(column.get()));
+        buttons.back()->setLabel(std::to_string(i));
+    }
+    harness.focus(*buttons.front());
+    CHECK(harness.draw() == Rows{"[ 0 ]", "[ 1 ]"});
+    using Type = core::tui::MouseEvent::Type;
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 1, .y = 0})) == EventResult::Handled);
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 1, .y = 0})) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"[ 2 ]", "[ 3 ]"});
+    harness.focus(*buttons.at(1));
+    CHECK(harness.draw() == Rows{"[ 1 ]", "[ 2 ]"});
+    buttons.clear();
 }
 
 TEST_CASE("tui containers: a child scrolled out of view takes no click at its old place", "[tui][containers][drawn]") {
@@ -408,25 +484,137 @@ TEST_CASE("tui containers: the wheel stops at the last full view and scrolls bac
     }
     static_cast<void>(harness.draw());
     using Type = core::tui::MouseEvent::Type;
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 2; ++i) {
         CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 1, .y = 1})) == EventResult::Handled);
         static_cast<void>(harness.draw());
     }
+    // At the end of the content the wheel is left to whatever lies around the scroll.
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 1, .y = 1})) == EventResult::Ignored);
     CHECK(harness.draw() == Rows{"line 2", "line 3", "line 4"});
     CHECK(harness.send(mouseAt(Type::ScrollUp, {.x = 1, .y = 1})) == EventResult::Handled);
     CHECK(harness.draw() == Rows{"line 1", "line 2", "line 3"});
     lines.clear();
 }
 
-TEST_CASE("tui containers: a scroll over content that is not a stack on its axis leaves the wheel to others",
-          "[tui][containers]") {
+TEST_CASE("tui containers: a scroll whose content shrinks moves back to keep its view full", "[tui][containers]") {
+    Harness harness{10, 3};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(scroll.get(), ui::Axis::Vertical);
+    std::vector<std::unique_ptr<TextImpl>> lines;
+    for (int i = 0; i < 5; ++i) {
+        lines.push_back(harness.make<TextImpl>(column.get()));
+        lines.back()->setText("line " + std::to_string(i));
+    }
+    static_cast<void>(harness.draw());
+    using Type = core::tui::MouseEvent::Type;
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 1, .y = 1})) == EventResult::Handled);
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 1, .y = 1})) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"line 2", "line 3", "line 4"});
+    lines.pop_back();
+    lines.pop_back();
+    CHECK(harness.draw() == Rows{"line 0", "line 1", "line 2"});
+    lines.clear();
+}
+
+TEST_CASE("tui containers: a scroll scrolls a long text line by line", "[tui][containers]") {
     Harness harness{10, 2};
     auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
     auto const text = harness.make<TextImpl>(scroll.get());
     text->setText("a\nb\nc");
     CHECK(harness.draw() == Rows{"a", "b"});
+    CHECK(harness.send(mouseAt(core::tui::MouseEvent::Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"b", "c"});
     CHECK(harness.send(mouseAt(core::tui::MouseEvent::Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Ignored);
-    CHECK(harness.draw() == Rows{"a", "b"});
+    CHECK(harness.draw() == Rows{"b", "c"});
+}
+
+TEST_CASE("tui containers: Tab into a scroll brings a button deep inside it into view", "[tui][containers]") {
+    Harness harness{12, 4};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const panel = harness.make<PanelImpl>(scroll.get());
+    panel->setTitle("P");
+    auto const column = harness.make<StackImpl>(panel.get(), ui::Axis::Vertical);
+    std::vector<std::unique_ptr<ButtonImpl>> buttons;
+    std::vector<int> clicked;
+    for (int i = 0; i < 6; ++i) {
+        buttons.push_back(harness.make<ButtonImpl>(column.get()));
+        buttons.back()->setLabel(std::to_string(i));
+        buttons.back()->setOnClick([&clicked, i] { clicked.push_back(i); });
+    }
+    CHECK(harness.draw() == Rows{"┌─P────────┐", "│[ 0 ]     │", "│[ 1 ]     │", "│[ 2 ]     │"});
+    auto const tab = [&] { morph::tui::detail::moveFocus(harness.context(), Direction::Forward); };
+    for (int i = 0; i < 6; ++i) {
+        tab();
+    }
+    REQUIRE(harness.focused(*buttons.back()));
+    CHECK(harness.draw() == Rows{"│[ 2 ]     │", "│[ 3 ]     │", "│[ 4 ]     │", "│[ 5 ]     │"});
+    CHECK(WidgetBase::of(*buttons.front()).view().screenBounds().empty());
+    CHECK(harness.click({.x = 2, .y = 0}) == EventResult::Handled);
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Handled);
+    CHECK(clicked == std::vector<int>{2, 2});
+
+    harness.focus(*buttons.back());
+    static_cast<void>(harness.draw());
+    tab();
+    REQUIRE(harness.focused(*buttons.front()));
+    CHECK(harness.draw() == Rows{"│[ 0 ]     │", "│[ 1 ]     │", "│[ 2 ]     │", "│[ 3 ]     │"});
+    buttons.clear();
+}
+
+TEST_CASE("tui containers: a horizontal scroll moves a column's lines sideways", "[tui][containers]") {
+    Harness harness{5, 2};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Horizontal);
+    auto const column = harness.make<StackImpl>(scroll.get(), ui::Axis::Vertical);
+    auto const wide = harness.make<TextImpl>(column.get());
+    wide->setText("abcdefg");
+    auto const narrow = harness.make<TextImpl>(column.get());
+    narrow->setText("xy");
+    CHECK(harness.draw() == Rows{"abcde", "xy"});
+    using Type = core::tui::MouseEvent::Type;
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"bcdef", "y"});
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Handled);
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 0, .y = 0})) == EventResult::Ignored);
+    CHECK(harness.draw() == Rows{"cdefg"});
+}
+
+TEST_CASE("tui containers: the wheel an inner scroll cannot use moves the scroll around it", "[tui][containers]") {
+    Harness harness{10, 3};
+    auto const outer = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const column = harness.make<StackImpl>(outer.get(), ui::Axis::Vertical);
+    auto const top = harness.make<TextImpl>(column.get());
+    top->setText("top");
+    auto const inner = harness.make<ScrollImpl>(column.get(), ui::Axis::Vertical);
+    inner->setLayout(ui::LayoutHints{.height = ui::Sizing::fixed(2)});
+    auto const lines = harness.make<TextImpl>(inner.get());
+    lines->setText("a\nb\nc");
+    auto const tail = harness.make<TextImpl>(column.get());
+    tail->setText("t1\nt2\nt3");
+    CHECK(harness.draw() == Rows{"top", "a", "b"});
+    using Type = core::tui::MouseEvent::Type;
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 0, .y = 1})) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"top", "b", "c"});
+    CHECK(harness.send(mouseAt(Type::ScrollDown, {.x = 0, .y = 1})) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"b", "c", "t1"});
+}
+
+TEST_CASE("tui containers: a click on a panel scrolled partly out of view lands where the panel shows it",
+          "[tui][containers]") {
+    Harness harness{12, 3};
+    auto const scroll = harness.make<ScrollImpl>(nullptr, ui::Axis::Vertical);
+    auto const panel = harness.make<PanelImpl>(scroll.get());
+    panel->setTitle("P");
+    panel->setCollapsible(true);
+    std::vector<bool> toggles;
+    panel->setOnToggle([&](bool collapsed) { toggles.push_back(collapsed); });
+    auto const body = harness.make<TextImpl>(panel.get());
+    body->setText("a\nb\nc\nd");
+    CHECK(harness.draw().front() == "┌─▾ P──────┐");
+    CHECK(harness.send(mouseAt(core::tui::MouseEvent::Type::ScrollDown, {.x = 5, .y = 1})) == EventResult::Handled);
+    CHECK(harness.draw() == Rows{"│a         │", "│b         │", "│c         │"});
+    // The top row now shows the panel's second line, not its title line.
+    static_cast<void>(harness.click({.x = 5, .y = 0}));
+    CHECK(toggles.empty());
 }
 
 TEST_CASE("tui containers: a horizontal scroll keeps the focused child in view", "[tui][containers]") {

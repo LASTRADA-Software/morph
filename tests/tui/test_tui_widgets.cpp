@@ -102,6 +102,18 @@ TEST_CASE("tui widgets: a hidden child in a row takes no gap either", "[tui][wid
     CHECK(harness.draw() == Rows{"a c"});
 }
 
+TEST_CASE("tui widgets: a stack's own size counts a child's fixed extent", "[tui][widgets]") {
+    Harness harness{10, 5};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const inner = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    auto const tall = harness.make<TextImpl>(inner.get());
+    tall->setText("t");
+    tall->setLayout(ui::LayoutHints{.height = ui::Sizing::fixed(3)});
+    auto const after = harness.make<TextImpl>(column.get());
+    after->setText("after");
+    CHECK(harness.draw() == Rows{"t", "", "", "after"});
+}
+
 TEST_CASE("tui widgets: multi-line text takes one row per line", "[tui][widgets]") {
     Harness harness{10, 3};
     auto const text = harness.make<TextImpl>(nullptr);
@@ -510,35 +522,20 @@ TEST_CASE("tui widgets: a child squeezed out of a column takes no click at its o
     CHECK(clicks == 1);
 }
 
-TEST_CASE("tui widgets: a child skipped or squeezed out of a row takes no click at its old place",
-          "[tui][widgets][drawn]") {
+TEST_CASE("tui widgets: a child squeezed out of a row takes no click at its old place", "[tui][widgets][drawn]") {
     Harness harness{8, 1};
     auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
     int clicks = 0;
-    SECTION("skipped, as by a scroll") {
-        auto const button = harness.make<ButtonImpl>(row.get());
-        button->setLabel("A");
-        button->setOnClick([&] { ++clicks; });
-        auto const text = harness.make<TextImpl>(row.get());
-        text->setText("t");
-        CHECK(harness.draw() == Rows{"[ A ]t"});
-        row->setSkip(1);
-        CHECK(harness.draw() == Rows{"t"});
-        CHECK(WidgetBase::of(*button).view().screenBounds().empty());
-        static_cast<void>(harness.click({.x = 3, .y = 0}));
-    }
-    SECTION("squeezed by a sibling that grew") {
-        auto const text = harness.make<TextImpl>(row.get());
-        text->setText("ab");
-        auto const button = harness.make<ButtonImpl>(row.get());
-        button->setLabel("B");
-        button->setOnClick([&] { ++clicks; });
-        CHECK(harness.draw() == Rows{"ab[ B ]"});
-        text->setText("abcdefgh");
-        CHECK(harness.draw() == Rows{"abcdefgh"});
-        CHECK(WidgetBase::of(*button).view().screenBounds().empty());
-        static_cast<void>(harness.click({.x = 4, .y = 0}));
-    }
+    auto const text = harness.make<TextImpl>(row.get());
+    text->setText("ab");
+    auto const button = harness.make<ButtonImpl>(row.get());
+    button->setLabel("B");
+    button->setOnClick([&] { ++clicks; });
+    CHECK(harness.draw() == Rows{"ab[ B ]"});
+    text->setText("abcdefgh");
+    CHECK(harness.draw() == Rows{"abcdefgh"});
+    CHECK(WidgetBase::of(*button).view().screenBounds().empty());
+    static_cast<void>(harness.click({.x = 4, .y = 0}));
     CHECK(clicks == 0);
 }
 

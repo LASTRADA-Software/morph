@@ -9,6 +9,7 @@
 #include <functional>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -28,18 +29,15 @@ public:
     void setGap(int gap) override;
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
     [[nodiscard]] int gap() const noexcept { return _gap; }
-    /// Leading shown children given no area: what a Scroll around this stack has scrolled past.
-    void setSkip(std::size_t skip);
-    [[nodiscard]] std::size_t skip() const noexcept { return _skip; }
     /// Fixed main-axis extents and their gap, for a Table row; an empty list returns the row to the solver.
     void setColumnLayout(std::vector<int> extents, int gap);
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
 
 private:
     ui::Axis _axis;
     int _gap = 0;
-    std::size_t _skip = 0;
     std::vector<int> _extents;
     int _extentGap = 0;
 };
@@ -49,6 +47,7 @@ class SlotImpl final : public TuiContainer<ui::SlotWidget> {
 public:
     explicit SlotImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
 };
 
@@ -62,6 +61,7 @@ public:
     /// Throws std::logic_error when @p child is not one of this grid's children.
     void setSpan(ui::Widget& child, int span) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
 
 protected:
@@ -92,6 +92,7 @@ public:
     [[nodiscard]] bool wantsFocus() const override { return _collapsible; }
     [[nodiscard]] std::string probeText() const override { return _title; }
     [[nodiscard]] bool letsChildrenAct() const override { return !_collapsed; }
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
@@ -111,24 +112,38 @@ private:
     std::function<void(bool)> _onToggle;
 };
 
-/// Scroll: shows as much of its content as fits. When the content is a stack along the scroll's axis, whole
-/// children scroll out of view, the focused one is always kept in view, the view never ends short of the content
-/// while there is more of it, and the wheel moves one child. Other content does not scroll.
+/// Scroll: a viewport onto its content, which is laid out at its natural extent along the scroll's axis (at least
+/// the viewport's) and at the viewport's across it, and drawn moved back by the scroll position.
 ///
-/// A child scrolled out of view is given no area, so it neither draws nor takes a click.
+/// A widget scrolled wholly out of view is given no area, so it neither draws nor takes a click; one scrolled partly
+/// out of view draws the part that shows (see `WidgetBase::render`). Whenever the focus moves to a widget inside,
+/// the scroll brings it into view, its top edge first when it is taller than the view. The wheel moves the view one
+/// cell, and is left to whatever lies around the scroll when the view cannot move that way.
 class ScrollImpl final : public TuiContainer<ui::ScrollWidget> {
 public:
     ScrollImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _axis{axis} { adopt(makeView(*this)); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] bool wheel(int delta) override;
 
 private:
-    [[nodiscard]] StackImpl* scrolledStack() const;
-    [[nodiscard]] std::size_t skipFor(StackImpl const& stack, int viewport) const;
+    /// Where the children go at scroll position 0, for a viewport of @p viewport.
+    [[nodiscard]] std::vector<::core::tui::Rect> contentAreas(::core::tui::Size viewport) const;
+    /// Where the widget owning the focused view lies in the content at scroll position 0, as far as the containers
+    /// on the way to it say; nothing when the focus is not inside.
+    [[nodiscard]] std::optional<::core::tui::Rect> focusedArea(::core::tui::Size viewport) const;
+    /// Moves the view to the focused widget when the focus has moved to one inside since the last frame.
+    void followFocus(::core::tui::Size viewport);
+    /// Moves the view by @p cells along the axis, within the content; whether it moved.
+    bool scrollBy(int cells);
 
     ui::Axis _axis;
-    std::size_t _skip = 0;
+    int _offset = 0;    ///< The scroll position: content cells before the view.
+    int _extent = 0;    ///< The content's extent along the axis, as of the last frame.
+    int _viewport = 0;  ///< The view's extent along the axis, as of the last frame.
+    /// The focused view the scroll last moved to, compared by address only: it may be gone by the next frame.
+    ::core::tui::Component const* _followed = nullptr;
 };
 
 }  // namespace morph::tui::detail

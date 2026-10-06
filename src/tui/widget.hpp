@@ -82,8 +82,23 @@ public:
     [[nodiscard]] virtual bool expandsByDefault() const { return false; }
     /// The text a conformance probe reads.
     [[nodiscard]] virtual std::string probeText() const { return {}; }
-    /// Draws the widget into its own area; a container also places its children here.
+    /// Draws the widget into its own area; a container also places its children here. The canvas is as large as
+    /// the area the widget was laid out at, even where an ancestor shows only part of it.
     virtual void paint(::core::tui::Canvas& canvas);
+    /// Draws the widget for its view, which core::tui hands @p canvas over the drawn part of the view's area.
+    ///
+    /// core::tui clips a view to its parent's drawn bounds and starts the canvas at the clipped corner, so a view
+    /// cut off at its top or left (one scrolled partly out of view) would draw its first row or column where its
+    /// later ones belong. When the drawn part is smaller than the laid-out area, `paint` draws into a canvas of the
+    /// whole area over a scratch copy of the drawn cells, and only the drawn cells are copied back; the cursor a
+    /// widget sets comes back with them, hidden when it lies outside. `drawShift` records the cut, which `place`
+    /// and a release's click position account for.
+    void render(::core::tui::Canvas& canvas);
+    /// How many cells of this widget's laid-out area its last drawing left off at the left and at the top.
+    [[nodiscard]] ::core::tui::Point drawShift() const noexcept { return _drawShift; }
+    /// Gives this widget @p area, in its container's coordinates: those of the container's whole laid-out area,
+    /// as its `paint` sees them. An empty area means it is not drawn.
+    void place(::core::tui::Rect area);
     /// Handles a key while actionable and focused (or bubbled to).
     [[nodiscard]] virtual ::core::tui::EventResult key(::core::tui::KeyEvent const& key);
     /// The primary action: what Enter, Space and a click do.
@@ -114,6 +129,7 @@ protected:
 
 private:
     void syncVisible();
+    void paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size laidOut);
     [[nodiscard]] ::core::tui::EventResult press(::core::tui::MouseEvent const& mouse);
     [[nodiscard]] ::core::tui::EventResult release(::core::tui::MouseEvent const& mouse);
 
@@ -126,6 +142,7 @@ private:
     std::optional<ui::Key> _dragKey;
     std::function<bool(ui::Key const&)> _accepts;
     std::function<void(ui::Key)> _onDrop;
+    ::core::tui::Point _drawShift{};
     std::unique_ptr<::core::tui::Component> _view;
 };
 
@@ -160,6 +177,13 @@ public:
     /// Whether the children may take input while this container is actionable itself; false while it holds them
     /// out of reach (a collapsed panel, a closed dialog).
     [[nodiscard]] virtual bool letsChildrenAct() const { return true; }
+    /// Where each of `children()` goes inside this container when it is laid out at @p size, in its own
+    /// coordinates; an empty area for a child that is not drawn. This is what `paint` places, and what a scroll
+    /// around the container reads to find a widget it should bring into view. A container that does not say returns
+    /// an empty list.
+    [[nodiscard]] virtual std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const;
+    /// Gives each of `children()` its area from @p areas, in order; a child past the end gets none.
+    void placeChildren(std::span<::core::tui::Rect const> areas) const;
 
 protected:
     virtual void childAttached(WidgetBase& child);
@@ -231,19 +255,23 @@ public:
 struct StackSpec {
     ui::Axis axis = ui::Axis::Vertical;  ///< The main axis.
     int gap = 0;                         ///< Cells between neighbours.
-    std::size_t skip = 0;                ///< Leading shown children given no area: scrolled out of view.
     std::span<int const> extents;        ///< When non-empty, the main-axis extents to use, in order (table columns).
 };
 
-/// The natural size of @p children stacked along @p axis with @p gap between them; hidden children count nothing.
+/// The size @p widget asks its container for: its natural size, but a Fixed amount where its layout hints say so.
+[[nodiscard]] ::core::tui::Size requestedSize(WidgetBase const& widget);
+/// The size @p children ask for stacked along @p axis with @p gap between them (`requestedSize` each); hidden
+/// children count nothing.
 [[nodiscard]] ::core::tui::Size stackNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap);
-/// Places @p children inside @p area (parent-relative). Hidden and skipped children get an empty area, so they
-/// neither render nor take a click (see `forgetDrawnBounds`).
+/// Where @p children go inside @p area: one area per child, in order, an empty one for a child that is not drawn.
 ///
 /// With no extents the layout solver sizes the shown children, and a hidden one takes no space. With extents every
 /// child takes the next one, in order, so a hidden child keeps its slot and the children after it stay in their
-/// columns; a child past the last extent takes its natural extent. A skipped child takes no space in either mode;
-/// with extents it still uses up its extent, so each later child keeps its own column's.
+/// columns; a child past the last extent takes its natural extent.
+[[nodiscard]] std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
+                                                        StackSpec const& spec);
+/// Places @p children inside @p area (in the container's coordinates) as `stackAreas` says. Hidden children get an
+/// empty area, so they neither render nor take a click (see `forgetDrawnBounds`).
 void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area, StackSpec const& spec);
 /// @p text split at '\n'.
 [[nodiscard]] std::vector<std::string_view> splitLines(std::string_view text);

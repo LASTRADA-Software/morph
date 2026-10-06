@@ -3,6 +3,8 @@
 #include "tui/widget.hpp"
 
 #include <algorithm>
+#include <core/tui/Buffer.hpp>
+#include <core/tui/Cell.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
@@ -29,7 +31,7 @@ public:
         if (owner().container() == nullptr) {
             forgetDrawnBounds(*this);
         }
-        owner().paint(canvas);
+        owner().render(canvas);
     }
     /// Hands the event to the owner. A handler may destroy the owner meanwhile, and this view with it, so nothing is
     /// touched after the call.
@@ -136,6 +138,92 @@ void WidgetBase::drop(ui::Key key) const {
 
 void WidgetBase::paint(::core::tui::Canvas& /*canvas*/) {}
 
+namespace {
+
+/// Where @p view was laid out this frame, in screen cells: its area placed in its parent's drawn bounds, as
+/// core::tui places it before clipping.
+::core::tui::Rect laidOutBounds(::core::tui::Component const& view) {
+    auto const* const parent = view.parent();
+    auto const origin = parent != nullptr ? parent->screenBounds() : ::core::tui::Rect{};
+    return view.area().offset(origin.x, origin.y);
+}
+
+}  // namespace
+
+// A view whose drawn bounds are not a part of where it was laid out was not placed by a parent's area (an
+// overlay): it is drawn as it is.
+void WidgetBase::render(::core::tui::Canvas& canvas) {
+    auto const drawn = _view->screenBounds();
+    auto const laidOut = laidOutBounds(*_view);
+    if (drawn == laidOut || !laidOut.contains(drawn)) {
+        _drawShift = {};
+        paint(canvas);
+        return;
+    }
+    _drawShift = {.x = drawn.x - laidOut.x, .y = drawn.y - laidOut.y};
+    paintClipped(canvas, laidOut.size());
+}
+
+// The scratch buffer spans the drawn rows, and the columns from the laid-out left edge to the drawn right one: a
+// row starting above the buffer is dropped whole, while a string starting left of it would be.
+void WidgetBase::paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size laidOut) {
+    auto& screen = canvas.buffer();
+    auto const drawn = _view->screenBounds();
+    int const left = _drawShift.x;
+    ::core::tui::Buffer scratch{drawn.height, left + drawn.width};
+    for (int row = 0; row < drawn.height; ++row) {
+        for (int col = 0; col < drawn.width; ++col) {
+            auto const* const from = screen.tryAt(drawn.y + row, drawn.x + col);
+            auto* const into = scratch.tryAt(row, left + col);
+            if (from != nullptr && into != nullptr) {
+                *into = *from;
+            }
+        }
+    }
+    scratch.setCursor(-1, -1);
+    scratch.setCursorVisible(true);
+
+    ::core::tui::Canvas whole{
+        scratch, {.x = 0, .y = -_drawShift.y, .width = laidOut.width, .height = laidOut.height}, canvas.theme()};
+    paint(whole);
+
+    for (int row = 0; row < drawn.height; ++row) {
+        for (int col = 0; col < drawn.width; ++col) {
+            auto const* const from = scratch.tryAt(row, left + col);
+            auto* const into = screen.tryAt(drawn.y + row, drawn.x + col);
+            if (from == nullptr || into == nullptr) {
+                continue;
+            }
+            *into = *from;
+            // The wide character this cell continues lies left of the drawn part.
+            if (col == 0 && from->isContinuation()) {
+                into->reset(from->style);
+            }
+        }
+    }
+
+    auto const cursor = scratch.cursor();
+    if (cursor.x >= 0) {
+        ::core::tui::Point const cell{.x = cursor.x - left, .y = cursor.y};
+        bool const shown = cell.x >= 0 && cell.y >= 0 && cell.x < drawn.width && cell.y < drawn.height;
+        if (shown) {
+            screen.setCursor(drawn.y + cell.y, drawn.x + cell.x);
+        }
+        screen.setCursorVisible(shown && scratch.cursorVisible());
+    } else if (!scratch.cursorVisible()) {
+        screen.setCursorVisible(false);
+    }
+}
+
+void WidgetBase::place(::core::tui::Rect area) {
+    if (area.empty()) {
+        _view->setArea({});
+        return;
+    }
+    auto const shift = _container != nullptr ? _container->drawShift() : ::core::tui::Point{};
+    _view->setArea(area.offset(-shift.x, -shift.y));
+}
+
 EventResult WidgetBase::key(::core::tui::KeyEvent const& /*key*/) { return EventResult::Ignored; }
 
 void WidgetBase::click(::core::tui::Point /*cell*/) { activate(); }
@@ -193,7 +281,7 @@ EventResult WidgetBase::release(::core::tui::MouseEvent const& mouse) {
     auto const bounds = _view->screenBounds();
     bool const inside = cell.x >= 0 && cell.y >= 0 && cell.x < bounds.width && cell.y < bounds.height;
     if (inside && actionable()) {
-        click(cell);
+        click({.x = cell.x + _drawShift.x, .y = cell.y + _drawShift.y});
     }
     return EventResult::Handled;
 }
@@ -253,9 +341,33 @@ std::vector<WidgetBase*> ContainerBase::shownChildren() const {
     return shown;
 }
 
+std::vector<::core::tui::Rect> ContainerBase::childAreas(::core::tui::Size /*size*/) const { return {}; }
+
+void ContainerBase::placeChildren(std::span<::core::tui::Rect const> areas) const {
+    auto area = areas.begin();
+    for (auto* child : _children) {
+        child->place(area != areas.end() ? *area : ::core::tui::Rect{});
+        if (area != areas.end()) {
+            ++area;
+        }
+    }
+}
+
 void ContainerBase::childAttached(WidgetBase& /*child*/) {}
 
 void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
+
+::core::tui::Size requestedSize(WidgetBase const& widget) {
+    auto size = widget.naturalSize();
+    auto const& hints = widget.layout();
+    if (hints.width.kind == ui::Sizing::Kind::Fixed) {
+        size.width = std::max(0, hints.width.amount);
+    }
+    if (hints.height.kind == ui::Sizing::Kind::Fixed) {
+        size.height = std::max(0, hints.height.amount);
+    }
+    return size;
+}
 
 ::core::tui::Size stackNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap) {
     bool const vertical = axis == ui::Axis::Vertical;
@@ -266,7 +378,7 @@ void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
         if (!child->shown()) {
             continue;
         }
-        auto const natural = child->naturalSize();
+        auto const natural = requestedSize(*child);
         along += vertical ? natural.height : natural.width;
         across = std::max(across, vertical ? natural.width : natural.height);
         ++count;
@@ -289,39 +401,40 @@ struct Placement {
 /// @p size along the main axis.
 int mainExtent(::core::tui::Size size, bool vertical) { return vertical ? size.height : size.width; }
 
-/// Gives @p child the slot at @p offset, @p extent long, along the main axis; across, its sizing decides.
-void place(WidgetBase& child, Placement const& placement, int offset, int extent) {
+/// The slot at @p offset, @p extent long, along the main axis; across, @p child's sizing decides.
+::core::tui::Rect slotOf(WidgetBase const& child, Placement const& placement, int offset, int extent) {
     auto const& area = placement.area;
     if (placement.vertical) {
-        int const across = layout::crossExtent(child.layout().width, area.width);
-        child.view().setArea({.x = area.x, .y = area.y + offset, .width = across, .height = extent});
-    } else {
-        int const across = layout::crossExtent(child.layout().height, area.height);
-        child.view().setArea({.x = area.x + offset, .y = area.y, .width = extent, .height = across});
+        return {.x = area.x,
+                .y = area.y + offset,
+                .width = layout::crossExtent(child.layout().width, area.width),
+                .height = extent};
     }
+    return {.x = area.x + offset,
+            .y = area.y,
+            .width = extent,
+            .height = layout::crossExtent(child.layout().height, area.height)};
 }
 
-/// The solver's mode: the shown children past the skipped ones share the area; the others get none of it.
-void arrangeSolved(std::span<WidgetBase* const> children, Placement const& placement, StackSpec const& spec) {
-    std::vector<WidgetBase*> placed;
+/// The solver's mode: the shown children share the area; the hidden ones get none of it.
+void solvedAreas(std::span<WidgetBase* const> children, Placement const& placement, StackSpec const& spec,
+                 std::span<::core::tui::Rect> areas) {
+    std::vector<WidgetBase const*> placed;
     placed.reserve(children.size());
-    std::size_t skipped = 0;
-    for (auto* child : children) {
-        if (!child->shown() || skipped < spec.skip) {
-            skipped += child->shown() ? 1U : 0U;
-            child->view().setArea({});
+    std::vector<::core::tui::Rect*> slots;
+    slots.reserve(children.size());
+    std::vector<layout::Item> items;
+    items.reserve(children.size());
+    for (auto const [child, area] : std::views::zip(children, areas)) {
+        if (!child->shown()) {
             continue;
         }
-        placed.push_back(child);
-    }
-
-    std::vector<layout::Item> items;
-    items.reserve(placed.size());
-    for (auto const* child : placed) {
         auto sizing = placement.vertical ? child->layout().height : child->layout().width;
         if (sizing.kind == ui::Sizing::Kind::Content && child->expandsByDefault()) {
             sizing = ui::Sizing::stretch(1);
         }
+        placed.push_back(child);
+        slots.push_back(&area);
         items.push_back(
             layout::Item{.sizing = sizing, .natural = mainExtent(child->naturalSize(), placement.vertical)});
     }
@@ -329,18 +442,18 @@ void arrangeSolved(std::span<WidgetBase* const> children, Placement const& place
     auto const extents = layout::distribute(items, layout::Track{.length = length, .gap = spec.gap});
 
     int offset = 0;
-    for (auto const [child, extent] : std::views::zip(placed, extents)) {
-        place(*child, placement, offset, extent);
+    for (auto const [child, slot, extent] : std::views::zip(placed, slots, extents)) {
+        *slot = slotOf(*child, placement, offset, extent);
         offset += extent + spec.gap;
     }
 }
 
 /// The extents' mode: each child takes the next extent, a hidden one keeping its slot empty.
-void arrangeColumns(std::span<WidgetBase* const> children, Placement const& placement, StackSpec const& spec) {
+void columnAreas(std::span<WidgetBase* const> children, Placement const& placement, StackSpec const& spec,
+                 std::span<::core::tui::Rect> areas) {
     auto given = spec.extents.begin();
-    std::size_t skipped = 0;
     int offset = 0;
-    for (auto* child : children) {
+    for (auto const [child, area] : std::views::zip(children, areas)) {
         int extent = 0;
         if (given != spec.extents.end()) {
             extent = std::max(*given, 0);
@@ -348,15 +461,8 @@ void arrangeColumns(std::span<WidgetBase* const> children, Placement const& plac
         } else {
             extent = mainExtent(child->naturalSize(), placement.vertical);
         }
-        if (child->shown() && skipped < spec.skip) {
-            ++skipped;
-            child->view().setArea({});
-            continue;
-        }
         if (child->shown()) {
-            place(*child, placement, offset, extent);
-        } else {
-            child->view().setArea({});
+            area = slotOf(*child, placement, offset, extent);
         }
         offset += extent + spec.gap;
     }
@@ -364,12 +470,21 @@ void arrangeColumns(std::span<WidgetBase* const> children, Placement const& plac
 
 }  // namespace
 
-void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area, StackSpec const& spec) {
+std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
+                                          StackSpec const& spec) {
     Placement const placement{.area = area, .vertical = spec.axis == ui::Axis::Vertical};
+    std::vector<::core::tui::Rect> areas(children.size());
     if (spec.extents.empty()) {
-        arrangeSolved(children, placement, spec);
+        solvedAreas(children, placement, spec, areas);
     } else {
-        arrangeColumns(children, placement, spec);
+        columnAreas(children, placement, spec, areas);
+    }
+    return areas;
+}
+
+void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area, StackSpec const& spec) {
+    for (auto const [child, placed] : std::views::zip(children, stackAreas(children, area, spec))) {
+        child->place(placed);
     }
 }
 
