@@ -1550,6 +1550,19 @@ and ends — and every connection's socket, which resumes each connection's
 parked read the same way. `port()` reads `0` afterwards, and the port is free
 to rebind, matching `QtWebSocketServer`.
 
+**A failed accept is retried or ends the flow, by whether it can recur.**
+Exhaustion (`EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`) and any other failure the
+next attempt may not repeat waits 50 ms and accepts again, so a process out of
+descriptors keeps its listener and recovers when descriptors are freed. A
+listener that can no longer accept at all ends the flow instead: one that has
+stopped listening (`EINVAL`), a closed or foreign descriptor
+(`EBADF`/`ENOTSOCK`) or a non-stream socket (`EOPNOTSUPP`) fails every attempt
+the same way. core-cpp reports these as `BadHandle`/`Unsupported`, or, in
+releases inside the supported range that predate that classification, as
+`SystemError` carrying the `errno`; both are recognised. The server then drops
+the listener, so `port()` reads `0` and a later `listen()` binds afresh.
+Connections already accepted are untouched.
+
 **The listener's non-blocking mode stops at the listener.**
 `TcpSocket`'s fd-adopting constructor clears `O_NONBLOCK` on every descriptor it
 takes ownership of, so a connection from `accept()` or `tryAccept()` is always
@@ -2040,7 +2053,7 @@ keepalive to tell "idle" from "dead" apart).
 | `SocketServer(loop, server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server` on `loop`, an `exec::IoLoop` that must outlive it. Does not start listening. |
 | `SocketServer(server, port = 0, cfg = Config{})` | The same, on a private `IoLoop` the first `listen()` creates. |
 | `listen()` | On the loop, and waited for: binds `127.0.0.1:port` with `SO_REUSEADDR`, hands the listener to the loop and starts the accept flow; returns success. `false` if the port cannot be bound or, for the loop-less constructor, the loop cannot be created (a process out of descriptors). |
-| `port()` | Bound port (OS-assigned when constructed with `0`), or `0` when not listening. Atomic; callable from any thread. |
+| `port()` | Bound port (OS-assigned when constructed with `0`), or `0` when not listening — including after the listener stopped being able to accept. Atomic; callable from any thread. |
 | `close()` | On the loop, and waited for (inline on the loop's own thread): closes the listener, reclaims every connection's models (`closeConnection`) and closes its socket. `port()` reads `0` afterwards and the port is free to rebind. Idempotent; also run by the destructor. Concurrent callers on a **live** object are safe — each call is one loop task, run one at a time. Racing `close()` against the *destructor* remains out of contract, as for any member call. |
 
 ## `executeInto` — settling the caller's own completion
