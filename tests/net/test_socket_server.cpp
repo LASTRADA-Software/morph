@@ -1208,28 +1208,27 @@ TEST_CASE("SocketServer::close() releases the listening port", "[net][socket_ser
 
 TEST_CASE("acceptListenerIsDead: a failure that recurs on every accept ends the flow, any other is retried",
           "[net][socket_server]") {
-    using ::core::net::NetError;
     using ::core::net::NetErrorCode;
+    auto const dead = [](NetErrorCode code, int systemCode) {
+        return morph::net::detail::acceptListenerIsDead(::core::net::NetError{.code = code, .systemCode = systemCode});
+    };
     // Dead: newer core-cpp's own classification, and the SystemError + errno
     // spelling the pinned release reports for the same conditions.
-    CHECK(morph::net::detail::acceptListenerIsDead(NetError{.code = NetErrorCode::BadHandle, .systemCode = EBADF}));
-    CHECK(morph::net::detail::acceptListenerIsDead(NetError{.code = NetErrorCode::Unsupported, .systemCode = 0}));
+    CHECK(dead(NetErrorCode::BadHandle, EBADF));
+    CHECK(dead(NetErrorCode::Unsupported, 0));
     for (int const errnoValue : {EINVAL, EBADF, ENOTSOCK, EOPNOTSUPP}) {
         CAPTURE(errnoValue);
-        CHECK(morph::net::detail::acceptListenerIsDead(
-            NetError{.code = NetErrorCode::SystemError, .systemCode = errnoValue}));
+        CHECK(dead(NetErrorCode::SystemError, errnoValue));
     }
     // Retried: exhaustion clears once descriptors or memory are freed.
     for (int const errnoValue : {EMFILE, ENFILE, ENOBUFS, ENOMEM}) {
         CAPTURE(errnoValue);
-        CHECK_FALSE(morph::net::detail::acceptListenerIsDead(
-            NetError{.code = NetErrorCode::SystemError, .systemCode = errnoValue}));
+        CHECK_FALSE(dead(NetErrorCode::SystemError, errnoValue));
     }
     // Retried: one peer's failure, not the listener's -- even carrying an
     // errno that would mean a dead listener under SystemError.
-    CHECK_FALSE(
-        morph::net::detail::acceptListenerIsDead(NetError{.code = NetErrorCode::PermissionDenied, .systemCode = EINVAL}));
-    CHECK_FALSE(morph::net::detail::acceptListenerIsDead(NetError{.code = NetErrorCode::HostUnreach, .systemCode = 0}));
+    CHECK_FALSE(dead(NetErrorCode::PermissionDenied, EINVAL));
+    CHECK_FALSE(dead(NetErrorCode::HostUnreach, 0));
 }
 
 TEST_CASE("SocketServer: a listener that stops listening ends the accept flow instead of retrying it",
