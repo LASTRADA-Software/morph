@@ -1356,11 +1356,11 @@ public:
         // With the swap: a run admitted before this point is in `snapshot`
         // and is failed below, and one admitted after it is not.
         _cancels->record(exc);
-        for (auto const& weak : _taskRuns) {
-            if (auto const run = weak.lock()) {
-                static_cast<void>(run->stopSource->request_stop());
-            }
-        }
+        // Settle before stopping. A stopped Task handler resumes on its strand
+        // and settles its own sink with `OperationCancelled`; requested first,
+        // that settle can land before this one, and the caller would be
+        // answered with the stop instead of @p exc. Settled first, the
+        // handler's later settle is the ignored one.
         for (auto& weak : snapshot) {
             if (auto sink = weak.lock()) {
                 // May race a reply settling the same sink; `ISettleSink`'s
@@ -1368,6 +1368,11 @@ public:
                 // `CompletionState`'s first-result-wins gave this loop before
                 // the sink existed.
                 sink->settleException(exc);
+            }
+        }
+        for (auto const& weak : _taskRuns) {
+            if (auto const run = weak.lock()) {
+                static_cast<void>(run->stopSource->request_stop());
             }
         }
     }
