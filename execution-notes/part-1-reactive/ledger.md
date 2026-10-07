@@ -1,0 +1,111 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-10-04-declarative-ui-tui-1-reactive.md
+Spec: docs/superpowers/specs/2026-10-04-declarative-ui-tui-design.md (§3, §4, §4b, §7, §9); contract: docs/superpowers/plans/2026-10-04-declarative-ui-tui-interfaces.md
+Branch feature/declarative-ui; part starts at 7bb681fa (after Part 0 squash).
+## Pre-flight scan
+Table: preflight.md (69 rows: 11 CONFLICT, 20 NOTE, 38 OK; all plan code built + tested in scratch with repo flags, ASan/UBSan/TSan, Doxygen 0 warnings; GCC/MSVC not checked).
+Ruling: rulings 1–20 in preflight.md "Proposed rulings" are ACCEPTED as written (6: prefer try/catch in TimerHandle::cancel over NOLINT) — each resolves a measured build/tidy/correctness conflict toward the spec/contract — cost: per-ruling, stated there.
+Ruling map → T1: 1,7,8,9,10,18,19 · T2: 1,7,8,19 · T3: 11,19 · T4: 4,19 · T5: 2,3,5,19 · T6: 4,5,7,14,16,19 · T7: 4,5,14,16,19 · T8: 4,11,14,17,19 · T9: 6,11,13,14,18,19 · T10: 10,12,15 · T11: 11,20
+## Tasks
+- Task 1: dispatched (BASE 7bb681fa)
+- Task 1: implemented f4438229; new names: detail::DeeplyEqualityComparable<T> (T2/T6 reuse), detail::kDefaultMaxEffectRunsPerFlush (T10 pins); destructors need /// @brief under strict Doxygen; under review
+- Task 1: review NEEDS FIXES — Important: (1) Effect destroying itself in its own run = heap-use-after-free (reproduced under ASan); (2) off-owner get() still tracks (plan-mandated `static_cast<void>(checkOwner()); trackRead();`), plus untracked/batch/Node ctor touch core state off-owner. Minors: Effect retention test doesn't pin "new" sources; move-only F accepted then fails in std::function; adoptSources not exception-safe; test name vs ruling 10 wording; flush-during-widget-event repost loop (→ T10 docs)
+- Ruling: off-owner operations are refused after the report, as spec §3 says ("dropped"), overriding the plan's report-then-proceed code in get()/untracked()/batch(); the Node constructor reports and keeps its counter consistent — cost: an off-owner read returns without subscribing (it was a data race before).
+- Ruling: an Effect may destroy itself (or its owner scope) during its run; the graph must survive it, with a test — Parts 4–5 remount inside Effect bodies — cost: one guard flag per running node.
+- Task 1: minor (→ T10): document in signals.md that a flush deferred by an open widget event re-posts itself, so a modal loop pumping the owner inside a callback spins
+- Task 1: fix round 1 dispatched
+- Task 1: fix round 1 → 3cfd8af3 (also fixed Effect closure freed mid-run; libc++ lacks move_only_function → shared_ptr body + move_constructible; off-owner batch/widgetEvent/untracked: reported, body runs without touching runtime state); Computed self-destroy guard → T2 must test; under re-review
+- Task 1: re-review: findings 1,3,4,5,6 closed; 2 partly (refusal of off-owner batch/untracked/widgetEvent not pinned by tests); new out-of-scope: ~Node off-owner unreported race → fix round 2 dispatched
+- Task 1: (→ T10) signals.md must state off-owner batch/untracked/widgetEvent behaviour: reported, body runs, runtime state untouched, every graph op inside refused individually (spec §3 says "dropped"; deviation stated in squash body)
+- Task 1: nit (deferred): Check loop skips one source when an earlier and the current source are both destroyed in one pull — benign
+- Task 1: fix round 2 → d34abc32 (refusal pinned via batchDepth()/isInWidgetEvent() accessors; ~Node off-owner reports kOffOwner); controller read the 13-line header diff: clean
+- Task 1: complete (commits 7bb681fa..d34abc32, review clean after 2 rounds)
+- Task 2: dispatched (BASE d34abc32)
+- Ruling: Task 2 Computed keeps a failure as state (recompute catches+stores; a read during failure rethrows and later reads retry; repeated failure = unchanged; recovery always propagates; updateIfNecessary returns bool for 'destroyed') instead of the brief's throw-through-pull design — the brief's design measurably breaks 4 cases (stale C after A->B(throws)->C, catching Effect reported as kEffectThrew, recovery-to-same-value stuck, two catching readers) and spec §3 says 'rethrows to its reader and retries on the next read' — cost: one stored exception_ptr per Computed; deviation stated in squash body.
+- Task 2: implemented 03047aff (failure-as-state); concerns: pull guard unobservable (kept); self-destroying read throws logic_error unreported (no site); failing Computed re-runs once per reader per flush; under review
+- Task 2: review NEEDS FIXES — I1 new failure after source change treated as unchanged (stale error message); I2 successful retry outside flush leaves observers queued with no flush; I3 cycle formed after first evaluation → SIGSEGV (self-read guard checks only _computing); retry storm measured bounded; diamond glitch-free; '1 expected failure' = pre-existing [!shouldfail] test_replay_ledger.cpp:46 → fix round 1 dispatched
+- Task 2: fix round 1 → 02dc4155 (I1 unchanged only for forced retry of a Clean node; I2 every Computed read opens a batch; I3 Node::isPulling refuses reads during a pull → logic_error + kComputedReadsItself); M1 no site (supported behaviour, not misuse); under re-review
+- Task 2: re-review passed (I1–I3 addressed, M1 decline accepted; probes: nested batch in flush posts nothing, outer batch posts once, widgetEvent ok, off-owner refused, diamond reads not refused); new Minor: Check-node direct read of failing Computed counts as change (extra Effect run) → fix round 2 dispatched with doc wrap cosmetic
+- Task 2: fix round 2 → 9d2c19e6 (pull first, then retry only an already-seen failure; isClean removed); controller read the header diff: clean
+- Task 2: complete (commits d34abc32..9d2c19e6, review clean after 2 rounds)
+- Task 3: dispatched (BASE 9d2c19e6)
+- Task 3: implemented 246bd2de (test-only; 11 mutation rows, re-post now pinned by in-event pending()==1); under review
+- Task 3: review approved (every existing site pinned with report+refusal; no races); minors → fix round 1 (bound write-cycle/self-read tests so regressions assert; pending()==0 after foreign set; CHECK not REQUIRE in widgetEvent lambda)
+- Task 3: (→ T5) kSendInUpdate has no test yet — Task 5 must pin it with report + refusal
+- Task 3: fix round 1 → 0df7d303 (test-only; mutations of the write-cycle and self-read guards now fail as assertions, exit 42; write-cycle runs pinned at 11 = construction + 10); controller read the diff: clean
+- Task 3: complete (commits 9d2c19e6..0df7d303)
+- Task 4: dispatched (BASE 0df7d303)
+- Task 4: implemented 0f8cc68f; concerns: clear() moves out before destroying (deviation); untested: Effect clearing its scope during its first run inside scope.effect(); @file cites signals.md (arrives T10); under review
+- Task 4: review NEEDS FIXES — Important: first-run scope.reset() inside scope.effect() = heap-use-after-free (measured ASan); adopt's reserve(size+1) quadratic (measured 8.4 s / 200k). Minors: test 6 non-discriminating; off-owner doc overclaims; make-in-dtor-during-clear loops
+- Ruling: Scope survives being destroyed during an Effect's first run (alive token; the new object is destroyed at once, `this` untouched); a first-run clear() keeps the new Effect — later parts unmount from Effect bodies and a first run is a run like any other — cost: one shared token per Scope.
+- Task 4: fix round 1 dispatched
+- Task 4: fix round 1 → 2e8cbd91 (in-progress make() frames marked dead by ~Scope instead of a shared token; adopt fixed: 200k makes 8293→12 ms probe; test 6 discriminates); under re-review
+- Task 4: re-review: all 5 addressed (probe: nested/throwing/destroying makes clean under ASan); dangling ref from effect() after first-run destroy: documented, accepted (only the destroying code can hit it); minors → fix round 2 (throwing-ctor frame-unlink test; doc: object dtor must not use dead scope)
+- Task 4: fix round 2 → 301ff7fc (throwing-ctor test fails without leave() under ASan detect_stack_use_after_return=1; doc line)
+- Task 4: complete (commits 0df7d303..301ff7fc, review clean after 2 rounds)
+- Task 4: (→ T11) the throwing-ctor Scope test needs ASAN_OPTIONS=detect_stack_use_after_return=1 to observe its failure; T11's ASan run should set it (or confirm the preset does)
+- Task 5: dispatched (BASE 301ff7fc)
+- Task 5: implemented 96c2d857; deviations: move-only update support, ToFailMsg takes exception_ptr const&, 5 extra tests; concern: update destroying its own Store unhandled; under review
+- Task 5: review NEEDS FIXES — Important: update destroying its own Store = UAF (measured: plain send and via request(); closure freed mid-call). Minors: success-path throws logged not Failed (doc); request() has no latest-wins (doc); owner check is per thread not per executor (Task 1 design)
+- Ruling: Store survives being destroyed by its own update (local closure copy + liveness frame), as Node (T1) and Scope (T4) do — consistent self-destruction guarantees across the layer — cost: a stack frame per send.
+- Task 5: minor (deferred → final review): owner affinity is per thread; a second executor on the same thread delivers without kOffOwner (inherent to the noteOwner/OwnerAffinity design)
+- Task 5: fix round 1 dispatched
+- Task 5: fix round 1 → 04529093 (UpdateFrame on send()'s stack marked by ~Store; type-erased shared update kept alive by send; docs for logged throws and no latest-wins); ASan RED→GREEN both paths; controller read the header diff: clean
+- Task 5: complete (commits 301ff7fc..04529093, review clean after 1 round)
+- Task 5: (→ T11) the "destructor marks the running update" mutation fails only under ASan — T11's ASan run is its gate
+- Task 6: dispatched (BASE 04529093)
+- Task 6: implemented 7c38e012 (+2 reasoned NOLINTs in signal.hpp for exception_ptr); concerns: fetcher destroying its Query must not read its action after (doc only); stop request tested via fake only; ruling-5 NOLINT suppresses nothing; under review
+- Task 6: review NEEDS FIXES — Important: idle "nothing in flight" untested (mutant survives). Minors: ruling-5 NOLINT dead (measured); signal.hpp exception_ptr NOLINTs → .clang-tidy AllowedTypes; error() doc overstates; 3 probed cases untested; batch-per-delivery unobservable (kept)
+- Ruling: ruling 5's NOLINT is removed — its measured premise does not hold for the code as built (clang-tidy 22.1.8 finds nothing) — cost: none; a dead suppression would hide a future real finding.
+- Task 6: fix round 1 dispatched
+- Task 6: fix round 1 → 4512c0b0 (idle test kills the surviving mutant; 3 probed cases tested; dead NOLINT removed; .clang-tidy AllowedTypes ^std::exception_ptr$ replaces 2 NOLINTs, shown load-bearing; error() doc)
+- Task 6: complete (commits 04529093..4512c0b0, review clean after 1 round)
+- Task 7: dispatched (BASE 4512c0b0)
+- Task 7: implemented bf3c1472; concerns: invalidated query destroyed while Mutation lives (undetected); runner throw after destroying mutation dropped; off-owner reply leaves pending stuck (as Query); under review
+- Task 7: review APPROVED (probes: owning struct either member order safe; independent-lifetime listed query → UAF, documented contract accepted; runner-throw-after-destroy dropped as in Query; off-owner reply leaves Mutation pending() stuck permanently unlike Query); doc minors → fix round 1
+- Task 7: fix round 1 → 27ed30f5 (doc-only: lifetime rule; off-owner pending stuck)
+- Task 7: complete (commits 4512c0b0..27ed30f5)
+- Task 8: dispatched (BASE 27ed30f5)
+- Task 8: implemented c651cb6f; ASan/TSan/20x repeat clean; concerns: identical consecutive publishes don't notify (equality skip); clang-tidy reports 2 possible leaks in completion.hpp (pre-existing, unverified); MainThreadExecutor deviation (ruling 17) → must go in squash body; under review
+- Note (→ T11): clangd's embedded clang-tidy flags cppcoreguidelines-prefer-member-initializer at control.hpp:101 (Query _effect) — where T6 removed ruling 5's NOLINT as dead per CLI clang-tidy 22.1.8. T11 must run CI's clang-tidy-diff configuration (Linux CI is the authority) on control.hpp and restore the reasoned NOLINT if it fires there.
+- Task 8: review APPROVED. (a) equality skip on identical publishes: not a defect — no Subscription consumer in Parts 2–10; latest() is state per spec (doc + test added in round 1). (b) completion.hpp:205/229 clang-tidy NewDeleteLeaks = analyzer false positives (LSan probe 1000x each path clean; control leak detected) — not filed. (c) owner check kept (defence in depth). Minors → fix round 1 (doc skip + test; case 5/7 comment precision)
+- Ruling: Subscription keeps Signal's equality skip (state semantics, as spec §4b names it latest()) — no consumer needs every-publish; refreshOn covers that — cost: a later consumer wanting events must use refreshOn.
+- Task 8: fix round 1 → 42d82b01 (skip documented + test; cases 5 and 8 drain the owner after the reply; case 7 comment); 20/20 repeats on both builds
+- Task 8: complete (commits 27ed30f5..42d82b01)
+- Task 9: dispatched (BASE 42d82b01)
+- Task 9: implemented ee001ce1; concerns: empty-catch NOLINT in TimerHandle::cancel; period runs from construction (key change before tick → 2 fetches close together); null-scheduler check moved before first fetch; Apple python3 leaks CPATH/SDKROOT into children (tooling); under review
+- Task 9: review NEEDS FIXES — Important: (1) Scheduler contract lacks cancel guarantees Query's raw-this timer relies on (cancel-returns ⇒ never runs even if queued; cancel from inside callback; handles outlive scheduler); (2) measured: fetch slower than period never shows a value (each tick supersedes); key change at 999ms + tick at 1000ms cancels the fresh fetch. Minors: ManualScheduler after(0) self-re-arm livelocks advance; missed-period catch-up differs from real schedulers; advance-from-callback undetected; negative refreshEvery silently off
+- Ruling: timed refresh = a tick refetches only when no call is in flight (a tick during a call is skipped); the period restarts whenever a call is issued (key change, refetch, invalidation, tick) — implemented as a one-shot after(refreshEvery) re-armed on issue/skip — spec §4b/§5b are silent; supersede-on-tick starves any fetch slower than its period (measured); hung calls stay bounded by the bridge's client timeout, which Poller retries — cost: Part 6's plan test "Poller: a refetch while a page is in flight applies its events once" (P6:2441) expects a tick to supersede a late reply; Part 6 must adapt that test (the supersede path is still reachable via key change) and state the deviation.
+- Ruling: Scheduler states (a) after cancel() returns on the owner the callback never runs, even if already due/queued, (b) cancel() is allowed inside the callback, (c) a handle may outlive its scheduler, (d) every() does not catch up missed periods (next deadline counted from the firing); ManualScheduler matches (d); Query's timer lambda is also gated through _lifetime — cost: TUI/Qt Scheduler impls in Parts 3–4 must honour (a)–(d) (their tests should pin them).
+- Task 9: fix round 1 dispatched
+- Task 9: fix round 1 → afccadb3 (items 1–5; but ManualScheduler changed to jump-to-target firing each due timer once, following ruling (d))
+- Ruling (corrects the (d) part of the Scheduler ruling above): "no catch-up" applies to a real owner loop that was blocked; ManualScheduler models a never-blocked loop, so advance() steps the clock deadline by deadline and every() fires once per elapsed period; a callback-created timer due at the current firing time waits for the next advance() (livelock guard) — Part 6's workout tests (P6:~4909, ~4951) expect per-second ticks across advance(10000ms) — cost: none beyond round 2.
+- Task 9: fix round 2 dispatched
+- Task 9: fix round 2 → 0d3bab0b (stepwise fake clock restored; 26 mutants caught); under re-review (rounds 1+2)
+- Task 9: re-review ACCEPTED rounds 1+2 (all 5 items yes; off-owner tick stops refresh: accepted — re-arming off-owner would race; (a) achievable by core-cpp EventLoop::cancelTimer and QTimer stop+deleteLater). Downstream contradictions recorded in .superpowers/sdd/program-notes.md (P6 Poller deadline + test; P8/P9 tests settle before advancing; P3/P4 scheduler guarantees). (→ T10) control.md must not say "re-fetches the current key every period" (P1:4135) — state the skip/restart rule.
+- Task 9: Minor (measured) fake clock can run backwards → fix round 3 dispatched
+- Task 9: fix round 3 → e48eaac6 (deferred zero-delay timer due at next advance start; adds ManualScheduler::now())
+- Task 9: complete (commits 42d82b01..e48eaac6, review clean after 3 rounds)
+- Task 10: dispatched (BASE e48eaac6)
+- Task 10: implemented 78c687e8 (+ store.hpp request() doc corrected per ruling 12); 12 claims read-only; 'removed spec-mentions gate' to verify; under review
+- Task 10: review NEEDS FIXES — Important (reproduced at 78c687e8): after a kWriteCycle, an Effect reading through a Computed never re-runs on later writes (dropQueue/settle leave the intermediate Computed Dirty; markStale stops at it). Minors: off-owner never-computed read IS reported; "every read opens a batch" only on owner; A→B→A within a flush needs ==; duplicate STATIC_REQUIRE. Removed gate = drift-guard.yml deleted on master (#755) — correctly not restored.
+- Ruling: the write-cycle recovery defect is fixed in this part (graph core is unshipped work of this branch, so per AGENTS.md it belongs to the change, not an issue) — fresh implementer, test first — cost: one more graph-core change late in the part; T11's gates re-cover it.
+- Task 10: fix round 1 dispatched (fresh implementer, opus: graph fix + doc minors)
+- Task 10: fix round 1 → b7fb68ed (stale transitive sources flagged so the next write passes once; also fixes Effect-own-write-leaves-Computed-stale and throw-before-read cases) + 56a7d1cc (doc minors); under re-review
+- Task 10: re-review — finding 1 fixed (5000-seed fuzz: 0 inconsistent/0 missed vs 6650 missed on base); minors fixed; NEW Important (measured): stack overflow in flag walk on a cycle formed after a refused kComputedReadsItself → fix round 2
+- Ruling: an Effect writing a Signal it reads through a Computed is a real feedback loop (re-runs when the Computed is pulled; with a second reader it is a bounded, reported write cycle); the self-write exemption covers direct reads only — documented and pinned, not a defect, not filed — cost: authors must read directly or untracked to avoid it.
+- Ruling: a failed enqueue (bad_alloc) losing an Effect behind a Computed (pre-existing) is documented narrowly, not fixed — allocation failure in a UI graph is not a recoverable path the spec promises — cost: docs only.
+- Task 10: fix round 2 → 02c53c51 (flag cleared before walk, restored on throw; cycle2 test SIGSEGV→pass; self-write-through-Computed behaviour pinned + documented; narrowed docs); fuzz 0/0; extra runs 330 vs 302 base only with throwers (ruled acceptable, item 5)
+- Task 10: complete (commits e48eaac6..02c53c51: 78c687e8 docs, b7fb68ed graph fix, 56a7d1cc doc minors, 02c53c51 cycle fix)
+- Task 11: started (BASE 02c53c51)
+- Task 11: gates — build/reactive 1923/1923; ASan (+detect_stack_use_after_return) and TSan [reactive] 171/628 clean, instrumentation confirmed (labelled: Homebrew-LLVM builds of existing dirs, not --preset reconfigure); clang-tidy-diff recipe over 48 files: 3 test findings fixed in c9f20f0b; control.hpp ~101 clean, scheduler.hpp NOLINT load-bearing; real check_install_export.sh passes (bash 5 + GNU findutils), 62 headers incl. 7 reactive. completion.hpp NewDeleteLeaks = known false positive (T8 LSan probe), unchanged file — not filed.
+- Task 11: squashed → ce59d9f1 "reactive: signal graph, view state and declarative control" (tree identical; body states 9 deviations)
+- Task 11: complete. Part 1 final review dispatched (opus) over 7bb681fa..ce59d9f1
+- Part 1 final review: ready with fixes. I1 child Effect can run before the parent that unmounts it (queue order = write order; measured); I2 refetch()/run() don't untrack fetcher/runner → duplicate mutation from an Effect (measured; Parts 5/8 hand-roll the wrap = missing seam); I3 Query value keeps previous key's data after new key's fetch fails (measured; contradicts control.md). Minors M1–M7.
+- Ruling: the flush runs queued Effects in creation order (monotonic id), so a parent runs before the children it created; Effects created mid-flush run after — Part 2 views unmount children from parent Effects; making authors order writes is not a rule anyone can keep — cost: an ordered queue per flush.
+- Ruling: Query::refetch's fetcher call and Mutation::run's runner call are untracked, as the key path and Store::send already are — cost: none.
+- Ruling: a failure for a NEW key clears value() (the old key's data must not show under the new key); a failed refetch of the SAME key keeps value() — cost: a view shows empty + error after a failed key change.
+- Ruling: afterFlush throwing is caught and reported (as kEffectThrew or a dedicated existing-style site), never escapes into the executor; Mutation::run inside a Computed is reported and refused before issuing; M3 doc-only; M4 no change (documented limit); M5 add explicit typename; M6 drop the duplicate real-bridge refreshOn test; M7 tests for I1–I3.
+- Part 1 final fix dispatch (fresh opus); commits wip(reactive) then controller re-squashes onto 7bb681fa
+- Part 1 final fixes: e360dbc7 + 081ebb7d (new sites kAfterFlushThrew, kRunInComputed; queue O(log n)); residual: Query::refetch inside a Computed not refused; under scoped re-review
+- Part 1 final fixes re-review: ACCEPTED all 9 (fuzz 0/0; nested-mount zombies 0 vs 6413 base; requeue in id order; destroyed queued removed; bound intact). Residuals → last small round: refetch-in-Computed refusal (site generalized), write-cycle starvation doc note
+- Part 1 final: last minors e574b6ed (refetch refused in Computed, site kIssueInComputed; starvation doc). Folded e360dbc7..e574b6ed into the part → 2a22b7d9 (tree identical to tested HEAD). PART 1 COMPLETE.

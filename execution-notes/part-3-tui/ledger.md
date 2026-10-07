@@ -1,0 +1,139 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-10-04-declarative-ui-tui-3-tui.md
+Spec: docs/superpowers/specs/2026-10-04-declarative-ui-tui-design.md (§2, §6); contract: docs/superpowers/plans/2026-10-04-declarative-ui-tui-interfaces.md
+Branch feature/declarative-ui; part starts at 69a18881 (after Part 2). Two squash groups: ioloop, then tui.
+## Pre-flight scan
+Table: preflight.md (88 rows: 27 CONFLICT, 14 NOTE; plan code built in scratch against core-cpp v0.7.0; each task's own tests pass as the plan states; Task 18 does not compile and 4/23 conformance cases fail once completed; repo configure/install, TSan, Windows, CI network not measured).
+Ruling: rulings R1–R19 in preflight.md are ACCEPTED as written — each resolves a measured conflict with the actual Part 0–2 code or a program-notes obligation — cost: per-ruling, stated there.
+## Tasks
+- Task 1: dispatched (BASE 69a18881)
+- Task 1: implemented d183ed9c (20x + 20x TSan clean; net tests in build/ioloop-net NET=ON); concern: runAndWait inline on driving thread outside loop scope; under review
+- Task 1: review APPROVED (byte-identical to brief; OwnThread unchanged; owner checks hold; probes: inline close of live timer, Weak::post racing destruction, re-entrant turn — clean). Important (measured): runAndWait hangs forever on a throwing or dropped-unrun task (pre-existing; Caller makes dropped-unrun reachable). Minors: inline body outside ExecutorScope; other-thread turn unchecked; hang-prone test paths.
+- Ruling: fix the runAndWait hang inside the ioloop group, not file it — Caller makes the dropped-unrun path reachable, so it belongs to this change (AGENTS.md), and the fix is smaller than an issue — cost: a behaviour change for OwnThread callers whose task throws (they now see the error instead of hanging); stated in the ioloop squash body.
+- Task 1: fix round 1 dispatched
+- Task 1: fix round 1 → 339312fe (runAndWait: throw reaches waiter, dropped task ends wait; inline body in ExecutorScope; fail-fast tests), a7cc7248 (debug assert foreign turn, only on IoLoop-posted tasks); [caller] count now one higher than R13 (→ T2); under re-review
+- Task 1: re-review passed (all 4 addressed; destructors that runAndWait now terminate instead of hang if close throws cross-thread — close bodies don't throw except user code via RemoteServer::closeConnection/cancelAll)
+- Task 1: minor (deferred): `guarded` doc clause about timer-only/flow-only foreign turns; failure-path detach race in the throw test
+- Task 1: complete (commits 69a18881..a7cc7248)
+- Task 2: dispatched (BASE a7cc7248)
+- Task 2: implemented 67f69598 + 52851e8a (default waitForConnected timeout so the driving-thread check is measured); [caller] 7/7 + net 2/2, 20x plain + TSan; build/clang-tsan reconfigured NET=ON; under review
+- Task 2: review APPROVED (bounded waits, Caller loop turned by test thread, ephemeral ports; minors cosmetic: near-tautological thread asserts; comment wording)
+- Task 2: complete (commits a7cc7248..52851e8a)
+- Task 3: dispatched (BASE 52851e8a)
+- Task 3: implemented f62ea9d5 (executor.md, concurrency_and_lifetimes.md, backend.md, profiler.md, security.md, CHANGELOG); read-only claims: two debug asserts, Hang→Use-after-free row, terminate-on-throwing-close; pre-existing broken anchor backend.md:1126 #protocol-negotiation; under review
+- Task 3: review NEEDS FIXES — wrong SocketServer closeConnection example (no user code in close); SocketBackend example only with inline cbExec; minors (core-cpp turn assert, ~IoLoop assert wording, thirteen, stale one-thread lines, reflows); pre-existing anchor fix in scope → fix round 1
+- Task 3: fix round 1 → e1131970 (docs corrected per review; anchor fixed); accepted
+- Task 3: complete (commits 52851e8a..e1131970)
+- Task 4: gates dispatched (BASE e1131970); squash by controller
+- Task 4: gates — morph_tests 2076/2076 (ctest), net 212; TSan/ASan filters clean (+10x TSan), instrumentation confirmed (substitute); tidy-diff over the 4 group files: one Catch2 3.15.1 EnumCastOutOfRange artefact (also on untouched files; CI pins 3.4.0) — not changed. Nothing to fix.
+- Task 4: squashed ioloop group → d72e512c "core: IoLoopDriver::Caller, the I/O loop on the calling thread" (tree identical; body states the runAndWait fix)
+- Task 4: complete. ioloop GROUP COMPLETE.
+- Task 5: dispatched (BASE d72e512c)
+- Task 5: implemented 646bc8c6 (build/tui; 300 repeats + 200 TSan; header set check is morph_tui_verify_interface_header_sets); concern: LoopExecutor destroy-thread contract undocumented (UAF if destroyed off-thread during a task, inferred); under review
+- Task 5: review APPROVED (TUI OFF: build.ninja + install scripts identical, measured; LoopExecutor meets IExecutor; destroy-thread probe: off-thread destroy then task uses it = UAF in post — document, don't guard); minor fixes → round 1 (doc + FIFO + no-inline-from-task tests)
+- Task 5: fix round 1 → b931b226 (destroy-thread doc; FIFO + post-from-task tests, mutations fail); accepted
+- Task 5: complete (commits d72e512c..b931b226)
+- Task 6: dispatched (BASE b931b226)
+- Task 6: implemented 6f824338 (install tui component; presets; CI; consumer find_package(morph COMPONENTS tui) measured both paths incl. libunicode-found; string(CONCAT) fix for stray ';'); unverified: windows-everything, CI jobs; under review
+- Task 6: (→ T19) README/install docs: a consumer of a TUI install also needs libunicode findable
+- Task 6: review APPROVED; fix round 1: nightly all-features leg gets TUI; CI asserts tui tests ran (-L tui --no-tests=error); string(APPEND) in morphConfig; README libunicode note. Deferred: no CI job installs tui (found-libunicode branch unguarded); unicode.org fetch has no retry (cold cache flake risk, inferred); CONTRIBUTING "widgets compile once" true by squash time.
+- Task 6: fix round 1 → d90c30fb (nightly TUI; -L tui --no-tests=error shown to fail without TUI; APPEND; README); accepted. Unverified until CI: new CI steps.
+- Task 6: complete (commits b931b226..d90c30fb)
+- Task 7: dispatched (BASE d90c30fb)
+- Task 7: implemented 5373ac96 (overflow-free; property checks 5000/2000 rounds; 12 mutations); under review
+- Task 7: (→ T19) spec states reserved-slot rule (R5), negative gaps/padding count as zero, edges saturate; reword "a hidden child takes no space"; leftover cells to first Stretch items
+- Task 7: review APPROVED (deterministic, overflow-free, property tests fixed-seed with real invariants; column-count memory bounded by app input — accepted)
+- Task 7: (→ T8, T9, T13) the solver lays out every item it is given: keep a reserved slot (R5 table cells) by passing Fixed 0 / height-0 GridCell (it still takes its gaps); drop a hidden child by leaving it out — each container must pick the right mode
+- Task 7: complete (commits d90c30fb..5373ac96)
+- Task 8: dispatched (BASE 5373ac96)
+- Task 8: implemented 770ca346 (21 cases incl. 12 for R2/R3/R5/R6; ASan build/tui-asan with core-cpp instrumented; 17 mutations); under review
+- Task 8: (→ T10, T11) View lives in widget.cpp (header-defined View trips portability-template-virtual-member-function); later widgets use adopt(makeView(*this)); FieldView/ListView will hit the same
+- Task 8: (→ T12) collectFocusable takes the widget; Dialog passes the dialog widget and overrides letsChildrenAct(); (→ T15) keep reachability checks when replacing `pointer`
+- Task 8: review NEEDS FIXES — Important (measured): an undrawn (squeezed/skipped) widget keeps stale screen bounds and takes clicks (core-cpp Screen::renderComponent skips setScreenBounds for an empty clipped area). Minor (measured): lost release leaves _pressed → later release clicks. R2/R3/R5/R6/#64 workaround confirmed; R6 measured (moved widget hit at new place).
+- Ruling: guard morph-side (undrawn widget not hit-testable) and fix the pressed-state leak now — cost: none.
+- Pending outward (ask user at next checkpoint): file a core-cpp issue "Screen::renderComponent leaves stale screen bounds when the clipped area is empty, so an undrawn component still takes clicks" (measured via morph probe; core-cpp Screen.cpp ~433-436).
+- (→ T14, T16) core-cpp #65 hover-target UAF is measured real (probe: heap-use-after-free in hover callback via tickHover) and becomes reachable once morph drives tickHover/pollTimeoutMs — Task 14/16 must either not drive hover or guard it (e.g. reset hover on widget destruction if core-cpp exposes a way); decide there.
+- Task 8: fix round 1 dispatched
+- Task 8: fix round 1 → 92e652cb (undrawn widget takes no click; new press ends a lost one; doc); under re-review
+- Task 8: (→ T12) a dialog frame clears its own bounds when undrawn; (→ T15) the pointer rewrite keeps the context-tracked press (a new press ends a lost one) and the undrawn-not-hittable guard
+- Task 8: re-review passed (forgetDrawnBounds from the root render; Context::pressed cleared on press and on destroy — ASan clean; original probe passes except core-cpp #65 hover case)
+- Task 8: residual (→ T12, T15): a hidden or empty-area root never renders, so its subtree keeps old bounds and is hittable from re-show until the next frame; a press that reaches no widget view (hidden root, dialog chrome, outside inline content) does not end a lost press (measured clicks==1) — T12 (dialog chrome/overlay tops) and T15 (pointer rewrite) must close both
+- Task 8: complete (commits 5373ac96..92e652cb)
+- Task 9: dispatched (BASE 92e652cb)
+- Task 9: implemented 8b74f9b5 (24 container cases; 68/68 plain + ASan); concerns: wheel can't scroll a focused child out of view; only axis-stack scrolls; .clang-tidy HeaderFilterRegex doesn't cover src/tui headers (pre-existing warnings in widget.hpp); core-cpp box drawing cuts titles mid-character (Panel draws its own title); under review
+- Pending outward (ask user at next checkpoint): possible core-cpp issue — box drawing truncates a title mid-grapheme (verify with a minimal repro first)
+- Task 9: review APPROVED (R2/R3 hold; Grid drops hidden child per spec; setSpan refuses non-children; morph's subcanvas putString grapheme-safe, measured). Plan-mandated gap: Scroll scrolls only an axis stack. Measured: core-cpp Canvas::drawBox cuts titles by bytes (title vanishes / off-centre for wide chars) — core-cpp issue candidate (pending outward, confirmed). clang-tidy with src/tui filter: 13 findings in widget.hpp (Task 8) hidden by HeaderFilterRegex.
+- Ruling: Scroll is generic — any content laid out at its natural extent and offset (contract: any child; keeps the focused child visible) — cost: a larger change in Task 9's fix round.
+- Ruling: keyboard scrolling, focus to the panel control on collapse, wheel at end passes outward, body click doesn't steal focus — TUI usability the contract implies — cost: small.
+- Ruling: widen .clang-tidy HeaderFilterRegex to src/tui (CI config fixed in the change that needs it) and fix widget.hpp's findings now — cost: none.
+- Task 9: fix round 1 dispatched
+- Task 9: fix round 1 → 7f0b4d56, d138af12, f962bbb3, dfa2f43c (generic Scroll; Tab into view through nested containers; keyboard scroll; wheel end passes outward; panel focus/collapse/body-click; widened HeaderFilterRegex; widget.hpp findings fixed by in-class constructors); 84/84 plain + ASan; under re-review
+- Ruling: CI's clang-tidy-diff stays per-file (it cannot report src/tui private-header findings reached from a .cpp); Task 20's gate runs a full (non-diff) clang-tidy over src/tui/*.cpp and tests/tui with header-filter covering src/tui — cost: a later header finding is caught at the part gate, not on each push.
+- (→ T10–T13) new widgets define constructors in-class; views call `render`, not `paint`; containers place children with place/childAreas, not view().setArea
+- Task 9: re-review passed (360-click Tab sweep, nested scrolls, resize clamp, ASan self-removal — all clean; widened filter adds only src/tui). Minors → round 2: panel click focus guard; Scroll keeps focused child visible after resize/content change (ruling, per contract). Stretched-button full-width hit area: by design.
+- Note: scripts/check_tidy_suppression_scope.sh fails locally on macOS at both 8b74f9b5 and HEAD (pre-existing local issue; T20 should check it under its intended environment)
+- Task 9: fix round 2 → 118ba41a (panel click focus guard; scroll keeps focused child visible after resize/content change without undoing user scrolling); accepted
+- Task 9: complete (commits 92e652cb..118ba41a)
+- Task 10: dispatched (BASE 118ba41a)
+- Task 10: implemented 76a77a1d (24 field cases; 111 plain + ASan; 6 R3 mutations caught by ASan); deviations: multiline Enter = newline never submits (contract); date field reports the instant its text shows; under review
+- Pending outward (ask user at next checkpoint): possible core-cpp issue — InputField silently drops typed characters above U+FFFF (most emoji); morph works around it (verify minimal repro first)
+- Task 10: (→ T18) TuiProbe clears a field with Ctrl+End then Ctrl+U (works in every mode); R1's End+Ctrl+U misses multiline text
+- Task 10: review NEEDS FIXES — Important (measured): date typed without Enter lost (no commit on focus leave). Minors (measured): supplementary chars colliding with Tab/Esc KeyCodes; private-use chars dropped; years >9999 format/parse mismatch; weak mask assertion. core-cpp InputField >U+FFFF drop confirmed (measured).
+- Ruling: DateTimeInput and FilePicker commit when focus leaves as well as on Enter (parseable → onChange once; unparseable → marked invalid, nothing reported; cleared → nullopt) — view.hpp:641 and Qt parity — cost: an onChange without Enter.
+- (→ T19) frontend.md: FilePicker never checks existence (app validates); single-line fields consume Up/Down; DST not representable (fixed offsetMinutes contract limit)
+- Task 10: fix round 1 dispatched
+- Task 10: fix round 1 → 84425de0 (commit on leave for date + path; char conversion before key checks; private-use; year width; mask assertion); concern: leave handler destroying the widget receiving focus unprobed; under re-review
+- Task 10: re-review — items 1–5 addressed; NEW Important (measured ASan, 27-case probe): a commit-on-leave handler destroying the widget about to get focus, or the whole view, → UAF in core-cpp Screen::updateFocus (setFocused on freed newFocus) for Tab/Shift+Tab/mouse
+- Ruling: fix morph-side — blur first, then re-check the target is alive/registered/actionable before focusing it; in scope (handlers may restructure the view) — cost: two focus transitions per move.
+- Pending outward (ask user at next checkpoint): core-cpp issue candidate — Screen::updateFocus calls setFocused on a component destroyed by the previous focus's onBlur (re-entrancy UAF; measured via morph probe)
+- Task 10: fix round 2 dispatched
+- Task 10: fix round 2 → 4f5f9ec0 (every focus move: blur old first, then focus the target only if alive + focusable; 27 probe cases ASan clean; re-check drop → ASan abort; same-instant retype not re-reported); accepted
+- Task 10: complete (commits 118ba41a..4f5f9ec0)
+- (→ T11, T12, T15) every focus move goes through the blur-first-then-recheck helper added in 4f5f9ec0
+- Pending outward batch (ask user at end of Part 3, before squash): 4 core-cpp issue candidates — stale bounds on empty clip (T8), drawBox byte-cut titles (T9), InputField drops >U+FFFF and private-use chars (T10), updateFocus re-entrancy UAF (T10)
+- Task 11: dispatched (BASE 4f5f9ec0)
+- Task 11: implemented a64b9fcd (25 [lists] cases; 149/149 plain + ASan; 11 R3 mutations abort under ASan); under review
+- Pending outward batch +1: core-cpp List::render shortens labels by byte count (measured: "▶ (•) Gr…" in 11 cols where "▶ (•) Green" fits)
+- Task 11: (→ T12) dialog closing must call closeUnreachablePopups
+- Task 11: review NEEDS FIXES — Important (measured): open dropdown list stays operable after its field is no longer drawn (wheel-scrolled out, squeezed, one-row screen). Minors: open list highlight not synced by setSelected; wheel over list swallowed; unreachable Tabs actionable check; right-edge clipping. core-cpp List::render byte-cut confirmed (lone UTF-8 lead byte emitted). morph paintRows grapheme-safe.
+- Task 11: fix round 1 dispatched
+- Task 11: fix round 1 → 62433855 (popup opens only from a drawn field with room; undrawn owner → not drawn, no input, closes on next key; highlight sync; wheel moves highlight; right-edge shift; unreachable Tabs check removed — T18 never calls Tabs::select); accepted on the evidence (RED-first tests, mutations caught)
+- Task 11: complete (commits 4f5f9ec0..62433855)
+- Task 12: dispatched (BASE 62433855)
+- Task 12: implemented 2d7bf448 (27 new cases; 183/183 plain + ASan; 21 mutations); under review
+- Task 12: (→ T14) Context::openDialogs holds dialog widgets: focusFirst compares focus against activeDialog(context)'s frame (host()); (→ T15) fit now empties root views' bounds (hidden-root stale hits closed); edges unhandled: dropdown focused behind a dialog not refocused on close; dialog re-shown while open doesn't take focus
+- Task 12: review APPROVED (all T12 obligations + R2/R3/R6 measured under ASan incl. nested dialogs, destroying and re-entrant handlers, lost presses). Minors → fix round 1.
+- Ruling: after a dialog closes, focus goes to the restore target if alive and focusable, else the first focusable of the top dialog or root — never nowhere while something is focusable — cost: small.
+- Ruling: a hidden Busy does not count as active (no idle redraw); Slider gets press/drag/release with pointer capture (Qt parity) — cost: added pointer code in Slider.
+- Task 12: fix round 1 dispatched
+- Task 12: fix round 1 → ab39c573 (focus fallback rule on close/hide/collapse; popup owner mapping; re-shown dialog retakes focus; restore target kept across nested open; visible-only Busy count; Slider pressAt/dragTo with capture); 194/194 plain + ASan; accepted on evidence
+- Task 12: complete (commits 62433855..ab39c573)
+- Task 13: dispatched (BASE ab39c573)
+- Task 13: implemented 9372e6f3 (24 table cases; 218/218 plain + ASan; 20 mutations; additions: double-click activation 500 ms, table scrolls own rows + wheel, markedRows over all rows); concerns: double-click test sleeps 0.7 s on the real clock; scroll-around-table test unpinned; under review
+- Task 13: (→ T19) document double-click window, hidden cell counts toward column width, table's own scrolling, a no-op click reports nothing
+- Task 13: review APPROVED (R3/R4/R5/R6, scrolling, gating measured under ASan; scroll-around test now pinned by reviewer's mutation; double-click can't flake — only costs 0.7 s). Minors → round 1: wheel event in gating test; _lastClick cleared on key; PageUp/Down by lines; Context::now injectable clock.
+- Task 13: (→ T18) markedRows counts positions among all rows; the probe's selectRows walks shown rows — use one basis (or Task 19 states the rule)
+- Task 13: fix round 1 → 28681c5d (wheel in gating test exposed + fixed: wheel scroll after a focusing click undone next frame; _lastClick cleared on key; PageUp/Down by lines; Context::now); accepted
+- Task 13: complete (commits ab39c573..28681c5d)
+- Task 14: dispatched (BASE 28681c5d)
+- Task 14: implemented 1ddf6d91 (all factories; real views mounted via Mounted; 235/235 plain + ASan, 30 random-order ASan runs; scratch conformance 20/23 — drag cases → T15). Hover decision: morph never ticks core-cpp hover (contract has no tooltips); widget destructor clears the screen's hover target as a guard (removal → ASan UAF). Concern: orphaned child (parent destroyed first) not drawn vs RecordingBackend making it a root. Under review.
+- Task 14: (→ T17) Session calls backend.focusFirst() before every draw
+- Task 14: review APPROVED (factories match contract; orphan behaviour not required by contract/conformance — document in T19; hover guard sound vs core-cpp's only dereference site (tick→onHoverConfirmed); conformance 20/23 confirmed, only drag fails; Mounted integration real, ASan clean)
+- Task 14: (→ T15) any Context-owned overlay the DragController adds needs the same hover reset as widget destructors; (→ T18) the probe's click via setFocus+Enter bypasses the mouse hit path — decide whether that's enough for click gating; (→ T19) frontend.md: a child that outlives its parent is detached and not drawn
+- Task 14: complete (commits 28681c5d..1ddf6d91)
+- Task 15: dispatched (BASE 1ddf6d91)
+- Task 15: implemented 5ca3761f (drag threaded into press/move/release; outline moves with target, no click interception; Context::endPress; 252/252 plain + ASan; 20 mutations; scratch conformance 23/23 with probe laying out roots side by side per R1); concerns: mode-1000 lost-press hole (inferred; Drag mode 1002 closes it); drop handler on a dialog itself never receives; under review
+- Task 15: (→ T17) set mouse tracking to Drag (1002) mode; run Backend::fit() before every draw; (→ T18) TuiProbe::drag lays out source and target roots side by side
+- Task 15: review APPROVED (kanban drop via Mounted/forEach during drop clean; R2/R3/R6 probes clean; overlays never hittable; mode 1000 can't drag → T17 must set 1002; lost-press hole reproduced only without a frame between events). Fix round 1: container drag label = first descendant text; Esc cancels a drag.
+- (→ T17) guarantee fit() and a draw after every input event (closes the lost-press hole) and pin it with a test; set mouse tracking 1002
+- (→ T19) frontend.md: a dialog's own drop handler is never a drop target; source hidden mid-drag ends the gesture on the next motion
+- Task 15: fix round 1 → cc9ef050 (container drag label = first descendant text; Esc ends a drag); 255/255; conformance 23/23; accepted
+- Task 15: complete (commits 1ddf6d91..cc9ef050)
+- (→ T17) when no widget has keyboard focus, Esc must still reach the DragController (Session routes it)
+- Task 16: dispatched (BASE cc9ef050)
+- Task 16: implemented ba3d3b5d (9 cases incl. manual-clock sibling cancel, blocked owner, self-destroy; plain/ASan/TSan; 7 mutations; 50x repeats); concerns: brief's 6 tests on real time; relies on readyCount counting queued timer callbacks (measured, undocumented in core-cpp); under review
+- Task 16: review APPROVED ((a) via documented core-cpp cancelTimer window; (b)(c)(d) pinned; self-destroy ASan). Fix round 1: throwing-callback + zero/negative delay tests; real-time cases → ManualLoop; readyCount comment; owner-scope mutation; docs (drift; destroy before EventLoop)
+- (→ T17) Session destroys LoopScheduler before its EventLoop (member order)
+- Task 16: fix round 1 → 84791aeb (manual-clock tests; throwing + non-positive delay tests; mutations bite; 50/50 plain/ASan/TSan); accepted
+- Task 16: complete (commits cc9ef050..84791aeb)
+- Task 17: dispatched (BASE 84791aeb)
+- Outward: pushed docs/declarative-ui-plans (= 3f0ee98c) and opened draft PR #882 for review by Yaraslaut (user asked; he may take over). feature/declarative-ui not pushed.

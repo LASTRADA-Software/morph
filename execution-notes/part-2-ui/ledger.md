@@ -1,0 +1,94 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-10-04-declarative-ui-tui-2-ui.md
+Spec: docs/superpowers/specs/2026-10-04-declarative-ui-tui-design.md (§5–5b); contract: docs/superpowers/plans/2026-10-04-declarative-ui-tui-interfaces.md
+Branch feature/declarative-ui; part starts at 2a22b7d9 (after Part 1).
+## Pre-flight scan
+Table: preflight.md (101 rows: 14 CONFLICT, 16 NOTE; plan code assembled task by task against Part 1's real headers in scratch: 62 tests, strict flags, ASan+UBSan with rulings applied; tidy 22, Doxygen, format; GCC/MSVC/Linux/TSan not covered).
+Ruling: rulings 1–18 in preflight.md are ACCEPTED, except ruling 2's placement — the scope.hpp `made.reset()` → `made = nullptr` change belongs to morph::reactive, so the controller amended it into Part 1's commit now (nothing on top yet; [reactive] 182 cases pass plain and ASan) instead of landing it in Part 2 — cost: Part 1's hash changed before any part depended on it.
+- Ruling 16(c) moot (scope.hpp change is in Part 1's commit). Program-notes entry for Parts 3/4 added (ruling 11, 16b).
+## Tasks
+- Task 1: dispatched (BASE d45311e3)
+- Task 1: implemented 4a84006d; brief's mutation only compile-errors → 2 compiling mutations added; unused <cstddef> kept; under review
+- Task 1: review APPROVED (Prop disambiguation correct on all forms tried; no toolkit/bridge include — glaze via util/datetime.hpp is allowed by ruling 17); minors → fix round 1 (drop <cstddef>; reject pointer→Prop<bool> and float→integral constants, not full non-narrowing since Prop<size_t>=0 must work; doc braced-init limit; empty std::function refused; binding-form tests)
+- Task 1: fix round 1 → bd859bc2 (ConstantConvertible concept; empty binding throws invalid_argument; braced-init documented; binding-form tests); controller read diff: clean
+- Task 1: complete (commits d45311e3..bd859bc2)
+- Task 2: dispatched (BASE bd859bc2)
+- Task 2: implemented 9da2580c; self-destroying handler test catches UAF under ASan when invoke uses stored handler; under review
+- Task 2: review NEEDS FIXES — I1 helpers ignore hidden/disabled/collapsed ancestors (probe: 3 clicks delivered, contract says 0); I2 Select key outside options + ordering vs setOptions underspecified. Minors: no kind check in helpers; setSpan accepts non-child; dump values unescaped; prop() can't tell unset from empty; self-drop accepted; dump coverage gaps; contract docs missing "no handler after destructor" + "moveChild keeps native state"
+- Ruling: actionability walks the ancestors — a widget inside a hidden, disabled or collapsed container is not actionable (as backend.hpp documents) — cost: none; it makes the reference backend match real toolkits.
+- Ruling: Select remembers the requested key across setOptions and re-resolves it; a key outside the options marks none (recorded as none) until options containing it arrive; choose() with a non-option key is a test misuse and throws — Qt resets currentIndex on model change, so the rule must be explicit for Parts 3–4 — cost: each backend stores the requested key.
+- Task 2: (→ T8) conformance must pin: Select key-before-options re-resolution; ancestor visibility/enabled gating; no handler fires after the widget's destructor returns.
+- Task 2: (→ T9) backend_contract.md states: ancestor gating; Select re-resolution; no handler after destructor returns (Qt queued connections); moveChild keeps native state (TUI emulates by remove+re-add — see program notes)
+- Task 2: fix round 1 dispatched
+- Task 2: fix round 1 → 6c5dbadd (ancestor gating; Select re-resolution; kind checks; setSpan child check; dump escaping; hasProp; self-drop refused; collapse on non-collapsible throws); under re-review
+- Task 2: (→ T4, T6) private actionable() now takes the helper name + accepted kinds: the plan's dismiss/selectRows/activateRow must pass {"Dialog"}/{"Table"}; T6 column titles go through formatItem (escaping)
+- Task 2: re-review: all addressed (ancestor walk iterative O(depth); escaping reversible, plan's 27 golden dumps unaffected; Select marker consistent)
+- Task 2: minor (→ T9): RecordingBackend::find compares against the escaped form — document it (as prop() does); choose() error text nit
+- Task 2: complete (commits bd859bc2..6c5dbadd, review clean after 1 round)
+- Task 3: dispatched (BASE 6c5dbadd)
+- Task 3: implemented 29ebef6b; untracked wrapper unobservable until T4 (pin there); Mounter comment names T4–6 kinds; under review
+- Task 3: review NEEDS FIXES — I1 callbacks not untracked (widgetEvent only batches; reproduced with an echoing backend: handler subscribes the firing Effect). Minors: throwing callback propagates into the backend, unreported/undocumented; Mounter comment names T4–6 kinds (mandated; becomes true); constructor untracked unpinned. Teardown order, binding cost, unmount-from-callback (sibling, own root) verified under ASan.
+- Ruling: Mounted runs every callback inside widgetEvent AND untracked; the backend contract does not forbid echo (Qt emits change signals synchronously from setters) — cost: none.
+- Ruling: a throwing widget callback is caught by Mounted's wrapper and reported (a ui-level site, e.g. kCallbackThrew), never propagated into the backend; writes made before the throw still flush — Qt slots must not throw and the TUI loop would only log; one rule for both — cost: a callback's exception is not visible to the backend's caller.
+- Task 3: fix round 1 dispatched
+- Task 3: fix round 1 → fc6152d0 (runCallback: widgetEvent + untracked + catch/report ui::detail::site::kCallbackThrew; drop predicate wrapped; constructor untracked pinned); controller read mount.hpp diff: clean
+- Task 3: complete (commits 6c5dbadd..fc6152d0)
+- Ruling: no backend setter ever fires a handler — including Select::setOptions (re-resolution after new options is not a user choice) and Menu::setItems; Mounted's untracked callbacks stay as defence in depth — cost: Qt backend must suppress model-change signals (use user-only signals such as `activated`).
+- (→ T8) conformance pins "no setter fires a handler" incl. setOptions/setItems; (→ T9) backend_contract.md states it.
+- Task 4: dispatched (BASE fc6152d0)
+- Task 4: implemented 18ada2aa; deviations: Tabs pages in one scope (portable teardown order); closed Dialog blocks dismiss/child clicks, 'a new dialog is closed' (→ T8/T9); switchOn refuses empty selector; EchoingBackend → tests/ui_echoing_backend.hpp; untested: content failing mid-mount; under review
+- Task 4: review NEEDS FIXES — deviations accepted (Tabs one scope; new Dialog closed + closed blocks children → T8/T9; switchOn refuses empty). Important (measured): a content mount that throws partway leaves Switch partial+live, Dialog stuck (open=true in app, closed widget, equality-gated), Tabs with nothing visible. Minor docs.
+- Ruling: content mounts are all-or-nothing — build into a local scope, commit on success; Dialog opens only after a complete mount; Tabs switches visibility only after the new page mounted; a failure keeps the previous visible state and is reported — cost: one scope move per mount.
+- Task 4: fix round 1 dispatched
+- Task 4: fix round 1 → 66fc2044 (all-or-nothing mounts; Dialog retries on open false→true; Tabs builds before hiding, failure re-highlights shown page); under re-review
+- Task 4: re-review — partial-mount findings addressed; NEW: Tabs app `selected` stays at failed index (equality-gated re-click never retries; invariant broken); self-destruction mid-mount from a backend create hook now UAF (old code accidentally safe)
+- Ruling: after a failed Tabs page mount, the mount reports the still-shown page through the Tabs' onSelect (as a widget callback) so the app's state matches the widget and retrying the tab is a real change — cost: onSelect may fire without a user click (only after a failed mount).
+- Ruling: destroying the Mounted/runtime/backend while a mount is in progress (backend factory or a binding's first evaluation during mount) is out of contract and documented as a precondition; widget callbacks stay covered — backends never call app code during create, and a mount is not an event — cost: a pathological app that does it crashes.
+- Task 4: fix round 2 dispatched
+- Task 4: fix round 2 → 5a1bba5b (failed Tabs page: restoreSelection — re-highlight, onSelect(shown) as a widget callback, then a task posted to the owner re-reads the selected Computed via a weak_ptr so the next re-select is a real change; G2/G3 mutations show it is needed and UAF-safe; precondition "a mount must run to completion" documented; liveNodes asserted). Controller read the diff: accepted; no loop (after failure app index == shown → no remount).
+- Task 4: (→ final review) the Tabs resync (posted owner task + weak_ptr<function>) is the most intricate mechanism in Part 2 for an edge case — check it as a whole; a simpler alternative is retrying from the onSelect path when the clicked index equals a failed one.
+- Task 4: complete (commits fc6152d0..5a1bba5b, review clean after 2 rounds)
+- Task 5: dispatched (BASE 5a1bba5b)
+- Task 5: implemented 3557a85e (per-row all-or-nothing; reorderChildren by-ref; KeyedRows last-first unmount; forEach refuses empty fn); concern: last-first mutation survives on libc++ (inferred caught on libstdc++); under review
+- Task 5: review APPROVED (reorder LIS-minimal: 6000 randomized snapshots, moves == n−LIS, 0 mismatches; duplicates: first wins, reported per snapshot; row self/other delete ASan clean; failed row isolated + retried; front-first unmount mutant IS caught on libc++ — test pins order)
+- Task 5: minors (→ T9 docs): a rowView writing its ForEach's own rows signal is dropped until the next change (Part 1 self-write rule); only the first row failure per run is reported; duplicate/failed-row reports repeat on every change
+- Task 5: complete (commits 5a1bba5b..3557a85e)
+- Task 6: dispatched (BASE 3557a85e)
+- Task 6: implemented 41c580e1; additions: row must have exactly one non-null cell per column (else reported + left out); table selection follows Select rule; RecordingBackend tells a table when a row is destroyed; under review
+- Task 6: review APPROVED (shapes match; cell rule fits all 9 later-part tables; selection/removal/reorder/self-destroy probes ASan clean). onChildDestroyed hook is RecordingBackend-internal (TUI childForgotten / Qt forget already meet the TableWidget rule).
+- Ruling: in Multiple mode a user change reports exactly what the widget shows — keys of rows that exist and are selected; pending keys with no row are dropped by a user change (programmatic setSelection still keeps them pending) — the user acted on what they saw — cost: Parts 3/4 must filter their stored selection to existing rows before calling the handler.
+- Ruling: a table shows the user's selection even when the app binds no `selection` prop (the widget keeps it); a hidden cell keeps its column (columns are laid out by all cells, not shown ones) — cost: Part 4 must highlight on user pick; Part 3 must size columns by all cells.
+- (→ T8/T9) conformance + backend_contract.md: the three rules above; RecordingBackend already does them.
+- Task 6: fix round 1 (minor: clear onChildDestroyed hook in ~FakeTable; stale mount comment)
+- Task 6: fix round 1 → 2aaa2173 (hook cleared in ~FakeTable; three TableWidget rules stated + Multiple-mode test). Agent stalled during verification; controller verified: build/reactive and clang-asan [ui] 1067/109 pass (binaries newer than sources), clang-format clean.
+- Task 6: complete (commits 3557a85e..2aaa2173)
+- Task 7: dispatched (BASE 2aaa2173)
+- Task 7: implemented 00ba522a (after one stall + resume); MSVC getenv guard uncompiled; teardown order documented only (tests in Parts 3/4); under review
+- Task 7: review APPROVED (shapes match contract; compiles against Part 3/4/6 call sites; layering clean). Minors: clang-cl getenv deprecation not silenced; teardown order hand-rolled in Parts 3 and 4 (same guarantee twice → missing seam); `--ui` consumes next option; no `--`; test gaps; wording.
+- Ruling: add a small framework helper in ui (e.g. `ui::runApplication(AppContext&, IViewBackend&, ApplicationFactory, loop)` or detail-level) that calls the factory, null-checks, mounts, runs the loop, and destroys application/mount before returning — Parts 3/4 call it instead of hand-rolling the order (AGENTS.md: same guarantee twice is a missing seam) — cost: Parts 3/4 plans' Session::run/Frontend::run adapt (program note).
+- Ruling: morph is header-only in the base target, so processEnvironment stays inline; add a clang-cl guard (`#if defined(__clang__) && defined(_WIN32)` diagnostic push/ignore -Wdeprecated-declarations) next to the MSVC pragma — cost: none.
+- Ruling: `--ui` followed by an argument starting with `--` is "needs a name"; `--` ends option parsing — cost: none.
+- Task 7: fix round 1 dispatched
+- Task 7: fix round 1 → 5bdb6f24 (ui::runApplication(AppContext&, IViewBackend&, ApplicationFactory const&, std::function<int()> const&) -> int; clang-cl guard; `--` and `--ui --x` handling; tests); controller read diff: clean
+- Task 7: complete (commits 2aaa2173..5bdb6f24)
+- Task 8: dispatched (BASE 5bdb6f24)
+- Task 8: implemented 160395b0 (23 cases; 33 broken backends each caught); probe interface grew (dismiss, selectRows, selectedRows, mutable childAt, Select textOf) → P3 Task 18 / P4 Task 8 adapt; TuiProbe::drag assumes roots; some rules left to Parts 3/4; under review
+- Task 8: review NEEDS FIXES — case 16 tests RecordingBackend's atomic selectRows (a correct Qt/TUI backend reports 2–3×); gating case misses direct-parent-only backends (measured). Minors: tabs case derefs raw pointer after settle; rule 4 only live for queued delivery; `type` replaces text.
+- Task 8: fix round 1 dispatched
+- Task 8: fix round 1 → 9180ed48 (case 16 asserts contract: ≥1 report, no rowless key, last == [1,3]; gating one level higher kills the direct-parent mutant; tabs case via sentinel; probe docs) — evidence matches the reviewer's asks; accepted
+- Task 8: complete (commits 5bdb6f24..9180ed48)
+- Task 9: dispatched (BASE 9180ed48)
+- Task 9: implemented 01e7b1c0 (3 ui specs, maps, CHANGELOG; 195 links 0 broken; Doxygen strict; two read-only claims measured with temp tests); under review
+- Task 9: review APPROVED (claims sampled match code; 5 probes confirm; conformance section matches suite); 5 Minor doc precision fixes → fix round 1
+- Task 9: fix round 1 → f9aeae99 (5 doc fixes; links/anchors 0 broken)
+- Task 9: complete (commits 9180ed48..f9aeae99)
+- Task 10: gates dispatched (BASE f9aeae99); squash by controller
+- Task 10: gates — 2064/2064; layering -H clean; ASan(+dsuar)/TSan [ui],[reactive] clean, instrumentation confirmed (substitute for Linux presets); tidy-diff 66 files: reconcile complexity → extracted reorder; event NewDeleteLeaks FP → reasoned NOLINT (161bdf20); install/export real script passes (68 headers). Apple libc++ flags reactive/control.hpp:289 (artifact, not fixed).
+- Task 10: squashed → 6edc3a5f (tree identical). Part 2 final review dispatched over d45311e3..6edc3a5f
+- Part 2 final review: ready with fixes. I1 (measured ASan): restoreSelection touches _rt/pages after calling the app's onSelect, which may destroy the Mounted. I2 (measured): Variant B — no equality gate on the Tabs index, delete the posted resync — fixes I1, passes all but one log assertion. Minors M1–M6; contract mismatches already in program-notes.
+- Ruling: adopt Variant B (ungated Tabs index binding; delete Pages::resync + posted task); restoreSelection calls onSelect last and touches nothing after it — simpler and fixes the UAF — cost: a repeated setSelected with an unchanged index (contract allows).
+- Ruling: a Dialog whose content failed calls its onDismiss (as a widget callback, touching nothing after), so the app's `open` follows the widget, mirroring Tabs — cost: onDismiss may fire without a user action (only after a failed mount).
+- Ruling: M1 fix wording (Switch shows nothing after a failed case); M3 interfaces.md is a plan doc — not edited during execution (master plan rule); program-notes carries the deltas; M4 shared test helpers into tests/ui_echoing_backend.hpp (or a ui test-support header); M5 test runApplication when the mount throws; M6 reconcile unmounts gone rows last-first to match the stated rule.
+- Part 2 final fix dispatch (fresh opus); then scoped re-review; then fold into 6edc3a5f
+- Part 2 final fixes: d399f77a, 25deb10c, 763e3edf, 2c183d48, 807d9fdb (I1 RED under ASan; 2068/2068); under scoped re-review
+- Part 2 final fixes re-review: ACCEPTED all 6 (retries bounded; no write cycles; Dialog ungated intended+documented); Minor: docs overstate 'unchanged value only re-sends' — retried on every binding re-run while naming failed content → doc fix dispatched
+- Part 2 final: doc fix c881f9e8; folded d399f77a..c881f9e8 into the part → 69a18881 (tree identical; message corrected per kind). PART 2 COMPLETE.
