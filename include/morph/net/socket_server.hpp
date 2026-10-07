@@ -8,6 +8,7 @@
 #include <core/async/Task.hpp>
 #include <core/net/EventLoop.hpp>
 #include <core/net/IListener.hpp>
+#include <core/net/NetError.hpp>
 #include <core/net/Sockets.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -29,6 +30,35 @@
 #include "detail/ws_handshake.hpp"
 
 namespace morph::net {
+
+namespace detail {
+
+/// @brief Whether a failed `accept()` says the listening socket itself is
+///        unusable, so every later attempt fails the same way and retrying
+///        cannot help.
+///
+/// A socket that is no longer listening answers `EINVAL`; a closed or foreign
+/// descriptor `EBADF`/`ENOTSOCK`; a non-stream socket `EOPNOTSUPP`. core-cpp
+/// classifies these as `BadHandle` and `Unsupported`, but releases inside the
+/// supported version range still report every failed accept as `SystemError`
+/// with the `errno` in `systemCode`, so both spellings are recognised.
+/// Exhaustion (`EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`) is not in the list: it
+/// clears once descriptors or memory are freed, so it is retried.
+/// @param error The error `IListener::accept()` reported.
+/// @return `true` when the listener can never accept again.
+[[nodiscard]] inline bool acceptListenerIsDead(::core::net::NetError const& error) noexcept {
+    using ::core::net::NetErrorCode;
+    if (error.code == NetErrorCode::BadHandle || error.code == NetErrorCode::Unsupported) {
+        return true;
+    }
+    if (error.code != NetErrorCode::SystemError) {
+        return false;
+    }
+    int const code = error.systemCode;
+    return code == EINVAL || code == EBADF || code == ENOTSOCK || code == EOPNOTSUPP;
+}
+
+}  // namespace detail
 
 /// @brief Configuration for `SocketServer`.
 struct SocketServerConfig {
@@ -263,38 +293,17 @@ private:
             loop.loop().spawn(clientFlow(shared_from_this(), client));
         }
 
-        /// Whether @p error says the listening socket itself is unusable, so
-        /// every later `accept()` fails the same way and retrying cannot help.
-        ///
-        /// A socket that is no longer listening answers `EINVAL`; a closed or
-        /// foreign descriptor `EBADF`/`ENOTSOCK`; a non-stream socket
-        /// `EOPNOTSUPP`. core-cpp classifies these as `BadHandle` and
-        /// `Unsupported`, but releases inside the supported version range
-        /// still report every failed accept as `SystemError` with the `errno`
-        /// in `systemCode`, so both spellings are recognised. Exhaustion
-        /// (`EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`) is not in the list: it
-        /// clears once descriptors or memory are freed, so it is retried.
-        static bool listenerIsDead(::core::net::NetError const& error) noexcept {
-            using ::core::net::NetErrorCode;
-            if (error.code == NetErrorCode::BadHandle || error.code == NetErrorCode::Unsupported) {
-                return true;
-            }
-            if (error.code != NetErrorCode::SystemError) {
-                return false;
-            }
-            int const code = error.systemCode;
-            return code == EINVAL || code == EBADF || code == ENOTSOCK || code == EOPNOTSUPP;
-        }
-
         /// Drops a listener that can no longer accept, so `port()` reads `0`
         /// and a later `listen()` can bind again. Connections already accepted
         /// keep running: only the listening socket is gone.
+        ///
+        /// Only the accept flow calls it, and only while its generation is
+        /// current, so `listener` is still the one it was started with: the
+        /// one place that resets it, `close()`, moves the generation first.
         void listenerLost() {
             note("SocketServer::listenerLost");
-            if (listener) {
-                listener->close();
-                listener.reset();
-            }
+            listener->close();
+            listener.reset();
             port.store(0);
         }
 
@@ -311,7 +320,7 @@ private:
                     if (next.error().code == ::core::net::NetErrorCode::Cancelled) {
                         co_return;
                     }
-                    if (listenerIsDead(next.error())) {
+                    if (::morph::net::detail::acceptListenerIsDead(next.error())) {
                         self->listenerLost();
                         co_return;
                     }
