@@ -247,10 +247,8 @@ std::string DragController::labelText() const {
 
 // The capture is the source's view while it drags; released here, the moves and the release that follow are
 // hit-tested and belong to no press.
-bool escapeEndsDrag(Context& context, ::core::tui::InputEvent const& event) {
-    auto const* const key = std::get_if<::core::tui::KeyEvent>(&event);
-    if (key == nullptr || key->codepoint != 0 || key->key != ::core::tui::KeyCode::Escape ||
-        !context.drag->dragging()) {
+bool endDrag(Context& context) {
+    if (!context.drag->dragging()) {
         return false;
     }
     auto& screen = *context.screen;
@@ -260,6 +258,14 @@ bool escapeEndsDrag(Context& context, ::core::tui::InputEvent const& event) {
     }
     context.endPress();
     return true;
+}
+
+bool escapeEndsDrag(Context& context, ::core::tui::InputEvent const& event) {
+    auto const* const key = std::get_if<::core::tui::KeyEvent>(&event);
+    if (key == nullptr || key->codepoint != 0 || key->key != ::core::tui::KeyCode::Escape) {
+        return false;
+    }
+    return endDrag(context);
 }
 
 }  // namespace morph::tui::detail

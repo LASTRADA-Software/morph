@@ -6,6 +6,7 @@
 
 #include "tui/container_widgets.hpp"
 #include "tui/context.hpp"
+#include "tui/drag.hpp"
 #include "tui/field_widgets.hpp"
 #include "tui/leaf_widgets.hpp"
 #include "tui/list_widgets.hpp"
@@ -135,6 +136,8 @@ void Backend::focusFirst() {
         focusNext();
     }
 }
+
+bool Backend::endDrag() { return detail::endDrag(_impl->context); }
 
 bool Backend::animating() const noexcept { return _impl->context.activeBusy > 0; }
 

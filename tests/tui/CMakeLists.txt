@@ -10,6 +10,7 @@ add_executable(morph_tui_tests
     test_tui_backend.cpp
     test_tui_drag.cpp
     test_tui_scheduler.cpp
+    test_tui_frontend.cpp
 )
 
 target_link_libraries(morph_tui_tests

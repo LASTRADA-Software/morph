@@ -78,6 +78,10 @@ private:
     std::unique_ptr<Outline> _outline;
 };
 
+/// Ends the drag in progress, if any, as a native drag ends on Esc: no drop, and the press, its pointer capture, the
+/// label and the outline are gone; true when there was one.
+[[nodiscard]] bool endDrag(Context& context);
+
 /// Ends the drag in progress, as a native drag ends, when @p event is Esc: no drop, and the press, its pointer
 /// capture, the label and the outline are gone. Every component of the backend that takes keys asks this first, so
 /// Esc ends a drag wherever the focus is, as long as some view of this backend has it; true when it did.

@@ -81,6 +81,13 @@ public:
     ///        dialog's frame (the dialog held nothing focusable when it opened, and has since gained something).
     void focusFirst();
 
+    /// @brief Ends the drag-and-drop gesture in progress, if any, with no drop, as Esc does.
+    ///
+    /// Esc reaches the gesture through the widget that has the keyboard focus; a frontend calls this for an Esc no
+    /// widget took, so that a drag ends while nothing is focused too.
+    /// @return True when a drag was in progress and has ended.
+    bool endDrag();
+
     /// @brief Whether any Busy widget is spinning, so the frontend should keep advancing the animation.
     /// @return True while at least one Busy is active.
     [[nodiscard]] bool animating() const noexcept;

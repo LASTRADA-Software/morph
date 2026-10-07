@@ -559,6 +559,7 @@ if(MORPH_BUILD_TUI)
         src/tui/drag.hpp
         src/tui/field_widgets.cpp
         src/tui/field_widgets.hpp
+        src/tui/frontend.cpp
         src/tui/layout.cpp
         src/tui/layout.hpp
         src/tui/leaf_widgets.cpp
@@ -568,6 +569,8 @@ if(MORPH_BUILD_TUI)
         src/tui/loop_executor.cpp
         src/tui/scheduler.cpp
         src/tui/scheduler.hpp
+        src/tui/session.cpp
+        src/tui/session.hpp
         src/tui/table_widget.cpp
         src/tui/table_widget.hpp
         src/tui/widget.cpp
@@ -580,6 +583,7 @@ if(MORPH_BUILD_TUI)
         BASE_DIRS include
         FILES
             include/morph/tui/backend.hpp
+            include/morph/tui/frontend.hpp
             include/morph/tui/loop_executor.hpp
     )
     # Same standalone-compile check the core target gets.
