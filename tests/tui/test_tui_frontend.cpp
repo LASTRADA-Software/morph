@@ -383,3 +383,28 @@ TEST_CASE("tui::Frontend: asks the terminal for drag reports by default, or for 
     }
 }
 
+
+TEST_CASE("tui::Frontend: a resize re-fits the view before the next event is handled", "[tui][frontend]") {
+    using Type = core::tui::MouseEvent::Type;
+    Rig rig{{.width = 20, .height = 3}};
+    int clicks = 0;
+    morph::reactive::TimerHandle grow;
+    static_cast<void>(
+        rig.frontend().run([&rig, &clicks, &grow](ui::AppContext& ctx) -> std::unique_ptr<ui::Application> {
+            auto app = std::make_unique<TestApp>(ctx.runtime());
+            app->build = [&clicks] {
+                return ui::column({.children = {ui::spacer(), ui::button({.label = "Go", .onClick = [&clicks] {
+                                                                               ++clicks;
+                                                                           }})}});
+            };
+            // The terminal grows, and the click on the button's new, bottom row arrives in the same read.
+            grow = ctx.scheduler().after(10ms, [&rig] {
+                rig.output->resize({.width = 20, .height = 6});
+                rig.source.pushEvents({core::tui::ResizeEvent{.columns = 20, .rows = 6},
+                                       mouse(Type::Press, {.x = 1, .y = 5}), mouse(Type::Release, {.x = 1, .y = 5})});
+                rig.source.closeInput();
+            });
+            return app;
+        }));
+    CHECK(clicks == 1);
+}
