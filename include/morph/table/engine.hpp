@@ -358,6 +358,21 @@ private:
         return true;
     }
 
+    // Zone text for a profiler capture: the sort chain, and the filter's size.
+    [[nodiscard]] std::string describeSort() const {
+        std::string out;
+        for (auto const& key : _in.sort) {
+            out += key.column;
+            out += key.dir == SortDirection::Descending ? " desc " : " asc ";
+        }
+        return out;
+    }
+    [[nodiscard]] std::string describeFilter() const {
+        return _in.filter == nullptr ? std::string{}
+                                     : std::to_string(_in.filter->columns().size()) + " columns, " +
+                                           std::to_string(_in.filter->groups().size()) + " groups";
+    }
+
     [[nodiscard]] RowOrder rowOrder() const {
         std::vector<RowOrder::Key> keys;
         for (auto const& key : _in.sort) {
@@ -461,6 +476,7 @@ private:
         }
         if (_filterRun) {
             MORPH_ZONE("table.filter");
+            MORPH_ZONE_TEXT(describeFilter());
             if (!_filterRun->run(deadline, stop)) {
                 return false;
             }
@@ -474,6 +490,7 @@ private:
         }
         if (_sort) {
             MORPH_ZONE("table.sort");
+            MORPH_ZONE_TEXT(describeSort());
             if (!_sort->run(deadline, stop)) {
                 return false;
             }
@@ -954,7 +971,9 @@ private:
             start(Request::Full, allChanged);
             return;
         }
+        auto const began = std::chrono::steady_clock::now();
         apply(job->input(), std::move(*job).take());
+        recordOwnerStep(began);
         setPending(false);
     }
 
@@ -971,6 +990,8 @@ private:
         }
         MORPH_PLOT("table.sourceRows", in.snapshot->rowCount());
         MORPH_PLOT("table.viewRows", result.view.size());
+        MORPH_PLOT("table.keyCacheColumns",
+                   std::ranges::count_if(_keys, [](auto const& keys) { return keys != nullptr; }));
         _trueView = std::move(result.view);
         _viewSnapshot = in.snapshot;
         auto change = std::move(result.change);

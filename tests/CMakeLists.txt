@@ -664,6 +664,7 @@ add_executable(morph_table_tests
     table/test_table_query.cpp
     table/test_table_selection.cpp
     table/test_table_columns.cpp
+    table/bench_table.cpp
 )
 target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main)
 target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

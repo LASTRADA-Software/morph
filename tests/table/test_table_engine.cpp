@@ -210,7 +210,7 @@ TEST_CASE("table: results are identical on the owner, in owner steps and on a wo
     for (auto const& [sort, filter] : scenarios()) {
         Engine inline_{source};
         Engine stepped{
-            source, EngineOptions{.owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{200}}};
+            source, EngineOptions{.owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}}};
         Engine threaded{source, EngineOptions{.owner = &owner, .worker = &pool}};
         for (Engine* engine : {&inline_, &stepped, &threaded}) {
             REQUIRE(engine->setSort(sort).has_value());
@@ -227,13 +227,14 @@ TEST_CASE("table: results are identical on the owner, in owner steps and on a wo
 TEST_CASE("table: owner steps yield to the frame budget", "[table][engine]") {
     morph::exec::MainThreadExecutor owner;
     auto source = tabletest::syntheticSource(20000, 6);
-    Engine engine{source, EngineOptions{.owner = &owner, .worker = nullptr}};
+    Engine engine{source, EngineOptions{.owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}}};
     REQUIRE(engine.setSort({{"name", kAsc}, {"price", kDesc}}).has_value());
     CHECK(engine.stats().ownerSteps == 0);
     REQUIRE(tabletest::pumpUntil(owner, [&] { return !engine.pending(); }));
-    // The work took several owner turns rather than one: the step bound is
-    // what the [.benchmark] run measures in a Release build.
-    CHECK(engine.stats().ownerSteps > 2);
+    // A 1 us budget yields at every chunk boundary: two key columns of ten
+    // 2,048-row chunks each, then the sort passes. How long a real step takes
+    // is what the [.benchmark] run measures in a Release build.
+    CHECK(engine.stats().ownerSteps > 20);
 }
 
 TEST_CASE("table: a filter change filters the cached sorted order without re-sorting", "[table][engine]") {

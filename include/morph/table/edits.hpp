@@ -138,11 +138,11 @@ private:
         }
         auto const& request = _queues.at(row).front();
         _commit(request, _alive.guard([this, row](std::expected<std::vector<Cell>, FieldError> outcome) {
-            settle(row, std::move(outcome));
+            settle(row, outcome);
         }));
     }
 
-    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError> outcome) {
+    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError>& outcome) {
         auto const found = _queues.find(row);
         if (found == _queues.end() || found->second.empty()) {
             return;
