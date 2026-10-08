@@ -160,6 +160,22 @@ type it is instantiated on. Each derived column carries:
   derivation reads whichever shape `schemaJson<Row>()` actually produced,
   trying the inlined property first and falling back to the `$ref`/`$defs`
   indirection.
+- `kind` — the column's table kind (spec 7 §4), by the names
+  `morph::table::ColumnKind` reads: `custom` for an `x-comparator` member;
+  `quantity` for an exact value (`num`/`den`) with `ExtUnits`, `decimal`
+  without; `date` / `dateTime` for an integer with `x-widget` `epochDays` /
+  `epochSeconds`, or a string with `format` `date` / `date-time`; `integer`,
+  `number` and `bool` by JSON type; `text` otherwise. The table engine
+  ([../table/engine.md](../table/engine.md)) builds its keys by it.
+- `title` — the row schema's `title`, a human-readable header. `label` keeps
+  defaulting to `field`; a renderer that wants a readable header without an
+  override uses `title`.
+- `x-unitAlternatives`, `x-comparator` — copied off the property when present.
+- `enum` — the values of a closed set: the property's `enum`, or the `const`
+  of each `oneOf` entry (glaze's shape for an enum with names).
+
+A member the row schema marks `x-hidden` is not derived as a column. A
+`V::columns` override may still name it.
 
 `V::columns` (a `static constexpr std::array<ColumnOverride, N>`) is the
 declare-to-override escape hatch: supplying it emits **exactly** the declared
@@ -179,7 +195,7 @@ have is emitted as a bare `{field, label}` column with no `x-decimalPlaces` /
 | `v-title` | top-level | string | Screen title. Defaults to `v-query`'s type id. |
 | `v-query` | top-level | string | Registered query action's type id; executed with an empty body. |
 | `v-rowKey` | top-level | string | Wire field uniquely identifying a row. Defaults to `"id"`. |
-| `v-columns` | top-level | array | Ordered column descriptors: `{field, label, "v-hidden"?, "x-decimalPlaces"?, ExtUnits?}`. Derived from the row type unless `V::columns` overrides it. |
+| `v-columns` | top-level | array | Ordered column descriptors: `{field, label, kind, title?, "v-hidden"?, "x-decimalPlaces"?, ExtUnits?, "x-unitAlternatives"?, "x-comparator"?, enum?}`. Derived from the row type unless `V::columns` overrides it. |
 | `v-rowAction` | top-level | object | `{action, bind?}` — the action a row activation opens. Omitted when `V` declares no `rowAction`. Carries only `action`/`bind`, never `label`/`scope`/`confirm`. |
 | `v-actions` | top-level | array | `{action, label, scope, bind?, confirm?}` per entry — buttons that run an action. `scope` is `"row"` or `"collection"`; `confirm` is omitted when `false`; `bind` is omitted when empty. Omitted entirely when `V` declares no `actions`. |
 
