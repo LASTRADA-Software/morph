@@ -273,3 +273,59 @@ TEST_CASE("RawHandler: a raw result is not published to typed subscribers", "[br
     rawprobe::renameTyped(*watch);
     REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [&] { return rawprobe::renamesSeen(*watch) == 1; }));
 }
+
+TEST_CASE("RawHandler: two shared handlers on one key share one instance", "[bridge][raw]") {
+    auto const mode = GENERATE(Mode::Local, Mode::Remote);
+    RawRig rig{mode};
+    RawHandler first{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared, "7"};
+    RawHandler second{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared};
+    second.attach("7");
+
+    CHECK(await(rig, first.execute("Raw_Add", R"({"by":2})")).value == "2");
+    CHECK(await(rig, second.execute("Raw_Add", R"({"by":3})")).value == "5");
+    CHECK(second.primary() == "7");
+}
+
+TEST_CASE("RawHandler: a shared handler that was never attached rejects its calls", "[bridge][raw]") {
+    auto const mode = GENERATE(Mode::Local, Mode::Remote);
+    RawRig rig{mode};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared};
+
+    auto reply = await(rig, handler.execute("Raw_Add", R"({"by":1})"));
+    CHECK(reply.error);
+    CHECK(handler.primary().empty());
+}
+
+TEST_CASE("RawHandler: re-attaching moves the handler to the other instance", "[bridge][raw]") {
+    auto const mode = GENERATE(Mode::Local, Mode::Remote);
+    RawRig rig{mode};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared, "1"};
+    CHECK(await(rig, handler.execute("Raw_Add", R"({"by":10})")).value == "10");
+
+    handler.attach("2");
+    CHECK(await(rig, handler.execute("Raw_Add", R"({"by":1})")).value == "1");
+    CHECK(handler.primary() == "2");
+}
+
+TEST_CASE("RawHandler: a private handler refuses attach, and bindByType refuses a private key", "[bridge][raw]") {
+    RawRig rig{Mode::Local};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+    CHECK_THROWS_AS(handler.attach("1"), std::logic_error);
+    CHECK_THROWS_AS(rig.bridge->bindByType("Raw_Counter", BindSharing::Private, "1"), std::invalid_argument);
+}
+
+// Typed counterpart: test_bridge_bind_paths.cpp, switchBackend re-binding.
+TEST_CASE("RawHandler: switchBackend re-binds private and shared raw handlers", "[bridge][raw]") {
+    RawRig rig{Mode::Local};
+    RawHandler priv{*rig.bridge, &rig.owner, "Raw_Counter"};
+    RawHandler shared{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared, "9"};
+    REQUIRE(await(rig, priv.execute("Raw_Add", R"({"by":1})")).value == "1");
+    REQUIRE(await(rig, shared.execute("Raw_Add", R"({"by":1})")).value == "1");
+
+    rig.bridge->switchBackend(std::make_unique<morph::backend::LocalBackend>(rig.pool));
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [&] { return priv.isBound() && shared.isBound(); }));
+    // A fresh backend holds fresh instances, still reachable by the same handlers.
+    CHECK(await(rig, priv.execute("Raw_Add", R"({"by":4})")).value == "4");
+    CHECK(await(rig, shared.execute("Raw_Add", R"({"by":6})")).value == "6");
+    CHECK(shared.primary() == "9");
+}

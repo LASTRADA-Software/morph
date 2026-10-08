@@ -2790,6 +2790,21 @@ public:
         return _bridge.executeRaw(_binding, std::move(actionId), std::move(bodyJson), _cbExec, std::move(stop));
     }
 
+    /// @brief Attaches (or re-points) this shared handler to the instance for
+    ///        @p instanceKey, as `BridgeHandler::attach` does for a typed one.
+    /// @param instanceKey Canonical string encoding of the primary key.
+    /// @throws std::logic_error on a private handler.
+    void attach(std::string instanceKey) {
+        if (!_binding->shared) {
+            throw std::logic_error{"RawHandler::attach: the handler is private"};
+        }
+        _bridge.attach(_binding, std::move(instanceKey));
+    }
+
+    /// @brief This handler's current instance key.
+    /// @return The attached key, or empty before the first attach settles.
+    [[nodiscard]] std::string primary() const { return _bridge.bindingPrimary(_binding); }
+
     /// @brief Whether the handler holds a live instance now.
     /// @return `true` when bound.
     [[nodiscard]] bool isBound() const noexcept { return Bridge::isBound(_binding); }
