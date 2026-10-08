@@ -4,8 +4,10 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <exception>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -60,6 +62,34 @@ public:
 
     /// @brief Re-issues the current request; does nothing while idle.
     virtual void refetch() = 0;
+};
+
+/// @brief A query's registration with the mutations that invalidate it.
+///
+/// The query owns the link and clears it when it is destroyed; a mutation holds it shared
+/// (`MutationOptions::invalidates`). So a mutation never refetches a query that is gone, and the two may be
+/// destroyed in either order.
+class InvalidationLink final {
+public:
+    /// @param target The query to refetch. Borrowed until `clear()`.
+    explicit InvalidationLink(Refetchable& target MORPH_LIFETIMEBOUND) noexcept : _target{&target} {}
+
+    /// @brief Refetches the query, or does nothing once it is gone.
+    void refetch() const {
+        if (_target != nullptr) {
+            _target->refetch();
+        }
+    }
+
+    /// @brief Unregisters the query; called by its destructor.
+    void clear() noexcept { _target = nullptr; }
+
+    /// @brief Whether the query is still registered.
+    /// @return False once the query has been destroyed.
+    [[nodiscard]] bool live() const noexcept { return _target != nullptr; }
+
+private:
+    Refetchable* _target;
 };
 
 /// @brief How a `Query` refreshes besides key changes, and how long it lets a key settle.
@@ -131,6 +161,7 @@ public:
     ///         positive while `options.scheduler` is null; nothing has been fetched then.
     Query(Runtime& runtime MORPH_LIFETIMEBOUND, Fetch fetch, Key key, QueryOptions options = {})
         : _rt{&runtime},
+          _link{std::make_shared<InvalidationLink>(*this)},
           _fetch{std::make_shared<Fetch const>(std::move(fetch))},
           _pending{runtime, false},
           _value{runtime, std::nullopt},
@@ -169,7 +200,9 @@ public:
           QueryOptions options = {})
         : Query(runtime, [&handler](A const& action) { return handler.execute(action); }, std::move(key), options) {}
 
-    ~Query() override = default;
+    /// @brief Clears the query's invalidation link, so no mutation refetches it any more, and cancels what it
+    ///        has in flight.
+    ~Query() override { _link->clear(); }
     Query(Query const&) = delete;
     Query& operator=(Query const&) = delete;
     Query(Query&&) = delete;
@@ -209,6 +242,10 @@ public:
             issue();
         }
     }
+
+    /// @brief This query's link, for `MutationOptions::invalidates`.
+    /// @return The link; it refetches nothing once this query is destroyed.
+    [[nodiscard]] std::shared_ptr<InvalidationLink> link() const { return _link; }
 
     /// @brief Re-fetches whenever the bridge publishes a @p Pub on @p handler's instance.
     ///
@@ -340,6 +377,8 @@ private:
     }
 
     Runtime* _rt;
+    // What the mutations that invalidate this query hold; cleared by the destructor.
+    std::shared_ptr<InvalidationLink> _link;
     // Shared, so a running issue() can keep the fetcher alive past the query.
     std::shared_ptr<Fetch const> _fetch;
     Signal<bool> _pending;
@@ -361,6 +400,249 @@ private:
     async::CallbackScope _lifetime;
     // Last member, so it is destroyed first: a reply still in flight finds it stopped.
     async::CallbackScope _inflight;
+};
+
+/// @brief What a `Mutation` does with a run while another is in flight.
+enum class Concurrency : std::uint8_t {
+    /// Refuses the run: `run()` returns false and nothing is sent. The default: a second click on a pending
+    /// button does nothing.
+    Exclusive,
+    /// Queues the run and sends it when the previous one settles, a failure included; one queue per
+    /// `MutationOptions::serialKey`.
+    Serial,
+    /// Sends the run; only the newest run's reply is applied.
+    Latest,
+    /// Sends the run; every reply is applied as it arrives.
+    Parallel,
+};
+
+/// @brief How a `Mutation` sequences its runs, and what a success invalidates.
+/// @tparam A The action type.
+template <typename A>
+struct MutationOptions {
+    /// @brief What a run does while another is in flight.
+    Concurrency concurrency = Concurrency::Exclusive;
+    /// @brief For `Serial`: the queue a run joins. Empty means one queue for every run.
+    std::function<std::string(A const&)> serialKey;
+    /// @brief The queries refetched, in the same batch as the result, after every applied success. A link whose
+    ///        query is gone refetches nothing.
+    std::vector<std::shared_ptr<InvalidationLink>> invalidates;
+};
+
+/// @brief A command: issues a write and tracks it, then refetches what the write invalidates.
+///
+/// `MutationOptions::concurrency` decides what a run does while another is in flight (`Concurrency`).
+/// `pending()` is true while a run is in flight or queued. An applied success records `lastResult()`, clears
+/// `error()`, ticks `successCount()` and refetches every live query in `MutationOptions::invalidates` — one
+/// batch, so one flush and one frame. An applied failure records `error()` and invalidates nothing. A reply
+/// `Latest` does not apply only stops counting as pending.
+///
+/// The runner runs untracked: a `run()` from inside an Effect does not subscribe that Effect to what the
+/// runner reads, so a change there cannot issue the write again.
+///
+/// A runner that throws instead of returning a `Completion` fails that run: the exception becomes `error()`
+/// at once, and nothing is left pending for it. `run()` off the Runtime's owner, and a delivery off it, are
+/// reported (`detail::site::kOffOwner`) and dropped. A dropped delivery is never counted down, so `pending()`
+/// stays true for good and an `Exclusive` mutation refuses every later run: it is a wiring error, not a state
+/// to recover from. `run()` inside a Computed's computation is reported (`detail::site::kIssueInComputed`)
+/// and refused before anything is issued.
+///
+/// The runner may destroy the mutation, and so may a query's fetcher during an invalidation, another handler
+/// of the reply, or an Effect the reply wakes; the mutation is not touched afterwards.
+/// @tparam A The action type.
+/// @tparam R The result type; defaults to the action's registered result.
+// NOLINTNEXTLINE(readability-redundant-typename) -- valid everywhere; implicit typename here is unverified on MSVC
+template <typename A, typename R = typename model::ActionTraits<A>::Result>
+class Mutation final {
+public:
+    /// @brief Issues one call.
+    using Run = std::function<async::Completion<R>(A)>;
+
+    /// @brief Builds a mutation over any runner — the test seam, and the interpreter's path.
+    /// @param runtime The runtime. Borrowed: it must outlive the mutation.
+    /// @param run Issues a call; its `Completion` must deliver on the runtime's owner.
+    /// @param options Concurrency and invalidation.
+    Mutation(Runtime& runtime MORPH_LIFETIMEBOUND, Run run, MutationOptions<A> options = {})
+        : _rt{&runtime},
+          _run{std::make_shared<Run const>(std::move(run))},
+          _options{std::move(options)},
+          _busy{runtime, 0},
+          _error{runtime, nullptr},
+          _last{runtime, std::nullopt},
+          _successes{runtime, 0} {}
+
+    /// @brief Builds a mutation that executes through a bridge handler.
+    /// @tparam M The handler's model type.
+    /// @tparam S The handler's sharing policy.
+    /// @param runtime The runtime. Borrowed: it must outlive the mutation.
+    /// @param handler Executes the calls; its callbacks must be delivered on the runtime's owner. Borrowed.
+    /// @param options Concurrency and invalidation.
+    template <typename M, typename S>
+    Mutation(Runtime& runtime MORPH_LIFETIMEBOUND, bridge::BridgeHandler<M, S>& handler MORPH_LIFETIMEBOUND,
+             MutationOptions<A> options = {})
+        : Mutation(runtime, [&handler](A action) { return handler.execute(std::move(action)); }, std::move(options)) {}
+
+    ~Mutation() = default;
+    Mutation(Mutation const&) = delete;
+    Mutation& operator=(Mutation const&) = delete;
+    Mutation(Mutation&&) = delete;
+    Mutation& operator=(Mutation&&) = delete;
+
+    /// @brief Issues, queues or refuses @p action, as `MutationOptions::concurrency` says. Refused, and reported,
+    ///        off the Runtime's owner (`detail::site::kOffOwner`) and inside a Computed's computation
+    ///        (`detail::site::kIssueInComputed`).
+    /// @param action The action; built by the caller per gesture, so an idempotency key minted while building it
+    ///        is fresh per click.
+    /// @return False when the run was refused: `Exclusive` with a run in flight, off the owner, or inside a
+    ///         Computed. A run that was sent or queued returns true, even when its runner threw.
+    bool run(A action) {
+        detail::RuntimeCore const& core = *_rt->core();
+        if (!core.checkOwner()) {
+            return false;
+        }
+        // A computation is pure: one that issued a write would issue it on every recomputation, and the
+        // pending count it cannot write would never be counted back down.
+        if (core.isComputing()) {
+            core.report(detail::site::kIssueInComputed);
+            return false;
+        }
+        if (_options.concurrency == Concurrency::Exclusive && _busy.peek() != 0) {
+            return false;
+        }
+        if (_options.concurrency != Concurrency::Serial) {
+            send(std::move(action), std::nullopt, false);
+            return true;
+        }
+        std::string key = _options.serialKey ? _options.serialKey(action) : std::string{};
+        Lane& lane = _lanes[key];
+        if (lane.active) {
+            lane.queued.push_back(std::move(action));
+            _busy.set(_busy.peek() + 1);
+            return true;
+        }
+        lane.active = true;
+        send(std::move(action), std::move(key), false);
+        return true;
+    }
+
+    /// @brief Whether a run is in flight or queued. Tracked.
+    /// @return True while any is.
+    [[nodiscard]] bool pending() const { return _busy.get() != 0; }
+
+    /// @brief The most recent applied failure. Tracked.
+    /// @return The exception, or null; cleared by the next applied success.
+    [[nodiscard]] std::exception_ptr error() const { return _error.get(); }
+
+    /// @brief The most recent applied result. Tracked.
+    /// @return The result, or `nullopt` before the first success. Valid until the next applied success.
+    [[nodiscard]] std::optional<R> const& lastResult() const { return _last.get(); }
+
+    /// @brief How many successes have been applied. Tracked; it ticks once per applied success, so an Effect can
+    ///        react to "it succeeded again" when the result is equal to the last one.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t successCount() const { return _successes.get(); }
+
+private:
+    struct Lane {
+        bool active = false;
+        std::deque<A> queued;
+    };
+
+    // Sends one run. @p lane is the Serial queue it belongs to; @p counted says whether `_busy` already counts it
+    // (a queued run does).
+    void send(A action, std::optional<std::string> lane, bool counted) {
+        std::uint64_t const generation = ++_generation;
+        // Held here, so a runner that destroys the mutation keeps itself alive until it returns.
+        std::shared_ptr<Run const> const runner = _run;
+        async::CallbackToken const alive = _lifetime.token();
+        async::Completion<R> completion;
+        try {
+            // Untracked: a run() called from an Effect must not subscribe that Effect to what the runner reads,
+            // or a change there would re-run it and issue the write again.
+            completion = _rt->untracked([&] { return (*runner)(std::move(action)); });
+        } catch (...) {
+            if (!alive.expired()) {
+                settle(generation, lane, std::nullopt, std::current_exception(), counted);
+            }
+            return;
+        }
+        if (alive.expired()) {
+            return;
+        }
+        if (!counted) {
+            _busy.set(_busy.peek() + 1);
+        }
+        completion
+            .then(_lifetime,
+                  [this, generation, lane](R const& result) {
+                      if (_rt->core()->checkOwner()) {
+                          settle(generation, lane, result, nullptr, true);
+                      }
+                  })
+            .onError(_lifetime, [this, generation, lane](std::exception_ptr const& error) {
+                if (_rt->core()->checkOwner()) {
+                    settle(generation, lane, std::nullopt, error, true);
+                }
+            });
+    }
+
+    // Applies one settled run, then sends the next queued run of its Serial lane.
+    void settle(std::uint64_t generation, std::optional<std::string> const& lane, std::optional<R> result,
+                std::exception_ptr const& error, bool counted) {
+        bool const applies = _options.concurrency != Concurrency::Latest || generation == _generation;
+        async::CallbackToken const alive = _lifetime.token();
+        _rt->batch([&] {
+            if (counted) {
+                _busy.set(_busy.peek() - 1);
+            }
+            if (!applies) {
+                return;
+            }
+            if (error != nullptr) {
+                _error.set(error);
+                return;
+            }
+            _last.set(std::move(result));
+            _error.set(nullptr);
+            _successes.set(_successes.peek() + 1);
+            // A refetch runs the query's fetcher, which may destroy this mutation.
+            for (auto const& link : _options.invalidates) {
+                link->refetch();
+                if (alive.expired()) {
+                    return;
+                }
+            }
+        });
+        if (alive.expired() || !lane.has_value()) {
+            return;
+        }
+        auto const found = _lanes.find(*lane);
+        if (found == _lanes.end()) {
+            return;
+        }
+        if (found->second.queued.empty()) {
+            _lanes.erase(found);
+            return;
+        }
+        A next = std::move(found->second.queued.front());
+        found->second.queued.pop_front();
+        send(std::move(next), lane, true);
+    }
+
+    Runtime* _rt;
+    // Shared, so a running send() can keep the runner alive past the mutation.
+    std::shared_ptr<Run const> _run;
+    MutationOptions<A> _options;
+    // Runs in flight or queued.
+    Signal<std::size_t> _busy;
+    Signal<std::exception_ptr> _error;
+    Signal<std::optional<R>> _last;
+    Signal<std::uint64_t> _successes;
+    std::map<std::string, Lane> _lanes;
+    std::uint64_t _generation = 0;
+    // Last member, so it is destroyed first: a reply still in flight finds it stopped. Its tokens expire with the
+    // mutation, which is how a runner or a refetch that destroyed the mutation finds out.
+    async::CallbackScope _lifetime;
 };
 
 }  // namespace morph::reactive
