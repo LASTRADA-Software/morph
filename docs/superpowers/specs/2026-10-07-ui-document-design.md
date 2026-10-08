@@ -151,7 +151,7 @@ one.
 | `{"can": "m"}` | Whether the signed-in principal may run mutation or query `m` (§12b). |
 | `{"pref": "point.path"}` | The user's choice at a customization point (§12b). |
 | `{"fn": "name", "args": [e, ...]}` | A library function (below). |
-| `{"t": "key", "fallback": "text", "args": [e, ...]}` | The text of `t(key, fallback, args...)`: shorthand for the library function. |
+| `{"t": "key", "fallback": "text", "args": {"name": e}}` | The text of `t(key, fallback, args)`: shorthand for the library function. |
 | `{"ref": "event"}` | The payload of the event whose command list is running: the new text, the chosen key, the dropped payload. Valid only inside a command list. |
 | `{"if": [cond, then, else]}` | Choice. |
 | `{"obj": {"k": e}}`, `{"list": [e, ...]}` | Constructors, used for action bodies. |
@@ -186,8 +186,14 @@ one.
 - display: `number`, `decimal(x, dp)`, `quantity(x, unit?)`, `money(x, currency)`,
   `date(x, style)`, `dateTime(x, style)` — using the client's locale and display zone through
   `render/locale_format.hpp`;
-- text: `t(key, fallback, args...)`, the i18n lookup of `render/i18n.hpp` (a `TranslationProvider`
-  over `(key, locale)`).
+- text: `t(key, fallback, args)`, the i18n lookup of `render/i18n.hpp` (a `TranslationProvider`
+  over `(key, locale)`). A message and its `fallback` are Unicode MessageFormat 2 patterns, and `args`
+  is an object of named arguments. `ui/1` accepts the subset of MessageFormat 2 that a UI needs:
+  placeholders (`{$count}`), `:number` and `:string` formatting, and `.match` on a `:number` (CLDR
+  plural categories for the active locale, and exact values such as `=0`) or on a `:string` (a
+  select). So `".input {$n :number} .match $n one {{{$n} sample}} * {{{$n} samples}}"` reads
+  "1 sample" and "3 samples" in English and takes Polish's or Arabic's forms from their catalogues.
+  A pattern outside the subset is refused when the catalogue loads, and the fallback is shown.
 
 The forms engine's `x-rules` (spec 2 §3) translate into this language, so a client has one
 evaluator.
@@ -236,12 +242,41 @@ A query is spec 1 §4b's `Query`, declared as data:
 - `when` false, or a `body` that evaluates to `null`, makes the query idle.
 - `debounce` delays a fetch until the key has been stable for that many milliseconds.
 - The last value is kept while a refetch is in flight, so lists do not blank.
-- `refreshOn` names actions of the query's own model alias: the query refetches when a call to one of
-  them, made through that alias by this client, completes successfully. It is the interpreter's own
-  bookkeeping over its dispatch, not a bridge subscription, so it works without the result type and
-  two actions with one reply type do not trigger each other. A change made by another client is not
-  pushed; `refreshEvery` is the polling answer, and it refetches on a timer and **skips a tick while a
-  request is in flight**.
+- `refreshOn` names action ids of the query's model type: the query refetches when a call to one of
+  them, made by this client through any alias of that model type in any mounted screen, completes
+  successfully. It matches by model type, not by instance, because two private instances of a
+  database-backed model read the same rows: a capture in one tab must refresh the list in another. It
+  is the interpreter's own bookkeeping over its dispatch (through the query cache, below), not a
+  bridge subscription, so it works without the result type and two actions with one reply type do not
+  trigger each other. A change made by another client is not pushed; `refreshEvery` is the polling
+  answer, and it refetches on a timer and **skips a tick while a request is in flight**.
+- `staleTime` (milliseconds, default 0) is how long a cached value counts as fresh (below).
+
+### The query cache
+
+Queries are declared per scope but stored per client session, so screens that show the same data
+share it.
+
+- **Key.** A query's cache key is `(model type, instance, action, canonical body)`. The instance is
+  the shared key, or the private binding the alias holds; the canonical body is the evaluated body's
+  JSON with sorted object keys. Two queries with equal keys — in one screen, in two tabs, in the app
+  root scope — share one entry: one request in flight, one value, one error.
+- **Freshness.** A query that mounts on an entry younger than its `staleTime` uses the cached value and
+  sends nothing; an older entry is shown at once and refetched (the value is kept while it refetches,
+  as for any query). An entry no mounted query uses is kept for 5 minutes, then dropped.
+- **Invalidation.** `invalidates`, `refreshOn` and `{"refetch": "q"}` mark entries stale and refetch
+  those a mounted query uses, in one batch. `invalidates` names queries of the mutation's own document;
+  `refreshOn` reaches every mounted screen (above).
+- **Isolation.** The cache belongs to the session: `signOut` and a principal change clear it, and a
+  backend switch (spec 6 §9) marks every entry stale. A `secret` field is never cached (§13).
+- **Prefetch.** A screen may declare `"prefetch": ["q", ...]`: queries whose bodies depend only on the
+  screen's `params`. A navigator entry, a menu item or a row whose activation would open the screen
+  starts them on hover or keyboard focus, after 150 ms, so the screen mounts on a warm cache. A
+  prefetch is a query like any other, so it is authorised as one and counts against the server's
+  limits.
+
+The reactive core's `Query` (spec 1 §4b) is unchanged: the interpreter builds each one with a
+fetcher that goes through the cache.
 
 ### Mutations
 
@@ -261,6 +296,13 @@ A query is spec 1 §4b's `Query`, declared as data:
   screen updates in one frame.
 - `patch` replaces one row of a query's cached list (the row whose key equals `key`) with `with`,
   without refetching. `key` and `with` are evaluated against the reply, bound as `result`.
+- `optimistic` has `patch`'s shape — `{"query": "q", "key": e, "with": e}` — but is applied when the run
+  starts, evaluated against the run's body bound as `body`. The reply replaces it (and `patch`, when
+  declared, applies to the reply); a failure rolls the row back to its value before the run, and
+  `onError` runs after the rollback. Only client-owned fields may be written optimistically: a field
+  the server calculates (§7) is never predicted, and a document whose `with` names one is refused at
+  load. Overlapping optimistic runs on one row roll back in reverse order, so the row ends at its
+  last confirmed value.
 - `onSuccess` and `onError` are command lists (§8). The reply is readable as `{"result": "capture"}`
   until the next run.
 - `"offline": "queue"` sends a run that cannot reach the server through the client's offline queue,
@@ -300,14 +342,14 @@ Every element may carry an `id`. An element's live values are addressable as `{"
 
 | Element | Values |
 |---|---|
-| any | `visible`, `enabled`, `valid`, `errors` |
-| text input, date, slider | `value`, `draft`, `dirty`, `focused` |
+| any | `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
+| text input, date, slider | `value`, `draft`, `dirty`, `focused`, `touched` |
 | checkbox | `checked` |
 | select | `selected`, `selectedOption` |
 | table | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` (spec 7 §12) |
 | dialog, drawer | `open` |
 | a transfer (`upload`, `download` with an `id`) | `progress` (0 to 1, or `null`), `pending`, `error` (spec 6 §18) |
-| form (spec 2) | each field's `value`, `draft`, `valid`, `required`, and the form's `ready`, `body` |
+| form (spec 2) | each field's `value`, `draft`, `valid`, `required`, `touched`, and the form's `ready`, `body`, `submitted` |
 
 Relations are expressions over those values and the scope's declarations:
 
@@ -334,6 +376,19 @@ through `required` instead. A failing check adds its message to each target's `e
 its `valid`. A dialog's or form's `ready` holds when every required element is engaged, every element
 is valid and no blocking check fails. The server re-validates every action it receives: client checks
 are guidance, never authority.
+
+**Showing errors.** `errors` is what is wrong now; `shownErrors` is what the renderer displays, and
+is what an element's error text binds to by default. A dialog, form or screen declares when the two
+meet with `showErrors`:
+
+- `"touched"` (the default): an element's errors show once it is `touched` — it has lost focus at
+  least once — or once the enclosing form or dialog is `submitted`;
+- `"submit"`: errors show only once it is `submitted`;
+- `"always"`: errors show at once.
+
+`submitted` becomes true when a run of the dialog's or form's submitting mutation is attempted,
+whether or not `ready` refused it, and is reset by `{"reset": ...}` of the dialog's state. A required
+field the user has not reached therefore does not show "required" while they fill the fields above it.
 
 **Watches.**
 
@@ -449,11 +504,16 @@ execute and every evaluation, whatever the client sent.
 | `{"seq": [...]}`, `{"all": [...]}` | Runs commands in order, stopping at a failure; or together, waiting for all. |
 | `{"if": [cond, [...], [...]]}` | Runs one branch. |
 | `{"cancelClose": true}` | Keeps the screen open; valid only in `onClose` (spec 6 §3). |
+| `{"retry": true}` | Refetches the failed queries of the innermost `boundary`; valid only inside a boundary's `error` (§9). |
 | `{"signIn": {"from": "m"}}`, `{"signOut": true}` | Installs the session token mutation `m` replied with and reloads the catalog; or ends the session and unmounts every screen (spec 6 §5). |
 | `{"upload": e, "to": "m", "as": "x"?, "id": "t"?}` | Sends a file the user picked or dropped through the server's file side channel, then runs mutation `m` with its reference (vocabulary `files/1`); `id` names the transfer for `progress`. |
 | `{"download": e, "save": "dialog", "name": e?}` or `{"download": e, "to": "preview", "as": "url"}` | Fetches a file by reference through the side channel and lets the user save it, or binds a local temporary reference to state `url` for a viewer (`files/1`, spec 6 §18). |
 
 A command list triggered by one event runs in one batch: the screen updates once.
+
+Every screen instance has a **route**, the string form of its id and params (spec 6 §20). `navigate`
+accepts one in place of a screen id, `{"navigate": {"route": e}}`, which is how a link, a bookmark
+and the browser's address bar open a screen.
 
 ## 9. View nodes
 
@@ -494,6 +554,7 @@ list) and is restylable (§10).
 | `collapsible` | `title`, `open`, `onToggle`, `header` (nodes shown beside the title), children |
 | `dropZone` | `accept`, `multiple`, `onDrop` (spec 6 §18) |
 | `customize` | `point`: the editor of a customization point (spec 6 §19) |
+| `boundary` | `loading`, `error` (node lists), children. Shows `loading` until every query read inside its children has a first value, `error` when one of them has failed with no value to keep, and the children otherwise. Inside `error`, `{"ref": "boundary.error"}` is the first failure's text and `{"retry": true}` refetches every failed query of the boundary. A refetch of a query that has a value does not leave the children: per-element `stale` covers it. Boundaries nest; the innermost one owns a query. |
 
 A `menu` item is `{label, icon, keys, checked, enabled, onClick, items}`; `items` nests a submenu and
 `checked` makes the item checkable. A status bar, a timeline, a diff table, a readout tile and a
@@ -591,6 +652,12 @@ MORPH_REGISTER_SCREEN(screen);
   handles in place of values.
 - Registration emits the JSON once and runs the load-time validation of §3; a screen that fails is a
   failing server test, never a client surprise.
+- Registration also runs the **accessibility rules**: every text input, date-time input, slider, select,
+  checkbox and file picker has a label or `a11y.name` (a form field takes its field's label); a button
+  without text, every `custom` node, every `table` and every `dialog` or `drawer` has `a11y.name` or a
+  title; an `icon` alone never names a node. A screen that breaks a rule fails registration, with the
+  path and the rule. The client does not repeat these rules: they guard authoring, and a client must
+  not refuse a document an older server registered.
 - The builders cover every construct of the document: the lifecycle keys (`identity`, `title`,
   `dirty`, `onMount`, `onUnmount`, `onClose`, `onBackendChange`), `refreshOn` over action types,
   `form` with its `fields` overlay, `dataTable`, `custom` and host components, and the command
@@ -634,6 +701,12 @@ MORPH_REGISTER_SCREEN(screen);
   refuses the document. A new node kind, function or command is a new vocabulary version
   (`ui/2`, `expr/2`). A server may keep documents for more than one version and sends the newest the
   client speaks.
+- **Development reload.** A client started in development mode re-sends `ui-hello` every second. When
+  the manifest digest changes, it fetches the changed entries and remounts the mounted screens whose
+  documents changed, keeping each scope's state where the new document still declares it under the
+  same name and type, and the screen's identity. A remount that fails validation keeps the old
+  document and reports the refusal. Production clients do not poll: the digest is read once per
+  connection.
 
 ## 12b. Permissions and per-user customization
 
@@ -736,6 +809,20 @@ places, none of which changes the document:
   typed counterparts for session, timeout, cancellation, accounting and `switchBackend`.
 - **Dispatch refresh:** `refreshOn` fires on the named action through the alias and not on another
   action with the same reply type.
+- **Query cache:** two screens with an equal key send one request; `staleTime` spares a remount's
+  fetch; a mutation in one tab refreshes, through `refreshOn`, a query of the same model type in
+  another; `signOut` clears the cache; a prefetch warms the entry the screen then mounts on.
+- **Optimistic:** the row shows `with` before the reply, the reply replaces it, a failure rolls it back
+  before `onError` runs, two overlapping runs end at the last confirmed value, and an optimistic write
+  to a calculated field is refused at load.
+- **Showing errors:** each `showErrors` policy against `touched` and `submitted`.
+- **Boundary:** first load, failure without a value, `retry`, a refetch that keeps the children, and
+  nesting.
+- **Messages:** plural categories for English, Polish and Arabic from the CLDR rules; a `.match` on a
+  string; a pattern outside the subset falls back.
+- **Accessibility rules:** each rule refuses a screen at registration with its path.
+- **Routes and reload:** a route round-trips through `navigate`; a changed document remounts in
+  development mode with its state kept by name, and a refused one leaves the old one mounted.
 - **Security:** a credential-bearing mutation is refused with `"offline": "queue"`; a `secret` field
   is absent from `result`, diagnostics and the queue; a side-effecting host component renders its
   fallback on an unverified connection.

@@ -420,6 +420,12 @@ Performance work is driven by numbers, from two sources.
 - **Traces.** Zones behind `MORPH_ENABLE_TRACY`: `table.snapshot`, `table.keyBuild`, `table.sort`,
   `table.filter`, `table.apply`, `table.change`, with the sort chain and filter summary as zone text,
   and plots for source rows, view rows and key-cache size.
+- **Mounting.** The cost of mounting a table whose rows each have a row scope (state, one query,
+  two bound cells) at 1,000, 10,000 and 100,000 rows: time to first frame, reactive nodes alive,
+  and memory. The result decides whether row scopes follow the view's windowing (spec 3 §5): if
+  10,000 rows mount within one frame budget, every row keeps its scope; otherwise a row scope is
+  created when its row is instantiated by the view, and its state is kept by row key while the row
+  exists.
 - **Provisional targets**, to be confirmed against baselines: the owner thread is never blocked for
   more than 16 ms by a table operation at any size, with or without a worker (§8); a sort or filter
   of 1,000 rows completes within one frame, on the owner in one step; of 10,000 rows within 100 ms;

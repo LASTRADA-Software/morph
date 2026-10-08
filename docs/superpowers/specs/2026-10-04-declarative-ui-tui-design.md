@@ -236,7 +236,8 @@ Query(Runtime& rt, std::function<Completion<R>(A const&)> fetch, std::function<s
 ```
 
 The fetcher constructor is the test seam and the path the document interpreter uses, whose fetcher
-is model-free JSON dispatch with `A` and `R` as JSON text.
+is model-free JSON dispatch with `A` and `R` as JSON text, through the client's query cache (spec 5
+§5, "The query cache"), which shares one request and one value among queries with equal keys.
 
 - An internal Effect reads `key`, tracked. A changed key is fetched under a new generation of the
   query's `CallbackScope`. `nullopt` is idle: nothing in flight, value and error cleared.

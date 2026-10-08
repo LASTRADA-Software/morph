@@ -104,6 +104,9 @@ MorphButton { text: "Deposit"; enabled: v.s17; onActivated: a.fire(18) }
 - A `table` over the table engine (spec 7) receives the engine's `ViewChange` as these keyed
   operations, so the engine's view order, not the model's, is what the user sees, and selection,
   focus and scroll survive a sort or filter.
+- Whether a row scope exists for every row or only for the rows the view instantiates is decided by
+  spec 7 §15's mount measurement. Until it is measured, every row has a scope, and the measurement
+  states the cost at 1,000, 10,000 and 100,000 rows.
 
 ## 6. Components
 
@@ -180,6 +183,10 @@ a request the document may refuse.
   A WebAssembly smoke executable built and linked in CI proves it.
 - The file picker uses `QFileDialog::getOpenFileContent`, because a browser exposes file contents,
   not paths.
+- **Browser history.** The focused screen's route (spec 6 §20) is the page's URL fragment, `#/<route>`.
+  Navigating pushes a history entry, the browser's back and forward focus or reopen the screen whose
+  route the entry holds, and a reload or a shared link opens the route's screen after sign-in. A route
+  whose screen the principal may not open shows the start screen.
 
 ## 11. Tests
 

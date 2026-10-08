@@ -23,7 +23,8 @@ screen of the lims example (§11).
 [12 Tests](#12-tests) · [13 Risks](#13-risks) · [14 Host vocabulary](#14-host-vocabulary-host1) ·
 [15 Native panes and the close guard](#15-native-panes-tabs-and-the-close-guard) ·
 [16 Call and return](#16-call-and-return) · [17 Keyboard and focus](#17-keyboard-and-focus) ·
-[18 Files and long jobs](#18-files-and-long-jobs) · [19 Settings and messages](#19-settings-and-messages)
+[18 Files and long jobs](#18-files-and-long-jobs) · [19 Settings and messages](#19-settings-and-messages) ·
+[20 Routes](#20-routes) · [21 Development tools](#21-development-tools)
 
 ## 1. Intent
 
@@ -190,29 +191,42 @@ trust it (§8).
 The look of an application is data first.
 
 **Theme tokens** (vocabulary `ui-theme/1`) are part of the bundle, or of the client when the
-application ships its own:
+application ships its own. A token file is a **Design Tokens Community Group format** document
+(version 2025.10): each token is an object with `$value` and `$type`, groups nest, and a value may
+alias another token as `"{color.accent}"`. A design tool's export is therefore a theme without a
+converter. The bundle lists the files that make up each variant:
 
 ```json
 "theme": { "vocab": "ui-theme/1",
-  "light": { "color.surface": "#FFFFFF", "color.surfaceAlt": "#F1F5F9", "color.text": "#0F172A",
-             "color.textMuted": "#64748B", "color.accent": "#2563EB", "color.accentText": "#FFFFFF",
-             "color.ok": "#15803D", "color.warn": "#B45309", "color.err": "#B91C1C",
-             "color.border": "#CBD5E1", "color.focus": "#2563EB" },
-  "dark":  { "color.surface": "#0B1220" },
-  "scale": { "space": [0, 4, 8, 12, 16, 24, 32], "radius": [0, 4, 8, 12], "font.size": [11, 12, 13, 15, 18, 24],
-             "font.family": "Inter", "control.height": 32 },
-  "density": { "comfortable": { "control.height": 32 }, "compact": { "control.height": 26 } } }
+  "base":    "theme/base.tokens.json",
+  "light":   "theme/light.tokens.json",
+  "dark":    "theme/dark.tokens.json",
+  "density": { "comfortable": "theme/comfortable.tokens.json", "compact": "theme/compact.tokens.json" },
+  "surfaces": { "sidebar": "theme/sidebar.tokens.json" } }
 ```
 
-- The names are the closed set `ui-theme/1` defines; an unknown name is ignored, a missing one takes
-  the `MorphUi` default. The `MorphUi` base components (spec 3 §3) read the tokens through one
+```json
+{ "color": { "$type": "color",
+             "surface": { "$value": "#FFFFFF" }, "text": { "$value": "#0F172A" },
+             "accent":  { "$value": "#2563EB" }, "focus": { "$value": "{color.accent}" } },
+  "space": { "$type": "dimension", "2": { "$value": { "value": 8, "unit": "px" } } },
+  "font":  { "family": { "$type": "fontFamily", "$value": "Inter" } } }
+```
+
+- A variant is resolved by layering its files over `base`, later files winning, then resolving
+  aliases; an alias cycle or an alias to a missing token refuses the theme when the bundle is
+  registered. Composite DTCG types (`shadow`, `typography`, `border`) are accepted; a `$type` the
+  client does not know is ignored with the token.
+- The token paths are the closed set `ui-theme/1` defines (`color.surface`, `space.2`,
+  `control.height`, …); an unknown path is ignored, a missing one takes the `MorphUi` default. The `MorphUi` base components (spec 3 §3) read the tokens through one
   `Theme` singleton, so every generated screen and every host component sees the same values.
-- `{"pref": "density"}` (spec 5 §12b) selects a `density` entry at runtime.
+- `{"pref": "density"}` (spec 5 §12b) selects a `density` variant at runtime.
 - The terminal renderer maps colour roles to its palette and ignores the scale.
 - **Semantic sets.** Each of `ok`, `warn`, `err` and `info` has `color.<role>`, `color.<role>.bg`,
   `color.<role>.border` and `color.<role>.dot`; `elevation.1` to `elevation.3` are shadow tokens.
-- **Surfaces.** A theme may declare `"surfaces": {"sidebar": {"color.surface": "#0F172A",
-  "color.text": "#E2E8F0"}}`: a named token set that overrides the base for a subtree. A node with
+- **Surfaces.** A theme may declare `"surfaces": {"sidebar": "theme/sidebar.tokens.json"}`: a named
+  token file (for example one that sets `color.surface` and `color.text`) that overrides the variant
+  for a subtree. A node with
   `"surface": "sidebar"` resolves every token under it, including a host component's, through that
   set. This is how a dark rail sits inside a light theme.
 - **Extension tokens.** Names under `ext.` (`ext.rail.width`, `ext.row.dense`) are free-form, typed
@@ -294,15 +308,17 @@ are the catalog entry's (§8).
   run it per tab, one tab at a time, and stop at the first veto.
 - **Recent order.** Ctrl+Tab walks tabs most recently used first; the shell shows a switcher while
   the modifier is held.
-- **Start.** `resume` reopens the screens recorded for the person, as `screenId` or
-  `screenId:identity`; `overview` or any screen id opens that screen; `app-start-fallback` applies
-  when nothing is recorded or a recorded screen is no longer available. The record is written as
-  tabs open and close, debounced, and flushed before the session is cleared on sign-out.
+- **Start.** `resume` reopens the screens recorded for the person, as their routes (§20); `overview`
+  or any screen id opens that screen; `app-start-fallback` applies when nothing is recorded or a
+  recorded screen is no longer available. The record is written as tabs open and close, debounced, and
+  flushed before the session is cleared on sign-out.
 - **Navigator.** The catalog (§8) is listed with its module and group; an entry that is
   `available: false` is listed disabled with its reason. A search over titles (in every locale, §19)
   and a keyboard shortcut open it; its keys are §17's.
 - **Pins.** The user's shortcuts are an application-scope customization point of kind `pins` (§8),
   ordered, optionally grouped, limited to `app-max-pins`.
+- **Prefetch.** Hovering or focusing a navigator entry, a pin or a tab whose screen is not mounted
+  starts the screen's `prefetch` queries (spec 5 §5).
 - **Window chrome** (title bar, window controls, user menu) is the host's: the shell is an item the
   host places in its own window. The generic client supplies a plain default.
 
@@ -596,6 +612,13 @@ framework's claims in this spec are tested against it, not against a description
 - **Settings and messages:** each `customize` editor edits its point and `resetPrefs` restores the
   default; `setLocale` re-resolves every `t`; a missing catalogue shows the fallback; search matches
   titles in every manifest locale.
+- **Tokens:** a DTCG export from a design tool loads as a theme; variants layer over `base`; an alias
+  resolves, and an alias cycle refuses the theme at registration.
+- **Routes:** every screen's route round-trips; a route with a param of the wrong type is refused; a
+  `resume` record of routes reopens the tabs; on WebAssembly, back and forward follow the history and
+  a reload reopens the focused screen.
+- **Inspector:** it lists every mounted node with its evaluated properties and every query with its
+  key, state and age, and a release build contains none of it.
 - **Automation conformance:** on each platform with an automation interface, a generated screen
   exposes the names, roles and ids §6 promises.
 - **Port check:** an application's existing UI-automation suite, restricted to lookups by accessible
@@ -765,11 +788,51 @@ default. An application section (a logging panel) is a host component, or host v
 
 **Messages.**
 
-- The bundle manifest lists a catalogue per locale, `i18n/<locale>.json`, a flat map of key to text,
-  fetched by hash (spec 5 §12) and cached. The client's `TranslationProvider` resolves
+- The bundle manifest lists a catalogue per locale, `i18n/<locale>.json`, a flat map of key to a
+  MessageFormat 2 pattern in the subset spec 5 §4 defines, fetched by hash (spec 5 §12) and cached.
+  Plural and select forms live in the pattern, so a locale with more plural categories adds variants
+  in its own catalogue without changing the document. The client's `TranslationProvider` resolves
   `(key, locale)` from them; `{"env": "locale"}` is the active locale and `{"setLocale": "de"}`
   changes it, which re-resolves every `t`, and is stored as a preference.
 - Keys are authored, `<screen>.<name>`; there are no keys derived from text. Porting a screen keeps
   its source text as the `fallback` and gives it an authored key, so a missing catalogue shows the
   source text.
 - Search across locales (§17) asks the provider for each locale the manifest lists.
+
+## 20. Routes
+
+A **route** is the string form of a screen instance: `<screen id>` followed by its params as a query
+string, `lims.sample?sampleId=1042`. Param values are the canonical text of their declared types
+(spec 5 §3): an `int` in decimal, a `decimal` as `num/den@dp`, a `key` as `i:<int64>` or `s:<text>`,
+a string percent-encoded.
+
+- Every screen instance has one route, derived from its id and params. Two instances with equal
+  `identity` have equal routes, so focusing an open tab by route is the same as focusing it by
+  identity.
+- **Opening a route** parses it against the screen's `params` (an unknown screen, a missing required
+  param or a value that does not parse is refused with the route and the reason), then opens the
+  screen as `navigate` does. The principal's permissions apply: a screen the catalog omits opens the
+  start screen instead.
+- **Where routes are used.** `resume` records are routes (§7). A host may offer "copy link" with
+  `morph://<app id>/<route>`, which an operating system hands to the client. The WebAssembly client
+  keeps the focused screen's route in the browser's history (spec 3 §10).
+- A screen opened as a dialog, drawer or window (§16) has no route of its own: it answers its opener
+  and is not reopened from a link.
+
+## 21. Development tools
+
+A client started in development mode (`--dev`, or `MORPH_UI_DEV=1`) adds two tools. Neither is built
+into a release client.
+
+- **Reload.** Documents and components reload when the server's manifest changes (spec 5 §12,
+  "Development reload").
+- **Inspector.** A window, opened with Ctrl+Shift+I, over the focused screen:
+  - the document tree as mounted, each node with its kind, `id`, `testId` and evaluated properties,
+    and the node under the pointer highlighted in the screen;
+  - every query and mutation with its cache key, state (`idle`, `pending`, `fresh`, `stale`,
+    `error`), age, last error and the action it runs, with a refetch button;
+  - the command log: each event, the commands it ran and the batch they ran in;
+  - the reactive runtime's counters: flushes, effects run per flush, and every misuse it reported.
+
+  The inspector reads the interpreter's state and never writes it, except through the same commands a
+  user could run.
