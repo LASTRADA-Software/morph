@@ -51,6 +51,8 @@ inline constexpr char const* kIssueInComputed =
 inline constexpr char const* kAfterFlushThrew = "morph::reactive: an exception escaped afterFlush";
 /// @brief A Runtime was destroyed while nodes made from it were alive.
 inline constexpr char const* kRuntimeOutlived = "morph::reactive: Runtime destroyed while nodes are alive";
+/// @brief A control node was built over a handler whose callbacks are not delivered on the Runtime's owner.
+inline constexpr char const* kHandlerExecutor = "morph::reactive: a handler delivers off the Runtime's owner";
 }  // namespace site
 
 /// @brief How many times one Effect may run in a single flush unless `RuntimeOptions` says otherwise.

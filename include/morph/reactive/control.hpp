@@ -92,6 +92,41 @@ private:
     Refetchable* _target;
 };
 
+namespace detail {
+
+/// @brief Checks that @p handler delivers its callbacks on @p runtime's owner, reporting `site::kHandlerExecutor`
+///        when it does not.
+///
+/// A control node writes its signals from the handler's callbacks, so they must run where the runtime runs. The
+/// check is by affinity, not by pointer identity: a distinct serial executor that runs its tasks on the owner's
+/// thread is accepted. An executor that is not serial is reported at once. Any other serial executor is checked
+/// where it runs, by one posted task, which reports when it finds itself off the owner. No callback executor
+/// means the bridge's owner.
+/// @tparam M The handler's model type.
+/// @tparam S The handler's sharing policy.
+/// @param runtime The runtime the node belongs to.
+/// @param handler The handler the node is built over.
+template <typename M, typename S>
+void checkHandlerExecutor(Runtime const& runtime, bridge::BridgeHandler<M, S> const& handler) {
+    exec::IExecutor* const callbacks = handler.guiExecutor();
+    exec::IExecutor& delivery = callbacks != nullptr ? *callbacks : handler.owner();
+    std::shared_ptr<RuntimeCore> const& core = runtime.core();
+    if (!delivery.isSerial()) {
+        core->report(site::kHandlerExecutor);
+        return;
+    }
+    if (&delivery == &core->owner()) {
+        return;
+    }
+    delivery.post([weak = std::weak_ptr<RuntimeCore>{core}] {
+        if (auto const live = weak.lock(); live != nullptr && !live->onOwner()) {
+            live->report(site::kHandlerExecutor);
+        }
+    });
+}
+
+}  // namespace detail
+
 /// @brief How a `Query` refreshes besides key changes, and how long it lets a key settle.
 struct QueryOptions {
     /// @brief Runs the timed refresh and the debounce; required when either is positive. Borrowed: it must
@@ -187,10 +222,12 @@ public:
     }
 
     /// @brief Builds a query that fetches through a bridge handler.
+    ///
+    /// Checks the handler's callback executor against the runtime's owner (`detail::checkHandlerExecutor`).
     /// @tparam M The handler's model type.
     /// @tparam S The handler's sharing policy.
     /// @param runtime The runtime. Borrowed: it must outlive the query.
-    /// @param handler Executes the requests; its GUI executor must be the runtime's owner. Borrowed.
+    /// @param handler Executes the requests; its callbacks must be delivered on the runtime's owner. Borrowed.
     /// @param key The tracked key.
     /// @param options Timed refresh and debounce; see QueryOptions.
     /// @throws std::invalid_argument when `options.refreshEvery` or `options.debounce` is negative, or either is
@@ -198,7 +235,9 @@ public:
     template <typename M, typename S>
     Query(Runtime& runtime MORPH_LIFETIMEBOUND, bridge::BridgeHandler<M, S>& handler MORPH_LIFETIMEBOUND, Key key,
           QueryOptions options = {})
-        : Query(runtime, [&handler](A const& action) { return handler.execute(action); }, std::move(key), options) {}
+        : Query(runtime, [&handler](A const& action) { return handler.execute(action); }, std::move(key), options) {
+        detail::checkHandlerExecutor(runtime, handler);
+    }
 
     /// @brief Clears the query's invalidation link, so no mutation refetches it any more, and cancels what it
     ///        has in flight.
@@ -472,6 +511,8 @@ public:
           _successes{runtime, 0} {}
 
     /// @brief Builds a mutation that executes through a bridge handler.
+    ///
+    /// Checks the handler's callback executor against the runtime's owner (`detail::checkHandlerExecutor`).
     /// @tparam M The handler's model type.
     /// @tparam S The handler's sharing policy.
     /// @param runtime The runtime. Borrowed: it must outlive the mutation.
@@ -480,7 +521,9 @@ public:
     template <typename M, typename S>
     Mutation(Runtime& runtime MORPH_LIFETIMEBOUND, bridge::BridgeHandler<M, S>& handler MORPH_LIFETIMEBOUND,
              MutationOptions<A> options = {})
-        : Mutation(runtime, [&handler](A action) { return handler.execute(std::move(action)); }, std::move(options)) {}
+        : Mutation(runtime, [&handler](A action) { return handler.execute(std::move(action)); }, std::move(options)) {
+        detail::checkHandlerExecutor(runtime, handler);
+    }
 
     ~Mutation() = default;
     Mutation(Mutation const&) = delete;
@@ -642,6 +685,56 @@ private:
     std::uint64_t _generation = 0;
     // Last member, so it is destroyed first: a reply still in flight finds it stopped. Its tokens expire with the
     // mutation, which is how a runner or a refetch that destroyed the mutation finds out.
+    async::CallbackScope _lifetime;
+};
+
+/// @brief The latest `R` the bridge published on a handler's instance, as reactive state.
+///
+/// Uses the handler's one subscription slot for `R`: two consumers of the same `R` use two handlers. The
+/// subscription is gated by a scope the Subscription owns, so a publish delivered after it is destroyed —
+/// one already queued included — is dropped. The handler keeps the dead entry until it is destroyed or
+/// subscribes to `R` again. A delivery off the Runtime's owner is reported (`detail::site::kOffOwner`)
+/// and dropped.
+///
+/// `latest()` is state, not an event stream: when `R` compares with `==`, a publish equal to the current
+/// value does not notify. For something to happen on every publish, use `Query::refreshOn`.
+/// @tparam R The published result type.
+template <typename R>
+class Subscription final {
+public:
+    /// @brief Subscribes to every `R` published on @p handler's instance, and checks the handler's callback
+    ///        executor against the runtime's owner (`detail::checkHandlerExecutor`).
+    /// @tparam M The handler's model type.
+    /// @tparam S The handler's sharing policy.
+    /// @param runtime The runtime. Borrowed: it must outlive the subscription.
+    /// @param handler The handler whose instance publishes; its GUI executor must be the runtime's
+    ///        owner. Borrowed: it must outlive the subscription.
+    template <typename M, typename S>
+    Subscription(Runtime& runtime MORPH_LIFETIMEBOUND, bridge::BridgeHandler<M, S>& handler MORPH_LIFETIMEBOUND)
+        : _rt{&runtime}, _latest{runtime, std::nullopt} {
+        detail::checkHandlerExecutor(runtime, handler);
+        handler.template subscribe<R>(_lifetime, [this](R value) {
+            if (!_rt->core()->checkOwner()) {
+                return;
+            }
+            _latest.set(std::move(value));
+        });
+    }
+
+    ~Subscription() = default;
+    Subscription(Subscription const&) = delete;
+    Subscription& operator=(Subscription const&) = delete;
+    Subscription(Subscription&&) = delete;
+    Subscription& operator=(Subscription&&) = delete;
+
+    /// @brief The latest published value. Tracked.
+    /// @return The value, or `nullopt` before the first publish. Valid until the next publish.
+    [[nodiscard]] std::optional<R> const& latest() const { return _latest.get(); }
+
+private:
+    Runtime* _rt;
+    Signal<std::optional<R>> _latest;
+    // Last member, so it is destroyed first: a publish still in flight finds it stopped.
     async::CallbackScope _lifetime;
 };
 
