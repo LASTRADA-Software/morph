@@ -437,6 +437,7 @@ target_sources(morph
         include/morph/table/data_source.hpp
         include/morph/table/sort.hpp
         include/morph/table/filter.hpp
+        include/morph/table/view_change.hpp
 )
 
 # The detail/ headers that public headers include. They are not public surface
