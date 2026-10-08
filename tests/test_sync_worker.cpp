@@ -9,12 +9,12 @@
 #include <morph/core/owner_strand.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 TEST_CASE("morph::offline::SyncWorker: run on empty queue returns zero successful and zero failed", "[sync]") {

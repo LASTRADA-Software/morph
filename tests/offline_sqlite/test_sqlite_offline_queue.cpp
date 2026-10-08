@@ -19,13 +19,13 @@
 #include <morph/core/owner_strand.hpp>
 #include <morph/offline/sqlite_offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "../offline_queue_conformance.hpp"
-#include "../owner_probe_recorder.hpp"
 #include "../test_support.hpp"
 
 namespace {

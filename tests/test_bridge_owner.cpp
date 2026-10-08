@@ -22,13 +22,13 @@
 #include <morph/core/remote.hpp>
 #include <morph/forms/flows.hpp>
 #include <morph/forms/sections.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 namespace owner_test {

@@ -423,6 +423,8 @@ target_sources(morph
         include/morph/core/model_key.hpp
         include/morph/core/payload_schema.hpp
         include/morph/core/payload_shape_tag.hpp
+        include/morph/testing/step_executor.hpp
+        include/morph/testing/owner_probe_recorder.hpp
         include/morph/forms/app.hpp
         include/morph/forms/flows.hpp
         include/morph/forms/layout.hpp

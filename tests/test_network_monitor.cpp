@@ -7,10 +7,10 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/io_loop.hpp>
 #include <morph/offline/network_monitor.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <thread>
 #include <vector>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 using namespace std::chrono_literals;

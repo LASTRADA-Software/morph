@@ -19,6 +19,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <mutex>
 #include <new>
 #include <optional>
@@ -30,7 +31,6 @@
 #include <utility>
 #include <vector>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 namespace {

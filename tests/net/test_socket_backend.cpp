@@ -33,6 +33,7 @@
 #include <morph/net/socket_backend.hpp>
 #include <morph/net/socket_server.hpp>
 #include <morph/session/session.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -44,7 +45,6 @@
 #include <vector>
 
 #include "../bind_support.hpp"
-#include "../owner_probe_recorder.hpp"
 #include "../test_support.hpp"
 
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based

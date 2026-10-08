@@ -19,10 +19,10 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/io_loop.hpp>
 #include <morph/core/timeout_scheduler.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <stdexcept>
 #include <thread>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 using morph::async::detail::TimeoutScheduler;

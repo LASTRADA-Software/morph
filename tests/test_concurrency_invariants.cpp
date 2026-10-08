@@ -23,6 +23,7 @@
 #include <morph/offline/network_monitor.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -31,7 +32,6 @@
 #include <utility>
 #include <vector>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 using namespace std::chrono_literals;

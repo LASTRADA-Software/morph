@@ -10,6 +10,7 @@
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/reconnect_coordinator.hpp>
 #include <morph/offline/sync_worker.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -17,7 +18,6 @@
 #include <thread>
 #include <vector>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 using morph::offline::ReconnectCoordinator;

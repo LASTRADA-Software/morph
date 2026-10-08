@@ -18,11 +18,11 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/timeout_scheduler.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <stdexcept>
 #include <thread>
 
 #include "bind_support.hpp"
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 // NOLINTBEGIN(misc-use-internal-linkage): registration needs external linkage.

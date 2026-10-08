@@ -22,12 +22,12 @@
 #include <morph/net/detail/ws_frame.hpp>
 #include <morph/net/detail/ws_handshake.hpp>
 #include <morph/net/socket_server.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include "../owner_probe_recorder.hpp"
 #include "../test_support.hpp"
 
 // ── Test model, registered process-wide (same pattern as tests/qt/test_qt_websocket.cpp) ──

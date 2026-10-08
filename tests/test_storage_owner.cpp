@@ -26,13 +26,13 @@
 #include <morph/offline/file_offline_queue.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/replay_ledger.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <optional>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 namespace {
