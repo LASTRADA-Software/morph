@@ -771,9 +771,17 @@ public:
     void beginEdit(RowId const& key) { _editing.insert(key); }
 
     /// @brief Ends an edit; a held row moves to its sorted place now.
+    ///
+    /// The commit that ends an edit usually patches the row just before, and
+    /// that update reaches the engine on a later owner turn: the next repair
+    /// does not hold the row either, so it moves once rather than waiting for
+    /// the settle interval.
     /// @param key The row's key.
     void endEdit(RowId const& key) {
         _editing.erase(key);
+        if (_options.reorder == ReorderPolicy::Deferred) {
+            _releaseOnRepair.insert(key);
+        }
         if (_holds.erase(key) > 0) {
             relayout();
         }
@@ -1054,10 +1062,13 @@ private:
         auto change = std::move(result.change);
         if (_options.reorder == ReorderPolicy::Deferred && input.repair) {
             for (auto const row : input.dirty) {
-                if (std::ranges::find(input.previousView, row) != input.previousView.end()) {
-                    _holds.insert(input.snapshot->rowId(row));
+                auto key = input.snapshot->rowId(row);
+                if (!_releaseOnRepair.contains(key) &&
+                    std::ranges::find(input.previousView, row) != input.previousView.end()) {
+                    _holds.insert(std::move(key));
                 }
             }
+            _releaseOnRepair.clear();
             for (auto const& editing : _editing) {
                 _holds.insert(editing);
             }
@@ -1197,6 +1208,7 @@ private:
     // deferred reorder
     std::unordered_set<RowId> _holds;
     std::unordered_set<RowId> _editing;
+    std::unordered_set<RowId> _releaseOnRepair;  // edits ended since the last repair
     std::uint64_t _settleSeq = 0;
     // execution
     bool _pending = false;

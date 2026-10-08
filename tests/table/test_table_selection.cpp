@@ -10,9 +10,15 @@
 //    earlier edits: "edits to one row run in order" fails.
 //  - CellEdits::settle not patching the row on success: "a commit runs the
 //    mutation and patches the row" fails.
+//  - Engine holding a dirty row whose edit just ended (drop the
+//    _releaseOnRepair check): "under deferred reorder, a committed edit moves
+//    its row when the commit settles" fails.
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
+#include <functional>
+#include <morph/core/executor.hpp>
 #include <morph/table/edits.hpp>
 #include <morph/table/selection.hpp>
 #include <string>
@@ -182,6 +188,28 @@ TEST_CASE("table: edits to one row run in order, other rows run alongside", "[ta
     calls[1].second(std::vector<Cell>{std::int64_t{3}});
     CHECK(std::get<std::int64_t>(source->snapshot()->cell(0, 0)) == 2);
     CHECK(edits.unsettled() == 0);
+}
+
+TEST_CASE("table: under deferred reorder, a committed edit moves its row when the commit settles", "[table][edits]") {
+    morph::exec::MainThreadExecutor owner;
+    std::vector<std::function<void()>> settles;
+    auto const source = fiveRows();
+    Engine engine{source, EngineOptions{.owner = &owner,
+                                        .reorder = ReorderPolicy::Deferred,
+                                        .scheduleSettle = [&](std::chrono::milliseconds, std::function<void()> fire) {
+                                            settles.push_back(std::move(fire));
+                                        }}};
+    REQUIRE(engine.setSort({{.column = "c", .dir = kAsc}}).has_value());
+    REQUIRE(viewKeys(engine).front() == key(1));  // 10 sorts first
+    std::vector<EditDone> pending;
+    CellEdits edits{*source, [&](EditRequest const&, EditDone done) { pending.push_back(std::move(done)); }, &engine};
+    edits.commit(EditRequest{.row = key(1), .column = "c", .value = std::int64_t{60}});
+    REQUIRE(pending.size() == 1);
+    pending.front()(std::vector<Cell>{std::int64_t{60}});
+    owner.drain();
+    // The row moved to the end as the commit settled, with no settle timer fired.
+    CHECK(viewKeys(engine).back() == key(1));
+    CHECK(engine.heldRows().empty());
 }
 
 TEST_CASE("table: a completion after the committer is gone is ignored", "[table][edits]") {

@@ -181,7 +181,7 @@ concept HasViewActions = requires {
 /// @param prop   A property node.
 /// @return The resolved node; @p prop when the reference does not resolve.
 [[nodiscard]] inline glz::generic_u64 const* resolveSchemaRef(glz::generic_u64 const& rowDom,
-                                                            glz::generic_u64 const& prop) {
+                                                              glz::generic_u64 const& prop) {
     auto const* const ref = ::morph::forms::detail::findMember(prop, "$ref");
     if (ref == nullptr || !ref->is_string()) {
         return &prop;

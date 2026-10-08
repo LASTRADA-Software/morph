@@ -248,7 +248,9 @@ updated row that was in the view, and every row between `beginEdit` and
 order around it. A held row stays even if its update took it out of the
 filter. `scheduleSettle(settle, fire)` arms a timer per repair; only the most
 recent one releases (any update in between makes earlier timers stale), and it
-releases every held row not being edited. `endEdit` releases its row at once.
+releases every held row not being edited. `endEdit` releases its row at once, and the
+update its commit patched, which reaches the engine a turn later, does not hold it again: a committed
+edit moves its row once.
 `settleNow()` releases without a timer. A sort or filter change, or a
 structural change, releases everything.
 
