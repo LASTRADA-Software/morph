@@ -33,6 +33,7 @@ struct RecordingListener final : ChangeListener {
 
 std::vector<std::vector<Cell>> numberedRows(std::size_t count) {
     std::vector<std::vector<Cell>> rows;
+    rows.reserve(count);
     for (std::size_t i = 0; i < count; ++i) {
         rows.push_back({Cell{static_cast<std::int64_t>(i)}, Cell{std::string{"row "} + std::to_string(i)}});
     }
@@ -46,7 +47,7 @@ std::vector<ColumnInfo> twoColumns() {
 }  // namespace
 
 TEST_CASE("table: a snapshot is a pointer copy of the source's rows", "[table][source]") {
-    auto source = tabletest::makeSource(twoColumns(), numberedRows(3));
+    auto const source = tabletest::makeSource(twoColumns(), numberedRows(3));
     auto const first = source->snapshot();
     auto const second = source->snapshot();
     CHECK(first.get() == second.get());
@@ -57,7 +58,7 @@ TEST_CASE("table: a snapshot is a pointer copy of the source's rows", "[table][s
 
 TEST_CASE("table: an update leaves an earlier snapshot unchanged and copies one chunk", "[table][source]") {
     auto const rows = TableSnapshot::kChunkRows * 3;
-    auto source = tabletest::makeSource(twoColumns(), numberedRows(rows));
+    auto const source = tabletest::makeSource(twoColumns(), numberedRows(rows));
     auto const before = source->tableSnapshot();
     source->updateRow(5, {Cell{std::int64_t{500}}, Cell{std::string{"five"}}});
     auto const after = source->tableSnapshot();
@@ -70,7 +71,7 @@ TEST_CASE("table: an update leaves an earlier snapshot unchanged and copies one 
 }
 
 TEST_CASE("table: readColumn hands runs that cover exactly the rows asked for", "[table][source]") {
-    auto source = tabletest::makeSource(twoColumns(), numberedRows(TableSnapshot::kChunkRows + 10));
+    auto const source = tabletest::makeSource(twoColumns(), numberedRows(TableSnapshot::kChunkRows + 10));
     struct Collect final : ColumnSink {
         std::vector<std::int64_t> values;
         std::size_t calls = 0;
@@ -90,18 +91,17 @@ TEST_CASE("table: readColumn hands runs that cover exactly the rows asked for", 
     CHECK(sink.calls == 2);
     REQUIRE(sink.values.size() == TableSnapshot::kChunkRows + 2);
     CHECK(sink.values.front() == 3);
-    CHECK(sink.values.back() == static_cast<std::int64_t>(TableSnapshot::kChunkRows + 4));
+    CHECK(std::cmp_equal(sink.values.back(), TableSnapshot::kChunkRows + 4));
 }
 
 TEST_CASE("table: insert and remove keep keys and cells aligned across chunks", "[table][source]") {
-    auto source = tabletest::makeSource(twoColumns(), numberedRows(TableSnapshot::kChunkRows + 2));
+    auto const source = tabletest::makeSource(twoColumns(), numberedRows(TableSnapshot::kChunkRows + 2));
     source->insertRow(1, RowId{std::string{"new"}}, {Cell{std::int64_t{-1}}, Cell{std::string{"inserted"}}});
     auto snap = source->snapshot();
     REQUIRE(snap->rowCount() == TableSnapshot::kChunkRows + 3);
     CHECK(std::get<std::string>(snap->rowId(1)) == "new");
     CHECK(std::get<std::int64_t>(snap->cell(2, 0)) == 1);
-    CHECK(std::get<std::int64_t>(snap->cell(snap->rowCount() - 1, 0)) ==
-          static_cast<std::int64_t>(TableSnapshot::kChunkRows + 1));
+    CHECK(std::cmp_equal(std::get<std::int64_t>(snap->cell(snap->rowCount() - 1, 0)), TableSnapshot::kChunkRows + 1));
     CHECK(source->indexOf(RowId{std::string{"new"}}) == 1U);
 
     source->removeRow(0);
@@ -112,7 +112,7 @@ TEST_CASE("table: insert and remove keep keys and cells aligned across chunks", 
 }
 
 TEST_CASE("table: listeners hear every kind of change, and patchRow finds rows by key", "[table][source]") {
-    auto source = tabletest::makeSource(twoColumns(), numberedRows(4));
+    auto const source = tabletest::makeSource(twoColumns(), numberedRows(4));
     RecordingListener listener;
     source->subscribe(listener);
     source->updateRow(1, {Cell{std::int64_t{10}}, Cell{std::string{"x"}}});

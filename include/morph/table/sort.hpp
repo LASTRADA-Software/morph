@@ -41,6 +41,8 @@
 
 namespace morph::table {
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row and column indices are bounded by the snapshot's own counts, and the sort and filter loops index once per comparison, where at() would check every access
+
 /// @brief A sort key's direction.
 enum class SortDirection : std::uint8_t {
     Ascending,   ///< Smallest first.
@@ -96,9 +98,10 @@ inline constexpr std::size_t kCheckEvery = 2048;
 /// @return The value, or nothing when @p text is not exactly an integer.
 [[nodiscard]] inline std::optional<std::int64_t> parseInteger(std::string_view text) {
     std::int64_t value = 0;
-    auto const* const end = text.data() + text.size();
-    auto const [ptr, ec] = std::from_chars(text.data(), end, value);
-    if (ec != std::errc{} || ptr != end || text.empty()) {
+    auto const* const first = std::to_address(text.begin());
+    auto const* const last = std::to_address(text.end());
+    auto const [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last || text.empty()) {
         return std::nullopt;
     }
     return value;
@@ -109,9 +112,10 @@ inline constexpr std::size_t kCheckEvery = 2048;
 /// @return The value, or nothing when @p text is not exactly a number or is NaN.
 [[nodiscard]] inline std::optional<double> parseReal(std::string_view text) {
     double value = 0;
-    auto const* const end = text.data() + text.size();
-    auto const [ptr, ec] = std::from_chars(text.data(), end, value);
-    if (ec != std::errc{} || ptr != end || text.empty() || std::isnan(value)) {
+    auto const* const first = std::to_address(text.begin());
+    auto const* const last = std::to_address(text.end());
+    auto const [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last || text.empty() || std::isnan(value)) {
         return std::nullopt;
     }
     return value;
@@ -340,11 +344,10 @@ private:
             ints[row] = *value;
             return CellState::Valid;
         }
-        if (auto const* value = std::get_if<std::string>(&cell)) {
-            if (*value == "true" || *value == "false") {
-                ints[row] = *value == "true" ? 1 : 0;
-                return CellState::Valid;
-            }
+        if (auto const* value = std::get_if<std::string>(&cell);
+            value != nullptr && (*value == "true" || *value == "false")) {
+            ints[row] = *value == "true" ? 1 : 0;
+            return CellState::Valid;
         }
         return CellState::Invalid;
     }
@@ -385,13 +388,14 @@ inline void buildKeys(RowSnapshot const& snapshot, std::size_t column, ColumnInf
 /// @brief Compares two rows' keys in one column, valid before invalid in
 ///        either direction.
 /// @param keys The column's keys.
-/// @param a    One row.
-/// @param b    Another row.
-/// @param dir  The key's direction; it does not move invalid cells.
-/// @return Negative, zero or positive as row @p a orders before, with, or after @p b.
-[[nodiscard]] inline int compareKeys(KeyColumn const& keys, std::uint32_t a, std::uint32_t b, SortDirection dir) {
-    bool const validA = keys.states[a] == CellState::Valid;
-    bool const validB = keys.states[b] == CellState::Valid;
+/// @param left  One row.
+/// @param right Another row.
+/// @param dir   The key's direction; it does not move invalid cells.
+/// @return Negative, zero or positive as row @p left orders before, with, or after @p right.
+[[nodiscard]] inline int compareKeys(KeyColumn const& keys, std::uint32_t left, std::uint32_t right,
+                                     SortDirection dir) {
+    bool const validA = keys.states[left] == CellState::Valid;
+    bool const validB = keys.states[right] == CellState::Valid;
     if (validA != validB) {
         return validA ? -1 : 1;
     }
@@ -399,10 +403,10 @@ inline void buildKeys(RowSnapshot const& snapshot, std::size_t column, ColumnInf
         return 0;
     }
     auto const sign = [](auto ordering) -> int {
-        if (ordering < 0) {
+        if (std::is_lt(ordering)) {
             return -1;
         }
-        return ordering > 0 ? 1 : 0;
+        return std::is_gt(ordering) ? 1 : 0;
     };
     int result = 0;
     switch (keys.kind) {
@@ -411,21 +415,21 @@ inline void buildKeys(RowSnapshot const& snapshot, std::size_t column, ColumnInf
         case ColumnKind::Date:
         case ColumnKind::DateTime:
         case ColumnKind::Bool:
-            result = sign(keys.ints[a] <=> keys.ints[b]);
+            result = sign(keys.ints[left] <=> keys.ints[right]);
             break;
         case ColumnKind::Decimal:
         case ColumnKind::Quantity:
-            result = sign(keys.exact[a] <=> keys.exact[b]);
+            result = sign(keys.exact[left] <=> keys.exact[right]);
             break;
         case ColumnKind::Number:
-            result = sign(std::strong_order(keys.reals[a], keys.reals[b]));
+            result = sign(std::strong_order(keys.reals[left], keys.reals[right]));
             break;
         case ColumnKind::Text:
-            result = sign(keys.text[a].compare(keys.text[b]) <=> 0);
+            result = sign(keys.text[left].compare(keys.text[right]) <=> 0);
             break;
         case ColumnKind::Custom:
-            result = keys.usesComparator() ? sign(keys.comparator(keys.cells[a], keys.cells[b]))
-                                           : sign(keys.text[a].compare(keys.text[b]) <=> 0);
+            result = keys.usesComparator() ? sign(keys.comparator(keys.cells[left], keys.cells[right]))
+                                           : sign(keys.text[left].compare(keys.text[right]) <=> 0);
             break;
         default:
             break;
@@ -456,16 +460,16 @@ public:
 
     /// @brief Whether row @p a orders before row @p b. Ties break by source
     ///        row, so this is a strict total order and every sort is stable.
-    /// @param a One row.
-    /// @param b Another row.
-    /// @return `true` when @p a comes first.
-    [[nodiscard]] bool operator()(std::uint32_t a, std::uint32_t b) const {
+    /// @param left  One row.
+    /// @param right Another row.
+    /// @return `true` when @p left comes first.
+    [[nodiscard]] bool operator()(std::uint32_t left, std::uint32_t right) const {
         for (auto const& key : _keys) {
-            if (int const result = compareKeys(*key.keys, a, b, key.dir); result != 0) {
+            if (int const result = compareKeys(*key.keys, left, right, key.dir); result != 0) {
                 return result < 0;
             }
         }
-        return a < b;
+        return left < right;
     }
 
     /// @brief Whether this is source order.
@@ -500,6 +504,20 @@ public:
     /// @param stop     A stop request ends the step early.
     /// @return `true` when the rows are sorted.
     bool run(Deadline deadline, ::core::async::StopToken const& stop) {
+        return sortRuns(deadline, stop) && mergePasses(deadline, stop);
+    }
+
+    /// @brief Whether the sort has finished.
+    /// @return `true` once `run` returned `true`.
+    [[nodiscard]] bool done() const noexcept { return _runStart >= _rows.size() && _width >= _rows.size(); }
+
+    /// @brief The sorted rows. Valid once `done()`.
+    /// @return The rows, moved out.
+    [[nodiscard]] std::vector<std::uint32_t> take() && { return std::move(_rows); }
+
+private:
+    // Phase one: sorts each run of kRun rows in place.
+    bool sortRuns(Deadline deadline, ::core::async::StopToken const& stop) {
         auto const count = _rows.size();
         std::size_t work = 0;
         while (_runStart < count) {
@@ -512,50 +530,62 @@ public:
                 return false;
             }
         }
+        return true;
+    }
+
+    // Phase two: merges runs pass by pass, doubling their width.
+    bool mergePasses(Deadline deadline, ::core::async::StopToken const& stop) {
+        auto const count = _rows.size();
         while (_width < count) {
             while (_mergeAt < count) {
-                if (!_merging) {
-                    _left = _mergeAt;
-                    _leftEnd = std::min(_mergeAt + _width, count);
-                    _right = _leftEnd;
-                    _rightEnd = std::min(_mergeAt + (2 * _width), count);
-                    _out = _mergeAt;
-                    _merging = true;
+                if (!mergeOne(deadline, stop)) {
+                    return false;
                 }
-                while (_left < _leftEnd && _right < _rightEnd) {
-                    _buffer[_out++] = _order(_rows[_right], _rows[_left]) ? _rows[_right++] : _rows[_left++];
-                    if (++work % detail::kCheckEvery == 0 && detail::shouldYield(deadline, stop)) {
-                        return false;
-                    }
-                }
-                while (_left < _leftEnd) {
-                    _buffer[_out++] = _rows[_left++];
-                }
-                while (_right < _rightEnd) {
-                    _buffer[_out++] = _rows[_right++];
-                }
-                _merging = false;
-                _mergeAt = _rightEnd;
             }
             _rows.swap(_buffer);
             _width *= 2;
             _mergeAt = 0;
-            if (detail::shouldYield(deadline, stop) && _width < count) {
+            if (_width < count && detail::shouldYield(deadline, stop)) {
                 return false;
             }
         }
         return true;
     }
 
-    /// @brief Whether the sort has finished.
-    /// @return `true` once `run` returned `true`.
-    [[nodiscard]] bool done() const noexcept { return _runStart >= _rows.size() && _width >= _rows.size(); }
+    // Merges the two runs at `_mergeAt` into the buffer, resuming a merge a
+    // previous step left half done.
+    bool mergeOne(Deadline deadline, ::core::async::StopToken const& stop) {
+        auto const count = _rows.size();
+        if (!_merging) {
+            _left = _mergeAt;
+            _leftEnd = std::min(_mergeAt + _width, count);
+            _right = _leftEnd;
+            _rightEnd = std::min(_mergeAt + (2 * _width), count);
+            _out = _mergeAt;
+            _merging = true;
+        }
+        std::size_t work = 0;
+        while (_left < _leftEnd && _right < _rightEnd) {
+            _buffer[_out++] = _order(_rows[_right], _rows[_left]) ? _rows[_right++] : _rows[_left++];
+            if (++work % detail::kCheckEvery == 0 && detail::shouldYield(deadline, stop)) {
+                return false;
+            }
+        }
+        std::copy(_rows.begin() + static_cast<std::ptrdiff_t>(_left),
+                  _rows.begin() + static_cast<std::ptrdiff_t>(_leftEnd),
+                  _buffer.begin() + static_cast<std::ptrdiff_t>(_out));
+        _out += _leftEnd - _left;
+        _left = _leftEnd;
+        std::copy(_rows.begin() + static_cast<std::ptrdiff_t>(_right),
+                  _rows.begin() + static_cast<std::ptrdiff_t>(_rightEnd),
+                  _buffer.begin() + static_cast<std::ptrdiff_t>(_out));
+        _out += _rightEnd - _right;
+        _right = _rightEnd;
+        _merging = false;
+        _mergeAt = _rightEnd;
+        return true;
+    }
 
-    /// @brief The sorted rows. Valid once `done()`.
-    /// @return The rows, moved out.
-    [[nodiscard]] std::vector<std::uint32_t> take() && { return std::move(_rows); }
-
-private:
     std::vector<std::uint32_t> _rows;
     std::vector<std::uint32_t> _buffer;
     RowOrder _order;
@@ -579,6 +609,8 @@ private:
     static_cast<void>(sort.run(kNoDeadline, ::core::async::StopToken{}));
     return std::move(sort).take();
 }
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
 

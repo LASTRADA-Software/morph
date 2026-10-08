@@ -180,17 +180,17 @@ concept HasViewActions = requires {
 /// @param rowDom The row type's schema DOM.
 /// @param prop   A property node.
 /// @return The resolved node; @p prop when the reference does not resolve.
-[[nodiscard]] inline glz::generic_u64 const& resolveSchemaRef(glz::generic_u64 const& rowDom,
+[[nodiscard]] inline glz::generic_u64 const* resolveSchemaRef(glz::generic_u64 const& rowDom,
                                                             glz::generic_u64 const& prop) {
     auto const* const ref = ::morph::forms::detail::findMember(prop, "$ref");
     if (ref == nullptr || !ref->is_string()) {
-        return prop;
+        return &prop;
     }
     auto const& refText = ref->get_string();
     auto const defName = refText.substr(refText.find_last_of('/') + 1);
     auto const* const defs = ::morph::forms::detail::findMember(rowDom, "$defs");
     auto const* const def = (defs == nullptr) ? nullptr : ::morph::forms::detail::findMember(*defs, defName);
-    return def == nullptr ? prop : *def;
+    return def == nullptr ? &prop : def;
 }
 
 /// @brief A property's JSON-Schema `type`, ignoring a `null` alternative.
@@ -240,7 +240,7 @@ concept HasViewActions = requires {
     if (findMember(prop, "x-comparator") != nullptr) {
         return "custom";
     }
-    auto const& node = resolveSchemaRef(rowDom, prop);
+    auto const& node = *resolveSchemaRef(rowDom, prop);
     auto const* const properties = findMember(node, "properties");
     if (properties != nullptr && findMember(*properties, "num") != nullptr &&
         findMember(*properties, "den") != nullptr) {
@@ -335,7 +335,7 @@ concept HasViewActions = requires {
             entry[std::string{key}] = *value;
         }
     }
-    auto const& resolved = resolveSchemaRef(rowDom, prop);
+    auto const& resolved = *resolveSchemaRef(rowDom, prop);
     if (auto const* const values = ::morph::forms::detail::findMember(resolved, "enum")) {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         entry["enum"] = *values;
@@ -349,7 +349,7 @@ concept HasViewActions = requires {
         }
         if (!constants.empty()) {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-            entry["enum"] = std::move(constants);
+            entry["enum"] = constants;
         }
     }
     if (auto const* const units = ::morph::forms::detail::findMember(prop, "ExtUnits")) {

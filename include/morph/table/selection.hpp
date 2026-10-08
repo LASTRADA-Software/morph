@@ -30,6 +30,8 @@
 
 namespace morph::table {
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row and column indices are bounded by the snapshot's own counts, and the sort and filter loops index once per comparison, where at() would check every access
+
 /// @brief Where a table's rows are sorted and filtered.
 enum class TableMode : std::uint8_t {
     Client,  ///< The client holds every row and the engine sorts and filters them.
@@ -71,9 +73,9 @@ public:
     }
 
     /// @brief Selects a row; in `Single` mode it replaces the selection.
-    /// @param id The row's key.
+    /// @param key The row's key.
     /// @return `false` in `None` mode.
-    bool select(RowId const& id) {
+    bool select(RowId const& key) {
         if (_options.mode == SelectionMode::None) {
             return false;
         }
@@ -81,31 +83,31 @@ public:
             _keys.clear();
             _order.clear();
         }
-        if (_keys.insert(id).second) {
-            _order.push_back(id);
+        if (_keys.insert(key).second) {
+            _order.push_back(key);
         }
         return true;
     }
 
     /// @brief Deselects a row.
-    /// @param id The row's key.
+    /// @param key The row's key.
     /// @return `true` when it was selected.
-    bool deselect(RowId const& id) {
-        if (_keys.erase(id) == 0) {
+    bool deselect(RowId const& key) {
+        if (_keys.erase(key) == 0) {
             return false;
         }
-        std::erase(_order, id);
+        std::erase(_order, key);
         return true;
     }
 
     /// @brief Selects an unselected row, or deselects a selected one.
-    /// @param id The row's key.
+    /// @param key The row's key.
     /// @return Whether the row is selected afterwards.
-    bool toggle(RowId const& id) {
-        if (deselect(id)) {
+    bool toggle(RowId const& key) {
+        if (deselect(key)) {
             return false;
         }
-        return select(id);
+        return select(key);
     }
 
     /// @brief Deselects every row.
@@ -136,27 +138,27 @@ public:
         if (!_options.pruneOnFilter) {
             return;
         }
-        std::erase_if(_order, [&](RowId const& id) {
-            if (engine.viewRowOfKey(id)) {
+        std::erase_if(_order, [&](RowId const& key) {
+            if (engine.viewRowOfKey(key)) {
                 return false;
             }
-            _keys.erase(id);
+            _keys.erase(key);
             return true;
         });
     }
 
     /// @brief Moves the cursor.
-    /// @param id The row's key, or nothing for no cursor.
-    void setActiveKey(std::optional<RowId> id) { _active = std::move(id); }
+    /// @param key The row's key, or nothing for no cursor.
+    void setActiveKey(std::optional<RowId> key) { _active = std::move(key); }
 
     /// @brief The row with the cursor.
     /// @return Its key, or nothing.
     [[nodiscard]] std::optional<RowId> const& activeKey() const noexcept { return _active; }
 
     /// @brief Whether a row is selected.
-    /// @param id The row's key.
+    /// @param key The row's key.
     /// @return `true` when selected.
-    [[nodiscard]] bool contains(RowId const& id) const { return _keys.contains(id); }
+    [[nodiscard]] bool contains(RowId const& key) const { return _keys.contains(key); }
 
     /// @brief Selected rows.
     /// @return The count.
@@ -214,5 +216,7 @@ struct TableCounts {
                        .sourceCount = engine.sourceRowCount(),
                        .selectedCount = selection.selectedCount()};
 }
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table

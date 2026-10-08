@@ -46,21 +46,22 @@ std::vector<std::pair<SortChain, FilterSpec>> scenarios() {
     group.groups.push_back(
         GroupFilter{.columns = {"name", "n"}, .combine = Combine::Any, .include = {FilterEntry{.contains = "ta"}}});
     return {
-        {{{"n", kAsc}}, {}},
-        {{{"name", kDesc}}, {}},
-        {{{"on", kAsc}, {"price", kDesc}, {"mass", kAsc}}, {}},
-        {{{"mass", kAsc}}, filterOn("price", FilterEntry{.ge = "250.5"})},
+        {{{.column = "n", .dir = kAsc}}, {}},
+        {{{.column = "name", .dir = kDesc}}, {}},
+        {{{.column = "on", .dir = kAsc}, {.column = "price", .dir = kDesc}, {.column = "mass", .dir = kAsc}}, {}},
+        {{{.column = "mass", .dir = kAsc}}, filterOn("price", FilterEntry{.ge = "250.5"})},
         {{}, filterOn("name", FilterEntry{.contains = "ETA"})},
-        {{{"price", kAsc}}, group},
-        {{{"n", kDesc}}, filterOn("on", FilterEntry{.between = std::array<std::string, 2>{"2023-06-01", "2024-12-31"}})},
+        {{{.column = "price", .dir = kAsc}}, group},
+        {{{.column = "n", .dir = kDesc}},
+         filterOn("on", FilterEntry{.between = std::array<std::string, 2>{"2023-06-01", "2024-12-31"}})},
     };
 }
 
 }  // namespace
 
 TEST_CASE("table: the initial view is every row in source order", "[table][engine]") {
-    auto source = tabletest::column(ColumnKind::Integer, {std::int64_t{3}, std::int64_t{1}, std::int64_t{2}});
-    Engine engine{source};
+    auto const source = tabletest::column(ColumnKind::Integer, {std::int64_t{3}, std::int64_t{1}, std::int64_t{2}});
+    Engine const engine{source};
     CHECK(engine.viewRowCount() == 3);
     CHECK(engine.sourceRowCount() == 3);
     CHECK(engine.sourceRowOf(1) == 1U);
@@ -69,8 +70,8 @@ TEST_CASE("table: the initial view is every row in source order", "[table][engin
 }
 
 TEST_CASE("table: sort and filter map view rows and source rows both ways", "[table][engine]") {
-    auto source = tabletest::column(ColumnKind::Integer,
-                                    {std::int64_t{30}, std::int64_t{10}, std::int64_t{20}, std::int64_t{40}});
+    auto const source = tabletest::column(ColumnKind::Integer,
+                                          {std::int64_t{30}, std::int64_t{10}, std::int64_t{20}, std::int64_t{40}});
     Engine engine{source};
     FollowingModel model{engine};
     REQUIRE(engine.setSort({{"c", kAsc}}).has_value());
@@ -83,14 +84,14 @@ TEST_CASE("table: sort and filter map view rows and source rows both ways", "[ta
     CHECK(engine.viewRowOfKey(RowId{std::int64_t{0}}) == 2U);
     CHECK(engine.viewRowOfKey(RowId{std::int64_t{3}}) == std::nullopt);
     CHECK(model.check());
-    CHECK(model.changes == 2);
+    CHECK(model.changes() == 2);
 }
 
 TEST_CASE("table: setSort and setFilter refuse what they cannot apply and keep the old state", "[table][engine]") {
-    auto source = tabletest::column(ColumnKind::Integer, {std::int64_t{1}});
+    auto const source = tabletest::column(ColumnKind::Integer, {std::int64_t{1}});
     Engine engine{source};
     REQUIRE(engine.setSort({{"c", kDesc}}).has_value());
-    auto const badSort = engine.setSort({{"nope", kAsc}});
+    auto const badSort = engine.setSort({{.column = "nope", .dir = kAsc}});
     REQUIRE_FALSE(badSort.has_value());
     CHECK(badSort.error().code == TableErrorCode::UnknownColumn);
     CHECK(engine.sort() == SortChain{{"c", kDesc}});
@@ -103,7 +104,7 @@ TEST_CASE("table: setSort and setFilter refuse what they cannot apply and keep t
 TEST_CASE("table: a small table computes on the owner in one step", "[table][engine]") {
     morph::exec::MainThreadExecutor owner;
     ManualExecutor worker;
-    auto source = tabletest::syntheticSource(500, 1);
+    auto const source = tabletest::syntheticSource(500, 1);
     Engine engine{source, EngineOptions{.owner = &owner, .worker = &worker}};
     std::vector<bool> pendings;
     engine.onPending([&](bool value) { pendings.push_back(value); });
@@ -119,7 +120,7 @@ TEST_CASE("table: a small table computes on the owner in one step", "[table][eng
 TEST_CASE("table: pending brackets asynchronous work and the old view stays meanwhile", "[table][engine]") {
     morph::exec::MainThreadExecutor owner;
     ManualExecutor worker;
-    auto source = tabletest::syntheticSource(3000, 2);
+    auto const source = tabletest::syntheticSource(3000, 2);
     Engine engine{source, EngineOptions{.owner = &owner, .worker = &worker}};
     FollowingModel model{engine};
     std::vector<bool> pendings;
@@ -130,21 +131,21 @@ TEST_CASE("table: pending brackets asynchronous work and the old view stays mean
     CHECK(engine.pending());
     CHECK(pendings == std::vector<bool>{true});
     CHECK(viewKeys(engine) == before);
-    CHECK(model.changes == 0);
+    CHECK(model.changes() == 0);
 
     CHECK(worker.runAll() == 1);
     CHECK(engine.pending());  // the result is applied on the owner, not on the worker
     owner.drain();
     CHECK_FALSE(engine.pending());
     CHECK(pendings == std::vector<bool>{true, false});
-    CHECK(model.changes == 1);
+    CHECK(model.changes() == 1);
     CHECK(model.check());
 }
 
 TEST_CASE("table: a superseded sort stops and its result is dropped", "[table][engine]") {
     morph::exec::MainThreadExecutor owner;
     ManualExecutor worker;
-    auto source = tabletest::syntheticSource(3000, 3);
+    auto const source = tabletest::syntheticSource(3000, 3);
     Engine engine{source, EngineOptions{.owner = &owner, .worker = &worker}};
     FollowingModel model{engine};
 
@@ -154,12 +155,12 @@ TEST_CASE("table: a superseded sort stops and its result is dropped", "[table][e
     worker.runAll();                                          // the first job sees its stop request
     owner.drain();                                            // drops it and starts the second
     CHECK(engine.stats().dropped == 1);
-    CHECK(model.changes == 0);
+    CHECK(model.changes() == 0);
     CHECK(engine.pending());
     CHECK(worker.runAll() == 1);
     owner.drain();
     CHECK_FALSE(engine.pending());
-    CHECK(model.changes == 1);
+    CHECK(model.changes() == 1);
     CHECK(model.check());
 
     Engine reference{source};
@@ -170,7 +171,7 @@ TEST_CASE("table: a superseded sort stops and its result is dropped", "[table][e
 TEST_CASE("table: a sort superseded after its job finished is still dropped", "[table][engine]") {
     morph::exec::MainThreadExecutor owner;
     ManualExecutor worker;
-    auto source = tabletest::syntheticSource(3000, 31);
+    auto const source = tabletest::syntheticSource(3000, 31);
     Engine engine{source, EngineOptions{.owner = &owner, .worker = &worker}};
     FollowingModel model{engine};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
@@ -178,10 +179,10 @@ TEST_CASE("table: a sort superseded after its job finished is still dropped", "[
     REQUIRE(engine.setSort({{"name", kAsc}}).has_value());
     owner.drain();
     CHECK(engine.stats().dropped == 1);
-    CHECK(model.changes == 0);
+    CHECK(model.changes() == 0);
     worker.runAll();
     owner.drain();
-    CHECK(model.changes == 1);
+    CHECK(model.changes() == 1);
     CHECK(model.check());
     Engine reference{source};
     REQUIRE(reference.setSort({{"name", kAsc}}).has_value());
@@ -191,7 +192,7 @@ TEST_CASE("table: a sort superseded after its job finished is still dropped", "[
 TEST_CASE("table: an engine destroyed with a job in flight drops the job's result", "[table][engine]") {
     morph::exec::MainThreadExecutor owner;
     ManualExecutor worker;
-    auto source = tabletest::syntheticSource(3000, 4);
+    auto const source = tabletest::syntheticSource(3000, 4);
     std::size_t changes = 0;
     {
         Engine engine{source, EngineOptions{.owner = &owner, .worker = &worker}};
@@ -204,20 +205,20 @@ TEST_CASE("table: an engine destroyed with a job in flight drops the job's resul
 }
 
 TEST_CASE("table: results are identical on the owner, in owner steps and on a worker", "[table][engine]") {
-    auto source = tabletest::syntheticSource(6000, 5);
+    auto const source = tabletest::syntheticSource(6000, 5);
     morph::exec::MainThreadExecutor owner;
     morph::exec::ThreadPoolExecutor pool{2};
     for (auto const& [sort, filter] : scenarios()) {
-        Engine inline_{source};
-        Engine stepped{
-            source, EngineOptions{.owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}}};
+        Engine oneStep{source};
+        Engine stepped{source,
+                       EngineOptions{.owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}}};
         Engine threaded{source, EngineOptions{.owner = &owner, .worker = &pool}};
-        for (Engine* engine : {&inline_, &stepped, &threaded}) {
+        for (Engine* engine : {&oneStep, &stepped, &threaded}) {
             REQUIRE(engine->setSort(sort).has_value());
             REQUIRE(engine->setFilter(filter).has_value());
         }
         REQUIRE(tabletest::pumpUntil(owner, [&] { return !stepped.pending() && !threaded.pending(); }));
-        auto const expected = viewKeys(inline_);
+        auto const expected = viewKeys(oneStep);
         CHECK(viewKeys(stepped) == expected);
         CHECK(viewKeys(threaded) == expected);
         CHECK(stepped.stats().ownerSteps > 1);
@@ -226,8 +227,9 @@ TEST_CASE("table: results are identical on the owner, in owner steps and on a wo
 
 TEST_CASE("table: owner steps yield to the frame budget", "[table][engine]") {
     morph::exec::MainThreadExecutor owner;
-    auto source = tabletest::syntheticSource(20000, 6);
-    Engine engine{source, EngineOptions{.owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}}};
+    auto const source = tabletest::syntheticSource(20000, 6);
+    Engine engine{source,
+                  EngineOptions{.owner = &owner, .worker = nullptr, .frameBudget = std::chrono::microseconds{1}}};
     REQUIRE(engine.setSort({{"name", kAsc}, {"price", kDesc}}).has_value());
     CHECK(engine.stats().ownerSteps == 0);
     REQUIRE(tabletest::pumpUntil(owner, [&] { return !engine.pending(); }));
@@ -238,7 +240,7 @@ TEST_CASE("table: owner steps yield to the frame budget", "[table][engine]") {
 }
 
 TEST_CASE("table: a filter change filters the cached sorted order without re-sorting", "[table][engine]") {
-    auto source = tabletest::syntheticSource(3000, 7);
+    auto const source = tabletest::syntheticSource(3000, 7);
     Engine engine{source};
     REQUIRE(engine.setSort({{"price", kAsc}}).has_value());
     CHECK(engine.stats().fullSorts == 1);
@@ -269,7 +271,7 @@ TEST_CASE("table: a filter change filters the cached sorted order without re-sor
 }
 
 TEST_CASE("table: keys are built once per column and reused", "[table][engine]") {
-    auto source = tabletest::syntheticSource(1000, 8);
+    auto const source = tabletest::syntheticSource(1000, 8);
     Engine engine{source};
     REQUIRE(engine.setSort({{"price", kAsc}}).has_value());
     REQUIRE(engine.setSort({{"price", kDesc}}).has_value());
@@ -284,7 +286,7 @@ TEST_CASE("table: a progress sink hears from a worker job on the owner", "[table
         std::vector<std::pair<std::size_t, std::size_t>> calls;
         void progress(std::size_t done, std::size_t total) override { calls.emplace_back(done, total); }
     };
-    auto recorder = std::make_shared<Recorder>();
+    auto const recorder = std::make_shared<Recorder>();
     morph::exec::MainThreadExecutor owner;
     ManualExecutor worker;
     Services services;

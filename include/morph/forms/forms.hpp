@@ -535,6 +535,18 @@ concept DeclaresSchemaMarker = requires {
     { std::remove_cvref_t<T>::schemaMarker() } noexcept -> std::convertible_to<std::string_view>;
 };
 
+/// @brief Sets the keyword a member type declares with `schemaMarker()` on
+///        its property; does nothing for any other type.
+/// @tparam Member The member's type.
+/// @param property The property's schema node.
+template <typename Member>
+void annotateSchemaMarker(glz::generic_u64& property) {
+    if constexpr (DeclaresSchemaMarker<Member>) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+        property[std::string{Member::schemaMarker()}] = true;
+    }
+}
+
 /// @brief Concept: a field type that declares slider bounds via `noexcept`
 ///        `static constexpr min()` / `max()` / `step()` — the `Ranged` shape.
 template <typename T>
@@ -2431,9 +2443,7 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     if (!widgetHint.empty()) {
         property["x-widget"] = std::string{widgetHint};
     }
-    if constexpr (DeclaresSchemaMarker<Member>) {
-        property[std::string{Member::schemaMarker()}] = true;
-    }
+    annotateSchemaMarker<Member>(property);
     if constexpr (DeclaresRangedBounds<Member>) {
         using Bound = std::remove_cvref_t<decltype(Member::min())>;
         if constexpr (std::floating_point<Bound>) {

@@ -55,6 +55,8 @@
 
 namespace morph::table {
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row and column indices are bounded by the snapshot's own counts, and the sort and filter loops index once per comparison, where at() would check every access
+
 /// @brief What an updated row that would move does.
 enum class ReorderPolicy : std::uint8_t {
     Immediate,  ///< It moves at once.
@@ -124,45 +126,46 @@ public:
     /// @return Column ids.
     [[nodiscard]] std::vector<std::string> visible() const {
         std::vector<std::string> out;
-        for (auto const& id : _order) {
-            if (!_hidden.contains(id)) {
-                out.push_back(id);
+        for (auto const& columnId : _order) {
+            if (!_hidden.contains(columnId)) {
+                out.push_back(columnId);
             }
         }
         return out;
     }
 
     /// @brief Shows or hides a column.
-    /// @param id   Column id.
+    /// @param columnId   Column columnId.
     /// @param show `true` to show.
     /// @return `false` when the column is unknown, or hiding it would leave none visible.
-    bool setVisible(std::string const& id, bool show) {
-        if (std::ranges::find(_order, id) == _order.end()) {
+    bool setVisible(std::string const& columnId, bool show) {
+        if (std::ranges::find(_order, columnId) == _order.end()) {
             return false;
         }
         if (show) {
-            _hidden.erase(id);
+            _hidden.erase(columnId);
             return true;
         }
-        if (!_hidden.contains(id) && visible().size() == 1) {
+        if (!_hidden.contains(columnId) && visible().size() == 1) {
             return false;
         }
-        _hidden.insert(id);
+        _hidden.insert(columnId);
         return true;
     }
 
     /// @brief Moves a column to a display position.
-    /// @param id Column id.
-    /// @param to Position in `order()`, clamped to the end.
+    /// @param columnId Column columnId.
+    /// @param position Position in `order()`, clamped to the end.
     /// @return `false` when the column is unknown.
-    bool move(std::string const& id, std::size_t to) {
-        auto const at = std::ranges::find(_order, id);
-        if (at == _order.end()) {
+    bool move(std::string const& columnId, std::size_t position) {
+        auto const found = std::ranges::find(_order, columnId);
+        if (found == _order.end()) {
             return false;
         }
-        auto moved = std::move(*at);
-        _order.erase(at);
-        _order.insert(_order.begin() + static_cast<std::ptrdiff_t>(std::min(to, _order.size())), std::move(moved));
+        auto moved = std::move(*found);
+        _order.erase(found);
+        _order.insert(_order.begin() + static_cast<std::ptrdiff_t>(std::min(position, _order.size())),
+                      std::move(moved));
         return true;
     }
 
@@ -177,17 +180,18 @@ public:
     /// @param ids The new columns, as the new default order.
     void rebuild(std::vector<std::string> ids) {
         std::vector<std::string> order;
-        for (auto const& id : _order) {
-            if (std::ranges::find(ids, id) != ids.end()) {
-                order.push_back(id);
+        for (auto const& columnId : _order) {
+            if (std::ranges::find(ids, columnId) != ids.end()) {
+                order.push_back(columnId);
             }
         }
-        for (auto const& id : ids) {
-            if (std::ranges::find(order, id) == order.end()) {
-                order.push_back(id);
+        for (auto const& columnId : ids) {
+            if (std::ranges::find(order, columnId) == order.end()) {
+                order.push_back(columnId);
             }
         }
-        std::erase_if(_hidden, [&](std::string const& id) { return std::ranges::find(ids, id) == ids.end(); });
+        std::erase_if(_hidden,
+                      [&](std::string const& hiddenId) { return std::ranges::find(ids, hiddenId) == ids.end(); });
         _defaults = std::move(ids);
         _order = std::move(order);
         if (!_order.empty() && visible().empty()) {
@@ -325,9 +329,9 @@ public:
     /// @return The input.
     [[nodiscard]] JobInput const& input() const noexcept { return _in; }
 
-    /// @brief The result. Valid once `done()`.
-    /// @return The result, moved out.
-    [[nodiscard]] JobResult take() && { return std::move(_result); }
+    /// @brief Moves the result out. Valid once `done()`; the input stays readable.
+    /// @return The result.
+    [[nodiscard]] JobResult takeResult() { return std::move(_result); }
 
 private:
     enum class Phase : std::uint8_t { Keys, Order, Diff, Done };
@@ -355,15 +359,15 @@ private:
         MORPH_ZONE("table.keyBuild");
         auto const rows = _in.snapshot->rowCount();
         if (!_patched && _in.repair) {
-            for (std::size_t c = 0; c < _result.keys.size(); ++c) {
-                if (_result.keys[c] == nullptr) {
+            for (std::size_t column = 0; column < _result.keys.size(); ++column) {
+                if (_result.keys[column] == nullptr) {
                     continue;
                 }
-                auto copy = std::make_shared<KeyColumn>(*_result.keys[c]);
+                auto copy = std::make_shared<KeyColumn>(*_result.keys[column]);
                 for (auto const row : _in.dirty) {
-                    copy->set(row, _in.snapshot->cell(row, c), _in.columns[c], _in.services);
+                    copy->set(row, _in.snapshot->cell(row, column), _in.columns[column], _in.services);
                 }
-                _result.keys[c] = std::move(copy);
+                _result.keys[column] = std::move(copy);
             }
             _patched = true;
         }
@@ -412,11 +416,8 @@ private:
     [[nodiscard]] RowOrder rowOrder() const {
         std::vector<RowOrder::Key> keys;
         for (auto const& key : _in.sort) {
-            for (std::size_t c = 0; c < _in.columns.size(); ++c) {
-                if (_in.columns[c].id == key.column) {
-                    keys.push_back({.keys = _result.keys[c].get(), .dir = key.dir});
-                    break;
-                }
+            if (auto const column = findColumn(_in.columns, key.column)) {
+                keys.push_back({.keys = _result.keys[*column].get(), .dir = key.dir});
             }
         }
         return RowOrder{std::move(keys)};
@@ -472,43 +473,55 @@ private:
         return out;
     }
 
-    bool order(Deadline deadline, ::core::async::StopToken const& stop) {
+    // Merges the re-keyed dirty rows into the previous order (and the cached
+    // full order), without sorting the rest.
+    void repair() {
+        MORPH_ZONE("table.change");
+        auto const orderBy = rowOrder();
+        std::vector<std::uint32_t> passing;
+        for (auto const row : _in.dirty) {
+            if (passesFilter(row)) {
+                passing.push_back(row);
+            }
+        }
+        _result.view = repairOrder(_in.previousTrueView, std::move(passing), orderBy);
+        if (_in.cachedSorted != nullptr) {
+            _result.sorted =
+                std::make_shared<std::vector<std::uint32_t> const>(repairOrder(*_in.cachedSorted, _in.dirty, orderBy));
+        }
+        _result.repaired = true;
+    }
+
+    // Chooses the work: filter the cached sorted order; or filter, then sort
+    // the survivors; or sort every row and cache the order.
+    void plan() {
         auto const rows = _in.snapshot->rowCount();
         auto const filtering = _in.filter != nullptr && !_in.filter->empty();
+        _started = true;
+        if (_in.cachedSorted != nullptr) {
+            _base = *_in.cachedSorted;
+            _sorted = true;
+        } else {
+            _base.resize(rows);
+            std::ranges::iota(_base, 0U);
+            _sorted = _in.sort.empty();
+            if (!_sorted && !filtering) {
+                _sort.emplace(std::move(_base), rowOrder());
+                _result.fullSort = true;
+            }
+        }
+        if (filtering && (_sorted || _sort == std::nullopt)) {
+            _filterRun.emplace(*_in.filter, keyPointers(), std::move(_base));
+        }
+    }
+
+    bool order(Deadline deadline, ::core::async::StopToken const& stop) {
         if (_in.repair) {
-            MORPH_ZONE("table.change");
-            auto const orderBy = rowOrder();
-            std::vector<std::uint32_t> passing;
-            for (auto const row : _in.dirty) {
-                if (passesFilter(row)) {
-                    passing.push_back(row);
-                }
-            }
-            _result.view = repairOrder(_in.previousTrueView, std::move(passing), orderBy);
-            if (_in.cachedSorted != nullptr) {
-                _result.sorted = std::make_shared<std::vector<std::uint32_t> const>(
-                    repairOrder(*_in.cachedSorted, _in.dirty, orderBy));
-            }
-            _result.repaired = true;
+            repair();
             return true;
         }
         if (!_started) {
-            _started = true;
-            if (_in.cachedSorted != nullptr) {
-                _base = *_in.cachedSorted;
-                _sorted = true;
-            } else {
-                _base.resize(rows);
-                std::iota(_base.begin(), _base.end(), 0U);
-                _sorted = _in.sort.empty();
-                if (!_sorted && !filtering) {
-                    _sort.emplace(std::move(_base), rowOrder());
-                    _result.fullSort = true;
-                }
-            }
-            if (filtering && (_sorted || _sort == std::nullopt)) {
-                _filterRun.emplace(*_in.filter, keyPointers(), std::move(_base));
-            }
+            plan();
         }
         if (_filterRun) {
             MORPH_ZONE("table.filter");
@@ -606,15 +619,15 @@ public:
     /// @brief Builds the engine; the initial view is every row in source order.
     /// @param source  The rows. Must not be null.
     /// @param options How the engine runs.
-    Engine(std::shared_ptr<DataSource> source, EngineOptions options = {})
-        : _source{std::move(source)}, _options{std::move(options)} {
-        _columns.assign(_source->columns().begin(), _source->columns().end());
-        _snapshot = _source->snapshot();
-        _viewSnapshot = _snapshot;
-        _keys.resize(_columns.size());
-        _view.resize(_snapshot->rowCount());
-        std::iota(_view.begin(), _view.end(), 0U);
-        _trueView = _view;
+    explicit Engine(std::shared_ptr<DataSource> source, EngineOptions options = {})
+        : _source{std::move(source)},
+          _options{std::move(options)},
+          _columns(_source->columns().begin(), _source->columns().end()),
+          _snapshot{_source->snapshot()},
+          _viewSnapshot{_snapshot},
+          _keys(_columns.size()),
+          _view(identity(_snapshot->rowCount())),
+          _trueView{_view} {
         _source->subscribe(*this);
     }
 
@@ -711,11 +724,11 @@ public:
     [[nodiscard]] RowId rowIdAt(std::size_t viewRow) const { return _viewSnapshot->rowId(_view.at(viewRow)); }
 
     /// @brief The view row of the row keyed @p id.
-    /// @param id A row key.
+    /// @param key A row key.
     /// @return The view row, or nothing when no row in the view has that key.
-    [[nodiscard]] std::optional<std::size_t> viewRowOfKey(RowId const& id) const {
+    [[nodiscard]] std::optional<std::size_t> viewRowOfKey(RowId const& key) const {
         indexKeys();
-        auto const found = _keyIndex.find(id);
+        auto const found = _keyIndex.find(key);
         return found == _keyIndex.end() ? std::nullopt : std::optional{found->second};
     }
 
@@ -754,14 +767,14 @@ public:
 
     /// @brief Marks a row as being edited: with `Deferred` reorder it keeps its
     ///        place through updates until `endEdit`.
-    /// @param id The row's key.
-    void beginEdit(RowId const& id) { _editing.insert(id); }
+    /// @param key The row's key.
+    void beginEdit(RowId const& key) { _editing.insert(key); }
 
     /// @brief Ends an edit; a held row moves to its sorted place now.
-    /// @param id The row's key.
-    void endEdit(RowId const& id) {
-        _editing.erase(id);
-        if (_holds.erase(id) > 0) {
+    /// @param key The row's key.
+    void endEdit(RowId const& key) {
+        _editing.erase(key);
+        if (_holds.erase(key) > 0) {
             relayout();
         }
     }
@@ -769,7 +782,7 @@ public:
     /// @brief Releases every deferred row not being edited, as the settle
     ///        interval does.
     void settleNow() {
-        std::erase_if(_holds, [&](RowId const& id) { return !_editing.contains(id); });
+        std::erase_if(_holds, [&](RowId const& key) { return !_editing.contains(key); });
         relayout();
     }
 
@@ -779,6 +792,12 @@ public:
 
 private:
     static constexpr auto kAbsent = std::numeric_limits<std::uint32_t>::max();
+
+    [[nodiscard]] static std::vector<std::uint32_t> identity(std::size_t rows) {
+        std::vector<std::uint32_t> out(rows);
+        std::ranges::iota(out, 0U);
+        return out;
+    }
 
     enum class Request : std::uint8_t { Full, Repair };
 
@@ -842,7 +861,8 @@ private:
         std::erase_if(_filterSpec.columns,
                       [&](auto const& entry) { return !detail::findColumn(_columns, entry.first).has_value(); });
         for (auto& group : _filterSpec.groups) {
-            std::erase_if(group.columns, [&](std::string const& id) { return !detail::findColumn(_columns, id); });
+            std::erase_if(group.columns,
+                          [&](std::string const& columnId) { return !detail::findColumn(_columns, columnId); });
         }
         std::erase_if(_filterSpec.groups, [](GroupFilter const& group) { return group.columns.empty(); });
         auto compiled = compileFilter(_filterSpec, _columns, _options.services);
@@ -856,49 +876,49 @@ private:
     }
 
     [[nodiscard]] detail::JobInput makeInput(Request kind, bool allChanged) {
-        detail::JobInput in;
-        in.snapshot = _snapshot;
-        in.columns = _columns;
-        in.services = _options.services.forTask();
-        in.keys = _keys;
-        in.keys.resize(_columns.size());
+        detail::JobInput input;
+        input.snapshot = _snapshot;
+        input.columns = _columns;
+        input.services = _options.services.forTask();
+        input.keys = _keys;
+        input.keys.resize(_columns.size());
         for (auto const& key : _sort) {
             if (auto const index = detail::findColumn(_columns, key.column)) {
-                in.needed.push_back(*index);
+                input.needed.push_back(*index);
             }
         }
         if (_filter != nullptr) {
             for (auto const column : _filter->columnsUsed()) {
-                in.needed.push_back(column);
+                input.needed.push_back(column);
             }
         }
-        std::ranges::sort(in.needed);
-        auto const [first, last] = std::ranges::unique(in.needed);
-        in.needed.erase(first, last);
-        in.sort = _sort;
-        in.filter = _filter;
+        std::ranges::sort(input.needed);
+        auto const [first, last] = std::ranges::unique(input.needed);
+        input.needed.erase(first, last);
+        input.sort = _sort;
+        input.filter = _filter;
         if (!_sort.empty() && _sortCache.order != nullptr && _sortCache.chain == _sort &&
             _sortCache.snapshot == _snapshot) {
-            in.cachedSorted = _sortCache.order;
+            input.cachedSorted = _sortCache.order;
         }
-        in.previousView = _view;
-        in.previousSnapshot = _viewSnapshot;
-        in.repair = kind == Request::Repair;
-        in.indicesStable = in.repair || _viewSnapshot == _snapshot;
-        if (in.repair) {
-            in.dirty = std::move(_dirty);
-            std::ranges::sort(in.dirty);
-            auto const [dupFirst, dupLast] = std::ranges::unique(in.dirty);
-            in.dirty.erase(dupFirst, dupLast);
-            in.previousTrueView = _trueView;
+        input.previousView = _view;
+        input.previousSnapshot = _viewSnapshot;
+        input.repair = kind == Request::Repair;
+        input.indicesStable = input.repair || _viewSnapshot == _snapshot;
+        if (input.repair) {
+            input.dirty = std::move(_dirty);
+            std::ranges::sort(input.dirty);
+            auto const [dupFirst, dupLast] = std::ranges::unique(input.dirty);
+            input.dirty.erase(dupFirst, dupLast);
+            input.previousTrueView = _trueView;
             if (_sortCache.order != nullptr && _sortCache.chain == _sort) {
-                in.cachedSorted = _sortCache.order;
+                input.cachedSorted = _sortCache.order;
             }
         }
         _dirty.clear();
-        in.allChanged = allChanged;
-        in.resetThreshold = _options.resetThreshold;
-        return in;
+        input.allChanged = allChanged;
+        input.resetThreshold = _options.resetThreshold;
+        return input;
     }
 
     void request(Request kind, bool allChanged = false) {
@@ -928,7 +948,7 @@ private:
         detail::ViewJob job{makeInput(kind, allChanged)};
         static_cast<void>(job.step(kNoDeadline, ::core::async::StopToken{}));
         recordOwnerStep(began);
-        apply(job.input(), std::move(job).take());
+        apply(job.input(), job.takeResult());
     }
 
     void start(Request kind, bool allChanged) {
@@ -939,7 +959,7 @@ private:
         ++_generation;
         _jobStop = ::core::async::StopSource{};
         setPending(true);
-        auto job = std::make_shared<detail::ViewJob>(makeInput(kind, allChanged));
+        auto const job = std::make_shared<detail::ViewJob>(makeInput(kind, allChanged));
         auto const generation = _generation;
         auto* const owner = _options.owner;
         if (_options.worker == nullptr) {
@@ -950,12 +970,12 @@ private:
         // callbacks gated on the engine's lifetime, which run on the owner.
         auto finished = _alive.guard([this, job, generation] { finish(generation, job); });
         std::function<void(std::size_t, std::size_t)> report;
-        if (auto progress = _options.services.progress) {
+        if (auto const progress = _options.services.progress) {
             report =
                 _alive.guard([progress](std::size_t done, std::size_t total) { progress->progress(done, total); });
         }
         _options.worker->post([job, stop = _jobStop.get_token(), owner, finished = std::move(finished),
-                               report = std::move(report)]() mutable {
+                               report = std::move(report)] mutable {
             static_cast<void>(job->step(kNoDeadline, stop));
             if (report) {
                 auto const [done, total] = job->progress();
@@ -1008,42 +1028,43 @@ private:
             return;
         }
         auto const began = std::chrono::steady_clock::now();
-        apply(job->input(), std::move(*job).take());
+        apply(job->input(), job->takeResult());
         recordOwnerStep(began);
         setPending(false);
     }
 
-    void apply(detail::JobInput const& in, detail::JobResult result) {
+    void apply(detail::JobInput const& input, detail::JobResult result) {
         _stats.keyBuilds += result.keyBuilds;
         _stats.fullSorts += result.fullSort ? 1 : 0;
         _stats.subsetSorts += result.subsetSort ? 1 : 0;
         _stats.repairs += result.repaired ? 1 : 0;
-        if (in.snapshot == _snapshot) {
+        if (input.snapshot == _snapshot) {
             _keys = std::move(result.keys);
             if (result.sorted != nullptr) {
-                _sortCache = SortCache{.chain = in.sort, .snapshot = in.snapshot, .order = std::move(result.sorted)};
+                _sortCache =
+                    SortCache{.chain = input.sort, .snapshot = input.snapshot, .order = std::move(result.sorted)};
             }
         }
-        MORPH_PLOT("table.sourceRows", in.snapshot->rowCount());
+        MORPH_PLOT("table.sourceRows", input.snapshot->rowCount());
         MORPH_PLOT("table.viewRows", result.view.size());
         MORPH_PLOT("table.keyCacheColumns",
                    std::ranges::count_if(_keys, [](auto const& keys) { return keys != nullptr; }));
         _trueView = std::move(result.view);
-        _viewSnapshot = in.snapshot;
+        _viewSnapshot = input.snapshot;
         auto change = std::move(result.change);
-        if (_options.reorder == ReorderPolicy::Deferred && in.repair) {
-            for (auto const row : in.dirty) {
-                if (std::ranges::find(in.previousView, row) != in.previousView.end()) {
-                    _holds.insert(in.snapshot->rowId(row));
+        if (_options.reorder == ReorderPolicy::Deferred && input.repair) {
+            for (auto const row : input.dirty) {
+                if (std::ranges::find(input.previousView, row) != input.previousView.end()) {
+                    _holds.insert(input.snapshot->rowId(row));
                 }
             }
-            for (auto const& id : _editing) {
-                _holds.insert(id);
+            for (auto const& editing : _editing) {
+                _holds.insert(editing);
             }
             if (!_holds.empty()) {
-                auto const displayed = holdLayout(in.previousView);
-                change =
-                    diffViews(in.previousView, displayed, in.dirty, in.snapshot->rowCount(), _options.resetThreshold);
+                auto const displayed = holdLayout(input.previousView);
+                change = diffViews(input.previousView, displayed, input.dirty, input.snapshot->rowCount(),
+                                   _options.resetThreshold);
                 _view = displayed;
                 scheduleSettle();
                 publish(change);
@@ -1189,5 +1210,7 @@ private:
     EngineStats _stats;
     async::CallbackScope _alive;
 };
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table

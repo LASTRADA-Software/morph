@@ -39,6 +39,8 @@
 
 namespace morph::table {
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row and column indices are bounded by the snapshot's own counts, and the sort and filter loops index once per comparison, where at() would check every access
+
 /// @brief One filter condition. Exactly one operator member is set.
 ///
 /// Values are exact text, parsed for the column's kind when the filter is
@@ -173,6 +175,7 @@ public:
     /// @return Sorted, unique column indices.
     [[nodiscard]] std::vector<std::size_t> columnsUsed() const {
         std::vector<std::size_t> out;
+        out.reserve(_columns.size());
         for (auto const& column : _columns) {
             out.push_back(column.column);
         }
@@ -293,7 +296,7 @@ private:
             case Op::Ne:
                 return text != entry.text;
             case Op::Contains:
-                return text.find(entry.text) != std::string_view::npos;
+                return text.contains(entry.text);
             case Op::StartsWith:
                 return text.starts_with(entry.text);
             case Op::EndsWith:
@@ -488,17 +491,111 @@ struct RawEntry {
     return out;
 }
 
-/// @brief The index of the column with id @p id.
-/// @param columns The table's columns.
-/// @param id      A column id.
+/// @brief The index of the column with id @p columnId.
+/// @param columns  The table's columns.
+/// @param columnId A column id.
 /// @return Its index, or nothing.
-[[nodiscard]] inline std::optional<std::size_t> findColumn(std::span<ColumnInfo const> columns, std::string_view id) {
+[[nodiscard]] inline std::optional<std::size_t> findColumn(std::span<ColumnInfo const> columns,
+                                                           std::string_view columnId) {
     for (std::size_t i = 0; i < columns.size(); ++i) {
-        if (columns[i].id == id) {
+        if (columns[i].id == columnId) {
             return i;
         }
     }
     return std::nullopt;
+}
+
+/// @brief An `UnknownColumn` error.
+/// @param columnId The column id that names no column.
+/// @return The error.
+[[nodiscard]] inline TableError unknownColumn(std::string const& columnId) {
+    return TableError{.code = TableErrorCode::UnknownColumn, .column = columnId, .message = "no column " + columnId};
+}
+
+/// @brief Compiles entries for one column, appending them to @p out.
+/// @param entries  The entries.
+/// @param info     The column.
+/// @param services Collator and date parser.
+/// @param out      Receives the compiled entries.
+/// @return Nothing, or the first entry's error.
+[[nodiscard]] inline std::expected<void, TableError> compileEntries(std::span<FilterEntry const> entries,
+                                                                    ColumnInfo const& info, Services const& services,
+                                                                    std::vector<CompiledFilter::Entry>& out) {
+    for (auto const& entry : entries) {
+        auto compiled = compileEntry(entry, info, services);
+        if (!compiled) {
+            return std::unexpected(std::move(compiled.error()));
+        }
+        out.push_back(std::move(*compiled));
+    }
+    return {};
+}
+
+/// @brief Compiles the filter on one column.
+/// @param columnId The column's id.
+/// @param filter   Its filter.
+/// @param columns  The table's columns.
+/// @param services Collator and date parser.
+/// @return The compiled filter, or the first error.
+[[nodiscard]] inline std::expected<CompiledFilter::Column, TableError> compileColumnFilter(
+    std::string const& columnId, ColumnFilter const& filter, std::span<ColumnInfo const> columns,
+    Services const& services) {
+    auto const index = findColumn(columns, columnId);
+    if (!index) {
+        return std::unexpected(unknownColumn(columnId));
+    }
+    CompiledFilter::Column out{.column = *index, .combine = filter.combine, .include = {}, .exclude = {}};
+    if (auto included = compileEntries(filter.include, columns[*index], services, out.include); !included) {
+        return std::unexpected(std::move(included.error()));
+    }
+    if (auto excluded = compileEntries(filter.exclude, columns[*index], services, out.exclude); !excluded) {
+        return std::unexpected(std::move(excluded.error()));
+    }
+    return out;
+}
+
+/// @brief Compiles a group: per column, the entries that apply to it.
+/// @param group    The group.
+/// @param columns  The table's columns.
+/// @param services Collator and date parser.
+/// @return The compiled group, or an error when a column is unknown, an entry
+///         is malformed, or an entry applies to none of the group's columns.
+[[nodiscard]] inline std::expected<CompiledFilter::Group, TableError> compileGroup(GroupFilter const& group,
+                                                                                   std::span<ColumnInfo const> columns,
+                                                                                   Services const& services) {
+    CompiledFilter::Group out;
+    std::vector<std::size_t> appliesTo(group.include.size(), 0);
+    std::optional<TableError> lastError;
+    for (auto const& columnId : group.columns) {
+        auto const index = findColumn(columns, columnId);
+        if (!index) {
+            return std::unexpected(unknownColumn(columnId));
+        }
+        CompiledFilter::Column column{.column = *index, .combine = group.combine, .include = {}, .exclude = {}};
+        for (std::size_t i = 0; i < group.include.size(); ++i) {
+            auto compiled = compileEntry(group.include[i], columns[*index], services);
+            if (compiled) {
+                ++appliesTo[i];
+                column.include.push_back(std::move(*compiled));
+            } else if (compiled.error().code == TableErrorCode::InvalidSpec) {
+                return std::unexpected(std::move(compiled.error()));
+            } else {
+                lastError = std::move(compiled.error());
+            }
+        }
+        // With `all`, a column that cannot evaluate every entry cannot
+        // match; with `any`, one that evaluates none cannot either.
+        bool const usable =
+            group.combine == Combine::All ? column.include.size() == group.include.size() : !column.include.empty();
+        if (usable) {
+            out.columns.push_back(std::move(column));
+        }
+    }
+    if (std::ranges::find(appliesTo, std::size_t{0}) != appliesTo.end()) {
+        return std::unexpected(lastError.value_or(TableError{
+            .code = TableErrorCode::InvalidSpec, .column = {}, .message = "a filter group names no column"}));
+    }
+    return out;
 }
 
 }  // namespace detail
@@ -518,70 +615,22 @@ struct RawEntry {
                                                                              std::span<ColumnInfo const> columns,
                                                                              Services const& services) {
     CompiledFilter out;
-    for (auto const& [id, filter] : spec.columns) {
-        auto const index = detail::findColumn(columns, id);
-        if (!index) {
-            return std::unexpected(
-                TableError{.code = TableErrorCode::UnknownColumn, .column = id, .message = "no column " + id});
+    for (auto const& [columnId, filter] : spec.columns) {
+        auto compiled = detail::compileColumnFilter(columnId, filter, columns, services);
+        if (!compiled) {
+            return std::unexpected(std::move(compiled.error()));
         }
-        CompiledFilter::Column compiled{.column = *index, .combine = filter.combine, .include = {}, .exclude = {}};
-        for (auto const& entry : filter.include) {
-            auto entryOut = detail::compileEntry(entry, columns[*index], services);
-            if (!entryOut) {
-                return std::unexpected(entryOut.error());
-            }
-            compiled.include.push_back(std::move(*entryOut));
-        }
-        for (auto const& entry : filter.exclude) {
-            auto entryOut = detail::compileEntry(entry, columns[*index], services);
-            if (!entryOut) {
-                return std::unexpected(entryOut.error());
-            }
-            compiled.exclude.push_back(std::move(*entryOut));
-        }
-        if (!compiled.include.empty() || !compiled.exclude.empty()) {
-            out._columns.push_back(std::move(compiled));
+        if (!compiled->include.empty() || !compiled->exclude.empty()) {
+            out._columns.push_back(std::move(*compiled));
         }
     }
     for (auto const& group : spec.groups) {
-        CompiledFilter::Group compiled;
-        std::vector<std::size_t> appliesTo(group.include.size(), 0);
-        std::optional<TableError> lastError;
-        for (auto const& id : group.columns) {
-            auto const index = detail::findColumn(columns, id);
-            if (!index) {
-                return std::unexpected(
-                    TableError{.code = TableErrorCode::UnknownColumn, .column = id, .message = "no column " + id});
-            }
-            CompiledFilter::Column column{.column = *index, .combine = group.combine, .include = {}, .exclude = {}};
-            for (std::size_t i = 0; i < group.include.size(); ++i) {
-                auto entryOut = detail::compileEntry(group.include[i], columns[*index], services);
-                if (!entryOut) {
-                    if (entryOut.error().code == TableErrorCode::InvalidSpec) {
-                        return std::unexpected(entryOut.error());
-                    }
-                    lastError = entryOut.error();
-                    continue;
-                }
-                ++appliesTo[i];
-                column.include.push_back(std::move(*entryOut));
-            }
-            // With `all`, a column that cannot evaluate every entry cannot
-            // match; with `any`, one that evaluates none cannot either.
-            bool const usable = group.combine == Combine::All ? column.include.size() == group.include.size()
-                                                              : !column.include.empty();
-            if (usable) {
-                compiled.columns.push_back(std::move(column));
-            }
-        }
-        for (std::size_t i = 0; i < appliesTo.size(); ++i) {
-            if (appliesTo[i] == 0) {
-                return std::unexpected(lastError.value_or(TableError{
-                    .code = TableErrorCode::InvalidSpec, .column = {}, .message = "a filter group names no column"}));
-            }
+        auto compiled = detail::compileGroup(group, columns, services);
+        if (!compiled) {
+            return std::unexpected(std::move(compiled.error()));
         }
         if (!group.include.empty()) {
-            out._groups.push_back(std::move(compiled));
+            out._groups.push_back(std::move(*compiled));
         }
     }
     return out;
@@ -661,6 +710,8 @@ private:
     std::size_t _read = 0;
     std::size_t _write = 0;
 };
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
 

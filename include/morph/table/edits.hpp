@@ -100,12 +100,8 @@ public:
         if (found == _queues.end()) {
             return false;
         }
-        for (auto const& request : found->second) {
-            if (request.column == column) {
-                return true;
-            }
-        }
-        return false;
+        return std::ranges::any_of(found->second,
+                                   [&](EditRequest const& request) { return request.column == column; });
     }
 
     /// @brief The error a cell shows, until its next edit succeeds.

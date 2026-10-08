@@ -41,6 +41,8 @@
 
 namespace morph::table {
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row and column indices are bounded by the snapshot's own counts, and the sort and filter loops index once per comparison, where at() would check every access
+
 /// @brief What a column holds, which decides how its keys are built and compared.
 enum class ColumnKind : std::uint8_t {
     Integer,   ///< `int64`, compared numerically.
@@ -124,11 +126,11 @@ struct TableError {
         return std::unexpected(TableError{
             .code = TableErrorCode::InvalidValue, .column = {}, .message = "not a decimal: " + std::string{text}});
     };
-    std::size_t at = 0;
+    std::size_t cursor = 0;
     bool negative = false;
-    if (at < text.size() && (text[at] == '-' || text[at] == '+')) {
-        negative = text[at] == '-';
-        ++at;
+    if (cursor < text.size() && (text[cursor] == '-' || text[cursor] == '+')) {
+        negative = text[cursor] == '-';
+        ++cursor;
     }
     std::uint64_t magnitude = 0;
     std::uint32_t fractionDigits = 0;
@@ -138,20 +140,20 @@ struct TableError {
     // than INT64_MAX, and parsing to that bound keeps "-9223372036854775808" exact.
     auto const bound = negative ? static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) + 1U
                                 : static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
-    for (; at < text.size(); ++at) {
-        char const ch = text[at];
-        if (ch == '.' && !inFraction) {
+    for (; cursor < text.size(); ++cursor) {
+        char const character = text[cursor];
+        if (character == '.' && !inFraction) {
             inFraction = true;
             continue;
         }
-        if (ch < '0' || ch > '9') {
+        if (character < '0' || character > '9') {
             return fail();
         }
-        auto const digit = static_cast<std::uint64_t>(ch - '0');
+        auto const digit = static_cast<std::uint64_t>(character - '0');
         if (magnitude > (bound - digit) / 10U) {
             return fail();
         }
-        magnitude = magnitude * 10U + digit;
+        magnitude = (magnitude * 10U) + digit;
         ++digits;
         if (inFraction) {
             ++fractionDigits;
@@ -276,6 +278,7 @@ public:
     /// @param text   The text.
     /// @param format The column's format; empty for the parser's default.
     /// @return Days since 1970-01-01, or nothing when @p text is not a date.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - text then format, as every parser reads them
     [[nodiscard]] virtual std::optional<std::int64_t> parseDate(std::string_view text,
                                                                 std::string_view format) const = 0;
 
@@ -303,19 +306,20 @@ public:
     /// @param text   The text.
     /// @param format Ignored.
     /// @return Days since 1970-01-01, or nothing.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - text then format, as every parser reads them
     [[nodiscard]] std::optional<std::int64_t> parseDate(std::string_view text,
                                                         std::string_view format) const override {
         static_cast<void>(format);
         if (text.size() != 10 || text[4] != '-' || text[7] != '-') {
             return std::nullopt;
         }
-        auto const number = [&](std::size_t at, std::size_t count) -> std::optional<int> {
+        auto const number = [&](std::size_t offset, std::size_t count) -> std::optional<int> {
             int value = 0;
-            for (std::size_t i = at; i < at + count; ++i) {
+            for (std::size_t i = offset; i < offset + count; ++i) {
                 if (text[i] < '0' || text[i] > '9') {
                     return std::nullopt;
                 }
-                value = value * 10 + (text[i] - '0');
+                value = (value * 10) + (text[i] - '0');
             }
             return value;
         };
@@ -341,7 +345,7 @@ public:
     [[nodiscard]] std::optional<std::int64_t> parseDateTime(std::string_view text,
                                                             std::string_view format) const override {
         if (auto const days = parseDate(text, format)) {
-            return *days * 86400;
+            return *days * std::int64_t{86400};
         }
         auto const instant = time::DateTime::fromIso8601(text);
         if (!instant) {
@@ -433,6 +437,7 @@ public:
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class RowSnapshot {
 public:
+    RowSnapshot() = default;
     virtual ~RowSnapshot() = default;
 
     /// @brief The number of rows.
@@ -465,6 +470,19 @@ public:
             sink.cells(row, std::span<Cell const>{&value, 1});
         }
     }
+
+protected:
+    /// @brief Copies the base of a snapshot: a derived snapshot makes a changed
+    ///        copy of itself this way.
+    RowSnapshot(RowSnapshot const&) = default;
+    /// @brief Moves the base of a snapshot.
+    RowSnapshot(RowSnapshot&&) = default;
+    /// @brief Copy-assigns the base of a snapshot.
+    /// @return `*this`.
+    RowSnapshot& operator=(RowSnapshot const&) = default;
+    /// @brief Move-assigns the base of a snapshot.
+    /// @return `*this`.
+    RowSnapshot& operator=(RowSnapshot&&) = default;
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -552,13 +570,13 @@ public:
 
     /// @brief A copy with a row inserted before @p row. Chunks before it are shared.
     /// @param row   Insert position, at most `rowCount()`.
-    /// @param id    The new row's key.
+    /// @param key   The new row's key.
     /// @param cells The new row's cells.
     /// @return The new snapshot.
-    [[nodiscard]] std::shared_ptr<TableSnapshot const> withInserted(std::size_t row, RowId id,
+    [[nodiscard]] std::shared_ptr<TableSnapshot const> withInserted(std::size_t row, RowId key,
                                                                     std::vector<Cell> cells) const {
         auto [ids, rows] = tail(row);
-        ids.insert(ids.begin(), std::move(id));
+        ids.insert(ids.begin(), std::move(key));
         rows.insert(rows.begin(), std::move(cells));
         auto out = std::make_shared<TableSnapshot>(*this);
         out->assign(std::move(ids), std::move(rows), row);
@@ -595,6 +613,8 @@ private:
     [[nodiscard]] std::pair<std::vector<RowId>, std::vector<std::vector<Cell>>> tail(std::size_t first) const {
         std::vector<RowId> ids;
         std::vector<std::vector<Cell>> rows;
+        ids.reserve(_rows - first);
+        rows.reserve(_rows - first);
         for (std::size_t row = first; row < _rows; ++row) {
             ids.push_back(rowId(row));
             std::vector<Cell> cells;
@@ -614,9 +634,12 @@ private:
         std::vector<RowId> headIds;
         std::vector<std::vector<Cell>> headRows;
         if (keepChunks < _chunks.size()) {
+            headIds.reserve(first - (keepChunks * kChunkRows));
+            headRows.reserve(first - (keepChunks * kChunkRows));
             for (std::size_t row = keepChunks * kChunkRows; row < first; ++row) {
                 headIds.push_back(rowId(row));
                 std::vector<Cell> cells;
+                cells.reserve(_columnCount);
                 for (std::size_t column = 0; column < _columnCount; ++column) {
                     cells.push_back(cell(row, column));
                 }
@@ -626,7 +649,7 @@ private:
         _chunks.resize(std::min(keepChunks, _chunks.size()));
         headIds.insert(headIds.end(), std::make_move_iterator(ids.begin()), std::make_move_iterator(ids.end()));
         headRows.insert(headRows.end(), std::make_move_iterator(rows.begin()), std::make_move_iterator(rows.end()));
-        _rows = _chunks.size() * kChunkRows + headIds.size();
+        _rows = (_chunks.size() * kChunkRows) + headIds.size();
         for (std::size_t at = 0; at < headIds.size(); at += kChunkRows) {
             auto chunk = std::make_shared<Chunk>();
             auto const end = std::min(at + kChunkRows, headIds.size());
@@ -716,10 +739,10 @@ public:
     virtual ~RowPatcher() = default;
 
     /// @brief Replaces the cells of the row keyed @p id.
-    /// @param id    The row's key.
+    /// @param key   The row's key.
     /// @param cells The new cells.
     /// @return `false` when no row has that key.
-    virtual bool patchRow(RowId const& id, std::vector<Cell> cells) = 0;
+    virtual bool patchRow(RowId const& key, std::vector<Cell> cells) = 0;
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -775,11 +798,11 @@ public:
     }
 
     /// @brief Replaces the cells of the row keyed @p id, then notifies `Updated`.
-    /// @param id    The row's key.
+    /// @param key   The row's key.
     /// @param cells The new cells.
     /// @return `false` when no row has that key.
-    bool patchRow(RowId const& id, std::vector<Cell> cells) override {
-        auto const found = _index.find(id);
+    bool patchRow(RowId const& key, std::vector<Cell> cells) override {
+        auto const found = _index.find(key);
         if (found == _index.end()) {
             return false;
         }
@@ -789,10 +812,10 @@ public:
 
     /// @brief Inserts a row before @p row, then notifies `Inserted`.
     /// @param row   Insert position.
-    /// @param id    The new row's key.
+    /// @param key   The new row's key.
     /// @param cells The new row's cells.
-    void insertRow(std::size_t row, RowId id, std::vector<Cell> cells) {
-        _snapshot = _snapshot->withInserted(row, std::move(id), std::move(cells));
+    void insertRow(std::size_t row, RowId key, std::vector<Cell> cells) {
+        _snapshot = _snapshot->withInserted(row, std::move(key), std::move(cells));
         reindex();
         notify(RowChange{.kind = ChangeKind::Inserted, .rows = {row}});
     }
@@ -806,10 +829,10 @@ public:
     }
 
     /// @brief The index of the row keyed @p id.
-    /// @param id The key.
+    /// @param key The key.
     /// @return Its row index, or nothing.
-    [[nodiscard]] std::optional<std::size_t> indexOf(RowId const& id) const {
-        auto const found = _index.find(id);
+    [[nodiscard]] std::optional<std::size_t> indexOf(RowId const& key) const {
+        auto const found = _index.find(key);
         return found == _index.end() ? std::nullopt : std::optional{found->second};
     }
 
@@ -834,6 +857,8 @@ private:
     std::unordered_map<RowId, std::size_t> _index;
     std::vector<ChangeListener*> _listeners;
 };
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
 

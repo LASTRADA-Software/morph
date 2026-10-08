@@ -25,7 +25,8 @@
 using namespace morph::table;
 using tabletest::viewKeys;
 
-namespace {
+// Reflected by glaze, so not in an anonymous namespace.
+namespace tquery {
 
 struct ResultRow {
     std::int64_t id = 0;
@@ -39,6 +40,13 @@ struct ListResults {
     std::optional<std::int64_t> sampleId;
     TableQuery table;
 };
+
+}  // namespace tquery
+
+using tquery::ListResults;
+using tquery::ResultRow;
+
+namespace {
 
 RowKey<ResultRow> byId() {
     return [](ResultRow const& row) { return RowId{row.id}; };
@@ -94,7 +102,7 @@ TEST_CASE("table: a TableQuery round-trips through JSON in the spec's shape", "[
     Page<ResultRow> page{.rows = resultRows(2), .total = 2, .offset = 0};
     std::string pageJson;
     REQUIRE_FALSE(glz::write_json(page, pageJson));
-    CHECK(pageJson.find(R"("total":2)") != std::string::npos);
+    CHECK(pageJson.contains(R"("total":2)"));
 }
 
 TEST_CASE("table: a list action's table member is marked x-table", "[table][query]") {
@@ -126,13 +134,13 @@ TEST_CASE("table: typed rows become columns with inferred kinds", "[table][query
 
 TEST_CASE("table: client mode and server mode give the same rows", "[table][query]") {
     auto const rows = resultRows(2500);
-    auto source =
+    auto const source =
         std::make_shared<RowsSource<ResultRow>>(std::make_shared<std::vector<ResultRow> const>(rows), byId());
     std::vector<std::pair<SortChain, FilterSpec>> const corpus{
-        {{{"mass", SortDirection::Descending}}, {}},
-        {{{"analysis", SortDirection::Ascending}, {"id", SortDirection::Descending}},
+        {{{.column = "mass", .dir = SortDirection::Descending}}, {}},
+        {{{.column = "analysis", .dir = SortDirection::Ascending}, {.column = "id", .dir = SortDirection::Descending}},
          filterOn("ph", FilterEntry{.ge = "7"})},
-        {{{"ph", SortDirection::Ascending}}, filterOn("analysis", FilterEntry{.startsWith = "PH"})},
+        {{{.column = "ph", .dir = SortDirection::Ascending}}, filterOn("analysis", FilterEntry{.startsWith = "PH"})},
         {{}, filterOn("approved", FilterEntry{.eq = "true"})},
     };
     for (auto const& [sort, filters] : corpus) {
@@ -221,7 +229,8 @@ TEST_CASE("table: a column the principal may not read is refused", "[table][quer
     auto const rows = resultRows(10);
     ApplyOptions options;
     options.mayRead = [](std::string_view column) { return column != "mass"; };
-    auto const sorted = apply(rows, byId(), TableQuery{.sort = {{"mass", {}}}, .filters = {}, .page = {}}, options);
+    auto const sorted =
+        apply(rows, byId(), TableQuery{.sort = {{.column = "mass", .dir = {}}}, .filters = {}, .page = {}}, options);
     REQUIRE_FALSE(sorted.has_value());
     CHECK(sorted.error().code == TableErrorCode::ColumnNotReadable);
     CHECK(sorted.error().column == "mass");
@@ -241,8 +250,8 @@ TEST_CASE("table: a server's filter error is typed and travels as JSON", "[table
     CHECK(result.error().code == TableErrorCode::InvalidValue);
     std::string json;
     REQUIRE_FALSE(glz::write_json(result.error(), json));
-    CHECK(json.find(R"("code":"invalidValue")") != std::string::npos);
-    CHECK(json.find(R"("column":"mass")") != std::string::npos);
+    CHECK(json.contains(R"("code":"invalidValue")"));
+    CHECK(json.contains(R"("column":"mass")"));
 }
 
 TEST_CASE("table: LIKE patterns keep % and _ ordinary", "[table][query]") {

@@ -48,7 +48,7 @@ struct TcRow {
     std::int64_t id = 0;
     std::string analysis;
     morph::math::Rational price;
-    morph::units::Quantity<TcUnit::g> mass{};
+    morph::units::Quantity<TcUnit::g> mass;
     double ph = 0;
     bool approved = false;
     morph::time::DateTime measuredOn;
@@ -65,7 +65,7 @@ struct NoOverride {};
 
 }  // namespace tcol
 
-namespace {
+namespace tcol {
 
 struct EpochRow {
     std::int64_t day = 0;
@@ -84,7 +84,7 @@ struct NameSecret {
     static constexpr std::array columns{morph::views::ColumnOverride{.field = "secret"}};
 };
 
-}  // namespace
+}  // namespace tcol
 
 TEST_CASE("table: derived columns carry kind, title and metadata", "[table][columns]") {
     auto const json = morph::views::detail::deriveColumns<tcol::NoOverride, tcol::TcRow>();
@@ -127,7 +127,7 @@ TEST_CASE("table: derived columns carry kind, title and metadata", "[table][colu
 }
 
 TEST_CASE("table: integer columns with an epoch widget are dates", "[table][columns]") {
-    auto const json = morph::views::detail::deriveColumns<HideNothing, EpochRow>();
+    auto const json = morph::views::detail::deriveColumns<tcol::HideNothing, tcol::EpochRow>();
     INFO(json);
     glz::generic columns;
     REQUIRE_FALSE(glz::read_json(columns, json));
@@ -139,7 +139,7 @@ TEST_CASE("table: integer columns with an epoch widget are dates", "[table][colu
 }
 
 TEST_CASE("table: an override list may still name a hidden member", "[table][columns]") {
-    auto const json = morph::views::detail::deriveColumns<NameSecret, tcol::TcRow>();
+    auto const json = morph::views::detail::deriveColumns<tcol::NameSecret, tcol::TcRow>();
     glz::generic columns;
     REQUIRE_FALSE(glz::read_json(columns, json));
     REQUIRE(columns.get_array().size() == 1);

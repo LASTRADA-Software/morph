@@ -6,14 +6,15 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
-#include <mutex>
-#include <morph/core/executor.hpp>
-#include <morph/table/engine.hpp>
-#include <random>
 #include <memory>
+#include <morph/core/executor.hpp>
 #include <morph/table/data_source.hpp>
+#include <morph/table/engine.hpp>
+#include <mutex>
+#include <random>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -103,57 +104,58 @@ inline std::vector<ColumnInfo> syntheticColumns() {
 
 // One synthetic row for key `id`; `rng` decides every cell.
 inline std::vector<Cell> syntheticRow(std::int64_t id, std::mt19937& rng) {
-    static constexpr std::string_view kWords[] = {"alpha",  "Beta",   "\xC3\xA9tage", "Gamma",  "delta",
-                                                  "\xC3\x89lan", "omega", "Zeta",       "\xC3\xBC" "ber", "pH value"};
-    auto const pick = [&](std::uint32_t n) { return static_cast<std::uint32_t>(rng() % n); };
-    std::vector<Cell> row;
-    row.emplace_back(id);
+    static constexpr std::array<std::string_view, 10> kWords{
+        "alpha", "Beta", "\303\251tage", "Gamma", "delta", "\303\211lan", "omega", "Zeta", "\303\274ber", "pH value"};
+    auto const pick = [&](std::uint32_t bound) { return static_cast<std::uint32_t>(rng() % bound); };
+    enum class Draw : std::uint8_t { Value, Empty, Unparsable };
     // ~5% empty, ~3% unparsable, otherwise a value.
-    auto const invalidity = [&]() -> int {
+    auto const draw = [&] {
         auto const roll = pick(100);
-        return roll < 5 ? 1 : (roll < 8 ? 2 : 0);
-    };
-    switch (invalidity()) {
-        case 1: row.emplace_back(); break;
-        case 2: row.emplace_back(std::string{"n/a"}); break;
-        default: row.emplace_back(static_cast<std::int64_t>(pick(1000)) - 500); break;
-    }
-    switch (invalidity()) {
-        case 1: row.emplace_back(); break;
-        case 2: row.emplace_back(std::string{"1,5"}); break;
-        default:
-            row.emplace_back(morph::math::Rational{morph::math::Numerator{static_cast<std::int64_t>(pick(100000))},
-                                                   morph::math::Denominator{100}, morph::math::DecimalPlaces{2}});
-            break;
-    }
-    switch (invalidity()) {
-        case 1: row.emplace_back(); break;
-        case 2: row.emplace_back(std::string{"heavy"}); break;
-        default: {
-            // grams, kilograms or milligrams
-            static constexpr std::int64_t kFactors[] = {1, 1000, 1};
-            auto const unit = pick(3);
-            auto const amount = morph::math::Rational{static_cast<std::int64_t>(pick(5000)), {}};
-            auto const factor = unit == 2 ? morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, {}}
-                                          : morph::math::Rational{kFactors[unit], {}};
-            row.emplace_back(morph::table::QuantityCell{.amount = amount, .toCanonical = factor});
-            break;
+        if (roll < 5) {
+            return Draw::Empty;
         }
-    }
-    switch (invalidity()) {
-        case 1: row.emplace_back(); break;
-        default:
-            row.emplace_back(std::string{kWords[pick(10)]} + " " + std::to_string(pick(500)));
-            break;
-    }
-    switch (invalidity()) {
-        case 1: row.emplace_back(); break;
-        case 2: row.emplace_back(std::string{"someday"}); break;
-        default: row.emplace_back(static_cast<std::int64_t>(19000 + pick(2000))); break;
-    }
+        return roll < 8 ? Draw::Unparsable : Draw::Value;
+    };
+    std::vector<Cell> row;
+    row.reserve(6);
+    auto const add = [&](Draw what, Cell unparsable, auto&& value) {
+        if (what == Draw::Empty) {
+            row.emplace_back();
+        } else if (what == Draw::Unparsable) {
+            row.push_back(std::move(unparsable));
+        } else {
+            row.push_back(value());
+        }
+    };
+    row.emplace_back(id);
+    add(draw(), std::string{"n/a"}, [&] { return Cell{static_cast<std::int64_t>(pick(1000)) - 500}; });
+    add(draw(), std::string{"1,5"}, [&] {
+        return Cell{morph::math::Rational{morph::math::Numerator{static_cast<std::int64_t>(pick(100000))},
+                                          morph::math::Denominator{100}, morph::math::DecimalPlaces{2}}};
+    });
+    add(draw(), std::string{"heavy"}, [&] {
+        // grams, kilograms or milligrams
+        auto const unit = pick(3);
+        auto const amount = morph::math::Rational{static_cast<std::int64_t>(pick(5000)), {}};
+        auto factor = morph::math::Rational{1, {}};
+        if (unit == 1) {
+            factor = morph::math::Rational{1000, {}};
+        } else if (unit == 2) {
+            factor = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, {}};
+        }
+        return Cell{morph::table::QuantityCell{.amount = amount, .toCanonical = factor}};
+    });
+    // Text has no unparsable value: an unparsable draw is a value too.
+    auto const textDraw = draw();
+    add(textDraw == Draw::Empty ? Draw::Empty : Draw::Value, Cell{}, [&] {
+        return Cell{std::string{kWords.at(pick(static_cast<std::uint32_t>(kWords.size())))} + " " +
+                    std::to_string(pick(500))};
+    });
+    add(draw(), std::string{"someday"}, [&] { return Cell{static_cast<std::int64_t>(19000 + pick(2000))}; });
     return row;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- row count, then seed
 inline std::shared_ptr<morph::table::VectorSource> syntheticSource(std::size_t rows, std::uint32_t seed) {
     std::mt19937 rng{seed};
     std::vector<std::vector<Cell>> cells;
@@ -179,7 +181,7 @@ public:
             std::scoped_lock const lock{_mutex};
             tasks.swap(_tasks);
         }
-        for (auto& task : tasks) {
+        for (auto const& task : tasks) {
             task();
         }
         return tasks.size();
@@ -197,6 +199,7 @@ private:
 // The keys of an engine's view, in view order.
 inline std::vector<RowId> viewKeys(morph::table::Engine const& engine) {
     std::vector<RowId> out;
+    out.reserve(engine.viewRowCount());
     for (std::size_t i = 0; i < engine.viewRowCount(); ++i) {
         out.push_back(engine.rowIdAt(i));
     }
@@ -209,23 +212,26 @@ class FollowingModel {
 public:
     explicit FollowingModel(morph::table::Engine& engine) : _engine{&engine}, _rows{viewKeys(engine)} {
         engine.onViewChange([this](morph::table::ViewChange const& change) {
-            ++changes;
+            ++_changes;
             if (change.isReset()) {
-                ++resets;
+                ++_resets;
             }
-            last = change;
+            _last = change;
             auto const after = viewKeys(*_engine);
             morph::table::applyViewChange(_rows, change, std::span<RowId const>{after});
         });
     }
     [[nodiscard]] bool check() const { return _rows == viewKeys(*_engine); }
-    std::size_t changes = 0;
-    std::size_t resets = 0;
-    morph::table::ViewChange last;
+    [[nodiscard]] std::size_t changes() const { return _changes; }
+    [[nodiscard]] std::size_t resets() const { return _resets; }
+    [[nodiscard]] morph::table::ViewChange const& last() const { return _last; }
 
 private:
     morph::table::Engine* _engine;
     std::vector<RowId> _rows;
+    std::size_t _changes = 0;
+    std::size_t _resets = 0;
+    morph::table::ViewChange _last;
 };
 
 // Pumps `owner` until `done()` or a generous timeout; returns done().

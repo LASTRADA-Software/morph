@@ -43,7 +43,7 @@ Selection make(SelectionOptions options) {
 }  // namespace
 
 TEST_CASE("table: selection survives sort, filter and refetch", "[table][selection]") {
-    auto source = fiveRows();
+    auto const source = fiveRows();
     Engine engine{source};
     auto selection = make({.mode = SelectionMode::Multiple, .pruneOnFilter = false, .tableMode = TableMode::Client});
     CHECK(selection.select(key(0)));
@@ -73,7 +73,7 @@ TEST_CASE("table: selection survives sort, filter and refetch", "[table][selecti
 }
 
 TEST_CASE("table: pruneOnFilter drops selected rows that leave the view", "[table][selection]") {
-    auto source = fiveRows();
+    auto const source = fiveRows();
     Engine engine{source};
     auto selection = make({.mode = SelectionMode::Multiple, .pruneOnFilter = true, .tableMode = TableMode::Client});
     REQUIRE(selection.selectAll(engine).has_value());
@@ -93,7 +93,7 @@ TEST_CASE("table: single and none modes", "[table][selection]") {
     CHECK(single.keys() == std::vector<RowId>{key(2)});
     CHECK_FALSE(single.toggle(key(2)));
     CHECK(single.selectedCount() == 0);
-    Engine engine{fiveRows()};
+    Engine const engine{fiveRows()};
     CHECK(single.selectAll(engine).error().code == TableErrorCode::Unavailable);
 
     auto none = make({});
@@ -107,7 +107,7 @@ TEST_CASE("table: server mode has neither select-all nor pruning", "[table][sele
     REQUIRE_FALSE(pruning.has_value());
     CHECK(pruning.error().code == TableErrorCode::Unavailable);
     auto selection = make({.mode = SelectionMode::Multiple, .pruneOnFilter = false, .tableMode = TableMode::Server});
-    Engine engine{fiveRows()};
+    Engine const engine{fiveRows()};
     CHECK(selection.selectAll(engine).error().code == TableErrorCode::Unavailable);
     CHECK(selection.select(key(1234)));  // a key outside any fetched page
     CHECK(selection.contains(key(1234)));
@@ -126,7 +126,7 @@ TEST_CASE("table: activation does not change the selection", "[table][selection]
 }
 
 TEST_CASE("table: a commit runs the mutation and patches the row", "[table][edits]") {
-    auto source = fiveRows();
+    auto const source = fiveRows();
     Engine engine{source};
     REQUIRE(engine.setSort({{"c", kAsc}}).has_value());
     std::vector<EditRequest> ran;
@@ -149,7 +149,7 @@ TEST_CASE("table: a commit runs the mutation and patches the row", "[table][edit
 }
 
 TEST_CASE("table: a field error attaches to its cell until the next edit succeeds", "[table][edits]") {
-    auto source = fiveRows();
+    auto const source = fiveRows();
     std::vector<EditDone> pending;
     CellEdits edits{*source, [&](EditRequest const&, EditDone done) { pending.push_back(std::move(done)); }};
     edits.commit(EditRequest{.row = key(2), .column = "c", .value = std::string{"lots"}});
@@ -164,7 +164,7 @@ TEST_CASE("table: a field error attaches to its cell until the next edit succeed
 }
 
 TEST_CASE("table: edits to one row run in order, other rows run alongside", "[table][edits]") {
-    auto source = fiveRows();
+    auto const source = fiveRows();
     std::vector<std::pair<EditRequest, EditDone>> calls;
     CellEdits edits{*source,
                     [&](EditRequest const& request, EditDone done) { calls.emplace_back(request, std::move(done)); }};
@@ -185,7 +185,7 @@ TEST_CASE("table: edits to one row run in order, other rows run alongside", "[ta
 }
 
 TEST_CASE("table: a completion after the committer is gone is ignored", "[table][edits]") {
-    auto source = fiveRows();
+    auto const source = fiveRows();
     EditDone late;
     {
         CellEdits edits{*source, [&](EditRequest const&, EditDone done) { late = std::move(done); }};

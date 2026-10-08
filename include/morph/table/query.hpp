@@ -42,6 +42,8 @@
 
 namespace morph::table {
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row and column indices are bounded by the snapshot's own counts, and the sort and filter loops index once per comparison, where at() would check every access
+
 /// @brief Which rows of the view a request wants.
 struct PageRequest {
     /// @brief First view row.
@@ -129,6 +131,76 @@ namespace detail {
            (entry.between && ((*entry.between)[0].size() > max || (*entry.between)[1].size() > max));
 }
 
+/// @brief Whether any of @p entries has an operand longer than @p max bytes.
+/// @param entries The entries.
+/// @param max     The bound.
+/// @return `true` when one has.
+[[nodiscard]] inline bool anyTooLong(std::span<FilterEntry const> entries, std::size_t max) {
+    return std::ranges::any_of(entries, [max](FilterEntry const& entry) { return entryTooLong(entry, max); });
+}
+
+/// @brief Checks that a column exists and the principal may read it.
+/// @param columnId The column's id.
+/// @param columns  The row schema's columns.
+/// @param mayRead  Whether the principal may read a column; empty allows every column.
+/// @return The error, or nothing.
+[[nodiscard]] inline std::optional<TableError> checkColumn(std::string const& columnId,
+                                                           std::span<ColumnInfo const> columns,
+                                                           std::function<bool(std::string_view)> const& mayRead) {
+    if (!findColumn(columns, columnId)) {
+        return unknownColumn(columnId);
+    }
+    if (mayRead && !mayRead(columnId)) {
+        return TableError{.code = TableErrorCode::ColumnNotReadable,
+                          .column = columnId,
+                          .message = "column " + columnId + " is not readable"};
+    }
+    return std::nullopt;
+}
+
+/// @brief Checks a filter's columns, entry counts and value lengths.
+/// @param filters The filter.
+/// @param columns The row schema's columns.
+/// @param limits  The bounds.
+/// @param mayRead Whether the principal may read a column.
+/// @return The first violation, or nothing.
+[[nodiscard]] inline std::optional<TableError> checkFilters(FilterSpec const& filters,
+                                                            std::span<ColumnInfo const> columns,
+                                                            QueryLimits const& limits,
+                                                            std::function<bool(std::string_view)> const& mayRead) {
+    if (filters.columns.size() > limits.maxFilterColumns) {
+        return limitError({}, "too many filtered columns");
+    }
+    for (auto const& [columnId, filter] : filters.columns) {
+        if (auto error = checkColumn(columnId, columns, mayRead)) {
+            return error;
+        }
+        if (filter.include.size() + filter.exclude.size() > limits.maxEntries) {
+            return limitError(columnId, "too many filter entries");
+        }
+        if (anyTooLong(filter.include, limits.maxTextLength) || anyTooLong(filter.exclude, limits.maxTextLength)) {
+            return limitError(columnId, "filter value too long");
+        }
+    }
+    if (filters.groups.size() > limits.maxGroups) {
+        return limitError({}, "too many filter groups");
+    }
+    for (auto const& group : filters.groups) {
+        if (group.columns.size() > limits.maxGroupColumns || group.include.size() > limits.maxEntries) {
+            return limitError({}, "filter group too large");
+        }
+        for (auto const& columnId : group.columns) {
+            if (auto error = checkColumn(columnId, columns, mayRead)) {
+                return error;
+            }
+        }
+        if (anyTooLong(group.include, limits.maxTextLength)) {
+            return limitError({}, "filter value too long");
+        }
+    }
+    return std::nullopt;
+}
+
 }  // namespace detail
 
 /// @brief Checks @p query against the table's columns and @p limits.
@@ -145,17 +217,6 @@ namespace detail {
 [[nodiscard]] inline std::expected<TableQuery, TableError> validate(
     TableQuery query, std::span<ColumnInfo const> columns, QueryLimits const& limits = {},
     std::function<bool(std::string_view)> const& mayRead = {}) {
-    auto const checkColumn = [&](std::string const& id) -> std::optional<TableError> {
-        if (!detail::findColumn(columns, id)) {
-            return TableError{.code = TableErrorCode::UnknownColumn, .column = id, .message = "no column " + id};
-        }
-        if (mayRead && !mayRead(id)) {
-            return TableError{.code = TableErrorCode::ColumnNotReadable,
-                              .column = id,
-                              .message = "column " + id + " is not readable"};
-        }
-        return std::nullopt;
-    };
     if (query.page.offset < 0 || query.page.offset > limits.maxOffset) {
         return std::unexpected(detail::limitError({}, "page.offset out of range"));
     }
@@ -167,48 +228,12 @@ namespace detail {
         return std::unexpected(detail::limitError({}, "too many sort keys"));
     }
     for (auto const& key : query.sort) {
-        if (auto error = checkColumn(key.column)) {
+        if (auto error = detail::checkColumn(key.column, columns, mayRead)) {
             return std::unexpected(std::move(*error));
         }
     }
-    if (query.filters.columns.size() > limits.maxFilterColumns) {
-        return std::unexpected(detail::limitError({}, "too many filtered columns"));
-    }
-    for (auto const& [id, filter] : query.filters.columns) {
-        if (auto error = checkColumn(id)) {
-            return std::unexpected(std::move(*error));
-        }
-        if (filter.include.size() + filter.exclude.size() > limits.maxEntries) {
-            return std::unexpected(detail::limitError(id, "too many filter entries"));
-        }
-        for (auto const& entry : filter.include) {
-            if (detail::entryTooLong(entry, limits.maxTextLength)) {
-                return std::unexpected(detail::limitError(id, "filter value too long"));
-            }
-        }
-        for (auto const& entry : filter.exclude) {
-            if (detail::entryTooLong(entry, limits.maxTextLength)) {
-                return std::unexpected(detail::limitError(id, "filter value too long"));
-            }
-        }
-    }
-    if (query.filters.groups.size() > limits.maxGroups) {
-        return std::unexpected(detail::limitError({}, "too many filter groups"));
-    }
-    for (auto const& group : query.filters.groups) {
-        if (group.columns.size() > limits.maxGroupColumns || group.include.size() > limits.maxEntries) {
-            return std::unexpected(detail::limitError({}, "filter group too large"));
-        }
-        for (auto const& id : group.columns) {
-            if (auto error = checkColumn(id)) {
-                return std::unexpected(std::move(*error));
-            }
-        }
-        for (auto const& entry : group.include) {
-            if (detail::entryTooLong(entry, limits.maxTextLength)) {
-                return std::unexpected(detail::limitError({}, "filter value too long"));
-            }
-        }
+    if (auto error = detail::checkFilters(query.filters, columns, limits, mayRead)) {
+        return std::unexpected(std::move(*error));
     }
     return query;
 }
@@ -222,11 +247,11 @@ namespace detail {
 [[nodiscard]] inline std::string escapeLikePattern(std::string_view text, char escape = '\\') {
     std::string out;
     out.reserve(text.size());
-    for (char const ch : text) {
-        if (ch == '%' || ch == '_' || ch == escape) {
+    for (char const character : text) {
+        if (character == '%' || character == '_' || character == escape) {
             out.push_back(escape);
         }
-        out.push_back(ch);
+        out.push_back(character);
     }
     return out;
 }
@@ -269,26 +294,28 @@ struct PageRows {
     if (!filter) {
         return std::unexpected(std::move(filter.error()));
     }
-    detail::JobInput in;
-    in.snapshot = source.snapshot();
-    in.columns.assign(columns.begin(), columns.end());
-    in.services = options.services.forTask();
-    in.keys.resize(columns.size());
+    detail::JobInput input;
+    input.snapshot = source.snapshot();
+    input.columns.assign(columns.begin(), columns.end());
+    input.services = options.services.forTask();
+    input.keys.resize(columns.size());
     for (auto const& key : checked->sort) {
-        in.needed.push_back(*detail::findColumn(columns, key.column));
+        if (auto const column = detail::findColumn(columns, key.column)) {
+            input.needed.push_back(*column);
+        }
     }
     for (auto const column : filter->columnsUsed()) {
-        in.needed.push_back(column);
+        input.needed.push_back(column);
     }
-    std::ranges::sort(in.needed);
-    auto const [first, last] = std::ranges::unique(in.needed);
-    in.needed.erase(first, last);
-    in.sort = checked->sort;
-    in.filter = std::make_shared<CompiledFilter const>(std::move(*filter));
-    in.previousSnapshot = in.snapshot;
-    detail::ViewJob job{std::move(in)};
+    std::ranges::sort(input.needed);
+    auto const [first, last] = std::ranges::unique(input.needed);
+    input.needed.erase(first, last);
+    input.sort = checked->sort;
+    input.filter = std::make_shared<CompiledFilter const>(std::move(*filter));
+    input.previousSnapshot = input.snapshot;
+    detail::ViewJob job{std::move(input)};
     static_cast<void>(job.step(kNoDeadline, ::core::async::StopToken{}));
-    auto const view = std::move(job).take().view;
+    auto const view = job.takeResult().view;
 
     PageRows out;
     out.offset = checked->page.offset;
@@ -351,16 +378,13 @@ template <typename T>
     using V = std::remove_cvref_t<T>;
     if constexpr (IsOptional<V>::value) {
         return value ? toCell(*value) : Cell{};
-    } else if constexpr (std::is_same_v<V, bool>) {
+    } else if constexpr (std::is_same_v<V, bool> || std::is_same_v<V, std::string> ||
+                         std::is_same_v<V, math::Rational>) {
         return Cell{value};
     } else if constexpr (std::integral<V>) {
         return Cell{static_cast<std::int64_t>(value)};
     } else if constexpr (std::floating_point<V>) {
         return Cell{static_cast<double>(value)};
-    } else if constexpr (std::is_same_v<V, std::string>) {
-        return Cell{value};
-    } else if constexpr (std::is_same_v<V, math::Rational>) {
-        return Cell{value};
     } else if constexpr (units::isQuantity<V>) {
         return value.value() ? Cell{*value.value()} : Cell{};
     } else if constexpr (std::is_same_v<V, time::DateTime>) {
@@ -503,13 +527,13 @@ public:
                std::map<std::string, ColumnKind, std::less<>> const& kinds = {})
         : _columns{detail::reflectedColumns<Row>()},
           _readers{std::make_shared<std::vector<detail::CellReader<Row>> const>(detail::cellReaders<Row>())},
-          _key{std::move(key)} {
+          _key{std::move(key)},
+          _snapshot{std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers)} {
         for (auto& column : _columns) {
             if (auto const found = kinds.find(column.id); found != kinds.end()) {
                 column.kind = found->second;
             }
         }
-        _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers);
     }
 
     /// @brief The columns.
@@ -591,6 +615,7 @@ public:
     /// @brief An empty window.
     /// @param pageSize Rows per page (default 200).
     /// @param maxPages Pages held at most; the farthest from the visible rows go first.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - page size then page count, both documented above
     explicit PageWindow(std::int64_t pageSize = 200, std::size_t maxPages = 8)
         : _pageSize{std::max<std::int64_t>(pageSize, 1)}, _maxPages{std::max<std::size_t>(maxPages, 1)} {}
 
@@ -605,8 +630,8 @@ public:
     [[nodiscard]] std::vector<PageRequest> visible(std::int64_t first, std::int64_t count) {
         _visibleFirst = std::max<std::int64_t>(first, 0);
         _visibleCount = std::max<std::int64_t>(count, 0);
-        auto const firstPage = std::max<std::int64_t>(_visibleFirst / _pageSize - 1, 0);
-        auto const lastPage = (_visibleFirst + std::max<std::int64_t>(_visibleCount, 1) - 1) / _pageSize + 1;
+        auto const firstPage = std::max<std::int64_t>((_visibleFirst / _pageSize) - 1, 0);
+        auto const lastPage = ((_visibleFirst + std::max<std::int64_t>(_visibleCount, 1) - 1) / _pageSize) + 1;
         std::vector<PageRequest> out;
         for (auto page = firstPage; page <= lastPage; ++page) {
             if (_total && page * _pageSize >= *_total) {
@@ -702,6 +727,8 @@ private:
     std::int64_t _visibleFirst = 0;
     std::int64_t _visibleCount = 0;
 };
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
 

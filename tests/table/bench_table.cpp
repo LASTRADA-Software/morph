@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <functional>
@@ -21,6 +22,7 @@
 #include <morph/core/wire.hpp>
 #include <morph/table/engine.hpp>
 #include <morph/table/query.hpp>
+#include <print>
 #include <random>
 #include <string>
 #include <thread>
@@ -46,7 +48,7 @@ struct Spread {
 Spread spreadOf(std::vector<double> samples) {
     std::ranges::sort(samples);
     auto const at = [&](double q) {
-        auto const index = static_cast<std::size_t>(q * static_cast<double>(samples.size() - 1) + 0.5);
+        auto const index = static_cast<std::size_t>(std::lround(q * static_cast<double>(samples.size() - 1)));
         return samples[std::min(index, samples.size() - 1)];
     };
     return Spread{.median = at(0.5), .p10 = at(0.1), .p90 = at(0.9)};
@@ -60,18 +62,20 @@ int runsFor(std::size_t rows) {
 }
 
 void printHeader(char const* title) {
-    std::printf("\n%s\n\n| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|\n", title);
+    std::println("\n{}\n\n| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|", title);
 }
 
 void printRow(std::string const& scenario, std::size_t rows, Spread const& spread) {
-    std::printf("| %s | %zu | %.2f | %.2f-%.2f |\n", scenario.c_str(), rows, spread.median, spread.p10, spread.p90);
-    std::fflush(stdout);
+    std::println("| {} | {} | {:.2f} | {:.2f}-{:.2f} |", scenario, rows, spread.median, spread.p10, spread.p90);
+    static_cast<void>(std::fflush(stdout));
 }
 
 // Times `body` over `runs` fresh engines on `source`; the engine computes in
 // the calling thread (no owner), so the time is the work itself.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters) -- setup, then the body that is timed
 void measure(std::string const& scenario, std::shared_ptr<VectorSource> const& source,
              std::function<void(Engine&)> const& setup, std::function<void(Engine&)> const& body) {
+    // NOLINTEND(bugprone-easily-swappable-parameters)
     auto const rows = source->snapshot()->rowCount();
     std::vector<double> samples;
     for (int run = 0; run < runsFor(rows); ++run) {
@@ -121,27 +125,31 @@ TEST_CASE("table benchmark: sort and filter on the calling thread", "[.benchmark
     auto const none = [](Engine&) {};
     for (auto const size : kSizes) {
         auto const source = tabletest::syntheticSource(size, 42);
-        measure("sort: one numeric key", source, none, [](Engine& e) { require(e.setSort({{"price", kAsc}})); });
-        measure("sort: one text key", source, none, [](Engine& e) { require(e.setSort({{"name", kAsc}})); });
-        measure("sort: three keys", source, none,
-                [](Engine& e) { require(e.setSort({{"on", kAsc}, {"price", kDesc}, {"mass", kAsc}})); });
+        measure("sort: one numeric key", source, none,
+                [](Engine& e) { require(e.setSort({{.column = "price", .dir = kAsc}})); });
+        measure("sort: one text key", source, none,
+                [](Engine& e) { require(e.setSort({{.column = "name", .dir = kAsc}})); });
+        measure("sort: three keys", source, none, [](Engine& e) {
+            require(e.setSort(
+                {{.column = "on", .dir = kAsc}, {.column = "price", .dir = kDesc}, {.column = "mass", .dir = kAsc}}));
+        });
         measure("filter: text contains", source, none,
                 [](Engine& e) { require(e.setFilter(filterOn("name", FilterEntry{.contains = "ETA"}))); });
         measure("filter: numeric compare", source, none,
                 [](Engine& e) { require(e.setFilter(filterOn("price", FilterEntry{.ge = "500"}))); });
         measure("filter: group", source, none, [](Engine& e) { require(e.setFilter(groupFilter())); });
         measure("sort then filter", source, none, [](Engine& e) {
-            require(e.setSort({{"price", kAsc}}));
+            require(e.setSort({{.column = "price", .dir = kAsc}}));
             require(e.setFilter(filterOn("n", FilterEntry{.gt = "0"})));
         });
         measure("filter then sort", source, none, [](Engine& e) {
             require(e.setFilter(filterOn("n", FilterEntry{.gt = "0"})));
-            require(e.setSort({{"price", kAsc}}));
+            require(e.setSort({{.column = "price", .dir = kAsc}}));
         });
         measure(
             "toggle one filter ten times, sorted", source,
             [](Engine& e) {
-                require(e.setSort({{"price", kAsc}}));
+                require(e.setSort({{.column = "price", .dir = kAsc}}));
                 require(e.setFilter(filterOn("n", FilterEntry{.gt = "0"})));
             },
             [](Engine& e) {
@@ -158,11 +166,12 @@ TEST_CASE("table benchmark: 1,000 cell updates while sorted", "[.benchmark][tabl
         std::vector<double> samples;
         std::size_t fullSorts = 0;
         for (int run = 0; run < runsFor(size); ++run) {
-            auto source = tabletest::syntheticSource(size, 42);
+            auto const source = tabletest::syntheticSource(size, 42);
             morph::exec::MainThreadExecutor owner;
             Engine engine{source, EngineOptions{.owner = &owner, .worker = nullptr}};
-            require(engine.setSort({{"price", kAsc}}));
+            require(engine.setSort({{.column = "price", .dir = kAsc}}));
             REQUIRE(spinUntil(owner, [&] { return !engine.pending(); }));
+            // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp) -- a fixed seed keeps the case reproducible
             std::mt19937 rng{7};
             std::vector<std::pair<std::size_t, std::vector<Cell>>> updates;
             for (int i = 0; i < 1000; ++i) {
@@ -185,10 +194,10 @@ TEST_CASE("table benchmark: 1,000 cell updates while sorted", "[.benchmark][tabl
 }
 
 TEST_CASE("table benchmark: owner blocking with and without a worker", "[.benchmark][table]") {
-    std::printf(
-        "\nThe longest single owner step, per request (sort on three keys, then a text filter)\n\n"
-        "| execution | rows | worst owner step ms (median of runs) | worst of all runs ms | "
-        "request to result ms (median) |\n|---|---:|---:|---:|---:|\n");
+    std::println(
+        "\nThe longest single owner step, per request (sort on three keys, then a text filter)\n\n| execution | rows "
+        "| worst owner step ms (median of runs) | worst of all runs ms | request to result ms (median) "
+        "|\n|---|---:|---:|---:|---:|");
     morph::exec::ThreadPoolExecutor pool{2};
     for (auto const size : kSizes) {
         auto const source = tabletest::syntheticSource(size, 42);
@@ -199,7 +208,9 @@ TEST_CASE("table benchmark: owner blocking with and without a worker", "[.benchm
                 morph::exec::MainThreadExecutor owner;
                 Engine engine{source, EngineOptions{.owner = &owner, .worker = withWorker ? &pool : nullptr}};
                 auto const began = Clock::now();
-                require(engine.setSort({{"on", kAsc}, {"price", kDesc}, {"mass", kAsc}}));
+                require(engine.setSort({{.column = "on", .dir = kAsc},
+                                        {.column = "price", .dir = kDesc},
+                                        {.column = "mass", .dir = kAsc}}));
                 REQUIRE(spinUntil(owner, [&] { return !engine.pending(); }));
                 require(engine.setFilter(filterOn("name", FilterEntry{.contains = "eta"})));
                 REQUIRE(spinUntil(owner, [&] { return !engine.pending(); }));
@@ -207,16 +218,17 @@ TEST_CASE("table benchmark: owner blocking with and without a worker", "[.benchm
                 worst.push_back(static_cast<double>(engine.stats().maxOwnerStepMicros) / 1000.0);
             }
             auto const spread = spreadOf(worst);
-            std::printf("| %s | %zu | %.2f | %.2f | %.2f |\n", withWorker ? "worker" : "owner steps (8 ms budget)",
-                        size, spread.median, *std::ranges::max_element(worst), spreadOf(latency).median);
-            std::fflush(stdout);
+            std::println("| {} | {} | {:.2f} | {:.2f} | {:.2f} |", withWorker ? "worker" : "owner steps (8 ms budget)",
+                         size, spread.median, *std::ranges::max_element(worst), spreadOf(latency).median);
+            static_cast<void>(std::fflush(stdout));
         }
     }
 }
 
-namespace {
+// Ten small cells, the row spec 7 §9 sizes an envelope with. Reflected by
+// glaze, so not in an anonymous namespace.
+namespace tbench {
 
-// Ten small cells, the row spec 7 §9 sizes an envelope with.
 struct SmallRow {
     std::int64_t id = 0;
     std::string code;
@@ -229,6 +241,12 @@ struct SmallRow {
     std::int64_t owner = 0;
     std::string note;
 };
+
+}  // namespace tbench
+
+using tbench::SmallRow;
+
+namespace {
 
 std::string envelopeFor(std::size_t rows) {
     Page<SmallRow> page;
@@ -276,9 +294,9 @@ TEST_CASE("table benchmark: rows of ten small cells per envelope", "[.benchmark]
     auto const fit = low;
     CHECK(morph::wire::decode(envelopeFor(fit)).kind == "ok");
     CHECK_THROWS(morph::wire::decode(envelopeFor(fit + 1)));
-    std::printf(
-        "\nRows per envelope (kMaxEnvelopeBytes = %zu)\n\n| bytes per row in the envelope | rows that fit |\n"
-        "|---:|---:|\n| %.1f | %zu |\n",
+    std::println(
+        "\nRows per envelope (kMaxEnvelopeBytes = {})\n\n| bytes per row in the envelope | rows that fit "
+        "|\n|---:|---:|\n| {:.1f} | {} |",
         morph::wire::kMaxEnvelopeBytes, perRow, fit);
-    std::fflush(stdout);
+    static_cast<void>(std::fflush(stdout));
 }

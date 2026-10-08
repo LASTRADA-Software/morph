@@ -27,10 +27,10 @@ using Kind = ViewOp::Kind;
 
 ViewChange diff(Ids const& before, Ids const& after, Ids const& changed = {}, std::size_t threshold = 5000) {
     std::uint32_t limit = 0;
-    for (auto id : before) {
+    for (auto const id : before) {
         limit = std::max(limit, id + 1);
     }
-    for (auto id : after) {
+    for (auto const id : after) {
         limit = std::max(limit, id + 1);
     }
     return diffViews(before, after, changed, limit, threshold);
@@ -68,14 +68,14 @@ TEST_CASE("table: a single insert, remove and update are one operation each", "[
 }
 
 TEST_CASE("table: moving the first row to the end is one move", "[table][viewchange]") {
-    Ids const before{0, 1, 2, 3, 4, 5};
-    Ids const after{1, 2, 3, 4, 5, 0};
-    auto const change = diff(before, after);
+    Ids const original{0, 1, 2, 3, 4, 5};
+    Ids const rotated{1, 2, 3, 4, 5, 0};
+    auto const change = diff(original, rotated);
     REQUIRE(change.ops.size() == 1);
     CHECK(change.ops[0] == ViewOp{.kind = Kind::Moved, .first = 0, .count = 1, .to = 5});
-    CHECK(replay(before, change, after) == after);
+    CHECK(replay(original, change, rotated) == rotated);
 
-    auto const back = diff(after, before);
+    auto const back = diff(rotated, original);
     REQUIRE(back.ops.size() == 1);
     CHECK(back.ops[0] == ViewOp{.kind = Kind::Moved, .first = 5, .count = 1, .to = 0});
 }
@@ -92,7 +92,7 @@ TEST_CASE("table: an updated row that moves is one move and one change", "[table
 
 TEST_CASE("table: a reversal moves all but one row", "[table][viewchange]") {
     Ids before(50);
-    std::iota(before.begin(), before.end(), 0U);
+    std::ranges::iota(before, 0U);
     Ids after(before.rbegin(), before.rend());
     auto const change = diff(before, after);
     CHECK(count(change, Kind::Moved) == 49);
@@ -100,17 +100,18 @@ TEST_CASE("table: a reversal moves all but one row", "[table][viewchange]") {
 }
 
 TEST_CASE("table: random reorders with inserts and removes replay exactly", "[table][viewchange]") {
+    // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp) -- a fixed seed keeps the case reproducible
     std::mt19937 rng{889};
     for (int round = 0; round < 300; ++round) {
         auto const universe = static_cast<std::uint32_t>(1 + (rng() % 60));
         Ids pool(universe);
-        std::iota(pool.begin(), pool.end(), 0U);
+        std::ranges::iota(pool, 0U);
         std::ranges::shuffle(pool, rng);
         Ids before(pool.begin(), pool.begin() + static_cast<std::ptrdiff_t>(rng() % (universe + 1)));
         std::ranges::shuffle(pool, rng);
         Ids after(pool.begin(), pool.begin() + static_cast<std::ptrdiff_t>(rng() % (universe + 1)));
         Ids changed;
-        for (auto id : before) {
+        for (auto const id : before) {
             if (rng() % 4 == 0) {
                 changed.push_back(id);
             }
@@ -131,16 +132,19 @@ TEST_CASE("table: random reorders with inserts and removes replay exactly", "[ta
 
 TEST_CASE("table: a change over the threshold is one reset", "[table][viewchange]") {
     Ids before(100);
-    std::iota(before.begin(), before.end(), 0U);
+    std::ranges::iota(before, 0U);
     Ids after(before.rbegin(), before.rend());
     auto const change = diff(before, after, {}, 10);
     CHECK(change.isReset());
     CHECK(replay(before, change, after) == after);
 
+    Ids full(100);
+    std::ranges::iota(full, 0U);
     Ids sparse;
+    sparse.reserve(50);
     for (std::uint32_t i = 0; i < 100; i += 2) {
         sparse.push_back(i);
     }
-    CHECK(diff(before, sparse, {}, 10).isReset());
-    CHECK(diff(sparse, before, {}, 10).isReset());
+    CHECK(diff(full, sparse, {}, 10).isReset());
+    CHECK(diff(sparse, full, {}, 10).isReset());
 }
