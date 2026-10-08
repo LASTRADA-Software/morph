@@ -159,8 +159,10 @@ struct ViewPositions {
 /// @param before    The old view.
 /// @param positions Where identities sit.
 /// @param out       Receives the operations.
-inline void appendRemovals(std::span<std::uint32_t const> before, ViewPositions const& positions,
-                           std::vector<ViewOp>& out) {
+/// @param limit     Most operations @p out may hold; past it the scan stops.
+/// @return `false` when the removals take @p out past @p limit.
+[[nodiscard]] inline bool appendRemovals(std::span<std::uint32_t const> before, ViewPositions const& positions,
+                                         std::vector<ViewOp>& out, std::size_t limit) {
     for (std::size_t end = before.size(); end > 0;) {
         if (positions.after[before[end - 1]] != kAbsent) {
             --end;
@@ -171,8 +173,12 @@ inline void appendRemovals(std::span<std::uint32_t const> before, ViewPositions 
             --start;
         }
         out.push_back(ViewOp{.kind = ViewOp::Kind::Removed, .first = start, .count = end - start, .to = 0});
+        if (out.size() > limit) {
+            return false;
+        }
         end = start;
     }
+    return true;
 }
 
 /// @brief Appends the moves that put the kept rows in their new order.
@@ -185,9 +191,17 @@ inline void appendRemovals(std::span<std::uint32_t const> before, ViewPositions 
 /// count of occupied slots before its own.
 /// @param ranks The kept rows, in old order, as new-order ranks.
 /// @param out   Receives the operations.
-inline void appendMoves(std::span<std::uint32_t const> ranks, std::vector<ViewOp>& out) {
+/// @param limit Most operations @p out may hold; past it no move is computed.
+/// @return `false` when the moves would take @p out past @p limit.
+[[nodiscard]] inline bool appendMoves(std::span<std::uint32_t const> ranks, std::vector<ViewOp>& out,
+                                      std::size_t limit) {
     auto const stationary = longestIncreasing(ranks);
     auto const stationaryCount = static_cast<std::size_t>(std::ranges::count(stationary, true));
+    // Counting first keeps a full re-sort, which is a reset anyway, from
+    // computing every move before discarding them.
+    if (out.size() + (ranks.size() - stationaryCount) > limit) {
+        return false;
+    }
     auto const kept = ranks.size();
     std::vector<std::size_t> oldGap(kept);
     std::vector<std::size_t> stationaryBeforeRank(kept + 1, 0);
@@ -243,14 +257,17 @@ inline void appendMoves(std::span<std::uint32_t const> ranks, std::vector<ViewOp
         slots.occupy(movedSlot);
         out.push_back(ViewOp{.kind = ViewOp::Kind::Moved, .first = from, .count = 1, .to = destination});
     }
+    return true;
 }
 
 /// @brief Appends the insertions, front to back, coalesced into runs.
 /// @param after     The new view.
 /// @param positions Where identities sit.
 /// @param out       Receives the operations.
-inline void appendInsertions(std::span<std::uint32_t const> after, ViewPositions const& positions,
-                             std::vector<ViewOp>& out) {
+/// @param limit     Most operations @p out may hold; past it the scan stops.
+/// @return `false` when the insertions take @p out past @p limit.
+[[nodiscard]] inline bool appendInsertions(std::span<std::uint32_t const> after, ViewPositions const& positions,
+                                           std::vector<ViewOp>& out, std::size_t limit) {
     for (std::size_t start = 0; start < after.size();) {
         if (positions.before[after[start]] != kAbsent) {
             ++start;
@@ -261,8 +278,12 @@ inline void appendInsertions(std::span<std::uint32_t const> after, ViewPositions
             ++end;
         }
         out.push_back(ViewOp{.kind = ViewOp::Kind::Inserted, .first = start, .count = end - start, .to = 0});
+        if (out.size() > limit) {
+            return false;
+        }
         start = end;
     }
+    return true;
 }
 
 /// @brief Appends the changes of rows in both views, in new positions, coalesced into runs.
@@ -319,33 +340,32 @@ inline void appendChanges(std::span<std::uint32_t const> changed, ViewPositions 
     for (std::size_t i = 0; i < before.size(); ++i) {
         positions.before[before[i]] = static_cast<std::uint32_t>(i);
     }
-    detail::appendRemovals(before, positions, out.ops);
-
-    // The kept rows in old order, as ranks in the new order.
-    std::vector<std::uint32_t> rankOf(identityLimit, detail::kAbsent);
-    std::uint32_t rank = 0;
-    for (auto const identity : after) {
-        if (positions.before[identity] != detail::kAbsent) {
-            rankOf[identity] = rank++;
+    bool fits = detail::appendRemovals(before, positions, out.ops, resetThreshold);
+    if (fits) {
+        // The kept rows in old order, as ranks in the new order.
+        std::vector<std::uint32_t> rankOf(identityLimit, detail::kAbsent);
+        std::uint32_t rank = 0;
+        for (auto const identity : after) {
+            if (positions.before[identity] != detail::kAbsent) {
+                rankOf[identity] = rank++;
+            }
         }
-    }
-    std::vector<std::uint32_t> ranks;
-    ranks.reserve(rank);
-    for (auto const identity : before) {
-        if (rankOf[identity] != detail::kAbsent) {
-            ranks.push_back(rankOf[identity]);
+        std::vector<std::uint32_t> ranks;
+        ranks.reserve(rank);
+        for (auto const identity : before) {
+            if (rankOf[identity] != detail::kAbsent) {
+                ranks.push_back(rankOf[identity]);
+            }
         }
+        fits = detail::appendMoves(ranks, out.ops, resetThreshold);
     }
-    if (out.ops.size() <= resetThreshold) {
-        detail::appendMoves(ranks, out.ops);
+    if (fits) {
+        fits = detail::appendInsertions(after, positions, out.ops, resetThreshold);
     }
-    if (out.ops.size() <= resetThreshold) {
-        detail::appendInsertions(after, positions, out.ops);
-    }
-    if (out.ops.size() <= resetThreshold) {
+    if (fits) {
         detail::appendChanges(changed, positions, out.ops);
     }
-    if (out.ops.size() > resetThreshold) {
+    if (!fits || out.ops.size() > resetThreshold) {
         out.ops.assign(1, ViewOp{.kind = ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
     }
     return out;
