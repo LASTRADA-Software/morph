@@ -681,7 +681,7 @@ Public Member Functions</h2></td></tr>
 <p>Number of entries currently held in the pending list. </p>
 <p><b>Not</b> the number of calls in flight: the list is compacted amortised (see <span class="tt">trackPending</span>), so it also carries entries whose completion has already been destroyed and which <span class="tt"><a class="el" href="#a8cd0f4114df7c7f9ff9b224bdba3f5e4" title="Resolves every still-pending completion this backend produced with exc, and requests stop on every Ta...">cancelPending</a></span> would skip. It is an upper bound on the in-flight count and a direct measure of what the compaction policy costs in memory — which is what it exists to make observable. For a count of in-flight <em>calls</em>, use <span class="tt">Bridge::pendingCalls()</span>. </p><dl class="section return"><dt>Returns</dt><dd>Size of the pending list, live and dead entries alike. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01384">1384</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01389">1389</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
