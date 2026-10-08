@@ -200,13 +200,9 @@ struct TableError {
 /// Called from the engine's worker. An implementation either is safe to call
 /// concurrently, and returns null from `cloneForTask`, or returns a fresh
 /// instance there that one task uses alone.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class TextCollator {
 public:
-    TextCollator() = default;
-    TextCollator(TextCollator const&) = default;
-    TextCollator(TextCollator&&) = default;
-    TextCollator& operator=(TextCollator const&) = default;
-    TextCollator& operator=(TextCollator&&) = default;
     virtual ~TextCollator() = default;
 
     /// @brief A key whose byte order is the collation order of @p text.
@@ -224,6 +220,7 @@ public:
     /// @return Null when this instance is safe to call concurrently, else a copy.
     [[nodiscard]] virtual std::shared_ptr<TextCollator const> cloneForTask() const { return nullptr; }
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief The default collator: code-point order, with ASCII and Latin-1
 ///        letters case-folded. It does not fold accents.
@@ -270,13 +267,9 @@ public:
 ///        columns that hold text, and for filter values on those columns.
 ///
 /// The same thread-safety contract as `TextCollator`.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class DateParser {
 public:
-    DateParser() = default;
-    DateParser(DateParser const&) = default;
-    DateParser(DateParser&&) = default;
-    DateParser& operator=(DateParser const&) = default;
-    DateParser& operator=(DateParser&&) = default;
     virtual ~DateParser() = default;
 
     /// @brief Parses a date.
@@ -297,6 +290,7 @@ public:
     /// @return Null when this instance is safe to call concurrently, else a copy.
     [[nodiscard]] virtual std::shared_ptr<DateParser const> cloneForTask() const { return nullptr; }
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief The default date parser: ISO 8601 only, whatever the format.
 ///
@@ -358,13 +352,9 @@ public:
 };
 
 /// @brief Receives progress of a long sort or filter, on the owner thread.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class ProgressSink {
 public:
-    ProgressSink() = default;
-    ProgressSink(ProgressSink const&) = default;
-    ProgressSink(ProgressSink&&) = default;
-    ProgressSink& operator=(ProgressSink const&) = default;
-    ProgressSink& operator=(ProgressSink&&) = default;
     virtual ~ProgressSink() = default;
 
     /// @brief Reports progress through the current job.
@@ -372,6 +362,7 @@ public:
     /// @param total Work units in the job.
     virtual void progress(std::size_t done, std::size_t total) = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief Orders two cells of a `Custom` column. Called from the worker, so it
 ///        must be safe to call concurrently.
@@ -423,13 +414,9 @@ struct Services {
 // ── Snapshots ───────────────────────────────────────────────────────────────
 
 /// @brief Receives a run of one column's cells.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class ColumnSink {
 public:
-    ColumnSink() = default;
-    ColumnSink(ColumnSink const&) = default;
-    ColumnSink(ColumnSink&&) = default;
-    ColumnSink& operator=(ColumnSink const&) = default;
-    ColumnSink& operator=(ColumnSink&&) = default;
     virtual ~ColumnSink() = default;
 
     /// @brief Receives consecutive cells of one column.
@@ -437,18 +424,15 @@ public:
     /// @param cells    The cells of rows `firstRow`, `firstRow + 1`, ….
     virtual void cells(std::size_t firstRow, std::span<Cell const> cells) = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief An immutable view of a table's rows at one moment.
 ///
 /// Nothing changes a snapshot after it is published, so it is safe to read
 /// from any thread, concurrently, for as long as it is held.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class RowSnapshot {
 public:
-    RowSnapshot() = default;
-    RowSnapshot(RowSnapshot const&) = default;
-    RowSnapshot(RowSnapshot&&) = default;
-    RowSnapshot& operator=(RowSnapshot const&) = default;
-    RowSnapshot& operator=(RowSnapshot&&) = default;
     virtual ~RowSnapshot() = default;
 
     /// @brief The number of rows.
@@ -482,6 +466,7 @@ public:
         }
     }
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief A `RowSnapshot` that stores rows in shared, immutable chunks.
 ///
@@ -686,31 +671,24 @@ struct RowChange {
 };
 
 /// @brief Receives a `DataSource`'s change notifications, on the owner thread.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class ChangeListener {
 public:
-    ChangeListener() = default;
-    ChangeListener(ChangeListener const&) = default;
-    ChangeListener(ChangeListener&&) = default;
-    ChangeListener& operator=(ChangeListener const&) = default;
-    ChangeListener& operator=(ChangeListener&&) = default;
     virtual ~ChangeListener() = default;
 
     /// @brief Called after the source changed; its `snapshot()` already shows the change.
     /// @param change What changed.
     virtual void rowsChanged(RowChange const& change) = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief The rows of a table, as the engine reads them.
 ///
 /// Owner-affine: every member is called on the owner thread. The engine reads
 /// cells only from `snapshot()`, which it may hand to a worker.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class DataSource {
 public:
-    DataSource() = default;
-    DataSource(DataSource const&) = default;
-    DataSource(DataSource&&) = default;
-    DataSource& operator=(DataSource const&) = default;
-    DataSource& operator=(DataSource&&) = default;
     virtual ~DataSource() = default;
 
     /// @brief The table's columns.
@@ -729,15 +707,12 @@ public:
     /// @param listener A listener previously subscribed.
     virtual void unsubscribe(ChangeListener& listener) = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief Replaces a row by key; what a committed cell edit patches.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class RowPatcher {
 public:
-    RowPatcher() = default;
-    RowPatcher(RowPatcher const&) = default;
-    RowPatcher(RowPatcher&&) = default;
-    RowPatcher& operator=(RowPatcher const&) = default;
-    RowPatcher& operator=(RowPatcher&&) = default;
     virtual ~RowPatcher() = default;
 
     /// @brief Replaces the cells of the row keyed @p id.
@@ -746,6 +721,7 @@ public:
     /// @return `false` when no row has that key.
     virtual bool patchRow(RowId const& id, std::vector<Cell> cells) = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief A `DataSource` over rows held in memory, for tests, servers and
 ///        sources that cannot share their own storage.

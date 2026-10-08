@@ -316,13 +316,18 @@ private:
 
 namespace detail {
 
-// The operator an entry sets and its operand(s), or an error when it sets
-// none or several.
+/// @brief The operator an entry sets and its operand text.
 struct RawEntry {
+    /// @brief The operator.
     CompiledFilter::Op op = CompiledFilter::Op::IsEmpty;
+    /// @brief Its operands; the second only for `between`.
     std::array<std::string_view, 2> values{};
 };
 
+/// @brief Reads which operator an entry sets.
+/// @param entry  The entry.
+/// @param column The column, for the error.
+/// @return The operator and operands, or `InvalidSpec` when the entry sets none or several.
 [[nodiscard]] inline std::expected<RawEntry, TableError> readEntry(FilterEntry const& entry, std::string_view column) {
     using Op = CompiledFilter::Op;
     RawEntry out;
@@ -364,6 +369,10 @@ struct RawEntry {
     return out;
 }
 
+/// @brief Whether a column kind defines an operator.
+/// @param kind The column's kind.
+/// @param op   The operator.
+/// @return `true` when the operator applies to the kind.
 [[nodiscard]] inline bool operatorDefined(ColumnKind kind, CompiledFilter::Op op) {
     using Op = CompiledFilter::Op;
     if (op == Op::IsEmpty || op == Op::NotEmpty) {
@@ -389,7 +398,13 @@ struct RawEntry {
     }
 }
 
-// Parses one operand for the column's kind into slot `slot` of `entry`.
+/// @brief Parses one operand for the column's kind into a slot of @p entry.
+/// @param info     The column.
+/// @param services Collator (text is folded with it) and date parser.
+/// @param text     The operand text.
+/// @param slot     0, or 1 for the upper bound of `between`.
+/// @param entry    Receives the parsed operand.
+/// @return `false` when the text does not parse for the kind.
 [[nodiscard]] inline bool parseOperand(ColumnInfo const& info, Services const& services, std::string_view text,
                                        std::size_t slot, CompiledFilter::Entry& entry) {
     switch (info.kind) {
@@ -438,6 +453,11 @@ struct RawEntry {
     }
 }
 
+/// @brief Compiles one entry for one column.
+/// @param entry    The entry.
+/// @param info     The column.
+/// @param services Collator and date parser.
+/// @return The compiled entry, or the error naming the column.
 [[nodiscard]] inline std::expected<CompiledFilter::Entry, TableError> compileEntry(FilterEntry const& entry,
                                                                                    ColumnInfo const& info,
                                                                                    Services const& services) {
@@ -468,6 +488,10 @@ struct RawEntry {
     return out;
 }
 
+/// @brief The index of the column with id @p id.
+/// @param columns The table's columns.
+/// @param id      A column id.
+/// @return Its index, or nothing.
 [[nodiscard]] inline std::optional<std::size_t> findColumn(std::span<ColumnInfo const> columns, std::string_view id) {
     for (std::size_t i = 0; i < columns.size(); ++i) {
         if (columns[i].id == id) {

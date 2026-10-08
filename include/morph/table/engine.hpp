@@ -205,35 +205,57 @@ namespace detail {
 
 /// @brief Everything one view job reads. Immutable once the job starts.
 struct JobInput {
+    /// @brief The rows.
     std::shared_ptr<RowSnapshot const> snapshot;
+    /// @brief The columns.
     std::vector<ColumnInfo> columns;
+    /// @brief Services for this job alone (`Services::forTask`).
     Services services;
-    std::vector<std::shared_ptr<KeyColumn const>> keys;  // by column; null when not built
-    std::vector<std::size_t> needed;                     // columns whose keys the job needs
+    /// @brief Key columns by column index; null when not built.
+    std::vector<std::shared_ptr<KeyColumn const>> keys;
+    /// @brief Columns whose keys the job needs.
+    std::vector<std::size_t> needed;
+    /// @brief The sort chain.
     SortChain sort;
+    /// @brief The compiled filter, or null.
     std::shared_ptr<CompiledFilter const> filter;
-    std::shared_ptr<std::vector<std::uint32_t> const> cachedSorted;  // full order for `sort`, or null
-    // The view the change is computed against, and the snapshot its rows index.
+    /// @brief The full source's order for `sort` on `snapshot`, or null.
+    std::shared_ptr<std::vector<std::uint32_t> const> cachedSorted;
+    /// @brief The displayed view the change is computed against.
     std::vector<std::uint32_t> previousView;
+    /// @brief The snapshot `previousView`'s rows index.
     std::shared_ptr<RowSnapshot const> previousSnapshot;
-    bool indicesStable = true;  // previousView's rows index `snapshot` directly
-    // Repair: rows whose cells changed; `previousTrueView` is the order they repair.
+    /// @brief `previousView`'s rows index `snapshot` directly.
+    bool indicesStable = true;
+    /// @brief Repair: the rows whose cells changed.
     std::vector<std::uint32_t> dirty;
+    /// @brief Repair: the sorted, filtered order, without holds, that the dirty rows merge into.
     std::vector<std::uint32_t> previousTrueView;
+    /// @brief The job repairs updated rows rather than recomputing.
     bool repair = false;
-    bool allChanged = false;  // a reset: every surviving row may have new content
+    /// @brief Every surviving row may have new content (a reset).
+    bool allChanged = false;
+    /// @brief More operations than this make the change a reset.
     std::size_t resetThreshold = 5000;
 };
 
 /// @brief What a finished job hands back to the owner.
 struct JobResult {
+    /// @brief Key columns by column index, for `JobInput::snapshot`.
     std::vector<std::shared_ptr<KeyColumn const>> keys;
-    std::shared_ptr<std::vector<std::uint32_t> const> sorted;  // a full order for the chain, or null
+    /// @brief A full order for the chain, to cache, or null.
+    std::shared_ptr<std::vector<std::uint32_t> const> sorted;
+    /// @brief The sorted, filtered view.
     std::vector<std::uint32_t> view;
+    /// @brief From `JobInput::previousView` to `view`.
     ViewChange change;
+    /// @brief Every source row was sorted.
     bool fullSort = false;
+    /// @brief Only the filter's survivors were sorted.
     bool subsetSort = false;
+    /// @brief Updated rows were merged into the previous order.
     bool repaired = false;
+    /// @brief Key columns built from scratch.
     std::size_t keyBuilds = 0;
 };
 
@@ -245,12 +267,17 @@ struct JobResult {
 /// where it stopped.
 class ViewJob {
 public:
+    /// @brief Prepares a job.
+    /// @param input Everything it reads.
     explicit ViewJob(JobInput input) : _in{std::move(input)} {
         _result.keys = _in.keys;
         _result.keys.resize(_in.columns.size());
     }
 
-    // Runs until done (true), the deadline, or a stop request (false).
+    /// @brief Runs until done, the deadline, or a stop request.
+    /// @param deadline When to yield.
+    /// @param stop     A stop request ends the step.
+    /// @return `true` when the job is done.
     bool step(Deadline deadline, ::core::async::StopToken const& stop) {
         while (_phase != Phase::Done) {
             if (stop.stop_requested()) {
@@ -284,13 +311,22 @@ public:
         return true;
     }
 
-    // Work done and total, in phases, for a progress sink.
+    /// @brief Phases done and total, for a progress sink.
+    /// @return (done, total).
     [[nodiscard]] std::pair<std::size_t, std::size_t> progress() const noexcept {
         return {static_cast<std::size_t>(_phase), static_cast<std::size_t>(Phase::Done)};
     }
 
+    /// @brief Whether every phase has run.
+    /// @return `true` when done.
     [[nodiscard]] bool done() const noexcept { return _phase == Phase::Done; }
+
+    /// @brief What the job reads.
+    /// @return The input.
     [[nodiscard]] JobInput const& input() const noexcept { return _in; }
+
+    /// @brief The result. Valid once `done()`.
+    /// @return The result, moved out.
     [[nodiscard]] JobResult take() && { return std::move(_result); }
 
 private:

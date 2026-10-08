@@ -77,15 +77,24 @@ struct ViewChange {
 
 namespace detail {
 
-// A Fenwick tree of slot occupancy: how many occupied slots precede a slot.
+/// @brief A Fenwick tree of slot occupancy: how many occupied slots precede a slot.
 class SlotCounter {
 public:
+    /// @brief An empty counter over @p size slots.
+    /// @param size Slot count.
     explicit SlotCounter(std::size_t size) : _tree(size + 1, 0) {}
+
+    /// @brief Changes a slot's occupancy.
+    /// @param slot  The slot.
+    /// @param delta +1 to occupy, -1 to free.
     void add(std::size_t slot, int delta) {
         for (auto at = slot + 1; at < _tree.size(); at += at & (~at + 1)) {
             _tree[at] += delta;
         }
     }
+    /// @brief Occupied slots before @p slot.
+    /// @param slot The slot.
+    /// @return The count.
     [[nodiscard]] std::size_t before(std::size_t slot) const {
         int sum = 0;
         for (auto at = slot; at > 0; at -= at & (~at + 1)) {
@@ -98,7 +107,9 @@ private:
     std::vector<int> _tree;
 };
 
-// Marks the elements of a longest strictly increasing subsequence of `values`.
+/// @brief Marks the elements of a longest strictly increasing subsequence.
+/// @param values The sequence.
+/// @return One flag per element; `true` on the subsequence.
 [[nodiscard]] inline std::vector<bool> longestIncreasing(std::span<std::uint32_t const> values) {
     std::vector<std::size_t> tails;  // index into values of the smallest tail of each length
     std::vector<std::size_t> parent(values.size(), std::numeric_limits<std::size_t>::max());

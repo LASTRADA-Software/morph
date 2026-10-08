@@ -109,11 +109,19 @@ struct QueryLimits {
 
 namespace detail {
 
+/// @brief A `LimitExceeded` error.
+/// @param column  The column concerned, or empty.
+/// @param message The description.
+/// @return The error.
 [[nodiscard]] inline TableError limitError(std::string column, std::string message) {
     return TableError{
         .code = TableErrorCode::LimitExceeded, .column = std::move(column), .message = std::move(message)};
 }
 
+/// @brief Whether any operand of an entry is longer than @p max bytes.
+/// @param entry The entry.
+/// @param max   The bound.
+/// @return `true` when one is.
 [[nodiscard]] inline bool entryTooLong(FilterEntry const& entry, std::size_t max) {
     auto const tooLong = [max](std::optional<std::string> const& value) { return value && value->size() > max; };
     return tooLong(entry.eq) || tooLong(entry.ne) || tooLong(entry.lt) || tooLong(entry.le) || tooLong(entry.gt) ||
@@ -300,12 +308,18 @@ struct PageRows {
 
 namespace detail {
 
+/// @brief `true` for `std::optional<T>`.
+/// @tparam T A type.
 template <typename T>
 struct IsOptional : std::false_type {};
+/// @brief `true` for `std::optional<T>`.
+/// @tparam T The optional's value type.
 template <typename T>
 struct IsOptional<std::optional<T>> : std::true_type {};
 
-// The column kind a member type gives.
+/// @brief The column kind a member type gives.
+/// @tparam T The member type.
+/// @return The kind.
 template <typename T>
 [[nodiscard]] constexpr ColumnKind kindOf() {
     using V = std::remove_cvref_t<T>;
@@ -328,7 +342,10 @@ template <typename T>
     }
 }
 
-// A member value as a cell.
+/// @brief A member value as a cell.
+/// @tparam T The member type.
+/// @param value The member.
+/// @return The cell.
 template <typename T>
 [[nodiscard]] Cell toCell(T const& value) {
     using V = std::remove_cvref_t<T>;
@@ -363,9 +380,14 @@ template <typename T>
     }
 }
 
+/// @brief Reads one column's cell from a row.
+/// @tparam Row The row type.
 template <typename Row>
 using CellReader = Cell (*)(Row const&);
 
+/// @brief One cell reader per reflected member, in member order.
+/// @tparam Row The row type.
+/// @return The readers.
 template <typename Row>
 [[nodiscard]] std::vector<CellReader<Row>> cellReaders() {
     constexpr auto count = glz::reflect<Row>::size;
@@ -377,6 +399,9 @@ template <typename Row>
     }(std::make_index_sequence<count>{});
 }
 
+/// @brief One column per reflected member, its kind from the member's type.
+/// @tparam Row The row type.
+/// @return The columns.
 template <typename Row>
 [[nodiscard]] std::vector<ColumnInfo> reflectedColumns() {
     using Members = decltype(glz::to_tie(std::declval<Row&>()));

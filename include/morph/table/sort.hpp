@@ -78,15 +78,22 @@ inline constexpr Deadline kNoDeadline = Deadline::max();
 
 namespace detail {
 
-// How many elements of work pass between two looks at the clock and the stop
-// token: often enough to keep an owner step near its budget, rarely enough
-// that the clock read is noise.
+/// @brief Elements of work between two looks at the clock and the stop token:
+///        often enough to keep an owner step near its budget, rarely enough
+///        that the clock read is noise.
 inline constexpr std::size_t kCheckEvery = 2048;
 
+/// @brief Whether a step should return now.
+/// @param deadline When the step must end; `kNoDeadline` never passes.
+/// @param stop     A stop request ends the step.
+/// @return `true` when stop is requested or the deadline has passed.
 [[nodiscard]] inline bool shouldYield(Deadline deadline, ::core::async::StopToken const& stop) {
     return stop.stop_requested() || (deadline != kNoDeadline && std::chrono::steady_clock::now() >= deadline);
 }
 
+/// @brief Parses a whole decimal integer, all of @p text.
+/// @param text The text.
+/// @return The value, or nothing when @p text is not exactly an integer.
 [[nodiscard]] inline std::optional<std::int64_t> parseInteger(std::string_view text) {
     std::int64_t value = 0;
     auto const* const end = text.data() + text.size();
@@ -97,6 +104,9 @@ inline constexpr std::size_t kCheckEvery = 2048;
     return value;
 }
 
+/// @brief Parses a floating-point number, all of @p text.
+/// @param text The text.
+/// @return The value, or nothing when @p text is not exactly a number or is NaN.
 [[nodiscard]] inline std::optional<double> parseReal(std::string_view text) {
     double value = 0;
     auto const* const end = text.data() + text.size();
