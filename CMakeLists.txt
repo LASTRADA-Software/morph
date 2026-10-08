@@ -421,6 +421,8 @@ target_sources(morph
         include/morph/reactive/signal.hpp
         include/morph/reactive/scope.hpp
         include/morph/reactive/store.hpp
+        include/morph/reactive/scheduler.hpp
+        include/morph/reactive/testing/manual_scheduler.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
         include/morph/core/file_io_ops.hpp

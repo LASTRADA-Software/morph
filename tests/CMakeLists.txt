@@ -150,6 +150,7 @@ add_executable(morph_tests
     test_reactive_misuse.cpp
     test_reactive_scope.cpp
     test_reactive_store.cpp
+    test_reactive_scheduler.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
