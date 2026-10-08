@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "bind_support.hpp"
 #include "owner_probe_recorder.hpp"
 #include "raw_dispatch_probe.hpp"
 #include "test_support.hpp"
@@ -328,4 +329,53 @@ TEST_CASE("RawHandler: switchBackend re-binds private and shared raw handlers", 
     CHECK(await(rig, priv.execute("Raw_Add", R"({"by":4})")).value == "4");
     CHECK(await(rig, shared.execute("Raw_Add", R"({"by":6})")).value == "6");
     CHECK(shared.primary() == "9");
+}
+
+// Typed counterpart: test_async_registration.cpp, a handler destroyed with a call held for its bind.
+TEST_CASE("RawHandler: destroying the handler rejects calls held for its bind", "[bridge][raw]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    auto backend = std::make_unique<morph::testing::GateBackend>(pool);
+    auto* gate = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend), owner};
+
+    Reply reply;
+    {
+        RawHandler handler{bridge, &owner, "Raw_Counter"};
+        REQUIRE(gate->heldBinds() == 1);
+        handler.execute("Raw_Add", R"({"by":1})")
+            .then([&](std::string json) { reply.value = std::move(json); })
+            .onError([&](const std::exception_ptr& err) { reply.error = err; });
+        CHECK(bridge.pendingCalls() == 1);
+    }
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return reply.settled(); }));
+    CHECK(holds<morph::backend::HandlerDestroyedError>(reply.error));
+
+    gate->resolveBind();  // the late reply finds no binding and settles nothing
+    owner.runFor(std::chrono::milliseconds{20});
+    CHECK_FALSE(reply.value.has_value());
+    CHECK(bridge.pendingCalls() == 0);
+}
+
+// Typed counterpart: test_bridge_bind_paths.cpp, "Bridge destruction rejects a call still waiting for its bind".
+TEST_CASE("RawHandler: a handler that outlives its bridge does nothing on destruction", "[bridge][raw]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    auto backend = std::make_unique<morph::testing::GateBackend>(pool);
+    auto released = backend->releasedCounter();
+    auto bridge = std::make_unique<morph::bridge::Bridge>(std::move(backend), owner);
+    auto handler = std::make_unique<RawHandler>(*bridge, &owner, "Raw_Counter");
+
+    Reply reply;
+    handler->execute("Raw_Add", R"({"by":1})")
+        .then([&](std::string json) { reply.value = std::move(json); })
+        .onError([&](const std::exception_ptr& err) { reply.error = err; });
+
+    bridge.reset();
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return reply.settled(); }));
+    CHECK(holds<morph::backend::BridgeDestroyedError>(reply.error));
+
+    int const releasedBefore = *released;
+    handler.reset();  // the bridge's token has expired: deregisters nothing
+    CHECK(*released == releasedBefore);
 }
