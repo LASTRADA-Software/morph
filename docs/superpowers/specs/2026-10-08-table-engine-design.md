@@ -478,18 +478,19 @@ Performance work is driven by numbers, from two sources.
   created when its row is instantiated by the view, and its state is kept by row key while the row
   exists. It needs the reactive runtime and the view tree, so it is measured with the `table` node
   (spec 5 §9), not with the engine.
-- **Measured** (AMD Ryzen 5 7600X, 6 cores / 12 threads, Linux; GCC 16.2.1, Release `-O3`; the
-  machine also hosts CI runners, so a figure may carry their load; medians):
-  - A sort or filter of 1,000 rows takes 0.01-0.12 ms, within one frame, on the owner in one step.
-  - Of 10,000 rows, 0.15-1.95 ms; the whole three-key sort plus text filter, request to result,
-    2.2 ms on a worker.
-  - Of 100,000 rows, 1.4 ms (numeric filter) to 23 ms (text sort); request to result for the
-    three-key sort plus text filter, 28.6 ms on a worker, 27.7 ms in owner steps.
-  - The owner is blocked at most 0.01 ms per request with a worker at 100,000 rows, and at most
-    8.03 ms (the 8 ms step budget) without one. The 16 ms bound holds at every size, with or without
-    a worker.
-  - 1,000 cell updates while sorted repair in one pass: 4.4 ms (1,000 rows), 5.3 ms (10,000),
-    15 ms (100,000), with no re-sort.
+- **Measured** (AMD Ryzen 5 7600X, 6 cores / 12 threads, Linux; GCC 16.2.1, Release `-O3`; medians
+  on the shipped code, with CI runners loading the machine to a load average of 14; an idle run of an
+  earlier revision was 1.5 to 2 times faster; full tables in `docs/spec/table/engine.md`):
+  - A sort or filter of 1,000 rows takes 0.03-0.23 ms, within one frame, on the owner in one step.
+  - Of 10,000 rows, 0.33-2.68 ms; the three-key sort plus text filter, request to result, 4 ms on a
+    worker and 3.3 ms in owner steps.
+  - Of 100,000 rows, 2.6 ms (numeric filter) to 46 ms (text sort); request to result for the
+    three-key sort plus text filter, 96 ms on a worker and 57 ms in owner steps, within 1 s.
+  - The owner is blocked at most 0.04 ms per request with a worker at 100,000 rows, and at most
+    11.6 ms without one (8.03 ms on the idle machine): the 16 ms bound holds at every size, with or
+    without a worker.
+  - 1,000 cell updates while sorted repair in one pass: 6.5 ms (1,000 rows), 8.4 ms (10,000),
+    27 ms (100,000), with no re-sort.
   - Rows per envelope: a page of rows of ten small cells costs 212 bytes per row inside an `ok`
     envelope, so 39,361 rows fit in `kMaxEnvelopeBytes` (8 MiB); `client` mode suits results up to
     that size and `server` mode beyond it.

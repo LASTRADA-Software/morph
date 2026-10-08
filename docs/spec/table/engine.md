@@ -339,32 +339,37 @@ after the `CellEdits` is destroyed is ignored.
 ## Measurements
 
 AMD Ryzen 5 7600X (6 cores, 12 threads), Linux, GCC 16.2.1, Release (`-O3`),
-`morph_table_tests "[.benchmark]"`. The machine also hosts CI runners (load
-average 2.6 during the run). Median and 10th-90th percentile, milliseconds;
-keys are built inside every timing.
+`morph_table_tests "[.benchmark]"`, on the code as shipped. The machine also
+hosts CI runners, which were busy: load average 14.4 during the run. An
+earlier revision measured on the idle machine (load 2.6) ran 1.5 to 2 times
+faster, so read these as an upper bound. Median and 10th-90th percentile,
+milliseconds; keys are built inside every timing.
 
 | Scenario | 1,000 rows | 10,000 rows | 100,000 rows |
 |---|---:|---:|---:|
-| sort: one numeric key | 0.06 (0.06-0.08) | 1.27 (1.27-1.75) | 17.13 (17.05-18.21) |
-| sort: one text key | 0.11 (0.11-0.14) | 1.92 (1.91-1.95) | 23.09 (22.95-23.75) |
-| sort: three keys | 0.08 (0.08-0.11) | 1.59 (1.59-1.61) | 21.36 (21.29-21.93) |
-| filter: text contains | 0.05 (0.05-0.06) | 0.54 (0.54-0.58) | 5.47 (5.46-5.51) |
-| filter: numeric compare | 0.01 (0.01-0.01) | 0.16 (0.14-0.21) | 1.40 (1.37-1.53) |
-| filter: group | 0.05 (0.05-0.06) | 0.55 (0.55-0.59) | 5.37 (5.36-5.48) |
-| sort then filter | 0.08 (0.08-0.10) | 1.53 (1.52-1.75) | 18.94 (18.48-19.58) |
-| filter then sort | 0.05 (0.05-0.05) | 0.97 (0.96-0.98) | 9.72 (9.68-9.87) |
-| toggle one filter ten times, sorted | 0.08 (0.07-0.08) | 1.29 (1.28-1.30) | 10.03 (9.96-10.10) |
-| 1,000 updates while sorted (one repair, no sort) | 4.36 (4.35-4.45) | 5.26 (5.23-5.49) | 14.95 (14.56-15.11) |
+| sort: one numeric key | 0.13 (0.12-0.16) | 1.77 (1.73-1.81) | 33.01 (30.70-35.21) |
+| sort: one text key | 0.23 (0.21-0.24) | 2.68 (2.65-2.75) | 46.28 (44.41-47.41) |
+| sort: three keys | 0.17 (0.13-0.18) | 2.18 (2.13-2.25) | 40.35 (39.44-41.78) |
+| filter: text contains | 0.09 (0.08-0.10) | 0.94 (0.91-0.96) | 9.25 (9.18-9.34) |
+| filter: numeric compare | 0.03 (0.03-0.03) | 0.33 (0.32-0.36) | 2.63 (2.60-2.73) |
+| filter: group | 0.10 (0.09-0.11) | 1.00 (0.97-1.04) | 9.06 (8.94-9.23) |
+| sort then filter | 0.16 (0.15-0.18) | 2.15 (2.12-2.21) | 35.71 (34.77-36.37) |
+| filter then sort | 0.09 (0.08-0.10) | 1.41 (1.40-1.43) | 16.18 (15.28-18.26) |
+| toggle one filter ten times, sorted | 0.16 (0.15-0.17) | 2.30 (2.28-2.35) | 17.88 (17.17-19.37) |
+| 1,000 updates while sorted (one repair, no sort) | 6.51 (6.32-6.61) | 8.38 (8.19-8.65) | 27.39 (27.13-28.09) |
 
 Owner blocking, three-key sort then a text filter, per run:
 
 | Execution | Rows | Worst owner step, median of runs | Worst of all runs | Request to result, median |
 |---|---:|---:|---:|---:|
-| one step (below `smallTable`) | 1,000 | 0.08 | 0.16 | 0.13 |
-| owner steps, 8 ms budget | 10,000 | 1.58 | 2.54 | 2.20 |
-| worker | 10,000 | 0.00 | 0.00 | 2.24 |
-| owner steps, 8 ms budget | 100,000 | 8.02 | 8.03 | 27.65 |
-| worker | 100,000 | 0.01 | 0.01 | 28.59 |
+| one step (below `smallTable`) | 1,000 | 0.18 | 0.21 | 0.29 |
+| owner steps, 8 ms budget | 10,000 | 2.22 | 2.52 | 3.27 |
+| worker | 10,000 | 0.00 | 0.01 | 4.05 |
+| owner steps, 8 ms budget | 100,000 | 9.61 | 11.61 | 57.32 |
+| worker | 100,000 | 0.03 | 0.04 | 95.71 |
+
+A step runs past its 8 ms budget by at most one chunk of work plus whatever
+the scheduler takes from it; on the idle machine the worst step was 8.03 ms.
 
 Rows per envelope: a page of rows of ten small cells costs 212.2 bytes per row
 inside an `ok` envelope; 39,361 rows fit in `kMaxEnvelopeBytes` (8 MiB), checked
