@@ -417,6 +417,8 @@ target_sources(morph
         include/morph/util/rational.hpp
         include/morph/util/quantity.hpp
         include/morph/util/datetime.hpp
+        include/morph/reactive/runtime.hpp
+        include/morph/reactive/signal.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
         include/morph/core/file_io_ops.hpp
@@ -483,6 +485,7 @@ target_sources(morph
         include/morph/core/detail/instance_directory.hpp
         include/morph/core/detail/owned_state.hpp
         include/morph/core/detail/owner_affinity.hpp
+        include/morph/reactive/detail/graph.hpp
         include/morph/core/detail/owner_probe.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp

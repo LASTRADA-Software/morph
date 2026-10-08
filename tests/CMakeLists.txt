@@ -145,6 +145,7 @@ add_executable(morph_tests
     test_pinned_facts.cpp
     test_version.cpp
     test_callback_scope.cpp
+    test_reactive_signal.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
