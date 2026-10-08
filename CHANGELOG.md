@@ -176,9 +176,12 @@ API surface).
   id and dispatches actions by id with a JSON body, for a client compiled
   without the model's type. Calls carry the default session, the execute
   deadline, `pendingCalls()` accounting, cancellation and `switchBackend`
-  re-binding exactly as typed calls do; a shared handler attaches by a string
-  key. The underlying `Bridge::bindByType`, `Bridge::executeRaw` and
-  `Bridge::attach` are public for callers that manage bindings themselves.
+  re-binding exactly as typed calls do. A shared handler attaches by a string
+  key, and `RawHandler::executeOn` runs a keyed action on the instance it
+  names or rejects it. The underlying `Bridge::bindByType`,
+  `Bridge::executeRaw`, `Bridge::executeRawOn` and `Bridge::attach` are public
+  for callers that manage bindings themselves; `Bridge::attach` refuses an
+  empty key and a private binding.
 
 - **Coroutines on `core::async`.**
   - `Completion<T>` is awaitable: `co_await std::move(completion)` yields `T`

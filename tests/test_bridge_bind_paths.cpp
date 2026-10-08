@@ -73,7 +73,6 @@ BRIDGE_KEY_FROM_RESULT(BbpMake, &BbpMade::id);
 namespace {
 
 using morph::backend::detail::BindRequest;
-using morph::backend::detail::PromoteRequest;
 using morph::bridge::AllowShared;
 using morph::bridge::Bridge;
 using morph::bridge::BridgeHandler;

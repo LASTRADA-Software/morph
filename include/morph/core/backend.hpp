@@ -67,12 +67,14 @@ namespace detail {
 struct ActionCall {
     /// @brief String id of the target model type (from `ModelTraits`).
     ///
-    /// A view, not a copy. `ModelTraits<Model>::typeId()` is `constexpr` and
-    /// returns a view of the string literal `BRIDGE_REGISTER_MODEL` was given,
-    /// so the referent has static storage duration and outlives every call.
-    /// A hand-built `ActionCall` must observe the same rule: the id must
-    /// outlive the dispatch, which a string literal does and a temporary
-    /// `std::string` does not.
+    /// A view, not a copy, valid for as long as the call is. A typed call's id
+    /// is `ModelTraits<Model>::typeId()`, a view of the string literal
+    /// `BRIDGE_REGISTER_MODEL` was given, with static storage duration. A raw
+    /// call's id points into the call's own `action`, so it lives exactly as
+    /// long as the `ActionCall` and its copies. A backend that keeps an id
+    /// past the call — a reply table, a metrics label — copies it. A
+    /// hand-built `ActionCall` must observe the same rule: the id must outlive
+    /// the dispatch, which a temporary `std::string` does not.
     std::string_view modelTypeId;
 
     /// @brief String id of the action type (from `ActionTraits`).

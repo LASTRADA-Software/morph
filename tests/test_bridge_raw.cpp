@@ -59,12 +59,16 @@ struct Reply {
     [[nodiscard]] bool settled() const { return value.has_value() || error != nullptr; }
 };
 
-Reply await(RawRig& rig, morph::async::Completion<std::string> completion) {
+Reply await(morph::exec::MainThreadExecutor& owner, morph::async::Completion<std::string> completion) {
     Reply reply;
     completion.then([&](std::string json) { reply.value = std::move(json); })
         .onError([&](const std::exception_ptr& err) { reply.error = err; });
-    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [&] { return reply.settled(); }));
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return reply.settled(); }));
     return reply;
+}
+
+Reply await(RawRig& rig, morph::async::Completion<std::string> completion) {
+    return await(rig.owner, std::move(completion));
 }
 
 std::string message(const std::exception_ptr& err) {
@@ -201,15 +205,31 @@ TEST_CASE("RawHandler: pendingCalls counts a raw call until it settles", "[bridg
     RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
     REQUIRE(rig.bridge->pendingCalls() == 0);
 
-    auto completion = handler.execute("Raw_Add", R"({"by":1})");
-    CHECK(rig.bridge->pendingCalls() == 1);
-    auto ok = await(rig, std::move(completion));
+    auto ok = await(rig, handler.execute("Raw_Add", R"({"by":1})"));
     CHECK(ok.value == "1");
     CHECK(rig.bridge->pendingCalls() == 0);
 
     auto failed = await(rig, handler.execute("Raw_Fail", "{}"));
     CHECK(failed.error);
     CHECK(rig.bridge->pendingCalls() == 0);
+}
+
+// Typed counterpart: test_bridge_pending_calls.cpp, which parks its action the same way: an action
+// that finishes on the pool can settle before the count is read.
+TEST_CASE("RawHandler: pendingCalls counts a raw call that is still running", "[bridge][raw]") {
+    rawprobe::SleeperScope const sleeping;
+    RawRig rig{Mode::Local};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+    core::async::StopSource stop;  // NOLINT(misc-const-correctness): request_stop() is non-const
+    Reply reply;
+    handler.execute("Raw_Sleep", R"({"ms":60000})", stop.get_token())
+        .then([&](std::string json) { reply.value = std::move(json); })
+        .onError([&](const std::exception_ptr& err) { reply.error = err; });
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [] { return rawprobe::sleeper().started.load() == 1; }));
+
+    CHECK(rig.bridge->pendingCalls() == 1);
+    static_cast<void>(stop.request_stop());
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [&] { return rig.bridge->pendingCalls() == 0; }));
 }
 
 // Typed counterpart: test_cancellation_policy.cpp, "execute with a stop token is G2 when stopped...".
@@ -258,7 +278,9 @@ TEST_CASE("RawHandler: cancelPending on a switch settles an in-flight raw call",
 
     rig.bridge->switchBackend(std::make_unique<morph::backend::LocalBackend>(rig.pool));
     REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [&] { return reply.settled(); }));
-    CHECK(reply.error);
+    // The switch's own error: a stopped Task settling the call would give
+    // OperationCancelled instead.
+    CHECK(holds<morph::backend::BackendChangedError>(reply.error));
 }
 
 TEST_CASE("RawHandler: a raw result is not published to typed subscribers", "[bridge][raw]") {
@@ -351,9 +373,9 @@ TEST_CASE("RawHandler: destroying the handler rejects calls held for its bind", 
     REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return reply.settled(); }));
     CHECK(holds<morph::backend::HandlerDestroyedError>(reply.error));
 
-    gate->resolveBind();  // the late reply finds no binding and settles nothing
-    owner.runFor(std::chrono::milliseconds{20});
-    CHECK_FALSE(reply.value.has_value());
+    auto const released = gate->releasedCounter();
+    gate->resolveBind();  // the late reply finds no binding: its instance is released
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return *released == 1; }));
     CHECK(bridge.pendingCalls() == 0);
 }
 
@@ -362,7 +384,6 @@ TEST_CASE("RawHandler: a handler that outlives its bridge does nothing on destru
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor owner;
     auto backend = std::make_unique<morph::testing::GateBackend>(pool);
-    auto released = backend->releasedCounter();
     auto bridge = std::make_unique<morph::bridge::Bridge>(std::move(backend), owner);
     auto handler = std::make_unique<RawHandler>(*bridge, &owner, "Raw_Counter");
 
@@ -375,7 +396,55 @@ TEST_CASE("RawHandler: a handler that outlives its bridge does nothing on destru
     REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return reply.settled(); }));
     CHECK(holds<morph::backend::BridgeDestroyedError>(reply.error));
 
-    int const releasedBefore = *released;
+    morph::testing::OwnerProbeRecorder const recorder{owner.coreExecutor()};
     handler.reset();  // the bridge's token has expired: deregisters nothing
-    CHECK(*released == releasedBefore);
+    CHECK(recorder.count("Bridge::deregisterHandler") == 0);
+}
+
+TEST_CASE("RawHandler: an empty key and a private binding are refused by attach", "[bridge][raw]") {
+    RawRig rig{Mode::Local};
+    RawHandler shared{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared};
+    CHECK_THROWS_AS(shared.attach(""), std::invalid_argument);
+    CHECK_THROWS_AS(shared.executeOn("", "Raw_Add", R"({"by":1})"), std::invalid_argument);
+
+    // The bridge's own seam refuses a private binding, not only the wrapper.
+    auto const priv = rig.bridge->bindByType("Raw_Counter", BindSharing::Private);
+    CHECK_THROWS_AS(rig.bridge->attach(priv, "5"), std::logic_error);
+    CHECK_THROWS_AS(rig.bridge->executeRawOn(priv, "5", "Raw_Add", "{}", &rig.owner), std::logic_error);
+    CHECK(rig.bridge->bindingPrimary(priv).empty());
+    rig.bridge->deregisterHandler(priv);
+}
+
+TEST_CASE("RawHandler: executeOn attaches to the key and runs there", "[bridge][raw]") {
+    auto const mode = GENERATE(Mode::Local, Mode::Remote);
+    RawRig rig{mode};
+    RawHandler other{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared, "8"};
+    REQUIRE(await(rig, other.execute("Raw_Add", R"({"by":40})")).value == "40");
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared, "3"};
+
+    CHECK(await(rig, handler.executeOn("8", "Raw_Add", R"({"by":2})")).value == "42");
+    CHECK(handler.primary() == "8");
+}
+
+TEST_CASE("RawHandler: executeOn rejects the call when its attach is refused", "[bridge][raw]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    auto backend = std::make_unique<morph::testing::GateBackend>(pool);
+    auto* gate = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend), owner};
+    RawHandler handler{bridge, &owner, "Raw_Counter", BindSharing::Shared, "3"};
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return gate->heldBinds() == 1; }));
+    gate->resolveBind();
+    REQUIRE(await(owner, handler.execute("Raw_Add", R"({"by":30})")).value == "30");
+
+    // The backend refuses the attach outright, leaving the binding on 3.
+    gate->bindMode = morph::testing::GateReply::Throw;
+    auto reply = await(owner, handler.executeOn("5", "Raw_Load", R"({"id":5})"));
+    gate->bindMode = morph::testing::GateReply::Hold;
+    REQUIRE(reply.error);
+    CHECK(message(reply.error).contains("bind threw"));
+
+    // The instance the handler fell back to was not touched.
+    CHECK(handler.primary() == "3");
+    CHECK(await(owner, handler.execute("Raw_Add", R"({"by":0})")).value == "30");
 }

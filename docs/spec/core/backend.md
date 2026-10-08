@@ -119,10 +119,13 @@ onto the strand alongside `localOp` for exactly that reason.
 long after the `ActionCall` is gone.
 
 `modelTypeId` and `actionTypeId` are views, so their referents must outlive the
-dispatch. The production path satisfies this by construction:
-`ModelTraits<M>::typeId()` is `constexpr` and returns a view of the string
-literal `BRIDGE_REGISTER_MODEL` was given. A hand-built `ActionCall` must use a
-literal or a string that outlives the call, not a temporary.
+dispatch. A typed call satisfies this with `ModelTraits<M>::typeId()`, which is
+`constexpr` and returns a view of the string literal `BRIDGE_REGISTER_MODEL` was
+given. A raw call (`Bridge::executeRaw`) points them into the `RawAction` its
+`action` owns, so they live exactly as long as the call. A backend that keeps an
+id after the call — in a reply table or a metrics label — copies it; the
+in-tree backends copy both into the envelope. A hand-built `ActionCall` must use
+a literal or a string that outlives the call, not a temporary.
 
 ## The abstract interface — `IBackend`
 
@@ -2101,7 +2104,7 @@ implementation to absorb — see
 |---|---|---|
 | Dual-path `ActionCall` | Three callables: `localOp`, `serializeAction`, `deserializeResult` | The same `ActionCall` struct works for both local and remote execution without an `if (isRemote)` branch at the call site — each backend uses the field(s) it needs. |
 | Callables are function pointers, not `std::function`s | `std::string (*)(const void*)` etc., with the action in `ActionCall::action` | Every call builds all three, whichever path it takes, so a stateful callable charges an allocation to calls that never invoke it. The behaviour is a constant of `(Model, Action)`; only the action is per-call. Measured at 3 allocations per local round trip. The cost is an explicit borrow: see [Lifetime contract](#lifetime-contract). |
-| Type ids are `string_view`s, not `std::string`s | `modelTypeId`, `actionTypeId` | They are always views of `constexpr` string literals from the registration macros, so copying them into a `std::string` bought nothing and allocated whenever an id exceeded the SSO threshold (`"CreateSwimlane"` is 14 characters; the margin is one character wide). |
+| Type ids are `string_view`s, not `std::string`s | `modelTypeId`, `actionTypeId` | A typed call's ids are views of `constexpr` string literals from the registration macros, so copying them into a `std::string` buys nothing and allocates whenever an id exceeds the SSO threshold (`"CreateSwimlane"` is 14 characters; the margin is one character wide). A raw call's ids are views into the call's own action, valid as long as the call. |
 | `registerModelWithContext` | Virtual with a default that drops `contextKey` | `LocalBackend`'s factory closure already captures identity, so there is nothing to forward — which is why the default drops the key rather than being pure virtual. A backend whose instances are constructed on the far side of a wire protocol has no such closure, so the envelope is the only channel the identity has: `SimulatedRemoteBackend` and `SocketBackend` both override it so the server's `LogProvider` can attach an action log. The default being *permissive* is what lets a wire backend ship without an override and silently stop journalling private registrations; the price of that permissiveness is that "is this a wire backend?" has to be answered by hand for each new transport. |
 | `RemoteServer` heap requirement | `std::enable_shared_from_this` | Every task the server posts captures `shared_from_this()` — the server must outlive any in-flight message. |
 | `RemoteServer` state on one strand | `exec::OwnerStrand` over the pool; `execute` admitted there, run on the model's strand | The registry, scopes, in-flight count and readiness need no lock, and per-model order is two strands' FIFO rather than a ticket gate. Admission is not on the model's strand, so a rejection never waits on a busy model — see [Per-model execute ordering](#per-model-execute-ordering). |
