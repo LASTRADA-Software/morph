@@ -92,6 +92,7 @@ static_assert(!kEqualityUsable<std::pair<int, Opaque>>);
 static_assert(!kEqualityUsable<std::tuple<int, std::vector<Opaque>>>);
 static_assert(!kEqualityUsable<std::variant<int, Opaque>>);
 
+// Mutation: Signal::set notifies without assigning the value.
 TEST_CASE("reactive::Signal: get returns the initial value and set replaces it", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -101,6 +102,7 @@ TEST_CASE("reactive::Signal: get returns the initial value and set replaces it",
     CHECK(count.peek() == 2);
 }
 
+// Mutation: RuntimeCore::endBatch calls flush() itself after requesting one, so the Effect runs inside set().
 TEST_CASE("reactive::Effect: runs on construction, then in a posted flush after a source changes", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -115,6 +117,7 @@ TEST_CASE("reactive::Effect: runs on construction, then in a posted flush after 
     CHECK(seen == std::vector{1, 2});
 }
 
+// Mutation: RuntimeCore::endBatch requests a flush at every depth, not only the outermost.
 TEST_CASE("reactive::Runtime: nested batches are one flush and one run", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -153,6 +156,7 @@ TEST_CASE("reactive::Runtime: exactly one post per idle-to-pending transition", 
     CHECK(owner.pending() == 1);
 }
 
+// Mutation: drop the early return on an equal value in Signal::set.
 TEST_CASE("reactive::Signal: an equal value notifies nobody; a non-comparable one always does", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -225,6 +229,7 @@ TEST_CASE("reactive::Signal: EqualityPolicy::Always notifies on an equal write",
     CHECK(runs == 2);
 }
 
+// Mutation: drop the notify() in Signal::mutate.
 TEST_CASE("reactive::Signal: mutate always notifies", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -237,6 +242,7 @@ TEST_CASE("reactive::Signal: mutate always notifies", "[reactive]") {
     CHECK(lastSize == 1);
 }
 
+// Mutation: constrain Effect's constructor on std::copy_constructible<F>: it no longer compiles.
 TEST_CASE("reactive::Effect: accepts a move-only body", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -249,6 +255,7 @@ TEST_CASE("reactive::Effect: accepts a move-only body", "[reactive]") {
     CHECK(seen == 12);
 }
 
+// Mutation: Node::adoptSources keeps the sources the latest run did not read.
 TEST_CASE("reactive::Effect: a source it stops reading no longer triggers it", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -272,6 +279,7 @@ TEST_CASE("reactive::Effect: a source it stops reading no longer triggers it", "
     CHECK(runs == 3);
 }
 
+// Mutation: adoptSources instead of mergeSources in Effect::recompute's catch.
 TEST_CASE("reactive::Effect: a run that throws keeps every source, old and new", "[reactive]") {
     Owner owner;
     morph::testing::OwnerProbeRecorder const probe{owner.coreExecutor()};
@@ -308,6 +316,7 @@ TEST_CASE("reactive::Effect: a run that throws keeps every source, old and new",
     CHECK(seen == std::vector{0, 12});
 }
 
+// Mutation: drop exposeStaleSources() from Node::endPull.
 TEST_CASE("reactive::Effect: a run that throws before reading a stale Computed still hears it change later",
           "[reactive]") {
     Owner owner;
@@ -339,6 +348,7 @@ TEST_CASE("reactive::Effect: a run that throws before reading a stale Computed s
     CHECK(seen == std::vector{0, 6});
 }
 
+// Mutation: adopt the run's sources in Effect::recompute even when the frame saw its observer destroyed (crashes).
 TEST_CASE("reactive::Effect: an Effect that destroys itself during its run leaves the graph intact", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -359,6 +369,7 @@ TEST_CASE("reactive::Effect: an Effect that destroys itself during its run leave
     CHECK(owner.pending() == 0);
 }
 
+// Mutation: merge the run's sources in Effect::recompute's catch even when its observer was destroyed (crashes).
 TEST_CASE("reactive::Effect: an Effect that destroys itself and then throws is reported once", "[reactive]") {
     Owner owner;
     morph::testing::OwnerProbeRecorder const probe{owner.coreExecutor()};
@@ -379,6 +390,7 @@ TEST_CASE("reactive::Effect: an Effect that destroys itself and then throws is r
     CHECK(owner.pending() == 0);
 }
 
+// Mutation: RuntimeCore::forget leaves a destroyed node in the queue (crashes).
 TEST_CASE("reactive::Effect: an Effect that destroys itself and a queued Effect skips the other", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -403,6 +415,7 @@ TEST_CASE("reactive::Effect: an Effect that destroys itself and a queued Effect 
     CHECK(otherRuns == 1);
 }
 
+// Mutation: skip unlinking from the sources in ~Node: the write reaches the freed Effect (ASan heap-use-after-free).
 TEST_CASE("reactive::Effect: destruction unlinks it from its sources", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -414,6 +427,8 @@ TEST_CASE("reactive::Effect: destruction unlinks it from its sources", "[reactiv
     CHECK(owner.pending() == 0);
 }
 
+// Mutation: skip unlinking from the observers in ~Node: the re-run reads the freed Signal (ASan
+// heap-use-after-free).
 TEST_CASE("reactive::Signal: destruction unlinks it from its observers", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -433,6 +448,7 @@ TEST_CASE("reactive::Signal: destruction unlinks it from its observers", "[react
     CHECK(runs == 2);
 }
 
+// Mutation: call afterFlush after every Effect the flush runs.
 TEST_CASE("reactive::Runtime: afterFlush runs once per flush that processed a queued Effect", "[reactive]") {
     Owner owner;
     int frames = 0;
@@ -445,6 +461,7 @@ TEST_CASE("reactive::Runtime: afterFlush runs once per flush that processed a qu
     CHECK(frames == 1);
 }
 
+// Mutation: reverse the comparison in Node::runsAfter.
 TEST_CASE("reactive::Runtime: a flush runs queued Effects oldest first, and one made during it last", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -476,6 +493,7 @@ TEST_CASE("reactive::Runtime: a flush runs queued Effects oldest first, and one 
     CHECK(log == std::vector<std::string>{"newer", "older", "newer"});
 }
 
+// Mutation: RuntimeCore::forget leaves a destroyed node in the queue (crashes); or reverse Node::runsAfter.
 TEST_CASE("reactive::Runtime: a queued Effect destroyed during the flush leaves the rest in creation order",
           "[reactive]") {
     // Every pair of a running Effect and a newer queued one it destroys, so the destroyed one sits at every
@@ -512,6 +530,7 @@ TEST_CASE("reactive::Runtime: a queued Effect destroyed during the flush leaves 
     CHECK(order == expected);
 }
 
+// Mutation: Runtime::untracked runs the body without its null-observer TrackingFrame.
 TEST_CASE("reactive::Runtime: untracked reads do not subscribe", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -526,6 +545,8 @@ TEST_CASE("reactive::Runtime: untracked reads do not subscribe", "[reactive]") {
     CHECK(runs == 1);
 }
 
+// Mutation: Node::pull marks the node Clean before recompute() and endPull keeps a colour raised during the run, so
+// the Effect's own write queues it again.
 TEST_CASE("reactive::Effect: an Effect that writes what it reads does not re-run itself", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -544,6 +565,7 @@ TEST_CASE("reactive::Effect: an Effect that writes what it reads does not re-run
     CHECK(owner.pending() == 0);
 }
 
+// Mutation: drop exposeStaleSources() from Node::endPull.
 TEST_CASE("reactive::Effect: an Effect that writes what it reads through a Computed still hears later writes",
           "[reactive]") {
     Owner owner;
@@ -563,6 +585,7 @@ TEST_CASE("reactive::Effect: an Effect that writes what it reads through a Compu
     CHECK(seen == std::vector{0, 10});
 }
 
+// Mutation: Node::pull marks the node Clean before recompute(), so a direct self-write queues the Effect again.
 TEST_CASE("reactive::Effect: writing what it reads is exempt only when read directly", "[reactive]") {
     Owner owner;
     morph::testing::OwnerProbeRecorder const probe{owner.coreExecutor()};
@@ -597,6 +620,7 @@ TEST_CASE("reactive::Effect: writing what it reads is exempt only when read dire
     CHECK(owner.pending() == 0);
 }
 
+// Mutation: RuntimeCore::forget leaves a destroyed node in the queue (crashes).
 TEST_CASE("reactive::Effect: a queued Effect destroyed during the flush is skipped", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -618,6 +642,7 @@ TEST_CASE("reactive::Effect: a queued Effect destroyed during the flush is skipp
     CHECK(victim == nullptr);
 }
 
+// Mutation: BatchScope's destructor skips endBatch() while an exception unwinds.
 TEST_CASE("reactive::Runtime: a throwing batch body still flushes what it wrote", "[reactive]") {
     Owner owner;
     Runtime runtime{owner};
@@ -687,6 +712,7 @@ TEST_CASE("reactive::Runtime: an owner that is not serial is refused", "[reactiv
     CHECK_THROWS_AS(Runtime{pool}, std::invalid_argument);
 }
 
+// Mutation: Signal::get tracks the read whatever checkOwner() says.
 TEST_CASE("reactive::Signal: a get off the owner is reported and subscribes nothing", "[reactive][misuse]") {
     Owner owner;
     morph::testing::OwnerProbeRecorder const probe{owner.coreExecutor()};
@@ -709,6 +735,7 @@ TEST_CASE("reactive::Signal: a get off the owner is reported and subscribes noth
 // Each off-owner body below runs while the owner thread is blocked in join(), so reading the core's
 // state from inside it is ordered by the thread's start and join.
 
+// Mutation: Runtime::batch opens its BatchScope off the owner too.
 TEST_CASE("reactive::Runtime: batch off the owner is reported and opens no batch", "[reactive][misuse]") {
     Owner owner;
     morph::testing::OwnerProbeRecorder const probe{owner.coreExecutor()};
@@ -721,6 +748,7 @@ TEST_CASE("reactive::Runtime: batch off the owner is reported and opens no batch
     CHECK(owner.pending() == 0);
 }
 
+// Mutation: Runtime::widgetEvent opens its WidgetEventScope off the owner too.
 TEST_CASE("reactive::Runtime: widgetEvent off the owner is reported and marks nothing", "[reactive][misuse]") {
     Owner owner;
     morph::testing::OwnerProbeRecorder const probe{owner.coreExecutor()};
@@ -738,6 +766,7 @@ TEST_CASE("reactive::Runtime: widgetEvent off the owner is reported and marks no
     CHECK(depthInside == 0);
 }
 
+// Mutation: Runtime::untracked installs its frame off the owner too.
 TEST_CASE("reactive::Runtime: untracked off the owner is reported and leaves the owner's frame installed",
           "[reactive][misuse]") {
     Owner owner;
@@ -755,6 +784,7 @@ TEST_CASE("reactive::Runtime: untracked off the owner is reported and leaves the
     CHECK(frameInside == ownerFrame);
 }
 
+// Mutation: the Node constructor counts the node whatever checkOwner() says.
 TEST_CASE("reactive::Runtime: a node built off the owner is reported and not counted", "[reactive][misuse]") {
     Owner owner;
     morph::testing::OwnerProbeRecorder const probe{owner.coreExecutor()};
@@ -767,6 +797,7 @@ TEST_CASE("reactive::Runtime: a node built off the owner is reported and not cou
     CHECK(runtime.core()->liveNodes() == 0);
 }
 
+// Mutation: drop the checkOwner() call from ~Node.
 TEST_CASE("reactive::Runtime: a node destroyed off the owner is reported", "[reactive][misuse]") {
     Owner owner;
     morph::testing::OwnerProbeRecorder const probe{owner.coreExecutor()};
