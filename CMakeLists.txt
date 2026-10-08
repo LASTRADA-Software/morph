@@ -419,6 +419,7 @@ target_sources(morph
         include/morph/util/datetime.hpp
         include/morph/reactive/runtime.hpp
         include/morph/reactive/signal.hpp
+        include/morph/reactive/scope.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
         include/morph/core/file_io_ops.hpp
