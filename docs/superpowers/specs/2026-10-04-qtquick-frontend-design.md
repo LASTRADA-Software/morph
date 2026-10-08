@@ -19,13 +19,19 @@ nothing else.
   **`MORPH_BUILD_QT_QUICK`** (default OFF; requires `MORPH_BUILD_QT` for `QtExecutor`), linking
   `morph`, `morph::qt` and Qt 6.5+ `Quick`, `QuickControls2` and `Qml` PUBLIC.
 - Public headers in `include/morph/qt_quick/`: `frontend.hpp` (`qt_quick::Frontend`,
-  `qt_quick::frontendOption`) and `renderer.hpp` (`qt_quick::Renderer`, for embedding a document
+  `qt_quick::frontendOption`), `host_components.hpp` (`qt_quick::HostComponents`, `HostCommands`, `HostValues` and
+  `ScreenHostRegistry`; spec 6 §6, §14, §15) and
+  `renderer.hpp` (`qt_quick::Renderer`, for embedding a document
   view in an existing Qt Quick application). Sources and the private QML module `MorphUi` (the
   built-in kinds' base components) live in `src/qt_quick/`.
 - Registered as an optional component: header-set check, install and export as component
   `qt_quick`, `find_dependency(Qt6 6.5 COMPONENTS Quick QuickControls2 Qml)` in
   `morphConfig.cmake.in`, warnings and sanitizers, and the CI jobs that build Qt. The package version
   file is not `ARCH_INDEPENDENT` when a compiled component is installed.
+- `qt_quick::Renderer` implements `ui::ScreenHost` (spec 6 §4): a host with its own shell mounts a
+  screen by id and params and receives a handle (`title`, `dirty`, `requestClose`) and the screen's
+  root `QQuickItem`. `qt_quick::HostComponents` registers the application's named components
+  (spec 6 §6).
 - CONTRIBUTING states the rule this relies on: morph is header-only, except optional components that
   wrap a compiled toolkit.
 
@@ -63,6 +69,9 @@ MorphButton { text: "Deposit"; enabled: v.s17; onActivated: a.fire(18) }
   inline `component`. `tabs` becomes a `TabBar` over a `StackLayout` whose pages load lazily.
   `dialog` becomes a modal `Popup` whose `visible` follows its `open` slot.
 - `forEach` and `table` become views over list models (§5), with the row template as the delegate.
+- A node's `a11y` and `testId` become `Accessible.name`, `Accessible.role` and `objectName`; a node
+  bound to a form field takes its accessible name from the field's label unless the document sets
+  one. Automated UI tests locate elements by these (spec 6 §6).
 - The generator emits no JavaScript other than the event calls. The output passes `qmllint`, which
   its tests run over every golden.
 
@@ -92,6 +101,9 @@ MorphButton { text: "Deposit"; enabled: v.s17; onActivated: a.fire(18) }
   key order. Row identity, focus, selection and scroll position survive a refetch and a reorder.
 - Keys cross as text (`i:<int64>` or `s:<string>`), so no id becomes a double.
 - An editable cell writes through its row scope's command sinks; its value role reflects the draft.
+- A `table` over the table engine (spec 7) receives the engine's `ViewChange` as these keyed
+  operations, so the engine's view order, not the model's, is what the user sees, and selection,
+  focus and scroll survive a sort or filter.
 
 ## 6. Components
 
@@ -100,8 +112,13 @@ MorphButton { text: "Deposit"; enabled: v.s17; onActivated: a.fire(18) }
   a dedicated `QQmlEngine` for components, whose root context holds nothing but the component's
   props and an event sink. A component that fails to compile, or whose hash does not verify, is
   replaced by its fallback subtree, and the failure is reported once.
-- **Restyling a built-in kind** maps the kind's generated type name to the bundle's component; the
-  component must declare the base kind's props and events, which the renderer checks on load.
+- **Host components** are QML components the application registered with the client. The renderer
+  loads them into the main engine, not the contained component engine, so they may import one
+  another and the `Theme` singleton. One that is missing, or registered at a lower version than the
+  bundle names, renders its fallback and is reported once.
+- **Restyling a built-in kind** maps the kind's generated type name to the bundle's component or a
+  host component; the component must declare the base kind's props and events, which the renderer
+  checks on load; the server runs the same check when it registers the bundle.
 - Components are cached by hash on disk. The QML engine's own disk cache keeps their compiled form.
 
 ## 7. Controlled widgets
@@ -130,8 +147,10 @@ a request the document may refuse.
   resize.
 - `stale` dims an element; `errors` shows under it in the error colour; `readonly` uses the
   control's read-only state rather than disabling it, so its text stays selectable.
-- Text roles map to the Controls palette. The style is `Basic` unless the application's bundle maps
-  kinds to its own components.
+- **Theme.** The `MorphUi` components read one `Theme` singleton, filled from the bundle's
+  `ui-theme/1` tokens (colour roles, spacing, radius and type scales, density; spec 6 §6), with the
+  `MorphUi` defaults for any token the bundle omits. Text roles map to the theme's colour roles. The
+  style is `Basic` unless the application's bundle maps kinds to its own components.
 
 ## 9. The frontend
 
@@ -151,7 +170,7 @@ a request the document may refuse.
 ## 10. WebAssembly
 
 - The same library builds under Emscripten, single-threaded: `QtExecutor` is the only executor and
-  the I/O loop is host-driven.
+  the I/O loop is host-driven. The table engine runs as cooperative chunks on the owner (spec 7 §8).
 - The frontend's state lives on the heap and is released at page unload, because Qt's WebAssembly
   event loop does not return to `run`'s frame.
 - Generated QML and custom components are compiled at runtime, so the QML modules they import —

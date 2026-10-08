@@ -7,8 +7,7 @@ all. Its `Screen` also hit-tests every mouse event, so a drag that leaves the co
 on loses its moves and its release. This spec closes both gaps so a `core::tui` application can
 implement drag-and-drop, and morph's TUI frontend can let kanban's board move tasks by dragging.
 
-The work lands in the core-cpp repository as release **0.7.0**. morph then raises its pin from
-0.5 to 0.7 in one commit of the declarative-UI branch.
+The work lands in the core-cpp repository as release **0.7.0**, which is the version morph pins.
 
 ## Contents
 

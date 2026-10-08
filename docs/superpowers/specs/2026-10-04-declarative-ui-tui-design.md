@@ -63,11 +63,16 @@ This is spec 1 of a program delivered as a series of pull requests (§1, "The pr
 | 3 | `2026-10-04-qtquick-frontend-design.md` | `morph::qt_quick`: the QML generator and renderer, native and WebAssembly |
 | 4 | `2026-10-04-examples-migration-design.md` | Every example's screens defined on its server, rendered by the generic client |
 | 5 | `2026-10-07-ui-document-design.md` | The UI document: structure, expressions, control, relations, server-calculated values, components, delivery |
+| 6 | `2026-10-08-app-hosting-design.md` | Hosting an application: screen lifecycle, the host contract, the app root scope and session, the design package, the workspace shell, application-scope preferences, offline as a backend switch |
+| 7 | `2026-10-08-table-engine-design.md` | The table engine: a table declared from a model's list action, columns from the row type, sorting, filtering, selection, paging and cell editing |
 
-Each layer lands in its own pull request, in this order: the reactive core and view tree; the
-document and its interpreter; the Qt Quick renderer; the forms engine; the generic client with
-model-free dispatch and delivery; the examples, a few per pull request; the terminal renderer
-whenever it is ready. The shipped QML forms renderer stays until the examples no longer use it.
+Each layer lands in its own pull request, in this order: the bridge seams for model-free dispatch
+(spec 5 §2); the reactive core and view tree; the table engine (spec 7), which the renderer's list
+model consumes; the document and its interpreter; the Qt Quick renderer; the forms engine; the
+hosting layer (spec 6: lifecycle, `ScreenHost`, the app root scope, the design package, the workspace
+shell); the generic client with delivery; the examples, a few per pull request; the terminal
+renderer whenever it is ready. The shipped QML forms renderer stays until the examples no longer use
+it.
 
 ### Requirements the reactive core meets
 
@@ -100,8 +105,17 @@ not meet, and each has a test in §7.
 - Headers: `document.hpp` (the document model and its load-time validation, spec 5 §3),
   `expression.hpp` (the `expr/1` evaluator), `interpreter.hpp` (document to reactive nodes),
   `view.hpp` (the view tree), `backend.hpp` (widget interfaces, `IViewBackend`), `mount.hpp`,
-  `frontend.hpp` (§5b), `author.hpp` (the server-side builders of spec 5 §11),
-  `testing/recording_backend.hpp` and `testing/backend_conformance.hpp`.
+  `frontend.hpp` (§5b: `AppContext`, `AppSource`, `Frontend`, `FrontendOption`, `EnvironmentReader`,
+  `Bundle`, `ConnectError`, `FrontendError`, `Backend`), `host.hpp` (spec 6 §4: `ScreenHost`,
+  `ScreenHandle`, `ParamMap`, `MountError`), `author.hpp` (the server-side builders of spec 5 §11),
+  `testing/recording_backend.hpp` and `testing/backend_conformance.hpp`. The test kit they need
+  (`StepExecutor`, `OwnerProbeRecorder`) is provided under `include/morph/testing/`, so
+  `RecordingBackend` depends on nothing outside the installed headers.
+
+**`morph::table`** (`include/morph/table/`)
+
+- Header-only, in the base `morph` target, with no toolkit dependency: the table engine of spec 7.
+  Only `query_rows_source.hpp` depends on `morph::reactive`.
 
 **`morph::tui`** (`include/morph/tui/`, sources in `src/tui/`)
 
@@ -168,8 +182,9 @@ members: reading a `const` node updates them without casting const away.
 - Each misuse is **reported, then refused**. The report is `detail::noteOwner(site, owner, false)`:
   it asserts in a debug build, and a test's installed probe sees the site instead. The refusal is the
   same in every build.
-  - An exception escaping an `Effect` (a defect): that flush stops; effects still queued stay queued
-    for a new flush.
+  - An exception escaping an `Effect` (a defect): that flush stops and the runtime posts a new flush
+    for the effects still queued, at most a bounded number of times in a row, so a defect cannot
+    stall the queue until the next `set()` and cannot loop forever.
   - An effect re-run more than `maxEffectRunsPerFlush` times in one flush (a write cycle): the flush
     stops and its queue is dropped.
   - `set()` inside a Computed: the write is dropped. A Computed reading itself: the read throws
@@ -178,7 +193,9 @@ members: reading a `const` node updates them without casting const away.
   - A Runtime destroyed while nodes are alive: nodes keep the core alive, and any flush is a no-op.
 
 **Relation to the bridge:** this layer consumes `Completion` and `subscribe` like any caller and
-never enters `BridgeHandler`; nothing in the bridge knows a reactive runtime exists.
+never enters `BridgeHandler`; nothing in the bridge knows a reactive runtime exists. The
+interpreter's model-free dispatch uses the bridge seams of spec 5 §2, which are in the bridge, not
+here.
 
 ## 4. Store and async: `morph::reactive`
 
@@ -201,7 +218,8 @@ flight.
 
 Header `morph/reactive/control.hpp`: reactive nodes like `Computed` — non-copyable, non-movable,
 owned by a scope, affinity-checked against the Runtime's owner. A node built over a handler checks at
-construction that the handler's callback executor is the Runtime's owner.
+construction that the handler's callback executor is serial and runs on the Runtime's owner, by
+affinity and not by pointer identity; no callback executor means the bridge's owner.
 
 ### What this replaces
 
@@ -227,19 +245,22 @@ is model-free JSON dispatch with `A` and `R` as JSON text.
 - `QueryOptions::debounce` fetches a key only once it has been stable that long.
 - Tracked reads: `pending()`; `value()`, kept while a refetch is in flight; `error()`, cleared by the
   next success. `refetch()` re-issues the current key.
-- `refreshOn<Pub>(handler)` refetches on a published `Pub`. `QueryOptions::refreshEvery` refetches on
-  a `Scheduler` timer and skips a tick while a request is in flight.
+- `refreshOn<Pub>(handler)` refetches on a published `Pub`; it fires per result type, so two actions
+  with one reply type fire each other. A document's `refreshOn` is the action-id form of spec 5 §5,
+  implemented over the interpreter's own dispatch. `QueryOptions::refreshEvery` refetches on a
+  `Scheduler` timer and skips a tick while a request is in flight.
 - A fetch that throws synchronously is recorded as the query's error; `pending()` falls.
 
 ### `Mutation<A>` — a command
 
 ```cpp
+template <class A, class R = morph::model::ActionTraits<A>::Result> class Mutation;
 Mutation(Runtime& rt, BridgeHandler<M, S>& handler, MutationOptions options = {});
 Mutation(Runtime& rt, std::function<Completion<R>(A)> run, MutationOptions options = {});
 ```
 
 - `run(A)` issues one call. Tracked reads: `pending()`, `error()` (cleared by the next success),
-  `lastResult()`.
+  `lastResult()`, and `successCount()`, which ticks once per success.
 - `MutationOptions::concurrency` decides what a run does while another is in flight: `Exclusive`
   refuses it, `Serial` queues it (per key when `serialKey` is set), `Latest` sends it and applies
   only the newest reply, `Parallel` applies every reply as it arrives.
@@ -289,7 +310,9 @@ the widget and everything inside it; `ContainerWidget` has `moveChild(Widget&, i
 kind has a widget interface with UTF-8 setters; `IViewBackend` has one typed factory per kind. A
 setter called with the value the widget already shows changes nothing — in particular a text input's
 cursor, selection and composition are kept. Input widgets are controlled: a user action reports the
-request, and the widget shows what its slot says afterwards.
+request, and the widget shows what its slot says afterwards. A slot that transforms or clamps the typed value
+shows the raw text for one posted turn first; the cursor and composition rules above keep that
+turn harmless for input methods.
 
 **`ui::testing::RecordingBackend`** is a headless fake tree with an operation log and `click`,
 `edit`, `choose`, `toggle`, `dismiss` and `drag` helpers. A helper acts only on a widget a user could
@@ -305,6 +328,7 @@ Both are checked by the same behaviour cases (§7).
 namespace morph::ui {
 class AppContext {
 public:
+    virtual ~AppContext() = default;
     virtual reactive::Runtime& runtime() = 0;   // owned by the frontend
     virtual exec::IExecutor& executor() = 0;    // the runtime's owner; every bridge's callback executor
     virtual Scheduler& scheduler() = 0;
@@ -315,10 +339,17 @@ class AppSource {                                // where the screens and the mo
 public:
     virtual ~AppSource() = default;
     virtual void open(AppContext& ctx, std::function<void(std::expected<Bundle, ConnectError>)> ready) = 0;
+    virtual void switchBackend(Backend backend, std::function<void(std::expected<void, std::string>)> done) = 0;
 };
-class Frontend { public: virtual std::string_view name() const = 0; virtual int run(AppSource& source) = 0; };
-std::unique_ptr<Frontend> selectFrontend(std::span<FrontendOption const> built, int argc, char const* const* argv,
-                                         EnvironmentReader const& env = processEnvironment());
+class Frontend {
+public:
+    virtual ~Frontend() = default;
+    virtual std::string_view name() const = 0;
+    virtual int run(AppSource& source) = 0;
+};
+std::expected<std::unique_ptr<Frontend>, FrontendError>
+    selectFrontend(std::span<FrontendOption const> built, std::vector<std::string>& args,
+                   EnvironmentReader const& env = processEnvironment());
 }
 ```
 
@@ -327,9 +358,15 @@ std::unique_ptr<Frontend> selectFrontend(std::span<FrontendOption const> built, 
   builds one from its arguments.
 - `run` builds the runtime and executor first, opens the source, mounts the app shell and drives its
   loop until `quit()`; screens and connections are destroyed before the runtime.
+- An `AppSource` signs the user in natively when the application needs it (before the catalog is
+  requested, on the owner), and `switchBackend` replaces the dispatch target under mounted screens:
+  it is `Bridge::switchBackend` posted to the owner, after which the interpreter holds the queries on
+  private aliases, runs each screen's `onBackendChange` and refetches (spec 6 §5, §9). `Backend` is
+  the application's opaque handle. A host with its
+  own shell mounts screens through `ScreenHost` instead of `run`'s app shell (spec 6 §4).
 - `selectFrontend`: `--ui=<name>` or `--ui <name>`, else `MORPH_UI`, else the first option whose
-  `usable()` holds; the flag is removed from the arguments passed on, and scanning stops at `--`. An
-  unknown or unbuilt name is an error naming the built ones.
+  `usable()` holds; the flag is removed from `args`, which the caller passes on, and scanning stops at
+  `--`. An unknown or unbuilt name is a `FrontendError` naming the built ones.
 
 ## 6. The terminal renderer: `morph::tui` (`MORPH_BUILD_TUI`)
 
@@ -351,8 +388,8 @@ after its destruction. It must be destroyed on the loop's thread, outside a turn
 panels; labels with text roles as theme colours; buttons, checkboxes and text inputs over
 `InputField`; selects as lists or overlays; tabs; dialogs as overlays with focus kept inside them;
 scroll; busy spinners; tables; date-time fields; sliders; a file path field. A key reaches an
-ancestor only when the ancestor opts in. Drag-and-drop is optional and uses core-cpp 0.7's pointer
-capture when provided.
+ancestor only when the ancestor opts in. Drag-and-drop (spec 5 §9) uses core-cpp 0.7's pointer
+capture; a terminal without mouse reporting ignores `drag` and `drop`.
 
 **`tui::Frontend`** (`tui::frontendOption()`, named `"tui"`, usable when stdin is a terminal):
 `IoLoop{Caller}`, a `LoopExecutor`, the runtime, `Screen` and `TuiRuntime` with interrupt handling
@@ -365,7 +402,7 @@ the frontend initialises is shut down when `run` returns.
 
 `reactive`, `control` and `ui` tests are in morph's base test tree; `tests/tui/` is registered under
 `MORPH_BUILD_TUI`. Owners are `morph::testing::StepExecutor`s drained by the test; misuse is observed
-through `morph::testing::OwnerProbeRecorder`. Every test states the mutation that would make it fail.
+through `morph::testing::OwnerProbeRecorder`; both live in `include/morph/testing/` (§2). Every test states the mutation that would make it fail.
 
 - **reactive, Store, control:** glitch-freedom; pruning; unlinking; batching; one `post()` per
   idle→pending transition and a recovered flush after a throwing `post`; the equality skip, and a

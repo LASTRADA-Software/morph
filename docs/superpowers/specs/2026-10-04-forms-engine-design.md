@@ -19,7 +19,7 @@ are evaluated in exactly one place.
 
 [1 Shape](#1-shape) · [2 The field model](#2-the-field-model) · [3 Rules](#3-rules) ·
 [4 Values and exactness](#4-values-and-exactness) · [5 FormSession](#5-formsession) ·
-[6 Typed forms](#6-typed-forms-formltagt) · [7 Rendering](#7-rendering) ·
+[6 Typed forms](#6-typed-forms-forma) · [7 Rendering](#7-rendering) ·
 [8 Collections, wizards, app shell](#8-collections-wizards-app-shell) · [9 Packaging](#9-packaging) ·
 [10 Parity and tests](#10-parity-and-tests) · [11 Retiring the QML renderer](#11-retiring-the-qml-renderer) ·
 [12 Docs](#12-docs) · [13 Risks](#13-risks)
@@ -68,13 +68,14 @@ resolving `$ref` and nullable `anyOf`/`oneOf`, and produces one `FieldSpec` per 
 | `Enum` | `enum` / `const` branches (`x-widget: radio` for radio) | the enum value |
 | `Choice` | `x-optionsAction`, `x-optionValue`, `x-optionLabel`, `x-optionsDependsOn` | the option's value |
 | `DateTime`, `Date` | `format: date-time` / `date` | ISO 8601 UTC |
+| `EpochDateTime`, `EpochDate` | `x-widget: epochSeconds` / `epochDays` on an integer | int64 seconds or days since the epoch (UTC), digits preserved; displayed as the locale's date-time or date |
 | `Slider` | `x-widget: slider` with `x-min/max/step` | integer |
 | `Array` | array of scalars | JSON array |
 | `Object` | nested object (recursion, cycle-safe) | nested object |
 | `ObjectArray` | array of objects | array of nested objects |
 
 A `FieldSpec` carries: wire name and path; label, help, placeholder and their i18n keys
-(`forms/i18n.hpp`); required (`required` and `optionalFields`), `x-blankAs`; `x-readonly`,
+(`forms/i18n.hpp`; `render::resolveText` resolves through it); required (`required` and `optionalFields`), `x-blankAs`; `x-readonly`,
 `x-hidden`, `x-computed`; exact bounds (`minimum`/`maximum`/`multipleOf`, `x-exactMinimum`/
 `x-exactMaximum`, instance `x-minimum`/`x-maximum` from `InstanceConstraints::decorate`), decimal
 places, display decimals; unit and alternatives with their exact factors; enum values; the Choice
@@ -101,8 +102,8 @@ away.
   come from `visibleWhen`, `readonlyWhen` and `requiredWhen`; `Unknown` presents as visible,
   editable and not required.
 - Comparisons are exact: integers as digit strings, decimals and quantities as `Rational`, booleans
-  as booleans — the two divergences the agreement tests were written against (`equals` against a
-  bool, and against an int64 above 2^53) cannot arise, because nothing passes through a double.
+  as booleans — `equals` against a bool, and against an int64 above 2^53, are exact, because nothing
+  passes through a double.
 - Each rule is translated into the document's expression language (spec 5 §4), whose three-valued
   logic is the same, so the client has **one** evaluator for rules, relations and checks. The typed
   rule nodes (`allRulesSatisfied<A>`) stay the server-side check; the agreement corpus (§10)
@@ -110,9 +111,8 @@ away.
 - A rule's field list is matched by membership: a presentation rule applies to every field it names,
   not only its first.
 - An operand whose draft does not encode (invalid text) is `Unknown`, for every rule kind including
-  `engaged`. The QML renderer counted non-blank text as engaged; the engine does not, because a value
-  the server would refuse should not satisfy a condition. This is listed in `engine.md`'s
-  differences table.
+  `engaged`: a value the server would refuse does not satisfy a condition. `engine.md`'s differences
+  table lists where this differs from the QML renderer.
 
 ## 4. Values and exactness
 
@@ -123,7 +123,7 @@ field is engaged. Encoding a draft yields `std::expected<WireValue, FieldError>`
   — new, in `render/locale_format.hpp`, beside the locale code it uses, so `util/` keeps no
   dependency on `render/`: locale input normalised by
   `render::normalizeLocaleNumber`, then digits → `Rational` with the declared decimal places,
-  rejecting more places than declared. C++ has no decimal parser today; this is the one the forms
+  rejecting more places than declared. It is the one decimal parser the forms
   engine and any app share.
 - Quantity unit conversion is exact `Rational` arithmetic with the factors `x-unitAlternatives`
   carries; integers keep every digit; date-times convert from the display offset to UTC.
@@ -133,7 +133,7 @@ field is engaged. Encoding a draft yields `std::expected<WireValue, FieldError>`
 - The **body** is assembled as JSON text in `x-order`; it is the byte-for-byte contract the parity
   tests compare. Prefill decodes a JSON body back into drafts (the reverse of every encoder).
 - Display uses `render::formatCanonicalNumber` and `render::resolveText` with the session's
-  `TranslationProvider` and locale — both headers exist and gain their first production caller.
+  `TranslationProvider` and locale.
 
 ## 5. FormSession
 
@@ -157,9 +157,9 @@ using ChoiceFetcher = std::function<async::Completion<std::string>(std::string_v
   `required` computeds; for a Choice, `options` (a `reactive::Query` keyed on its dependency
   fields' encoded values, so a parent change refetches and a superseded reply is dropped).
 - **Readiness:** every required field encodes, no field has an error, no gating rule is `False`. A form that is
-  already ready when it is built submits once in automatic mode, as the QML renderer did.
+  already ready when it is built submits once in automatic mode.
 - **Submission** is a `reactive::Mutation` over the `Submitter`. In automatic mode an Effect submits
-  whenever the form becomes ready with a changed body — the behaviour `DynamicForm` has today —
+  whenever the form becomes ready with a changed body,
   except while a programmatic change (prefill, reset) is applying; in explicit mode only `submit()`
   does.
 - **Choice options:** the rows are the result if it is an array, else its first array member. A
@@ -171,7 +171,7 @@ using ChoiceFetcher = std::function<async::Completion<std::string>(std::string_v
   `forms::handlerSubmitter(executor, handlers...)` routes through C++ code's own typed handlers, for
   tests and local tools; `handlerChoiceFetcher` is the same for options. Tests pass a fake.
 - **Overlapping submissions.** A form's submit is an `Exclusive` mutation (spec 1 §4b): the submit
-  control disables while one is in flight, and each success ticks `successCount`, which a document's
+  control disables while one is in flight, and each success ticks the mutation's `successCount` (spec 1 §4b), which a document's
   `watch` or a C++ caller observes per submission.
 
 ## 6. Typed forms: `Form<A>`
@@ -218,6 +218,32 @@ public:
   `enabled` (readonly). Layout: sections are `Panel`s, tab groups (consecutive runs merged) are
   `Tabs`, accordions are collapsible `Panel`s, `x-colspan` places fields in a `Grid`.
 - Explicit mode adds a Submit `Button` bound to readiness; every form shows the last reply or error.
+- **Field overlay.** A `form` node's `fields` map (`omit`, `hidden`, `label`, `unit`, `decimals`,
+  `widget`, `blankAs`, per field) is applied to the parsed `FormModel` before the session is built
+  (`blankAs` takes the lower-case spelling of `x-blankAs`: `omit`, `empty`), so
+  an application states its labels, units and hidden members on the server and no client rewrites
+  the schema. `omit` removes the member from the form and from the body; `hidden` keeps it in the
+  body and out of the view. An overlay declared on the server's schema emitter is refined by the
+  document's (spec 6 §10).
+- **Grid widget.** An `ObjectArray` member with `x-widget: grid` (or `"widget": "grid"` in a `fields`
+  overlay) renders as an editable grid over the form's draft rows, for typed rows entered in place:
+  - *Columns* derive from the item schema as the table engine's do (spec 7 §4) and take the same
+    keys (`label`, `unit`, `decimals`, `width`, `hidden`, `tone`). `input: false` makes a column
+    display-only; an `x-computed` member is display-only by default.
+  - *Cells edit the form's draft*, not a mutation: the form validates and submits the whole body, as
+    for any field, and a cell's error shows on the cell.
+  - `rowOps` is a subset of `add`, `duplicate`, `remove` and `exclude`. `exclude` toggles the boolean
+    member named by `excludeField`, and an excluded row stays in the body. `ghostRow: true` shows a
+    trailing empty row whose first edit appends a row.
+  - `summary` is a list of `{label, fn, of}` evaluated over a column with the expression library
+    (`mean`, `sum`, `min`, `max`, `count`) and shown in a footer row.
+  - *Keyboard.* Tab and Shift+Tab move between input cells, Enter commits the cell and moves down,
+    Esc reverts the cell, and the arrow keys move between cells that are not being edited.
+  - `tone` is an expression over `{"row": ...}` that yields `ok`, `warn` or `err`; a column's `tone`
+    colours its cell and a grid's `rowTone` colours the row.
+  - *Sibling members* of the form's object are ordinary fields; `x-section` places them with the grid
+    (a conditions strip above it). An override (below) takes props from any element reference and
+    sets any field's draft from its events, so a replacement cell editor needs no special access.
 - **Overrides** (the replacement for `SlotRegistry`) are declared in the document: a `form` node's
   `overrides` maps a field, a widget hint, a unit or a kind — resolved in that order, then the
   default — to a document subtree or a custom component (spec 5 §10) whose props are the field's
@@ -227,6 +253,8 @@ public:
 
 ## 8. Collections, wizards, app shell
 
+- A collection's table is the table node of spec 7: the `v-columns` derivation and `ColumnOverride`
+  are shared with it, and sorting, filtering, selection and paging are the table engine's.
 - **`CollectionModel::fromSchema(viewJson)`** (the `v-*` keywords; typed via `viewSchemaJson<V>()`),
   **`CollectionSession`**: the list is a `Query` on `v-query`; row and collection actions are
   `Mutation`s whose bodies are built from `bind` entries with exact ids; an action with `confirm`
@@ -246,13 +274,19 @@ public:
   mounts first. Each screen's session is created when the screen is selected, outside any mount, and
   kept while it stays in the menu.
 
+- **Workspace shell.** `app-shell: "workspace"` is a second shell kind beside the menu-and-switch
+  one: tabs over screens, with per-tab `dirty` and `title`, a close protocol, most-recently-used
+  switching, a navigator over the catalog, pins and a start page (`resume`, `overview` or a screen
+  id). A tab is a screen instance, one per `identity`; a `singleton` screen has one tab. Its
+  semantics, preferences and window-chrome boundary are spec 6 §7–8.
+
 Sections (`SectionSet`) keep their typed session and gain no renderer here.
 
 ## 9. Packaging
 
 Header-only, in the base `morph` target, under `include/morph/forms/engine/`: `field_model.hpp`,
 `rules.hpp`, `form_session.hpp`, `typed_form.hpp`, `form_view.hpp`, `overrides.hpp`,
-`collection.hpp`, `wizard.hpp`, `app_shell.hpp`, `handler_submitter.hpp`; `parseDecimal` in
+`collection.hpp`, `wizard.hpp`, `app_shell.hpp`, `workspace.hpp` (spec 6 §7), `handler_submitter.hpp`; `parseDecimal` in
 `render/locale_format.hpp`. It depends on `morph::reactive` and `morph::ui`, never on a renderer.
 `rules.hpp` and `field_model.hpp` do not include the schema emitters; only `typed_form.hpp` does.
 
@@ -295,7 +329,7 @@ example of consuming the schemas from a browser, not a renderer morph ships.
 `docs/spec/forms/engine.md` (new: model, rules, values, sessions, rendering, overrides);
 `forms.md`, `views.md`, `workflows_navigation.md` and `widget_hints.md` lose their QML-renderer
 sections and point at the engine; `docs/spec/README.md` map; `ARCHITECTURE.md`; CHANGELOG
-`[Unreleased]` → Added (the engine, `parseDecimal`, `ViewScreen`).
+`[Unreleased]` → Added (the engine, `parseDecimal`).
 
 ## 13. Risks
 

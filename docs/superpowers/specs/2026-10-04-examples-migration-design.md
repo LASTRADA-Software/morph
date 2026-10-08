@@ -25,7 +25,7 @@ the shipped QML forms renderer (spec 2 §11).
 | polls | 3 QML, bridge + presenter + forms controller, WASM only | Landing (open by id, create), create-poll (dynamic option list), vote grid, undo, comments, finalize, live activity feed |
 | kanban | 7 QML, 2 bridges + 2 presenters, desktop + headless test client | Login, projects, members (role picker), board (swimlanes, columns, cards, drag to move), rules, task detail (comments, attachments) |
 | ledger | 5 QML, 4 bridges + 4 presenters + report poller | Tabs: ledger (accounts, entries, store, undo), budgets, rules, statement (polled job) |
-| lims | 3 QML, 2 bridges + 2 presenters | Tabs: sample lifecycle (forms + actions), results (live recalculation, verify, conflicts) |
+| lims | 3 QML, 2 bridges + 2 presenters | Tabs: sample lifecycle (forms + actions), results (live recalculation, verify, conflicts); its tab strip is the workspace shell (spec 6 §7) |
 | forms demo | 2 QML + FormsController | App shell over the lab schemas: forms, the intake wizard, the samples collection |
 
 Not UI, unchanged: `concepts`, `qt_tls_client`, `vetted_hmac`, `crm`. **Servers stay on Qt**
@@ -45,7 +45,7 @@ examples/<app>/
 
 - **The domain library loses Qt.** pastebin's, bookmarks' and ledger's `App` classes are QObjects
   with QTimers that only the server runs; they move into `src/server/`.
-- **`screens/`** is target `<app>_screens`, linking `morph` and the domain library only. It is linked
+- **`screens/`** is target `<app>_screens` (`ladder_<rung>_screens` for a ladder rung, §6), linking `morph` and the domain library only. It is linked
   by the server and by the app's local-mode client. A Qt include in it fails to build.
 - **Screens replace controllers.** What the bridges, presenters and QML conditionals did becomes
   declarations: queries, mutations, relations, checks and watches. Formatting is the expression
@@ -139,6 +139,36 @@ file to its replacement. App-specific decisions:
   the client's, enabled by the screen.
 - **ledger:** the statement job is a query with `refreshEvery` that skips while a poll is in flight,
   and that stops once the job is finished or failed; each outcome has a screen test.
+- **lims, sample entry:** a second reference screen, `lims.sample`, is the reference for hosting a
+  record-editing dialog (spec 6) and a model-derived table (spec 7). It is implemented and unit
+  tested as an example, with these parts, each chosen to exercise one feature of the program:
+  - *Lifecycle (spec 6 §3):* `params: {sampleId: int?}`, `identity: sampleId`, `title` the sample
+    number, `dirty` from the section edits, `onMount` loading or creating, a close guard.
+  - *Private instance:* the sample model is bound without `instance`, so each open screen holds its
+    own working copy, and Save commits it.
+  - *Sections as forms (spec 2):* header, sampling conditions and a measurement section, each a
+    `form` over its section action with a `fields` overlay (hidden member, label, unit, decimals, an
+    epoch-day date).
+  - *Optional measurements:* turbidity and nitrate cards that are added from a menu and removed by
+    a clear mutation that `invalidates` the snapshots, over a state list.
+  - *Computed on the server:* a dilution series whose rows carry measured value, recovery
+    percentage, limits and an `outsideLimits` flag, all computed by the model (spec 6 §10); the card
+    header counts the rows outside limits.
+  - *Host components (spec 6 §6):* `SeriesGrid` and `RecoveryCurve` over that list, each with a
+    `table` or `text` fallback.
+  - *Errors:* save returns an enum outcome and typed errors; messages are selected by `errorKind`
+    and by the enum.
+  - *Lookup table (spec 7):* a "choose project" dialog is a `table` over a server-mode list action,
+    with sort, a filter and single selection.
+  - *Backend switch (spec 6 §9):* the screen survives a switch from a remote to a local backend
+    through `onBackendChange`.
+  The lims `SampleModel` gains the section, snapshot and working-copy actions this needs (spec 6
+  §11 lists them); its existing actions are reused.
+  The screen is authored with the C++ builders, registered with `MORPH_REGISTER_SCREEN`, validated at
+  registration, and mounted by the screen harness on `RecordingBackend`. Its tests are those listed
+  under spec 6 §12 for lifecycle, forms, errors and offline switching, run against this screen, and
+  the render smoke test opens it on Qt Quick offscreen. No name from any application outside this
+  repository appears in the example, its tests or its data.
 - **lims:** the results tab is the reference for live recalculation (spec 5 §7): a row of capture
   values per result; a preview per row keyed on its draft, through `evaluate` of the capture action
   where its `computedFields` suffice; the calculated concentration shown stale while in flight; and
@@ -177,7 +207,8 @@ The "Presenter architecture" rules and the QML-surface drift guard are replaced 
 Examples move a few per pull request, each building and passing on its own:
 
 1. `examples/common` and the generic client, with the gallery.
-2. lims and the forms demo: the live-recalculation reference and the app shell.
+2. lims and the forms demo: the live-recalculation reference, the sample-entry reference screen
+   and the app shell.
 3. bank.
 4. pastebin, bookmarks, polls.
 5. kanban, ledger.

@@ -67,7 +67,8 @@ server (or in-process, local mode)               client (one generic binary)
 
 - **Model-free dispatch.** The client sends `(model type, instance, action type, JSON body)` through
   `Bridge` and receives the JSON reply, with the session, timeout, cancellation and in-flight
-  accounting `Bridge` already applies to typed calls. The client compiles in no model or action type.
+  accounting `Bridge` applies to typed calls. The client compiles in no model or action type. This
+  needs seams `Bridge` does not have today (below).
 - **Local mode.** A desktop application without a server links its models and screen definitions
   into the client process: the UI registry is read in-process and dispatch goes to `LocalBackend`.
   The document and its rendering are identical to remote mode.
@@ -75,10 +76,32 @@ server (or in-process, local mode)               client (one generic binary)
   `let` and every bound property into `Computed`s, queries into `Query`s, mutations into `Mutation`s,
   relations into `Computed`s and `Effect`s. Renderers observe those values; they evaluate nothing.
 
+### Bridge seams this design adds
+
+`BridgeHandler<Model>::executeJson` needs a handler built for a concrete `Model`, and a handler is
+created only through templates over `Model`. A client that compiles in no model needs three additions:
+
+- **A binding by type id.** `Bridge::bindByType(typeId, sharing, instanceKey)` returns a
+  `HandlerBinding` keyed by the model's registered type id string, with the same registration,
+  deregistration, owner principal and `switchBackend` re-binding as a typed handler. Local mode
+  resolves the type id in the model registry; a remote backend already carries it as a string.
+- **A raw execute.** `Bridge::executeRaw(binding, actionId, bodyJson)` returns the JSON reply with the
+  session, timeout, cancellation and in-flight accounting of a typed call. It does not run the
+  client-side `recomputeAll` or `ActionValidator`, which need the action type: the forms engine
+  validates in the client (spec 2), and the server validates every call.
+- **A string-keyed attach.** `attach(binding, instanceKey)` for a shared instance, as
+  `attachHandler<Model>` does with a typed key.
+
+The catalog tells the client, per model type, whether it is **stateless** (a shared singleton is
+equivalent to a private instance) and whether it is **keyed** (it can be shared by an instance key). A
+model that is not keyed cannot be given an `instance` expression; the document is refused at load.
+These seams, the `ui` envelope kinds of §12 and their authorisation rules are specified in the wire
+and bridge documents when the interpreter lands, and come before it in the delivery order.
+
 ## 3. Document structure
 
 A **bundle** is everything an application serves: its screens, its app shell (menu and routes, the
-`app-*` vocabulary of `forms/app.hpp`), and its custom components. A **screen** document:
+`app-*` vocabulary of `forms/engine/app_shell.hpp`), and its custom components. A **screen** document:
 
 ```json
 { "vocab": "ui/1", "id": "lims.results", "title": { "t": "lims.results.title", "fallback": "Results" },
@@ -96,6 +119,11 @@ A **bundle** is everything an application serves: its screens, its app shell (me
   row scope is keyed by its row key, so its state survives reordering and is kept while the row
   exists.
 - **Params** are the screen's typed inputs, set by navigation (§8).
+- **Lifecycle keys.** A screen may also declare `title` (an expression), `dirty` (a bool expression),
+  `identity` (an expression; equal identities are one screen), `onMount`, `onUnmount`, `onClose`
+  (command lists; `{"cancelClose": true}` is valid only in `onClose`), `onSave` and `onBackendChange`. Their
+  semantics, and the host's side of them, are spec 6 §3–4. These keys, the commands `cancelClose`,
+  `signIn` and `signOut`, and the node and expression additions of spec 6 are part of `ui/1`.
 - **Types.** `bool`, `int` (int64, exact), `string`, `decimal` (`{num, den, dp}`, exact),
   `quantity` (`{num, den, dp, unit}`), `timestamp` (UTC), `key` (`int` or `string`), `list<T>`,
   records, and `T?` for an optional value (`null`). Query and mutation results take their record
@@ -123,10 +151,16 @@ one.
 | `{"can": "m"}` | Whether the signed-in principal may run mutation or query `m` (§12b). |
 | `{"pref": "point.path"}` | The user's choice at a customization point (§12b). |
 | `{"fn": "name", "args": [e, ...]}` | A library function (below). |
+| `{"t": "key", "fallback": "text", "args": [e, ...]}` | The text of `t(key, fallback, args...)`: shorthand for the library function. |
+| `{"ref": "event"}` | The payload of the event whose command list is running: the new text, the chosen key, the dropped payload. Valid only inside a command list. |
 | `{"if": [cond, then, else]}` | Choice. |
 | `{"obj": {"k": e}}`, `{"list": [e, ...]}` | Constructors, used for action bodies. |
 | `{"map": e, "as": "x", "to": e}`, `{"filter": e, "as": "x", "where": e}` | Comprehensions over a list. |
-| `{"env": "widthClass"}` | Client environment: `widthClass` (`compact`, `medium`, `expanded`), `locale`, `platform`. |
+| `{"env": "widthClass"}` | Client environment: `widthClass` (`compact`, `medium`, `expanded`), `locale`, `platform`, `online`, `backend` (spec 6 §5, §9). |
+| `{"errorKind": "m"}` | The kind of query or mutation `m`'s error: `notFound`, `validation`, `connectionLost`, `denied`, `conflict`, `backendChanged`, `other` (spec 6 §10). |
+| `{"session": "displayName"}` | A session attribute: `principal`, `userName`, `displayName`, `userKey`, `tenant`, `authenticated`. |
+| `{"ref": "app.name"}` | A name of the app document (spec 6 §5). |
+| `{"host": "name"}` | The value an application registered with the client (`host/1`, spec 6 §14); `null` when the client lacks it. |
 
 **Semantics.**
 
@@ -147,11 +181,13 @@ one.
 - arithmetic: `add`, `sub`, `mul`, `div`, `neg`, `round(x, dp)` over `int`, `decimal`, `quantity`;
 - optional: `engaged`, `coalesce`;
 - string: `concat`, `format(template, args...)`, `trim`, `length`, `isEmpty`, `contains`;
-- list: `count`, `sum`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`;
+- list: `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`
+  (`mean` is the exact sum over the count, at the operands' declared places, rounded half to even);
 - display: `number`, `decimal(x, dp)`, `quantity(x, unit?)`, `money(x, currency)`,
   `date(x, style)`, `dateTime(x, style)` — using the client's locale and display zone through
   `render/locale_format.hpp`;
-- text: `t(key, fallback, args...)`, the i18n lookup of `render/i18n.hpp`.
+- text: `t(key, fallback, args...)`, the i18n lookup of `render/i18n.hpp` (a `TranslationProvider`
+  over `(key, locale)`).
 
 The forms engine's `x-rules` (spec 2 §3) translate into this language, so a client has one
 evaluator.
@@ -170,8 +206,18 @@ evaluator.
 
 - A scope names every model it uses, under an alias. A screen or a dialog may use any number of
   models; each query and mutation names the alias it goes through.
-- `instance` selects a shared model instance (the bridge's shared-instance key) and is an expression:
-  when it changes, the alias rebinds, and the queries through it refetch.
+- `instance` is `"private"`, `"shared"` or an expression:
+  - an expression selects a shared model instance (the bridge's shared-instance key); when it
+    changes, the alias rebinds, and the queries through it refetch. The model must be keyed;
+  - `"private"` binds an instance of its own to the scope, so the model's state, such as an open
+    record, is that scope's alone; it is released when the scope unmounts (spec 6 §3);
+  - `"shared"` is the model's singleton and needs no key.
+  An alias that names none is `"shared"` when the catalog marks the model stateless and `"private"`
+  otherwise.
+- A private instance costs a server-side model instance and, for a database-backed model, its own
+  connection. A row scope's alias must therefore name an `instance` (a document that leaves it out
+  there is refused at load), and the server's `maxLiveModels` limit is the brake on the total.
+- A shared instance runs on one strand, so calls through it serialise, whichever scopes make them.
 - A model handle belongs to the scope that declares it. A dialog that declares its own handle
   releases it when it closes.
 
@@ -180,7 +226,7 @@ evaluator.
 ```json
 "results": { "model": "sample", "action": "Lims_ListResults",
              "body": { "obj": { "sampleId": { "ref": "sampleId" } } },
-             "when": true, "debounce": 0, "refreshOn": ["Lims_ResultChanged"], "refreshEvery": 0 }
+             "when": true, "debounce": 0, "refreshOn": ["Lims_CaptureConcentration"], "refreshEvery": 0 }
 ```
 
 A query is spec 1 §4b's `Query`, declared as data:
@@ -190,8 +236,12 @@ A query is spec 1 §4b's `Query`, declared as data:
 - `when` false, or a `body` that evaluates to `null`, makes the query idle.
 - `debounce` delays a fetch until the key has been stable for that many milliseconds.
 - The last value is kept while a refetch is in flight, so lists do not blank.
-- `refreshOn` refetches when the model publishes one of the named events; `refreshEvery` refetches
-  on a timer and **skips a tick while a request is in flight**.
+- `refreshOn` names actions of the query's own model alias: the query refetches when a call to one of
+  them, made through that alias by this client, completes successfully. It is the interpreter's own
+  bookkeeping over its dispatch, not a bridge subscription, so it works without the result type and
+  two actions with one reply type do not trigger each other. A change made by another client is not
+  pushed; `refreshEvery` is the polling answer, and it refetches on a timer and **skips a tick while a
+  request is in flight**.
 
 ### Mutations
 
@@ -216,7 +266,12 @@ A query is spec 1 §4b's `Query`, declared as data:
 - `"offline": "queue"` sends a run that cannot reach the server through the client's offline queue,
   which replays it on reconnect; the mutation stays `pending` until the replay settles, and its
   elements show `stale`. Without it, a run while offline fails at once. Offline queuing is part of
-  `ui/1`; a replay the server rejects runs the mutation's `onError`, as an online failure would.
+  `ui/1`; a replay the server rejects runs the mutation's `onError`, as an online failure would. A
+  mutation that sends a credential or returns a token is never queued: it is refused at load with
+  `"offline": "queue"`.
+- A reply field the server marks `secret` (a session token) is never readable as `{"result": "m"}`
+  after the mutation's own `onSuccess` has run, and is left out of diagnostics, the offline queue and
+  journals.
 
 ### Several models in one dialog
 
@@ -249,8 +304,9 @@ Every element may carry an `id`. An element's live values are addressable as `{"
 | text input, date, slider | `value`, `draft`, `dirty`, `focused` |
 | checkbox | `checked` |
 | select | `selected`, `selectedOption` |
-| table | `selection`, `activeKey` |
-| dialog | `open` |
+| table | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` (spec 7 §12) |
+| dialog, drawer | `open` |
+| a transfer (`upload`, `download` with an `id`) | `progress` (0 to 1, or `null`), `pending`, `error` (spec 6 §18) |
 | form (spec 2) | each field's `value`, `draft`, `valid`, `required`, and the form's `ready`, `body` |
 
 Relations are expressions over those values and the scope's declarations:
@@ -364,9 +420,11 @@ the row will eventually run:
 The server answers an `evaluate` envelope by decoding the body, running `recomputeAll` and the
 action's validation, and replying with the body, its computed fields filled, and its field errors.
 It never calls the model's `execute`, so an evaluation has no effect and can be repeated freely. It
-is authorised as the action itself: a principal who may not run the action may not evaluate it. A
-calculation that reads model state — a calibration, a method limit — is a dedicated action whose
-model computes it.
+is authorised as the action itself: a principal who may not run the action may not evaluate it. An
+evaluation writes no journal or action-log entry, counts against the server's in-flight and rate
+limits per principal, and is not protected by the client's `debounce`, which only spares an honest
+client. A calculation that reads model state — a calibration, a method limit — is a dedicated action
+whose model computes it.
 
 **On the server,** every calculation is authoritative: `computedFields` are recomputed on every
 execute and every evaluation, whatever the client sent.
@@ -380,29 +438,83 @@ execute and every evaluation, whatever the client sent.
 | `{"run": "m", "body": e?, "as": "x"?, "each": e?}` | Runs a mutation, optionally with a body override, once per element of `each`. |
 | `{"refetch": "q"}` | Refetches a query. |
 | `{"open": "dialog"}`, `{"close": "dialog"}` | Opens or closes a dialog. |
-| `{"navigate": "screen", "params": e}` | Moves to another screen. |
+| `{"navigate": "screen", "params": e, "as": "tab"\|"dialog"\|"drawer"\|"window", "onResult": [...], "onCancel": [...]}` | Opens another screen: as a tab the shell decides (spec 6 §7), as a dialog, drawer or window it can answer (spec 6 §16). |
+| `{"return": e}`, `{"close": "self"}` | Ends a screen opened as a dialog, drawer or window: the opener's `onResult` gets `e`, or its `onCancel` runs. |
+| `{"focus": "id"}` | Moves keyboard focus to a node (spec 6 §17). |
+| `{"host": "name", "args": e?}` | Runs a command an application registered with the client (`host/1`, spec 6 §14). |
+| `{"switchBackend": "name"}` | Asks the application's `AppSource` to switch to a backend it lists (spec 6 §9). |
+| `{"resetPrefs": "point"\|"all"}` | Restores the document's defaults for a customization point, or for all of them (§12b). |
+| `{"setLocale": "de"}` | Changes the active locale and re-resolves every `t`; stored as a preference (spec 6 §19). |
 | `{"notify": e, "role": "success"}` | Shows a transient message. |
 | `{"seq": [...]}`, `{"all": [...]}` | Runs commands in order, stopping at a failure; or together, waiting for all. |
 | `{"if": [cond, [...], [...]]}` | Runs one branch. |
-| `{"upload": e, "to": "m", "as": "x"?}` | Sends a file the user picked through the server's file side channel, then runs mutation `m` with its reference (vocabulary `files/1`). |
-| `{"download": e, "save": "dialog"}` | Fetches a file by reference through the side channel and lets the user save it (`files/1`). |
+| `{"cancelClose": true}` | Keeps the screen open; valid only in `onClose` (spec 6 §3). |
+| `{"signIn": {"from": "m"}}`, `{"signOut": true}` | Installs the session token mutation `m` replied with and reloads the catalog; or ends the session and unmounts every screen (spec 6 §5). |
+| `{"upload": e, "to": "m", "as": "x"?, "id": "t"?}` | Sends a file the user picked or dropped through the server's file side channel, then runs mutation `m` with its reference (vocabulary `files/1`); `id` names the transfer for `progress`. |
+| `{"download": e, "save": "dialog", "name": e?}` or `{"download": e, "to": "preview", "as": "url"}` | Fetches a file by reference through the side channel and lets the user save it, or binds a local temporary reference to state `url` for a viewer (`files/1`, spec 6 §18). |
 
 A command list triggered by one event runs in one batch: the screen updates once.
 
 ## 9. View nodes
 
-The node palette is spec 1 §5's — text, button, text input, checkbox, select, menu, column, row,
-grid, spacer, panel, scroll, switch, tabs, dialog, busy, forEach, table, date-time input, slider,
-file picker, with drag-and-drop on every node — written as `{"kind": "...", ...}` with every
-property an expression and every event a command list. The document adds:
+This section is the one normative palette of the program (spec 1 §5 refers here). The kinds are text,
+button, text input, checkbox, select, menu, column, row, grid, spacer, panel, scroll, switch, tabs,
+dialog, busy, forEach, table, date-time input, slider and file picker, written as
+`{"kind": "...", ...}` with every property an expression and every event a command list.
+
+**Common properties.** `id`, `visible`, `enabled`, `a11y`, `testId`, `tooltip`, `keys` and `autofocus`
+(spec 6 §17), `surface` (a named token set for the subtree, spec 6 §6), `sizing` (`"content"`,
+`{"fixed": n}` or `{"stretch": w}`; units are spec 3 §8's), `gap` on containers, and `columns` and
+`span` on grids.
+
+**Events** (command lists; the payload is `{"ref": "event"}`): `onClick` and `onActivate` (button,
+row, menu item), `onChange` (every edit), `onCommit` (Enter or loss of focus), `onToggle`,
+`onChoose`, `onDismiss` (dialog and drawer), `onSubmit` (a single-line text input), `onPick` (file
+picker), `onDrop` (a node with `drop`, or a `dropZone`), and `on: {name: [...]}` for a custom component's own events.
+
+**Drag and drop.** A node may declare `"drag": {"payload": e}` and `"drop": {"accepts": e,
+"onDrop": [...]}`. A drag carries the payload, never a node; a drop target runs `onDrop` with the
+payload as `{"ref": "event"}` when the dragged payload matches `accepts`. A file picker or a `dropZone`
+panel also accepts files the operating system drops on it, as `{"ref": "event"}` references usable by
+`upload` (`files/1`). A renderer that cannot drag ignores `drag` and `drop`.
+
+**Further kinds.** Each has a built-in fallback in the terminal renderer (a text line or a plain
+list) and is restylable (§10).
+
+| Kind | Properties and events |
+|---|---|
+| `banner` | `tone`, `text`, `action` (`{label, onClick}`), `dismissible`, `onDismiss` |
+| `badge` | `tone`, `text`, `icon` |
+| `progress` | `value` (0 to 1; `null` is indeterminate), `label` |
+| `steps` | `items` (`[{label, state}]`), `current` |
+| `keyValue` | `items` (`[{label, value}]`) |
+| `emptyState` | `title`, `text`, `icon`, `action` |
+| `drawer` | As `dialog`, plus `side` (`start` or `end`) |
+| `splitter` | `orientation`, `sizes` (the user's sizes are a `layout` customization point), children |
+| `collapsible` | `title`, `open`, `onToggle`, `header` (nodes shown beside the title), children |
+| `dropZone` | `accept`, `multiple`, `onDrop` (spec 6 §18) |
+| `customize` | `point`: the editor of a customization point (spec 6 §19) |
+
+A `menu` item is `{label, icon, keys, checked, enabled, onClick, items}`; `items` nests a submenu and
+`checked` makes the item checkable. A status bar, a timeline, a diff table, a readout tile and a
+signature strip are compositions of the kinds above or host components, not kinds. `icon` names an
+entry of the theme's icon map (spec 6 §6).
+
+The document adds:
 
 - `id` on any node (§6); `readonly`, `required`, `errors` and `stale` on inputs and text;
+- `a11y` (`{"name": e, "role": "..."}`) and `testId` on any node: the accessible name and role, and a
+  stable identifier for automated tests (spec 6 §6);
 - `form`: a schema form of the forms engine (spec 2), `{"kind": "form", "model": "sample",
   "action": "Lims_CaptureConcentration", "prefill": e, "submit": "explicit"}`, whose fields are
-  addressable as elements;
+  addressable as elements, which may carry the `overrides` of spec 2 §7 and a `fields` overlay
+  (`omit`, `hidden`, `label`, `unit`, `decimals`, `widget`, `blankAs`) applied to the parsed form
+  model before the session is built (spec 6 §10);
 - `collection` and `wizard`, the forms engine's list and wizard screens;
 - `custom` (§10);
-- editable cells: a table cell is any node, and its row scope is the row's;
+- editable cells: a table cell is any node, and its row scope is the row's. A `table` may also be
+  declared from a model's list action, with its columns derived from the row type and its sorting,
+  filtering, selection and paging provided by the table engine (spec 7);
 - **adaptive layout:** `grid.columns`, `visible` and sizing accept expressions over
   `{"env": "widthClass"}`, so one document lays out for a phone-width browser, a laptop and a large
   screen.
@@ -432,9 +544,20 @@ property an expression and every event a command list. The document adds:
   rounding is acceptable), and `json` (structured data, exact values inside it as text).
 - **Containment.** A component sees its props and nothing else: no session, no bridge, no other
   element. Its only way out is its declared events, which run the document's commands.
-- **Restyling built-in kinds.** The bundle may map a built-in kind to a component with the same
-  props and events, such as `"button": "BrandButton"`, which restyles every button of the
-  application.
+- **Restyling built-in kinds.** The bundle's `restyle` map names a component for a built-in kind,
+  such as `"restyle": {"button": "BrandButton"}`; the component must have the same props and events,
+  which is checked when the server registers the bundle and again when the client loads it.
+- **Host components.** A component may instead name one the client carries, `"host": "ResultGrid"`
+  with a `version`, in place of `"qml"`. It needs no hash and no verified TLS connection, because it
+  is part of the client binary; the handshake (§12) says which ones a client has. Theme tokens
+  (`ui-theme/1`) come first, host components second, delivered components third (spec 6 §6). Because
+  a document is data that loads on any connection the client accepts, a host component's props and
+  event payloads are untrusted input, and a component with a side effect is usable only from a
+  verified connection (§13).
+- **Hover link.** A custom or host component may declare the event `pointHovered` (a key, or
+  `null`) and the prop `highlightKey`, so a chart and a table that share keys highlight each other:
+  the table's `hoveredKey` element value feeds the chart's `highlightKey`, and the chart's event
+  sets the table's `highlightKey`.
 - **Fallback.** Every component names a fallback subtree of built-in nodes. A renderer that cannot
   load the component — a terminal, a client without the right Qt version, a failed hash check —
   renders the fallback.
@@ -468,24 +591,49 @@ MORPH_REGISTER_SCREEN(screen);
   handles in place of values.
 - Registration emits the JSON once and runs the load-time validation of §3; a screen that fails is a
   failing server test, never a client surprise.
+- The builders cover every construct of the document: the lifecycle keys (`identity`, `title`,
+  `dirty`, `onMount`, `onUnmount`, `onClose`, `onBackendChange`), `refreshOn` over action types,
+  `form` with its `fields` overlay, `dataTable`, `custom` and host components, and the command
+  forms. The reference screen of spec 6 §11 is the first full use and fixes the API.
 - Inline lambdas cannot appear in a screen. A value the library cannot express is a server-computed
   field.
 
 ## 12. Delivery, versioning and discovery
 
-- **Handshake.** The client's `hello` lists the vocabularies it speaks (`ui/1`, `expr/1`,
-  `forms/1`), its Qt version and whether it loads custom components. The reply carries the
-  application's id and version and the digest of the UI bundle's manifest. A client that is missing a
-  vocabulary the bundle needs is refused at connect time with a message naming it.
-- **Catalog.** A `catalog` request returns the application's screens and its app shell, filtered
-  for the signed-in principal (§12b). A screen document is fetched by id.
-- **Content addressing.** The bundle's manifest lists every document and component by SHA-256. The
+- **Handshake.** The wire `hello` is unchanged: it is unauthorised, carries no session and names no
+  model, so it cannot carry an application's inventory. The UI service has its own envelope kinds,
+  each added to the wire kind table:
+
+  | Kind | Carries | Authorisation |
+  |---|---|---|
+  | `ui-hello` | Request: the vocabularies the client speaks (`ui/1`, `expr/1`, `forms/1`, `ui-theme/1`, `files/1`), its Qt version, whether it loads custom components, its host components, host commands and host values with versions. Reply: the application's id and version, the vocabularies it accepts, the manifest digest | An authoriser call for the pseudo-action `ui/hello`, so an application that serves a login screen before sign-in allows it for an empty principal |
+  | `ui-catalog` | The catalog and app shell for the principal | The principal's session |
+  | `ui-fetch` | A document, component or theme by hash | The session, except for entries the catalog marks `public` (a login screen) |
+  | `ui-evaluate` | An `evaluate` request (§7) | As the action it evaluates |
+  | `ui-file` | The file side channel (`files/1`) | As the mutation that references the file |
+
+  A server without the UI service answers `unknown envelope kind`; the client then reports that the
+  peer serves no UI. An old client against a new server is unchanged, since it sends none of these
+  kinds. A client that is missing a vocabulary the bundle needs is refused after `ui-hello` with a
+  message naming it. New kinds are additive and do not bump `kProtocolVersion`: a peer without the UI
+  service answers `unknown envelope kind: ui-hello`, which a client reads as "no UI service", the way
+  it reads the same reply to `hello` as a peer that predates the handshake. The kinds are added to
+  the wire document's kind table, with their authorisation rules, as part of the change.
+- **Catalog.** A `ui-catalog` request returns the application's screens and its app shell, filtered
+  for the signed-in principal (§12b). A screen document is fetched by id. Each entry carries `id`,
+  `title`, `module`, `group`, `icon`, `singleton`, `available`, `reason` and `whenDenied` (`hide` or
+  `disable`), `public`, `host` and `reuseEmpty`, so a navigator can list what an application has not built, disabled with its reason
+  (spec 6 §8). The bundle may also carry an **app document** and a **theme** (spec 6 §5–6).
+- **Content addressing.** The bundle's manifest lists every document, component, theme and message catalogue by SHA-256. The
   client verifies each file against the manifest, and the manifest against the digest from the
-  handshake, before using it. Verified files are cached by hash; an unchanged manifest fetches
+  `ui-hello` reply, before using it. The digest is only as trustworthy as the channel that carried it. Verified files are cached by hash; an unchanged manifest fetches
   nothing, and a client without a connection starts from its last verified bundle.
 - **Versions.** Within a vocabulary version, changes are additive: a client ignores an optional key it
-  does not know. A new node kind, function or command is a new vocabulary version. A server may keep
-  documents for more than one version and sends the newest the client speaks.
+  does not know, unless the key's name begins with `!` (`"!requires"`), which marks it
+  must-understand: a client that does not know it refuses the node and renders its fallback, or
+  refuses the document. A new node kind, function or command is a new vocabulary version
+  (`ui/2`, `expr/2`). A server may keep documents for more than one version and sends the newest the
+  client speaks.
 
 ## 12b. Permissions and per-user customization
 
@@ -493,11 +641,13 @@ A screen's document is the same for every user of a given vocabulary version, so
 verified by one hash, and validated and tested once. What differs between users comes from three
 places, none of which changes the document:
 
-- **Permissions.** The catalog lists a screen only when the principal may run every query the
-  screen declares at its top level, and the app shell's menu omits what the catalog omits. Within a
-  screen, `{"can": "m"}` is true when the principal may run `m`: the catalog reply carries the
-  principal's permitted action ids for the application, answered by the same `IAuthorizer` the
-  server applies to each call. A screen binds `visible` or `enabled` to it, so a verifier sees a
+- **Permissions.** By default (`whenDenied: "hide"`) the catalog lists a screen only when the
+  principal may run every query the screen declares at its top level, and the app shell's menu omits
+  what the catalog omits; an entry with `whenDenied: "disable"` is listed, disabled, with the reason
+  `denied`. Within a screen, `{"can": "m"}` is true when the principal may run `m`: the catalog reply
+  carries the principal's permitted action ids for the application, answered by the same
+  `IAuthorizer` the server applies to each call. The set is a snapshot: the client asks again after
+  `signIn` and after any reply of error kind `denied`. A screen binds `visible` or `enabled` to it, so a verifier sees a
   Verify button and a technician does not. The server still authorises every call; `can` decides
   only what is shown.
 - **Data.** What a user sees in a list or a form is what the queries return for that user.
@@ -514,10 +664,16 @@ places, none of which changes the document:
     typed setting, readable in expressions as `{"pref": "density"}`; `layout` lets the user collapse
     panels and choose the default tab of a `tabs` node; `saved` keeps named sets of `value` points,
     such as saved filters.
-  - The client stores each choice through a framework preferences model on the server, keyed by
-    principal, application, screen and point id, so a user's choices follow them to every device.
-    Choices are fetched with the screen and written as the user makes them; offline, they are kept
-    locally and written on reconnect.
+  - The app document may declare a `customize` block as well, with two more kinds: `pins` (an ordered,
+    optionally grouped list of catalog ids) and `arrange` (an ordered list of the declared children
+    of a container node, each enabled or hidden; it orders and hides, and never positions or sizes).
+  - The client stores each choice through an `IPreferencesStore` (spec 6 §8), by default a framework
+    preferences model on the server, keyed by the person the server derives from the verified
+    principal, the application, the screen (or `app`) and the point id, so a user's choices follow
+    them to every device. A key the client supplies is never trusted; an application with its own
+    storage supplies its own store, which maps the principal to the person on the server. A stored
+    value has a size bound. Choices are fetched with the screen and written as the user makes them;
+    offline, they are kept locally and written on reconnect.
   - A choice that no longer fits its point — a column the document no longer has, an option it no
     longer offers, a value of the wrong type — is ignored, so a new document version never breaks on
     an old preference.
@@ -531,8 +687,15 @@ places, none of which changes the document:
 - Documents cannot execute code: expressions are total and bounded, commands are a closed set, and
   every action they run is authorised by the server like any other call.
 - Components run in a dedicated QML engine whose context holds only their props and event sinks.
-- An `evaluate` request is authorised as the action it evaluates. A preference is readable and
-  writable only by its own principal.
+- An `evaluate` request is authorised as the action it evaluates, and is limited per principal (§7).
+  A preference is readable and writable only by its own principal, which the preferences model checks
+  against the verified session, since the authoriser sees no request body.
+- A host component runs client code with props a document chose. Props and event payloads are
+  untrusted input and a host component validates them. A component that opens files, reaches the
+  network or touches the host marks itself `safeForUntrusted: false`, and the client mounts it only
+  when the connection is verified; on any other connection its fallback renders.
+- A session token never appears in reactive state after its use, in diagnostics, in the offline
+  queue or in a journal (§5).
 
 ## 14. Tests
 
@@ -557,13 +720,34 @@ places, none of which changes the document:
   follows the principal's permitted actions.
 - **Customization:** each point kind round-trips through the preferences model; an outdated choice is
   ignored; reset restores the defaults.
+- **Hosting (spec 6 §12):** lifecycle keys, the host contract, the app document and session, the
+  design package, the workspace shell, application-scope preferences, the backend switch, the form
+  overlay and error kinds.
+- **Palette:** each further kind renders, falls back in the terminal, and is restylable; menus nest
+  and check; `tooltip`, `surface`, `keys` and `autofocus` apply; `mean` is exact.
+- **Commands:** `navigate` as a dialog returns through `onResult` or `onCancel`; `focus`; `host`
+  with a missing command; `switchBackend` for a listed and an unlisted name; `resetPrefs`;
+  `setLocale`.
 - **Authoring:** every registered screen of every example validates; builder output matches golden
   JSON.
-- **Compatibility:** an old client against a new server and the reverse, through the handshake.
+- **Compatibility:** an old client against a new server and the reverse, through the `ui-hello`
+  handshake; a server without the UI service; a `!`-prefixed key an old client does not know.
+- **Bridge seams:** a binding by type id, a raw execute and a string-keyed attach behave as their
+  typed counterparts for session, timeout, cancellation, accounting and `switchBackend`.
+- **Dispatch refresh:** `refreshOn` fires on the named action through the alias and not on another
+  action with the same reply type.
+- **Security:** a credential-bearing mutation is refused with `"offline": "queue"`; a `secret` field
+  is absent from `result`, diagnostics and the queue; a side-effecting host component renders its
+  fallback on an unverified connection.
 
 ## 15. Out of scope
 
 - **Free layout editing.** A user adjusts a screen only through its declared customization points
-  (§12b); rearranging a screen freely, such as moving dashboard panels, is not part of this design.
+  (§12b); positioning or sizing panels freely is not part of this design. Ordering and hiding the
+  children a document declares is the `arrange` point.
+- **Server push.** A document learns of a change by its own calls, by `refreshOn` over its own
+  dispatch and by polling with `refreshEvery`. A server-initiated message (pushed progress, another
+  client's change) needs a wire kind the protocol does not have; it is a candidate for `ui/2`, as a
+  `ui-event` kind negotiated by `ui-hello`.
 - **Server-side composite actions.** Committing several models in one transaction is not part of this
   design; a dialog that must commit atomically runs one server action (§5).
