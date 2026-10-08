@@ -644,8 +644,6 @@ private:
 template <>
 struct glz::meta<morph::table::Combine> {
     using enum morph::table::Combine;
-    /// @brief The names, in the order of `value`.
-    static constexpr std::array keys{"any", "all"};
-    /// @brief The enumerators.
-    static constexpr std::array value{Any, All};
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value = glz::enumerate("any", Any, "all", All);
 };

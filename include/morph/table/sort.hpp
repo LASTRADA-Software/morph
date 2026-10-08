@@ -29,8 +29,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <morph/table/data_source.hpp>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -576,8 +576,6 @@ private:
 template <>
 struct glz::meta<morph::table::SortDirection> {
     using enum morph::table::SortDirection;
-    /// @brief The names, in the order of `value`.
-    static constexpr std::array keys{"asc", "desc"};
-    /// @brief The enumerators.
-    static constexpr std::array value{Ascending, Descending};
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value = glz::enumerate("asc", Ascending, "desc", Descending);
 };

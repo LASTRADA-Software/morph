@@ -527,6 +527,14 @@ concept DeclaresWidget = requires {
     { std::remove_cvref_t<T>::widget() } noexcept -> std::convertible_to<std::string_view>;
 };
 
+/// @brief Concept: a field type that marks its schema property with a
+///        keyword of its own via a `noexcept` `static constexpr schemaMarker()`
+///        — `morph::table::TableQuery` declares `x-table` this way.
+template <typename T>
+concept DeclaresSchemaMarker = requires {
+    { std::remove_cvref_t<T>::schemaMarker() } noexcept -> std::convertible_to<std::string_view>;
+};
+
 /// @brief Concept: a field type that declares slider bounds via `noexcept`
 ///        `static constexpr min()` / `max()` / `step()` — the `Ranged` shape.
 template <typename T>
@@ -2422,6 +2430,9 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     }
     if (!widgetHint.empty()) {
         property["x-widget"] = std::string{widgetHint};
+    }
+    if constexpr (DeclaresSchemaMarker<Member>) {
+        property[std::string{Member::schemaMarker()}] = true;
     }
     if constexpr (DeclaresRangedBounds<Member>) {
         using Bound = std::remove_cvref_t<decltype(Member::min())>;

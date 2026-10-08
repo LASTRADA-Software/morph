@@ -898,7 +898,8 @@ private:
         auto finished = _alive.guard([this, job, generation] { finish(generation, job); });
         std::function<void(std::size_t, std::size_t)> report;
         if (auto progress = _options.services.progress) {
-            report = _alive.guard([progress](std::size_t done, std::size_t total) { progress->progress(done, total); });
+            report =
+                _alive.guard([progress](std::size_t done, std::size_t total) { progress->progress(done, total); });
         }
         _options.worker->post([job, stop = _jobStop.get_token(), owner, finished = std::move(finished),
                                report = std::move(report)]() mutable {

@@ -865,9 +865,8 @@ private:
 template <>
 struct glz::meta<morph::table::ColumnKind> {
     using enum morph::table::ColumnKind;
-    /// @brief The names, in the order of `value`.
-    static constexpr std::array keys{"integer", "decimal",  "quantity", "number", "text",
-                                     "date",    "dateTime", "bool",     "key",    "custom"};
-    /// @brief The enumerators.
-    static constexpr std::array value{Integer, Decimal, Quantity, Number, Text, Date, DateTime, Bool, Key, Custom};
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value =
+        glz::enumerate("integer", Integer, "decimal", Decimal, "quantity", Quantity, "number", Number, "text", Text,
+                       "date", Date, "dateTime", DateTime, "bool", Bool, "key", Key, "custom", Custom);
 };
