@@ -856,6 +856,36 @@ TEST_CASE("cancelPending on a LocalBackend that stays alive stops its running Ta
     REQUIRE(probe().order == std::vector<std::string>{"sleep-start", "sleep-cancelled"});
 }
 
+// The stopped handler settles its own call with `OperationCancelled`, from its
+// strand. With the strand inline, that settle happens inside `request_stop()`
+// itself, so this pins the order `cancelPending` must keep: the caller is
+// answered with the error it was given, never with the stop it caused.
+TEST_CASE("cancelPending answers a running Task handler's caller with its error and not with the stop",
+          "[coroutine][model][cancel]") {
+    coro_test::SchedulerScope const timers;
+    morph::testing::InlineExecutor pool;
+    morph::exec::MainThreadExecutor exec;
+    auto backend = std::make_unique<morph::backend::LocalBackend>(pool);
+    auto* local = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend), exec};
+    morph::bridge::BridgeHandler<CoroModel> handler{bridge, &exec};
+    armHold(&exec);
+
+    std::exception_ptr answered;
+    handler.execute(CoroSleep{.ms = 60'000}).then([](int) {}).onError([&](const std::exception_ptr& error) {
+        answered = error;
+    });
+    REQUIRE(pumpUntil(exec, [&] {
+        std::scoped_lock const lock{probe().mtx};
+        return !probe().order.empty();
+    }));
+
+    local->cancelPending(std::make_exception_ptr(morph::backend::DisconnectedError{}));
+    REQUIRE(pumpUntil(exec, [&] { return answered != nullptr && probe().holdFinished.load(); }));
+    CHECK(holds<morph::backend::DisconnectedError>(answered));
+    CHECK_FALSE(holds<core::async::OperationCancelled>(answered));
+}
+
 TEST_CASE("an action queued behind a suspended Task handler does not run once a backend switch failed it",
           "[coroutine][model][lifetime]") {
     coro_test::SchedulerScope const timers;

@@ -350,7 +350,11 @@ returns a `core::async::Task` on `LocalBackend`, which carries a
 | The client-side execute deadline | `ClientTimeoutError` | That call |
 
 A stopped handler suspended in a stop-aware await resumes with
-`OperationCancelled` on its model's strand. A synchronous handler has nothing
+`OperationCancelled` on its model's strand. `LocalBackend::cancelPending`
+settles every pending call before it requests any stop, because the stopped
+handler settles its own call too, from another thread: were the stop
+requested first, that `OperationCancelled` could reach the caller ahead of the
+error the verb names. A synchronous handler has nothing
 to stop and runs to completion; its result is discarded by the settled state. A
 call on a remote backend is settled locally only — the wire carries no
 cancellation. `tests/test_coroutine_model.cpp` measures the scope's
