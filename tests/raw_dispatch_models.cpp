@@ -39,6 +39,8 @@ struct RawSpawn {
 };
 
 struct RawCounter {
+    using PrimaryKey = std::int64_t;
+
     std::int64_t total = 0;
 
     // NOLINTBEGIN(readability-convert-member-functions-to-static)
@@ -100,5 +102,25 @@ SpawnSlot& spawnSlot() {
     static SpawnSlot slot;
     return slot;
 }
+
+class TypedRenameWatch {
+public:
+    TypedRenameWatch(morph::bridge::Bridge& bridge, morph::exec::IExecutor& owner, const std::string& key)
+        : handler{bridge, &owner} {
+        handler.attach(std::stoll(key));
+        handler.subscribe<std::string>([this](const std::string& /*renamed*/) { ++seen; });
+    }
+    morph::bridge::BridgeHandler<RawCounter, morph::bridge::AllowShared> handler;
+    int seen = 0;
+};
+
+std::shared_ptr<TypedRenameWatch> watchRenames(morph::bridge::Bridge& bridge, morph::exec::IExecutor& owner,
+                                               const std::string& key) {
+    return std::make_shared<TypedRenameWatch>(bridge, owner, key);
+}
+
+int renamesSeen(const TypedRenameWatch& watch) { return watch.seen; }
+
+void renameTyped(TypedRenameWatch& watch) { static_cast<void>(watch.handler.execute(RawRename{.name = "typed"})); }
 }  // namespace rawprobe
 // NOLINTEND(misc-use-internal-linkage)

@@ -1552,6 +1552,35 @@ public:
         return typed;
     }
 
+    /// @brief `executeRaw`, cancellable through @p stop.
+    ///
+    /// A stop before the call settles rejects it with
+    /// `core::async::OperationCancelled` and asks its stop source to stop; a
+    /// Task handler on a local backend sees that at its next stop-aware
+    /// `co_await`. A token already stopped rejects without dispatching.
+    /// @param binding  A binding from `bindByType`.
+    /// @param actionId The action's registered type id.
+    /// @param bodyJson The action's JSON body.
+    /// @param cbExec   Executor the `Completion` callbacks are posted on.
+    /// @param stop     The caller's cancel.
+    /// @return Completion resolving with the reply's JSON text, or rejected
+    ///         with `core::async::OperationCancelled`.
+    ::morph::async::Completion<std::string> executeRaw(const std::shared_ptr<detail::HandlerBinding>& binding,
+                                                       std::string actionId, std::string bodyJson,
+                                                       ::morph::exec::IExecutor* cbExec,
+                                                       ::core::async::StopToken stop) {
+        if (stop.stop_requested()) {
+            auto [cancelled, promise] = ::morph::async::Completion<std::string>::makeSettleable(cbExec);
+            promise.reject(std::make_exception_ptr(::core::async::OperationCancelled{}));
+            return std::move(cancelled);
+        }
+        auto completion = executeRaw(binding, std::move(actionId), std::move(bodyJson), cbExec);
+        // Never empty: every path of `executeRaw` returns a completion built
+        // on a state, a rejected one included.
+        completion.state()->linkCancel(std::move(stop));
+        return completion;
+    }
+
 private:
     template <typename, typename>
     friend class BridgeHandler;
@@ -2748,6 +2777,17 @@ public:
     /// @return Completion resolving with the reply's JSON text.
     [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string actionId, std::string bodyJson) {
         return _bridge.executeRaw(_binding, std::move(actionId), std::move(bodyJson), _cbExec);
+    }
+
+    /// @brief `execute`, cancellable through @p stop.
+    /// @param actionId The action's registered type id.
+    /// @param bodyJson The action's JSON body.
+    /// @param stop     The caller's cancel.
+    /// @return Completion resolving with the reply's JSON text, or rejected
+    ///         with `core::async::OperationCancelled`.
+    [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string actionId, std::string bodyJson,
+                                                                  ::core::async::StopToken stop) {
+        return _bridge.executeRaw(_binding, std::move(actionId), std::move(bodyJson), _cbExec, std::move(stop));
     }
 
     /// @brief Whether the handler holds a live instance now.

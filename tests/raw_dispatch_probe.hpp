@@ -22,6 +22,21 @@ struct SpawnSlot {
 
 SpawnSlot& spawnSlot();
 
+/// A typed shared handler on one instance, subscribed to `std::string`
+/// results; counts what it receives. Opaque here: the handler's type names
+/// the model.
+class TypedRenameWatch;
+
+/// Attaches a typed shared handler to the instance for @p key and subscribes it.
+std::shared_ptr<TypedRenameWatch> watchRenames(morph::bridge::Bridge& bridge, morph::exec::IExecutor& owner,
+                                               const std::string& key);
+
+/// How many `std::string` results @p watch has received.
+int renamesSeen(const TypedRenameWatch& watch);
+
+/// Dispatches a typed `Raw_Rename` through @p watch's own handler.
+void renameTyped(TypedRenameWatch& watch);
+
 struct Sleeper {
     std::atomic<int> started{0};
     std::atomic<int> cancelled{0};

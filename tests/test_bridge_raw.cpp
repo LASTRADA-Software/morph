@@ -6,6 +6,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <chrono>
+#include <core/async/Cancellation.hpp>
+#include <core/async/StopToken.hpp>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -13,6 +16,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
+#include <morph/session/session.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -70,6 +74,23 @@ std::string message(const std::exception_ptr& err) {
     }
 }
 
+// Whether @p err holds an @p E. A helper rather than CHECK_THROWS_AS over
+// std::rethrow_exception: that call is [[noreturn]], so MSVC flags the
+// macro's code after it as unreachable (C4702, an error here).
+template <typename E>
+bool holds(const std::exception_ptr& err) {
+    if (!err) {
+        return false;
+    }
+    try {
+        std::rethrow_exception(err);
+    } catch (const E&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 }  // namespace
 
 TEST_CASE("RawHandler: dispatches by id and keeps the instance's state", "[bridge][raw]") {
@@ -89,11 +110,11 @@ TEST_CASE("RawHandler: a model's refusal, an unknown action and a malformed body
 
     auto refused = await(rig, handler.execute("Raw_Fail", "{}"));
     REQUIRE(refused.error);
-    CHECK(message(refused.error).find("counter refused") != std::string::npos);
+    CHECK(message(refused.error).contains("counter refused"));
 
     auto unknown = await(rig, handler.execute("Raw_Nope", "{}"));
     REQUIRE(unknown.error);
-    CHECK(message(unknown.error).find("Raw_Counter/Raw_Nope") != std::string::npos);
+    CHECK(message(unknown.error).contains("Raw_Counter/Raw_Nope"));
 
     auto malformed = await(rig, handler.execute("Raw_Add", R"({"by":"x"})"));
     REQUIRE(malformed.error);
@@ -106,7 +127,7 @@ TEST_CASE("RawHandler: an unknown model type fails the bind and rejects the call
 
     auto reply = await(rig, handler.execute("Raw_Add", R"({"by":1})"));
     REQUIRE(reply.error);
-    CHECK(message(reply.error).find("Raw_Missing") != std::string::npos);
+    CHECK(message(reply.error).contains("Raw_Missing"));
     CHECK_FALSE(handler.isBound());
 }
 
@@ -141,7 +162,114 @@ TEST_CASE("RawHandler: one constructed inside a running action refuses an instan
 
     auto reply = await(rig, handler.execute("Raw_Spawn", R"({"key":"3"})"));
     REQUIRE(reply.error);
-    CHECK(message(reply.error).find("attach on the owner") != std::string::npos);
+    CHECK(message(reply.error).contains("attach on the owner"));
     CHECK_FALSE(slot.handler);
     slot.bridge = nullptr;
+}
+
+// Typed counterpart: test_principal.cpp / test_bridge_local.cpp session cases.
+TEST_CASE("RawHandler: the default session reaches the model", "[bridge][raw]") {
+    auto const mode = GENERATE(Mode::Local, Mode::Remote);
+    RawRig rig{mode};
+    morph::session::Context session;
+    session.requestId = "req-raw-1";
+    rig.bridge->setDefaultSession(session);
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+
+    CHECK(await(rig, handler.execute("Raw_RequestId", "{}")).value == R"("req-raw-1")");
+}
+
+// Typed counterpart: test_client_execute_deadline.cpp, "fires ClientTimeoutError when no reply arrives in time".
+TEST_CASE("RawHandler: the execute deadline rejects a call with no reply", "[bridge][raw]") {
+    rawprobe::SleeperScope const sleeping;
+    RawRig rig{Mode::Local};
+    rig.bridge->setExecuteDeadline(std::chrono::milliseconds{50});
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+
+    auto reply = await(rig, handler.execute("Raw_Sleep", R"({"ms":60000})"));
+    REQUIRE(reply.error);
+    CHECK(holds<morph::backend::ClientTimeoutError>(reply.error));
+    // The deadline asks the Task handler to stop, as for a typed call.
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [] { return rawprobe::sleeper().cancelled.load() == 1; }));
+}
+
+// Typed counterpart: test_bridge_pending_calls.cpp.
+TEST_CASE("RawHandler: pendingCalls counts a raw call until it settles", "[bridge][raw]") {
+    auto const mode = GENERATE(Mode::Local, Mode::Remote);
+    RawRig rig{mode};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+    REQUIRE(rig.bridge->pendingCalls() == 0);
+
+    auto completion = handler.execute("Raw_Add", R"({"by":1})");
+    CHECK(rig.bridge->pendingCalls() == 1);
+    auto ok = await(rig, std::move(completion));
+    CHECK(ok.value == "1");
+    CHECK(rig.bridge->pendingCalls() == 0);
+
+    auto failed = await(rig, handler.execute("Raw_Fail", "{}"));
+    CHECK(failed.error);
+    CHECK(rig.bridge->pendingCalls() == 0);
+}
+
+// Typed counterpart: test_cancellation_policy.cpp, "execute with a stop token is G2 when stopped...".
+TEST_CASE("RawHandler: a stop token cancels the call and stops its Task handler", "[bridge][raw]") {
+    rawprobe::SleeperScope const sleeping;
+    RawRig rig{Mode::Local};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+
+    core::async::StopSource stop;  // NOLINT(misc-const-correctness): request_stop() is non-const
+    Reply reply;
+    handler.execute("Raw_Sleep", R"({"ms":60000})", stop.get_token())
+        .then([&](std::string json) { reply.value = std::move(json); })
+        .onError([&](const std::exception_ptr& err) { reply.error = err; });
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [] { return rawprobe::sleeper().started.load() == 1; }));
+
+    static_cast<void>(stop.request_stop());
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [&] { return reply.settled(); }));
+    CHECK(holds<core::async::OperationCancelled>(reply.error));
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [] { return rawprobe::sleeper().cancelled.load() == 1; }));
+    CHECK(rawprobe::sleeper().finished.load() == 0);
+}
+
+TEST_CASE("RawHandler: a token already stopped rejects without dispatching", "[bridge][raw]") {
+    rawprobe::SleeperScope const sleeping;
+    RawRig rig{Mode::Local};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+    core::async::StopSource stop;  // NOLINT(misc-const-correctness)
+    static_cast<void>(stop.request_stop());
+
+    auto reply = await(rig, handler.execute("Raw_Sleep", R"({"ms":10})", stop.get_token()));
+    CHECK(holds<core::async::OperationCancelled>(reply.error));
+    CHECK(rawprobe::sleeper().started.load() == 0);
+    CHECK(rig.bridge->pendingCalls() == 0);
+}
+
+// Typed counterpart: test_cancellation_policy.cpp, "Bridge::switchBackend is G2 for the outgoing backend's calls".
+TEST_CASE("RawHandler: cancelPending on a switch settles an in-flight raw call", "[bridge][raw]") {
+    rawprobe::SleeperScope const sleeping;
+    RawRig rig{Mode::Local};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+    Reply reply;
+    handler.execute("Raw_Sleep", R"({"ms":60000})")
+        .then([&](std::string json) { reply.value = std::move(json); })
+        .onError([&](const std::exception_ptr& err) { reply.error = err; });
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [] { return rawprobe::sleeper().started.load() == 1; }));
+
+    rig.bridge->switchBackend(std::make_unique<morph::backend::LocalBackend>(rig.pool));
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [&] { return reply.settled(); }));
+    CHECK(reply.error);
+}
+
+TEST_CASE("RawHandler: a raw result is not published to typed subscribers", "[bridge][raw]") {
+    RawRig rig{Mode::Local};
+    auto watch = rawprobe::watchRenames(*rig.bridge, rig.owner, "41");
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter", BindSharing::Shared, "41"};
+
+    CHECK(await(rig, handler.execute("Raw_Rename", R"({"name":"x"})")).value == R"("renamed to x")");
+    rig.owner.runFor(std::chrono::milliseconds{20});
+    CHECK(rawprobe::renamesSeen(*watch) == 0);
+
+    // Control: a typed result on the same instance does reach the subscriber.
+    rawprobe::renameTyped(*watch);
+    REQUIRE(morph::testing::pumpOwnerUntil(rig.owner, [&] { return rawprobe::renamesSeen(*watch) == 1; }));
 }
