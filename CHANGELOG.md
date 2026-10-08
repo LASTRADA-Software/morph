@@ -183,6 +183,31 @@ API surface).
   for callers that manage bindings themselves; `Bridge::attach` refuses an
   empty key and a private binding.
 
+- **`morph::reactive`: a signal graph, view state and declarative control.** Header-only, in the
+  base `morph` target.
+  - `Signal<T>`, `Computed<T>`, `Effect` and `Scope` over a `Runtime` bound to a serial owner
+    executor: glitch-free, batched, one posted flush per change, owners' Effects before those of the
+    scopes they own, a flush deferred while a widget event runs, a bounded re-post after a throwing
+    Effect, an equality skip that looks through element types (`kEqualityUsable`,
+    `EqualityPolicy`), a `RuntimeOptions::afterFlush` hook for a frontend's redraw, and misuse
+    reported through the owner probe and then refused in every build.
+  - `Store<ViewState, Msg>` with a compile-time exhaustive update (`ExhaustiveUpdate`), and
+    `request()`.
+  - `Query` (a latest-wins async resource keyed on tracked state, with a timed refresh and a
+    debounce through `QueryOptions`), `Mutation` (a tracked command with an `Exclusive`, `Serial`,
+    `Latest` or `Parallel` concurrency mode, `successCount()`, and the queries it invalidates
+    through `InvalidationLink`s refetched in one batch) and `Subscription`, over a `BridgeHandler`
+    (whose callback executor is checked against the owner) or any `Completion`-returning fetcher;
+    `errorMessage`.
+  - `Scheduler` and `TimerHandle`, the timer seam a frontend implements on its event loop, and
+    `testing::ManualScheduler` for deterministic tests.
+
+  See `docs/spec/reactive/signals.md`, `store.md` and `control.md`.
+- **The owner test kit is installed.** `morph::testing::StepExecutor`
+  (`<morph/testing/step_executor.hpp>`) and `morph::testing::OwnerProbeRecorder`
+  (`<morph/testing/owner_probe_recorder.hpp>`) ship in the `morph` target, so a test kit built on
+  them depends on nothing outside the installed headers.
+
 - **Coroutines on `core::async`.**
   - `Completion<T>` is awaitable: `co_await std::move(completion)` yields `T`
     or rethrows, resumes on the executor the coroutine suspended on (core-cpp's

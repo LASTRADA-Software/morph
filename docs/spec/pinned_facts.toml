@@ -30,3 +30,8 @@ DISCONNECTED_ERROR_WHAT = "transport disconnected before completion resolved"
 UNAUTHORIZED_REPLY = "unauthorized"
 MODEL_NOT_FOUND_REPLY = "model not found"
 REGISTER_REQUIRES_TYPEID_REPLY = "register requires a typeId"
+
+# ── morph::reactive ─────────────────────────────────────────────────────────
+REACTIVE_MAX_EFFECT_RUNS_PER_FLUSH = 100        # morph::reactive::detail::kDefaultMaxEffectRunsPerFlush, the RuntimeOptions default; include/morph/reactive/detail/graph.hpp (docs/spec/reactive/signals.md)
+REACTIVE_MAX_THROW_REPOSTS = 3                  # morph::reactive::detail::kDefaultMaxThrowReposts, the RuntimeOptions default; include/morph/reactive/detail/graph.hpp (docs/spec/reactive/signals.md)
+REACTIVE_UNKNOWN_ERROR_TEXT = "unknown error"   # morph::reactive::errorMessage() for a non-std exception; include/morph/reactive/control.hpp (docs/spec/reactive/control.md)

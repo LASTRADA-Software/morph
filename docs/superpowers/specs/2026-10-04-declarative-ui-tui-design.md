@@ -217,9 +217,10 @@ flight.
 ## 4b. Declarative control: Query, Mutation, Subscription
 
 Header `morph/reactive/control.hpp`: reactive nodes like `Computed` — non-copyable, non-movable,
-owned by a scope, affinity-checked against the Runtime's owner. A node built over a handler checks at
-construction that the handler's callback executor is serial and runs on the Runtime's owner, by
-affinity and not by pointer identity; no callback executor means the bridge's owner.
+owned by a scope, affinity-checked against the Runtime's owner. A node built over a handler checks
+that the handler's callback executor is serial and runs on the Runtime's owner, by affinity and not
+by pointer identity: one that is not serial is reported at construction, and any other is checked by
+one task posted to it, where it runs. No callback executor means the bridge's owner.
 
 ### What this replaces
 
@@ -256,8 +257,8 @@ is model-free JSON dispatch with `A` and `R` as JSON text, through the client's 
 
 ```cpp
 template <class A, class R = morph::model::ActionTraits<A>::Result> class Mutation;
-Mutation(Runtime& rt, BridgeHandler<M, S>& handler, MutationOptions options = {});
-Mutation(Runtime& rt, std::function<Completion<R>(A)> run, MutationOptions options = {});
+Mutation(Runtime& rt, BridgeHandler<M, S>& handler, MutationOptions<A> options = {});
+Mutation(Runtime& rt, std::function<Completion<R>(A)> run, MutationOptions<A> options = {});
 ```
 
 - `run(A)` issues one call. Tracked reads: `pending()`, `error()` (cleared by the next success),
