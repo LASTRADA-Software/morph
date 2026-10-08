@@ -3,10 +3,12 @@
 #pragma once
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <core/async/Task.hpp>
 #include <core/net/EventLoop.hpp>
 #include <core/net/IListener.hpp>
+#include <core/net/NetError.hpp>
 #include <core/net/Sockets.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +30,35 @@
 #include "detail/ws_handshake.hpp"
 
 namespace morph::net {
+
+namespace detail {
+
+/// @brief Whether a failed `accept()` says the listening socket itself is
+///        unusable, so every later attempt fails the same way and retrying
+///        cannot help.
+///
+/// A socket that is no longer listening answers `EINVAL`; a closed or foreign
+/// descriptor `EBADF`/`ENOTSOCK`; a non-stream socket `EOPNOTSUPP`. core-cpp
+/// classifies these as `BadHandle` and `Unsupported`, but releases inside the
+/// supported version range still report every failed accept as `SystemError`
+/// with the `errno` in `systemCode`, so both spellings are recognised.
+/// Exhaustion (`EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`) is not in the list: it
+/// clears once descriptors or memory are freed, so it is retried.
+/// @param error The error `IListener::accept()` reported.
+/// @return `true` when the listener can never accept again.
+[[nodiscard]] inline bool acceptListenerIsDead(::core::net::NetError const& error) noexcept {
+    using ::core::net::NetErrorCode;
+    if (error.code == NetErrorCode::BadHandle || error.code == NetErrorCode::Unsupported) {
+        return true;
+    }
+    if (error.code != NetErrorCode::SystemError) {
+        return false;
+    }
+    int const code = error.systemCode;
+    return code == EINVAL || code == EBADF || code == ENOTSOCK || code == EOPNOTSUPP;
+}
+
+}  // namespace detail
 
 /// @brief Configuration for `SocketServer`.
 struct SocketServerConfig {
@@ -262,7 +293,22 @@ private:
             loop.loop().spawn(clientFlow(shared_from_this(), client));
         }
 
-        /// Accepts until the listener it was started with is closed.
+        /// Drops a listener that can no longer accept, so `port()` reads `0`
+        /// and a later `listen()` can bind again. Connections already accepted
+        /// keep running: only the listening socket is gone.
+        ///
+        /// Only the accept flow calls it, and only while its generation is
+        /// current, so `listener` is still the one it was started with: the
+        /// one place that resets it, `close()`, moves the generation first.
+        void listenerLost() {
+            note("SocketServer::listenerLost");
+            listener->close();
+            listener.reset();
+            port.store(0);
+        }
+
+        /// Accepts until the listener it was started with is closed or stops
+        /// being able to accept.
         static ::core::async::Task<void> acceptFlow(std::shared_ptr<Core> self, ::core::net::IListener* accepting,
                                                     std::uint64_t startedAt) {
             for (;;) {
@@ -272,6 +318,10 @@ private:
                 }
                 if (!next) {
                     if (next.error().code == ::core::net::NetErrorCode::Cancelled) {
+                        co_return;
+                    }
+                    if (::morph::net::detail::acceptListenerIsDead(next.error())) {
+                        self->listenerLost();
                         co_return;
                     }
                     // Out of descriptors, or another failure the next attempt

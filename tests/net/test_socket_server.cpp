@@ -217,6 +217,27 @@ int highestOpenFd(int limit) {
     return highest;
 }
 
+// The descriptor listening on 127.0.0.1:port in this process, or -1. Matches on
+// SO_ACCEPTCONN as well as the port, because every connection the server
+// accepts shares the listener's local port.
+int listeningFdFor(std::uint16_t port) {
+    for (int fd = 0; fd < 4096; ++fd) {
+        sockaddr_in addr{};
+        socklen_t len = sizeof(addr);
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): POSIX takes a sockaddr*.
+        if (::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len) != 0 || addr.sin_family != AF_INET ||
+            ntohs(addr.sin_port) != port) {
+            continue;
+        }
+        int accepting = 0;
+        socklen_t optLen = sizeof(accepting);
+        if (::getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &accepting, &optLen) == 0 && accepting != 0) {
+            return fd;
+        }
+    }
+    return -1;
+}
+
 }  // namespace
 
 TEST_CASE("SocketServer: register -> execute -> reply round trip with a raw client", "[net][socket_server]") {
@@ -1183,6 +1204,76 @@ TEST_CASE("SocketServer::close() releases the listening port", "[net][socket_ser
     morph::net::SocketServer rebound{*server, port};
     REQUIRE(rebound.listen());
     REQUIRE(rebound.port() == port);
+}
+
+TEST_CASE("acceptListenerIsDead: a failure that recurs on every accept ends the flow, any other is retried",
+          "[net][socket_server]") {
+    using ::core::net::NetErrorCode;
+    auto const dead = [](NetErrorCode code, int systemCode) {
+        return morph::net::detail::acceptListenerIsDead(::core::net::NetError{.code = code, .systemCode = systemCode});
+    };
+    // Dead: newer core-cpp's own classification, and the SystemError + errno
+    // spelling the pinned release reports for the same conditions.
+    CHECK(dead(NetErrorCode::BadHandle, EBADF));
+    CHECK(dead(NetErrorCode::Unsupported, 0));
+    for (int const errnoValue : {EINVAL, EBADF, ENOTSOCK, EOPNOTSUPP}) {
+        CAPTURE(errnoValue);
+        CHECK(dead(NetErrorCode::SystemError, errnoValue));
+    }
+    // Retried: exhaustion clears once descriptors or memory are freed.
+    for (int const errnoValue : {EMFILE, ENFILE, ENOBUFS, ENOMEM}) {
+        CAPTURE(errnoValue);
+        CHECK_FALSE(dead(NetErrorCode::SystemError, errnoValue));
+    }
+    // Retried: one peer's failure, not the listener's -- even carrying an
+    // errno that would mean a dead listener under SystemError.
+    CHECK_FALSE(dead(NetErrorCode::PermissionDenied, EINVAL));
+    CHECK_FALSE(dead(NetErrorCode::HostUnreach, 0));
+}
+
+TEST_CASE("SocketServer: a listener that stops listening ends the accept flow instead of retrying it",
+          "[net][socket_server]") {
+    // shutdown() on a listening socket leaves the descriptor open but no longer
+    // listening, so every accept() on it fails at once and for good (EINVAL).
+    // The flow must give the listener up -- port() reads 0 -- rather than
+    // re-arming its back-off forever, and the server must be able to listen
+    // again. A connection accepted before the listener died keeps working.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    std::uint16_t const port = wsServer.port();
+    REQUIRE(port != 0U);
+
+    RawWsClient survivor{port};
+    survivor.send(morph::wire::makeRegister("NetEchoModel"));
+    auto const registered = survivor.receive();
+    REQUIRE(registered.kind == "ok");
+
+    int const listeningFd = listeningFdFor(port);
+    REQUIRE(listeningFd >= 0);
+    REQUIRE(::shutdown(listeningFd, SHUT_RDWR) == 0);
+
+    REQUIRE(morph::testing::waitUntil([&wsServer] { return wsServer.port() == 0U; },
+                                      morph::testing::WaitBudget{std::chrono::seconds{5}}));
+
+    morph::wire::Envelope execReq;
+    execReq.kind = "execute";
+    execReq.callId = 1;
+    execReq.modelId = registered.modelId;
+    execReq.modelType = "NetEchoModel";
+    execReq.actionType = "NetEchoAction";
+    execReq.body = R"({"value":7})";
+    survivor.send(execReq);
+    auto const reply = survivor.receive();
+    REQUIRE(reply.kind == "ok");
+    REQUIRE(reply.body == "7");
+
+    REQUIRE(wsServer.listen());
+    REQUIRE(wsServer.port() != 0U);
+    RawWsClient fresh{wsServer.port()};
+    fresh.send(morph::wire::makeRegister("NetEchoModel"));
+    REQUIRE(fresh.receive().kind == "ok");
 }
 
 TEST_CASE("SocketServer: teardown racing a connecting client still finishes promptly", "[net][socket_server]") {
