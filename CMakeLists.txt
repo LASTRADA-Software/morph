@@ -435,6 +435,7 @@ target_sources(morph
         include/morph/util/tagged.hpp
         include/morph/forms/instance_constraints.hpp
         include/morph/table/data_source.hpp
+        include/morph/table/sort.hpp
 )
 
 # The detail/ headers that public headers include. They are not public surface

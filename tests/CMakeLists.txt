@@ -656,6 +656,7 @@ endif()
 # does not list them, and they run only when asked for by tag.
 add_executable(morph_table_tests
     table/test_table_source.cpp
+    table/test_table_sort.cpp
 )
 target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main)
 target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
