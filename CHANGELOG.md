@@ -402,6 +402,33 @@ API surface).
   handler is attached to — by any handler attached to it. Fan-out is per
   `Bridge`; there is no server-initiated push. See
   `docs/spec/core/bridge.md#subscription-semantics`.
+- **`morph::table`, the table engine** (`include/morph/table/`, header-only).
+  - `table::Engine` sorts, filters and maps a table's view over a
+    `DataSource`, with exact keys (no double unless the column is a `Number`),
+    invalid cells last in either direction, a stable multi-key sort, and the
+    filter semantics of spec 7 §6. It emits `ViewChange` list operations
+    (removed, moved, inserted, changed, or one reset) that replay the old view
+    into the new one with minimal moves.
+  - Large tables compute off the owner: on a worker executor, or in
+    frame-budgeted steps on the owner when there is none. `pending()` brackets
+    the work, and a superseded request is stopped and its result dropped.
+    Tables under 2,000 rows compute in one step.
+  - Updated rows are repaired once per owner turn without re-sorting;
+    `ReorderPolicy::Deferred` keeps an updated or edited row in place until
+    the view settles.
+  - `TableQuery`, `Page<Row>`, `validate` and `table::apply` give a
+    server-mode list action its body, reply, untrusted-input limits and
+    reference implementation; `RowsSource<Row>` adapts typed rows;
+    `PageWindow<Row>` holds a server-mode client's pages.
+  - `Selection` and `CellEdits` keep keyed selection and ordered per-row cell
+    commits.
+  - A forms schema marks a `TableQuery` member `x-table`, and
+    `morph::views` derived columns now carry `kind`, `title`,
+    `x-unitAlternatives`, `x-comparator` and `enum`, and leave out `x-hidden`
+    members.
+
+  Measured numbers are in `docs/spec/table/engine.md`. `QueryRowsSource`
+  follows with `morph::reactive`.
 
 ### Changed
 
