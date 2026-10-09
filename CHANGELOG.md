@@ -411,15 +411,21 @@ API surface).
     into the new one with minimal moves.
   - Large tables compute off the owner: on a worker executor, or in
     frame-budgeted steps on the owner when there is none. `pending()` brackets
-    the work, and a superseded request is stopped and its result dropped.
-    Tables under 2,000 rows compute in one step.
+    the work, and a superseded request is stopped and its result dropped,
+    keeping the updates and `Changed` operations it had taken. Updates wait
+    for a running job rather than stop it. A throwing collator or comparator
+    is a `ServiceFailed` error (`onError` off the call). Handlers may call
+    back in or destroy the engine, a source or `CellEdits`. Tables under
+    2,000 rows compute in one step.
   - Updated rows are repaired once per owner turn without re-sorting;
     `ReorderPolicy::Deferred` keeps an updated or edited row in place until
     the view settles.
   - `TableQuery`, `Page<Row>`, `validate` and `table::apply` give a
     server-mode list action its body, reply, untrusted-input limits and
     reference implementation; `RowsSource<Row>` adapts typed rows;
-    `PageWindow<Row>` holds a server-mode client's pages.
+    `PageWindow<Row>` holds a server-mode client's pages, ignoring replies to
+    a query `reset()` replaced and fetching the rest of a page a server cut
+    short.
   - `Selection` and `CellEdits` keep keyed selection and ordered per-row cell
     commits.
   - A forms schema marks a `TableQuery` member `x-table`, and

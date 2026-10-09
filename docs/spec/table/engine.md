@@ -171,13 +171,20 @@ Fenwick tree over gap slots, so a diff is O(n log n).
 for its lifetime. The initial view is every row in source order.
 
 - `setSort(SortChain)` and `setFilter(FilterSpec)` return `std::expected`; on an
-  error (unknown column, a filter that does not compile) the previous state
-  stays. Neither throws.
+  error (unknown column, a filter that does not compile, or `ServiceFailed`
+  when the job ran inside the call and an injected service threw) the previous
+  state stays. Neither throws. Columns are checked against the source's latest
+  columns.
+- `columns()` are the applied view's columns, what `cellAt` indexes; a column
+  past them reads an empty cell. A reset that changes the columns changes
+  `columns()` when its view is applied, and publishes one `Reset`.
 - `viewRowCount`, `sourceRowCount`, `sourceRowOf`, `viewRowOf`, `rowIdAt`,
   `viewRowOfKey`, `cellAt`, `view` read the **applied** view, which keeps
   showing while a job is pending.
 - `onViewChange` receives each `ViewChange`, after the view changed; `onPending`
-  receives `pending()` transitions.
+  receives `pending()` transitions; `onError` receives a `ServiceFailed` from a
+  job that did not run inside the call that asked for it (the sort and filter
+  then go back to those of the view shown).
 - A filter change with a sort active filters the cached sorted order of the
   full source (no re-sort). A sort change with a filter active sorts only the
   surviving rows (no cache is made). Key columns are reused across requests on
@@ -202,11 +209,25 @@ order, then diff) it runs in steps. A job never names the engine.
 | a worker executor | the worker, to completion or a stop | until the result is applied |
 | no worker | steps posted to the owner, each within `frameBudget` (8 ms) | until the result is applied |
 
-- **One job at a time.** A request while a job runs requests stop on it and
-  queues. When the job reports back on the owner (stopped or finished), its
-  result is dropped and the queued request starts from the latest state. A
-  result is applied only by the job of the current generation with nothing
-  queued.
+- **One job at a time.** A request that makes the running job's result useless
+  (a new sort, filter, column set or structural change) requests stop on it;
+  when it reports back its result is dropped and the work starts from the
+  latest state. Updated rows do not stop a job: they wait and are repaired
+  after its result is applied, so a stream of updates cannot starve the view.
+- **Pending work.** Dirty rows (changed since the key columns were built) and
+  rows owed a `Changed` are handed to a job and handed back if it is dropped
+  or fails, so a `Changed` is never lost to supersession. The cached sorted
+  order is only ever of the rows the keys were built from.
+- **Callbacks.** Any handler (`onViewChange`, `onPending`, `onError`, the
+  progress sink, the settle scheduler, a source's listener, a `CellEdits`
+  commit, a patch's notification) may call back in or destroy its caller.
+  Each object calls out last, or takes a `CallbackScope` token before the call
+  and returns if it expired. A handler that starts a job keeps `pending()`
+  true. A listener unsubscribed during a notification is not called after
+  that, even if it was registered when the notification began.
+- **Exceptions.** A collator, date parser or comparator that throws ends its
+  job (`ViewJob::failure`); the work it took is handed back and the error is
+  `ServiceFailed`.
 - **Lifetime.** Completions are posted to the owner wrapped in the engine's
   `CallbackScope` guard, so a job that outlives its engine has its result
   dropped. The destructor requests stop on the running job. The owner and
@@ -214,7 +235,8 @@ order, then diff) it runs in steps. A job never names the engine.
 - **Services on a worker.** `Services::forTask()` fills defaults and clones a
   collator or date parser whose `cloneForTask()` returns one. Comparators are
   called from the worker and must be safe to call concurrently. A
-  `ProgressSink` hears one call per job phase, on the owner.
+  `ProgressSink` hears one call per job phase on a worker, one per step with
+  no worker, on the owner.
 - **What touches what.** Owner: the engine, the source, `onViewChange`,
   `onPending`, `ProgressSink`. Worker: the job's own state, shared immutable
   snapshots and key columns, the cloned services. A repair copies the key
@@ -239,8 +261,8 @@ With no owner executor the flush runs inside the notification.
   `RowId`. A reset re-reads the columns and keeps the sort keys and filter
   entries whose columns remain; a remaining filter entry that no longer
   compiles clears the filter.
-- An update while a job runs, or a repair that was dropped, turns the next
-  request into a recompute with fresh keys.
+- A recompute while updates are pending re-keys the dirty rows on copies and
+  merges them into the cached full order before it filters.
 
 **Deferred reorder** (`ReorderPolicy::Deferred`): after a repair, every
 updated row that was in the view, and every row between `beginEdit` and
@@ -251,8 +273,12 @@ recent one releases (any update in between makes earlier timers stale), and it
 releases every held row not being edited. `endEdit` releases its row at once, and the
 update its commit patched, which reaches the engine a turn later, does not hold it again: a committed
 edit moves its row once.
+The release stands for the notifications up to `endEdit`: a view that had
+already taken in the commit's update drops it, so a later update holds the
+row as usual. Holds released while a job runs are laid out with its result.
 `settleNow()` releases without a timer. A sort or filter change, or a
-structural change, releases everything.
+structural change, releases everything when its view is applied, rows being
+edited included; the next repair holds them again.
 
 ## Server mode
 
@@ -276,18 +302,29 @@ structural change, releases everything.
 - `TableError` serialises with its code by name (`"unsupportedOperator"`), so a
   server returns it as the action's typed error.
 - `PageWindow<Row>` is the client's view of a server-mode table: `visible(first,
-  count)` returns the pages to fetch around the visible rows (one page of margin
-  each side, nothing past a known total, nothing held or in flight); `accept`
-  stores a reply and evicts the pages farthest from the visible rows beyond
-  `maxPages`; `fail` records the error the table shows until the next reply;
-  `reset` drops everything when the sort or filter changes.
+  count)` returns the `PageFetch`es (a `PageRequest` tagged with the query) to
+  send around the visible rows (one page of margin each side, nothing past a
+  known total, nothing complete or in flight); `accept(fetch, page)` stores a
+  reply and evicts the pages farthest from the visible rows beyond `maxPages`;
+  `fail(fetch, error)` records the error the table shows until the next reply;
+  `reset` drops everything and starts a new query when the sort or filter
+  changes. A reply or failure for an older query is ignored. A reply shorter
+  than asked (a server's clamped limit) leaves its page incomplete, and the
+  rest is fetched from where it ended; a known total survives a reply that
+  omits it.
 
-`RowsSource<Row>` infers kinds from member types: `bool` → `Bool`, other
-integers → `Integer`, floating point → `Number`, `Rational` → `Decimal`,
-`Quantity` → `Quantity`, `DateTime` and `Timestamp` → `DateTime`, anything else
-→ `Text` (enums by their glaze name). `std::optional` empties are empty cells.
-A `kinds` map overrides the inference by column id (an `int64` of epoch days
-is a `Date`).
+`RowsSource<Row>` has one column per key glaze writes for the row, read
+through the row's `glz::meta` when it has one (which may omit, reorder or
+compute members), and infers kinds from the value types: `bool` → `Bool`, other
+integers → `Integer` (an unsigned value above `INT64_MAX` is an invalid cell),
+floating point → `Number`, `Rational` → `Decimal`, `Quantity` → `Quantity`,
+`DateTime` and `Timestamp` → `DateTime`, a type glaze writes as one of its
+members (`Ranged`, `Choice`, `Tagged`) → that member's kind, anything else →
+`Text` (enums by their glaze name). `std::optional` empties, and anything glaze
+writes as `null`, are empty cells. A `kinds` map overrides the inference by
+column id (an `int64` of epoch days is a `Date`); a `comparators` map names a
+`Custom` column's comparator. `apply` compiles the filter with its own
+`Services::forTask()` copy.
 
 ## Selection and edits
 
@@ -316,7 +353,9 @@ after the `CellEdits` is destroyed is ignored.
   action that takes a table query from its schema.
 - `morph::views::detail::deriveColumns` emits each column's `kind` in the
   `ColumnKind` names, plus `title`, `x-unitAlternatives`, `x-comparator` and
-  `enum`, and skips `x-hidden` members
+  `enum`, and skips `x-hidden` members. A `std::optional` member, which
+  glaze writes as `anyOf` its type and `null`, derives from its type's
+  alternative
   ([../forms/views.md](../forms/views.md#column-derivation)).
 
 ## API reference
@@ -382,11 +421,14 @@ against `wire::decode` both ways.
 | A filter value that does not parse | `InvalidValue` naming the column; filter unchanged. |
 | A sort on an unknown column | `UnknownColumn`; sort unchanged. |
 | A quantity whose canonical value overflows | The cell is invalid and sorts last. |
-| A request while a job runs | The job is stopped and its result dropped; the latest request runs next. |
+| A sort, filter or structural request while a job runs | The job is stopped and its result dropped; the latest state runs next. |
+| An update while a job runs | It waits; a repair follows the job's result. |
+| An injected service throws | `ServiceFailed`; the sort and filter stay those of the view shown. |
+| A handler destroys the engine, source or `CellEdits` | The caller returns without touching itself. |
 | The engine destroyed with a job in flight | The job is stopped; its completion is a no-op. |
 | A reset that removes a sorted or filtered column | That sort key or filter entry is dropped. |
 | A server query over a bound | `LimitExceeded` (the limit itself is clamped). |
-| A commit's completion after its `CellEdits` is gone | Ignored. |
+| A commit's completion after its `CellEdits` is gone | Ignored; the destructor ended the row's engine edit. |
 
 ## Design decisions
 
@@ -405,6 +447,11 @@ against `wire::decode` both ways.
   `BENCHMARK` reports a mean and a standard deviation.
 
 ## Not here yet
+
+- With no worker, a recompute's diff is one owner step (about 30 ms for an
+  insert into 100,000 rows), and applying a `Deferred` repair lays out and
+  diffs on the owner (10 to 55 ms at 100,000 rows).
+- `RowsSource` cannot name a date column's text format.
 
 - `query_rows_source.hpp` (`QueryRowsSource`, a source over a
   `morph::reactive` query's rows, diffing a refetch by key) needs the reactive

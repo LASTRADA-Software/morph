@@ -271,7 +271,12 @@ receive it:
   `settle` interval or the row's editor commits and loses focus; then the engine emits one `moved`.
   A user editing a sorted column therefore does not see the row leave from under the cursor. A held
   row also stays visible when its update takes it out of the filter, until it is released. A sort or
-  filter change releases every held row.
+  filter change, or a structural change, releases every held row, a row being edited included; the
+  next repair holds an edited row again.
+- **Pending work.** Updated rows, and the rows owed a `changed` operation, stay pending until a
+  result that took them in is applied: a dropped or failed task hands them back. A reset that changes
+  the columns shows its columns when its view is applied, and is published as one `reset`, because
+  row operations cannot say that the columns changed.
 - `ViewChange` is computed from the old and new view order, so a renderer applies the minimum list
   operations (spec 3 §5).
 
@@ -288,15 +293,21 @@ engine does its work off the owner:
   application's thread pool, one task at a time per table. A task captures the snapshot, the key
   columns it may reuse, the compiled sort and filter, its generation and a completion gated on the
   engine's `CallbackScope`, and never the engine or a signal, so a task that outlives its table only
-  has its result dropped. A request while a task runs stops the task and queues; the queued request
-  starts from the latest state when the stopped task reports back. A dropped repair (below) leaves the
-  key cache stale for its rows, so the next request rebuilds the keys it needs.
+  has its result dropped. A request that makes the running task's result useless (a new sort, filter,
+  or structural change) stops the task, and the work starts from the latest state when it reports
+  back. Updated rows do not stop a task: they wait for its result and are repaired after it, so a
+  stream of updates cannot keep a task from ever finishing.
 - **Stop.** Stopping is cooperative: the task checks the `StopToken` between chunks of the key build
   and inside a chunked merge sort, so a superseded task usually stops early and may run to
   completion, its result then dropped by generation.
 - **Services.** Collator and date parser calls happen on the worker: a service is thread-safe, or the
   engine clones one per task. `ProgressSink` notifications, one per task phase, are posted to the
-  owner.
+  owner (with no worker, one per owner step). A service that throws ends its task: the sort and filter
+  go back to those of the view shown, and the error is `serviceFailed`, returned from the call when
+  the task ran inside it and reported through the engine's error handler otherwise.
+- **Callbacks.** Every handler the engine, a source or the cell-edit committer calls may call back in
+  or destroy its caller. Each object calls out last, or checks a liveness token after the call and
+  returns if it is gone. A listener unsubscribed during a notification is not called after that.
 - **Result.** A view mapping and its `ViewChange` are posted to the owner and applied there. `pending`
   is true from the request until then, and the previous view stays visible meanwhile (like a `Query`'s
   last value, spec 1 §4b). The engine never writes a signal from the worker.
@@ -537,5 +548,9 @@ same scenario names.
 - **Collation differs between clients.** The sort key comes from the renderer's collator; a client
   and a server in server mode may order accented text differently. Server mode therefore uses the
   server's collator for the order it returns, and the client does not re-sort a page (§9).
+- **Known limits.** With no worker, the diff of a recompute is one owner step: an insert into a
+  100,000-row table blocks the owner for about 30 ms. Applying a `deferred` repair lays held rows out
+  and diffs on the owner, O(n log n): 10 to 55 ms at 100,000 rows. A typed row's date column cannot
+  name a text format (`RowsSource` takes kinds and comparator names only).
 - **Measured on one machine.** The figures in §15 come from one desktop CPU; a browser build without
   threads, or a slower client, is measured on its own before its `client` mode cap is set (§8).
