@@ -9,6 +9,7 @@
 //    kind, title and metadata" fails (nine columns, not eight).
 //  - inferColumnKind swapping quantity and decimal: the same test fails.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
@@ -96,13 +97,11 @@ TEST_CASE("table: derived columns carry kind, title and metadata", "[table][colu
     REQUIRE(list.size() == 8);  // `secret` is x-hidden
 
     auto const column = [&](std::string const& field) -> glz::generic const& {
-        for (auto const& entry : list) {
-            if (entry["field"].get_string() == field) {
-                return entry;
-            }
-        }
-        FAIL("no column " << field);
-        return list.front();
+        auto const found =
+            std::ranges::find_if(list, [&](auto const& entry) { return entry["field"].get_string() == field; });
+        INFO("column " << field);
+        REQUIRE(found != list.end());
+        return *found;
     };
     CHECK(column("id")["kind"].get_string() == "integer");
     CHECK(column("analysis")["kind"].get_string() == "text");

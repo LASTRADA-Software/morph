@@ -235,8 +235,8 @@ TEST_CASE("table: a stop request ends a merge sort early, and a later run finish
     std::ranges::iota(rows, 0U);
     ChunkedMergeSort sort{rows, RowOrder{{{.keys = &keys, .dir = kAsc}}}};
 
-    ::core::async::StopSource const stopSource;
-    stopSource.request_stop();
+    ::core::async::StopSource stopSource;  // NOLINT(misc-const-correctness): request_stop() is non-const
+    static_cast<void>(stopSource.request_stop());
     CHECK_FALSE(sort.run(kNoDeadline, stopSource.get_token()));
     CHECK_FALSE(sort.done());
     CHECK(sort.run(kNoDeadline, ::core::async::StopToken{}));

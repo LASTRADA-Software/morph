@@ -80,7 +80,7 @@ TEST_CASE("table: a thousand updates in one turn repair once, without a sort", "
     CHECK(viewKeys(engine) == viewKeys(reference));
 }
 
-TEST_CASE("table: an updated row that moves is one move and one change", "[table][changes]") {
+TEST_CASE("table: the engine reports an updated row that moves as one move and one change", "[table][changes]") {
     morph::exec::MainThreadExecutor owner;
     auto const source = tabletest::column(ColumnKind::Integer,
                                           {std::int64_t{10}, std::int64_t{20}, std::int64_t{30}, std::int64_t{40}});

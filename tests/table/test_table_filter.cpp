@@ -34,7 +34,7 @@ struct Filtered {
     Services services;
 
     // The rows that pass `spec`, in source order; an error when it does not compile.
-    std::expected<Rows, TableError> by(FilterSpec const& spec) const {
+    [[nodiscard]] std::expected<Rows, TableError> by(FilterSpec const& spec) const {
         auto const compiled = compileFilter(spec, source->columns(), services);
         if (!compiled) {
             return std::unexpected(compiled.error());

@@ -109,6 +109,8 @@ FLOORS = {
     "include/morph/qt": (97.0, 100.00),
     "include/morph/render": (97.0, 100.00),
     "include/morph/session": (95.0, 98.61),
+    # Measured in the CI coverage leg (1250 branch arms) when the table engine landed.
+    "include/morph/table": (84.0, 87.28),
     "include/morph/util": (93.0, 96.39),
 }
 
