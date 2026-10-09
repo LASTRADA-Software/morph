@@ -19,5 +19,6 @@ var searchData=
   ['tokenverifier_16',['TokenVerifier',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#aa635acbcb8543b3ed5d5475dc47355ad',1,'morph::session::TokenVerifier']]],
   ['tostring_17',['toString',['../d9/db8/quantity_8hpp.html#a22d27c318fd909bab2e0562e48e2bf14',1,'morph::units']]],
   ['trackedpendingcount_18',['trackedPendingCount',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a3f7a8adfb34735899ff6a1f195363564',1,'morph::backend::LocalBackend']]],
-  ['trunc_19',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]]
+  ['trunc_19',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]],
+  ['typeid_20',['typeId',['../d8/d3a/classmorph_1_1bridge_1_1RawHandler.html#a161ebd09b83a7cf848e25392e365b32f',1,'morph::bridge::RawHandler']]]
 ];

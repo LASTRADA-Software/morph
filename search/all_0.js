@@ -70,7 +70,7 @@ var searchData=
   ['atdeclaredprecision_67',['atDeclaredPrecision',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a71c5b40c2b3ee9b1dea894405b837ff6',1,'morph::units::Quantity']]],
   ['atleastoneof_68',['AtLeastOneOf',['../de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html',1,'morph::forms']]],
   ['atleastoneof_69',['atLeastOneOf',['../d4/d11/forms_8hpp.html#a12e5ed5f38f22a7940d4230b76c30f51',1,'morph::forms']]],
-  ['attach_70',['attach',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a421fba9e2f183185c0f05f8b43c66d78',1,'morph::bridge::BridgeHandler']]],
+  ['attach_70',['attach',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a8fa4a8017c2d9204a0eb6c1c3555052b',1,'morph::bridge::Bridge::attach()'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a421fba9e2f183185c0f05f8b43c66d78',1,'morph::bridge::BridgeHandler::attach()'],['../d8/d3a/classmorph_1_1bridge_1_1RawHandler.html#af55f2cc230ced738b90d0f9eace1f3d0',1,'morph::bridge::RawHandler::attach()']]],
   ['attachhandler_71',['attachHandler',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aa1760de87cd33a1a1559c7a72b213efd',1,'morph::bridge::Bridge']]],
   ['attempts_72',['Attempts',['../d5/da0/classmorph_1_1offline_1_1Attempts.html',1,'morph::offline::Attempts'],['../d5/da0/classmorph_1_1offline_1_1Attempts.html#a5a2d607100fec5d9ad24f5692ddc74fb',1,'morph::offline::Attempts::Attempts() noexcept=default'],['../d5/da0/classmorph_1_1offline_1_1Attempts.html#a509c605665813050822dca28ee0545a8',1,'morph::offline::Attempts::Attempts(Count count) noexcept']]],
   ['attempts_73',['attempts',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f',1,'morph::offline::QueueItem']]],

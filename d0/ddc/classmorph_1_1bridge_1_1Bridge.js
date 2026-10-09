@@ -7,6 +7,7 @@ var classmorph_1_1bridge_1_1Bridge =
     [ "registerHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a4075023106e7be2251049ca4be569410", null ],
     [ "registerHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7c18a6f7785c958a7d2e3ea2df97c107", null ],
     [ "registerSharedHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a3bf4ad2334d1085e4db591164770f2c6", null ],
+    [ "attach", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a8fa4a8017c2d9204a0eb6c1c3555052b", null ],
     [ "attachHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aa1760de87cd33a1a1559c7a72b213efd", null ],
     [ "assignHandlerPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a22e009f482dd20475ab4baa1e7a1cb3f", null ],
     [ "bindingPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a783a5885f3041a222751ef842ef0118e", null ],
@@ -27,5 +28,9 @@ var classmorph_1_1bridge_1_1Bridge =
     [ "deregisterHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a73ac9d12273ad9a5fbf34f999f796b8c", null ],
     [ "executeVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a3e4ee91931517750f483a3bd0a6a0b1f", null ],
     [ "executeAttachedVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a130636713844cd8e33f15e668d3696bc", null ],
-    [ "executeCreatingVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aceae04f5b2096e2535b6279afba5a586", null ]
+    [ "executeCreatingVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aceae04f5b2096e2535b6279afba5a586", null ],
+    [ "bindByType", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a25e9a30690f6d5cbbbe78c216355c3e5", null ],
+    [ "executeRaw", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a98b8ef145e90f38adfa9a72ff30df0a5", null ],
+    [ "executeRaw", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a44a2776f2c039ae6bbcb8693697468d7", null ],
+    [ "executeRawOn", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7316cf1ab945cb2ecf680d06964126f3", null ]
 ];

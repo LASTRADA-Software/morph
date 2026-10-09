@@ -34,7 +34,8 @@ var annotated_dup =
         [ "Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html", "d0/ddc/classmorph_1_1bridge_1_1Bridge" ],
         [ "NoSharing", "d8/d38/structmorph_1_1bridge_1_1NoSharing.html", null ],
         [ "AllowShared", "dd/dfb/structmorph_1_1bridge_1_1AllowShared.html", null ],
-        [ "BridgeHandler", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler" ]
+        [ "BridgeHandler", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler" ],
+        [ "RawHandler", "d8/d3a/classmorph_1_1bridge_1_1RawHandler.html", "d8/d3a/classmorph_1_1bridge_1_1RawHandler" ]
       ] ],
       [ "core", null, [
         [ "FileIoOps", "db/d00/structmorph_1_1core_1_1FileIoOps.html", "db/d00/structmorph_1_1core_1_1FileIoOps" ]

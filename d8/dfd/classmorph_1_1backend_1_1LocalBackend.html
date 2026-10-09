@@ -174,7 +174,7 @@ Public Member Functions</h2></td></tr>
 <p>Each model instance gets its own strand so actions are serialised per-model without a global lock on the pool.</p>
 <p>Its registry, its pending list and its record of Task runs belong to the caller's owner — the <span class="tt">Bridge</span>'s, given through <span class="tt"><a class="el" href="#ae028acf47eb830db4de5d66733007efd" title="Records the owner every verb below is called from.">setOwner</a></span> — and are touched only there, without a lock. Only the strand tasks it posts run elsewhere, and they reach nothing of the backend but what each carries. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01031">1031</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01033">1033</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a1bbaff0063b89c293f427e07da9f1424" name="a1bbaff0063b89c293f427e07da9f1424"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1bbaff0063b89c293f427e07da9f1424">&#9670;&#160;</a></span>LocalBackend()</h2>
@@ -208,7 +208,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01041">1041</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01043">1043</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,7 +245,7 @@ Public Member Functions</h2></td></tr>
 </ol>
 <p>Must not run on one of this backend's strand threads, whose drain it would wait for; a debug build asserts that. The single-threaded WebAssembly build seals, stops the handlers, then closes: sealed first, each stopped handler unwinds inline in the stop, and the drains wait for nothing, since nothing else could run the strands. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01076">1076</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01078">1078</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -286,7 +286,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Newly assigned <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01104">1104</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01106">1106</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,7 +327,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A settled <span class="tt">Completion</span> carrying the bound id or the failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01126">1126</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01128">1128</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -362,7 +362,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01141">1141</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01143">1143</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -408,7 +408,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01148">1148</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01150">1150</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -444,7 +444,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Canonical key strings of the live shared instances, in unspecified order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01163">1163</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01165">1165</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -479,7 +479,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01175">1175</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01177">1177</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -514,7 +514,7 @@ Public Member Functions</h2></td></tr>
 </ul>
 <p>A <span class="tt">shared_ptr</span> copy of each holder is captured into the posted task so a concurrent <span class="tt"><a class="el" href="#a9a539d67d97dbb987f5a644d2c6073d5" title="Removes the model with mid, or releases one attachment to it.">deregisterModel</a></span> cannot free the model out from under its pending notification (mirrors <span class="tt"><a class="el" href="#a47ad27212764e887546947dafef832d2" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute</a></span>'s holder capture). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01209">1209</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01211">1211</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -564,7 +564,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that will carry the result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01244">1244</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01246">1246</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -616,7 +616,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01263">1263</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01265">1265</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -651,7 +651,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01352">1352</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01354">1354</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -681,7 +681,7 @@ Public Member Functions</h2></td></tr>
 <p>Number of entries currently held in the pending list. </p>
 <p><b>Not</b> the number of calls in flight: the list is compacted amortised (see <span class="tt">trackPending</span>), so it also carries entries whose completion has already been destroyed and which <span class="tt"><a class="el" href="#a8cd0f4114df7c7f9ff9b224bdba3f5e4" title="Resolves every still-pending completion this backend produced with exc, and requests stop on every Ta...">cancelPending</a></span> would skip. It is an upper bound on the in-flight count and a direct measure of what the compaction policy costs in memory — which is what it exists to make observable. For a count of in-flight <em>calls</em>, use <span class="tt">Bridge::pendingCalls()</span>. </p><dl class="section return"><dt>Returns</dt><dd>Size of the pending list, live and dead entries alike. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01389">1389</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l01391">1391</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

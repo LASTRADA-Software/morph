@@ -152,9 +152,11 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a3bf4ad2334d1085e4db591164770f2c6" id="r_a3bf4ad2334d1085e4db591164770f2c6"><td class="memTemplParams" colspan="2">template&lt;typename Model&gt; </td></tr>
 <tr class="memitem:a3bf4ad2334d1085e4db591164770f2c6 template"><td class="memItemLeft">std::shared_ptr&lt; detail::HandlerBinding &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3bf4ad2334d1085e4db591164770f2c6">registerSharedHandler</a> ()</td></tr>
 <tr class="memdesc:a3bf4ad2334d1085e4db591164770f2c6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates a shared, initially <b>unattached</b> binding for <span class="tt">Model</span>.  <br /></td></tr>
+<tr class="memitem:a8fa4a8017c2d9204a0eb6c1c3555052b" id="r_a8fa4a8017c2d9204a0eb6c1c3555052b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8fa4a8017c2d9204a0eb6c1c3555052b">attach</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding, std::string primary)</td></tr>
+<tr class="memdesc:a8fa4a8017c2d9204a0eb6c1c3555052b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Attaches (or re-points) a shared <code class="param">binding</code> to the instance for <code class="param">primary</code>, creating it if no live instance holds the key.  <br /></td></tr>
 <tr class="memitem:aa1760de87cd33a1a1559c7a72b213efd" id="r_aa1760de87cd33a1a1559c7a72b213efd"><td class="memTemplParams" colspan="2">template&lt;typename Model&gt; </td></tr>
 <tr class="memitem:aa1760de87cd33a1a1559c7a72b213efd template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa1760de87cd33a1a1559c7a72b213efd">attachHandler</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding, std::string primary)</td></tr>
-<tr class="memdesc:aa1760de87cd33a1a1559c7a72b213efd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Attaches (or re-points) <code class="param">binding</code> to the shared instance for <code class="param">primary</code>.  <br /></td></tr>
+<tr class="memdesc:aa1760de87cd33a1a1559c7a72b213efd"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#a8fa4a8017c2d9204a0eb6c1c3555052b" title="Attaches (or re-points) a shared binding to the instance for primary, creating it if no live instance...">attach</a></span> for a typed caller.  <br /></td></tr>
 <tr class="memitem:a22e009f482dd20475ab4baa1e7a1cb3f" id="r_a22e009f482dd20475ab4baa1e7a1cb3f"><td class="memTemplParams" colspan="2">template&lt;typename Model&gt; </td></tr>
 <tr class="memitem:a22e009f482dd20475ab4baa1e7a1cb3f template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a22e009f482dd20475ab4baa1e7a1cb3f">assignHandlerPrimary</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding, std::string primary)</td></tr>
 <tr class="memdesc:a22e009f482dd20475ab4baa1e7a1cb3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Files <code class="param">binding's</code> current instance under <code class="param">primary</code>, in place.  <br /></td></tr>
@@ -184,7 +186,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a6316aa3aa3f91f1e09449f42e68ca0ac" id="r_a6316aa3aa3f91f1e09449f42e68ca0ac"><td class="memItemLeft"><a class="el" href="../../d0/d26/structmorph_1_1session_1_1Principal.html">::morph::session::Principal</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6316aa3aa3f91f1e09449f42e68ca0ac">currentPrincipal</a> () const</td></tr>
 <tr class="memdesc:a6316aa3aa3f91f1e09449f42e68ca0ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy of the currently installed <span class="tt">Principal</span>.  <br /></td></tr>
 <tr class="memitem:ad3991ee9236705247dc7164611b2ee0e" id="r_ad3991ee9236705247dc7164611b2ee0e"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ad3991ee9236705247dc7164611b2ee0e">pendingCalls</a> () const noexcept</td></tr>
-<tr class="memdesc:ad3991ee9236705247dc7164611b2ee0e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of actions made through <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> that have not yet resolved.  <br /></td></tr>
+<tr class="memdesc:ad3991ee9236705247dc7164611b2ee0e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of calls made through the bridge — typed (<span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> and its keyed variants) or raw (<span class="tt"><a class="el" href="#a98b8ef145e90f38adfa9a72ff30df0a5" title="Dispatches the action registered as actionId with a JSON body through binding, and resolves with the ...">executeRaw()</a></span>, <span class="tt"><a class="el" href="#a7316cf1ab945cb2ecf680d06964126f3" title="executeRaw on the instance for instanceKey: attaches the shared binding to it first when it holds ano...">executeRawOn()</a></span>) — that have not yet resolved.  <br /></td></tr>
 <tr class="memitem:a743d9a146b92a58adfd4f993a655a3db" id="r_a743d9a146b92a58adfd4f993a655a3db"><td class="memTemplParams" colspan="2">template&lt;typename Backend&gt; <br />
 requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</td></tr>
 <tr class="memitem:a743d9a146b92a58adfd4f993a655a3db template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db">switchBackend</a> (std::unique_ptr&lt; Backend &gt; newBackend)</td></tr>
@@ -202,6 +204,14 @@ requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</t
 <tr class="memitem:aceae04f5b2096e2535b6279afba5a586" id="r_aceae04f5b2096e2535b6279afba5a586"><td class="memTemplParams" colspan="2">template&lt;typename Model, typename Action&gt; </td></tr>
 <tr class="memitem:aceae04f5b2096e2535b6279afba5a586 template"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aceae04f5b2096e2535b6279afba5a586">executeCreatingVia</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding, Action action, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
 <tr class="memdesc:aceae04f5b2096e2535b6279afba5a586"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches a result-keyed <code class="param">action</code> on a shared <code class="param">binding</code>, giving it an anonymous instance first if it has none, and promoting that instance under the key its result carries.  <br /></td></tr>
+<tr class="memitem:a25e9a30690f6d5cbbbe78c216355c3e5" id="r_a25e9a30690f6d5cbbbe78c216355c3e5"><td class="memItemLeft">std::shared_ptr&lt; detail::HandlerBinding &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a25e9a30690f6d5cbbbe78c216355c3e5">bindByType</a> (std::string typeId, BindSharing sharing, std::string instanceKey={})</td></tr>
+<tr class="memdesc:a25e9a30690f6d5cbbbe78c216355c3e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Binds the model registered as <code class="param">typeId</code>, for a caller compiled without the model's type.  <br /></td></tr>
+<tr class="memitem:a98b8ef145e90f38adfa9a72ff30df0a5" id="r_a98b8ef145e90f38adfa9a72ff30df0a5"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a98b8ef145e90f38adfa9a72ff30df0a5">executeRaw</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding, std::string actionId, std::string bodyJson, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
+<tr class="memdesc:a98b8ef145e90f38adfa9a72ff30df0a5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches the action registered as <code class="param">actionId</code> with a JSON body through <code class="param">binding</code>, and resolves with the JSON reply.  <br /></td></tr>
+<tr class="memitem:a44a2776f2c039ae6bbcb8693697468d7" id="r_a44a2776f2c039ae6bbcb8693697468d7"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a44a2776f2c039ae6bbcb8693697468d7">executeRaw</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding, std::string actionId, std::string bodyJson, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec, ::core::async::StopToken stop)</td></tr>
+<tr class="memdesc:a44a2776f2c039ae6bbcb8693697468d7"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#a98b8ef145e90f38adfa9a72ff30df0a5" title="Dispatches the action registered as actionId with a JSON body through binding, and resolves with the ...">executeRaw</a></span>, cancellable through <code class="param">stop</code>.  <br /></td></tr>
+<tr class="memitem:a7316cf1ab945cb2ecf680d06964126f3" id="r_a7316cf1ab945cb2ecf680d06964126f3"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7316cf1ab945cb2ecf680d06964126f3">executeRawOn</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding, std::string instanceKey, std::string actionId, std::string bodyJson, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
+<tr class="memdesc:a7316cf1ab945cb2ecf680d06964126f3"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#a98b8ef145e90f38adfa9a72ff30df0a5" title="Dispatches the action registered as actionId with a JSON body through binding, and resolves with the ...">executeRaw</a></span> on the instance for <code class="param">instanceKey:</code> attaches the shared <code class="param">binding</code> to it first when it holds another or none.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
@@ -211,10 +221,10 @@ Static Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Central dispatcher that routes typed actions to an <span class="tt">IBackend</span>. </p>
 <p><span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> owns exactly one active backend at a time. It tracks all registered <span class="tt">HandlerBinding</span> instances and re-registers them when <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Replaces the active backend with newBackend.">switchBackend()</a></span> is called or the backend reconnects, enabling seamless local ↔ remote transitions.</p>
-<dl class="section user"><dt>One owner</dt><dd>A <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>, its handlers and its backend belong to the executor given at construction. Every member function is called there — inside a task of the owner, or on the thread that constructed the bridge outside the owner's tasks (a GUI owner's own thread) — and every field is touched only there, so nothing here takes a lock. A call from anywhere else is a contract violation, asserted in a debug build. What reaches the bridge from other threads arrives as a task on the owner: bind and promote replies (the owner is the executor <span class="tt">bindModel</span>/<span class="tt">promoteModel</span> deliver on), reconnects (the executor the reconnect handler is posted to), and the bridge-side work an action's result triggers. <span class="tt"><a class="el" href="#ad3991ee9236705247dc7164611b2ee0e" title="Returns the number of actions made through executeVia() that have not yet resolved.">pendingCalls()</a></span>, <span class="tt"><a class="el" href="#aa13d46f5383cf39280ce85eae7c6a0c3" title="Whether binding currently has a live ModelId.">isBound()</a></span> and <span class="tt"><a class="el" href="#adf85d1d8abbe32df6c02ce186dfbbecd" title="Whether any subscription is currently registered on this bridge.">hasSubscribers()</a></span> read atomics and may be asked from any thread. See <span class="tt">docs/spec/core/bridge.md</span>, "Thread safety — one owner".</dd></dl>
+<dl class="section user"><dt>One owner</dt><dd>A <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>, its handlers and its backend belong to the executor given at construction. Every member function is called there — inside a task of the owner, or on the thread that constructed the bridge outside the owner's tasks (a GUI owner's own thread) — and every field is touched only there, so nothing here takes a lock. A call from anywhere else is a contract violation, asserted in a debug build. What reaches the bridge from other threads arrives as a task on the owner: bind and promote replies (the owner is the executor <span class="tt">bindModel</span>/<span class="tt">promoteModel</span> deliver on), reconnects (the executor the reconnect handler is posted to), and the bridge-side work an action's result triggers. <span class="tt"><a class="el" href="#ad3991ee9236705247dc7164611b2ee0e" title="Returns the number of calls made through the bridge — typed (executeVia() and its keyed variants) or ...">pendingCalls()</a></span>, <span class="tt"><a class="el" href="#aa13d46f5383cf39280ce85eae7c6a0c3" title="Whether binding currently has a live ModelId.">isBound()</a></span> and <span class="tt"><a class="el" href="#adf85d1d8abbe32df6c02ce186dfbbecd" title="Whether any subscription is currently registered on this bridge.">hasSubscribers()</a></span> read atomics and may be asked from any thread. See <span class="tt">docs/spec/core/bridge.md</span>, "Thread safety — one owner".</dd></dl>
 <dl class="section user"><dt>The bind rule</dt><dd>The bind is a <span class="tt">Completion</span> delivered on the owner; a backend that can settles it before returning, and that outcome is applied at once. <span class="tt">execute</span> dispatches immediately when the binding's <span class="tt">currentId</span> is set and no bind is in flight, and is otherwise held by the binding and dispatched when the bind settles. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00701">701</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00739">739</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aa2702f61353012e04fd5f4ec2ab3cfb2" name="aa2702f61353012e04fd5f4ec2ab3cfb2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa2702f61353012e04fd5f4ec2ab3cfb2">&#9670;&#160;</a></span>Bridge()</h2>
@@ -253,7 +263,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00716">716</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00754">754</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -283,7 +293,7 @@ Static Public Member Functions</h2></td></tr>
 <p>Clears the backend's reconnect handler, rejects every call still waiting for a bind with <span class="tt">BridgeDestroyedError</span>, and cancels the backend's pending calls with the same error. </p>
 <p>On the owner. A reply or reconnect still queued there finds the bridge's token expired and touches nothing; a bind reply for a binding the bridge no longer tracks releases its instance on the backend that issued it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00734">734</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00772">772</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -314,7 +324,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The executor this bridge belongs to. </p>
 <dl class="section return"><dt>Returns</dt><dd>The owner given at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00763">763</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00801">801</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -344,7 +354,7 @@ Static Public Member Functions</h2></td></tr>
 <p>Whether the calling thread is on this bridge's owner. </p>
 <dl class="section return"><dt>Returns</dt><dd>True inside one of the owner's tasks, or on the thread that constructed the bridge outside them. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00768">768</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00806">806</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -382,7 +392,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the new binding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00777">777</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00815">815</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -417,7 +427,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00791">791</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00829">829</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -447,7 +457,7 @@ template&lt;typename Model&gt; </div>
 </div><div class="memdoc">
 
 <p>Creates a shared, initially <b>unattached</b> binding for <span class="tt">Model</span>. </p>
-<p>Registers nothing on the backend: a shared handler has no instance until a keyed action or an explicit <span class="tt">attach</span> names one. The binding is tracked from the start so <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Replaces the active backend with newBackend.">switchBackend()</a></span> knows about it.</p>
+<p>Registers nothing on the backend: a shared handler has no instance until a keyed action or an explicit <span class="tt"><a class="el" href="#a8fa4a8017c2d9204a0eb6c1c3555052b" title="Attaches (or re-points) a shared binding to the instance for primary, creating it if no live instance...">attach</a></span> names one. The binding is tracked from the start so <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Replaces the active backend with newBackend.">switchBackend()</a></span> knows about it.</p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Model</td><td>Concrete model type. Must have a registered <span class="tt">ModelTraits</span>. </td></tr>
@@ -456,7 +466,57 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the new, unattached binding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00813">813</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00851">851</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8fa4a8017c2d9204a0eb6c1c3555052b" name="a8fa4a8017c2d9204a0eb6c1c3555052b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8fa4a8017c2d9204a0eb6c1c3555052b">&#9670;&#160;</a></span>attach()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::bridge::Bridge::attach </td>
+          <td>(</td>
+          <td class="paramtype">const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>binding</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>primary</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Attaches (or re-points) a shared <code class="param">binding</code> to the instance for <code class="param">primary</code>, creating it if no live instance holds the key. </p>
+<p>Idempotent: attaching to the primary a binding already holds is a no-op. A different primary re-points the binding — the previous instance is released and survives only if another handler still holds it. The binding's <span class="tt">contextKey</span> is set to <code class="param">primary</code> as well, so a keyed model's journal entries carry the entity key.</p>
+<p>Issued after any bind already in flight for <code class="param">binding</code>, and never waits: a call made through the binding meanwhile is held until it settles. A refused attach is logged and leaves the binding on the instance it held; a call held behind it is rejected with its error only when the binding has no instance to fall back to.</p>
+<p>Needs no model type, so a binding from <span class="tt"><a class="el" href="#a25e9a30690f6d5cbbbe78c216355c3e5" title="Binds the model registered as typeId, for a caller compiled without the model&#39;s type.">bindByType</a></span> attaches through it as a typed one does. The key is matched exactly, so it must be the canonical encoding <span class="tt">keyToString</span> gives the model's key type: another spelling of the same key names a different instance.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">binding</td><td>Shared binding, from <span class="tt"><a class="el" href="#a3bf4ad2334d1085e4db591164770f2c6" title="Creates a shared, initially unattached binding for Model.">registerSharedHandler</a>&lt;Model&gt;()</span> or <span class="tt"><a class="el" href="#a25e9a30690f6d5cbbbe78c216355c3e5" title="Binds the model registered as typeId, for a caller compiled without the model&#39;s type.">bindByType</a></span>. </td></tr>
+    <tr><td class="paramname">primary</td><td>Canonical string encoding of the primary key to attach to. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::invalid_argument</td><td>for an empty <code class="param">primary:</code> the bridge reads an empty primary as "never attached". </td></tr>
+    <tr><td class="paramname">std::logic_error</td><td>for a private <code class="param">binding</code>, whose instance is re-created private by every re-bind. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00885">885</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -489,9 +549,7 @@ template&lt;typename Model&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Attaches (or re-points) <code class="param">binding</code> to the shared instance for <code class="param">primary</code>. </p>
-<p>Idempotent: attaching to the primary a binding already holds is a no-op. A different primary re-points the binding — the previous instance is released and survives only if another handler still holds it. The binding's <span class="tt">contextKey</span> is set to <code class="param">primary</code> as well, so a keyed model's journal entries carry the entity key.</p>
-<p>Issued after any bind already in flight for <code class="param">binding</code>, and never waits: a call made through the binding meanwhile is held until it settles. A refused attach is logged and leaves the binding on the instance it held; a call held behind it is rejected with its error only when the binding has no instance to fall back to.</p>
+<p><span class="tt"><a class="el" href="#a8fa4a8017c2d9204a0eb6c1c3555052b" title="Attaches (or re-points) a shared binding to the instance for primary, creating it if no live instance...">attach</a></span> for a typed caller. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Model</td><td>Concrete model type. </td></tr>
@@ -506,7 +564,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00838">838</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00900">900</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -556,7 +614,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00871">871</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00943">943</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -592,7 +650,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Canonical key string, or an empty string when unattached. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00905">905</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00977">977</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -628,7 +686,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <span class="tt">currentId != 0</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00917">917</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00989">989</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -672,7 +730,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with the canonical key strings, in unspecified order, or rejected with the backend's failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00928">928</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01000">1000</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -724,7 +782,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00944">944</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01016">1016</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -764,7 +822,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00953">953</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01025">1025</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -794,7 +852,7 @@ template&lt;typename Model&gt; </div>
 <p>Whether any subscription is currently registered on this bridge. </p>
 <p>A single relaxed atomic load, safe from any thread: a result with no subscriber is never boxed and never sent to the owner. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if at least one subscription exists. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00963">963</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01035">1035</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -841,7 +899,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00976">976</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01048">1048</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -877,7 +935,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00989">989</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01061">1061</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -916,7 +974,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01021">1021</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01093">1093</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -946,7 +1004,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns the currently installed client-side execute deadline. </p>
 <dl class="section return"><dt>Returns</dt><dd>The deadline; <span class="tt">std::chrono::milliseconds{0}</span> when disabled. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01031">1031</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01103">1103</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -976,7 +1034,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns a copy of the currently installed default session. </p>
 <dl class="section return"><dt>Returns</dt><dd>Snapshot of the default <span class="tt">Context</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01038">1038</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01110">1110</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1011,7 +1069,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01054">1054</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01126">1126</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1041,7 +1099,7 @@ template&lt;typename Model&gt; </div>
 <p>Returns a copy of the currently installed <span class="tt">Principal</span>. </p>
 <p>Default-constructed (empty <span class="tt">id</span>, no <span class="tt">roles</span>) if <span class="tt"><a class="el" href="#aaa5a8eb690678014ee8403bfcdca07df" title="Installs the verified Principal for this Bridge.">setPrincipal</a></span> was never called or the application signed out by clearing it. </p><dl class="section return"><dt>Returns</dt><dd>Snapshot of the installed <span class="tt">Principal</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01064">1064</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01136">1136</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1068,11 +1126,11 @@ template&lt;typename Model&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Returns the number of actions made through <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> that have not yet resolved. </p>
+<p>Returns the number of calls made through the bridge — typed (<span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> and its keyed variants) or raw (<span class="tt"><a class="el" href="#a98b8ef145e90f38adfa9a72ff30df0a5" title="Dispatches the action registered as actionId with a JSON body through binding, and resolves with the ...">executeRaw()</a></span>, <span class="tt"><a class="el" href="#a7316cf1ab945cb2ecf680d06964126f3" title="executeRaw on the instance for instanceKey: attaches the shared binding to it first when it holds ano...">executeRawOn()</a></span>) — that have not yet resolved. </p>
 <p>Incremented once per call, when it is made (a call held for its bind included); decremented exactly once when the returned <span class="tt">Completion</span> settles on success or on error (including a cancellation error from <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Replaces the active backend with newBackend.">switchBackend()</a></span>/<span class="tt"><a class="el" href="#a7045f7c97ea552add8cfbfc1868daba3" title="Clears the backend&#39;s reconnect handler, rejects every call still waiting for a bind with BridgeDestro...">~Bridge()</a></span>/a dropped transport). A client can poll this to build a "still loading" indicator or gate a feature on quiescence. A single relaxed atomic load, safe from any thread.</p>
 <dl class="section return"><dt>Returns</dt><dd>Count of actions made but not yet resolved. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01080">1080</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01153">1153</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1117,7 +1175,7 @@ requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</d
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01094">1094</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01167">1167</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1154,7 +1212,7 @@ requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</d
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01119">1119</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01192">1192</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1189,7 +1247,7 @@ requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</d
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01219">1219</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01292">1292</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1254,7 +1312,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception (including <span class="tt">ValidationError</span> on <span class="tt">LocalBackend</span> when the action fails its validator). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01280">1280</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01353">1353</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1316,7 +1374,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01321">1321</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01394">1394</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1372,7 +1430,244 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01371">1371</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01420">1420</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a25e9a30690f6d5cbbbe78c216355c3e5" name="a25e9a30690f6d5cbbbe78c216355c3e5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a25e9a30690f6d5cbbbe78c216355c3e5">&#9670;&#160;</a></span>bindByType()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::shared_ptr&lt; detail::HandlerBinding &gt; morph::bridge::Bridge::bindByType </td>
+          <td>(</td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">BindSharing</td>          <td class="paramname"><span class="paramname"><em>sharing</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>instanceKey</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Binds the model registered as <code class="param">typeId</code>, for a caller compiled without the model's type. </p>
+<p>A private binding is bound at once, as <span class="tt"><a class="el" href="#a4075023106e7be2251049ca4be569410" title="Creates and registers a new HandlerBinding for Model.">registerHandler</a>&lt;Model&gt;()</span> binds one. A shared binding is bound when attached: here when <code class="param">instanceKey</code> is not empty, otherwise by a later <span class="tt"><a class="el" href="#a8fa4a8017c2d9204a0eb6c1c3555052b" title="Attaches (or re-points) a shared binding to the instance for primary, creating it if no live instance...">attach</a></span>. The binding is tracked for <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Replaces the active backend with newBackend.">switchBackend()</a></span>, deregistered by <span class="tt"><a class="el" href="#a73ac9d12273ad9a5fbf34f999f796b8c" title="Deregisters binding from the active backend and removes it from tracking.">deregisterHandler</a></span>, and its instance is owned by the session's principal on a server exactly as a typed handler's is.</p>
+<p>Called off the owner — inside a running action, where a <span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a></span> may be constructed too — the registration is posted to the owner, and a call made meanwhile is held. Attaching is the owner's, so a key is refused there.</p>
+<p>The bridge cannot tell whether the model is keyed: a shared binding of an unkeyed model is refused, if at all, by the backend when attached.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>The model's registered type id. </td></tr>
+    <tr><td class="paramname">sharing</td><td>Private or shared. </td></tr>
+    <tr><td class="paramname">instanceKey</td><td>For a shared binding, the key to attach to now, or empty to stay unattached. Must be empty for a private binding, and off the owner. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The binding. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::invalid_argument</td><td>for a private binding with a key. </td></tr>
+    <tr><td class="paramname">std::logic_error</td><td>for a key given off the owner. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01570">1570</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a98b8ef145e90f38adfa9a72ff30df0a5" name="a98b8ef145e90f38adfa9a72ff30df0a5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a98b8ef145e90f38adfa9a72ff30df0a5">&#9670;&#160;</a></span>executeRaw() <span class="overload">[1/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt; morph::bridge::Bridge::executeRaw </td>
+          <td>(</td>
+          <td class="paramtype">const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>binding</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>actionId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>bodyJson</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Dispatches the action registered as <code class="param">actionId</code> with a JSON body through <code class="param">binding</code>, and resolves with the JSON reply. </p>
+<p>The call is stamped with the default session, raced against the execute deadline, counted in <span class="tt"><a class="el" href="#ad3991ee9236705247dc7164611b2ee0e" title="Returns the number of calls made through the bridge — typed (executeVia() and its keyed variants) or ...">pendingCalls()</a></span>, held while a bind is in flight, and settled by <span class="tt">cancelPending</span> exactly as a typed call. It always carries a stop source, since whether the handler is a Task is not known here. Neither the client-side recompute nor the action's validator runs here: they need the action's type, and whoever runs the model runs both. The reply is not offered to typed subscriptions: it is JSON text, not the result a subscriber expects.</p>
+<p>The call runs on the instance <code class="param">binding</code> holds now. Unlike a typed call, it does not attach to the key a payload-keyed action names, nor create and promote an instance for a result-keyed one: a keyed action sent through a shared binding attached elsewhere runs on that other instance, and one sent before any attach is rejected as not bound. A keyed action goes through <span class="tt"><a class="el" href="#a7316cf1ab945cb2ecf680d06964126f3" title="executeRaw on the instance for instanceKey: attaches the shared binding to it first when it holds ano...">executeRawOn</a></span>.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">binding</td><td>A binding from <span class="tt"><a class="el" href="#a25e9a30690f6d5cbbbe78c216355c3e5" title="Binds the model registered as typeId, for a caller compiled without the model&#39;s type.">bindByType</a></span>. </td></tr>
+    <tr><td class="paramname">actionId</td><td>The action's registered type id. </td></tr>
+    <tr><td class="paramname">bodyJson</td><td>The action's JSON body. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>Executor the <span class="tt">Completion</span> callbacks are posted on. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Completion resolving with the reply's JSON text. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01610">1610</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a44a2776f2c039ae6bbcb8693697468d7" name="a44a2776f2c039ae6bbcb8693697468d7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a44a2776f2c039ae6bbcb8693697468d7">&#9670;&#160;</a></span>executeRaw() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt; morph::bridge::Bridge::executeRaw </td>
+          <td>(</td>
+          <td class="paramtype">const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>binding</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>actionId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>bodyJson</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::core::async::StopToken</td>          <td class="paramname"><span class="paramname"><em>stop</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><span class="tt"><a class="el" href="#a98b8ef145e90f38adfa9a72ff30df0a5" title="Dispatches the action registered as actionId with a JSON body through binding, and resolves with the ...">executeRaw</a></span>, cancellable through <code class="param">stop</code>. </p>
+<p>A stop before the call settles rejects it with <span class="tt">core::async::OperationCancelled</span> and asks its stop source to stop; a Task handler on a local backend sees that at its next stop-aware <span class="tt">co_await</span>. A token already stopped rejects without dispatching. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">binding</td><td>A binding from <span class="tt"><a class="el" href="#a25e9a30690f6d5cbbbe78c216355c3e5" title="Binds the model registered as typeId, for a caller compiled without the model&#39;s type.">bindByType</a></span>. </td></tr>
+    <tr><td class="paramname">actionId</td><td>The action's registered type id. </td></tr>
+    <tr><td class="paramname">bodyJson</td><td>The action's JSON body. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>Executor the <span class="tt">Completion</span> callbacks are posted on. </td></tr>
+    <tr><td class="paramname">stop</td><td>The caller's cancel. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Completion resolving with the reply's JSON text, or rejected with <span class="tt">core::async::OperationCancelled</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01649">1649</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7316cf1ab945cb2ecf680d06964126f3" name="a7316cf1ab945cb2ecf680d06964126f3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7316cf1ab945cb2ecf680d06964126f3">&#9670;&#160;</a></span>executeRawOn()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt; morph::bridge::Bridge::executeRawOn </td>
+          <td>(</td>
+          <td class="paramtype">const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>binding</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>instanceKey</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>actionId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>bodyJson</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>cbExec</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><span class="tt"><a class="el" href="#a98b8ef145e90f38adfa9a72ff30df0a5" title="Dispatches the action registered as actionId with a JSON body through binding, and resolves with the ...">executeRaw</a></span> on the instance for <code class="param">instanceKey:</code> attaches the shared <code class="param">binding</code> to it first when it holds another or none. </p>
+<p>What a keyed action needs from a caller without its type, which cannot read the key out of the body: the call runs on <code class="param">instanceKey's</code> instance or not at all. An attach that is refused, or superseded by a re-bind, rejects the call with its failure instead of running it on the instance the binding fell back to. The binding stays attached to <code class="param">instanceKey</code> afterwards, as a typed payload-keyed call leaves it. Otherwise as <span class="tt"><a class="el" href="#a98b8ef145e90f38adfa9a72ff30df0a5" title="Dispatches the action registered as actionId with a JSON body through binding, and resolves with the ...">executeRaw</a></span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">binding</td><td>A shared binding from <span class="tt"><a class="el" href="#a25e9a30690f6d5cbbbe78c216355c3e5" title="Binds the model registered as typeId, for a caller compiled without the model&#39;s type.">bindByType</a></span>. </td></tr>
+    <tr><td class="paramname">instanceKey</td><td>Canonical string encoding of the primary key; see <span class="tt"><a class="el" href="#a8fa4a8017c2d9204a0eb6c1c3555052b" title="Attaches (or re-points) a shared binding to the instance for primary, creating it if no live instance...">attach</a></span>. </td></tr>
+    <tr><td class="paramname">actionId</td><td>The action's registered type id. </td></tr>
+    <tr><td class="paramname">bodyJson</td><td>The action's JSON body. </td></tr>
+    <tr><td class="paramname">cbExec</td><td>Executor the <span class="tt">Completion</span> callbacks are posted on. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Completion resolving with the reply's JSON text. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::invalid_argument</td><td>for an empty <code class="param">instanceKey</code>. </td></tr>
+    <tr><td class="paramname">std::logic_error</td><td>for a private <code class="param">binding</code>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01684">1684</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

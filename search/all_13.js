@@ -40,6 +40,6 @@ var searchData=
   ['tryreconnect_37',['tryReconnect',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#adb8457d14b2b1bf531c6c070ea667403',1,'morph::offline::ReconnectCoordinator::Deps']]],
   ['type_38',['type',['../df/d19/structmorph_1_1model_1_1HandlerResult.html',1,'morph::model::type&lt; T &gt;'],['../df/d19/structmorph_1_1model_1_1HandlerResult.html#ad5e7043f0798997df9c66f6432477e94',1,'morph::model::HandlerResult::type'],['../d6/dad/structmorph_1_1model_1_1HandlerResult_3_1_1core_1_1async_1_1Task_3_01R_01_4_01_4.html#a1e700da0ae24555852f1789eda3a35d7',1,'morph::model::HandlerResult&lt;::core::async::Task&lt; R &gt; &gt;::type']]],
   ['type_20erasure_39',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
-  ['typeid_40',['typeId',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192',1,'morph::wire::Envelope']]],
+  ['typeid_40',['typeId',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192',1,'morph::wire::Envelope::typeId'],['../d8/d3a/classmorph_1_1bridge_1_1RawHandler.html#a161ebd09b83a7cf848e25392e365b32f',1,'morph::bridge::RawHandler::typeId()']]],
   ['types_41',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]]
 ];
