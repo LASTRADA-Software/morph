@@ -224,8 +224,9 @@ TEST_CASE("table: an edit committed while its row is patched starts once", "[tab
 // does not end it, and the row stays held as edited.
 TEST_CASE("table: cell edits may be destroyed while their row is patched", "[table][reentrancy]") {
     auto const source = integers(5);
-    Engine engine{source, EngineOptions{.reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
+    Engine engine{source,
+                  EngineOptions{.reorder = ReorderPolicy::Deferred,
+                                .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     std::vector<EditDone> pending;
     auto edits = std::make_unique<CellEdits>(
         *source, [&](EditRequest const&, EditDone done) { pending.push_back(std::move(done)); }, &engine);
@@ -242,8 +243,9 @@ TEST_CASE("table: cell edits may be destroyed while their row is patched", "[tab
 // stays held, and every later repair holds it again.
 TEST_CASE("table: destroying cell edits ends the edits they had in flight", "[table][reentrancy]") {
     auto const source = integers(5);
-    Engine engine{source, EngineOptions{.reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
+    Engine engine{source,
+                  EngineOptions{.reorder = ReorderPolicy::Deferred,
+                                .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     REQUIRE(engine.setSort({{"n", SortDirection::Ascending}}).has_value());
     std::vector<EditDone> pending;
     auto edits = std::make_unique<CellEdits>(

@@ -190,10 +190,11 @@ TEST_CASE("table: holds released while a job runs are laid out with its result",
     ManualExecutor owner;
     ManualExecutor worker;
     auto const source = numbered(3000);
-    Engine engine{source, EngineOptions{.owner = &owner,
-                                        .worker = &worker,
-                                        .reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
+    Engine engine{source,
+                  EngineOptions{.owner = &owner,
+                                .worker = &worker,
+                                .reorder = ReorderPolicy::Deferred,
+                                .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     FollowingModel model{engine};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
     drain(owner, &worker);
@@ -219,10 +220,11 @@ TEST_CASE("table: a row being edited stays held through updates that wait on a j
     ManualExecutor owner;
     ManualExecutor worker;
     auto const source = numbered(3000);
-    Engine engine{source, EngineOptions{.owner = &owner,
-                                        .worker = &worker,
-                                        .reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
+    Engine engine{source,
+                  EngineOptions{.owner = &owner,
+                                .worker = &worker,
+                                .reorder = ReorderPolicy::Deferred,
+                                .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     FollowingModel model{engine};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
     drain(owner, &worker);
@@ -250,10 +252,11 @@ TEST_CASE("table: an ended edit moves its row once even past another repair", "[
     ManualExecutor owner;
     ManualExecutor worker;
     auto const source = numbered(3000);
-    Engine engine{source, EngineOptions{.owner = &owner,
-                                        .worker = &worker,
-                                        .reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
+    Engine engine{source,
+                  EngineOptions{.owner = &owner,
+                                .worker = &worker,
+                                .reorder = ReorderPolicy::Deferred,
+                                .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
     drain(owner, &worker);
     std::vector<EditDone> commits;
@@ -276,8 +279,9 @@ TEST_CASE("table: an ended edit moves its row once even past another repair", "[
 // before the edit ends, and the token then keeps a later update from holding.
 TEST_CASE("table: an ended edit's token does not outlive its update", "[table][pending]") {
     auto const source = numbered(5);
-    Engine engine{source, EngineOptions{.reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
+    Engine engine{source,
+                  EngineOptions{.reorder = ReorderPolicy::Deferred,
+                                .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
     std::vector<EditDone> commits;
     CellEdits edits{*source, [&](EditRequest const&, EditDone done) { commits.push_back(std::move(done)); }, &engine};

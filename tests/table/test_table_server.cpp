@@ -78,9 +78,8 @@ std::string text(Cell const& cell) { return displayText(cell); }
 // a filter on it reads the hidden member.
 TEST_CASE("table: typed rows read the member glaze writes under each key", "[table][server]") {
     using tserver::NoteRow;
-    std::vector<NoteRow> const rows{
-        {.id = 1, .internalNote = "secret-z", .analysis = "Arsenic", .ph = 7.5},
-        {.id = 2, .internalNote = "secret-a", .analysis = "Zinc", .ph = 3.25}};
+    std::vector<NoteRow> const rows{{.id = 1, .internalNote = "secret-z", .analysis = "Arsenic", .ph = 7.5},
+                                    {.id = 2, .internalNote = "secret-a", .analysis = "Zinc", .ph = 3.25}};
     RowKey<NoteRow> const key = [](NoteRow const& row) { return RowId{row.id}; };
     RowsSource<NoteRow> const source{std::make_shared<std::vector<NoteRow> const>(rows), key};
     REQUIRE(source.columns().size() == 3);
