@@ -85,6 +85,7 @@ public:
 
     /// @brief Ends the engine edit of every row with an edit in flight or
     ///        settling: its completion will be ignored, so nothing else would.
+    // NOLINTNEXTLINE(bugprone-exception-escape) -- a handler that throws from here terminates, as from any destructor
     ~CellEdits() {
         if (_engine == nullptr) {
             return;
@@ -147,7 +148,7 @@ public:
     }
 
 private:
-    void start(RowId row) {
+    void start(RowId const& row) {
         if (_engine != nullptr) {
             _engine->beginEdit(row);
         }

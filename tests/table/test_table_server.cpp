@@ -78,7 +78,9 @@ std::string text(Cell const& cell) { return displayText(cell); }
 // a filter on it reads the hidden member.
 TEST_CASE("table: typed rows read the member glaze writes under each key", "[table][server]") {
     using tserver::NoteRow;
-    std::vector<NoteRow> rows{{1, "secret-z", "Arsenic", 7.5}, {2, "secret-a", "Zinc", 3.25}};
+    std::vector<NoteRow> const rows{
+        {.id = 1, .internalNote = "secret-z", .analysis = "Arsenic", .ph = 7.5},
+        {.id = 2, .internalNote = "secret-a", .analysis = "Zinc", .ph = 3.25}};
     RowKey<NoteRow> const key = [](NoteRow const& row) { return RowId{row.id}; };
     RowsSource<NoteRow> const source{std::make_shared<std::vector<NoteRow> const>(rows), key};
     REQUIRE(source.columns().size() == 3);
@@ -93,7 +95,7 @@ TEST_CASE("table: typed rows read the member glaze writes under each key", "[tab
     CHECK(page->rows.empty());
 
     using tserver::ReorderedRow;
-    std::vector<ReorderedRow> reordered{{"bolt", 4}, {"axle", 30}};
+    std::vector<ReorderedRow> const reordered{{.name = "bolt", .qty = 4}, {.name = "axle", .qty = 30}};
     RowsSource<ReorderedRow> const second{std::make_shared<std::vector<ReorderedRow> const>(reordered),
                                           [](ReorderedRow const& row) { return RowId{row.name}; }};
     REQUIRE(second.columns().size() == 2);
@@ -152,7 +154,7 @@ TEST_CASE("table: wrapped and unsigned members keep their kind and value", "[tab
 // integer and sorts ascending.
 TEST_CASE("table: typed rows name a comparator for a custom column", "[table][server]") {
     using tserver::CodeRow;
-    std::vector<CodeRow> rows{{1, 10}, {2, 30}, {3, 20}};
+    std::vector<CodeRow> const rows{{.id = 1, .code = 10}, {.id = 2, .code = 30}, {.id = 3, .code = 20}};
     ApplyOptions options;
     options.services.comparators.emplace("reverse", [](Cell const& left, Cell const& right) {
         return std::get<std::int64_t>(right) <=> std::get<std::int64_t>(left);
@@ -261,6 +263,7 @@ TEST_CASE("table: the window ignores replies to a query it was reset from", "[ta
 TEST_CASE("table: the window fetches the rest of a page a server cut short", "[table][server]") {
     using Row = tserver::CodeRow;
     std::vector<Row> rows;
+    rows.reserve(300);
     for (std::int64_t i = 0; i < 300; ++i) {
         rows.push_back(Row{.id = i, .code = 0});
     }

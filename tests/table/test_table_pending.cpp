@@ -193,7 +193,7 @@ TEST_CASE("table: holds released while a job runs are laid out with its result",
     Engine engine{source, EngineOptions{.owner = &owner,
                                         .worker = &worker,
                                         .reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()>) {}}};
+                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     FollowingModel model{engine};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
     drain(owner, &worker);
@@ -222,7 +222,7 @@ TEST_CASE("table: a row being edited stays held through updates that wait on a j
     Engine engine{source, EngineOptions{.owner = &owner,
                                         .worker = &worker,
                                         .reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()>) {}}};
+                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     FollowingModel model{engine};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
     drain(owner, &worker);
@@ -253,7 +253,7 @@ TEST_CASE("table: an ended edit moves its row once even past another repair", "[
     Engine engine{source, EngineOptions{.owner = &owner,
                                         .worker = &worker,
                                         .reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()>) {}}};
+                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
     drain(owner, &worker);
     std::vector<EditDone> commits;
@@ -277,7 +277,7 @@ TEST_CASE("table: an ended edit moves its row once even past another repair", "[
 TEST_CASE("table: an ended edit's token does not outlive its update", "[table][pending]") {
     auto const source = numbered(5);
     Engine engine{source, EngineOptions{.reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()>) {}}};
+                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     REQUIRE(engine.setSort({{"n", kAsc}}).has_value());
     std::vector<EditDone> commits;
     CellEdits edits{*source, [&](EditRequest const&, EditDone done) { commits.push_back(std::move(done)); }, &engine};
@@ -298,6 +298,7 @@ TEST_CASE("table: a column-changing reset shows its columns with its view", "[ta
     ManualExecutor owner;
     ManualExecutor worker;
     std::vector<std::vector<Cell>> cells;
+    cells.reserve(3000);
     for (std::int64_t i = 0; i < 3000; ++i) {
         cells.push_back({Cell{i}});
     }
@@ -339,9 +340,9 @@ TEST_CASE("table: a column-changing reset shows its columns with its view", "[ta
 namespace {
 
 // Orders cells by their integer value, and throws when `armed` is set.
-CellComparator throwingComparator(bool const& armed) {
-    return [&armed](Cell const& left, Cell const& right) -> std::strong_ordering {
-        if (armed) {
+CellComparator throwingComparator(std::shared_ptr<bool const> armed) {
+    return [armed = std::move(armed)](Cell const& left, Cell const& right) -> std::strong_ordering {
+        if (*armed) {
             throw std::runtime_error{"comparator down"};
         }
         return std::get<std::int64_t>(left) <=> std::get<std::int64_t>(right);
@@ -350,6 +351,7 @@ CellComparator throwingComparator(bool const& armed) {
 
 std::shared_ptr<VectorSource> customColumn(std::size_t rows) {
     std::vector<std::vector<Cell>> cells;
+    cells.reserve(rows);
     for (std::size_t i = 0; i < rows; ++i) {
         cells.push_back({Cell{static_cast<std::int64_t>(rows - i)}});
     }
@@ -361,18 +363,18 @@ std::shared_ptr<VectorSource> customColumn(std::size_t rows) {
 // Mutation: ViewJob::step without its try/catch: the exception escapes setSort
 // after the sort chain was replaced.
 TEST_CASE("table: a service that throws inside the call fails the sort and keeps the old one", "[table][pending]") {
-    bool armed = true;
+    auto const armed = std::make_shared<bool>(true);
     EngineOptions options;
     options.services.comparators.emplace("byValue", throwingComparator(armed));
     Engine engine{customColumn(10), options};
-    auto const result = engine.setSort({{"c", kAsc}});
+    auto const result = engine.setSort({{.column = "c", .dir = kAsc}});
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == TableErrorCode::ServiceFailed);
     CHECK(engine.sort().empty());
     CHECK(viewKeys(engine) == keys({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));
 
-    armed = false;
-    REQUIRE(engine.setSort({{"c", kAsc}}).has_value());
+    *armed = false;
+    REQUIRE(engine.setSort({{.column = "c", .dir = kAsc}}).has_value());
     CHECK(viewKeys(engine) == keys({9, 8, 7, 6, 5, 4, 3, 2, 1, 0}));
 }
 
@@ -381,7 +383,7 @@ TEST_CASE("table: a service that throws inside the call fails the sort and keeps
 TEST_CASE("table: a service that throws on the worker reports through onError", "[table][pending]") {
     ManualExecutor owner;
     ManualExecutor worker;
-    bool armed = true;
+    auto const armed = std::make_shared<bool>(true);
     EngineOptions options{.owner = &owner, .worker = &worker};
     options.services.comparators.emplace("byValue", throwingComparator(armed));
     Engine engine{customColumn(3000), options};
@@ -390,7 +392,7 @@ TEST_CASE("table: a service that throws on the worker reports through onError", 
     std::vector<bool> pendingSeen;
     engine.onPending([&](bool pending) { pendingSeen.push_back(pending); });
 
-    REQUIRE(engine.setSort({{"c", kAsc}}).has_value());
+    REQUIRE(engine.setSort({{.column = "c", .dir = kAsc}}).has_value());
     REQUIRE(engine.pending());
     drain(owner, &worker);
     CHECK_FALSE(engine.pending());

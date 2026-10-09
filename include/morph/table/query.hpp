@@ -394,6 +394,42 @@ template <typename T>
     }
 }
 
+/// @brief An integer member as a cell.
+/// @tparam T The integer type.
+/// @param value The member.
+/// @return The cell: an `int64`, or text that an integer column reads as
+///         invalid when no `int64` holds the value (rather than a wrapped
+///         negative number).
+template <typename T>
+[[nodiscard]] Cell integerCell(T value) {
+    if constexpr (std::is_unsigned_v<T> && sizeof(T) >= sizeof(std::int64_t)) {
+        if (value > static_cast<T>(std::numeric_limits<std::int64_t>::max())) {
+            return Cell{std::to_string(value)};
+        }
+    }
+    return Cell{static_cast<std::int64_t>(value)};
+}
+
+/// @brief A member as the text glaze writes for it: an enum by its glaze name,
+///        a JSON string decoded, `null` as an empty cell.
+/// @tparam T The member type.
+/// @param value The member.
+/// @return The cell.
+template <typename T>
+[[nodiscard]] Cell writtenCell(T const& value) {
+    std::string text;
+    if (glz::write_json(value, text) || text == "null") {
+        return Cell{};
+    }
+    if (text.size() >= 2 && text.front() == '"' && text.back() == '"') {
+        std::string decoded;
+        if (!glz::read_json(decoded, text)) {
+            return Cell{std::move(decoded)};
+        }
+    }
+    return Cell{std::move(text)};
+}
+
 /// @brief A member value as a cell.
 /// @tparam T The member type.
 /// @param value The member.
@@ -407,14 +443,7 @@ template <typename T>
                          std::is_same_v<V, math::Rational>) {
         return Cell{value};
     } else if constexpr (std::integral<V>) {
-        if constexpr (std::is_unsigned_v<V> && sizeof(V) >= sizeof(std::int64_t)) {
-            if (value > static_cast<V>(std::numeric_limits<std::int64_t>::max())) {
-                // No int64 holds it: as text, which an integer column reads as
-                // invalid, rather than a wrapped negative number.
-                return Cell{std::to_string(value)};
-            }
-        }
-        return Cell{static_cast<std::int64_t>(value)};
+        return integerCell(value);
     } else if constexpr (std::floating_point<V>) {
         return Cell{static_cast<double>(value)};
     } else if constexpr (units::isQuantity<V>) {
@@ -426,19 +455,7 @@ template <typename T>
     } else if constexpr (MemberWrapper<V>) {
         return toCell(value.*(glz::meta<V>::value));
     } else {
-        // Enums with a glaze name, and anything else glaze writes, as text:
-        // a JSON string decoded, `null` as an empty cell.
-        std::string text;
-        if (glz::write_json(value, text) || text == "null") {
-            return Cell{};
-        }
-        if (text.size() >= 2 && text.front() == '"' && text.back() == '"') {
-            std::string decoded;
-            if (!glz::read_json(decoded, text)) {
-                return Cell{std::move(decoded)};
-            }
-        }
-        return Cell{std::move(text)};
+        return writtenCell(value);
     }
 }
 

@@ -784,6 +784,7 @@ public:
     /// @param viewRow View row index, below `viewRowCount()`.
     /// @param column  Column index into `columns()`.
     /// @return The cell; empty for a column past `columns()`.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- row then column, as every table reads them
     [[nodiscard]] Cell cellAt(std::size_t viewRow, std::size_t column) const {
         auto const row = _view.at(viewRow);
         if (column >= _viewColumns.size()) {
@@ -1123,7 +1124,7 @@ private:
             revert();
             return std::unexpected(serviceFailed(*job.failure()));
         }
-        auto applied = install(job.input(), job.takeResult(), ticket);
+        auto const applied = install(job.input(), job.takeResult(), ticket);
         recordOwnerStep(began);
         deliver(applied);
         return {};
@@ -1195,7 +1196,7 @@ private:
             return;
         }
         auto const began = std::chrono::steady_clock::now();
-        auto applied = install(input, job->takeResult(), _runningTicket);
+        auto const applied = install(input, job->takeResult(), _runningTicket);
         recordOwnerStep(began);
         if (!deliver(applied)) {
             return;

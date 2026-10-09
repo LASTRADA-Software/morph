@@ -187,7 +187,7 @@ struct EditSetup {
 // that element, and reading the request afterwards reads freed memory.
 TEST_CASE("table: a commit may read its request after settling it at once", "[table][reentrancy]") {
     std::vector<std::string> seen;
-    EditSetup setup{[&](EditRequest const& request, EditDone done) {
+    EditSetup setup{[&](EditRequest const& request, EditDone const& done) {
         done(std::vector<Cell>{Cell{std::int64_t{42}}});
         seen.push_back(request.column + " of a long enough name to live on the heap");
     }};
@@ -225,7 +225,7 @@ TEST_CASE("table: an edit committed while its row is patched starts once", "[tab
 TEST_CASE("table: cell edits may be destroyed while their row is patched", "[table][reentrancy]") {
     auto const source = integers(5);
     Engine engine{source, EngineOptions{.reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()>) {}}};
+                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     std::vector<EditDone> pending;
     auto edits = std::make_unique<CellEdits>(
         *source, [&](EditRequest const&, EditDone done) { pending.push_back(std::move(done)); }, &engine);
@@ -243,7 +243,7 @@ TEST_CASE("table: cell edits may be destroyed while their row is patched", "[tab
 TEST_CASE("table: destroying cell edits ends the edits they had in flight", "[table][reentrancy]") {
     auto const source = integers(5);
     Engine engine{source, EngineOptions{.reorder = ReorderPolicy::Deferred,
-                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()>) {}}};
+                                        .scheduleSettle = [](std::chrono::milliseconds, std::function<void()> const&) {}}};
     REQUIRE(engine.setSort({{"n", SortDirection::Ascending}}).has_value());
     std::vector<EditDone> pending;
     auto edits = std::make_unique<CellEdits>(
