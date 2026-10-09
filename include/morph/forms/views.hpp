@@ -176,21 +176,34 @@ concept HasViewActions = requires {
 };
 
 /// @brief The node a property's schema resolves to: its `$defs` entry when it
-///        is a `$ref`, else the property itself.
+///        is a `$ref`, else the property itself. A nullable property, which
+///        glaze writes for `std::optional<T>` as `anyOf` of `T` and `null`,
+///        resolves through its `T` alternative.
 /// @param rowDom The row type's schema DOM.
 /// @param prop   A property node.
-/// @return The resolved node; @p prop when the reference does not resolve.
+/// @return The resolved node; the unresolved one when the reference does not resolve.
 [[nodiscard]] inline glz::generic_u64 const* resolveSchemaRef(glz::generic_u64 const& rowDom,
                                                               glz::generic_u64 const& prop) {
-    auto const* const ref = ::morph::forms::detail::findMember(prop, "$ref");
+    using ::morph::forms::detail::findMember;
+    auto const* node = &prop;
+    if (auto const* const anyOf = findMember(prop, "anyOf"); anyOf != nullptr && anyOf->is_array()) {
+        for (auto const& alternative : anyOf->get_array()) {
+            auto const* const type = findMember(alternative, "type");
+            if (type == nullptr || !type->is_string() || type->get_string() != "null") {
+                node = &alternative;
+                break;
+            }
+        }
+    }
+    auto const* const ref = findMember(*node, "$ref");
     if (ref == nullptr || !ref->is_string()) {
-        return &prop;
+        return node;
     }
     auto const& refText = ref->get_string();
     auto const defName = refText.substr(refText.find_last_of('/') + 1);
-    auto const* const defs = ::morph::forms::detail::findMember(rowDom, "$defs");
-    auto const* const def = (defs == nullptr) ? nullptr : ::morph::forms::detail::findMember(*defs, defName);
-    return def == nullptr ? &prop : def;
+    auto const* const defs = findMember(rowDom, "$defs");
+    auto const* const def = (defs == nullptr) ? nullptr : findMember(*defs, defName);
+    return def == nullptr ? node : def;
 }
 
 /// @brief A property's JSON-Schema `type`, ignoring a `null` alternative.
@@ -356,17 +369,10 @@ concept HasViewActions = requires {
         // A write; see the directive above.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         entry["ExtUnits"] = *units;
-    } else if (auto const* const ref = ::morph::forms::detail::findMember(prop, "$ref")) {
-        auto const refText = ref->get_string();
-        auto const defName = refText.substr(refText.find_last_of('/') + 1);
-        auto const* const defs = ::morph::forms::detail::findMember(rowDom, "$defs");
-        auto const* const def = (defs == nullptr) ? nullptr : ::morph::forms::detail::findMember(*defs, defName);
-        auto const* const defUnits = (def == nullptr) ? nullptr : ::morph::forms::detail::findMember(*def, "ExtUnits");
-        if (defUnits != nullptr) {
-            // A write; see the directive above.
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-            entry["ExtUnits"] = *defUnits;
-        }
+    } else if (auto const* const defUnits = ::morph::forms::detail::findMember(resolved, "ExtUnits")) {
+        // A write; see the directive above.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        entry["ExtUnits"] = *defUnits;
     }
     return entry;
 }

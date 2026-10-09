@@ -664,6 +664,9 @@ add_executable(morph_table_tests
     table/test_table_query.cpp
     table/test_table_selection.cpp
     table/test_table_columns.cpp
+    table/test_table_pending.cpp
+    table/test_table_reentrancy.cpp
+    table/test_table_server.cpp
     table/bench_table.cpp
 )
 target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main)

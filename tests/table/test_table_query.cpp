@@ -263,50 +263,57 @@ TEST_CASE("table: the window fetches the pages around the visible rows", "[table
     PageWindow<int> window{100, 4};
     auto const first = window.visible(250, 30);
     REQUIRE(first.size() == 3);
-    CHECK(first[0] == PageRequest{.offset = 100, .limit = 100});
-    CHECK(first[1] == PageRequest{.offset = 200, .limit = 100});
-    CHECK(first[2] == PageRequest{.offset = 300, .limit = 100});
+    CHECK(first[0].request == PageRequest{.offset = 100, .limit = 100});
+    CHECK(first[1].request == PageRequest{.offset = 200, .limit = 100});
+    CHECK(first[2].request == PageRequest{.offset = 300, .limit = 100});
     CHECK(window.pending());
     CHECK(window.visible(250, 30).empty());  // all in flight
 
-    window.accept(Page<int>{.rows = std::vector<int>(100, 2), .total = 350, .offset = 200});
+    CHECK(window.accept(first[1], Page<int>{.rows = std::vector<int>(100, 2), .total = 350, .offset = 200}));
     CHECK(window.row(250) != nullptr);
     CHECK(*window.row(250) == 2);
     CHECK(window.row(150) == nullptr);
     CHECK(window.total() == 350);
-    window.accept(Page<int>{.rows = std::vector<int>(50, 3), .total = 350, .offset = 300});
+    CHECK(window.accept(first[2], Page<int>{.rows = std::vector<int>(50, 3), .total = 350, .offset = 300}));
     CHECK(window.row(349) != nullptr);
     CHECK(window.row(350) == nullptr);
 
-    // Pages past the total are never requested.
+    // Pages past the total are never requested, and a short last page is complete.
     auto const near = window.visible(320, 30);
     CHECK(near.empty());
 
     // The window keeps at most four pages, dropping the farthest.
-    window.accept(Page<int>{.rows = std::vector<int>(100, 1), .total = 350, .offset = 100});
+    CHECK(window.accept(first[0], Page<int>{.rows = std::vector<int>(100, 1), .total = 350, .offset = 100}));
     window.reset();
     CHECK(window.pagesHeld() == 0);
     auto const top = window.visible(0, 10);
     REQUIRE(top.size() == 2);
-    for (std::int64_t page = 0; page < 6; ++page) {
-        window.accept(
-            Page<int>{.rows = std::vector<int>(100, static_cast<int>(page)), .total = 600, .offset = page * 100});
+    auto more = window.visible(500, 10);
+    REQUIRE(more.size() == 3);
+    std::vector<PageFetch> fetches{top.begin(), top.end()};
+    fetches.insert(fetches.end(), more.begin(), more.end());
+    for (auto const& fetch : fetches) {
+        auto const page = fetch.request.offset / 100;
+        CHECK(window.accept(fetch, Page<int>{.rows = std::vector<int>(100, static_cast<int>(page)),
+                                             .total = 600,
+                                             .offset = fetch.request.offset}));
     }
     CHECK(window.pagesHeld() == 4);
-    CHECK(window.row(0) != nullptr);
-    CHECK(window.row(550) == nullptr);
+    CHECK(window.row(550) != nullptr);
+    CHECK(window.row(0) == nullptr);
 }
 
 TEST_CASE("table: a failed page shows its error until a reply arrives", "[table][query]") {
     PageWindow<int> window{10, 4};
     auto const requests = window.visible(0, 5);
     REQUIRE_FALSE(requests.empty());
-    window.fail(requests[0], TableError{.code = TableErrorCode::UnsupportedOperator, .column = "x", .message = "no"});
+    CHECK(window.fail(requests[0],
+                      TableError{.code = TableErrorCode::UnsupportedOperator, .column = "x", .message = "no"}));
     REQUIRE(window.error().has_value());
     CHECK(window.error()->code == TableErrorCode::UnsupportedOperator);
     auto const retry = window.visible(0, 5);
     REQUIRE_FALSE(retry.empty());
     CHECK(retry[0] == requests[0]);
-    window.accept(Page<int>{.rows = std::vector<int>(10, 0), .total = 10, .offset = 0});
+    CHECK(window.accept(retry[0], Page<int>{.rows = std::vector<int>(10, 0), .total = 10, .offset = 0}));
     CHECK_FALSE(window.error().has_value());
 }

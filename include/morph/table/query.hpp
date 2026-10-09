@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <expected>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <morph/table/data_source.hpp>
@@ -33,6 +34,7 @@
 #include <morph/util/datetime.hpp>
 #include <morph/util/quantity.hpp>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -290,14 +292,18 @@ struct PageRows {
     if (!checked) {
         return std::unexpected(std::move(checked.error()));
     }
-    auto filter = compileFilter(checked->filters, columns, options.services);
+    // One copy of the services for this call, the filter's operands included:
+    // a collator that is not safe to share clones itself here, so concurrent
+    // calls never fold on the one the caller passed.
+    auto services = options.services.forTask();
+    auto filter = compileFilter(checked->filters, columns, services);
     if (!filter) {
         return std::unexpected(std::move(filter.error()));
     }
     detail::JobInput input;
     input.snapshot = source.snapshot();
     input.columns.assign(columns.begin(), columns.end());
-    input.services = options.services.forTask();
+    input.services = std::move(services);
     input.keys.resize(columns.size());
     for (auto const& key : checked->sort) {
         if (auto const column = detail::findColumn(columns, key.column)) {
@@ -315,6 +321,10 @@ struct PageRows {
     input.previousSnapshot = input.snapshot;
     detail::ViewJob job{std::move(input)};
     static_cast<void>(job.step(kNoDeadline, ::core::async::StopToken{}));
+    if (job.failure()) {
+        return std::unexpected(TableError{
+            .code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + *job.failure()});
+    }
     auto const view = job.takeResult().view;
 
     PageRows out;
@@ -324,7 +334,8 @@ struct PageRows {
         out.total = count;
     }
     auto const begin = std::min(checked->page.offset, count);
-    auto const end = std::min(begin + checked->page.limit, count);
+    // Compared, not added: `maxLimit` may be as large as INT64_MAX.
+    auto const end = checked->page.limit >= count - begin ? count : begin + checked->page.limit;
     for (auto i = begin; i < end; ++i) {
         out.rows.push_back(view[static_cast<std::size_t>(i)]);
     }
@@ -343,6 +354,18 @@ struct IsOptional : std::false_type {};
 /// @tparam T The optional's value type.
 template <typename T>
 struct IsOptional<std::optional<T>> : std::true_type {};
+
+/// @brief A type glaze writes as one of its own members, as morph's `Ranged`,
+///        `Choice`, `Multiline` and `Tagged` are: its `glz::meta` value is a
+///        member pointer.
+template <typename V>
+concept MemberWrapper = requires { glz::meta<V>::value; } &&
+                        std::is_member_object_pointer_v<std::remove_cvref_t<decltype(glz::meta<V>::value)>>;
+
+/// @brief The member a `MemberWrapper` is written as.
+/// @tparam V The wrapper type.
+template <typename V>
+using WrappedMember = std::remove_cvref_t<decltype(std::declval<V const&>().*(glz::meta<V>::value))>;
 
 /// @brief The column kind a member type gives.
 /// @tparam T The member type.
@@ -364,6 +387,8 @@ template <typename T>
         return ColumnKind::Quantity;
     } else if constexpr (std::is_same_v<V, time::DateTime> || std::is_same_v<V, time::Timestamp>) {
         return ColumnKind::DateTime;
+    } else if constexpr (MemberWrapper<V>) {
+        return kindOf<WrappedMember<V>>();
     } else {
         return ColumnKind::Text;
     }
@@ -382,6 +407,13 @@ template <typename T>
                          std::is_same_v<V, math::Rational>) {
         return Cell{value};
     } else if constexpr (std::integral<V>) {
+        if constexpr (std::is_unsigned_v<V> && sizeof(V) >= sizeof(std::int64_t)) {
+            if (value > static_cast<V>(std::numeric_limits<std::int64_t>::max())) {
+                // No int64 holds it: as text, which an integer column reads as
+                // invalid, rather than a wrapped negative number.
+                return Cell{std::to_string(value)};
+            }
+        }
         return Cell{static_cast<std::int64_t>(value)};
     } else if constexpr (std::floating_point<V>) {
         return Cell{static_cast<double>(value)};
@@ -391,14 +423,20 @@ template <typename T>
         return Cell{std::chrono::floor<std::chrono::seconds>(value.value).time_since_epoch().count()};
     } else if constexpr (std::is_same_v<V, time::Timestamp>) {
         return value.value ? toCell(*value.value) : Cell{};
+    } else if constexpr (MemberWrapper<V>) {
+        return toCell(value.*(glz::meta<V>::value));
     } else {
-        // Enums with a glaze name, and anything else glaze writes, as text.
+        // Enums with a glaze name, and anything else glaze writes, as text:
+        // a JSON string decoded, `null` as an empty cell.
         std::string text;
-        if (glz::write_json(value, text)) {
+        if (glz::write_json(value, text) || text == "null") {
             return Cell{};
         }
         if (text.size() >= 2 && text.front() == '"' && text.back() == '"') {
-            text = text.substr(1, text.size() - 2);
+            std::string decoded;
+            if (!glz::read_json(decoded, text)) {
+                return Cell{std::move(decoded)};
+            }
         }
         return Cell{std::move(text)};
     }
@@ -409,32 +447,44 @@ template <typename T>
 template <typename Row>
 using CellReader = Cell (*)(Row const&);
 
-/// @brief One cell reader per reflected member, in member order.
+/// @brief The value glaze writes under `glz::reflect<Row>::keys[I]`: the
+///        I-th declared member of a row reflected by itself, the I-th entry of
+///        a row with a `glz::meta`, which may omit, reorder or compute members.
+/// @tparam Row The row type.
+/// @tparam I   The key's index.
+/// @param row The row.
+/// @return The value.
+template <typename Row, std::size_t I>
+[[nodiscard]] decltype(auto) memberAt(Row const& row) {
+    if constexpr (glz::reflectable<Row>) {
+        auto tie = glz::to_tie(row);
+        return glz::get_member(row, glz::get<I>(tie));
+    } else {
+        return glz::get_member(row, glz::get<I>(glz::reflect<Row>::values));
+    }
+}
+
+/// @brief One cell reader per key glaze writes, in key order.
 /// @tparam Row The row type.
 /// @return The readers.
 template <typename Row>
 [[nodiscard]] std::vector<CellReader<Row>> cellReaders() {
     constexpr auto count = glz::reflect<Row>::size;
     return [&]<std::size_t... I>(std::index_sequence<I...>) {
-        return std::vector<CellReader<Row>>{+[](Row const& row) -> Cell {
-            auto tie = glz::to_tie(row);
-            return toCell(glz::get_member(row, glz::get<I>(tie)));
-        }...};
+        return std::vector<CellReader<Row>>{+[](Row const& row) -> Cell { return toCell(memberAt<Row, I>(row)); }...};
     }(std::make_index_sequence<count>{});
 }
 
-/// @brief One column per reflected member, its kind from the member's type.
+/// @brief One column per key glaze writes, its kind from the value's type.
 /// @tparam Row The row type.
 /// @return The columns.
 template <typename Row>
 [[nodiscard]] std::vector<ColumnInfo> reflectedColumns() {
-    using Members = decltype(glz::to_tie(std::declval<Row&>()));
     constexpr auto count = glz::reflect<Row>::size;
     std::vector<ColumnInfo> out;
     [&]<std::size_t... I>(std::index_sequence<I...>) {
         (out.push_back(ColumnInfo{.id = std::string{glz::reflect<Row>::keys[I]},
-                                  .kind = kindOf<std::remove_cvref_t<decltype(glz::get_member(
-                                      std::declval<Row const&>(), glz::get<I>(std::declval<Members>())))>>(),
+                                  .kind = kindOf<decltype(memberAt<Row, I>(std::declval<Row const&>()))>(),
                                   .comparator = {},
                                   .format = {}}),
          ...);
@@ -506,25 +556,31 @@ private:
     std::shared_ptr<std::vector<detail::CellReader<Row>> const> _readers;
 };
 
-/// @brief A `DataSource` over typed rows: one column per reflected member,
-///        its kind inferred from the member's type.
+/// @brief A `DataSource` over typed rows: one column per key glaze writes,
+///        its kind inferred from the value's type.
 ///
-/// `bool` is `Bool`; other integers `Integer`; floating point `Number`;
-/// `Rational` `Decimal`; a `Quantity` `Quantity`; `DateTime` and `Timestamp`
-/// `DateTime`; everything else `Text` (an enum by its glaze name). A
-/// `std::optional` member's empty state is an empty cell. `setRows` replaces
-/// the rows and notifies `Reset`.
+/// `bool` is `Bool`; other integers `Integer` (an unsigned value above
+/// `INT64_MAX` is an invalid cell); floating point `Number`; `Rational`
+/// `Decimal`; a `Quantity` `Quantity`; `DateTime` and `Timestamp`
+/// `DateTime`; a type glaze writes as one of its members (`Ranged`,
+/// `Choice`, `Tagged`) that member's kind; everything else `Text` (an enum by
+/// its glaze name). A `std::optional` member's empty state, or anything glaze
+/// writes as `null`, is an empty cell. A row with a `glz::meta` has the
+/// columns its meta names. `setRows` replaces the rows and notifies `Reset`.
 /// @tparam Row A glaze-reflectable aggregate.
 template <typename Row>
 class RowsSource final : public DataSource {
 public:
     /// @brief Builds the source.
-    /// @param rows  The rows.
-    /// @param key   The key projection.
-    /// @param kinds Column kinds that replace the inferred ones, by column id
-    ///              (for example `Date` for an `int64` of epoch days).
+    /// @param rows        The rows.
+    /// @param key         The key projection.
+    /// @param kinds       Column kinds that replace the inferred ones, by column
+    ///                    id (for example `Date` for an `int64` of epoch days).
+    /// @param comparators Comparator names by column id, from
+    ///                    `Services::comparators`; a column named here is `Custom`.
     RowsSource(std::shared_ptr<std::vector<Row> const> rows, RowKey<Row> key,
-               std::map<std::string, ColumnKind, std::less<>> const& kinds = {})
+               std::map<std::string, ColumnKind, std::less<>> const& kinds = {},
+               std::map<std::string, std::string, std::less<>> const& comparators = {})
         : _columns{detail::reflectedColumns<Row>()},
           _readers{std::make_shared<std::vector<detail::CellReader<Row>> const>(detail::cellReaders<Row>())},
           _key{std::move(key)},
@@ -532,6 +588,10 @@ public:
         for (auto& column : _columns) {
             if (auto const found = kinds.find(column.id); found != kinds.end()) {
                 column.kind = found->second;
+            }
+            if (auto const found = comparators.find(column.id); found != comparators.end()) {
+                column.kind = ColumnKind::Custom;
+                column.comparator = found->second;
             }
         }
     }
@@ -546,20 +606,17 @@ public:
 
     /// @brief Registers @p listener.
     /// @param listener The listener.
-    void subscribe(ChangeListener& listener) override { _listeners.push_back(&listener); }
+    void subscribe(ChangeListener& listener) override { _listeners.add(listener); }
 
-    /// @brief Removes @p listener.
+    /// @brief Removes @p listener; safe from inside a notification.
     /// @param listener The listener.
-    void unsubscribe(ChangeListener& listener) override { std::erase(_listeners, &listener); }
+    void unsubscribe(ChangeListener& listener) override { _listeners.remove(listener); }
 
     /// @brief Replaces the rows and notifies `Reset`.
     /// @param rows The new rows.
     void setRows(std::shared_ptr<std::vector<Row> const> rows) {
         _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers);
-        auto const listeners = _listeners;
-        for (auto* listener : listeners) {
-            listener->rowsChanged(RowChange{.kind = ChangeKind::Reset, .rows = {}});
-        }
+        _listeners.notify(RowChange{.kind = ChangeKind::Reset, .rows = {}});
     }
 
 private:
@@ -567,7 +624,7 @@ private:
     std::shared_ptr<std::vector<detail::CellReader<Row>> const> _readers;
     RowKey<Row> _key;
     std::shared_ptr<RowsSnapshot<Row> const> _snapshot;
-    std::vector<ChangeListener*> _listeners;
+    detail::Listeners _listeners;
 };
 
 /// @brief Runs @p query over typed rows and returns the page of rows: what a
@@ -576,16 +633,18 @@ private:
 /// @param rows    The server's rows; read during the call only.
 /// @param key     The key projection.
 /// @param query   The request body's table query.
-/// @param options Limits, services and column access.
-/// @param kinds   Column kinds that replace the inferred ones.
+/// @param options     Limits, services and column access.
+/// @param kinds       Column kinds that replace the inferred ones.
+/// @param comparators Comparator names by column id; a column named here is `Custom`.
 /// @return The page, or the typed error the client shows.
 template <typename Row>
 [[nodiscard]] std::expected<Page<Row>, TableError> apply(
     std::vector<Row> const& rows, RowKey<Row> key, TableQuery const& query, ApplyOptions const& options = {},
-    std::map<std::string, ColumnKind, std::less<>> const& kinds = {}) {
+    std::map<std::string, ColumnKind, std::less<>> const& kinds = {},
+    std::map<std::string, std::string, std::less<>> const& comparators = {}) {
     // Borrowed for the call: an aliasing pointer that owns nothing.
     std::shared_ptr<std::vector<Row> const> const borrowed{std::shared_ptr<void>{}, &rows};
-    RowsSource<Row> const source{borrowed, std::move(key), kinds};
+    RowsSource<Row> const source{borrowed, std::move(key), kinds, comparators};
     auto page = apply(source, query, options);
     if (!page) {
         return std::unexpected(std::move(page.error()));
@@ -602,12 +661,33 @@ template <typename Row>
 
 // ── Server mode on the client ───────────────────────────────────────────────
 
+/// @brief A request a `PageWindow` asks the client to send, tagged with the
+///        query it belongs to.
+struct PageFetch {
+    /// @brief The rows to request.
+    PageRequest request;
+    /// @brief The window's query when the fetch was made (`PageWindow::query`).
+    std::uint64_t query = 0;
+
+    /// @brief Member-wise equality.
+    /// @param other The fetch to compare with.
+    /// @return `true` when request and query match.
+    [[nodiscard]] bool operator==(PageFetch const& other) const = default;
+};
+
 /// @brief The pages a `server`-mode table holds: those around the visible
 ///        rows, up to a bound, plus the request state and the last error.
 ///
-/// The client calls `visible` as the view scrolls and sends a request for each
-/// page it returns, then hands each reply to `accept` (or its error to
-/// `fail`). A change of sort or filter is a new query: call `reset`.
+/// The client calls `visible` as the view scrolls and sends the request of
+/// each fetch it returns, then hands the fetch back with its reply to
+/// `accept` (or with its error to `fail`). A change of sort or filter is a
+/// new query: call `reset`. A reply to a fetch made before the last `reset`
+/// is ignored, so a late page of the old query never shows under the new one.
+///
+/// A server may return fewer rows than a fetch asked for (`validate` clamps
+/// the limit to its `maxLimit`): the window then fetches the rest of the page
+/// from where the reply ended. A page is complete when it is full, reaches the
+/// known total, or a reply to it is empty.
 /// @tparam Row The row type.
 template <typename Row>
 class PageWindow {
@@ -619,61 +699,102 @@ public:
     explicit PageWindow(std::int64_t pageSize = 200, std::size_t maxPages = 8)
         : _pageSize{std::max<std::int64_t>(pageSize, 1)}, _maxPages{std::max<std::size_t>(maxPages, 1)} {}
 
-    /// @brief Declares the visible rows; returns the pages to fetch.
+    /// @brief Declares the visible rows; returns the fetches to send.
     ///
-    /// Covers the visible rows and one page either side, skipping pages held,
-    /// pages in flight, and pages past a known total. The returned pages are
-    /// marked in flight.
+    /// Covers the visible rows and one page either side, skipping complete
+    /// pages, pages in flight, and pages past a known total. A page held in
+    /// part is fetched from where it ends. The returned pages are marked in
+    /// flight.
     /// @param first First visible view row.
     /// @param count Visible rows.
-    /// @return The requests to send.
-    [[nodiscard]] std::vector<PageRequest> visible(std::int64_t first, std::int64_t count) {
+    /// @return The fetches to send.
+    [[nodiscard]] std::vector<PageFetch> visible(std::int64_t first, std::int64_t count) {
         _visibleFirst = std::max<std::int64_t>(first, 0);
         _visibleCount = std::max<std::int64_t>(count, 0);
         auto const firstPage = std::max<std::int64_t>((_visibleFirst / _pageSize) - 1, 0);
         auto const lastPage = ((_visibleFirst + std::max<std::int64_t>(_visibleCount, 1) - 1) / _pageSize) + 1;
-        std::vector<PageRequest> out;
+        std::vector<PageFetch> out;
         for (auto page = firstPage; page <= lastPage; ++page) {
             if (_total && page * _pageSize >= *_total) {
                 break;
             }
-            if (_pages.contains(page) || std::ranges::find(_inFlight, page) != _inFlight.end()) {
+            if (_complete.contains(page) || std::ranges::find(_inFlight, page) != _inFlight.end()) {
                 continue;
             }
+            auto const held = _pages.find(page);
+            auto const have = held == _pages.end() ? std::int64_t{0} : static_cast<std::int64_t>(held->second.size());
             _inFlight.push_back(page);
-            out.push_back(PageRequest{.offset = page * _pageSize, .limit = _pageSize});
+            out.push_back(
+                PageFetch{.request = PageRequest{.offset = (page * _pageSize) + have, .limit = _pageSize - have},
+                          .query = _query});
         }
         return out;
     }
 
     /// @brief Stores a reply.
-    /// @param page The page the server returned.
-    void accept(Page<Row> page) {
-        auto const index = page.offset / _pageSize;
-        std::erase(_inFlight, index);
-        _total = page.total;
+    /// @param fetch The fetch the reply answers, as `visible` returned it.
+    /// @param page  The page the server returned.
+    /// @return `false` when the reply was ignored: its fetch belongs to an
+    ///         earlier query, or is not awaited.
+    bool accept(PageFetch const& fetch, Page<Row> page) {
+        if (fetch.query != _query) {
+            return false;
+        }
+        auto const index = fetch.request.offset / _pageSize;
+        auto const flight = std::ranges::find(_inFlight, index);
+        if (flight == _inFlight.end()) {
+            return false;
+        }
+        _inFlight.erase(flight);
+        if (page.total) {
+            _total = page.total;
+        }
         _error.reset();
-        _pages.insert_or_assign(index, std::move(page.rows));
+        auto& rows = _pages[index];
+        bool const replyEmpty = page.rows.empty();
+        if (fetch.request.offset == (index * _pageSize) + static_cast<std::int64_t>(rows.size())) {
+            auto const room = static_cast<std::size_t>(_pageSize) - rows.size();
+            auto const take = std::min(room, page.rows.size());
+            rows.insert(rows.end(), std::make_move_iterator(page.rows.begin()),
+                        std::make_move_iterator(page.rows.begin() + static_cast<std::ptrdiff_t>(take)));
+        }
+        auto const end = (index * _pageSize) + static_cast<std::int64_t>(rows.size());
+        if (std::cmp_greater_equal(rows.size(), _pageSize) || (_total && end >= *_total) || replyEmpty) {
+            _complete.insert(index);
+        }
         evict();
+        return true;
     }
 
     /// @brief Records a failed request; the error is shown until a reply arrives.
-    /// @param request The request that failed.
-    /// @param error   The server's error.
-    void fail(PageRequest const& request, TableError error) {
-        std::erase(_inFlight, request.offset / _pageSize);
+    /// @param fetch The fetch that failed, as `visible` returned it.
+    /// @param error The server's error.
+    /// @return `false` when the failure was ignored: its fetch belongs to an earlier query.
+    bool fail(PageFetch const& fetch, TableError error) {
+        if (fetch.query != _query) {
+            return false;
+        }
+        std::erase(_inFlight, fetch.request.offset / _pageSize);
         _error = std::move(error);
+        return true;
     }
 
-    /// @brief Drops every page, request and error: the query changed.
+    /// @brief Drops every page, request and error and starts a new query: the
+    ///        sort or filter changed.
     void reset() {
+        ++_query;
         _pages.clear();
+        _complete.clear();
         _inFlight.clear();
         _total.reset();
         _error.reset();
     }
 
-    /// @brief The row at a view row, when its page is held.
+    /// @brief The current query, which `reset` advances.
+    /// @return The query's number.
+    [[nodiscard]] std::uint64_t query() const noexcept { return _query; }
+
+    /// @brief The row at a view row, when it is held.
     /// @param index View row.
     /// @return The row, or null.
     [[nodiscard]] Row const* row(std::int64_t index) const {
@@ -688,7 +809,7 @@ public:
         return offset < found->second.size() ? &found->second[offset] : nullptr;
     }
 
-    /// @brief The view's total rows, when the server reported it.
+    /// @brief The view's total rows, when a reply of this query reported it.
     /// @return The total.
     [[nodiscard]] std::optional<std::int64_t> total() const noexcept { return _total; }
 
@@ -696,7 +817,7 @@ public:
     /// @return The error, or nothing.
     [[nodiscard]] std::optional<TableError> const& error() const noexcept { return _error; }
 
-    /// @brief Pages held.
+    /// @brief Pages held, complete or in part.
     /// @return Page count.
     [[nodiscard]] std::size_t pagesHeld() const noexcept { return _pages.size(); }
 
@@ -714,13 +835,16 @@ private:
                     farthest = at;
                 }
             }
+            _complete.erase(farthest->first);
             _pages.erase(farthest);
         }
     }
 
     std::int64_t _pageSize;
     std::size_t _maxPages;
+    std::uint64_t _query = 0;
     std::map<std::int64_t, std::vector<Row>> _pages;
+    std::set<std::int64_t> _complete;
     std::vector<std::int64_t> _inFlight;
     std::optional<std::int64_t> _total;
     std::optional<TableError> _error;
@@ -731,14 +855,3 @@ private:
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
-
-/// @brief JSON names of `morph::table::TableErrorCode`, for a typed error on the wire.
-template <>
-struct glz::meta<morph::table::TableErrorCode> {
-    using enum morph::table::TableErrorCode;
-    /// @brief Each enumerator after its JSON name.
-    static constexpr auto value =
-        glz::enumerate("unknownColumn", UnknownColumn, "unsupportedOperator", UnsupportedOperator, "invalidValue",
-                       InvalidValue, "invalidSpec", InvalidSpec, "limitExceeded", LimitExceeded, "columnNotReadable",
-                       ColumnNotReadable, "unavailable", Unavailable);
-};

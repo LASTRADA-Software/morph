@@ -81,6 +81,16 @@ struct EpochRow {
 
 struct HideNothing {};
 
+struct OptionalRow {
+    std::int64_t id = 0;
+    std::optional<std::int64_t> count;
+    std::optional<double> ph;
+    std::optional<morph::math::Rational> price;
+    std::optional<TcStatus> status;
+    std::optional<morph::time::DateTime> at;
+    std::optional<morph::units::Quantity<TcUnit::g>> mass;
+};
+
 struct NameSecret {
     static constexpr std::array columns{morph::views::ColumnOverride{.field = "secret"}};
 };
@@ -143,4 +153,31 @@ TEST_CASE("table: an override list may still name a hidden member", "[table][col
     REQUIRE_FALSE(glz::read_json(columns, json));
     REQUIRE(columns.get_array().size() == 1);
     CHECK(columns.get_array()[0]["kind"].get_string() == "integer");
+}
+
+// Mutation: resolveSchemaRef not looking inside `anyOf`, which is how glaze
+// writes a std::optional member: every optional column is text, and an
+// optional enum loses its values.
+TEST_CASE("table: optional members keep their column kind", "[table][columns]") {
+    auto const json = morph::views::detail::deriveColumns<tcol::HideNothing, tcol::OptionalRow>();
+    INFO(json);
+    glz::generic columns;
+    REQUIRE_FALSE(glz::read_json(columns, json));
+    auto const& list = columns.get_array();
+    REQUIRE(list.size() == 7);
+    auto const column = [&](std::string const& field) -> glz::generic const& {
+        auto const found =
+            std::ranges::find_if(list, [&](auto const& entry) { return entry["field"].get_string() == field; });
+        INFO("column " << field);
+        REQUIRE(found != list.end());
+        return *found;
+    };
+    CHECK(column("count")["kind"].get_string() == "integer");
+    CHECK(column("ph")["kind"].get_string() == "number");
+    CHECK(column("price")["kind"].get_string() == "decimal");
+    CHECK(column("status")["kind"].get_string() == "text");
+    CHECK(column("status")["enum"].get_array().size() == 2);
+    CHECK(column("at")["kind"].get_string() == "dateTime");
+    CHECK(column("mass")["kind"].get_string() == "quantity");
+    CHECK(column("mass").contains("ExtUnits"));
 }
