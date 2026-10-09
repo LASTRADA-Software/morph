@@ -234,6 +234,88 @@ private:
     morph::table::ViewChange _last;
 };
 
+// A list model that also keeps the text of one column per row, as a renderer
+// caches what it painted: Inserted, Changed and Reset re-read it, Moved
+// carries it along. `stale()` counts rows whose text differs from the engine's.
+class ContentModel {
+public:
+    ContentModel(morph::table::Engine& engine, std::size_t column) : _engine{&engine}, _column{column} {
+        for (std::size_t i = 0; i < engine.viewRowCount(); ++i) {
+            _rows.emplace_back(engine.rowIdAt(i), text(i));
+        }
+        engine.onViewChange([this](morph::table::ViewChange const& change) { follow(change); });
+    }
+    // Rows painted with old text; -1 when the order itself diverged.
+    [[nodiscard]] long stale() const {
+        if (_rows.size() != _engine->viewRowCount()) {
+            return -1;
+        }
+        long count = 0;
+        for (std::size_t i = 0; i < _rows.size(); ++i) {
+            if (_rows[i].first != _engine->rowIdAt(i)) {
+                return -1;
+            }
+            count += _rows[i].second == text(i) ? 0 : 1;
+        }
+        return count;
+    }
+    [[nodiscard]] std::size_t changes() const { return _changes; }
+    [[nodiscard]] morph::table::ViewChange const& last() const { return _last; }
+
+private:
+    [[nodiscard]] std::string text(std::size_t viewRow) const {
+        return morph::table::displayText(_engine->cellAt(viewRow, _column));
+    }
+    void follow(morph::table::ViewChange const& change) {
+        using Kind = morph::table::ViewOp::Kind;
+        ++_changes;
+        _last = change;
+        for (auto const& op : change.ops) {
+            auto const first = static_cast<std::ptrdiff_t>(op.first);
+            switch (op.kind) {
+                case Kind::Removed:
+                    _rows.erase(_rows.begin() + first, _rows.begin() + first + static_cast<std::ptrdiff_t>(op.count));
+                    break;
+                case Kind::Moved: {
+                    auto moved = std::move(_rows[op.first]);
+                    _rows.erase(_rows.begin() + first);
+                    _rows.insert(_rows.begin() + static_cast<std::ptrdiff_t>(op.to), std::move(moved));
+                    break;
+                }
+                case Kind::Inserted:
+                    for (std::size_t i = op.first; i < op.first + op.count; ++i) {
+                        _rows.insert(_rows.begin() + static_cast<std::ptrdiff_t>(i), {_engine->rowIdAt(i), text(i)});
+                    }
+                    break;
+                case Kind::Changed:
+                    for (std::size_t i = op.first; i < op.first + op.count; ++i) {
+                        _rows[i].second = text(i);
+                    }
+                    break;
+                case Kind::Reset:
+                default:
+                    _rows.clear();
+                    for (std::size_t i = 0; i < _engine->viewRowCount(); ++i) {
+                        _rows.emplace_back(_engine->rowIdAt(i), text(i));
+                    }
+                    break;
+            }
+        }
+    }
+
+    morph::table::Engine* _engine;
+    std::size_t _column;
+    std::vector<std::pair<RowId, std::string>> _rows;
+    std::size_t _changes = 0;
+    morph::table::ViewChange _last;
+};
+
+// Runs `owner` and `worker` until neither has anything queued.
+inline void drain(ManualExecutor& owner, ManualExecutor* worker = nullptr) {
+    while (owner.runAll() + (worker != nullptr ? worker->runAll() : 0) > 0) {
+    }
+}
+
 // Pumps `owner` until `done()` or a generous timeout; returns done().
 inline bool pumpUntil(morph::exec::MainThreadExecutor& owner, std::function<bool()> const& done) {
     auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{60};

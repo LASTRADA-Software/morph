@@ -18,13 +18,21 @@
 /// executor, or, with no worker, in frame-budgeted steps posted to the owner;
 /// `pending()` is true until its result is applied on the owner, and the
 /// previous view stays visible meanwhile. One job runs at a time: a request
-/// while one runs stops it and queues; the stopped job's result is dropped.
+/// that makes the running job's result useless (a new sort, filter or
+/// structural change) stops it and its result is dropped; updated rows wait
+/// for it and are repaired after.
 ///
 /// **Changes.** Updated rows re-key only themselves and are merged back into
 /// the order, once per owner turn however many updates arrived. Inserted,
-/// removed and reset rows recompute the view. With `ReorderPolicy::Deferred`
-/// an updated row keeps its place until the view has been quiet for the
-/// settle interval, or until its edit ends.
+/// removed and reset rows recompute the view. Work a dropped job had taken
+/// (updated rows, rows owed a `Changed`) is kept for the next one. With
+/// `ReorderPolicy::Deferred` an updated row keeps its place until the view has
+/// been quiet for the settle interval, or until its edit ends.
+///
+/// **Callbacks.** Every handler the engine calls (`onViewChange`, `onPending`,
+/// `onError`, the progress sink, the settle scheduler) may call the engine
+/// again or destroy it: the engine calls out last, or checks that it is still
+/// alive before it goes on.
 ///
 /// See `docs/spec/table/engine.md`.
 
@@ -33,6 +41,7 @@
 #include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <functional>
 #include <limits>
@@ -231,7 +240,9 @@ struct JobInput {
     std::shared_ptr<RowSnapshot const> previousSnapshot;
     /// @brief `previousView`'s rows index `snapshot` directly.
     bool indicesStable = true;
-    /// @brief Repair: the rows whose cells changed.
+    /// @brief Rows whose cells changed since `keys` were built: their keys are
+    ///        rebuilt on copies, a repair merges them back, and the change
+    ///        reports those in both views as `Changed`.
     std::vector<std::uint32_t> dirty;
     /// @brief Repair: the sorted, filtered order, without holds, that the dirty rows merge into.
     std::vector<std::uint32_t> previousTrueView;
@@ -279,10 +290,55 @@ public:
     }
 
     /// @brief Runs until done, the deadline, or a stop request.
+    ///
+    /// An exception from an injected service (a collator, date parser or
+    /// comparator) ends the job: it is done, with `failure()` set.
     /// @param deadline When to yield.
     /// @param stop     A stop request ends the step.
     /// @return `true` when the job is done.
     bool step(Deadline deadline, ::core::async::StopToken const& stop) {
+        try {
+            return run(deadline, stop);
+        } catch (std::exception const& error) {
+            _failure = error.what();
+        } catch (...) {
+            _failure = "unknown exception";
+        }
+        _phase = Phase::Done;
+        return true;
+    }
+
+    /// @brief Sets a receiver of (phases done, total) after each phase ends,
+    ///        on the thread that runs the step.
+    /// @param listener The receiver.
+    void onPhase(std::function<void(std::size_t, std::size_t)> listener) { _onPhase = std::move(listener); }
+
+    /// @brief Phases done and total, for a progress sink.
+    /// @return (done, total).
+    [[nodiscard]] std::pair<std::size_t, std::size_t> progress() const noexcept {
+        return {static_cast<std::size_t>(_phase), static_cast<std::size_t>(Phase::Done)};
+    }
+
+    /// @brief Whether every phase has run.
+    /// @return `true` when done.
+    [[nodiscard]] bool done() const noexcept { return _phase == Phase::Done; }
+
+    /// @brief Why the job failed: the message of the exception that ended it.
+    /// @return The message, or nothing when the job did not fail.
+    [[nodiscard]] std::optional<std::string> const& failure() const noexcept { return _failure; }
+
+    /// @brief What the job reads.
+    /// @return The input.
+    [[nodiscard]] JobInput const& input() const noexcept { return _in; }
+
+    /// @brief Moves the result out. Valid once `done()`; the input stays readable.
+    /// @return The result.
+    [[nodiscard]] JobResult takeResult() { return std::move(_result); }
+
+private:
+    enum class Phase : std::uint8_t { Keys, Order, Diff, Done };
+
+    bool run(Deadline deadline, ::core::async::StopToken const& stop) {
         while (_phase != Phase::Done) {
             if (stop.stop_requested()) {
                 return false;
@@ -308,33 +364,16 @@ public:
                 return false;
             }
             advance();
+            if (_onPhase) {
+                auto const [doneUnits, total] = progress();
+                _onPhase(doneUnits, total);
+            }
             if (_phase != Phase::Done && detail::shouldYield(deadline, stop)) {
                 return false;
             }
         }
         return true;
     }
-
-    /// @brief Phases done and total, for a progress sink.
-    /// @return (done, total).
-    [[nodiscard]] std::pair<std::size_t, std::size_t> progress() const noexcept {
-        return {static_cast<std::size_t>(_phase), static_cast<std::size_t>(Phase::Done)};
-    }
-
-    /// @brief Whether every phase has run.
-    /// @return `true` when done.
-    [[nodiscard]] bool done() const noexcept { return _phase == Phase::Done; }
-
-    /// @brief What the job reads.
-    /// @return The input.
-    [[nodiscard]] JobInput const& input() const noexcept { return _in; }
-
-    /// @brief Moves the result out. Valid once `done()`; the input stays readable.
-    /// @return The result.
-    [[nodiscard]] JobResult takeResult() { return std::move(_result); }
-
-private:
-    enum class Phase : std::uint8_t { Keys, Order, Diff, Done };
 
     void advance() {
         switch (_phase) {
@@ -352,13 +391,13 @@ private:
         }
     }
 
-    // Builds every needed column that has no keys, and in a repair patches the
-    // dirty rows of every column that has them (on a copy: the old keys may
-    // still be read by the owner or another job).
+    // Builds every needed column that has no keys, and patches the dirty rows
+    // of every column that has them (on a copy: the old keys may still be
+    // read by the owner or another job).
     bool buildKeys(Deadline deadline, ::core::async::StopToken const& stop) {
         MORPH_ZONE("table.keyBuild");
         auto const rows = _in.snapshot->rowCount();
-        if (!_patched && _in.repair) {
+        if (!_patched && !_in.dirty.empty()) {
             for (std::size_t column = 0; column < _result.keys.size(); ++column) {
                 if (_result.keys[column] == nullptr) {
                     continue;
@@ -492,14 +531,21 @@ private:
         _result.repaired = true;
     }
 
-    // Chooses the work: filter the cached sorted order; or filter, then sort
-    // the survivors; or sort every row and cache the order.
+    // Chooses the work: filter the cached sorted order (with the dirty rows
+    // merged back into it); or filter, then sort the survivors; or sort every
+    // row and cache the order.
     void plan() {
         auto const rows = _in.snapshot->rowCount();
         auto const filtering = _in.filter != nullptr && !_in.filter->empty();
         _started = true;
         if (_in.cachedSorted != nullptr) {
-            _base = *_in.cachedSorted;
+            if (_in.dirty.empty()) {
+                _base = *_in.cachedSorted;
+                _result.sorted = _in.cachedSorted;
+            } else {
+                _base = repairOrder(*_in.cachedSorted, _in.dirty, rowOrder());
+                _result.sorted = std::make_shared<std::vector<std::uint32_t> const>(_base);
+            }
             _sorted = true;
         } else {
             _base.resize(rows);
@@ -550,19 +596,13 @@ private:
                 _result.sorted = std::make_shared<std::vector<std::uint32_t> const>(_base);
             }
         }
-        if (_in.cachedSorted != nullptr && !_in.sort.empty()) {
-            _result.sorted = _in.cachedSorted;
-        }
         _result.view = std::move(_base);
         return true;
     }
 
     void diff() {
         MORPH_ZONE("table.apply");
-        std::vector<std::uint32_t> changed;
-        if (_in.repair) {
-            changed = _in.dirty;
-        }
+        std::vector<std::uint32_t> changed = _in.dirty;
         if (_in.indicesStable) {
             if (_in.allChanged) {
                 changed = _result.view;
@@ -606,6 +646,9 @@ private:
     std::vector<std::uint32_t> _base;
     std::optional<FilterRun> _filterRun;
     std::optional<ChunkedMergeSort> _sort;
+    // outcome
+    std::optional<std::string> _failure;
+    std::function<void(std::size_t, std::size_t)> _onPhase;
 };
 
 }  // namespace detail
@@ -624,10 +667,12 @@ public:
           _options{std::move(options)},
           _columns(_source->columns().begin(), _source->columns().end()),
           _snapshot{_source->snapshot()},
+          _viewColumns{_columns},
           _viewSnapshot{_snapshot},
-          _keys(_columns.size()),
           _view(identity(_snapshot->rowCount())),
-          _trueView{_view} {
+          _trueView{_view},
+          _keysSnapshot{_snapshot},
+          _keys(_columns.size()) {
         _source->subscribe(*this);
     }
 
@@ -643,38 +688,39 @@ public:
     }
 
     /// @brief Sets the sort chain; an empty chain is source order.
+    ///
+    /// Keys are checked against the source's latest columns, which `columns()`
+    /// shows once the view computed with them is applied.
     /// @param chain The keys, most significant first.
-    /// @return `UnknownColumn` when a key names no column; the sort is then unchanged.
+    /// @return `UnknownColumn` when a key names no column; `ServiceFailed` when
+    ///         the sort ran inside the call and an injected service threw. The
+    ///         sort is then unchanged.
     std::expected<void, TableError> setSort(SortChain chain) {
         for (auto const& key : chain) {
             if (!detail::findColumn(_columns, key.column)) {
-                return std::unexpected(TableError{.code = TableErrorCode::UnknownColumn,
-                                                  .column = key.column,
-                                                  .message = "no column " + key.column});
+                return std::unexpected(detail::unknownColumn(key.column));
             }
         }
         if (chain == _sort) {
             return {};
         }
         _sort = std::move(chain);
-        _holds.clear();
-        request(Request::Full);
-        return {};
+        return schedule();
     }
 
     /// @brief Sets the filter.
     /// @param spec The filter; an empty spec shows every row.
-    /// @return The compile error, naming its column; the filter is then unchanged.
+    /// @return The compile error, naming its column; or `ServiceFailed` when
+    ///         the filter ran inside the call and an injected service threw.
+    ///         The filter is then unchanged.
     std::expected<void, TableError> setFilter(FilterSpec spec) {
-        auto compiled = compileFilter(spec, _columns, _options.services);
+        auto compiled = compile(spec);
         if (!compiled) {
-            return std::unexpected(compiled.error());
+            return std::unexpected(std::move(compiled.error()));
         }
         _filterSpec = std::move(spec);
         _filter = std::make_shared<CompiledFilter const>(std::move(*compiled));
-        _holds.clear();
-        request(Request::Full);
-        return {};
+        return schedule();
     }
 
     /// @brief The current sort chain.
@@ -685,9 +731,11 @@ public:
     /// @return The filter spec.
     [[nodiscard]] FilterSpec const& filter() const noexcept { return _filterSpec; }
 
-    /// @brief The table's columns.
+    /// @brief The columns of the applied view: what `cellAt` indexes. A reset
+    ///        that changes the columns changes them when its view is applied,
+    ///        with a `Reset` change.
     /// @return The columns.
-    [[nodiscard]] std::span<ColumnInfo const> columns() const noexcept { return _columns; }
+    [[nodiscard]] std::span<ColumnInfo const> columns() const noexcept { return _viewColumns; }
 
     /// @brief Rows in the view.
     /// @return View row count.
@@ -734,10 +782,14 @@ public:
 
     /// @brief One cell of the view.
     /// @param viewRow View row index, below `viewRowCount()`.
-    /// @param column  Column index.
-    /// @return The cell.
+    /// @param column  Column index into `columns()`.
+    /// @return The cell; empty for a column past `columns()`.
     [[nodiscard]] Cell cellAt(std::size_t viewRow, std::size_t column) const {
-        return _viewSnapshot->cell(_view.at(viewRow), column);
+        auto const row = _view.at(viewRow);
+        if (column >= _viewColumns.size()) {
+            return {};
+        }
+        return _viewSnapshot->cell(row, column);
     }
 
     /// @brief The view as source rows.
@@ -761,6 +813,13 @@ public:
     /// @param handler The receiver; empty to stop receiving.
     void onPending(std::function<void(bool)> handler) { _onPending = std::move(handler); }
 
+    /// @brief Sets the receiver of errors no call could return: an injected
+    ///        service that threw in a job that did not run inside the call
+    ///        that asked for it. The sort and filter go back to those of the
+    ///        view shown.
+    /// @param handler The receiver; empty to stop receiving.
+    void onError(std::function<void(TableError const&)> handler) { _onError = std::move(handler); }
+
     /// @brief Counters.
     /// @return The engine's counters so far.
     [[nodiscard]] EngineStats const& stats() const noexcept { return _stats; }
@@ -773,14 +832,14 @@ public:
     /// @brief Ends an edit; a held row moves to its sorted place now.
     ///
     /// The commit that ends an edit usually patches the row just before, and
-    /// that update reaches the engine on a later owner turn: the next repair
-    /// does not hold the row either, so it moves once rather than waiting for
-    /// the settle interval.
+    /// that update reaches the engine on a later owner turn: the first job
+    /// that includes it does not hold the row either, so it moves once rather
+    /// than waiting for the settle interval.
     /// @param key The row's key.
     void endEdit(RowId const& key) {
         _editing.erase(key);
         if (_options.reorder == ReorderPolicy::Deferred) {
-            _releaseOnRepair.insert(key);
+            _releaseOnRepair.insert_or_assign(key, _changeSeq);
         }
         if (_holds.erase(key) > 0) {
             relayout();
@@ -809,24 +868,41 @@ private:
 
     enum class Request : std::uint8_t { Full, Repair };
 
+    // What the engine's state was when a job's input was taken, to tell on
+    // the job's return whether a later change made its result useless.
+    struct Ticket {
+        std::uint64_t epoch = 0;           // structural changes absorbed
+        std::uint64_t changeSeq = 0;       // notifications absorbed
+        std::uint64_t columnsVersion = 0;  // column sets adopted
+    };
+
+    // What applying a result calls out with.
+    struct Applied {
+        ViewChange change;
+        bool armSettle = false;
+    };
+
+    // ── changes ─────────────────────────────────────────────────────────────
+
     void rowsChanged(RowChange const& change) override {
         switch (change.kind) {
             case ChangeKind::Updated:
                 for (auto const row : change.rows) {
-                    _dirty.push_back(static_cast<std::uint32_t>(row));
+                    _notifiedRows.push_back(static_cast<std::uint32_t>(row));
                 }
                 break;
             case ChangeKind::Reset:
-                _columnsChanged = true;
-                _structural = true;
+                _notifiedReset = true;
+                _notifiedStructural = true;
                 break;
             case ChangeKind::Inserted:
             case ChangeKind::Removed:
             default:
-                _structural = true;
+                _notifiedStructural = true;
                 break;
         }
-        ++_settleSeq;
+        _notified = true;
+        ++_changeSeq;
         if (_options.owner == nullptr) {
             flushChanges();
             return;
@@ -837,34 +913,64 @@ private:
         }
     }
 
-    // Applies every change notified since the last flush: one repair for any
-    // number of updates, or a recompute after a structural change.
+    // Takes in every change notified since the last flush, then asks for the
+    // work it makes: one repair for any number of updates, or a recompute
+    // after a structural change.
     void flushChanges() {
         MORPH_ZONE("table.snapshot");
         _flushScheduled = false;
-        _snapshot = _source->snapshot();
-        if (_columnsChanged) {
-            adoptColumns();
-        }
-        if (_structural || _running || _needFull || _dirty.empty()) {
-            _keys.assign(_columns.size(), nullptr);
-            _sortCache = {};
-            _dirty.clear();
-            _holds.clear();
-            bool const allChanged = _columnsChanged || _structural;
-            _structural = false;
-            _columnsChanged = false;
-            _needFull = false;
-            request(Request::Full, allChanged);
+        if (!absorb()) {
             return;
         }
-        request(Request::Repair);
+        // An error comes back only from a job that ran inside this call, which
+        // has then called nothing out.
+        if (auto const done = schedule(); !done) {
+            reportError(done.error());
+        }
     }
 
-    // Re-reads the columns after a reset, keeping the sort keys and filter
-    // entries whose columns remain.
+    // Folds the notified changes into the pending work. Updated rows join the
+    // dirty rows; a structural change drops the keys built for the old row
+    // indices and owes every row a `Changed`.
+    bool absorb() {
+        if (!_notified) {
+            return false;
+        }
+        _notified = false;
+        _absorbedSeq = _changeSeq;
+        _snapshot = _source->snapshot();
+        if (_notifiedReset) {
+            adoptColumns();
+        }
+        if (_notifiedStructural) {
+            ++_epoch;
+            _keys.assign(_columns.size(), nullptr);
+            _keysSnapshot = nullptr;
+            _sortCache = {};
+            _dirty.clear();
+            _obligeAll = true;
+        } else {
+            _dirty.insert(_dirty.end(), _notifiedRows.begin(), _notifiedRows.end());
+        }
+        _notifiedRows.clear();
+        _notifiedStructural = false;
+        _notifiedReset = false;
+        return true;
+    }
+
+    // Re-reads the columns after a reset; a changed column set keeps the sort
+    // keys and filter entries whose columns remain.
     void adoptColumns() {
-        _columns.assign(_source->columns().begin(), _source->columns().end());
+        std::vector<ColumnInfo> columns(_source->columns().begin(), _source->columns().end());
+        if (columns == _columns) {
+            return;
+        }
+        _columns = std::move(columns);
+        ++_columnsVersion;
+        fitToColumns();
+    }
+
+    void fitToColumns() {
         std::erase_if(_sort, [&](SortKey const& key) { return !detail::findColumn(_columns, key.column); });
         std::erase_if(_filterSpec.columns,
                       [&](auto const& entry) { return !detail::findColumn(_columns, entry.first).has_value(); });
@@ -873,7 +979,7 @@ private:
                           [&](std::string const& columnId) { return !detail::findColumn(_columns, columnId); });
         }
         std::erase_if(_filterSpec.groups, [](GroupFilter const& group) { return group.columns.empty(); });
-        auto compiled = compileFilter(_filterSpec, _columns, _options.services);
+        auto compiled = compile(_filterSpec);
         if (compiled) {
             _filter = std::make_shared<CompiledFilter const>(std::move(*compiled));
         } else {
@@ -883,7 +989,65 @@ private:
         }
     }
 
-    [[nodiscard]] detail::JobInput makeInput(Request kind, bool allChanged) {
+    // compileFilter, with an exception from the collator or date parser as an error.
+    [[nodiscard]] std::expected<CompiledFilter, TableError> compile(FilterSpec const& spec) const {
+        try {
+            return compileFilter(spec, _columns, _options.services);
+        } catch (std::exception const& error) {
+            return std::unexpected(serviceFailed(error.what()));
+        } catch (...) {
+            return std::unexpected(serviceFailed("unknown exception"));
+        }
+    }
+
+    [[nodiscard]] static TableError serviceFailed(std::string const& what) {
+        return TableError{.code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + what};
+    }
+
+    // ── scheduling ──────────────────────────────────────────────────────────
+
+    // Whether the shown view is out of date with the requested state.
+    [[nodiscard]] bool hasWork() const {
+        return !_dirty.empty() || _epoch != _viewEpoch || _sort != _appliedSort || _filter != _appliedFilter ||
+               _columnsVersion != _viewColumnsVersion;
+    }
+
+    // A repair merges the dirty rows into the shown order: only the rows'
+    // contents changed since that order was computed. (A structural change
+    // advances the epoch; every row is owed a `Changed` exactly while the
+    // epoch is ahead of the view's.)
+    [[nodiscard]] bool canRepair() const {
+        return !_dirty.empty() && _epoch == _viewEpoch && _sort == _appliedSort && _filter == _appliedFilter &&
+               _columnsVersion == _viewColumnsVersion;
+    }
+
+    // Whether a change since @p input was taken makes its result useless.
+    [[nodiscard]] bool supersedes(detail::JobInput const& input, Ticket const& ticket) const {
+        return _sort != input.sort || _filter != input.filter || _epoch != ticket.epoch ||
+               _columnsVersion != ticket.columnsVersion;
+    }
+
+    // Starts the work the requested state needs. While a job runs, a request
+    // that makes its result useless stops it; either way the work follows it.
+    std::expected<void, TableError> schedule() {
+        if (_running) {
+            if (supersedes(*_runningInput, _runningTicket)) {
+                _jobStop.request_stop();
+            }
+            return {};
+        }
+        if (!hasWork()) {
+            return {};
+        }
+        auto const kind = canRepair() ? Request::Repair : Request::Full;
+        if (_options.owner == nullptr || _snapshot->rowCount() < _options.smallTable) {
+            return runNow(kind);
+        }
+        start(kind);
+        return {};
+    }
+
+    [[nodiscard]] detail::JobInput makeInput(Request kind, Ticket& ticket) {
         detail::JobInput input;
         input.snapshot = _snapshot;
         input.columns = _columns;
@@ -905,185 +1069,254 @@ private:
         input.needed.erase(first, last);
         input.sort = _sort;
         input.filter = _filter;
-        if (!_sort.empty() && _sortCache.order != nullptr && _sortCache.chain == _sort &&
-            _sortCache.snapshot == _snapshot) {
+        // The cached order is of the rows the keys were built from (install
+        // keeps no other); the job merges the dirty rows back into it.
+        if (!_sort.empty() && _sortCache.order != nullptr && _sortCache.chain == _sort) {
             input.cachedSorted = _sortCache.order;
         }
         input.previousView = _view;
         input.previousSnapshot = _viewSnapshot;
         input.repair = kind == Request::Repair;
-        input.indicesStable = input.repair || _viewSnapshot == _snapshot;
-        if (input.repair) {
-            input.dirty = std::move(_dirty);
-            std::ranges::sort(input.dirty);
-            auto const [dupFirst, dupLast] = std::ranges::unique(input.dirty);
-            input.dirty.erase(dupFirst, dupLast);
-            input.previousTrueView = _trueView;
-            if (_sortCache.order != nullptr && _sortCache.chain == _sort) {
-                input.cachedSorted = _sortCache.order;
-            }
-        }
+        input.indicesStable = _epoch == _viewEpoch;
+        input.dirty = std::move(_dirty);
         _dirty.clear();
-        input.allChanged = allChanged;
+        std::ranges::sort(input.dirty);
+        auto const [dupFirst, dupLast] = std::ranges::unique(input.dirty);
+        input.dirty.erase(dupFirst, dupLast);
+        if (input.repair) {
+            input.previousTrueView = _trueView;
+        }
+        input.allChanged = _obligeAll;
+        _obligeAll = false;
         input.resetThreshold = _options.resetThreshold;
+        ticket = Ticket{.epoch = _epoch, .changeSeq = _absorbedSeq, .columnsVersion = _columnsVersion};
         return input;
     }
 
-    void request(Request kind, bool allChanged = false) {
-        if (_running) {
-            // One job at a time: stop the running one; the next starts from the
-            // latest state when it ends. Its result is dropped, so a queued
-            // repair could not merge into it: recompute instead.
-            _jobStop.request_stop();
-            _queued = true;
-            if (kind == Request::Repair) {
-                _needFull = true;
-            }
-            _queuedAllChanged = _queuedAllChanged || allChanged;
-            return;
+    // A job that was dropped or failed hands back the work it took.
+    void giveBack(detail::JobInput const& input, Ticket const& ticket) {
+        if (ticket.epoch == _epoch) {
+            _dirty.insert(_dirty.end(), input.dirty.begin(), input.dirty.end());
         }
-        auto const rows = _snapshot->rowCount();
-        if (_options.owner == nullptr || rows < _options.smallTable) {
-            runNow(kind, allChanged);
-            return;
-        }
-        start(kind, allChanged);
+        _obligeAll = _obligeAll || input.allChanged;
     }
 
-    void runNow(Request kind, bool allChanged) {
+    // A failed job's sort and filter go back to those of the view shown.
+    void revert() {
+        _sort = _appliedSort;
+        _filterSpec = _appliedFilterSpec;
+        _filter = _appliedFilter;
+        if (_columnsVersion != _viewColumnsVersion) {
+            fitToColumns();
+        }
+    }
+
+    std::expected<void, TableError> runNow(Request kind) {
         auto const began = std::chrono::steady_clock::now();
         ++_stats.jobs;
-        detail::ViewJob job{makeInput(kind, allChanged)};
+        Ticket ticket;
+        detail::ViewJob job{makeInput(kind, ticket)};
         static_cast<void>(job.step(kNoDeadline, ::core::async::StopToken{}));
+        if (job.failure()) {
+            recordOwnerStep(began);
+            giveBack(job.input(), ticket);
+            revert();
+            return std::unexpected(serviceFailed(*job.failure()));
+        }
+        auto applied = install(job.input(), job.takeResult(), ticket);
         recordOwnerStep(began);
-        apply(job.input(), job.takeResult());
+        deliver(applied);
+        return {};
     }
 
-    void start(Request kind, bool allChanged) {
+    void start(Request kind) {
         _running = true;
-        _queued = false;
-        _queuedAllChanged = false;
         ++_stats.jobs;
-        ++_generation;
         _jobStop = ::core::async::StopSource{};
-        setPending(true);
-        auto const job = std::make_shared<detail::ViewJob>(makeInput(kind, allChanged));
-        auto const generation = _generation;
+        auto const job = std::make_shared<detail::ViewJob>(makeInput(kind, _runningTicket));
+        _runningInput = &job->input();
         auto* const owner = _options.owner;
         if (_options.worker == nullptr) {
-            owner->post(_alive.guard([this, job, generation] { ownerStep(generation, job); }));
-            return;
-        }
-        // The worker task never names the engine: it holds the job and two
-        // callbacks gated on the engine's lifetime, which run on the owner.
-        auto finished = _alive.guard([this, job, generation] { finish(generation, job); });
-        std::function<void(std::size_t, std::size_t)> report;
-        if (auto const progress = _options.services.progress) {
-            report =
-                _alive.guard([progress](std::size_t done, std::size_t total) { progress->progress(done, total); });
-        }
-        _options.worker->post([job, stop = _jobStop.get_token(), owner, finished = std::move(finished),
-                               report = std::move(report)] mutable {
-            static_cast<void>(job->step(kNoDeadline, stop));
-            if (report) {
-                auto const [done, total] = job->progress();
-                owner->post([report, done = done, total = total] { report(done, total); });
+            owner->post(_alive.guard([this, job] { ownerStep(job); }));
+        } else {
+            // The worker task never names the engine: it holds the job and
+            // callbacks gated on the engine's lifetime, which run on the owner.
+            if (auto const progress = _options.services.progress) {
+                auto report =
+                    _alive.guard([progress](std::size_t done, std::size_t total) { progress->progress(done, total); });
+                job->onPhase([owner, report = std::move(report)](std::size_t done, std::size_t total) {
+                    owner->post([report, done, total] mutable { report(done, total); });
+                });
             }
-            owner->post(std::move(finished));
-        });
+            auto finished = _alive.guard([this, job] { finish(job); });
+            _options.worker->post([job, stop = _jobStop.get_token(), owner, finished = std::move(finished)] mutable {
+                static_cast<void>(job->step(kNoDeadline, stop));
+                owner->post(std::move(finished));
+            });
+        }
+        // Last: the handler may make a request or destroy the engine.
+        setPending(true);
     }
 
-    void ownerStep(std::uint64_t generation, std::shared_ptr<detail::ViewJob> const& job) {
+    void ownerStep(std::shared_ptr<detail::ViewJob> const& job) {
         auto const began = std::chrono::steady_clock::now();
         auto const stop = _jobStop.get_token();
         bool const done = job->step(began + _options.frameBudget, stop);
         recordOwnerStep(began);
-        if (_options.services.progress != nullptr) {
+        if (auto const progress = _options.services.progress) {
+            auto const alive = _alive.token();
             auto const [doneUnits, total] = job->progress();
-            _options.services.progress->progress(doneUnits, total);
-        }
-        if (!done && !stop.stop_requested() && generation == _generation) {
-            _options.owner->post(_alive.guard([this, generation, job] { ownerStep(generation, job); }));
-            return;
-        }
-        finish(generation, job);
-    }
-
-    void finish(std::uint64_t generation, std::shared_ptr<detail::ViewJob> const& job) {
-        if (generation != _generation) {
-            return;
-        }
-        _running = false;
-        if (_queued || !job->done()) {
-            ++_stats.dropped;
-            if (job->input().repair) {
-                _needFull = true;
-            }
-            bool const allChanged = _queuedAllChanged;
-            if (_needFull) {
-                _keys.assign(_columns.size(), nullptr);
-                _sortCache = {};
-                _needFull = false;
-            }
-            _queued = false;
-            _queuedAllChanged = false;
-            if (_snapshot->rowCount() < _options.smallTable) {
-                setPending(false);
-                runNow(Request::Full, allChanged);
+            progress->progress(doneUnits, total);
+            if (alive.expired()) {
                 return;
             }
-            start(Request::Full, allChanged);
+        }
+        if (!done && !stop.stop_requested()) {
+            _options.owner->post(_alive.guard([this, job] { ownerStep(job); }));
+            return;
+        }
+        finish(job);
+    }
+
+    void finish(std::shared_ptr<detail::ViewJob> const& job) {
+        _running = false;
+        _runningInput = nullptr;
+        auto const& input = job->input();
+        if (!job->done() || supersedes(input, _runningTicket)) {
+            ++_stats.dropped;
+            giveBack(input, _runningTicket);
+            afterJob(std::nullopt);
+            return;
+        }
+        if (job->failure()) {
+            giveBack(input, _runningTicket);
+            revert();
+            afterJob(serviceFailed(*job->failure()));
             return;
         }
         auto const began = std::chrono::steady_clock::now();
-        apply(job->input(), job->takeResult());
+        auto applied = install(input, job->takeResult(), _runningTicket);
         recordOwnerStep(began);
-        setPending(false);
+        if (!deliver(applied)) {
+            return;
+        }
+        afterJob(std::nullopt);
     }
 
-    void apply(detail::JobInput const& input, detail::JobResult result) {
+    // After a job returns: starts the work that remains (not after a failure,
+    // which would only fail again), lays out holds released meanwhile, ends
+    // `pending()`, and reports the failure. A handler may have started a job
+    // already; then `pending()` stays true.
+    void afterJob(std::optional<TableError> error) {
+        auto const alive = _alive.token();
+        if (!error && !_running && hasWork()) {
+            auto const done = schedule();
+            if (alive.expired()) {
+                return;
+            }
+            if (!done) {
+                error = done.error();
+            }
+        }
+        if (_relayoutPending && !_running) {
+            relayout();
+            if (alive.expired()) {
+                return;
+            }
+        }
+        if (!_running) {
+            setPending(false);
+            if (alive.expired()) {
+                return;
+            }
+        }
+        if (error) {
+            reportError(*error);
+        }
+    }
+
+    // ── applying ────────────────────────────────────────────────────────────
+
+    // Makes a finished job's result the shown view. Calls nothing out.
+    [[nodiscard]] Applied install(detail::JobInput const& input, detail::JobResult result, Ticket const& ticket) {
         _stats.keyBuilds += result.keyBuilds;
         _stats.fullSorts += result.fullSort ? 1 : 0;
         _stats.subsetSorts += result.subsetSort ? 1 : 0;
         _stats.repairs += result.repaired ? 1 : 0;
-        if (input.snapshot == _snapshot) {
-            _keys = std::move(result.keys);
-            if (result.sorted != nullptr) {
-                _sortCache =
-                    SortCache{.chain = input.sort, .snapshot = input.snapshot, .order = std::move(result.sorted)};
-            }
+        _keys = std::move(result.keys);
+        _keysSnapshot = input.snapshot;
+        if (result.sorted != nullptr) {
+            _sortCache = SortCache{.chain = input.sort, .snapshot = input.snapshot, .order = std::move(result.sorted)};
+        } else if (_sortCache.snapshot != input.snapshot) {
+            // An order of older rows: a repair it missed would merge into it
+            // as if it were current.
+            _sortCache = {};
         }
         MORPH_PLOT("table.sourceRows", input.snapshot->rowCount());
         MORPH_PLOT("table.viewRows", result.view.size());
         MORPH_PLOT("table.keyCacheColumns",
                    std::ranges::count_if(_keys, [](auto const& keys) { return keys != nullptr; }));
+        bool const columnsChanged = ticket.columnsVersion != _viewColumnsVersion;
+        if (columnsChanged) {
+            _viewColumns = input.columns;
+            _viewColumnsVersion = ticket.columnsVersion;
+        }
+        _viewEpoch = ticket.epoch;
+        _appliedSort = input.sort;
+        _appliedFilter = input.filter;
+        _appliedFilterSpec = _filterSpec;
         _trueView = std::move(result.view);
         _viewSnapshot = input.snapshot;
-        auto change = std::move(result.change);
-        if (_options.reorder == ReorderPolicy::Deferred && input.repair) {
-            for (auto const row : input.dirty) {
-                auto key = input.snapshot->rowId(row);
-                if (!_releaseOnRepair.contains(key) &&
-                    std::ranges::find(input.previousView, row) != input.previousView.end()) {
-                    _holds.insert(std::move(key));
-                }
+        _relayoutPending = false;
+        _viewIndexValid = false;
+        _keyIndexValid = false;
+        Applied out{.change = std::move(result.change), .armSettle = false};
+        if (_options.reorder == ReorderPolicy::Deferred) {
+            // An ended edit's token stands for the notifications up to its own
+            // count: one the shown view had already taken in has no use.
+            std::erase_if(_releaseOnRepair, [&](auto const& entry) { return entry.second <= _viewChangeSeq; });
+            if (input.repair) {
+                holdUpdatedRows(input);
+            } else {
+                // A sort, filter or structural change releases every held row.
+                _holds.clear();
             }
-            _releaseOnRepair.clear();
-            for (auto const& editing : _editing) {
-                _holds.insert(editing);
-            }
-            if (!_holds.empty()) {
-                auto const displayed = holdLayout(input.previousView);
-                change = diffViews(input.previousView, displayed, input.dirty, input.snapshot->rowCount(),
+            std::erase_if(_releaseOnRepair, [&](auto const& entry) { return entry.second <= ticket.changeSeq; });
+        }
+        _viewChangeSeq = ticket.changeSeq;
+        if (!_holds.empty()) {
+            auto displayed = holdLayout(input.previousView);
+            out.change = diffViews(input.previousView, displayed, input.dirty, input.snapshot->rowCount(),
                                    _options.resetThreshold);
-                _view = displayed;
-                scheduleSettle();
-                publish(change);
-                return;
+            _view = std::move(displayed);
+            out.armSettle = true;
+        } else {
+            _view = _trueView;
+        }
+        if (columnsChanged) {
+            // Row operations cannot say that the columns changed.
+            out.change.ops.assign(1, ViewOp{.kind = ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+        }
+        return out;
+    }
+
+    // Under `Deferred`, every updated row that was shown, and every row being
+    // edited, keeps its place; a row whose edit ended before its commit's
+    // update arrived does not.
+    void holdUpdatedRows(detail::JobInput const& input) {
+        std::vector<bool> shown(input.snapshot->rowCount(), false);
+        for (auto const row : input.previousView) {
+            shown[row] = true;
+        }
+        for (auto const row : input.dirty) {
+            auto key = input.snapshot->rowId(row);
+            if (shown[row] && !_releaseOnRepair.contains(key)) {
+                _holds.insert(std::move(key));
             }
         }
-        _view = _trueView;
-        publish(change);
+        for (auto const& editing : _editing) {
+            _holds.insert(editing);
+        }
     }
 
     // The true view with every held row put back at its displayed index.
@@ -1092,7 +1325,7 @@ private:
         std::vector<bool> isHeld(_viewSnapshot->rowCount(), false);
         for (std::size_t i = 0; i < displayed.size(); ++i) {
             auto const row = displayed[i];
-            if (row < isHeld.size() && _holds.contains(_viewSnapshot->rowId(row))) {
+            if (_holds.contains(_viewSnapshot->rowId(row))) {
                 held.emplace_back(i, row);
                 isHeld[row] = true;
             }
@@ -1110,31 +1343,47 @@ private:
         return out;
     }
 
+    // Lays the view out again after holds were released. While a job runs its
+    // result is about to replace the view, and it was diffed against the view
+    // as it is now: the release waits for it, and its layout takes it in.
     void relayout() {
-        auto const displayed = _holds.empty() ? _trueView : holdLayout(_view);
-        auto const change = diffViews(_view, displayed, {}, _viewSnapshot->rowCount(), _options.resetThreshold);
-        _view = displayed;
-        publish(change);
-    }
-
-    void scheduleSettle() {
-        if (!_options.scheduleSettle) {
+        if (_running) {
+            _relayoutPending = true;
             return;
         }
-        auto const seq = _settleSeq;
-        _options.scheduleSettle(_options.settle, _alive.guard([this, seq] {
-            if (seq == _settleSeq) {
-                settleNow();
-            }
-        }));
-    }
-
-    void publish(ViewChange const& change) {
+        _relayoutPending = false;
+        auto displayed = _holds.empty() ? _trueView : holdLayout(_view);
+        auto const change = diffViews(_view, displayed, {}, _viewSnapshot->rowCount(), _options.resetThreshold);
+        _view = std::move(displayed);
         _viewIndexValid = false;
         _keyIndexValid = false;
-        if (!change.empty() && _onViewChange) {
-            _onViewChange(change);
+        deliver(Applied{.change = change, .armSettle = false});
+    }
+
+    // ── calling out ─────────────────────────────────────────────────────────
+
+    // Arms the settle timer and publishes the change. Returns `false` when a
+    // handler destroyed the engine; the caller then returns at once.
+    bool deliver(Applied const& applied) {
+        auto const alive = _alive.token();
+        if (applied.armSettle && _options.scheduleSettle) {
+            auto const seq = _changeSeq;
+            auto const scheduler = _options.scheduleSettle;
+            scheduler(_options.settle, _alive.guard([this, seq] {
+                if (seq == _changeSeq) {
+                    settleNow();
+                }
+            }));
+            if (alive.expired()) {
+                return false;
+            }
         }
+        if (!applied.change.empty() && _onViewChange) {
+            // A copy: the handler may replace itself or destroy the engine.
+            auto const handler = _onViewChange;
+            handler(applied.change);
+        }
+        return !alive.expired();
     }
 
     void setPending(bool value) {
@@ -1143,7 +1392,15 @@ private:
         }
         _pending = value;
         if (_onPending) {
-            _onPending(value);
+            auto const handler = _onPending;
+            handler(value);
+        }
+    }
+
+    void reportError(TableError const& error) const {
+        if (_onError) {
+            auto const handler = _onError;
+            handler(error);
         }
     }
 
@@ -1185,40 +1442,57 @@ private:
 
     std::shared_ptr<DataSource> _source;
     EngineOptions _options;
+    // requested state: what the next job computes
     std::vector<ColumnInfo> _columns;
-    std::shared_ptr<RowSnapshot const> _snapshot;      // what the next job computes from
-    std::shared_ptr<RowSnapshot const> _viewSnapshot;  // what `_view` indexes
-    std::vector<std::shared_ptr<KeyColumn const>> _keys;
-    SortCache _sortCache;
+    std::shared_ptr<RowSnapshot const> _snapshot;
     SortChain _sort;
     FilterSpec _filterSpec;
     std::shared_ptr<CompiledFilter const> _filter;
+    std::uint64_t _columnsVersion = 0;
+    std::uint64_t _epoch = 0;
+    // applied state: what the shown view was computed from
+    std::vector<ColumnInfo> _viewColumns;
+    std::shared_ptr<RowSnapshot const> _viewSnapshot;
+    SortChain _appliedSort;
+    FilterSpec _appliedFilterSpec;
+    std::shared_ptr<CompiledFilter const> _appliedFilter;
+    std::uint64_t _viewColumnsVersion = 0;
+    std::uint64_t _viewEpoch = 0;
+    std::uint64_t _viewChangeSeq = 0;      // notifications the view took in
     std::vector<std::uint32_t> _view;      // displayed
     std::vector<std::uint32_t> _trueView;  // sorted and filtered, without holds
+    // caches, valid for `_keysSnapshot`
+    std::shared_ptr<RowSnapshot const> _keysSnapshot;
+    std::vector<std::shared_ptr<KeyColumn const>> _keys;
+    SortCache _sortCache;
     mutable std::vector<std::uint32_t> _viewIndex;
     mutable bool _viewIndexValid = false;
     mutable std::unordered_map<RowId, std::size_t> _keyIndex;
     mutable bool _keyIndexValid = false;
-    // changes
-    std::vector<std::uint32_t> _dirty;
-    bool _structural = false;
-    bool _columnsChanged = false;
+    // pending work
+    std::vector<std::uint32_t> _notifiedRows;  // updated, not yet absorbed
+    bool _notified = false;
+    bool _notifiedStructural = false;
+    bool _notifiedReset = false;
     bool _flushScheduled = false;
-    bool _needFull = false;
+    std::uint64_t _changeSeq = 0;       // notifications received
+    std::uint64_t _absorbedSeq = 0;     // notifications absorbed
+    std::vector<std::uint32_t> _dirty;  // rows changed since `_keysSnapshot`
+    bool _obligeAll = false;            // every row is owed a `Changed`
     // deferred reorder
     std::unordered_set<RowId> _holds;
     std::unordered_set<RowId> _editing;
-    std::unordered_set<RowId> _releaseOnRepair;  // edits ended since the last repair
-    std::uint64_t _settleSeq = 0;
+    std::unordered_map<RowId, std::uint64_t> _releaseOnRepair;  // ended edits, by the notification count then
+    bool _relayoutPending = false;
     // execution
     bool _pending = false;
     bool _running = false;
-    bool _queued = false;
-    bool _queuedAllChanged = false;
-    std::uint64_t _generation = 0;
+    detail::JobInput const* _runningInput = nullptr;
+    Ticket _runningTicket;
     ::core::async::StopSource _jobStop;
     std::function<void(ViewChange const&)> _onViewChange;
     std::function<void(bool)> _onPending;
+    std::function<void(TableError const&)> _onError;
     EngineStats _stats;
     async::CallbackScope _alive;
 };

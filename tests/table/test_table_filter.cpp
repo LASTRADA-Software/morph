@@ -14,6 +14,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <limits>
 #include <morph/table/filter.hpp>
 #include <numeric>
 #include <ranges>
@@ -108,6 +109,16 @@ TEST_CASE("table: an integer column compares against exact decimal values", "[ta
         .services = {}};
     CHECK(f.by(on("c", {ge("1.5")})) == Rows{1, 2});
     CHECK(f.by(on("c", {eq("2.0")})) == Rows{1});
+}
+
+// Mutation: parseDecimal clamping INT64_MIN to -INT64_MAX: `eq` the most
+// negative integer never matches the cell that holds it.
+TEST_CASE("table: an integer filter matches the most negative integer", "[table][filter]") {
+    Filtered const f{.source = tabletest::column(ColumnKind::Integer, {std::numeric_limits<std::int64_t>::min(),
+                                                                       std::numeric_limits<std::int64_t>::max()}),
+                     .services = {}};
+    CHECK(f.by(on("c", {eq("-9223372036854775808")})) == Rows{0});
+    CHECK(f.by(on("c", {lt("-9223372036854775807")})) == Rows{0});
 }
 
 TEST_CASE("table: a numeric filter never matches an invalid cell", "[table][filter]") {

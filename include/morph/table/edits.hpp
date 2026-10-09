@@ -30,6 +30,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -64,7 +65,9 @@ using EditCommit = std::function<void(EditRequest const& request, EditDone done)
 /// @brief Commits cell edits row by row, in order.
 ///
 /// Owner-affine. A completion that arrives after the `CellEdits` is destroyed
-/// is ignored.
+/// is ignored, and destroying it ends the engine edit of every row it still
+/// has in flight. The commit function, the patcher and the engine's handlers
+/// may commit again, or destroy this object, from inside a call it makes.
 class CellEdits {
 public:
     /// @brief Builds the committer.
@@ -79,7 +82,23 @@ public:
     CellEdits& operator=(CellEdits const&) = delete;
     CellEdits(CellEdits&&) = delete;
     CellEdits& operator=(CellEdits&&) = delete;
-    ~CellEdits() = default;
+
+    /// @brief Ends the engine edit of every row with an edit in flight or
+    ///        settling: its completion will be ignored, so nothing else would.
+    ~CellEdits() {
+        if (_engine == nullptr) {
+            return;
+        }
+        std::vector<RowId> rows{_ending.begin(), _ending.end()};
+        for (auto const& [row, queue] : _queues) {
+            rows.push_back(row);
+        }
+        _queues.clear();
+        _ending.clear();
+        for (auto const& row : rows) {
+            _engine->endEdit(row);
+        }
+    }
 
     /// @brief Commits an edit: now, or after the row's earlier edits settle.
     /// @param request The edit.
@@ -128,37 +147,56 @@ public:
     }
 
 private:
-    void start(RowId const& row) {
+    void start(RowId row) {
         if (_engine != nullptr) {
             _engine->beginEdit(row);
         }
-        auto const& request = _queues.at(row).front();
+        // A copy: a commit that settles at once pops the queue's front, and the
+        // commit may still read its request afterwards.
+        auto const request = _queues.at(row).front();
+        // The commit runs last: it may settle, commit again or destroy this object.
         _commit(request, _alive.guard([this, row](std::expected<std::vector<Cell>, FieldError> outcome) {
-            settle(row, outcome);
+            settle(row, std::move(outcome));
         }));
     }
 
-    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError>& outcome) {
+    // The queue is brought up to date before the patcher is called: patching
+    // notifies the source's listeners at once, and their handlers may commit
+    // to the same row or destroy this object.
+    void settle(RowId const& row, std::expected<std::vector<Cell>, FieldError> outcome) {
         auto const found = _queues.find(row);
         if (found == _queues.end() || found->second.empty()) {
             return;
         }
         auto const request = std::move(found->second.front());
         found->second.pop_front();
+        bool const more = !found->second.empty();
+        if (!more) {
+            _queues.erase(found);
+            _ending.insert(row);
+        }
         if (outcome) {
             if (auto const errors = _errors.find(row); errors != _errors.end()) {
                 errors->second.erase(request.column);
             }
+            auto const alive = _alive.token();
             _patcher->patchRow(row, std::move(*outcome));
+            if (alive.expired()) {
+                return;
+            }
         } else {
             auto const column = outcome.error().column.empty() ? request.column : outcome.error().column;
             _errors[row].insert_or_assign(column, std::move(outcome.error().message));
         }
-        if (!found->second.empty()) {
+        if (more) {
             start(row);
             return;
         }
-        _queues.erase(found);
+        _ending.erase(row);
+        if (_queues.contains(row)) {
+            // A commit made while the row was patched started its next edit.
+            return;
+        }
         if (_engine != nullptr) {
             _engine->endEdit(row);
         }
@@ -168,6 +206,7 @@ private:
     EditCommit _commit;
     Engine* _engine;
     std::unordered_map<RowId, std::deque<EditRequest>> _queues;
+    std::unordered_set<RowId> _ending;  // last edit settled, row being patched
     std::unordered_map<RowId, std::map<std::string, std::string, std::less<>>> _errors;
     async::CallbackScope _alive;
 };

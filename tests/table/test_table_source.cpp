@@ -12,6 +12,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <glaze/glaze.hpp>
+#include <limits>
 #include <memory>
 #include <morph/table/data_source.hpp>
 #include <span>
@@ -185,7 +187,39 @@ TEST_CASE("table: displayText renders every cell alternative", "[table][source]"
     CHECK(displayText(Cell{std::int64_t{-3}}) == "-3");
     CHECK(displayText(Cell{true}) == "true");
     CHECK(displayText(Cell{std::string{"x"}}) == "x");
-    CHECK(displayText(Cell{dec("1.5")}) == "3/2");
     CHECK(displayText(Cell{QuantityCell{.amount = dec("2"), .toCanonical = dec("1000")}}) == "2");
     CHECK(displayText(Cell{2.5}) == "2.5");
+}
+
+// Mutation: displayText formatting a Rational with `std::format("{}")`, which
+// writes the exact fraction: "3/2".
+TEST_CASE("table: displayText writes a decimal as a decimal", "[table][source]") {
+    CHECK(displayText(Cell{dec("1.5")}) == "1.5");
+    CHECK(displayText(Cell{dec("-12.50")}) == "-12.5");
+    CHECK(displayText(Cell{QuantityCell{.amount = dec("0.25"), .toCanonical = dec("1000")}}) == "0.25");
+}
+
+// Mutation: parseDecimal building every value through the canonicalising
+// constructor, which clamps INT64_MIN to -INT64_MAX.
+TEST_CASE("table: parseDecimal keeps the most negative integer", "[table][source]") {
+    auto const value = parseDecimal("-9223372036854775808");
+    REQUIRE(value.has_value());
+    CHECK(value->numerator == std::numeric_limits<std::int64_t>::min());
+    CHECK(value->denominator == 1);
+    CHECK_FALSE(parseDecimal("-922337203685477580.8").has_value());
+}
+
+namespace {
+
+template <typename T>
+constexpr bool kHasGlazeMeta = requires { glz::meta<T>::value; };
+
+}  // namespace
+
+// Mutation: glz::meta<TableErrorCode> declared in query.hpp, which this file
+// does not include: the code would be written as a number here and by name
+// where query.hpp is included, two definitions of one template.
+TEST_CASE("table: the error code's JSON names come with the type", "[table][source]") {
+    CHECK(kHasGlazeMeta<TableErrorCode>);
+    CHECK(kHasGlazeMeta<ColumnKind>);
 }

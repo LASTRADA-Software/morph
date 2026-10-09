@@ -107,6 +107,26 @@ TEST_CASE("table: single and none modes", "[table][selection]") {
     CHECK(none.selectedCount() == 0);
 }
 
+// Mutation: Selection::select taking its key by reference: in single mode it
+// clears the storage the key refers to before it inserts it.
+TEST_CASE("table: selecting the selected key again keeps it", "[table][selection]") {
+    auto selection = Selection::create(SelectionOptions{.mode = SelectionMode::Single}).value();
+    RowId const longKey{std::string{"a key long enough to be stored on the heap, not inline"}};
+    REQUIRE(selection.select(longKey));
+    REQUIRE(selection.select(selection.keys().front()));
+    REQUIRE(selection.keys().size() == 1);
+    CHECK(selection.keys().front() == longKey);
+    CHECK(selection.contains(longKey));
+
+    auto multiple = Selection::create(SelectionOptions{.mode = SelectionMode::Multiple}).value();
+    multiple.select(RowId{std::string{"first of several long keys stored on the heap"}});
+    multiple.select(RowId{std::string{"second of several long keys stored on the heap"}});
+    multiple.select(RowId{std::string{"third of several long keys stored on the heap"}});
+    REQUIRE(multiple.deselect(multiple.keys().front()));
+    CHECK(multiple.keys().size() == 2);
+    CHECK(multiple.selectedCount() == 2);
+}
+
 TEST_CASE("table: server mode has neither select-all nor pruning", "[table][selection]") {
     auto const pruning =
         Selection::create({.mode = SelectionMode::Multiple, .pruneOnFilter = true, .tableMode = TableMode::Server});

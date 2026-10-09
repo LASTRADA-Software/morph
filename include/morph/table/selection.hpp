@@ -73,9 +73,10 @@ public:
     }
 
     /// @brief Selects a row; in `Single` mode it replaces the selection.
-    /// @param key The row's key.
+    /// @param key The row's key, by value: it may come from `keys()`, which
+    ///            this call changes.
     /// @return `false` in `None` mode.
-    bool select(RowId const& key) {
+    bool select(RowId key) {
         if (_options.mode == SelectionMode::None) {
             return false;
         }
@@ -84,15 +85,17 @@ public:
             _order.clear();
         }
         if (_keys.insert(key).second) {
-            _order.push_back(key);
+            _order.push_back(std::move(key));
         }
         return true;
     }
 
     /// @brief Deselects a row.
-    /// @param key The row's key.
+    /// @param key The row's key, by value: it may come from `keys()`, which
+    ///            this call changes.
     /// @return `true` when it was selected.
-    bool deselect(RowId const& key) {
+    // NOLINTNEXTLINE(performance-unnecessary-value-param) -- a reference into `_order` would change under the erase
+    bool deselect(RowId key) {
         if (_keys.erase(key) == 0) {
             return false;
         }
@@ -101,13 +104,14 @@ public:
     }
 
     /// @brief Selects an unselected row, or deselects a selected one.
-    /// @param key The row's key.
+    /// @param key The row's key, by value: it may come from `keys()`, which
+    ///            this call changes.
     /// @return Whether the row is selected afterwards.
-    bool toggle(RowId const& key) {
+    bool toggle(RowId key) {
         if (deselect(key)) {
             return false;
         }
-        return select(key);
+        return select(std::move(key));
     }
 
     /// @brief Deselects every row.

@@ -93,6 +93,20 @@ inline constexpr std::size_t kCheckEvery = 2048;
     return stop.stop_requested() || (deadline != kNoDeadline && std::chrono::steady_clock::now() >= deadline);
 }
 
+/// @brief The collator to use: the service's, or the default.
+/// @param services The services.
+/// @return The collator; the default outlives every caller.
+[[nodiscard]] inline TextCollator const& collatorOf(Services const& services) {
+    return services.collator != nullptr ? *services.collator : *services.collatorOrDefault();
+}
+
+/// @brief The date parser to use: the service's, or the default.
+/// @param services The services.
+/// @return The parser; the default outlives every caller.
+[[nodiscard]] inline DateParser const& datesOf(Services const& services) {
+    return services.dates != nullptr ? *services.dates : *services.datesOrDefault();
+}
+
 /// @brief Parses a whole decimal integer, all of @p text.
 /// @param text The text.
 /// @return The value, or nothing when @p text is not exactly an integer.
@@ -187,7 +201,7 @@ struct KeyColumn {
                 break;
             case ColumnKind::Custom:
                 if (auto const found = services.comparators.find(info.comparator);
-                    found != services.comparators.end()) {
+                    found != services.comparators.end() && found->second) {
                     out.comparator = found->second;
                     out.cells.resize(rows);
                 } else {
@@ -204,7 +218,7 @@ struct KeyColumn {
     /// @param row      Row index.
     /// @param cell     The row's cell.
     /// @param info     The column.
-    /// @param services Collator and date parser.
+    /// @param services Collator and date parser; a null member means its default.
     void set(std::size_t row, Cell const& cell, ColumnInfo const& info, Services const& services) {
         states[row] = read(row, cell, info, services);
     }
@@ -229,7 +243,7 @@ private:
                 return readReal(row, cell);
             case ColumnKind::Text: {
                 auto const shown = textCell != nullptr ? *textCell : displayText(cell);
-                auto const& collator = *services.collator;
+                auto const& collator = detail::collatorOf(services);
                 text[row] = collator.sortKey(shown);
                 folded[row] = collator.fold(shown);
                 raw[row] = shown;
@@ -244,7 +258,7 @@ private:
                 if (usesComparator()) {
                     cells[row] = cell;
                 } else {
-                    text[row] = services.collator->sortKey(displayText(cell));
+                    text[row] = detail::collatorOf(services).sortKey(displayText(cell));
                 }
                 return CellState::Valid;
             default:
@@ -324,7 +338,7 @@ private:
             return CellState::Valid;
         }
         if (auto const* value = std::get_if<std::string>(&cell)) {
-            auto const& parser = *services.dates;
+            auto const& parser = detail::datesOf(services);
             auto const parsed = kind == ColumnKind::Date ? parser.parseDate(*value, info.format)
                                                          : parser.parseDateTime(*value, info.format);
             if (parsed) {
@@ -375,12 +389,6 @@ inline void buildKeys(RowSnapshot const& snapshot, std::size_t column, ColumnInf
         ColumnInfo const* info;
         Services const* services;
     };
-    if (services.collator == nullptr || services.dates == nullptr) {
-        auto const filled = services.forTask();
-        Sink sink{out, info, filled};
-        snapshot.readColumn(column, sink, first, last);
-        return;
-    }
     Sink sink{out, info, services};
     snapshot.readColumn(column, sink, first, last);
 }
@@ -564,10 +572,11 @@ private:
             _out = _mergeAt;
             _merging = true;
         }
-        std::size_t work = 0;
+        // The count runs across merges: a pass of narrow runs merges many
+        // short pairs, and a per-merge count would never reach a check.
         while (_left < _leftEnd && _right < _rightEnd) {
             _buffer[_out++] = _order(_rows[_right], _rows[_left]) ? _rows[_right++] : _rows[_left++];
-            if (++work % detail::kCheckEvery == 0 && detail::shouldYield(deadline, stop)) {
+            if (++_work % detail::kCheckEvery == 0 && detail::shouldYield(deadline, stop)) {
                 return false;
             }
         }
@@ -598,6 +607,7 @@ private:
     std::size_t _right = 0;
     std::size_t _rightEnd = 0;
     std::size_t _out = 0;
+    std::size_t _work = 0;
 };
 
 /// @brief Sorts @p rows by @p order in one call.

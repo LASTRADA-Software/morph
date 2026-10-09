@@ -28,7 +28,9 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/core/callback_scope.hpp>
 #include <morph/util/datetime.hpp>
+#include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <span>
@@ -90,6 +92,11 @@ struct ColumnInfo {
     std::string comparator;
     /// @brief For a `Date` or `DateTime` column holding text, the format handed to the `DateParser`.
     std::string format;
+
+    /// @brief Member-wise equality.
+    /// @param other The column to compare with.
+    /// @return `true` when id, kind, comparator and format match.
+    [[nodiscard]] bool operator==(ColumnInfo const& other) const = default;
 };
 
 /// @brief What went wrong in a fallible table call.
@@ -101,6 +108,7 @@ enum class TableErrorCode : std::uint8_t {
     LimitExceeded,        ///< A `TableQuery` over one of the server's bounds.
     ColumnNotReadable,    ///< A sort or filter on a column the principal may not read.
     Unavailable,          ///< An operation the table's mode does not offer.
+    ServiceFailed,        ///< An injected service (collator, date parser, comparator) threw.
 };
 
 /// @brief The error every fallible table call returns.
@@ -162,20 +170,29 @@ struct TableError {
     if (digits == 0 || fractionDigits > math::kMaxDecimalPlaces) {
         return fail();
     }
+    std::int64_t const numerator =
+        negative ? static_cast<std::int64_t>(0U - magnitude) : static_cast<std::int64_t>(magnitude);
+    if (fractionDigits == 0) {
+        // The whole-number constructor keeps INT64_MIN; the canonicalising
+        // one would have to negate it and clamps it instead.
+        return math::Rational{numerator, math::DecimalPlaces{0}};
+    }
+    if (numerator == std::numeric_limits<std::int64_t>::min()) {
+        return fail();
+    }
     std::int64_t denominator = 1;
     for (std::uint32_t i = 0; i < fractionDigits; ++i) {
         denominator *= 10;
     }
-    std::int64_t const numerator =
-        negative ? static_cast<std::int64_t>(0U - magnitude) : static_cast<std::int64_t>(magnitude);
     return math::Rational{math::Numerator{numerator}, math::Denominator{denominator},
                           math::DecimalPlaces{fractionDigits}};
 }
 
 /// @brief The text a cell shows when it has to be ordered or matched as text.
 /// @param cell The cell.
-/// @return Its text: the string itself, a number in decimal form, `true` or
-///         `false`, or empty for an empty cell.
+/// @return Its text: the string itself, a number in decimal form (a decimal
+///         to its own places, `"12.5"`), `true` or `false`, or empty for an
+///         empty cell.
 [[nodiscard]] inline std::string displayText(Cell const& cell) {
     return std::visit(
         []<typename T>(T const& value) -> std::string {
@@ -186,7 +203,9 @@ struct TableError {
             } else if constexpr (std::is_same_v<T, bool>) {
                 return value ? "true" : "false";
             } else if constexpr (std::is_same_v<T, QuantityCell>) {
-                return std::format("{}", value.amount);
+                return units::detail::formatRationalDecimal(value.amount);
+            } else if constexpr (std::is_same_v<T, math::Rational>) {
+                return units::detail::formatRationalDecimal(value);
             } else {
                 return std::format("{}", value);
             }
@@ -732,6 +751,47 @@ public:
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
+namespace detail {
+
+/// @brief A source's listeners, notified so that a listener may unsubscribe
+///        itself or another, or destroy the source, from inside a notification.
+///
+/// A listener unsubscribed during a notification is not called after that,
+/// even if it was registered when the notification began: unsubscribing is
+/// how its owner says it is about to be destroyed. A source destroyed during
+/// a notification ends it.
+class Listeners {
+public:
+    /// @brief Registers @p listener.
+    /// @param listener The listener.
+    void add(ChangeListener& listener) { _listeners.push_back(&listener); }
+
+    /// @brief Removes @p listener.
+    /// @param listener The listener.
+    void remove(ChangeListener& listener) { std::erase(_listeners, &listener); }
+
+    /// @brief Calls every listener registered now that is still registered when its turn comes.
+    /// @param change What changed.
+    void notify(RowChange const& change) {
+        auto const alive = _alive.token();
+        auto const listeners = _listeners;
+        for (auto* const listener : listeners) {
+            if (alive.expired()) {
+                return;
+            }
+            if (std::ranges::find(_listeners, listener) != _listeners.end()) {
+                listener->rowsChanged(change);
+            }
+        }
+    }
+
+private:
+    std::vector<ChangeListener*> _listeners;
+    async::CallbackScope _alive;
+};
+
+}  // namespace detail
+
 /// @brief Replaces a row by key; what a committed cell edit patches.
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class RowPatcher {
@@ -769,11 +829,11 @@ public:
 
     /// @brief Registers @p listener.
     /// @param listener The listener.
-    void subscribe(ChangeListener& listener) override { _listeners.push_back(&listener); }
+    void subscribe(ChangeListener& listener) override { _listeners.add(listener); }
 
-    /// @brief Removes @p listener.
+    /// @brief Removes @p listener; safe from inside a notification.
     /// @param listener The listener.
-    void unsubscribe(ChangeListener& listener) override { std::erase(_listeners, &listener); }
+    void unsubscribe(ChangeListener& listener) override { _listeners.remove(listener); }
 
     /// @brief Replaces every row (and optionally the columns), then notifies `Reset`.
     /// @param ids     The rows' keys.
@@ -786,7 +846,7 @@ public:
         }
         _snapshot = TableSnapshot::fromRows(_columns.size(), std::move(ids), std::move(rows));
         reindex();
-        notify(RowChange{.kind = ChangeKind::Reset, .rows = {}});
+        _listeners.notify(RowChange{.kind = ChangeKind::Reset, .rows = {}});
     }
 
     /// @brief Replaces one row's cells, then notifies `Updated`.
@@ -794,7 +854,7 @@ public:
     /// @param cells The new cells.
     void updateRow(std::size_t row, std::vector<Cell> cells) {
         _snapshot = _snapshot->withRow(row, std::move(cells));
-        notify(RowChange{.kind = ChangeKind::Updated, .rows = {row}});
+        _listeners.notify(RowChange{.kind = ChangeKind::Updated, .rows = {row}});
     }
 
     /// @brief Replaces the cells of the row keyed @p id, then notifies `Updated`.
@@ -817,7 +877,7 @@ public:
     void insertRow(std::size_t row, RowId key, std::vector<Cell> cells) {
         _snapshot = _snapshot->withInserted(row, std::move(key), std::move(cells));
         reindex();
-        notify(RowChange{.kind = ChangeKind::Inserted, .rows = {row}});
+        _listeners.notify(RowChange{.kind = ChangeKind::Inserted, .rows = {row}});
     }
 
     /// @brief Removes row @p row, then notifies `Removed`.
@@ -825,7 +885,7 @@ public:
     void removeRow(std::size_t row) {
         _snapshot = _snapshot->withRemoved(row);
         reindex();
-        notify(RowChange{.kind = ChangeKind::Removed, .rows = {row}});
+        _listeners.notify(RowChange{.kind = ChangeKind::Removed, .rows = {row}});
     }
 
     /// @brief The index of the row keyed @p id.
@@ -844,18 +904,10 @@ private:
         }
     }
 
-    void notify(RowChange const& change) {
-        // A copy: a listener may unsubscribe from inside its own notification.
-        auto const listeners = _listeners;
-        for (auto* listener : listeners) {
-            listener->rowsChanged(change);
-        }
-    }
-
     std::vector<ColumnInfo> _columns;
     std::shared_ptr<TableSnapshot const> _snapshot;
     std::unordered_map<RowId, std::size_t> _index;
-    std::vector<ChangeListener*> _listeners;
+    detail::Listeners _listeners;
 };
 
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
@@ -870,4 +922,15 @@ struct glz::meta<morph::table::ColumnKind> {
     static constexpr auto value =
         glz::enumerate("integer", Integer, "decimal", Decimal, "quantity", Quantity, "number", Number, "text", Text,
                        "date", Date, "dateTime", DateTime, "bool", Bool, "key", Key, "custom", Custom);
+};
+
+/// @brief JSON names of `morph::table::TableErrorCode`, for a typed error on the wire.
+template <>
+struct glz::meta<morph::table::TableErrorCode> {
+    using enum morph::table::TableErrorCode;
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value =
+        glz::enumerate("unknownColumn", UnknownColumn, "unsupportedOperator", UnsupportedOperator, "invalidValue",
+                       InvalidValue, "invalidSpec", InvalidSpec, "limitExceeded", LimitExceeded, "columnNotReadable",
+                       ColumnNotReadable, "unavailable", Unavailable, "serviceFailed", ServiceFailed);
 };

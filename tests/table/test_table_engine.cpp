@@ -297,7 +297,10 @@ TEST_CASE("table: a progress sink hears from a worker job on the owner", "[table
     worker.runAll();
     CHECK(recorder->calls.empty());
     owner.drain();
-    REQUIRE_FALSE(recorder->calls.empty());
+    // One call per phase (keys, order, diff). Mutation: ViewJob::run not
+    // calling its phase listener, so a worker job reports nothing.
+    REQUIRE(recorder->calls.size() == 3);
+    CHECK(recorder->calls[0] == std::pair<std::size_t, std::size_t>{1, 3});
     CHECK(recorder->calls.back().first == recorder->calls.back().second);
 }
 

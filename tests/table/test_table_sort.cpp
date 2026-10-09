@@ -12,7 +12,10 @@
 //  - readExact using saturating `*` instead of checkedMul: "a quantity that
 //    overflows its canonical unit is invalid" fails.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <compare>
 #include <cstdint>
 #include <limits>
 #include <morph/table/sort.hpp>
@@ -268,4 +271,72 @@ TEST_CASE("table: a past deadline yields between chunks", "[table][sort]") {
     auto const sorted = std::move(sort).take();
     CHECK(sorted.front() == 19999U);
     CHECK(sorted.back() == 0U);
+}
+
+// Mutation: KeyColumn::forColumn taking a registered comparator that is
+// empty: no cells are kept and the text keys are not sized, and the first key
+// writes out of bounds.
+TEST_CASE("table: an empty comparator orders a custom column by its text", "[table][sort]") {
+    Services services;
+    services.comparators.emplace("nothing", CellComparator{});
+    std::vector<std::vector<Cell>> const rows{{std::string{"b"}}, {std::string{"a"}}, {std::string{"c"}}};
+    Sorted sorted{.source = tabletest::makeSource({tabletest::col("c", ColumnKind::Custom, "nothing")}, rows),
+                  .services = services,
+                  .keys = {}};
+    CHECK(sorted.by({{"c", kAsc}}) == Rows{1, 0, 2});
+}
+
+// Mutation: KeyColumn::set dereferencing `services.collator` as given: the
+// default Services have none.
+TEST_CASE("table: a key column built with default services uses the default collator", "[table][sort]") {
+    auto const info = tabletest::col("c", ColumnKind::Text);
+    Services const services;
+    auto keys = KeyColumn::forColumn(info, services, 1);
+    keys.set(0, Cell{std::string{"Hello"}}, info, services);
+    CHECK(keys.states[0] == CellState::Valid);
+    CHECK(keys.folded[0] == "hello");
+
+    auto const dateInfo = tabletest::col("d", ColumnKind::Date);
+    auto dates = KeyColumn::forColumn(dateInfo, services, 1);
+    dates.set(0, Cell{std::string{"1970-01-02"}}, dateInfo, services);
+    CHECK(dates.ints[0] == 1);
+}
+
+// Mutation: ChunkedMergeSort::mergeOne counting work per merge rather than
+// across merges: a pass of 512-wide runs merges every row in one step, as no
+// single merge reaches a look at the clock.
+TEST_CASE("table: a merge pass of narrow runs looks at the clock", "[table][sort]") {
+    constexpr std::size_t kRows = 65536;
+    std::size_t comparisons = 0;
+    Services services;
+    services.comparators.emplace("counted", [&comparisons](Cell const& left, Cell const& right) {
+        ++comparisons;
+        return std::get<std::int64_t>(left) <=> std::get<std::int64_t>(right);
+    });
+    std::vector<std::vector<Cell>> rows;
+    rows.reserve(kRows);
+    for (std::size_t i = 0; i < kRows; ++i) {
+        rows.push_back({Cell{static_cast<std::int64_t>((i * 7919) % kRows)}});
+    }
+    auto const source = tabletest::makeSource({tabletest::col("c", ColumnKind::Custom, "counted")}, std::move(rows));
+    auto const snapshot = source->snapshot();
+    auto keys = KeyColumn::forColumn(source->columns()[0], services, kRows);
+    buildKeys(*snapshot, 0, source->columns()[0], services, 0, kRows, keys);
+    std::vector<std::uint32_t> order(kRows);
+    std::ranges::iota(order, 0U);
+    ChunkedMergeSort sort{std::move(order), RowOrder{{{.keys = &keys, .dir = kAsc}}}};
+    std::size_t largestStep = 0;
+    bool done = false;
+    while (!done) {
+        comparisons = 0;
+        done = sort.run(std::chrono::steady_clock::now(), ::core::async::StopToken{});
+        largestStep = std::max(largestStep, comparisons);
+    }
+    // The largest step is one of the run phase's: four 512-row std::sort
+    // calls, about 22,000 comparisons under libc++ and 45,000 under MSVC's
+    // debug STL, which re-invokes the predicate to verify the ordering. A
+    // whole 512-wide merge pass in one step is 65,534.
+    CHECK(largestStep < 56000);
+    auto const sorted = std::move(sort).take();
+    CHECK(std::get<std::int64_t>(keys.cells[sorted.front()]) == 0);
 }
