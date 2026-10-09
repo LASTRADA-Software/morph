@@ -14,6 +14,7 @@ that only know action names at runtime.
 - [`Bridge`](#bridge)
   - [`BridgeSink` — the typed state the backend settles](#bridgesink--the-typed-state-the-backend-settles)
 - [`BridgeHandler<Model>`](#bridgehandlermodel)
+- [Model-free dispatch — `RawHandler`](#model-free-dispatch--rawhandler)
 - [Registration readiness — the bind rule](#registration-readiness--the-bind-rule)
 - [`ActionExecuteRegistry`](#actionexecuteregistry)
   - [Why the key carries the sharing policy](#why-the-key-carries-the-sharing-policy)
@@ -80,7 +81,8 @@ struct HandlerBinding {
 ```
 
 One record per registered model instance. `typeId` is the string
-`ModelTraits<Model>::typeId()`. `modelFactory` creates a fresh
+`ModelTraits<Model>::typeId()` for a typed handler, or the id a raw handler was
+bound by (`bindByType`). `modelFactory` creates a fresh
 `IModelHolder` — used by `switchBackend()` and the reconnect handler to
 re-create the instance on a backend. `contextKey` is an optional stable
 identity (e.g. account id) that travels in the `register` wire envelope for
@@ -368,9 +370,10 @@ has no wire representation and does not affect dispatch or `Context` in any
 way — every dispatch is still authorized server-side via `IAuthorizer`
 regardless of what `currentPrincipal()` says.
 
-**`pendingCalls()`** returns the number of actions made through
-`executeVia()` (and so, transitively, `BridgeHandler::execute()`) that have
-not yet resolved — a client-side quiescence signal for building a "still
+**`pendingCalls()`** returns the number of calls made through
+`executeVia()` and its keyed variants (and so, transitively,
+`BridgeHandler::execute()`), or through `executeRaw()`/`executeRawOn()`, that
+have not yet resolved — a client-side quiescence signal for building a "still
 loading" indicator or gating a feature on "has everything settled" without
 hand-rolling a counter around every call site. Backed by a
 `std::shared_ptr<std::atomic<std::size_t>>` (`_pendingCalls`), incremented
@@ -395,7 +398,7 @@ already queued on the owner finds the bridge's `CallbackToken` expired — the
 `CallbackScope` member is declared last, so it is destroyed first — and touches
 nothing.
 
-**`liveness()`** (private, exposed only to `BridgeHandler` via friendship)
+**`liveness()`** (private, exposed only to `BridgeHandler` and `RawHandler` via friendship)
 returns a `morph::async::CallbackToken` issued from the bridge's `_callbacks`
 member — a `morph::async::CallbackScope` created with the bridge and destroyed
 with it. Each `BridgeHandler` captures it at construction and consults it in
@@ -508,6 +511,83 @@ caller through the `Completion` its `execute()` returned, not through the
 subscription.
 
 **`guiExecutor()`** returns the executor passed at construction.
+
+## Model-free dispatch — `RawHandler`
+
+A client compiled without a model's C++ type — the declarative UI's generic
+client — still has to bind that model, dispatch its actions and share its
+instances. It knows only the ids the registry publishes. These seams on
+`Bridge` serve it, and `RawHandler` wraps them as `BridgeHandler` wraps the
+typed calls:
+
+| Seam | What it does |
+|---|---|
+| `bindByType(typeId, BindSharing, instanceKey = {})` | Builds a `HandlerBinding` whose factory resolves `typeId` in the process registry (`defaultRegistry().create`) when a local backend binds it; a remote backend sends the id and never calls the factory. It is adopted through `adoptHandler`, the path a typed handler takes, so the [bind rule](#registration-readiness--the-bind-rule) applies unchanged. A private binding is bound at once; a shared one when it is attached. |
+| `executeRaw(binding, actionId, bodyJson, cbExec[, stop])` | Dispatches the action registered as `actionId` with a JSON body on the instance the binding holds, and resolves with the reply's JSON text. |
+| `executeRawOn(binding, instanceKey, actionId, bodyJson, cbExec)` | `executeRaw` on the instance for `instanceKey`: attaches the shared binding to it first, and rejects the call if that attach does not leave the binding there. |
+| `attach(binding, key)` | Attaches or re-points a shared binding to the instance for a canonical key string. Refuses an empty key (`std::invalid_argument`) and a private binding (`std::logic_error`). `attachHandler<Model>` shares its body without the checks, since a typed handler's sharing is fixed by its type. |
+| `RawHandler` | RAII: binds through `bindByType` on construction, dispatches through `executeRaw` (`execute`) and `executeRawOn` (`executeOn`), attaches through `attach`, deregisters through `deregisterHandler` on destruction. Non-copyable, non-movable. |
+
+**The call.** `detail::RawAction` holds both ids and the body, and the call's
+`ActionCall::action` owns it. `ActionCall::modelTypeId` and `actionTypeId` are
+views into it, so they outlive the dispatch however short-lived the caller's
+strings were. On a remote backend `serializeAction` returns the body unchanged
+and `deserializeResult` keeps the reply text. On `LocalBackend` the call runs
+the server's own JSON runner on the holder — `ActionDispatcher::dispatch`
+through `localOp` for an ordinary handler, `dispatchAsync` through
+`localOpAsync` for a `Task` handler, chosen by `dispatchesAsync` when the call
+is built — so the local path recomputes, validates and journals exactly as a
+server does, and an ordinary handler pays no `Task` run's cost. The client side
+does neither: `recomputeAll` and `ActionValidator<Action>::ready` need the
+action's type, and whoever runs the model runs both.
+
+**Shared with a typed call.** `makeSinkFor` builds the sink, as it does for
+`executeVia`: it is counted in `pendingCalls()` and armed with the execute
+deadline. `dispatchWith` — `dispatchNow`'s body — stamps the default session
+and dispatches through `IBackend::executeInto`. `executeRawOn` waits for, and
+attaches through, `dispatchAttached`, the body a typed payload-keyed call runs.
+The cancellable overload links the caller's `StopToken` as
+`BridgeHandler::execute(action, stop)` does. `cancelPending` on a
+`switchBackend` settles the call, and the binding is re-bound with every other
+live binding. `deregisterHandler` rejects calls held for its bind with
+`HandlerDestroyedError`.
+
+One part is a copy rather than a shared function: `executeRaw`'s
+hold-while-binding block repeats `executeVia`'s. Sharing it would make
+`executeVia` allocate its action on every call to hand it to a type-erased
+continuation, on the path `bench.alloc_budget` gates.
+
+**Different from a typed call, and why:**
+
+- **No subscription publish.** The sink is built with `detail::Publish::No`.
+  The reply is JSON text, and a `subscribe<R>` on the same instance expects the
+  typed result, not the encoded one. A typed subscriber is therefore not told
+  about a raw call's change to a shared instance.
+- **A stop source on every call.** On a remote backend the bridge cannot tell
+  whether the handler is a `Task`, so it cannot omit one the way a typed call
+  omits it for an ordinary handler.
+- **The key is the caller's.** A raw call cannot extract a key from the body
+  without the action's type, so it neither attaches to the key a payload-keyed
+  action names nor creates and promotes an instance for a result-keyed one.
+  `executeRaw` runs on the instance the binding holds, and one sent before any
+  attach is rejected as not bound. A keyed action goes through `executeRawOn`
+  with the key the caller already has (the UI document's `instance`, spec 5 §5).
+  `attach` alone is not enough: it is issued, not awaited, and a refused attach
+  leaves the binding on its previous instance.
+- **The key is matched exactly.** It must be the canonical encoding
+  `keyToString` gives the model's key type. Another spelling of the same key —
+  `"041"` for `41` — names a second instance.
+- **Keyedness is not checked.** A shared binding of an unkeyed model is not
+  refused by the bridge; the backend refuses it when attached, if at all. The
+  interpreter refuses such a document at load from the catalog's `keyed` flag.
+- **A key off the owner is refused.** `bindByType` constructed inside a
+  running action posts its registration to the owner like any handler, but
+  attaching is the owner's, so a key given there throws `std::logic_error`.
+
+Under `MORPH_CLIENT_ONLY` no model registers with the process registry, so a
+`LocalBackend` bind fails with `unknown model type` and every call through the
+binding is rejected with that failure. A client-only build talks to a server
+and does not install `LocalBackend`.
 
 ## Registration readiness — the bind rule
 
@@ -715,9 +795,10 @@ arguments. Used by `morph::flows::FlowSession::set<>`
 ## Subscription semantics
 
 `subscribe<R>(cb)` is keyed on the **result/state type**, not on an action. It
-fires whenever an `R` is produced on the instance the handler is attached to —
-by this handler, by another handler sharing that instance, or by another screen
-entirely. The subscriber names *what it renders*, not what somebody else must
+fires whenever an `R` is produced by a typed call on the instance the handler is
+attached to — by this handler, by another handler sharing that instance, or by
+another screen entirely. A `RawHandler`'s call on the same instance notifies
+nobody: its result is JSON text, not an `R`. The subscriber names *what it renders*, not what somebody else must
 call to produce it, so adding an action that also yields an `R` never breaks an
 existing subscriber.
 
@@ -752,8 +833,9 @@ existing subscriber.
   across clients ([shared_instances.md](shared_instances.md)), but a result
   produced by *another client* on that instance does not reach this client's
   subscribers — there is no server-initiated frame, and both transports would
-  need an unsolicited-message path to carry one. Two handlers in one process see
-  each other's work; two clients do not, and must re-read to notice a change.
+  need an unsolicited-message path to carry one. Two typed handlers in one process
+  see each other's work; two clients do not, and must re-read to notice a
+  change.
 
 
 ## Thread safety — one owner
@@ -869,6 +951,11 @@ is tolerated, as above.
 | `switchBackend` | `void switchBackend(unique_ptr<Backend>)` / `void switchBackend(shared_ptr<IBackend>)` | Tells the new backend its owner and pushes the default session, then issues a re-bind for every live binding. Binds settled before returning decide it: a failure releases what was acquired and rethrows with the old backend and every binding untouched; otherwise it commits — publishes settled ids, leaves bindings with a bind in flight holding their calls, swaps, notifies, moves the reconnect handler, and cancels the old backend's pending calls with `BackendChangedError` (stopping running Task handlers). The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Supersedes a bind in flight (its reply releases its instance), rejects held calls with `HandlerDestroyedError`, deregisters from the active backend (if bound), resets `currentId` to 0, removes from tracking. |
 | `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*, function<void(const R&)> onResult = {})` | On the owner. Counts the call pending and arms the execute deadline when it is made; dispatches now when no bind is in flight, else holds it until the bind settles (a failed bind rejects it with the bind's error; a never-attached `AllowShared` binding with `"handler not bound"`). Attaches the default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged); a failure to serialise the result or to append the success entry happens after the mutation committed and rejects the completion with `morph::model::ActionRecordingError` instead. Dispatches through `IBackend::executeInto`, handing the backend a `detail::BridgeSink<R>` that is simultaneously the caller's typed completion state and the backend's settle sink. The bridge-side work a result triggers (`onResult`, the subscription fan-out) runs on the owner, gated on the bridge's `CallbackToken`. A call whose handler returns a `Task` carries a `StopSource`, requested by the deadline, by a `CallbackScope` a callback was attached through, by a `co_await` of its completion that is stopped, by the token given to `BridgeHandler::execute(action, stop)`, and by the backend's `cancelPending`. |
+| `bindByType` | `shared_ptr<HandlerBinding> bindByType(string typeId, BindSharing, string instanceKey = {})` | Binds a model by its registered id; see [Model-free dispatch](#model-free-dispatch--rawhandler). Throws `invalid_argument` for a private binding with a key, `logic_error` for a key given off the owner. |
+| `executeRaw` | `Completion<string> executeRaw(const shared_ptr<HandlerBinding>&, string actionId, string bodyJson, IExecutor*)` | Dispatches by action id with a JSON body; resolves with the reply's JSON text. Session, deadline, `pendingCalls()`, held-while-binding and `cancelPending` as `executeVia`; not published to typed subscribers. |
+| `executeRaw` (cancellable) | `Completion<string> executeRaw(…, IExecutor*, core::async::StopToken stop)` | As above, with the caller's cancel, as `BridgeHandler::execute(action, stop)`. |
+| `executeRawOn` | `Completion<string> executeRawOn(const shared_ptr<HandlerBinding>&, string instanceKey, string actionId, string bodyJson, IExecutor*)` | `executeRaw` on the instance for `instanceKey`, attaching first; a refused or superseded attach rejects the call. Throws `invalid_argument` for an empty key, `logic_error` for a private binding. |
+| `attach` | `void attach(const shared_ptr<HandlerBinding>&, string primary)` | Attaches or re-points a shared binding by canonical key string, issued after any bind in flight. Throws `invalid_argument` for an empty key, `logic_error` for a private binding. `attachHandler<Model>` shares its body without the checks. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 | `setExecuteDeadline` | `void setExecuteDeadline(std::chrono::milliseconds)` | Opt-in client-side execute deadline; `0` (the default) disables it. Lazily creates the backing `TimeoutScheduler`, on a private `exec::IoLoop` with one thread, on first enable. |
@@ -876,7 +963,7 @@ is tolerated, as above.
 | `setPrincipal` | `void setPrincipal(session::Principal)` | Installs the verified `Principal`, readable outside a dispatch. Pass `Principal{}` to clear (sign-out). |
 | `currentPrincipal` | `session::Principal currentPrincipal() const` | Returns a snapshot of the installed `Principal`; default-constructed if none was ever set. |
 | `isBound` | `[[nodiscard]] static bool isBound(const shared_ptr<HandlerBinding>&) noexcept` | Atomic `currentId != 0`, safe from any thread. Point-in-time snapshot; see [Registration readiness](#registration-readiness--the-bind-rule). |
-| `pendingCalls` | `[[nodiscard]] size_t pendingCalls() const noexcept` | Count of `executeVia()` calls not yet resolved, held calls included. Relaxed atomic load, safe from any thread; see the `Bridge` section above. |
+| `pendingCalls` | `[[nodiscard]] size_t pendingCalls() const noexcept` | Count of typed and raw calls not yet resolved, held calls included. Relaxed atomic load, safe from any thread; see the `Bridge` section above. |
 
 ### `BridgeHandler<Model>`
 
@@ -899,11 +986,28 @@ is tolerated, as above.
 | `guiExecutor` | `IExecutor* guiExecutor() const noexcept` | Returns the callback executor. |
 | `binding` | `const shared_ptr<HandlerBinding>& binding() const` | Returns the underlying binding. |
 
+### `RawHandler`
+
+| Member | Signature | Notes |
+|---|---|---|
+| ctor | `RawHandler(Bridge&, IExecutor*, string typeId, BindSharing = Private, string instanceKey = {})` | Binds through `Bridge::bindByType`. |
+| dtor | `~RawHandler()` | As `~BridgeHandler`: deregisters on the owner while the bridge's `CallbackToken` is active, a no-op after the bridge is gone. |
+| `execute` | `Completion<string> execute(string actionId, string bodyJson)` | `Bridge::executeRaw` on this handler's binding. |
+| `execute` (cancellable) | `Completion<string> execute(string actionId, string bodyJson, core::async::StopToken)` | The cancellable `executeRaw`. |
+| `executeOn` | `Completion<string> executeOn(string instanceKey, string actionId, string bodyJson)` | `Bridge::executeRawOn`: the way to send a keyed action. |
+| `attach` | `void attach(string instanceKey)` | `Bridge::attach`: issued, not awaited. |
+| `primary` | `string primary() const` | The attached key, or empty before the first attach settles. |
+| `isBound` | `bool isBound() const noexcept` | `Bridge::isBound` on the binding. |
+| `typeId` | `const string& typeId() const noexcept` | The id given at construction. |
+
+`BindSharing` is `Private` or `Shared`: an enum, so a call site reads as what it
+means.
+
 ### `HandlerBinding`
 
 | Field | Type | Notes |
 |---|---|---|
-| `typeId` | `string` | `ModelTraits<Model>::typeId()`. |
+| `typeId` | `string` | `ModelTraits<Model>::typeId()`, or the id given to `bindByType`. |
 | `modelFactory` | `function<unique_ptr<IModelHolder>()>` | Factory for re-registration on backend switch. |
 | `contextKey` | `string` | Stable identity for remote backends (optional, empty by default). |
 | `currentId` | `atomic<uint64_t>` | Backend-assigned model id; 0 = unbound. The one field read off the owner, by `isBound()`. |
@@ -918,7 +1022,7 @@ is tolerated, as above.
 
 | Decision | Choice | Why |
 |---|---|---|
-| Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. |
+| Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — the handler (`BridgeHandler` or `RawHandler`) holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. |
 | Threading | **One owner, given at construction; every verb owner-only, asserted in debug builds** | Every consumer already called its `Bridge` from one thread, and the free-threaded contract cost a lock per runtime-settable field, a lifetime gate for teardown on any thread, and a registration handoff for replies that settle on a thread the bridge does not own. Handing the owner to `bindModel`/`promoteModel` as the delivery executor, and having backends post reconnects to it, makes every one of those a task on the owner instead. Teardown follows: handlers before the bridge, on the owner. |
 | Registration | **Asynchronous, with no policy: the bind rule** | A handler can be constructed inside a running action, off the owner, so its registration has to be posted; once it can be, every bind can be a `Completion` delivered on the owner. A backend that settles before returning keeps the synchronous feel — a `LocalBackend` handler is bound when its constructor returns — and the caller never has to gate a first dispatch on readiness, because `execute` is held until the bind settles. |
 | Reconnect handler | **Posted to the owner; liveness guard + weak-backend guard + stale check; cleared in `~Bridge`** | `IBackend::setReconnectHandler` takes the executor the handler is posted to, and the bridge passes its owner, so the re-bind is an ordinary owner task. The handler checks the bridge's `CallbackToken`, then that the backend that reconnected is still the active one; a reconnect of a backend switched away from is ignored. `~Bridge` and `switchBackend` clear the outgoing backend's handler. |
@@ -929,7 +1033,7 @@ is tolerated, as above.
 | `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map` keyed on registered ids lets any translation unit register its actions without central registration or RTTI. |
 | Executor keying | **`(modelId, actionId, typeid(Sharing))` — one executor per sharing policy** | The executor is the only place a typed handler is recovered from a `void*`, and `BridgeHandler<M, NoSharing>` / `BridgeHandler<M, AllowShared>` are unrelated types. A single `NoSharing`-only executor handed a shared handler would `static_cast` to the wrong instantiation, so its `kShared` — which gates a payload-/result-keyed action's attach-or-promote step — would answer for the wrong one and that step would silently never run. No runtime type information survives to check it by then, so the key carries the distinction instead: two entries per action, built from one generic-lambda template so they cannot diverge, and `execute` templated on `Sharing` so each call site selects its own. Costs one closure per registered action at static-init time, not per call. |
 | `registerActionExecutorOnce` | **`inline` definition in header** | The function is forward-declared in `registry.hpp` (`morph::model::detail`) but defined `inline` in `bridge.hpp`, after `ActionExecuteRegistry`. `inline` lets that definition be instantiated in every TU that transitively includes `bridge.hpp` without an ODR/link violation. The registration runs from the anonymous-namespace initializer the macro emits. Because the definition lives only in `bridge.hpp`, any TU expanding `BRIDGE_REGISTER_ACTION` must include it (directly or transitively) or the link fails with an unresolved symbol. |
-| `pendingCalls()` counter placement | **One `std::atomic<size_t>` on `Bridge`, not per-`HandlerBinding` or per-backend** | Client-side quiescence — "has everything settled" — is a property of the `Bridge` as a whole (the thing the GUI actually holds one of), not of any single handler or backend. A per-binding counter would force a caller wanting a global "still loading" signal to sum across every live `BridgeHandler`; a per-backend counter (mirroring `LocalBackend::_inFlight`/`RemoteServer`'s `_inFlight`, both server/backend-side) would miss calls dispatched before a `switchBackend()` mid-flight. Counting where the call's sink is built (`makeSink`, reached from `executeVia`, `executeAttachedVia` and `executeCreatingVia` — the chokepoints every dispatch path, `execute<Action>` and `executeJson` included, funnels through) and releasing it as the sink settles needs no cooperation from `IBackend` implementations at all. |
+| `pendingCalls()` counter placement | **One `std::atomic<size_t>` on `Bridge`, not per-`HandlerBinding` or per-backend** | Client-side quiescence — "has everything settled" — is a property of the `Bridge` as a whole (the thing the GUI actually holds one of), not of any single handler or backend. A per-binding counter would force a caller wanting a global "still loading" signal to sum across every live `BridgeHandler`; a per-backend counter (mirroring `LocalBackend::_inFlight`/`RemoteServer`'s `_inFlight`, both server/backend-side) would miss calls dispatched before a `switchBackend()` mid-flight. Counting where the call's sink is built (`makeSinkFor`, reached through `makeSink` from `executeVia`, `executeAttachedVia` and `executeCreatingVia`, and directly from `executeRaw` and `executeRawOn` — the chokepoints every dispatch path, `execute<Action>`, `executeJson` and a `RawHandler`'s calls included, funnels through) and releasing it as the sink settles needs no cooperation from `IBackend` implementations at all. |
 
 ## Limitations
 

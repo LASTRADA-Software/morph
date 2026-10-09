@@ -92,6 +92,9 @@ created only through templates over `Model`. A client that compiles in no model 
 - **A string-keyed attach.** `attach(binding, instanceKey)` for a shared instance, as
   `attachHandler<Model>` does with a typed key.
 
+`RawHandler` wraps the three as `BridgeHandler` wraps the typed calls: it binds on construction and
+deregisters on destruction.
+
 The catalog tells the client, per model type, whether it is **stateless** (a shared singleton is
 equivalent to a private instance) and whether it is **keyed** (it can be shared by an instance key). A
 model that is not keyed cannot be given an `instance` expression; the document is refused at load.

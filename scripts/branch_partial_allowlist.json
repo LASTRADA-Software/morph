@@ -97,7 +97,7 @@
     },
     {
       "file": "include/morph/core/backend.hpp",
-      "line": 1212,
+      "line": 1214,
       "source": "if (const auto* inst = _instances.find(modelId)) {",
       "reason": "Unreachable by construction given the `_changeAware`/`_instances` invariant (core audit finding BK2). `_changeAware` is an index over the instance directory: an id enters it in `createHolder` (this file, when the holder answers `isBackendChangeAware()`) in the same `_regMtx`-held critical section that files the instance, and leaves it in `deregisterModel` only when `InstanceDirectory::release` reports the instance actually destroyed. `notifyBackendChanged()` (this function) holds the same `_regMtx` while walking `_changeAware` and looking each id up at this line, so every id it walks is still live -- the null arm cannot occur without a code change that breaks that subset invariant."
     },
@@ -109,7 +109,7 @@
     },
     {
       "file": "include/morph/core/bridge.hpp",
-      "line": 1776,
+      "line": 2143,
       "source": "if (_executeDeadline.count() <= 0 || !_timeoutScheduler) {",
       "reason": "The `!_timeoutScheduler` disjunct is unreachable by construction. `setExecuteDeadline` is the only writer of both `_executeDeadline` and `_timeoutScheduler`, and it creates `_timeoutScheduler` in the same call that makes `_executeDeadline` positive; nothing resets `_timeoutScheduler` to null afterwards (setting the deadline back to 0 only stops new calls from arming it, per that method's doc comment). So `_executeDeadline > 0 && !_timeoutScheduler` cannot hold once any positive deadline has been set."
     },

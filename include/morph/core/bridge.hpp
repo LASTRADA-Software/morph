@@ -265,11 +265,13 @@ struct MemberPointerTraits<V A::*> {
 
 /// @brief Internal linkage record between a model type and its active backend id.
 ///
-/// Shared between `Bridge` and `BridgeHandler`. Every field is touched only on
+/// Shared between `Bridge` and the handler that owns it, a `BridgeHandler` or
+/// a `RawHandler`. Every field is touched only on
 /// the bridge's owner except `currentId`, an atomic so `isBound()` can be asked
 /// from anywhere.
 struct HandlerBinding {
-    /// @brief String type-id of the model.
+    /// @brief String type-id of the model: `ModelTraits<Model>::typeId()` for a
+    ///        typed handler, the id given to `Bridge::bindByType` for a raw one.
     std::string typeId;
 
     /// @brief Factory used to re-register the model on a backend switch.
@@ -294,8 +296,8 @@ struct HandlerBinding {
 
     /// @brief Whether this binding participates in the shared instance directory.
     ///
-    /// Set once at construction from `BridgeHandler`'s `Sharing` template
-    /// argument and never changed. A shared binding acquires no instance until
+    /// Set once at construction — from `BridgeHandler`'s `Sharing` template
+    /// argument, or from `bindByType`'s `BindSharing` — and never changed. A shared binding acquires no instance until
     /// it has a primary.
     bool shared = false;
 
@@ -382,6 +384,14 @@ inline std::optional<BindOutcome> takeSettled(
     return BindOutcome{.id = {}, .failure = state->error};
 }
 
+/// @brief Whether a settled result is offered to the typed subscriptions.
+enum class Publish : std::uint8_t {
+    /// A typed call: the result is `R` and subscribers to `R` receive it.
+    Typed,
+    /// A raw call: the result is JSON text, which no typed subscriber expects.
+    No,
+};
+
 /// @brief The typed completion state a backend settles directly.
 ///
 /// This object *is* the typed completion state `Bridge::executeVia` hands the
@@ -422,14 +432,19 @@ public:
     /// @param liveness      The bridge's token: nothing bridge-side runs once
     ///                      it has expired.
     /// @param owner         The bridge's owner.
+    /// @param publish       Whether the result is offered to the typed
+    ///                      subscriptions; `Publish::No` for a call whose
+    ///                      `R` is not the action's typed result.
     BridgeSink(std::function<void(const R&)> onResult, std::shared_ptr<std::atomic<std::size_t>> pendingCalls,
                std::shared_ptr<SubscriptionRegistry<HandlerBinding>> subscriptions,
-               ::morph::async::CallbackToken liveness, ::morph::exec::detail::OwnerAffinity owner)
+               ::morph::async::CallbackToken liveness, ::morph::exec::detail::OwnerAffinity owner,
+               Publish publish = Publish::Typed)
         : _onResult{std::move(onResult)},
           _pendingCalls{std::move(pendingCalls)},
           _subscriptions{std::move(subscriptions)},
           _liveness{std::move(liveness)},
-          _owner{owner} {}
+          _owner{owner},
+          _publish{publish} {}
 
     /// @brief Names the instance this dispatch targets, for the fan-out.
     ///        Called on the owner before the dispatch.
@@ -480,7 +495,7 @@ public:
         _pendingCalls->fetch_sub(1, std::memory_order_relaxed);
         bool bridgeWork = static_cast<bool>(_onResult);
         if constexpr (std::is_copy_constructible_v<R>) {
-            bridgeWork = bridgeWork || _subscriptions->hasSubscribers();
+            bridgeWork = bridgeWork || (_publish == Publish::Typed && _subscriptions->hasSubscribers());
         }
         if (!bridgeWork) {
             forward(opaque, /*onOwner=*/false);
@@ -522,7 +537,7 @@ private:
                     _onResult(*typedResult);
                 }
                 if constexpr (std::is_copy_constructible_v<R>) {
-                    if (_subscriptions->hasSubscribers()) {
+                    if (_publish == Publish::Typed && _subscriptions->hasSubscribers()) {
                         _owner.note("Bridge::publishResult");
                         _subscriptions->publishResult(_mid, std::type_index{typeid(R)}, std::any{*typedResult});
                     }
@@ -562,6 +577,7 @@ private:
     std::shared_ptr<SubscriptionRegistry<HandlerBinding>> _subscriptions;
     ::morph::async::CallbackToken _liveness;
     ::morph::exec::detail::OwnerAffinity _owner;
+    Publish _publish;
     std::optional<::morph::async::detail::TimeoutScheduler::Handle> _deadlineHandle;
     std::shared_ptr<::morph::async::detail::TimeoutScheduler> _schedulerRef;
     std::atomic_flag _settled = ATOMIC_FLAG_INIT;
@@ -669,7 +685,29 @@ void localTaskOp(::morph::model::detail::IModelHolder& holder, std::shared_ptr<v
         });
 }
 
+/// @brief The action of a call dispatched by id: both ids and the JSON body.
+///
+/// Owned by the call's `ActionCall::action`; the call's `modelTypeId` and
+/// `actionTypeId` views point into it, so they outlive the dispatch however
+/// short-lived the caller's strings were.
+struct RawAction {
+    /// @brief The model's registered type id.
+    std::string modelTypeId;
+    /// @brief The action's registered type id.
+    std::string actionTypeId;
+    /// @brief The action's JSON body.
+    std::string body;
+};
+
 }  // namespace detail
+
+/// @brief Whether a binding made by type id joins the shared instance directory.
+enum class BindSharing : std::uint8_t {
+    /// A private instance, created when the binding is bound.
+    Private,
+    /// A shared instance, created or joined when the binding is attached to a key.
+    Shared,
+};
 
 /// @brief Central dispatcher that routes typed actions to an `IBackend`.
 ///
@@ -817,7 +855,8 @@ public:
         return binding;
     }
 
-    /// @brief Attaches (or re-points) @p binding to the shared instance for @p primary.
+    /// @brief Attaches (or re-points) a shared @p binding to the instance for
+    ///        @p primary, creating it if no live instance holds the key.
     ///
     /// Idempotent: attaching to the primary a binding already holds is a no-op.
     /// A different primary re-points the binding — the previous instance is
@@ -831,11 +870,43 @@ public:
     /// instance it held; a call held behind it is rejected with its error only
     /// when the binding has no instance to fall back to.
     ///
+    /// Needs no model type, so a binding from `bindByType` attaches through it
+    /// as a typed one does. The key is matched exactly, so it must be the
+    /// canonical encoding `keyToString` gives the model's key type: another
+    /// spelling of the same key names a different instance.
+    ///
+    /// @param binding Shared binding, from `registerSharedHandler<Model>()` or
+    ///                `bindByType`.
+    /// @param primary Canonical string encoding of the primary key to attach to.
+    /// @throws std::invalid_argument for an empty @p primary: the bridge reads
+    ///         an empty primary as "never attached".
+    /// @throws std::logic_error for a private @p binding, whose instance is
+    ///         re-created private by every re-bind.
+    void attach(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
+        if (primary.empty()) {
+            throw std::invalid_argument{"Bridge::attach: the instance key is empty"};
+        }
+        if (!binding->shared) {
+            throw std::logic_error{"Bridge::attach: the binding is private"};
+        }
+        attachBinding(binding, std::move(primary));
+    }
+
+    /// @brief `attach` for a typed caller.
     /// @tparam Model Concrete model type.
     /// @param binding Shared binding, as returned by `registerSharedHandler<Model>()`.
     /// @param primary Canonical string encoding of the primary key to attach to.
     template <typename Model>
     void attachHandler(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
+        attachBinding(binding, std::move(primary));
+    }
+
+private:
+    /// @brief `attach`'s body, without its argument checks: a typed shared
+    ///        handler's key and sharing are fixed by its type.
+    /// @param binding Shared binding.
+    /// @param primary Canonical string encoding of the primary key to attach to.
+    void attachBinding(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
         note("Bridge::attachHandler");
         std::weak_ptr<detail::HandlerBinding> const weak{binding};
         whenIdle(*binding, [this, weak, primary = std::move(primary)](const std::exception_ptr& failure) {
@@ -847,6 +918,7 @@ public:
         });
     }
 
+public:
     /// @brief Files @p binding's current instance under @p primary, in place.
     ///
     /// The instance keeps everything the creating action just did — nothing is
@@ -1066,8 +1138,9 @@ public:
         return _principal;
     }
 
-    /// @brief Returns the number of actions made through `executeVia()` that
-    ///        have not yet resolved.
+    /// @brief Returns the number of calls made through the bridge — typed
+    ///        (`executeVia()` and its keyed variants) or raw (`executeRaw()`,
+    ///        `executeRawOn()`) — that have not yet resolved.
     ///
     /// Incremented once per call, when it is made (a call held for its bind
     /// included); decremented exactly once when the returned `Completion`
@@ -1328,32 +1401,8 @@ public:
         ::morph::async::Completion<R> typed{sink, cbExec};
         armDeadline(sink);
         auto held = std::make_shared<Action>(std::move(action));
-        std::weak_ptr<detail::HandlerBinding> const weak{binding};
-        whenIdle(*binding, [this, weak, sink, cbExec, held, key = std::move(key)](const std::exception_ptr& failure) {
-            auto strong = weak.lock();
-            if (rejectIfGone(sink, strong, failure)) {
-                return;
-            }
-            if (strong->primary == key && strong->currentId.load() != 0U) {
-                dispatchNow<Model, Action>(*strong, sink, std::move(*held), cbExec, /*held=*/true);
-                return;
-            }
-            runSuperseded(startBind(strong, attachRequest(*strong, key), key,
-                                    [this, weak, sink, cbExec, held, key](const std::exception_ptr& settled) {
-                                        auto bound = weak.lock();
-                                        if (rejectIfGone(sink, bound, settled)) {
-                                            return;
-                                        }
-                                        // An attach that left the binding on another key must not
-                                        // dispatch there. One that kept the key but bound no
-                                        // instance is rejected by `dispatchNow` itself.
-                                        if (bound->primary != key) {
-                                            sink->settleException(bound->bindFailure ? bound->bindFailure
-                                                                                     : notBound());
-                                            return;
-                                        }
-                                        dispatchNow<Model, Action>(*bound, sink, std::move(*held), cbExec, true);
-                                    }));
+        dispatchAttached(binding, sink, std::move(key), [this, sink, cbExec, held](detail::HandlerBinding& bound) {
+            dispatchNow<Model, Action>(bound, sink, std::move(*held), cbExec, /*held=*/true);
         });
         return typed;
     }
@@ -1410,8 +1459,254 @@ public:
     }
 
 private:
+    /// @brief The call factory a raw dispatch hands `dispatchWith`: owns the
+    ///        ids and body, and builds the `ActionCall` when the call runs.
+    /// @param binding  The binding the call goes through; its type id is copied.
+    /// @param actionId The action's registered type id.
+    /// @param bodyJson The action's JSON body.
+    /// @param sink     The call's sink; its stop source goes on the call.
+    /// @return A copyable callable returning the call.
+    static auto rawCallMaker(const detail::HandlerBinding& binding, std::string actionId, std::string bodyJson,
+                             const std::shared_ptr<detail::BridgeSink<std::string>>& sink) {
+        return [action = std::make_shared<detail::RawAction>(detail::RawAction{
+                    .modelTypeId = binding.typeId, .actionTypeId = std::move(actionId), .body = std::move(bodyJson)}),
+                stop = sink->stopSource] { return makeRawCall(action, stop); };
+    }
+
+    /// @brief Builds the `ActionCall` for one dispatch by id.
+    ///
+    /// The call owns @p action, and its id views point into it. On a local
+    /// backend it runs the server's own JSON runner, which recomputes,
+    /// validates and journals as a server does: `dispatch` for an ordinary
+    /// handler, through `localOp`, and `dispatchAsync` for a Task handler,
+    /// through `localOpAsync`. The dispatcher answers which one by id, so an
+    /// ordinary handler does not pay for a Task run's resumer and strand
+    /// enrolment.
+    /// @param action     The ids and body.
+    /// @param stopSource The call's stop source; a Task handler on a local
+    ///                   backend observes it.
+    /// @return The call, without its session.
+    static ::morph::backend::detail::ActionCall makeRawCall(std::shared_ptr<detail::RawAction> action,
+                                                            std::shared_ptr<::core::async::StopSource> stopSource) {
+        ::morph::backend::detail::ActionCall call;
+        call.modelTypeId = action->modelTypeId;
+        call.actionTypeId = action->actionTypeId;
+        call.serializeAction = [](const void* actionPtr) {
+            return static_cast<const detail::RawAction*>(actionPtr)->body;
+        };
+        call.deserializeResult = [](std::string_view json) -> std::shared_ptr<void> {
+            return std::make_shared<std::string>(json);
+        };
+        auto const& dispatcher = ::morph::model::detail::defaultDispatcher();
+        if (!dispatcher.dispatchesAsync(action->modelTypeId, action->actionTypeId)) {
+            // An unknown pair lands here too, and `dispatch` reports it.
+            call.localOp = [](::morph::model::detail::IModelHolder& holder, void* actionPtr) -> std::shared_ptr<void> {
+                auto const& raw = *static_cast<const detail::RawAction*>(actionPtr);
+                return std::make_shared<std::string>(::morph::model::detail::defaultDispatcher().dispatch(
+                    raw.modelTypeId, raw.actionTypeId, holder, raw.body));
+            };
+            call.stopSource = std::move(stopSource);
+            call.action = std::move(action);
+            return call;
+        }
+        // The backend holds the action until `done` has run, so the views
+        // `dispatchAsync` takes into it stay valid for the whole dispatch.
+        // NOLINTNEXTLINE(performance-unnecessary-value-param): the signature is ActionCall::localOpAsync's
+        call.localOpAsync = [](::morph::model::detail::IModelHolder& holder, std::shared_ptr<void> actionPtr,
+                               const std::shared_ptr<::morph::exec::detail::TaskResumer>& resumer,
+                               ::core::async::StopToken token, ::morph::backend::detail::ActionCall::LocalDone done) {
+            auto const& raw = *static_cast<const detail::RawAction*>(actionPtr.get());
+            ::morph::model::detail::defaultDispatcher().dispatchAsync(
+                raw.modelTypeId, raw.actionTypeId, holder, raw.body, resumer, std::move(token),
+                [done = std::move(done)](std::string result, const std::exception_ptr& err) {
+                    if (err) {
+                        done(nullptr, err);
+                        return;
+                    }
+                    // Runs from the coroutine's completion, where an escaping
+                    // throw terminates: a failed allocation fails the call.
+                    std::shared_ptr<void> boxed;
+                    try {
+                        boxed = std::make_shared<std::string>(std::move(result));
+                    } catch (...) {
+                        done(nullptr, std::current_exception());
+                        return;
+                    }
+                    done(std::move(boxed), nullptr);
+                });
+        };
+        call.stopSource = std::move(stopSource);
+        call.action = std::move(action);
+        return call;
+    }
+
+public:
+    /// @brief Binds the model registered as @p typeId, for a caller compiled
+    ///        without the model's type.
+    ///
+    /// A private binding is bound at once, as `registerHandler<Model>()` binds
+    /// one. A shared binding is bound when attached: here when @p instanceKey
+    /// is not empty, otherwise by a later `attach`. The binding is tracked
+    /// for `switchBackend()`, deregistered by `deregisterHandler`, and its
+    /// instance is owned by the session's principal on a server exactly as a
+    /// typed handler's is.
+    ///
+    /// Called off the owner — inside a running action, where a
+    /// `BridgeHandler` may be constructed too — the registration is posted to
+    /// the owner, and a call made meanwhile is held. Attaching is the owner's,
+    /// so a key is refused there.
+    ///
+    /// The bridge cannot tell whether the model is keyed: a shared binding of
+    /// an unkeyed model is refused, if at all, by the backend when attached.
+    ///
+    /// @param typeId      The model's registered type id.
+    /// @param sharing     Private or shared.
+    /// @param instanceKey For a shared binding, the key to attach to now, or
+    ///                    empty to stay unattached. Must be empty for a
+    ///                    private binding, and off the owner.
+    /// @return The binding.
+    /// @throws std::invalid_argument for a private binding with a key.
+    /// @throws std::logic_error for a key given off the owner.
+    std::shared_ptr<detail::HandlerBinding> bindByType(std::string typeId, BindSharing sharing,
+                                                       std::string instanceKey = {}) {
+        if (sharing == BindSharing::Private && !instanceKey.empty()) {
+            throw std::invalid_argument{"Bridge::bindByType: a private binding takes no instance key"};
+        }
+        if (!instanceKey.empty() && !onOwner()) {
+            throw std::logic_error{"Bridge::bindByType: attach on the owner, not inside an action"};
+        }
+        auto binding = makeBindingByType(std::move(typeId), sharing == BindSharing::Shared);
+        adoptHandler(binding);
+        if (!instanceKey.empty()) {
+            attach(binding, std::move(instanceKey));
+        }
+        return binding;
+    }
+
+    /// @brief Dispatches the action registered as @p actionId with a JSON
+    ///        body through @p binding, and resolves with the JSON reply.
+    ///
+    /// The call is stamped with the default session, raced against the
+    /// execute deadline, counted in `pendingCalls()`, held while a bind is in
+    /// flight, and settled by `cancelPending` exactly as a typed call. It
+    /// always carries a stop source, since whether the handler is a Task is
+    /// not known here. Neither the client-side recompute nor the action's
+    /// validator runs here: they need the action's type, and whoever runs the
+    /// model runs both. The reply is not offered to typed subscriptions: it is
+    /// JSON text, not the result a subscriber expects.
+    ///
+    /// The call runs on the instance @p binding holds now. Unlike a typed
+    /// call, it does not attach to the key a payload-keyed action names, nor
+    /// create and promote an instance for a result-keyed one: a keyed action
+    /// sent through a shared binding attached elsewhere runs on that other
+    /// instance, and one sent before any attach is rejected as not bound.
+    /// A keyed action goes through `executeRawOn`.
+    ///
+    /// @param binding  A binding from `bindByType`.
+    /// @param actionId The action's registered type id.
+    /// @param bodyJson The action's JSON body.
+    /// @param cbExec   Executor the `Completion` callbacks are posted on.
+    /// @return Completion resolving with the reply's JSON text.
+    ::morph::async::Completion<std::string> executeRaw(const std::shared_ptr<detail::HandlerBinding>& binding,
+                                                       std::string actionId, std::string bodyJson,
+                                                       ::morph::exec::IExecutor* cbExec) {
+        MORPH_ZONE("Bridge::executeRaw");
+        note("Bridge::executeRaw");
+        auto sink = makeSinkFor<std::string>({}, /*stoppable=*/true, detail::Publish::No);
+        ::morph::async::Completion<std::string> typed{sink, cbExec};
+        armDeadline(sink);
+        auto makeCall = rawCallMaker(*binding, std::move(actionId), std::move(bodyJson), sink);
+        if (!binding->bindInFlight) {
+            dispatchWith(*binding, sink, makeCall, cbExec, /*held=*/false);
+            return typed;
+        }
+        std::weak_ptr<detail::HandlerBinding> const weak{binding};
+        binding->waiting.emplace_back([this, weak, sink, cbExec, makeCall](const std::exception_ptr& failure) {
+            auto strong = weak.lock();
+            if (failure || !strong) {
+                sink->settleException(failure ? failure
+                                              : std::make_exception_ptr(::morph::backend::HandlerDestroyedError{}));
+                return;
+            }
+            dispatchWith(*strong, sink, makeCall, cbExec, /*held=*/true);
+        });
+        return typed;
+    }
+
+    /// @brief `executeRaw`, cancellable through @p stop.
+    ///
+    /// A stop before the call settles rejects it with
+    /// `core::async::OperationCancelled` and asks its stop source to stop; a
+    /// Task handler on a local backend sees that at its next stop-aware
+    /// `co_await`. A token already stopped rejects without dispatching.
+    /// @param binding  A binding from `bindByType`.
+    /// @param actionId The action's registered type id.
+    /// @param bodyJson The action's JSON body.
+    /// @param cbExec   Executor the `Completion` callbacks are posted on.
+    /// @param stop     The caller's cancel.
+    /// @return Completion resolving with the reply's JSON text, or rejected
+    ///         with `core::async::OperationCancelled`.
+    ::morph::async::Completion<std::string> executeRaw(const std::shared_ptr<detail::HandlerBinding>& binding,
+                                                       std::string actionId, std::string bodyJson,
+                                                       ::morph::exec::IExecutor* cbExec,
+                                                       ::core::async::StopToken stop) {
+        if (stop.stop_requested()) {
+            auto [cancelled, promise] = ::morph::async::Completion<std::string>::makeSettleable(cbExec);
+            promise.reject(std::make_exception_ptr(::core::async::OperationCancelled{}));
+            return std::move(cancelled);
+        }
+        auto completion = executeRaw(binding, std::move(actionId), std::move(bodyJson), cbExec);
+        // Never empty: every path of `executeRaw` returns a completion built
+        // on a state, a rejected one included.
+        completion.state()->linkCancel(std::move(stop));
+        return completion;
+    }
+
+    /// @brief `executeRaw` on the instance for @p instanceKey: attaches the
+    ///        shared @p binding to it first when it holds another or none.
+    ///
+    /// What a keyed action needs from a caller without its type, which cannot
+    /// read the key out of the body: the call runs on @p instanceKey's
+    /// instance or not at all. An attach that is refused, or superseded by a
+    /// re-bind, rejects the call with its failure instead of running it on the
+    /// instance the binding fell back to. The binding stays attached to
+    /// @p instanceKey afterwards, as a typed payload-keyed call leaves it.
+    /// Otherwise as `executeRaw`.
+    /// @param binding     A shared binding from `bindByType`.
+    /// @param instanceKey Canonical string encoding of the primary key; see
+    ///                    `attach`.
+    /// @param actionId    The action's registered type id.
+    /// @param bodyJson    The action's JSON body.
+    /// @param cbExec      Executor the `Completion` callbacks are posted on.
+    /// @return Completion resolving with the reply's JSON text.
+    /// @throws std::invalid_argument for an empty @p instanceKey.
+    /// @throws std::logic_error for a private @p binding.
+    ::morph::async::Completion<std::string> executeRawOn(const std::shared_ptr<detail::HandlerBinding>& binding,
+                                                         std::string instanceKey, std::string actionId,
+                                                         std::string bodyJson, ::morph::exec::IExecutor* cbExec) {
+        if (instanceKey.empty()) {
+            throw std::invalid_argument{"Bridge::executeRawOn: the instance key is empty"};
+        }
+        if (!binding->shared) {
+            throw std::logic_error{"Bridge::executeRawOn: the binding is private"};
+        }
+        MORPH_ZONE("Bridge::executeRawOn");
+        note("Bridge::executeRawOn");
+        auto sink = makeSinkFor<std::string>({}, /*stoppable=*/true, detail::Publish::No);
+        ::morph::async::Completion<std::string> typed{sink, cbExec};
+        armDeadline(sink);
+        auto makeCall = rawCallMaker(*binding, std::move(actionId), std::move(bodyJson), sink);
+        dispatchAttached(binding, sink, std::move(instanceKey),
+                         [this, sink, cbExec, makeCall](detail::HandlerBinding& bound) {
+                             dispatchWith(bound, sink, makeCall, cbExec, /*held=*/true);
+                         });
+        return typed;
+    }
+
+private:
     template <typename, typename>
     friend class BridgeHandler;
+    friend class RawHandler;
 
     using Resume = std::function<void(std::exception_ptr)>;
 
@@ -1438,6 +1733,21 @@ private:
         auto binding = std::make_shared<detail::HandlerBinding>();
         binding->typeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
         binding->modelFactory = [] { return ::morph::model::detail::ModelFactory::create<Model>(); };
+        binding->shared = shared;
+        return binding;
+    }
+
+    /// @brief Builds a binding for the model registered as @p typeId, not yet
+    ///        tracked or bound. Its factory resolves @p typeId in the process
+    ///        registry when a local backend binds it; a remote backend sends
+    ///        the id and ignores the factory.
+    /// @param typeId The model's registered type id.
+    /// @param shared Whether the binding joins the shared directory.
+    /// @return The new binding.
+    static std::shared_ptr<detail::HandlerBinding> makeBindingByType(std::string typeId, bool shared) {
+        auto binding = std::make_shared<detail::HandlerBinding>();
+        binding->modelFactory = [typeId] { return ::morph::model::detail::defaultRegistry().create(typeId); };
+        binding->typeId = std::move(typeId);
         binding->shared = shared;
         return binding;
     }
@@ -1526,6 +1836,53 @@ private:
     /// @return The error.
     [[nodiscard]] static std::exception_ptr notBound() {
         return std::make_exception_ptr(std::runtime_error("handler not bound"));
+    }
+
+    /// @brief Dispatches through @p binding once it holds the instance for
+    ///        @p key, attaching it first when it holds another or none.
+    ///
+    /// Waits for any bind in flight. An attach that leaves the binding on
+    /// another key — refused, or superseded by a re-bind — rejects the call
+    /// with the attach's failure rather than dispatching to the instance the
+    /// binding fell back to.
+    /// @tparam R        The sink's result type.
+    /// @tparam Dispatch Callable `void(detail::HandlerBinding&)`, run once on
+    ///                  the owner with the attached binding.
+    /// @param binding  Shared binding.
+    /// @param sink     The call's sink, settled here when the call cannot run.
+    /// @param key      Canonical primary key the call must run on.
+    /// @param dispatch Dispatches the call through the attached binding.
+    template <typename R, typename Dispatch>
+    void dispatchAttached(const std::shared_ptr<detail::HandlerBinding>& binding,
+                          const std::shared_ptr<detail::BridgeSink<R>>& sink, std::string key,
+                          const Dispatch& dispatch) {
+        std::weak_ptr<detail::HandlerBinding> const weak{binding};
+        whenIdle(*binding, [this, weak, sink, key = std::move(key), dispatch](const std::exception_ptr& failure) {
+            auto strong = weak.lock();
+            if (rejectIfGone(sink, strong, failure)) {
+                return;
+            }
+            if (strong->primary == key && strong->currentId.load() != 0U) {
+                dispatch(*strong);
+                return;
+            }
+            runSuperseded(startBind(strong, attachRequest(*strong, key), key,
+                                    [weak, sink, key, dispatch](const std::exception_ptr& settled) {
+                                        auto bound = weak.lock();
+                                        if (rejectIfGone(sink, bound, settled)) {
+                                            return;
+                                        }
+                                        // An attach that left the binding on another key must not
+                                        // dispatch there. One that kept the key but bound no
+                                        // instance is rejected by the dispatch itself.
+                                        if (bound->primary != key) {
+                                            sink->settleException(bound->bindFailure ? bound->bindFailure
+                                                                                     : notBound());
+                                            return;
+                                        }
+                                        dispatch(*bound);
+                                    }));
+        });
     }
 
     /// @brief Rejects @p sink when a held operation cannot go on.
@@ -1751,14 +2108,24 @@ private:
     template <typename Model, typename Action>
     std::shared_ptr<detail::BridgeSink<typename ::morph::model::ActionTraits<Action>::Result>> makeSink(
         std::function<void(const typename ::morph::model::ActionTraits<Action>::Result&)> onResult) {
-        using R = ::morph::model::ActionTraits<Action>::Result;
+        return makeSinkFor(std::move(onResult), isTaskHandlerCall<Model, Action>(), detail::Publish::Typed);
+    }
+
+    /// @brief `makeSink`'s body, for a caller that decides the stop source and
+    ///        the publish policy itself.
+    /// @tparam R Result type of the call.
+    /// @param onResult  Optional owner-side observer of the result.
+    /// @param stoppable Whether the call gets a stop source.
+    /// @param publish   Whether the result is offered to the typed subscriptions.
+    /// @return The sink.
+    template <typename R>
+    std::shared_ptr<detail::BridgeSink<R>> makeSinkFor(std::function<void(const R&)> onResult, bool stoppable,
+                                                       detail::Publish publish) {
         auto sink = std::make_shared<detail::BridgeSink<R>>(std::move(onResult), _pendingCalls, _subscriptions,
-                                                            _callbacks.token(), _affinity);
+                                                            _callbacks.token(), _affinity, publish);
         _pendingCalls->fetch_add(1, std::memory_order_relaxed);
-        std::shared_ptr<::core::async::StopSource> stopSource;
-        if constexpr (isTaskHandlerCall<Model, Action>()) {
-            stopSource = std::make_shared<::core::async::StopSource>();
-            sink->stopSource = stopSource;
+        if (stoppable) {
+            sink->stopSource = std::make_shared<::core::async::StopSource>();
         }
         return sink;
     }
@@ -1820,6 +2187,25 @@ private:
         detail::HandlerBinding& binding,
         const std::shared_ptr<detail::BridgeSink<typename ::morph::model::ActionTraits<Action>::Result>>& sink,
         Action action, ::morph::exec::IExecutor* cbExec, bool held) {
+        dispatchWith(
+            binding, sink, [&] { return makeActionCall<Model, Action>(std::move(action), sink->stopSource); }, cbExec,
+            held);
+    }
+
+    /// @brief `dispatchNow`'s body, for any way of building the call.
+    /// @tparam R        Result type of the call.
+    /// @tparam MakeCall Callable returning the `ActionCall`, without its session.
+    /// @param binding  The binding.
+    /// @param sink     The call's sink.
+    /// @param makeCall Builds the call; invoked at most once, and only when
+    ///                 the call is dispatched.
+    /// @param cbExec   The caller's executor.
+    /// @param held     Whether the call waited for a bind: its caller has
+    ///                 returned, so a throw from the backend rejects the call
+    ///                 instead of propagating.
+    template <typename R, typename MakeCall>
+    void dispatchWith(detail::HandlerBinding& binding, const std::shared_ptr<detail::BridgeSink<R>>& sink,
+                      MakeCall&& makeCall, ::morph::exec::IExecutor* cbExec, bool held) {
         // Its own zone, not part of `executeVia`'s: a call that waited for a
         // bind is dispatched later, from the bind's settle.
         MORPH_ZONE("Bridge::dispatchNow");
@@ -1835,7 +2221,7 @@ private:
             return;
         }
         sink->target(::morph::exec::detail::ModelId{raw});
-        auto call = makeActionCall<Model, Action>(std::move(action), sink->stopSource);
+        auto call = std::forward<MakeCall>(makeCall)();
         call.session = _defaultSession;
         try {
             _backend->executeInto(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec, sink);
@@ -2397,8 +2783,9 @@ public:
     /// @brief Subscribes to results of type @p R produced on the attached instance.
     ///
     /// Fires whenever an `R` is produced on the instance this handler is
-    /// attached to — by this handler, by another handler sharing the instance,
-    /// or by another screen entirely.
+    /// attached to by a typed call — this handler's, another handler's sharing
+    /// the instance, or another screen's. A `RawHandler`'s call on the same
+    /// instance notifies nobody: its result is JSON text, not an `R`.
     ///
     /// One callback per `(handler, R)`: subscribing again replaces the previous
     /// one. Callbacks are delivered on this handler's executor. Failed actions
@@ -2466,6 +2853,116 @@ private:
     // The owner, kept by value so the destructor can check it without the bridge.
     ::morph::exec::detail::OwnerAffinity _affinity;
     ::morph::exec::IExecutor* _guiExec;
+    std::shared_ptr<detail::HandlerBinding> _binding;
+};
+
+/// @brief A handler for a model known only by its registered type id.
+///
+/// What a client compiled without the model's C++ type holds: binds through
+/// `Bridge::bindByType` on construction, dispatches through
+/// `Bridge::executeRaw`, and deregisters on destruction — on the owner, with
+/// every guarantee a `BridgeHandler` has. Non-copyable and non-movable.
+class RawHandler {
+public:
+    /// @brief Binds the model registered as @p typeId.
+    /// @param bridge      The bridge to bind on. Borrowed: it must outlive
+    ///                    every call made on this handler.
+    /// @param cbExec      Executor the `Completion` callbacks are posted on.
+    ///                    Borrowed: it must outlive this handler.
+    /// @param typeId      The model's registered type id.
+    /// @param sharing     Private or shared.
+    /// @param instanceKey For a shared handler, the key to attach to now, or empty.
+    /// @throws std::invalid_argument for a private handler with a key.
+    /// @throws std::logic_error for a key given off the owner, inside a
+    ///         running action: attaching is the owner's.
+    RawHandler(Bridge& bridge MORPH_LIFETIMEBOUND, ::morph::exec::IExecutor* cbExec MORPH_LIFETIMEBOUND,
+               std::string typeId, BindSharing sharing = BindSharing::Private, std::string instanceKey = {})
+        : _bridge{bridge},
+          _liveness{bridge.liveness()},
+          _affinity{bridge.affinity()},
+          _cbExec{cbExec},
+          _binding{bridge.bindByType(std::move(typeId), sharing, std::move(instanceKey))} {}
+
+    /// @brief Deregisters the binding, on the owner.
+    ///
+    /// Every call still held for a bind in flight is rejected with
+    /// `HandlerDestroyedError`. Destroyed after its bridge — still on the
+    /// owner — it finds the bridge's token expired and deregisters nothing.
+    ~RawHandler() {
+        _affinity.note("RawHandler::~RawHandler");
+        if (_liveness.active()) {
+            _bridge.deregisterHandler(_binding);
+        }
+    }
+
+    RawHandler(const RawHandler&) = delete;
+    RawHandler& operator=(const RawHandler&) = delete;
+    RawHandler(RawHandler&&) = delete;
+    RawHandler& operator=(RawHandler&&) = delete;
+
+    /// @brief Dispatches the action registered as @p actionId with @p bodyJson.
+    /// @param actionId The action's registered type id.
+    /// @param bodyJson The action's JSON body.
+    /// @return Completion resolving with the reply's JSON text.
+    [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string actionId, std::string bodyJson) {
+        return _bridge.executeRaw(_binding, std::move(actionId), std::move(bodyJson), _cbExec);
+    }
+
+    /// @brief `execute`, cancellable through @p stop.
+    /// @param actionId The action's registered type id.
+    /// @param bodyJson The action's JSON body.
+    /// @param stop     The caller's cancel.
+    /// @return Completion resolving with the reply's JSON text, or rejected
+    ///         with `core::async::OperationCancelled`.
+    [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string actionId, std::string bodyJson,
+                                                                  ::core::async::StopToken stop) {
+        return _bridge.executeRaw(_binding, std::move(actionId), std::move(bodyJson), _cbExec, std::move(stop));
+    }
+
+    /// @brief `execute` on the instance for @p instanceKey, attaching this
+    ///        shared handler to it first; see `Bridge::executeRawOn`.
+    ///
+    /// The way to send a keyed action: a refused attach rejects the call
+    /// rather than running it on the instance the handler held before.
+    /// @param instanceKey Canonical string encoding of the primary key.
+    /// @param actionId    The action's registered type id.
+    /// @param bodyJson    The action's JSON body.
+    /// @return Completion resolving with the reply's JSON text.
+    /// @throws std::invalid_argument for an empty @p instanceKey.
+    /// @throws std::logic_error on a private handler.
+    [[nodiscard]] ::morph::async::Completion<std::string> executeOn(std::string instanceKey, std::string actionId,
+                                                                    std::string bodyJson) {
+        return _bridge.executeRawOn(_binding, std::move(instanceKey), std::move(actionId), std::move(bodyJson),
+                                    _cbExec);
+    }
+
+    /// @brief Attaches (or re-points) this shared handler to the instance for
+    ///        @p instanceKey, as `BridgeHandler::attach` does for a typed one.
+    ///
+    /// Issued, not awaited, and a refusal is logged rather than reported: a
+    /// call that must run on @p instanceKey goes through `executeOn`.
+    /// @param instanceKey Canonical string encoding of the primary key.
+    /// @throws std::invalid_argument for an empty @p instanceKey.
+    /// @throws std::logic_error on a private handler.
+    void attach(std::string instanceKey) { _bridge.attach(_binding, std::move(instanceKey)); }
+
+    /// @brief This handler's current instance key.
+    /// @return The attached key, or empty before the first attach settles.
+    [[nodiscard]] std::string primary() const { return _bridge.bindingPrimary(_binding); }
+
+    /// @brief Whether the handler holds a live instance now.
+    /// @return `true` when bound.
+    [[nodiscard]] bool isBound() const noexcept { return Bridge::isBound(_binding); }
+
+    /// @brief The model's registered type id.
+    /// @return The id given at construction.
+    [[nodiscard]] const std::string& typeId() const noexcept MORPH_LIFETIMEBOUND { return _binding->typeId; }
+
+private:
+    Bridge& _bridge;
+    ::morph::async::CallbackToken _liveness;
+    ::morph::exec::detail::OwnerAffinity _affinity;
+    ::morph::exec::IExecutor* _cbExec;
     std::shared_ptr<detail::HandlerBinding> _binding;
 };
 
