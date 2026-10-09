@@ -4,7 +4,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <exception>
 #include <functional>
 #include <map>
@@ -588,7 +587,9 @@ public:
 private:
     struct Lane {
         bool active = false;
-        std::deque<A> queued;
+        // A vector, not a deque: GCC's -Wstrict-overflow fires inside std::deque's destructor in
+        // optimised builds, and a Serial lane queues a handful of actions at most.
+        std::vector<A> queued;
     };
 
     // Sends one run. @p lane is the Serial queue it belongs to; @p counted says whether `_busy` already counts it
@@ -668,7 +669,7 @@ private:
             return;
         }
         A next = std::move(found->second.queued.front());
-        found->second.queued.pop_front();
+        found->second.queued.erase(found->second.queued.begin());
         send(std::move(next), lane, true);
     }
 
