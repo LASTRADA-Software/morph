@@ -60,7 +60,9 @@ BRIDGE_REGISTER_ACTION(ReactiveHitModel, ReactiveSetLevel, "Test_ReactiveSetLeve
 
 namespace {
 
-using morph::reactive::Concurrency;
+// Spelled rx::Concurrency: on Windows a using-declaration collides with the ConcRT
+// `::Concurrency` namespace the MSVC headers declare.
+namespace rx = morph::reactive;
 using morph::reactive::Effect;
 using morph::reactive::Mutation;
 using morph::reactive::MutationOptions;
@@ -127,7 +129,7 @@ TEST_CASE("reactive control over a bridge: a Subscription follows publishes", "[
     Bumps const latest{runtime, wiring.handler};
     // Two runs back to back: Serial sends the second after the first, where the Exclusive default refuses it.
     Mutation<ReactiveBump> bump{runtime, wiring.handler,
-                                MutationOptions<ReactiveBump>{.concurrency = Concurrency::Serial}};
+                                MutationOptions<ReactiveBump>{.concurrency = rx::Concurrency::Serial}};
     CHECK_FALSE(latest.latest().has_value());
     CHECK(bump.run(ReactiveBump{}));
     CHECK(bump.run(ReactiveBump{}));

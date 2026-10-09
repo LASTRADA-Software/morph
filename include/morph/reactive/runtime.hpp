@@ -90,7 +90,9 @@ public:
     /// @brief Runs a widget callback as one batch. A flush that falls due while it runs, or that a nested
     ///        event loop inside it (a modal dialog) picks up, is deferred: the end of the outermost widget
     ///        event posts it. So a remount never destroys a widget whose native handler is on the stack, and a
-    ///        nested loop does not spin on a flush it may not run.
+    ///        nested loop does not spin on a flush it may not run. The callback is untracked, like
+    ///        `untracked`: a widget callback is a transition, so one dispatched from inside an Effect's
+    ///        run does not subscribe that Effect to what it reads.
     /// @tparam F A callable taking no arguments.
     /// @param fn The callback.
     /// @return Whatever @p fn returns.
@@ -100,6 +102,7 @@ public:
             return std::invoke(std::forward<F>(fn));
         }
         detail::WidgetEventScope const event{*_core};
+        detail::TrackingFrame const untrackedFrame{*_core, nullptr};
         return batch(std::forward<F>(fn));
     }
 

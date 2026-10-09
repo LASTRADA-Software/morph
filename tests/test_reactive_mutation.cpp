@@ -26,7 +26,9 @@ namespace {
 
 using morph::async::Completion;
 using morph::reactive::Computed;
-using morph::reactive::Concurrency;
+// Spelled rx::Concurrency: on Windows a using-declaration collides with the ConcRT
+// `::Concurrency` namespace the MSVC headers declare.
+namespace rx = morph::reactive;
 using morph::reactive::Effect;
 using morph::reactive::Mutation;
 using morph::reactive::MutationOptions;
@@ -71,7 +73,7 @@ TEST_CASE("reactive::Mutation: pending() counts overlapping calls", "[reactive][
     Owner owner;
     Runtime runtime{owner};
     SaveServer server{owner};
-    Saver save{runtime, server.via<Save>(), SaveOptions{.concurrency = Concurrency::Parallel}};
+    Saver save{runtime, server.via<Save>(), SaveOptions{.concurrency = rx::Concurrency::Parallel}};
     CHECK_FALSE(save.pending());
     save.run(Save{1});
     save.run(Save{2});
@@ -109,7 +111,7 @@ TEST_CASE("reactive::Mutation: Parallel sends every run and applies each reply a
     Owner owner;
     Runtime runtime{owner};
     SaveServer server{owner};
-    Saver save{runtime, server.via<Save>(), SaveOptions{.concurrency = Concurrency::Parallel}};
+    Saver save{runtime, server.via<Save>(), SaveOptions{.concurrency = rx::Concurrency::Parallel}};
     CHECK(save.run(Save{1}));
     CHECK(save.run(Save{2}));
     REQUIRE(server.calls() == 2);
@@ -129,7 +131,7 @@ TEST_CASE("reactive::Mutation: Latest sends every run and applies only the newes
     Owner owner;
     Runtime runtime{owner};
     SaveServer server{owner};
-    Saver save{runtime, server.via<Save>(), SaveOptions{.concurrency = Concurrency::Latest}};
+    Saver save{runtime, server.via<Save>(), SaveOptions{.concurrency = rx::Concurrency::Latest}};
     CHECK(save.run(Save{1}));
     CHECK(save.run(Save{2}));
     REQUIRE(server.calls() == 2);
@@ -150,7 +152,7 @@ TEST_CASE("reactive::Mutation: Serial queues runs and sends each after the previ
     Owner owner;
     Runtime runtime{owner};
     SaveServer server{owner};
-    Saver save{runtime, server.via<Save>(), SaveOptions{.concurrency = Concurrency::Serial}};
+    Saver save{runtime, server.via<Save>(), SaveOptions{.concurrency = rx::Concurrency::Serial}};
     CHECK(save.run(Save{1}));
     CHECK(save.run(Save{2}));
     CHECK(save.run(Save{3}));
@@ -178,7 +180,7 @@ TEST_CASE("reactive::Mutation: Serial with serialKey keeps one queue per key", "
     Runtime runtime{owner};
     SaveServer server{owner};
     Saver save{runtime, server.via<Save>(),
-               SaveOptions{.concurrency = Concurrency::Serial,
+               SaveOptions{.concurrency = rx::Concurrency::Serial,
                            .serialKey = [](Save const& action) { return std::to_string(action.id % 10); }}};
     save.run(Save{1});   // key 1
     save.run(Save{11});  // key 1: queued behind 1
@@ -205,7 +207,7 @@ TEST_CASE("reactive::Mutation: Serial with a runner that throws moves on to the 
                    }
                    return server.fetch(action);
                },
-               SaveOptions{.concurrency = Concurrency::Serial}};
+               SaveOptions{.concurrency = rx::Concurrency::Serial}};
     save.run(Save{1});
     save.run(Save{2});
     save.run(Save{3});
@@ -373,7 +375,7 @@ TEST_CASE("reactive::Mutation: a runner that throws is an error, not a stuck pen
                    }
                    return server.fetch(action);
                },
-               SaveOptions{.concurrency = Concurrency::Parallel}};
+               SaveOptions{.concurrency = rx::Concurrency::Parallel}};
     save.run(Save{1});
     REQUIRE(save.pending());
 
@@ -424,7 +426,7 @@ TEST_CASE("reactive::Mutation: a destroyed Mutation gates late replies", "[react
     List const list{runtime, listServer.via<Lookup>(), [] { return std::optional{Lookup{0}}; }};
     auto save =
         std::make_unique<Saver>(runtime, saveServer.via<Save>(),
-                                SaveOptions{.concurrency = Concurrency::Parallel, .invalidates = {list.link()}});
+                                SaveOptions{.concurrency = rx::Concurrency::Parallel, .invalidates = {list.link()}});
     save->run(Save{1});
     save->run(Save{2});
     save.reset();

@@ -107,10 +107,15 @@ FLOORS = {
     "include/morph/net": (88.0, 91.87),
     "include/morph/offline": (88.0, 91.88),
     "include/morph/qt": (97.0, 100.00),
+    # Measured in the CI coverage leg (352 branch arms) when morph::reactive landed.
+    "include/morph/reactive": (90.0, 93.75),
     "include/morph/render": (97.0, 100.00),
     "include/morph/session": (95.0, 98.61),
     # Measured in the CI coverage leg (1250 branch arms) when the table engine landed.
     "include/morph/table": (84.0, 87.28),
+    # Measured in the CI coverage leg (22 branch arms) when the test kit was installed with
+    # morph::reactive.
+    "include/morph/testing": (74.0, 77.27),
     "include/morph/util": (93.0, 96.39),
 }
 

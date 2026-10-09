@@ -447,6 +447,13 @@ public:
     /// A pull that throws leaves the node Clean (so later changes still reach it) and rethrows. A pull
     /// during which the node is destroyed returns without touching it.
     /// @return False when the node was destroyed during the pull: the caller must not touch it either.
+    // GCC sees `_destroyedWatch` keep the address of the local `destroyed` on the path where the
+    // node is destroyed during the pull. On that path `this` is gone too and nothing reads the
+    // member again; on every other path `endPull` restores the enclosing watch before returning.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-pointer"
+#endif
     // NOLINTNEXTLINE(misc-no-recursion) -- the recursion depth is the graph's depth
     bool updateIfNecessary() {
         bool destroyed = false;
@@ -460,6 +467,9 @@ public:
         endPull(destroyed, enclosing);
         return !destroyed;
     }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
     /// @brief Counts one run of this Effect in the flush numbered @p epoch.
     /// @param epoch The current flush's number.

@@ -807,3 +807,34 @@ TEST_CASE("reactive::Runtime: a node destroyed off the owner is reported", "[rea
     std::thread{[&] { doomed.reset(); }}.join();
     CHECK(probe.count(morph::reactive::detail::site::kOffOwner) == 1);
 }
+
+// Mutation: drop the untracked TrackingFrame in Runtime::widgetEvent.
+TEST_CASE("reactive::Runtime: a widget callback run from inside an Effect subscribes it to nothing", "[reactive]") {
+    Owner owner;
+    Runtime runtime{owner};
+    Signal<int> items{runtime, 1};
+    int runs = 0;
+    int seen = 0;
+    Effect const binding{runtime, [&] {
+                             ++runs;
+                             // A renderer whose setter echoes into its own handler.
+                             runtime.widgetEvent([&] { seen = items.get(); });
+                         }};
+    owner.runAll();
+    REQUIRE(runs == 1);
+    CHECK(seen == 1);
+
+    items.set(5);
+    owner.runAll();
+    CHECK(runs == 1);
+}
+
+// Mutation: drop the ExecutorScope StepExecutor::runOne states around each task.
+TEST_CASE("testing::StepExecutor: its own tasks run on it", "[reactive][testing]") {
+    Owner owner;
+    bool onOwner = false;
+    owner.post([&] { onOwner = morph::exec::runningOn(owner); });
+    owner.runAll();
+    CHECK(onOwner);
+    CHECK_FALSE(morph::exec::runningOn(owner));
+}

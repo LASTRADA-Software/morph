@@ -103,8 +103,9 @@ since it is the same thread, but it is outside the owner model all the same.
   threw ([below](#misuse-reported-then-refused)). The default is `detail::kDefaultMaxThrowReposts`,
   **3**.
 - `Runtime::untracked(f)` runs `f` with tracking off: reads inside it subscribe nothing.
-- `Runtime::widgetEvent(f)` runs a widget callback as one batch. A renderer runs every user event
-  inside one. A flush that falls due while a widget event is open is **deferred** until the outermost
+- `Runtime::widgetEvent(f)` runs a widget callback as one batch, untracked. A renderer runs every
+  user event inside one. A widget callback is a transition, like `Store::send`, so one dispatched from
+  inside an Effect's run (a setter that echoes into its own handler) subscribes that Effect to nothing. A flush that falls due while a widget event is open is **deferred** until the outermost
   widget event returns: no write inside it posts (its batch is open), and a flush already posted that a
   nested event loop inside the callback picks up (a modal dialog) returns at once, keeping the queue,
   without re-posting. When the outermost widget event's batch closes, it posts the flush. So a remount

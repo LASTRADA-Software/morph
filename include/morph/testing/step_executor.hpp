@@ -57,6 +57,9 @@ public:
             task = std::move(_queue.front());
             _queue.pop_front();
         }
+        // States the scope around the task, as `MainThreadExecutor` does, so
+        // `exec::runningOn(*this)` and every owner check holds inside it.
+        ::core::async::ExecutorScope const scope{coreExecutor()};
         task();
         return true;
     }
