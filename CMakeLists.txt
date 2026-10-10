@@ -485,6 +485,7 @@ target_sources(morph
     FILES
         include/morph/detail/fixed_string.hpp
         include/morph/detail/quantity_equation.hpp
+        include/morph/detail/reflected_member.hpp
         include/morph/core/detail/completion_awaiter.hpp
         include/morph/core/detail/task_handler.hpp
         include/morph/core/detail/instance_directory.hpp
