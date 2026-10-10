@@ -114,6 +114,12 @@ public:
         static_cast<void>(_backend.drag(_backend.idOf(source), _backend.idOf(target)));
     }
     void dismiss(ui::Widget& dialog) override { _backend.dismiss(_backend.idOf(dialog)); }
+    void moveCursor(ui::Widget& field, std::size_t position) override {
+        _backend.moveCursor(_backend.idOf(field), position);
+    }
+    [[nodiscard]] std::size_t cursorOf(ui::Widget const& field) override {
+        return _backend.cursor(_backend.idOf(field));
+    }
     void selectRows(ui::Widget& table, std::vector<std::size_t> const& rows) override {
         int const tableId = _backend.idOf(table);
         std::vector<int> const children = _backend.children(tableId);
@@ -161,7 +167,7 @@ private:
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 23);
+    REQUIRE(cases.size() == 26);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);

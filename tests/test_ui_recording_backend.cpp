@@ -488,9 +488,10 @@ TEST_CASE("RecordingBackend: a closed dialog ignores dismiss, and so does everyt
     dialog->setOnDismiss([&] { ++dismissed; });
     auto button = backend.createButton(dialog.get());
     button->setOnClick([&] { ++clicks; });
+    // The click first: a dismissal closes the dialog, as a real one does, and the click would then not reach it.
     auto const useBoth = [&] {
-        backend.dismiss(1);
         backend.click(2);
+        backend.dismiss(1);
     };
     useBoth();  // a new dialog is closed
     dialog->setOpen(true);
@@ -499,4 +500,36 @@ TEST_CASE("RecordingBackend: a closed dialog ignores dismiss, and so does everyt
     useBoth();
     CHECK(dismissed == 1);
     CHECK(clicks == 1);
+}
+
+// Mutations: in FakeTextInput::setText, move the cursor whatever the text (the unchanged text loses the cursor);
+// never move it (the new text keeps a cursor inside it).
+TEST_CASE("RecordingBackend: setText with the text shown keeps the cursor, and another text moves it to the end",
+          "[ui]") {
+    RecordingBackend backend;
+    auto field = backend.createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    backend.edit(1, "abc");
+    CHECK(backend.cursor(1) == 3);
+    backend.moveCursor(1, 1);
+    CHECK(backend.cursor(1) == 1);
+    field->setText("abc");
+    CHECK(backend.cursor(1) == 1);
+    field->setText("abcd");
+    CHECK(backend.cursor(1) == 4);
+    backend.moveCursor(1, 99);
+    CHECK(backend.cursor(1) == 4);
+}
+
+// Mutation: drop the setByUser in RecordingBackend::dismiss (the dialog stays open).
+TEST_CASE("RecordingBackend: a dismissal closes the dialog before onDismiss runs", "[ui]") {
+    RecordingBackend backend;
+    std::string openInHandler;
+    auto dialog = backend.createDialog(nullptr);
+    dialog->setOnDismiss([&] { openInHandler = backend.prop(1, "open"); });
+    dialog->setOpen(true);
+    backend.clearLog();
+    backend.dismiss(1);
+    CHECK(openInHandler == "false");
+    CHECK(backend.prop(1, "open") == "false");
+    CHECK(backend.log().empty());
 }

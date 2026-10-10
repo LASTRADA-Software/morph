@@ -25,8 +25,12 @@ namespace morph::ui {
 /// Its destructor detaches it from its parent and frees its native resources; no handler of the widget runs after
 /// the destructor returns. A handler may destroy its own widget: the backend keeps the handler alive until that call
 /// returns, for example by calling a copy. A backend may assume a handler, a drop's `accepts` predicate included,
-/// never throws: the mount catches and reports what one throws. Every setter takes UTF-8 and may be called with an
-/// unchanged value.
+/// never throws: the mount catches and reports what one throws. Every setter takes UTF-8.
+///
+/// A setter called with the value the widget already shows changes nothing: a text input keeps its cursor, its
+/// selection and an input method's composition. Input widgets are controlled: a user's action changes what the
+/// widget shows, as the toolkit does, and reports the request through the handler; the mount then shows what the
+/// application's slot says, in a turn posted after the request's flush, so a refused request snaps back.
 class Widget {
 public:
     Widget() = default;
@@ -97,7 +101,8 @@ public:
 /// @brief An editable text field.
 class TextInputWidget : public Widget {
 public:
-    /// @brief Replaces the text. Never calls the `onChange` handler.
+    /// @brief Replaces the text. Never calls the `onChange` handler. With the text the field already shows, it changes
+    ///        nothing: the cursor, the selection and an input method's composition stay as they are.
     /// @param text The text, UTF-8.
     virtual void setText(std::string_view text) = 0;
 
@@ -243,7 +248,8 @@ public:
 
 /// @brief A modal overlay around its children, with a focus trap while open. A new dialog is closed.
 ///
-/// A closed dialog shows nothing and takes no input, its children included.
+/// A closed dialog shows nothing and takes no input, its children included. A user's dismissal closes it, as the
+/// toolkit does, before `onDismiss` runs; an application that keeps it open opens it again.
 class DialogWidget : public ContainerWidget {
 public:
     /// @brief Shows or hides the overlay.

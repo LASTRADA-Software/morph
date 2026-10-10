@@ -103,7 +103,9 @@ TEST_CASE("ui::table: a user's selection comes back through the selection prop",
     fixture.backend.selectRows(1, {intKey(2)});
     fixture.owner.runAll();
     CHECK(fixture.selection.peek() == std::vector<ui::Key>{intKey(2)});
-    CHECK(fixture.backend.log() == Lines{"set Table#1 selection=[2]"});
+    // The table shows the user's selection already, so the binding sends nothing back.
+    CHECK(fixture.backend.prop(1, "selection") == "[2]");
+    CHECK(fixture.backend.log().empty());
 }
 
 TEST_CASE("ui::table: activating a row reports its key", "[ui]") {

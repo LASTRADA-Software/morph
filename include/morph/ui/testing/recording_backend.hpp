@@ -613,14 +613,48 @@ public:
     void setOnClick(Action onClick) override { callbacks().click = std::move(onClick); }
 };
 
-/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`.
+/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, and a text cursor.
+///
+/// The cursor is a byte offset into the text. A user's edit puts it where the edit left it; `setText` with the text
+/// the field shows leaves it alone, as the contract requires, and `setText` with another text puts it at the end.
 class FakeTextInput final : public FakeLeaf<TextInputWidget> {
 public:
     using FakeLeaf<TextInputWidget>::FakeLeaf;
-    void setText(std::string_view text) override { set("text", formatText(text)); }
+
+    /// @brief Records property `text`; moves the cursor to the end only when the text changes.
+    /// @param text The text, UTF-8.
+    void setText(std::string_view text) override {
+        if (text != _shown) {
+            _shown = std::string{text};
+            _cursor = _shown.size();
+        }
+        set("text", formatText(text));
+    }
+
+    /// @brief The text the user typed: the field shows it, and the cursor is at @p cursor; nothing is logged.
+    /// @param text The whole new text.
+    /// @param cursor Where the cursor ends up; clamped to the text's size.
+    void typedByUser(std::string text, std::size_t cursor) {
+        _shown = std::move(text);
+        _cursor = std::min(cursor, _shown.size());
+        store().setByUser(id(), "text", formatText(_shown));
+    }
+
+    /// @brief Moves the cursor as the user's arrow keys or a click would.
+    /// @param cursor The new position; clamped to the text's size.
+    void moveCursorByUser(std::size_t cursor) noexcept { _cursor = std::min(cursor, _shown.size()); }
+
+    /// @brief Where the cursor is.
+    /// @return A byte offset into the text shown.
+    [[nodiscard]] std::size_t cursor() const noexcept { return _cursor; }
+
     void setPlaceholder(std::string_view placeholder) override { set("placeholder", formatText(placeholder)); }
     void setOnChange(std::function<void(std::string)> onChange) override { callbacks().change = std::move(onChange); }
     void setOnSubmit(std::function<void(std::string)> onSubmit) override { callbacks().submit = std::move(onSubmit); }
+
+private:
+    std::string _shown;
+    std::size_t _cursor = 0;
 };
 
 /// @brief A fake `CheckboxWidget`: properties `label`, `checked`.
@@ -1111,26 +1145,45 @@ public:
         }
     }
 
-    /// @brief Types into a text field: the field shows @p text, then `onChange` gets it.
+    /// @brief Types into a text field: the field shows @p text with the cursor at its end, then `onChange` gets it.
     /// @param widgetId The field.
     /// @param text The whole new text.
     /// @throws std::logic_error when the widget is not a text field.
     void edit(int widgetId, std::string text) {
         if (detail::Record const* const record = actionable(widgetId, "edit", {"TextInput"}); record != nullptr) {
-            _store->setByUser(widgetId, "text", detail::formatText(text));
+            textInput(*record).typedByUser(text, text.size());
             invoke(record->callbacks.change, std::move(text));
         }
     }
 
-    /// @brief Submits a text field with @p text.
+    /// @brief Submits a text field with @p text, which it then shows with the cursor at its end.
     /// @param widgetId The field.
     /// @param text The text submitted.
     /// @throws std::logic_error when the widget is not a text field.
     void submit(int widgetId, std::string text) {
         if (detail::Record const* const record = actionable(widgetId, "submit", {"TextInput"}); record != nullptr) {
-            _store->setByUser(widgetId, "text", detail::formatText(text));
+            textInput(*record).typedByUser(text, text.size());
             invoke(record->callbacks.submit, std::move(text));
         }
+    }
+
+    /// @brief Moves a text field's cursor, as the arrow keys or a click would; no handler runs.
+    /// @param widgetId The field.
+    /// @param position A byte offset into the text it shows; clamped to the text's size.
+    /// @throws std::logic_error when the widget is not a text field.
+    void moveCursor(int widgetId, std::size_t position) {
+        if (detail::Record const* const record = actionable(widgetId, "moveCursor", {"TextInput"});
+            record != nullptr) {
+            textInput(*record).moveCursorByUser(position);
+        }
+    }
+
+    /// @brief Where a text field's cursor is.
+    /// @param widgetId The field.
+    /// @return A byte offset into the text it shows.
+    /// @throws std::logic_error when the widget is not a text field.
+    [[nodiscard]] std::size_t cursor(int widgetId) {
+        return textInput(expectKind(widgetId, "cursor", {"TextInput"})).cursor();
     }
 
     /// @brief Toggles a check box: it flips its own `checked`, then `onToggle` gets the new state.
@@ -1194,11 +1247,12 @@ public:
         }
     }
 
-    /// @brief Dismisses an open dialog, as Esc does on the TUI.
+    /// @brief Dismisses an open dialog, as Esc does on the TUI: the dialog closes, then `onDismiss` runs.
     /// @param widgetId The dialog.
     /// @throws std::logic_error when the widget is not a dialog.
     void dismiss(int widgetId) {
         if (detail::Record const* const record = actionable(widgetId, "dismiss", {"Dialog"}); record != nullptr) {
+            _store->setByUser(widgetId, "open", detail::formatBool(false));
             invoke(record->callbacks.dismiss);
         }
     }
@@ -1310,6 +1364,11 @@ public:
     }
 
 private:
+    // The fake behind a text field's record.
+    static detail::FakeTextInput& textInput(detail::Record const& record) {
+        return dynamic_cast<detail::FakeTextInput&>(*record.widget);
+    }
+
     // A helper applies to some kinds only; using it on another kind is a mistake in the test, not a user action.
     detail::Record& expectKind(int widgetId, std::string_view helper, std::initializer_list<std::string_view> kinds) {
         detail::Record& record = _store->at(widgetId);

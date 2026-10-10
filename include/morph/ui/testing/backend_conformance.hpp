@@ -119,6 +119,16 @@ public:
     /// @param table The table.
     /// @return Their positions among the table's current rows, ascending.
     [[nodiscard]] virtual std::vector<std::size_t> selectedRows(Widget const& table) = 0;
+
+    /// @brief Moves a text field's cursor as a user would (the arrow keys, a click), without changing the text.
+    /// @param field The text field.
+    /// @param position A byte offset into the text it shows.
+    virtual void moveCursor(Widget& field, std::size_t position) = 0;
+
+    /// @brief Where a text field's cursor is.
+    /// @param field The text field.
+    /// @return A byte offset into the text it shows.
+    [[nodiscard]] virtual std::size_t cursorOf(Widget const& field) = 0;
 };
 
 /// @brief One scripted case.
@@ -671,6 +681,93 @@ struct Entry {
     return checks.result();
 }
 
+/// @brief Case: a setter given the text a field already shows changes nothing; in particular the cursor stays.
+///
+/// Built through the backend directly, so the setter is called with the shown text on purpose: a mount sends no such
+/// call for an accepted edit, but a re-assertion of a transformed one, or another renderer, may.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> unchangedTextKeepsCursor(ConformanceProbe& probe) {
+    std::unique_ptr<TextInputWidget> const field = probe.backend().createTextInput(nullptr, TextInputMode::SingleLine);
+    probe.settle();
+    probe.type(*field, "abc");
+    probe.moveCursor(*field, 1);
+    probe.settle();
+    Checks checks;
+    checks.that(probe.cursorOf(*field) == 1,
+                "moving the cursor to 1 left it at " + std::to_string(probe.cursorOf(*field)));
+    field->setText("abc");
+    probe.settle();
+    checks.text("the field after setText with the text it shows", "abc", probe.textOf(*field));
+    checks.that(probe.cursorOf(*field) == 1, "setText with the text the field shows moved the cursor from 1 to " +
+                                                 std::to_string(probe.cursorOf(*field)));
+    return checks.result();
+}
+
+/// @brief Case: an edit the document refuses snaps back, and one it transforms shows the transform.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> textInputIsControlled(ConformanceProbe& probe) {
+    reactive::Signal<std::string> name{probe.runtime(), "kept"};
+    bool refuse = true;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::textInput({.value = [&name] { return name.get(); },
+                                      .onChange =
+                                          [&name, &refuse](std::string text) {
+                                              if (!refuse) {
+                                                  std::ranges::transform(text, text.begin(), [](char character) {
+                                                      return character >= 'a' && character <= 'z'
+                                                                 ? static_cast<char>(character - 'a' + 'A')
+                                                                 : character;
+                                                  });
+                                                  name.set(std::move(text));
+                                              }
+                                          }})};
+    probe.settle();
+    Checks checks;
+    probe.type(view.root(), "typed");
+    probe.settle();
+    checks.text("the field after an edit the document refused", "kept", probe.textOf(view.root()));
+    refuse = false;
+    probe.type(view.root(), "typed");
+    probe.settle();
+    checks.text("the field after an edit the document upper-cased", "TYPED", probe.textOf(view.root()));
+    checks.text("the value after an edit the document upper-cased", "TYPED", name.peek());
+    return checks.result();
+}
+
+/// @brief Case: a dialog the user dismisses but the document keeps open is shown again, with its content.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> refusedDismissalKeepsDialogOpen(ConformanceProbe& probe) {
+    reactive::Signal<bool> const open{probe.runtime(), true};
+    int dismissals = 0;
+    int clicks = 0;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::dialog({.open = [&open] { return open.get(); },
+                                   .title = "Confirm",
+                                   .child = ui::button({.label = "OK", .onClick = [&clicks] { ++clicks; }}),
+                                   .onDismiss = [&dismissals] { ++dismissals; }})};
+    probe.settle();
+    ContainerWidget const* const dialog = asContainer(view.root());
+    if (dialog == nullptr) {
+        return "a Dialog's widget is not a ContainerWidget";
+    }
+    probe.dismiss(view.root());
+    probe.settle();
+    Checks checks;
+    checks.that(dismissals == 1, "dismissing the dialog called onDismiss " + std::to_string(dismissals) + " times");
+    Widget* const button = probe.childAt(*dialog, 0);
+    checks.that(button != nullptr, "a dialog kept open lost its content");
+    if (button != nullptr) {
+        probe.click(*button);
+        probe.settle();
+    }
+    checks.that(clicks == 1, "a click inside a dialog the document kept open ran its action " +
+                                 std::to_string(clicks) + " times; the dialog did not open again");
+    return checks.result();
+}
+
 /// @brief Case: no setter calls a handler. Setting a value, replacing options, items or rows, requesting a selection,
 ///        opening or closing — none of it is a user's doing, so none of it reaches `onChange`, `onToggle`,
 ///        `onSelect`, `onSelectionChange` and the like.
@@ -797,14 +894,17 @@ struct Entry {
     std::vector<Entry> withNine = three;
     withNine.push_back({.id = 9, .label = "i"});
     reactive::Signal<std::vector<Entry>> rows{runtime, three};
-    reactive::Signal<std::vector<Key>> const selection{runtime, {Key{std::int64_t{2}}, Key{std::int64_t{9}}}};
+    reactive::Signal<std::vector<Key>> selection{runtime, {Key{std::int64_t{2}}, Key{std::int64_t{9}}}};
     std::vector<std::vector<Key>> reports;
-    Mounted const view{
-        runtime, probe.backend(),
-        entryTable(rows,
-                   {.selectionMode = SelectionMode::Multiple,
-                    .selection = [&selection] { return selection.get(); },
-                    .onSelectionChange = [&reports](std::vector<Key> keys) { reports.push_back(std::move(keys)); }})};
+    // The selection is a slot, so the application writes what the user picked for the table to keep showing it.
+    Mounted const view{runtime, probe.backend(),
+                       entryTable(rows, {.selectionMode = SelectionMode::Multiple,
+                                         .selection = [&selection] { return selection.get(); },
+                                         .onSelectionChange =
+                                             [&reports, &selection](std::vector<Key> keys) {
+                                                 reports.push_back(keys);
+                                                 selection.set(std::move(keys));
+                                             }})};
     probe.settle();
     Checks checks;
     checks.text("the rows marked for requested keys 2 and 9, with no row 9", "b", selectedTexts(probe, view.root()));
@@ -1050,7 +1150,7 @@ private:
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 23> const cases{{
+    static std::array<ConformanceCase, 26> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -1069,6 +1169,10 @@ private:
         {.name = "a new Dialog is closed and a closed Dialog takes no input", .run = detail::closedDialogTakesNoInput},
         {.name = "a widget inside a hidden, disabled or collapsed container takes no input",
          .run = detail::unreachableWidgetsTakeNoInput},
+        {.name = "a setter given the text a field shows keeps the cursor", .run = detail::unchangedTextKeepsCursor},
+        {.name = "a text field shows what the document makes of an edit", .run = detail::textInputIsControlled},
+        {.name = "a dismissal the document refuses leaves the dialog open",
+         .run = detail::refusedDismissalKeepsDialogOpen},
         {.name = "no setter calls a handler", .run = detail::settersCallNoHandler},
         {.name = "a Select marks the requested key whenever its options contain it",
          .run = detail::selectReResolvesRequestedKey},

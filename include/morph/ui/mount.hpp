@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <exception>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -156,6 +157,8 @@ struct Pages {
     std::vector<SlotWidget*> slots;
     /// @brief The page shown now, if any; may be past the last page, and then none is shown.
     std::optional<std::size_t> shown;
+    /// @brief The tab the bar highlights, as far as the mount knows: the last one it set, or the user's pick since.
+    std::optional<std::size_t> highlighted;
     /// @brief The Tabs' `onSelect`, run as a widget callback; empty when the Tabs has none.
     std::function<void(std::size_t)> onSelect;
 };
@@ -236,6 +239,105 @@ private:
         };
     }
 
+    /// @brief A controlled input's re-assertion: what the widget shows as far as the mount knows, what its slot
+    ///        says now, and how to show a value.
+    /// @tparam T The value type.
+    template <typename T>
+    struct Reassertion {
+        /// @brief What the widget shows: the last value the mount set, or the last value the user asked for since.
+        ///        Owned by the scope, made before this, so it outlives it.
+        std::optional<T>* shown;
+        /// @brief What the slot says now.
+        std::function<T()> read;
+        /// @brief Shows a value, and records it in `*shown`.
+        std::function<void(T const&)> apply;
+    };
+
+    // What a controlled input's event calls after the application's handler, with the value the user asked for.
+    //
+    // The widget shows the request already: it is recorded as shown. Then one turn is posted to the owner; it reads
+    // the slot untracked and shows it when the widget shows anything else. The turn is posted after the event's
+    // widgetEvent closed, so it runs after the flush the event caused, whose bindings record what they set: an
+    // accepted request costs no setter call, a refused one snaps back, and a transformed one, which the binding has
+    // shown already, costs nothing more. The check is owned by @p scope and held weakly by the event and the turn,
+    // so neither does anything once the content is gone.
+    template <typename T, typename Read, typename Apply>
+    [[nodiscard]] std::function<void(T const&)> reasserter(reactive::Scope& scope, std::optional<T>& shown, Read read,
+                                                           Apply apply) {
+        auto const check = std::make_shared<Reassertion<T>>(
+            Reassertion<T>{.shown = &shown, .read = std::move(read), .apply = std::move(apply)});
+        scope.make<std::shared_ptr<Reassertion<T>>>(check);
+        return [runtime = _rt, weak = std::weak_ptr{check}](T const& requested) {
+            if (auto const live = weak.lock()) {
+                *live->shown = requested;
+            } else {
+                return;
+            }
+            // Called from a widget handler, which must not throw: a post that fails leaves the widget showing the
+            // user's value until the slot next changes.
+            try {
+                runtime->owner().post([runtime, weak] {
+                    if (auto const live = weak.lock()) {
+                        runtime->untracked([&live] { showSlot(*live); });
+                    }
+                });
+            } catch (...) {  // NOLINT(bugprone-empty-catch): see above
+            }
+        };
+    }
+
+    // Shows the slot's value if the widget shows anything else. A slot that throws is its binding's failure, which
+    // the binding's Effect reports; the widget keeps what the user did.
+    template <typename T>
+    static void showSlot(Reassertion<T> const& check) noexcept {
+        try {
+            T const current = check.read();
+            if (!(check.shown->has_value() && **check.shown == current)) {
+                check.apply(current);
+            }
+        } catch (...) {  // NOLINT(bugprone-empty-catch): reported by the binding's Effect, see above
+        }
+    }
+
+    // A controlled input's value: bound like any property, recording what it shows, and not sending what it already
+    // shows; a slot is also re-asserted after each user event (see `reasserter`). Returns what the event calls, or
+    // nothing for a constant, which is not a slot: the widget keeps what the user did to it.
+    template <typename T, typename Apply>
+    [[nodiscard]] std::function<void(T const&)> controlled(reactive::Scope& scope, Prop<T> const& prop, Apply apply) {
+        auto& shown = scope.make<std::optional<T>>();
+        // A value the widget already shows, the user's accepted edit above all, is not sent again.
+        auto show = [&shown, apply = std::move(apply)](T const& value) {
+            if (shown.has_value() && *shown == value) {
+                return;
+            }
+            apply(value);
+            shown = value;
+        };
+        reactive::Computed<T>* const value = bind(scope, prop, show);
+        if (value == nullptr) {
+            return {};
+        }
+        return reasserter<T>(scope, shown, [value] { return value->get(); }, std::move(show));
+    }
+
+    // An input's event: the application's handler, run as `event` runs it, then the re-assertion of the request.
+    // Installed whenever either exists, so a slot without a handler is read-only rather than editable.
+    template <typename T, typename Arg>
+    [[nodiscard]] std::function<void(Arg)> inputEvent(std::function<void(Arg)> const& handler,
+                                                      std::function<void(T const&)> reassert) const {
+        std::function<void(Arg)> inner = event(handler);
+        if (!reassert) {
+            return inner;
+        }
+        return [inner = std::move(inner), reassert = std::move(reassert)](Arg arg) {
+            T const requested(arg);
+            if (inner) {
+                inner(std::move(arg));
+            }
+            reassert(requested);
+        };
+    }
+
     void applyCommon(reactive::Scope& scope, Widget& widget, Common const& common) {
         if (common.visible.isBound() || !common.visible.constant()) {
             bind(scope, common.visible, [&widget](bool shown) { widget.setVisible(shown); });
@@ -306,10 +408,10 @@ private:
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
         TextInputWidget& widget = scope.adopt(_backend->createTextInput(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
-        bind(scope, spec.value, [&widget](std::string const& value) { widget.setText(value); });
+        auto reassert = controlled(scope, spec.value, [&widget](std::string const& value) { widget.setText(value); });
         bind(scope, spec.placeholder, [&widget](std::string const& text) { widget.setPlaceholder(text); });
-        widget.setOnChange(event(spec.onChange));
-        widget.setOnSubmit(event(spec.onSubmit));
+        widget.setOnChange(inputEvent(spec.onChange, reassert));
+        widget.setOnSubmit(inputEvent(spec.onSubmit, std::move(reassert)));
         return widget;
     }
 
@@ -317,8 +419,8 @@ private:
         CheckboxWidget& widget = scope.adopt(_backend->createCheckbox(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
-        bind(scope, spec.checked, [&widget](bool checked) { widget.setChecked(checked); });
-        widget.setOnToggle(event(spec.onToggle));
+        widget.setOnToggle(inputEvent(
+            spec.onToggle, controlled(scope, spec.checked, [&widget](bool checked) { widget.setChecked(checked); })));
         return widget;
     }
 
@@ -326,8 +428,9 @@ private:
         SelectWidget& widget = scope.adopt(_backend->createSelect(parent, spec.style));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.options, [&widget](std::vector<SelectOption> const& options) { widget.setOptions(options); });
-        bind(scope, spec.selected, [&widget](std::optional<Key> const& key) { widget.setSelected(key); });
-        widget.setOnSelect(event(spec.onSelect));
+        widget.setOnSelect(inputEvent(
+            spec.onSelect,
+            controlled(scope, spec.selected, [&widget](std::optional<Key> const& key) { widget.setSelected(key); })));
         return widget;
     }
 
@@ -389,8 +492,9 @@ private:
         widget.setPadding(spec.padding);
         widget.setCollapsible(spec.collapsible);
         if (spec.collapsible) {
-            bind(scope, spec.collapsed, [&widget](bool collapsed) { widget.setCollapsed(collapsed); });
-            widget.setOnToggle(event(spec.onToggle));
+            widget.setOnToggle(inputEvent(spec.onToggle, controlled(scope, spec.collapsed, [&widget](bool collapsed) {
+                                              widget.setCollapsed(collapsed);
+                                          })));
         }
         static_cast<void>(mount(scope, spec.child, &widget));
         return widget;
@@ -453,11 +557,20 @@ private:
             labels.push_back(tab.label);
         }
         widget.setTabs(labels);
-        widget.setOnSelect(event(spec.onSelect));
         auto& pageScope = scope.child();
         auto& pages = scope.make<Pages>();
         pages.slots.resize(spec.tabs.size(), nullptr);
-        pages.onSelect = event(spec.onSelect);
+        // A bound index is controlled: after a pick, the bar highlights the page that is shown, so a pick the
+        // document refuses moves the highlight back. A constant index is not a slot, and the bar keeps the pick.
+        std::function<void(std::size_t const&)> reassert;
+        if (spec.selected.isBound()) {
+            reassert = reasserter<std::size_t>(
+                scope, pages.highlighted,
+                [&pages] { return pages.shown.value_or(std::numeric_limits<std::size_t>::max()); },
+                [&widget, &pages](std::size_t index) { highlight(widget, pages, index); });
+        }
+        widget.setOnSelect(inputEvent(spec.onSelect, reassert));
+        pages.onSelect = inputEvent(spec.onSelect, std::move(reassert));
         auto show = [this, &widget, &pageScope, &pages, pageSpecs = spec.tabs](std::size_t index) {
             _rt->untracked([&] { showPage(widget, pageScope, pages, pageSpecs, index); });
         };
@@ -498,7 +611,13 @@ private:
             }
         }
         pages.shown = index;
+        highlight(widget, pages, index);
+    }
+
+    // Moves the bar's highlight, and records it.
+    static void highlight(TabsWidget& widget, Pages& pages, std::size_t index) {
         widget.setSelected(index);
+        pages.highlighted = index;
     }
 
     // After a page failed to mount: puts the bar's highlight back on the page still shown, and tells the application
@@ -510,9 +629,9 @@ private:
     //
     // Nothing here may replace the failure being reported: the callback's wrapper reports what the callback throws,
     // and anything else thrown here is dropped.
-    static void restoreSelection(TabsWidget& widget, Pages const& pages, std::size_t shown) noexcept {
+    static void restoreSelection(TabsWidget& widget, Pages& pages, std::size_t shown) noexcept {
         try {
-            widget.setSelected(shown);
+            highlight(widget, pages, shown);
         } catch (...) {  // NOLINT(bugprone-empty-catch)
             // The page's failure is the one reported; the bar keeps whatever highlight it had.
         }
@@ -548,10 +667,28 @@ private:
         DialogWidget& widget = scope.adopt(_backend->createDialog(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
-        std::function<void()> onDismiss = event(spec.onDismiss);
-        widget.setOnDismiss(onDismiss);
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
-        auto show = [this, &widget, &content, depth = scope.depth() + 1, child = spec.child](
+        auto& shownOpen = scope.make<std::optional<bool>>();
+        // A bound `open` is controlled: a dismissal the document refuses opens the dialog again, over the content it
+        // still holds. Content that failed to mount is not there to show, so the dialog stays closed for it.
+        std::function<void()> onDismiss = event(spec.onDismiss);
+        if (spec.open.isBound()) {
+            auto reassert =
+                reasserter<bool>(scope, shownOpen, spec.open.binding(), [&widget, &content, &shownOpen](bool open) {
+                    if (!open || content != nullptr) {
+                        widget.setOpen(open);
+                        shownOpen = open;
+                    }
+                });
+            onDismiss = [inner = std::move(onDismiss), reassert = std::move(reassert)] {
+                if (inner) {
+                    inner();
+                }
+                reassert(false);
+            };
+        }
+        widget.setOnDismiss(onDismiss);
+        auto show = [this, &widget, &content, &shownOpen, depth = scope.depth() + 1, child = spec.child](
                         bool open, std::function<void()> const& dismiss) {
             if (!open) {
                 content.reset();
@@ -564,6 +701,7 @@ private:
                 }
             }
             widget.setOpen(open);
+            shownOpen = open;
         };
         if (!spec.open.isBound()) {
             // A constant has no application state to bring back in line: content that fails throws out of the mount.
@@ -606,11 +744,13 @@ private:
         applyCommon(scope, widget, spec.common);
         widget.setColumns(spec.columns);
         widget.setSelectionMode(spec.selectionMode);
-        widget.setOnSelectionChange(event(spec.onSelectionChange));
         widget.setOnActivate(event(spec.onActivate));
         mountRows(scope, spec.rows, widget,
                   [&widget](Widget& rowWidget, Key const& key) { widget.setRowKey(rowWidget, key); });
-        bind(scope, spec.selection, [&widget](std::vector<Key> const& keys) { widget.setSelection(keys); });
+        widget.setOnSelectionChange(inputEvent(
+            spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
+                widget.setSelection(keys);
+            })));
         return widget;
     }
 
@@ -766,9 +906,10 @@ private:
         DateTimeInputWidget& widget =
             scope.adopt(_backend->createDateTimeInput(parent, spec.mode, spec.offsetMinutes));
         applyCommon(scope, widget, spec.common);
-        bind(scope, spec.value,
-             [&widget](std::optional<morph::time::Timestamp> const& value) { widget.setValue(value); });
-        widget.setOnChange(event(spec.onChange));
+        widget.setOnChange(inputEvent(
+            spec.onChange,
+            controlled(scope, spec.value,
+                       [&widget](std::optional<morph::time::Timestamp> const& value) { widget.setValue(value); })));
         return widget;
     }
 
@@ -776,16 +917,17 @@ private:
         SliderWidget& widget = scope.adopt(_backend->createSlider(parent));
         applyCommon(scope, widget, spec.common);
         widget.setRange(spec.minimum, spec.maximum, spec.step);
-        bind(scope, spec.value, [&widget](std::int64_t value) { widget.setValue(value); });
-        widget.setOnChange(event(spec.onChange));
+        widget.setOnChange(inputEvent(
+            spec.onChange, controlled(scope, spec.value, [&widget](std::int64_t value) { widget.setValue(value); })));
         return widget;
     }
 
     Widget& mountKind(reactive::Scope& scope, FilePicker const& spec, ContainerWidget* parent) {
         FilePickerWidget& widget = scope.adopt(_backend->createFilePicker(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
-        bind(scope, spec.path, [&widget](std::string const& path) { widget.setPath(path); });
-        widget.setOnPicked(event(spec.onPicked));
+        widget.setOnPicked(inputEvent(spec.onPicked, controlled(scope, spec.path, [&widget](std::string const& path) {
+                                          widget.setPath(path);
+                                      })));
         return widget;
     }
 
@@ -806,6 +948,13 @@ private:
 /// reads. An exception a callback throws is reported (`detail::site::kCallbackThrew`) and goes no further: the
 /// backend's call returns normally, a predicate that threw refuses the drop, and what the callback wrote before
 /// throwing still flushes.
+///
+/// An input whose value is a slot is controlled: a text input's text, a checkbox's state, a select's key, a slider's,
+/// date-time input's or file picker's value, a collapsible panel's state, a Tabs index, a Dialog's `open` and a
+/// Table's selection. After a user's request, and after the flush it caused, a posted turn shows the slot's value if
+/// the widget shows anything else: a refused request snaps back, an accepted one costs no setter call, and a
+/// transformed one shows the request for that one turn. That holds with no handler too, which makes a slot without one
+/// read-only. A constant is not a slot: the widget keeps what the user did to it.
 ///
 /// A mount that throws goes no further than the content it was building, and leaves none of it behind. A node mounted
 /// directly, a constant Switch selector, Tabs index or Dialog `open` included, throws out of the constructor. Content

@@ -158,6 +158,7 @@ add_executable(morph_tests
     test_ui_view.cpp
     test_ui_recording_backend.cpp
     test_ui_mount.cpp
+    test_ui_controlled.cpp
     test_ui_structure.cpp
     test_ui_foreach.cpp
     test_ui_table.cpp
