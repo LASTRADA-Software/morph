@@ -162,6 +162,7 @@ add_executable(morph_tests
     test_ui_structure.cpp
     test_ui_foreach.cpp
     test_ui_table.cpp
+    test_ui_frontend.cpp
     test_ui_conformance.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
