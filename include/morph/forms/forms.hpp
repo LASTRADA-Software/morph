@@ -174,6 +174,7 @@
 #include <limits>
 #include <memory>
 #include <morph/detail/fixed_string.hpp>
+#include <morph/detail/reflected_member.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -594,31 +595,32 @@ template <typename A>
     return {};
 }
 
-/// @brief Invokes `visitor.operator()<I>(name, member)` for every reflected
-///        member of @p action (glaze pure reflection).
+/// @brief Invokes `visitor.operator()<I>(name, member)` for every key glaze
+///        reflects on @p action, with the value glaze reads and writes under
+///        that key (`morph::detail::reflectedMember`). Under a `glz::meta`
+///        the walk follows the meta: its order, its names, and only the members
+///        it lists.
 template <typename A, typename Visitor>
 // Neither forwarding reference is forwarded, and neither may be. `action` is
-// bound by `glz::to_tie` into a tuple of references that outlives this line and
-// is read member-by-member below; moving from it would leave the tie pointing
-// at a moved-from object. `visitor` is invoked once per reflected member by the
+// read member-by-member below, and each member reference handed to the visitor
+// points into it; moving from it would leave those references pointing at a
+// moved-from object. `visitor` is invoked once per reflected member by the
 // fold expression, so forwarding it would move from it on the first member and
 // call a moved-from callable for every one after. Both are `&&` to preserve the
-// argument's cv-qualification through the tie — a `const A&` must tie to const
-// members — not to enable a move. The directive stays on one physical line
-// deliberately; see the note at detail/fixed_string.hpp:48.
+// argument's cv-qualification — a `const A&` must yield const members — not to
+// enable a move. The directive stays on one physical line deliberately; see the
+// note at detail/fixed_string.hpp:48.
 // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
 constexpr void forEachNamedMember(A&& action, Visitor&& visitor) {
     using Plain = std::remove_cvref_t<A>;
     constexpr auto memberCount = glz::reflect<Plain>::size;
-    auto memberTie = glz::to_tie(action);
     [&]<std::size_t... I>(std::index_sequence<I...>) {
         // `I` is a pack of `std::index_sequence<memberCount>`, i.e. every value in
         // [0, glz::reflect<Plain>::size), and `keys` is an array of exactly that
         // size — the index cannot be out of range by construction. The directive
         // stays on one physical line; see the note at detail/fixed_string.hpp:48.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-        (visitor.template operator()<I>(glz::reflect<Plain>::keys[I], glz::get_member(action, get<I>(memberTie))),
-         ...);
+        (visitor.template operator()<I>(glz::reflect<Plain>::keys[I], morph::detail::reflectedMember<I>(action)), ...);
     }(std::make_index_sequence<memberCount>{});
 }
 
@@ -3385,12 +3387,13 @@ constexpr void reconcileDeclaredPrecision(A& action) {
     // action from the dispatch path, not only form actions.
     if constexpr (glz::reflectable<Plain> || glz::glaze_object_t<Plain>) {
         constexpr auto memberCount = glz::reflect<Plain>::size;
-        auto memberTie = glz::to_tie(action);
         [&]<std::size_t... I>(std::index_sequence<I...>) {
             [[maybe_unused]] auto retag = [&]<std::size_t Idx>() {
-                auto& member = glz::get_member(action, get<Idx>(memberTie));
+                // A `glz::meta` entry that computes its value yields a value,
+                // not a reference: there is no stored member behind it to round.
+                [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(action);
                 using Member = std::remove_cvref_t<decltype(member)>;
-                if constexpr (units::isQuantity<Member>) {
+                if constexpr (units::isQuantity<Member> && std::is_lvalue_reference_v<decltype(member)>) {
                     member = member.atDeclaredPrecision();
                 }
             };

@@ -125,6 +125,7 @@ add_executable(morph_tests
     test_forms_rule_agreement.cpp
     test_forms_rule_corpus.cpp
     test_forms_layout.cpp
+    test_forms_meta_members.cpp
     test_forms_field_bounds.cpp
     test_forms_display_unit.cpp
     test_forms_blank_as.cpp

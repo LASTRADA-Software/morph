@@ -27,6 +27,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/detail/reflected_member.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/engine.hpp>
 #include <morph/table/filter.hpp>
@@ -464,23 +465,6 @@ template <typename T>
 template <typename Row>
 using CellReader = Cell (*)(Row const&);
 
-/// @brief The value glaze writes under `glz::reflect<Row>::keys[I]`: the
-///        I-th declared member of a row reflected by itself, the I-th entry of
-///        a row with a `glz::meta`, which may omit, reorder or compute members.
-/// @tparam Row The row type.
-/// @tparam I   The key's index.
-/// @param row The row.
-/// @return The value.
-template <typename Row, std::size_t I>
-[[nodiscard]] decltype(auto) memberAt(Row const& row) {
-    if constexpr (glz::reflectable<Row>) {
-        auto tie = glz::to_tie(row);
-        return glz::get_member(row, glz::get<I>(tie));
-    } else {
-        return glz::get_member(row, glz::get<I>(glz::reflect<Row>::values));
-    }
-}
-
 /// @brief One cell reader per key glaze writes, in key order.
 /// @tparam Row The row type.
 /// @return The readers.
@@ -488,7 +472,8 @@ template <typename Row>
 [[nodiscard]] std::vector<CellReader<Row>> cellReaders() {
     constexpr auto count = glz::reflect<Row>::size;
     return [&]<std::size_t... I>(std::index_sequence<I...>) {
-        return std::vector<CellReader<Row>>{+[](Row const& row) -> Cell { return toCell(memberAt<Row, I>(row)); }...};
+        return std::vector<CellReader<Row>>{
+            +[](Row const& row) -> Cell { return toCell(morph::detail::reflectedMember<I>(row)); }...};
     }(std::make_index_sequence<count>{});
 }
 
@@ -500,10 +485,11 @@ template <typename Row>
     constexpr auto count = glz::reflect<Row>::size;
     std::vector<ColumnInfo> out;
     [&]<std::size_t... I>(std::index_sequence<I...>) {
-        (out.push_back(ColumnInfo{.id = std::string{glz::reflect<Row>::keys[I]},
-                                  .kind = kindOf<decltype(memberAt<Row, I>(std::declval<Row const&>()))>(),
-                                  .comparator = {},
-                                  .format = {}}),
+        (out.push_back(
+             ColumnInfo{.id = std::string{glz::reflect<Row>::keys[I]},
+                        .kind = kindOf<decltype(morph::detail::reflectedMember<I>(std::declval<Row const&>()))>(),
+                        .comparator = {},
+                        .format = {}}),
          ...);
     }(std::make_index_sequence<count>{});
     return out;

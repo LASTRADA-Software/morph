@@ -1150,3 +1150,31 @@ TEST_CASE("Forms::ReconcileDeclaredPrecision::ExactAndEmptyValuesSurvive", "[for
     CHECK(*tie.moisture == Rational{Numerator{13}, Denominator{10}, dp1});
     CHECK(morph::units::toDecimalString(tie.moisture) == "1.3");
 }
+
+// Under a partial `glz::meta` the retag walks the meta's members, so a listed
+// Quantity past the hidden member is reconciled.
+struct QFMetaPrecision {
+    std::string hidden;
+    std::int64_t sampleId = 0;
+    Q<QFUnit::percent> moisture;  // declaredDecimals == 1
+};
+
+template <>
+struct glz::meta<QFMetaPrecision> {
+    using T = QFMetaPrecision;
+    static constexpr auto value = glz::object("sampleId", &T::sampleId, "moisture", &T::moisture);
+};
+
+TEST_CASE("Forms::ReconcileDeclaredPrecision::FollowsAPartialMeta", "[forms][quantity]") {
+    QFMetaPrecision action{
+        .hidden = "kept",
+        .sampleId = 3,
+        .moisture = Q<QFUnit::percent>{Rational{Numerator{123456}, Denominator{100000}, DecimalPlaces{5}}}};
+
+    morph::forms::reconcileDeclaredPrecision(action);
+
+    CHECK((*action.moisture).getDecimalPlaces() == dp1);
+    CHECK(*action.moisture == Rational{Numerator{6}, Denominator{5}, dp1});
+    CHECK(action.hidden == "kept");
+    CHECK(action.sampleId == 3);
+}
