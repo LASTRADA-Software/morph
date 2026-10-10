@@ -112,8 +112,10 @@ reconnect.
 The reconnect handler runs as a task on the owner. It ignores a reconnect of a
 backend the bridge has since switched away from. For every live binding it
 clears `currentId` — the id belonged to the connection that dropped — and
-issues the ordinary bind on the owner: an unattached shared binding
-(`primary` empty) has no instance to re-create and is skipped; an attached
+issues the ordinary bind on the owner: a shared binding holding neither a
+`primary` nor an instance has nothing to re-create and is skipped; an anonymous
+shared binding (an instance a result-keyed action bound, not yet promoted)
+re-binds anonymous, as a private one does; an attached
 shared binding re-binds with its `primary` (the register-or-attach shape), so
 the instance stays shared; a private binding re-binds with the private shape.
 A bind that settles before returning binds at once; one still in flight holds
@@ -265,8 +267,10 @@ tells the new backend its owner and pushes the current default session onto it
 it would on the backend being replaced — see `IBackend::setSession` and
 [backend.md](backend.md#session-propagation-to-control-envelopes)), then
 issues a bind on it for every live binding with the owner as the delivery
-executor. An unattached shared binding has no instance to re-create and is
-left as it is; an attached shared one re-binds with its `primary`.
+executor. A shared binding holding neither a `primary` nor an instance has
+nothing to re-create and is left as it is; an anonymous shared one re-binds
+anonymous, since its id belongs to the backend being replaced; an attached
+shared one re-binds with its `primary`.
 
 The binds the new backend settles **before returning** decide the switch. If
 any of them failed, every instance acquired so far is released — at once for
@@ -525,7 +529,7 @@ typed calls:
 | `bindByType(typeId, BindSharing, instanceKey = {})` | Builds a `HandlerBinding` whose factory resolves `typeId` in the process registry (`defaultRegistry().create`) when a local backend binds it; a remote backend sends the id and never calls the factory. It is adopted through `adoptHandler`, the path a typed handler takes, so the [bind rule](#registration-readiness--the-bind-rule) applies unchanged. A private binding is bound at once; a shared one when it is attached. |
 | `executeRaw(binding, actionId, bodyJson, cbExec[, stop])` | Dispatches the action registered as `actionId` with a JSON body on the instance the binding holds, and resolves with the reply's JSON text. |
 | `executeRawOn(binding, instanceKey, actionId, bodyJson, cbExec)` | `executeRaw` on the instance for `instanceKey`: attaches the shared binding to it first, and rejects the call if that attach does not leave the binding there. |
-| `attach(binding, key)` | Attaches or re-points a shared binding to the instance for a canonical key string. Refuses an empty key (`std::invalid_argument`) and a private binding (`std::logic_error`). `attachHandler<Model>` shares its body without the checks, since a typed handler's sharing is fixed by its type. |
+| `attach(binding, key)` | Attaches or re-points a shared binding to the instance for a canonical key string. Refuses an empty key (`std::invalid_argument`) and a private binding (`std::logic_error`). `attachHandler<Model>`, the typed path, skips the private-binding check, since a typed handler's sharing is fixed by its type, and refuses an empty key without throwing: logged, and recorded as the bind failure of a binding with no instance. |
 | `RawHandler` | RAII: binds through `bindByType` on construction, dispatches through `executeRaw` (`execute`) and `executeRawOn` (`executeOn`), attaches through `attach`, deregisters through `deregisterHandler` on destruction. Non-copyable, non-movable. |
 
 **The call.** `detail::RawAction` holds both ids and the body, and the call's
@@ -955,7 +959,7 @@ is tolerated, as above.
 | `executeRaw` | `Completion<string> executeRaw(const shared_ptr<HandlerBinding>&, string actionId, string bodyJson, IExecutor*)` | Dispatches by action id with a JSON body; resolves with the reply's JSON text. Session, deadline, `pendingCalls()`, held-while-binding and `cancelPending` as `executeVia`; not published to typed subscribers. |
 | `executeRaw` (cancellable) | `Completion<string> executeRaw(…, IExecutor*, core::async::StopToken stop)` | As above, with the caller's cancel, as `BridgeHandler::execute(action, stop)`. |
 | `executeRawOn` | `Completion<string> executeRawOn(const shared_ptr<HandlerBinding>&, string instanceKey, string actionId, string bodyJson, IExecutor*)` | `executeRaw` on the instance for `instanceKey`, attaching first; a refused or superseded attach rejects the call. Throws `invalid_argument` for an empty key, `logic_error` for a private binding. |
-| `attach` | `void attach(const shared_ptr<HandlerBinding>&, string primary)` | Attaches or re-points a shared binding by canonical key string, issued after any bind in flight. Throws `invalid_argument` for an empty key, `logic_error` for a private binding. `attachHandler<Model>` shares its body without the checks. |
+| `attach` | `void attach(const shared_ptr<HandlerBinding>&, string primary)` | Attaches or re-points a shared binding by canonical key string, issued after any bind in flight. Throws `invalid_argument` for an empty key, `logic_error` for a private binding. `attachHandler<Model>` skips the private-binding check and refuses an empty key without throwing. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 | `setExecuteDeadline` | `void setExecuteDeadline(std::chrono::milliseconds)` | Opt-in client-side execute deadline; `0` (the default) disables it. Lazily creates the backing `TimeoutScheduler`, on a private `exec::IoLoop` with one thread, on first enable. |

@@ -15,6 +15,8 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <exception>
+#include <functional>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -22,6 +24,8 @@
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -214,6 +218,34 @@ struct ShiThrowSecondModel {
 BRIDGE_REGISTER_MODEL(ShiThrowSecondModel, "SHI_ThrowSecondModel")
 // NOLINTEND(misc-use-internal-linkage)
 
+// NOLINTBEGIN(misc-use-internal-linkage)
+/// Keyed by a plain `std::string`, the one key type that can hold `""`.
+struct ShiNamedAdd {
+    std::string name;
+    std::int64_t amount = 0;
+};
+/// Keyless: runs against whatever instance the handler already holds.
+struct ShiNamedBump {
+    std::int64_t amount = 0;
+};
+struct ShiNamedModel {
+    std::int64_t value = 0;
+    ShiCounterState execute(const ShiNamedAdd& act) {
+        value += act.amount;
+        return {.value = value};
+    }
+    ShiCounterState execute(const ShiNamedBump& act) {
+        value += act.amount;
+        return {.value = value};
+    }
+};
+
+BRIDGE_REGISTER_MODEL(ShiNamedModel, "SHI_NamedModel")
+BRIDGE_REGISTER_ACTION(ShiNamedModel, ShiNamedAdd, "SHI_NamedAdd")
+BRIDGE_REGISTER_ACTION(ShiNamedModel, ShiNamedBump, "SHI_NamedBump")
+BRIDGE_MODEL_KEY(ShiNamedModel, ShiNamedAdd, &ShiNamedAdd::name);
+// NOLINTEND(misc-use-internal-linkage)
+
 namespace {
 
 using morph::bridge::AllowShared;
@@ -269,6 +301,63 @@ T settle(morph::exec::MainThreadExecutor& owner, morph::async::Completion<T> com
 std::unique_ptr<morph::backend::detail::IBackend> makeLocal(morph::exec::IExecutor& pool) {
     return std::make_unique<morph::backend::LocalBackend>(pool);
 }
+
+/// Drives a `Completion` to settlement and returns its failure, or null if it
+/// resolved.
+template <typename T>
+std::exception_ptr failureOf(morph::async::Completion<T> comp) {
+    auto failure = std::make_shared<std::exception_ptr>();
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    std::move(comp)
+        .then([done](const T&) { done->store(true); })
+        .onError([failure, done](const std::exception_ptr& error) {
+            *failure = error;
+            done->store(true);
+        });
+    REQUIRE(morph::testing::waitUntil([&] { return done->load(); }));
+    return *failure;
+}
+
+bool isInvalidArgument(const std::exception_ptr& failure) {
+    if (!failure) {
+        return false;
+    }
+    try {
+        std::rethrow_exception(failure);
+    } catch (const std::invalid_argument&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+/// A `LocalBackend` whose promotions fail, as a transport error would fail
+/// one, and whose reconnect the test fires by hand. A result-keyed action on
+/// it leaves its shared handler on an instance with no key.
+class PromoteRejectingBackend : public morph::backend::LocalBackend {
+public:
+    explicit PromoteRejectingBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
+
+    morph::async::Completion<morph::exec::detail::ModelId> promoteModel(
+        morph::backend::detail::PromoteRequest /*request*/, morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = morph::async::Completion<morph::exec::detail::ModelId>::makeSettleable(&cbExec);
+        promise.reject(std::make_exception_ptr(std::runtime_error{"promotion lost"}));
+        return std::move(completion);
+    }
+
+    void setReconnectHandler(std::function<void()> handler, morph::exec::IExecutor* /*exec*/) override {
+        _handler = std::move(handler);
+    }
+
+    void fireReconnect() const {
+        if (_handler) {
+            _handler();
+        }
+    }
+
+private:
+    std::function<void()> _handler;
+};
 
 }  // namespace
 
@@ -1579,4 +1668,97 @@ TEST_CASE("an instance evicted from its key as poisoned is never re-keyed by ass
     auto const rejoined = morph::testing::bindShared(backend, "SHI_CounterModel", factory, "B");
     REQUIRE(rejoined == joined);
     REQUIRE(backend.listInstances("SHI_CounterModel").size() == 2);
+}
+
+TEST_CASE("a typed attach to an empty string key is refused and never addresses a stale id after a switch",
+          "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec), exec};
+
+    BridgeHandler<ShiNamedModel, AllowShared> nameless{bridge, &exec};
+    BridgeHandler<ShiNamedModel> priv{bridge, &exec};
+
+    // `""` reads as "never attached" to every re-bind decision, so it cannot
+    // name a shared instance. The refusal is the attach's no-throw channel: it
+    // is logged, and the handler, which held no instance, rejects its calls.
+    REQUIRE_NOTHROW(nameless.attach(std::string{}));
+    CHECK_FALSE(nameless.primary().has_value());
+    CHECK(isInvalidArgument(failureOf(nameless.execute(ShiNamedBump{.amount = 100}))));
+    REQUIRE(settle(priv.execute(ShiNamedBump{.amount = 5})).value == 5);
+
+    bridge.switchBackend(makeLocal(exec));
+
+    // The private handler is re-created fresh; the refused one still has no
+    // instance, so it can never reach the private handler's.
+    REQUIRE(settle(priv.execute(ShiNamedBump{.amount = 1})).value == 1);
+    CHECK(isInvalidArgument(failureOf(nameless.execute(ShiNamedBump{.amount = 5}))));
+    CHECK(settle(priv.execute(ShiNamedBump{.amount = 1})).value == 2);
+}
+
+TEST_CASE("a refused empty-key attach leaves the handler on the instance it held", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec), exec};
+
+    BridgeHandler<ShiNamedModel, AllowShared> handler{bridge, &exec};
+    handler.attach(std::string{"left"});
+    REQUIRE(settle(handler.execute(ShiNamedBump{.amount = 3})).value == 3);
+
+    REQUIRE_NOTHROW(handler.attach(std::string{}));
+    CHECK(handler.primary() == std::optional<std::string>{"left"});
+    CHECK(settle(handler.execute(ShiNamedBump{.amount = 1})).value == 4);
+    CHECK(settle(handler.instances()) == std::vector<std::string>{"left"});
+}
+
+TEST_CASE("a payload-keyed action naming an empty string key is rejected through its Completion",
+          "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec), exec};
+
+    BridgeHandler<ShiNamedModel, AllowShared> handler{bridge, &exec};
+    std::exception_ptr failure;
+    REQUIRE_NOTHROW(failure = failureOf(handler.execute(ShiNamedAdd{.name = "", .amount = 1})));
+    CHECK(isInvalidArgument(failure));
+    CHECK_FALSE(handler.primary().has_value());
+    // Nothing was bound on the way: a keyless call still has no instance.
+    CHECK(failureOf(handler.execute(ShiNamedBump{.amount = 1})) != nullptr);
+}
+
+TEST_CASE("an anonymous shared instance is re-created by switchBackend, not left on the old backend's id",
+          "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{std::make_unique<PromoteRejectingBackend>(exec), exec};
+
+    // The create runs on an anonymous instance and its promotion fails, so the
+    // handler holds an instance and no key -- through no empty key at all.
+    BridgeHandler<ShiCounterModel, AllowShared> creator{bridge, &exec};
+    settle(creator.execute(ShiCreate{.initial = 5}));
+    REQUIRE_FALSE(creator.primary().has_value());
+    REQUIRE(settle(creator.execute(ShiPeek{})).value == 5);
+
+    BridgeHandler<ShiCounterModel> priv{bridge, &exec};
+
+    bridge.switchBackend(makeLocal(exec));
+
+    // Kept, the creator's id from the old backend would name whatever the new
+    // backend files under it -- here the private handler's instance.
+    REQUIRE(settle(priv.execute(ShiAddTo{.id = 1, .amount = 100})).value == 100);
+    CHECK(settle(creator.execute(ShiPeek{})).value == 0);
+    CHECK_FALSE(creator.primary().has_value());
+}
+
+TEST_CASE("an anonymous shared instance is re-bound by a reconnect", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    auto backend = std::make_unique<PromoteRejectingBackend>(exec);
+    auto* raw = backend.get();
+    Bridge bridge{std::move(backend), exec};
+
+    BridgeHandler<ShiCounterModel, AllowShared> creator{bridge, &exec};
+    settle(creator.execute(ShiCreate{.initial = 5}));
+    REQUIRE_FALSE(creator.primary().has_value());
+
+    // The id belonged to the connection that dropped: the instance is
+    // re-created, anonymous, rather than the old id being kept.
+    raw->fireReconnect();
+    CHECK(settle(creator.execute(ShiPeek{})).value == 0);
+    CHECK_FALSE(creator.primary().has_value());
 }

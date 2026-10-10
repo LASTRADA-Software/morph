@@ -161,9 +161,9 @@ template <ModelKey K>
         // behaviour (`operator*` on a disengaged optional), and encoding it as
         // "" or "0" would silently route every caller holding an unset id to
         // one shared instance -- the worst possible failure, because it looks
-        // like it worked. Both call sites in `BridgeHandler` turn a throw here
-        // into a rejected `Completion`, so this surfaces as an error the
-        // caller can see.
+        // like it worked. `BridgeHandler` turns a throw here into a rejected
+        // `Completion`, or for `attach` a logged refusal that rejects the
+        // handler's calls, so this surfaces as an error the caller can see.
         if (!key.hasValue()) {
             throw std::runtime_error("primary key is empty: a strong id with no value names no model instance");
         }
