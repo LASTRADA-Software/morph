@@ -2,11 +2,10 @@
 
 #pragma once
 #include <algorithm>
-#include <array>
 #include <cctype>
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <initializer_list>
 #include <map>
@@ -303,9 +302,7 @@ template <typename T, typename F>
     if (!value.has_value()) {
         return "none";
     }
-    std::array<char, 32> buffer{};
-    auto const [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), *value);
-    return error == std::errc{} ? std::string{buffer.data(), end} : std::string{"unknown"};
+    return std::format("{}", *value);
 }
 
 /// @brief An axis's name.
@@ -1765,8 +1762,8 @@ public:
         if (paths.empty()) {
             throw std::logic_error{"RecordingBackend: dropFiles of no files"};
         }
-        auto const* const zone = static_cast<detail::FakeDropZone const*>(record.widget);
-        if (!reachable(record) || !zone->takes(paths)) {
+        auto const& zone = dynamic_cast<detail::FakeDropZone const&>(*record.widget);
+        if (!reachable(record) || !zone.takes(paths)) {
             return false;
         }
         invoke(record.callbacks.files, std::move(paths));
