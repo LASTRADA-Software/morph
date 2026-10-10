@@ -10,5 +10,6 @@ var searchData=
   ['exact_7',['exact',['../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html#a9ab073ebe5a6bb971ede90e10a0ef35f',1,'morph::table::CompiledFilter::Entry::exact'],['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#a7939d8f0442d4519d39b0ec8c7d227fd',1,'morph::table::KeyColumn::exact']]],
   ['exclude_8',['exclude',['../da/dd1/structmorph_1_1table_1_1ColumnFilter.html#aa1df38cceace96d0c26c1b97501d4c47',1,'morph::table::ColumnFilter::exclude'],['../de/d62/structmorph_1_1table_1_1CompiledFilter_1_1Column.html#a954ec215cae02975e344ca8937e06b32',1,'morph::table::CompiledFilter::Column::exclude']]],
   ['executetimeout_9',['executeTimeout',['../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c',1,'morph::backend::LimitPolicy']]],
-  ['expiresatms_10',['expiresAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ac236bda69845ab2d93db16f42e8557c1',1,'morph::session::SessionToken']]]
+  ['expectedowner_10',['expectedOwner',['../dc/d5d/structmorph_1_1testing_1_1OwnerProbeRecorder_1_1Seen.html#aa240be3f5c531aab60d149e6e882adce',1,'morph::testing::OwnerProbeRecorder::Seen']]],
+  ['expiresatms_11',['expiresAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ac236bda69845ab2d93db16f42e8557c1',1,'morph::session::SessionToken']]]
 ];

@@ -185,6 +185,45 @@ var annotated_dup =
         [ "QtWebSocketServer", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer" ],
         [ "QtWebSocketServerConfig", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig" ]
       ] ],
+      [ "reactive", null, [
+        [ "detail", null, [
+          [ "BatchScope", "dd/d66/classmorph_1_1reactive_1_1detail_1_1BatchScope.html", "dd/d66/classmorph_1_1reactive_1_1detail_1_1BatchScope" ],
+          [ "EqualityUsable", "de/d44/structmorph_1_1reactive_1_1detail_1_1EqualityUsable.html", null ],
+          [ "EqualityUsable&lt; std::optional&lt; T &gt; &gt;", "d1/d97/structmorph_1_1reactive_1_1detail_1_1EqualityUsable_3_01std_1_1optional_3_01T_01_4_01_4.html", null ],
+          [ "EqualityUsable&lt; std::pair&lt; First, Second &gt; &gt;", "d5/d1d/structmorph_1_1reactive_1_1detail_1_1EqualityUsable_3_01std_1_1pair_3_01First_00_01Second_01_4_01_4.html", null ],
+          [ "EqualityUsable&lt; std::tuple&lt; Ts... &gt; &gt;", "d3/d7f/structmorph_1_1reactive_1_1detail_1_1EqualityUsable_3_01std_1_1tuple_3_01Ts_8_8_8_01_4_01_4.html", null ],
+          [ "EqualityUsable&lt; std::variant&lt; Ts... &gt; &gt;", "d9/d76/structmorph_1_1reactive_1_1detail_1_1EqualityUsable_3_01std_1_1variant_3_01Ts_8_8_8_01_4_01_4.html", null ],
+          [ "EqualityUsable&lt; T &gt;", "dc/df7/structmorph_1_1reactive_1_1detail_1_1EqualityUsable_3_01T_01_4.html", null ],
+          [ "FlushBounds", "d3/d22/structmorph_1_1reactive_1_1detail_1_1FlushBounds.html", "d3/d22/structmorph_1_1reactive_1_1detail_1_1FlushBounds" ],
+          [ "Node", "df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html", "df/d0a/classmorph_1_1reactive_1_1detail_1_1Node" ],
+          [ "RuntimeCore", "d7/d3a/classmorph_1_1reactive_1_1detail_1_1RuntimeCore.html", "d7/d3a/classmorph_1_1reactive_1_1detail_1_1RuntimeCore" ],
+          [ "TrackingFrame", "d4/d78/classmorph_1_1reactive_1_1detail_1_1TrackingFrame.html", "d4/d78/classmorph_1_1reactive_1_1detail_1_1TrackingFrame" ],
+          [ "UpdateCoversAll", "d1/db6/structmorph_1_1reactive_1_1detail_1_1UpdateCoversAll.html", null ],
+          [ "UpdateCoversAll&lt; Update, ViewState, std::variant&lt; Alts... &gt; &gt;", "d6/d8c/structmorph_1_1reactive_1_1detail_1_1UpdateCoversAll_3_01Update_00_01ViewState_00_01std_1_1variant_3_01Alts_8_8_8_01_4_01_4.html", null ],
+          [ "UpdateFrame", "d6/d3e/structmorph_1_1reactive_1_1detail_1_1UpdateFrame.html", "d6/d3e/structmorph_1_1reactive_1_1detail_1_1UpdateFrame" ],
+          [ "UpdateGuard", "d3/d9f/classmorph_1_1reactive_1_1detail_1_1UpdateGuard.html", "d3/d9f/classmorph_1_1reactive_1_1detail_1_1UpdateGuard" ],
+          [ "WidgetEventScope", "d9/d4c/classmorph_1_1reactive_1_1detail_1_1WidgetEventScope.html", "d9/d4c/classmorph_1_1reactive_1_1detail_1_1WidgetEventScope" ]
+        ] ],
+        [ "testing", null, [
+          [ "ManualScheduler", "d1/d5b/classmorph_1_1reactive_1_1testing_1_1ManualScheduler.html", "d1/d5b/classmorph_1_1reactive_1_1testing_1_1ManualScheduler" ]
+        ] ],
+        [ "Computed", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", "d4/d6f/classmorph_1_1reactive_1_1Computed" ],
+        [ "Effect", "de/ddc/classmorph_1_1reactive_1_1Effect.html", "de/ddc/classmorph_1_1reactive_1_1Effect" ],
+        [ "InvalidationLink", "dc/df9/classmorph_1_1reactive_1_1InvalidationLink.html", "dc/df9/classmorph_1_1reactive_1_1InvalidationLink" ],
+        [ "Mutation", "d3/d3a/classmorph_1_1reactive_1_1Mutation.html", "d3/d3a/classmorph_1_1reactive_1_1Mutation" ],
+        [ "MutationOptions", "d1/d37/structmorph_1_1reactive_1_1MutationOptions.html", "d1/d37/structmorph_1_1reactive_1_1MutationOptions" ],
+        [ "Query", "da/d9b/classmorph_1_1reactive_1_1Query.html", "da/d9b/classmorph_1_1reactive_1_1Query" ],
+        [ "QueryOptions", "d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html", "d9/dc5/structmorph_1_1reactive_1_1QueryOptions" ],
+        [ "Refetchable", "dc/d50/classmorph_1_1reactive_1_1Refetchable.html", "dc/d50/classmorph_1_1reactive_1_1Refetchable" ],
+        [ "Runtime", "d5/dc1/classmorph_1_1reactive_1_1Runtime.html", "d5/dc1/classmorph_1_1reactive_1_1Runtime" ],
+        [ "RuntimeOptions", "d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions.html", "d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions" ],
+        [ "Scheduler", "d3/d00/classmorph_1_1reactive_1_1Scheduler.html", "d3/d00/classmorph_1_1reactive_1_1Scheduler" ],
+        [ "Scope", "de/df1/classmorph_1_1reactive_1_1Scope.html", "de/df1/classmorph_1_1reactive_1_1Scope" ],
+        [ "Signal", "dc/d97/classmorph_1_1reactive_1_1Signal.html", "dc/d97/classmorph_1_1reactive_1_1Signal" ],
+        [ "Store", "da/dcf/classmorph_1_1reactive_1_1Store.html", "da/dcf/classmorph_1_1reactive_1_1Store" ],
+        [ "Subscription", "d5/d13/classmorph_1_1reactive_1_1Subscription.html", "d5/d13/classmorph_1_1reactive_1_1Subscription" ],
+        [ "TimerHandle", "de/d18/classmorph_1_1reactive_1_1TimerHandle.html", "de/d18/classmorph_1_1reactive_1_1TimerHandle" ]
+      ] ],
       [ "render", null, [
         [ "detail", null, [
           [ "CodePoint", "db/dc5/structmorph_1_1render_1_1detail_1_1CodePoint.html", "db/dc5/structmorph_1_1render_1_1detail_1_1CodePoint" ],
@@ -269,6 +308,10 @@ var annotated_dup =
         [ "VectorSource", "d6/d96/classmorph_1_1table_1_1VectorSource.html", "d6/d96/classmorph_1_1table_1_1VectorSource" ],
         [ "ViewChange", "d8/d7d/structmorph_1_1table_1_1ViewChange.html", "d8/d7d/structmorph_1_1table_1_1ViewChange" ],
         [ "ViewOp", "d8/df9/structmorph_1_1table_1_1ViewOp.html", "d8/df9/structmorph_1_1table_1_1ViewOp" ]
+      ] ],
+      [ "testing", null, [
+        [ "OwnerProbeRecorder", "d4/d2d/classmorph_1_1testing_1_1OwnerProbeRecorder.html", "d4/d2d/classmorph_1_1testing_1_1OwnerProbeRecorder" ],
+        [ "StepExecutor", "d1/dfb/classmorph_1_1testing_1_1StepExecutor.html", "d1/dfb/classmorph_1_1testing_1_1StepExecutor" ]
       ] ],
       [ "time", null, [
         [ "DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", "d5/d44/structmorph_1_1time_1_1DateTime" ],

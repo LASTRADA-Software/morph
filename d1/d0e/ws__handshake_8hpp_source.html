@@ -461,8 +461,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d0e/ws__han
 <div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span><span class="comment">///         Switching Protocols with a matching `Sec-WebSocket-Accept`.</span></div>
 <div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span><span class="keyword">inline</span> std::string performClientHandshake(TcpSocket&amp; socket, <span class="keyword">const</span> ParsedWsUrl&amp; url) {</div>
 <div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span>    std::string key = generateClientKey();</div>
-<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span>    std::string request = buildClientHandshakeRequest(url, key);</div>
-<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span>    socket.sendAll(request.data(), request.size());</div>
+<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span>    std::string <a class="code hl_function" href="../../d1/deb/store_8hpp.html#afebbd67c0996d27e5dbb14a8d0a2843a">request</a> = buildClientHandshakeRequest(url, key);</div>
+<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span>    socket.sendAll(<a class="code hl_function" href="../../d1/deb/store_8hpp.html#afebbd67c0996d27e5dbb14a8d0a2843a">request</a>.data(), <a class="code hl_function" href="../../d1/deb/store_8hpp.html#afebbd67c0996d27e5dbb14a8d0a2843a">request</a>.size());</div>
 <div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>    HandshakeReadResult <span class="keyword">const</span> result = readHttpHeaderBlock(socket);</div>
 <div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>    verifyServerHandshakeResponse(result.header, key);</div>
 <div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span>    <span class="keywordflow">return</span> result.leftover;</div>
@@ -486,6 +486,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d0e/ws__han
 <div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span>}</div>
 <div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span> </div>
 <div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span>}  <span class="comment">// namespace morph::net::detail</span></div>
+<div class="ttc" id="astore_8hpp_html_afebbd67c0996d27e5dbb14a8d0a2843a"><div class="ttname"><a href="../../d1/deb/store_8hpp.html#afebbd67c0996d27e5dbb14a8d0a2843a">morph::reactive::request</a></div><div class="ttdeci">void request(Store&lt; ViewState, Msg &gt; &amp;store, bridge::BridgeHandler&lt; Model, Sharing &gt; &amp;handler, async::CallbackScope const &amp;scope, Action action, ToMsg toMsg, ToFailMsg toFailMsg)</div><div class="ttdoc">Executes action and sends its result, or its failure, to store as one message.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/deb/store_8hpp_source.html#l00202">store.hpp:202</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

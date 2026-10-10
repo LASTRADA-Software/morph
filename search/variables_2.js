@@ -20,12 +20,13 @@ var searchData=
   ['combine_17',['combine',['../da/dd1/structmorph_1_1table_1_1ColumnFilter.html#a0232f6d7ae6e18199c9d3faccfe86393',1,'morph::table::ColumnFilter::combine'],['../d0/d05/structmorph_1_1table_1_1GroupFilter.html#a8727c32ec2af8796af027bc943d9a857',1,'morph::table::GroupFilter::combine'],['../de/d62/structmorph_1_1table_1_1CompiledFilter_1_1Column.html#a081f5bf4c5299f4d2cf4403f1a149ff7',1,'morph::table::CompiledFilter::Column::combine']]],
   ['comparator_18',['comparator',['../d3/d45/structmorph_1_1table_1_1ColumnInfo.html#a19101d56c7db10b0f306c8563f506f69',1,'morph::table::ColumnInfo::comparator'],['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ad8bd0191bea3fb90b92f8f65f608d092',1,'morph::table::KeyColumn::comparator']]],
   ['comparators_19',['comparators',['../d8/d47/structmorph_1_1table_1_1Services.html#af96091a2bc1dbc5d00ee21862376e70e',1,'morph::table::Services']]],
-  ['condition_20',['condition',['../d1/db1/structmorph_1_1forms_1_1Not.html#ae8b00489d6f6461ada9217306ae73bb8',1,'morph::forms::Not']]],
-  ['conditions_21',['conditions',['../d3/d81/structmorph_1_1forms_1_1And.html#a15e3bf2b2182853288b2eb0290e0e6ec',1,'morph::forms::And::conditions'],['../d4/d8d/structmorph_1_1forms_1_1Or.html#a637fff1e1257ce2f4c099b77191b712b',1,'morph::forms::Or::conditions']]],
-  ['confirm_22',['confirm',['../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html#afa12c0a9a3ef26bbad7f4c0415544b53',1,'morph::views::ActionDescriptor']]],
-  ['connecttimeout_23',['connectTimeout',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#acd8e19b0807613d9c4d494b407115e1e',1,'morph::net::SocketBackendConfig']]],
-  ['contains_24',['contains',['../dd/d3f/structmorph_1_1table_1_1FilterEntry.html#a2ccccf9451229e4ed4ef9824b7620d11',1,'morph::table::FilterEntry']]],
-  ['contextkey_25',['contextKey',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a8c17cefc14d6416071233de513237d50',1,'morph::wire::Envelope']]],
-  ['count_26',['count',['../d8/df9/structmorph_1_1table_1_1ViewOp.html#a10c1caacbdba00722c97669145db0817',1,'morph::table::ViewOp']]],
-  ['currentsize_27',['currentSize',['../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a60c641ccf2f22727411075649e34bdc0',1,'morph::offline::OfflineQueueFullError']]]
+  ['concurrency_20',['concurrency',['../d1/d37/structmorph_1_1reactive_1_1MutationOptions.html#a43dcb180360cb2ac2ad278c40214802c',1,'morph::reactive::MutationOptions']]],
+  ['condition_21',['condition',['../d1/db1/structmorph_1_1forms_1_1Not.html#ae8b00489d6f6461ada9217306ae73bb8',1,'morph::forms::Not']]],
+  ['conditions_22',['conditions',['../d3/d81/structmorph_1_1forms_1_1And.html#a15e3bf2b2182853288b2eb0290e0e6ec',1,'morph::forms::And::conditions'],['../d4/d8d/structmorph_1_1forms_1_1Or.html#a637fff1e1257ce2f4c099b77191b712b',1,'morph::forms::Or::conditions']]],
+  ['confirm_23',['confirm',['../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html#afa12c0a9a3ef26bbad7f4c0415544b53',1,'morph::views::ActionDescriptor']]],
+  ['connecttimeout_24',['connectTimeout',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#acd8e19b0807613d9c4d494b407115e1e',1,'morph::net::SocketBackendConfig']]],
+  ['contains_25',['contains',['../dd/d3f/structmorph_1_1table_1_1FilterEntry.html#a2ccccf9451229e4ed4ef9824b7620d11',1,'morph::table::FilterEntry']]],
+  ['contextkey_26',['contextKey',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a8c17cefc14d6416071233de513237d50',1,'morph::wire::Envelope']]],
+  ['count_27',['count',['../d8/df9/structmorph_1_1table_1_1ViewOp.html#a10c1caacbdba00722c97669145db0817',1,'morph::table::ViewOp']]],
+  ['currentsize_28',['currentSize',['../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a60c641ccf2f22727411075649e34bdc0',1,'morph::offline::OfflineQueueFullError']]]
 ];

@@ -15,6 +15,7 @@ var searchData=
   ['conflict_20resolution_20—_20a_20domain_20concern_20not_20a_20framework_20concern_12',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
   ['connectivity_20replay_13',['&lt;span class=&quot;tt&quot;&gt;offline/&lt;/span&gt; — connectivity + replay',['../index.html#offline--connectivity--replay',1,'']]],
   ['context_20authentication_14',['&lt;span class=&quot;tt&quot;&gt;session/&lt;/span&gt; — per-call context + authentication',['../index.html#session--per-call-context--authentication',1,'']]],
-  ['core_20—_20async_20core_20registry_20bridge_20backends_20wire_15',['&lt;span class=&quot;tt&quot;&gt;core/&lt;/span&gt; — async core, registry, bridge, backends, wire',['../index.html#core--async-core-registry-bridge-backends-wire',1,'']]],
-  ['core_20registry_20bridge_20backends_20wire_16',['&lt;span class=&quot;tt&quot;&gt;core/&lt;/span&gt; — async core, registry, bridge, backends, wire',['../index.html#core--async-core-registry-bridge-backends-wire',1,'']]]
+  ['control_15',['&lt;span class=&quot;tt&quot;&gt;reactive/&lt;/span&gt; — signal graph, view state, declarative control',['../index.html#reactive--signal-graph-view-state-declarative-control',1,'']]],
+  ['core_20—_20async_20core_20registry_20bridge_20backends_20wire_16',['&lt;span class=&quot;tt&quot;&gt;core/&lt;/span&gt; — async core, registry, bridge, backends, wire',['../index.html#core--async-core-registry-bridge-backends-wire',1,'']]],
+  ['core_20registry_20bridge_20backends_20wire_17',['&lt;span class=&quot;tt&quot;&gt;core/&lt;/span&gt; — async core, registry, bridge, backends, wire',['../index.html#core--async-core-registry-bridge-backends-wire',1,'']]]
 ];

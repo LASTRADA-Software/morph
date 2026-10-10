@@ -43,7 +43,9 @@ var index =
         [ "<span class=\"tt\">offline/</span> — connectivity + replay", "index.html#offline--connectivity--replay", null ],
         [ "<span class=\"tt\">session/</span> — per-call context + authentication", "index.html#session--per-call-context--authentication", null ],
         [ "<span class=\"tt\">forms/</span> — JSON-Schema generation for auto-built GUIs", "index.html#forms--json-schema-generation-for-auto-built-guis", null ],
-        [ "<span class=\"tt\">util/</span> — exact values, units, time", "index.html#util--exact-values-units-time", null ]
+        [ "<span class=\"tt\">util/</span> — exact values, units, time", "index.html#util--exact-values-units-time", null ],
+        [ "<span class=\"tt\">reactive/</span> — signal graph, view state, declarative control", "index.html#reactive--signal-graph-view-state-declarative-control", null ],
+        [ "<span class=\"tt\">testing/</span> — the installed owner test kit", "index.html#testing--the-installed-owner-test-kit", null ]
       ] ],
       [ "Qt integration headers (<span class=\"tt\">include/morph/qt/</span>)", "index.html#qt-integration-headers-includemorphqt", null ]
     ] ],

@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['kind_0',['Kind',['../d8/df9/structmorph_1_1table_1_1ViewOp.html#af5f73481cb3344d4b936e6efe69c9149',1,'morph::table::ViewOp']]]
+  ['groupkind_0',['GroupKind',['../dd/d6c/layout_8hpp.html#a38b02484a29ea1023b3f44835f3c6406',1,'morph::forms']]]
 ];

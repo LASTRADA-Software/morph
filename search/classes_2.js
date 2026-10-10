@@ -19,6 +19,7 @@ var searchData=
   ['compiledfilter_16',['CompiledFilter',['../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html',1,'morph::table']]],
   ['completion_17',['Completion',['../dd/de7/classmorph_1_1async_1_1Completion.html',1,'morph::async']]],
   ['completion_3c_3a_3amorph_3a_3aexec_3a_3adetail_3a_3amodelid_20_3e_18',['Completion&lt;::morph::exec::detail::ModelId &gt;',['../dd/de7/classmorph_1_1async_1_1Completion.html',1,'morph::async']]],
-  ['constraintviolation_19',['ConstraintViolation',['../d4/d51/structmorph_1_1forms_1_1ConstraintViolation.html',1,'morph::forms']]],
-  ['context_20',['Context',['../dd/d85/structmorph_1_1session_1_1Context.html',1,'morph::session']]]
+  ['computed_19',['Computed',['../d4/d6f/classmorph_1_1reactive_1_1Computed.html',1,'morph::reactive']]],
+  ['constraintviolation_20',['ConstraintViolation',['../d4/d51/structmorph_1_1forms_1_1ConstraintViolation.html',1,'morph::forms']]],
+  ['context_21',['Context',['../dd/d85/structmorph_1_1session_1_1Context.html',1,'morph::session']]]
 ];

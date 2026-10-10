@@ -1,7 +1,7 @@
 var searchData=
 [
   ['genericmodelbridgecore_0',['GenericModelBridgeCore',['../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html#a9ad1c3d17cec3821abf667147520c6b7',1,'morph::qt::bridge::GenericModelBridgeCore::GenericModelBridgeCore()'],['../dd/d45/classmorph_1_1qt_1_1bridge_1_1GenericModelBridgeCore.html#a9774baedcf28a6be80151c5bd910e551',1,'morph::qt::bridge::GenericModelBridgeCore::GenericModelBridgeCore(::morph::bridge::Bridge &amp;bridge, ::morph::exec::IExecutor *guiExec)']]],
-  ['get_1',['get',['../dc/d7a/structmorph_1_1util_1_1Tagged.html#a51b8422ec44363e9f8c4d28afc61518d',1,'morph::util::Tagged']]],
+  ['get_1',['get',['../dc/d97/classmorph_1_1reactive_1_1Signal.html#a6b8dfacfd8b7892ced2ce7e0639f5959',1,'morph::reactive::Signal::get()'],['../d4/d6f/classmorph_1_1reactive_1_1Computed.html#a8e91f94d4782836d07f3a96ba4dfca72',1,'morph::reactive::Computed::get()'],['../dc/d7a/structmorph_1_1util_1_1Tagged.html#a51b8422ec44363e9f8c4d28afc61518d',1,'morph::util::Tagged::get()']]],
   ['getdecimalplaces_2',['getDecimalPlaces',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a83aa3a8c561ea09daaf3d9d470a918d1',1,'morph::math::Rational']]],
   ['getwire_3',['getWire',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a7338c559da93d37a286f222ce825931c',1,'morph::math::Rational']]],
   ['greater_4',['greater',['../d4/d11/forms_8hpp.html#a1afefe4ea53ee4ca21c4103f41d7c592',1,'morph::forms']]],

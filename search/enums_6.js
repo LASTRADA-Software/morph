@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['op_0',['Op',['../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html#ab856c78706c848543886e2d3155bfc5f',1,'morph::table::CompiledFilter']]]
+  ['kind_0',['Kind',['../d8/df9/structmorph_1_1table_1_1ViewOp.html#af5f73481cb3344d4b936e6efe69c9149',1,'morph::table::ViewOp']]]
 ];

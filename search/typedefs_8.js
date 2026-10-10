@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['logprovider_0',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aa1967f685b6df4553d93c5d3efd448b7',1,'morph::backend::RemoteServer']]]
+  ['key_0',['Key',['../da/d9b/classmorph_1_1reactive_1_1Query.html#aa198444bad020302fa7ed275dbe8a808',1,'morph::reactive::Query']]]
 ];

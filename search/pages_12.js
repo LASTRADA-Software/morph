@@ -7,7 +7,9 @@ var searchData=
   ['session_20—_20per_20call_20context_20authentication_4',['&lt;span class=&quot;tt&quot;&gt;session/&lt;/span&gt; — per-call context + authentication',['../index.html#session--per-call-context--authentication',1,'']]],
   ['sessions_5',['Authenticated sessions',['../index.html#authenticated-sessions',1,'']]],
   ['shareable_20model_20instances_6',['Keyed, shareable model instances',['../index.html#keyed-shareable-model-instances',1,'']]],
-  ['strands_7',['Strands',['../index.html#strands',1,'']]],
-  ['subscriptions_8',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
-  ['syncworker_9',['SyncWorker',['../index.html#syncworker',1,'']]]
+  ['signal_20graph_20view_20state_20declarative_20control_7',['&lt;span class=&quot;tt&quot;&gt;reactive/&lt;/span&gt; — signal graph, view state, declarative control',['../index.html#reactive--signal-graph-view-state-declarative-control',1,'']]],
+  ['state_20declarative_20control_8',['&lt;span class=&quot;tt&quot;&gt;reactive/&lt;/span&gt; — signal graph, view state, declarative control',['../index.html#reactive--signal-graph-view-state-declarative-control',1,'']]],
+  ['strands_9',['Strands',['../index.html#strands',1,'']]],
+  ['subscriptions_10',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
+  ['syncworker_11',['SyncWorker',['../index.html#syncworker',1,'']]]
 ];

@@ -10,6 +10,8 @@ var searchData=
   ['quantitybounds_7',['QuantityBounds',['../df/dca/structmorph_1_1units_1_1QuantityBounds.html',1,'morph::units']]],
   ['quantitycell_8',['QuantityCell',['../d5/d33/structmorph_1_1table_1_1QuantityCell.html',1,'morph::table']]],
   ['quantitydecodeerror_9',['QuantityDecodeError',['../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html',1,'morph::forms']]],
-  ['querylimits_10',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
-  ['queueitem_11',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
+  ['query_10',['Query',['../da/d9b/classmorph_1_1reactive_1_1Query.html',1,'morph::reactive']]],
+  ['querylimits_11',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
+  ['queryoptions_12',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive']]],
+  ['queueitem_13',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
 ];

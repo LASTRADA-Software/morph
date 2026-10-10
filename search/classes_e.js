@@ -5,5 +5,6 @@ var searchData=
   ['outboxrelay_2',['OutboxRelay',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html',1,'morph::journal']]],
   ['outboxrelayresult_3',['OutboxRelayResult',['../d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html',1,'morph::journal']]],
   ['ownedlocalbridge_4',['OwnedLocalBridge',['../d6/d70/structmorph_1_1qt_1_1bridge_1_1detail_1_1OwnedLocalBridge.html',1,'morph::qt::bridge::detail']]],
-  ['ownerstrand_5',['OwnerStrand',['../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html',1,'morph::exec']]]
+  ['ownerproberecorder_5',['OwnerProbeRecorder',['../d4/d2d/classmorph_1_1testing_1_1OwnerProbeRecorder.html',1,'morph::testing']]],
+  ['ownerstrand_6',['OwnerStrand',['../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html',1,'morph::exec']]]
 ];

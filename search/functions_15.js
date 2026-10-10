@@ -2,7 +2,7 @@ var searchData=
 [
   ['validate_0',['validate',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0327fd527eda13c6fb49a67985adc34f',1,'morph::math::Rational::Wire::validate()'],['../dd/def/query_8hpp.html#a14818ea1b784ca6e51b4e9e0e3621a68',1,'morph::table::validate()']]],
   ['validationerror_1',['ValidationError',['../d7/d1a/structmorph_1_1model_1_1ValidationError.html#a5d3ab41ea96c68f40e3637cedbd92874',1,'morph::model::ValidationError']]],
-  ['value_2',['value',['../d5/da0/classmorph_1_1offline_1_1Attempts.html#afada40b93deb9a3beeec9945e128af5a',1,'morph::offline::Attempts::value()'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee',1,'morph::units::Quantity::value() const noexcept']]],
+  ['value_2',['value',['../d5/da0/classmorph_1_1offline_1_1Attempts.html#afada40b93deb9a3beeec9945e128af5a',1,'morph::offline::Attempts::value()'],['../da/d9b/classmorph_1_1reactive_1_1Query.html#a8ab5b89785d966f91888b11025886253',1,'morph::reactive::Query::value()'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee',1,'morph::units::Quantity::value() const noexcept']]],
   ['value_5for_3',['value_or',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834',1,'morph::units::Quantity']]],
   ['valuefield_4',['valueField',['../df/d65/structmorph_1_1forms_1_1Choice.html#a9ff13d4d8a8b4920b9c3374a2a35d477',1,'morph::forms::Choice']]],
   ['vectorsource_5',['VectorSource',['../d6/d96/classmorph_1_1table_1_1VectorSource.html#afae52488aa0c3a214e856fe74e43f3d3',1,'morph::table::VectorSource']]],

@@ -9,5 +9,6 @@ var searchData=
   ['ordered_20coalescing_20identity_20aware_20execution_20history_6',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
   ['ordered_20replayable_20action_20log_7',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
   ['orphan_20log_8',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
-  ['overview_9',['Overview',['../index.html#overview',1,'']]]
+  ['overview_9',['Overview',['../index.html#overview',1,'']]],
+  ['owner_20test_20kit_10',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]]
 ];

@@ -14,8 +14,10 @@ var searchData=
   ['quantitybounds_11',['QuantityBounds',['../df/dca/structmorph_1_1units_1_1QuantityBounds.html',1,'morph::units']]],
   ['quantitycell_12',['QuantityCell',['../d5/d33/structmorph_1_1table_1_1QuantityCell.html',1,'morph::table']]],
   ['quantitydecodeerror_13',['QuantityDecodeError',['../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html',1,'morph::forms::QuantityDecodeError'],['../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html#acace8089d2ec9c984a06fd8a6b0a2313',1,'morph::forms::QuantityDecodeError::QuantityDecodeError()']]],
-  ['query_14',['query',['../d3/d18/structmorph_1_1table_1_1PageFetch.html#a438502a7fae22416d9522854284a48cf',1,'morph::table::PageFetch::query'],['../da/d97/classmorph_1_1table_1_1PageWindow.html#a7d0cc95159cfabcec442805f9cb18e74',1,'morph::table::PageWindow::query()']]],
-  ['query_2ehpp_15',['query.hpp',['../dd/def/query_8hpp.html',1,'']]],
-  ['querylimits_16',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
-  ['queueitem_17',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
+  ['query_14',['Query',['../da/d9b/classmorph_1_1reactive_1_1Query.html',1,'morph::reactive::Query&lt; A, R &gt;'],['../da/d9b/classmorph_1_1reactive_1_1Query.html#a1a93b9215c0be3fa409f0f8feb70ef89',1,'morph::reactive::Query::Query(Runtime &amp;runtime, Fetch fetch, Key key, QueryOptions options={})'],['../da/d9b/classmorph_1_1reactive_1_1Query.html#a2f7acadde2c3f8a8787c13bede4305f0',1,'morph::reactive::Query::Query(Runtime &amp;runtime, bridge::BridgeHandler&lt; M, S &gt; &amp;handler, Key key, QueryOptions options={})']]],
+  ['query_15',['query',['../d3/d18/structmorph_1_1table_1_1PageFetch.html#a438502a7fae22416d9522854284a48cf',1,'morph::table::PageFetch::query'],['../da/d97/classmorph_1_1table_1_1PageWindow.html#a7d0cc95159cfabcec442805f9cb18e74',1,'morph::table::PageWindow::query()']]],
+  ['query_2ehpp_16',['query.hpp',['../dd/def/query_8hpp.html',1,'']]],
+  ['querylimits_17',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
+  ['queryoptions_18',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive']]],
+  ['queueitem_19',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
 ];

@@ -20,9 +20,15 @@ var searchData=
   ['unsettled_17',['unsettled',['../d3/d63/classmorph_1_1table_1_1CellEdits.html#a60644110b6e1b16441d231a5c020d6ac',1,'morph::table::CellEdits']]],
   ['unsubscribe_18',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aec8bdef725857e4a58d733ce13ea9028',1,'morph::bridge::BridgeHandler::unsubscribe()'],['../db/d7d/classmorph_1_1table_1_1DataSource.html#ad3c901aa7a9854a03fdb48bb51a7babb',1,'morph::table::DataSource::unsubscribe()'],['../d6/d96/classmorph_1_1table_1_1VectorSource.html#a9897a1bc29ebde73ca6d27cc803275cd',1,'morph::table::VectorSource::unsubscribe()'],['../dd/df1/classmorph_1_1table_1_1RowsSource.html#a278bf4cbf626a57c23c3e1a69a336566',1,'morph::table::RowsSource::unsubscribe()']]],
   ['unsupportedoperator_19',['UnsupportedOperator',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0a4d968eb9c5db5fcb13a0a9a5faa8054c',1,'morph::table']]],
-  ['updated_20',['Updated',['../dd/d57/data__source_8hpp.html#a326be1a73b1043a1076cfd0b907dd4a5aff0a3b7f3daef040faf89a88fdac01b7',1,'morph::table']]],
-  ['updaterow_21',['updateRow',['../d6/d96/classmorph_1_1table_1_1VectorSource.html#a4d628b23632cb2531c8b7c929cbf04d0',1,'morph::table::VectorSource']]],
-  ['usescomparator_22',['usesComparator',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ad8a8f54b95db0e8c34c1b521a52192e1',1,'morph::table::KeyColumn']]],
-  ['utf8length_23',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]],
-  ['util_20—_20exact_20values_20units_20time_24',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
+  ['untracked_20',['untracked',['../d5/dc1/classmorph_1_1reactive_1_1Runtime.html#ab885f39c3928d3bf72081f601806f612',1,'morph::reactive::Runtime']]],
+  ['updatecoversall_21',['UpdateCoversAll',['../d1/db6/structmorph_1_1reactive_1_1detail_1_1UpdateCoversAll.html',1,'morph::reactive::detail']]],
+  ['updatecoversall_3c_20update_2c_20viewstate_2c_20std_3a_3avariant_3c_20alts_2e_2e_2e_20_3e_20_3e_22',['UpdateCoversAll&lt; Update, ViewState, std::variant&lt; Alts... &gt; &gt;',['../d6/d8c/structmorph_1_1reactive_1_1detail_1_1UpdateCoversAll_3_01Update_00_01ViewState_00_01std_1_1variant_3_01Alts_8_8_8_01_4_01_4.html',1,'morph::reactive::detail']]],
+  ['updated_23',['Updated',['../dd/d57/data__source_8hpp.html#a326be1a73b1043a1076cfd0b907dd4a5aff0a3b7f3daef040faf89a88fdac01b7',1,'morph::table']]],
+  ['updateframe_24',['UpdateFrame',['../d6/d3e/structmorph_1_1reactive_1_1detail_1_1UpdateFrame.html',1,'morph::reactive::detail']]],
+  ['updateguard_25',['UpdateGuard',['../d3/d9f/classmorph_1_1reactive_1_1detail_1_1UpdateGuard.html',1,'morph::reactive::detail::UpdateGuard'],['../d3/d9f/classmorph_1_1reactive_1_1detail_1_1UpdateGuard.html#aa48999938dfd4b642dabcea8c29f0c95',1,'morph::reactive::detail::UpdateGuard::UpdateGuard()']]],
+  ['updateifnecessary_26',['updateIfNecessary',['../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html#ac0bd97bb3a86586c4f29775c9d8b1e7b',1,'morph::reactive::detail::Node']]],
+  ['updaterow_27',['updateRow',['../d6/d96/classmorph_1_1table_1_1VectorSource.html#a4d628b23632cb2531c8b7c929cbf04d0',1,'morph::table::VectorSource']]],
+  ['usescomparator_28',['usesComparator',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ad8a8f54b95db0e8c34c1b521a52192e1',1,'morph::table::KeyColumn']]],
+  ['utf8length_29',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]],
+  ['util_20—_20exact_20values_20units_20time_30',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
 ];

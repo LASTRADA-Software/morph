@@ -26,6 +26,13 @@ var NAVTREE =
 [
   [ "morph", "index.html", [
     [ "morph Architecture", "index.html", "index" ],
+    [ "Namespaces", "namespaces.html", [
+      [ "Namespace List", "namespaces.html", "namespaces_dup" ],
+      [ "Namespace Members", "namespacemembers.html", [
+        [ "All", "namespacemembers.html", null ],
+        [ "Variables", "namespacemembers_vars.html", null ]
+      ] ]
+    ] ],
     [ "Concepts", "concepts.html", "concepts" ],
     [ "Classes", "annotated.html", [
       [ "Class List", "annotated.html", "annotated_dup" ],
@@ -53,13 +60,14 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"d2/d5c/structmorph_1_1math_1_1Rational.html#abd3c4d2829cd78c8f1b45f618770d415",
-"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#af8a6235cbbe77ead17ea779d99d6011a",
-"d7/d80/structmorph_1_1render_1_1detail_1_1DigitMatch.html#a299e55c5134915b20651bea464a0df19",
-"da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa",
-"dd/d10/classmorph_1_1exec_1_1IoLoop.html#a251b1113b7ee6a05a5eb3a50946babeb",
-"de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#afef142673ef7b526b3722c1bbea87f57",
-"index.html#action-log--ordered-coalescing-identity-aware-execution-history"
+"d1/de8/rational_8hpp.html",
+"d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295",
+"d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#a79024fe3418bc13e73d4ce6aeec3a492",
+"d8/d09/structmorph_1_1app_1_1App.html",
+"da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7a6f0f225b00de32fafd07918b39848dfa",
+"dc/db1/classmorph_1_1exec_1_1OwnerStrand.html#a099c144c9b322df4777be378fcc1ee5b",
+"de/d18/classmorph_1_1reactive_1_1TimerHandle.html",
+"df/d65/structmorph_1_1forms_1_1Choice.html#a05321a797a43374ea683f6ff314a7ed8"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';
