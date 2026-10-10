@@ -297,8 +297,10 @@ struct HandlerBinding {
     /// @brief Whether this binding participates in the shared instance directory.
     ///
     /// Set once at construction — from `BridgeHandler`'s `Sharing` template
-    /// argument, or from `bindByType`'s `BindSharing` — and never changed. A shared binding acquires no instance until
-    /// it has a primary.
+    /// argument, or from `bindByType`'s `BindSharing` — and never changed. A
+    /// shared binding acquires an instance by attaching to a primary, or an
+    /// anonymous one for a result-keyed action, which keeps no primary until
+    /// the result's key promotes it.
     bool shared = false;
 
     /// @brief Current `ModelId` value in the active backend (0 = unbound).
@@ -893,11 +895,22 @@ public:
     }
 
     /// @brief `attach` for a typed caller.
+    ///
+    /// Skips `attach`'s private-binding check, since a typed handler's sharing
+    /// is fixed by its type, and refuses an empty @p primary without throwing:
+    /// in its turn after any bind in flight, the refusal is logged and leaves
+    /// the binding on the instance it held. A binding with no instance records
+    /// the refusal as its bind failure, so a call made through it is rejected
+    /// with that error.
     /// @tparam Model Concrete model type.
     /// @param binding Shared binding, as returned by `registerSharedHandler<Model>()`.
     /// @param primary Canonical string encoding of the primary key to attach to.
     template <typename Model>
     void attachHandler(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
+        if (primary.empty()) {
+            refuseAttach(binding, emptyKey());
+            return;
+        }
         attachBinding(binding, std::move(primary));
     }
 
@@ -915,6 +928,34 @@ private:
                 return;
             }
             runSuperseded(startBind(strong, attachRequest(*strong, primary), primary, {}));
+        });
+    }
+
+    /// @brief An empty key reads as "never attached" everywhere the bridge
+    ///        decides what to re-bind, so it can name no shared instance.
+    /// @return The error an attach to an empty key is refused with.
+    [[nodiscard]] static std::exception_ptr emptyKey() {
+        return std::make_exception_ptr(std::invalid_argument{"Bridge: the instance key is empty"});
+    }
+
+    /// @brief Refuses a typed attach without throwing, in its turn after any
+    ///        bind in flight for @p binding: logs @p refused, and records it as
+    ///        the bind failure of a binding with no instance to fall back to.
+    /// @param binding Shared binding.
+    /// @param refused Why the attach is refused.
+    void refuseAttach(const std::shared_ptr<detail::HandlerBinding>& binding, std::exception_ptr refused) {
+        note("Bridge::attachHandler");
+        std::weak_ptr<detail::HandlerBinding> const weak{binding};
+        whenIdle(*binding, [weak, refused = std::move(refused)](const std::exception_ptr& failure) {
+            auto strong = weak.lock();
+            if (failure || !strong) {
+                return;
+            }
+            ::morph::log::logError("[bridge] attach of '" + strong->typeId +
+                                   "' refused: " + detail::describeFailure(refused));
+            if (strong->currentId.load() == 0U) {
+                strong->bindFailure = refused;
+            }
         });
     }
 
@@ -1171,8 +1212,9 @@ public:
     /// @brief Replaces the active backend with @p newBackend.
     ///
     /// Tells @p newBackend its owner and the current default session, then
-    /// issues a bind on it for every live binding (an unattached shared one
-    /// has nothing to re-create). Binds the new backend settles before
+    /// issues a bind on it for every live binding (a shared one holding
+    /// neither a key nor an instance has nothing to re-create; an anonymous
+    /// one, not yet promoted, re-binds anonymous). Binds the new backend settles before
     /// returning decide the switch: if any of them failed, every instance
     /// acquired so far is released, and the failure is rethrown with the old
     /// backend and every binding untouched. Otherwise the switch commits: the
@@ -1211,7 +1253,7 @@ public:
                     continue;
                 }
                 live.push_back(weak);
-                if (binding->shared && binding->primary.empty()) {
+                if (holdsNothing(*binding)) {
                     untouched.push_back(binding);
                     continue;
                 }
@@ -1382,7 +1424,9 @@ public:
     ///
     /// Waits for any bind in flight, then attaches (or re-points) the binding
     /// to @p key if it does not hold it already, and dispatches once the attach
-    /// has settled. A refused attach rejects the call with its error.
+    /// has settled. A refused attach rejects the call with its error; an empty
+    /// @p key is refused at once with `std::invalid_argument`, leaving the
+    /// binding as it was.
     /// @tparam Model  Model type that owns the handler.
     /// @tparam Action Action type to dispatch.
     /// @param binding Shared binding.
@@ -1397,6 +1441,11 @@ public:
         using R = ::morph::model::ActionTraits<Action>::Result;
         MORPH_ZONE("Bridge::executeAttachedVia");
         note("Bridge::executeVia");
+        if (key.empty()) {
+            auto [refused, promise] = ::morph::async::Completion<R>::makeSettleable(cbExec);
+            promise.reject(emptyKey());
+            return std::move(refused);
+        }
         auto sink = makeSink<Model, Action>({});
         ::morph::async::Completion<R> typed{sink, cbExec};
         armDeadline(sink);
@@ -1829,6 +1878,18 @@ private:
         if (superseded) {
             superseded(std::make_exception_ptr(std::runtime_error{"bind superseded by a newer one"}));
         }
+    }
+
+    /// @brief Whether @p binding is shared and holds neither a key nor an
+    ///        instance, so a switch or reconnect has nothing to re-create.
+    ///
+    /// Both are asked: a key with no instance is a binding whose re-bind is
+    /// still owed, and an instance with no key is a result-keyed one not yet
+    /// promoted, whose id belongs to the backend it was bound on.
+    /// @param binding The binding.
+    /// @return `true` for a shared binding with an empty primary and no id.
+    [[nodiscard]] static bool holdsNothing(const detail::HandlerBinding& binding) {
+        return binding.shared && binding.primary.empty() && binding.currentId.load() == 0U;
     }
 
     /// @brief The error a call gets through a binding with no instance and no
@@ -2428,7 +2489,7 @@ private:
         std::vector<Resume> superseded;
         for (auto const& entry : _handlers) {
             auto binding = entry.lock();
-            if (!binding || (binding->shared && binding->primary.empty())) {
+            if (!binding || holdsNothing(*binding)) {
                 continue;
             }
             binding->currentId.store(0);
@@ -2662,7 +2723,10 @@ public:
     /// time this returns; otherwise calls made meanwhile are held until it
     /// has. A refused attach is logged and leaves the handler on the instance
     /// it held; a call held behind it is rejected with its error only when
-    /// the handler has no instance to fall back to.
+    /// the handler has no instance to fall back to. A key that names no
+    /// instance — an empty string, a strong id with no value — is refused the
+    /// same way: a call through a handler with no instance is then rejected
+    /// with `std::invalid_argument` or `std::runtime_error` respectively.
     ///
     /// @tparam M Defaulted to `Model`; never named explicitly. Present only so the
     ///         signature is instantiated lazily, since `PrimaryKeyOf` is
@@ -2672,7 +2736,14 @@ public:
     void attach(const ::morph::model::PrimaryKeyOf<M>& key)
         requires kShared
     {
-        _bridge.template attachHandler<Model>(_binding, ::morph::model::keyToString(key));
+        std::string encoded;
+        try {
+            encoded = ::morph::model::keyToString(key);
+        } catch (...) {
+            _bridge.refuseAttach(_binding, std::current_exception());
+            return;
+        }
+        _bridge.template attachHandler<Model>(_binding, std::move(encoded));
     }
 
     /// @brief This handler's current primary key, or `nullopt` if unattached.

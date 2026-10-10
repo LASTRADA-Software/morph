@@ -11,7 +11,7 @@
 - [The instance directory](#the-instance-directory)
 - [Enumerating live instances](#enumerating-live-instances)
 - [Wire protocol changes](#wire-protocol-changes)
-- [Async register-or-attach and attach](#async-register-or-attach-and-attach)
+- [Register-or-attach and attach go through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule)
 - [Ownership and authorization](#ownership-and-authorization)
 - [Lifetime and the A7 connection-scope change](#lifetime-and-the-a7-connection-scope-change)
 - [API reference](#api-reference)
@@ -385,6 +385,16 @@ the instance it held, and is recorded on the handler: a call held behind it is
 rejected with its error when the handler has no instance to fall back to, and
 otherwise runs on the instance the handler still holds.
 
+**An empty key is refused on every attach path.** A `std::string` key of `""`
+reads as "no primary" (see [Limitations](#limitations)), so attaching to it
+would hand the handler a private instance that a switch or reconnect could not
+tell from "never attached". `handler.attach("")` is refused through the channel
+above, with `std::invalid_argument`; a strong id with no value is refused the
+same way, with `keyToString`'s `std::runtime_error`. A payload-keyed
+`execute()` whose action names `""` is rejected through its `Completion`, and
+the raw `Bridge::attach` throws `std::invalid_argument`. None of them binds
+anything.
+
 **Attaches for one handler are serialised.** A keyed call made while an attach
 is in flight for its handler is held until that attach settles, then finds the
 handler already on the key and dispatches without a second attach. Two
@@ -469,10 +479,10 @@ strictly reduces pressure on it.
 | `BRIDGE_KEY_FROM(A, &A::field)` | macro | Declares that a further action `A` also carries the key. |
 | `BRIDGE_MODEL_KEY_FROM_RESULT(M, A, &R::field)` | macro | As `BRIDGE_MODEL_KEY`, but the key comes from `A`'s *result*. |
 | `BRIDGE_KEY_FROM_RESULT(A, &R::field)` | macro | A further creating action whose result establishes the key. |
-| `handler.attach(key)` | `void` | Attaches (or re-points) without executing an action. Synchronous and throwing, by design — see [Async register-or-attach and attach](#async-register-or-attach-and-attach). |
+| `handler.attach(key)` | `void` | Attaches (or re-points) without executing an action. Never throws or waits; a refused attach, an empty key included, is logged — see [Register-or-attach and attach go through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule). |
 | `handler.primary()` | `std::optional<PrimaryKey>` | The handler's current primary; empty if unattached. |
 | `handler.instances()` | `Completion<std::vector<PrimaryKey>>` | Snapshot of live shared keys for this model type. |
-| `handler.execute(keyedAction)` | `Completion<R>` | Unchanged signature and contract. Its **attach** step (payload-keyed) and the **bind** step of the result-keyed path take the backend's async path when one exists, so neither blocks on a round-trip — visible only as *not aborting a WASM main thread*. The result-keyed path's **promote** step (`assignPrimary`) is still synchronous and still blocks. See [Async register-or-attach and attach](#async-register-or-attach-and-attach). |
+| `handler.execute(keyedAction)` | `Completion<R>` | Unchanged signature and contract. Its **attach** step (payload-keyed) and the **bind** step of the result-keyed path take the backend's async path when one exists, so neither blocks on a round-trip — visible only as *not aborting a WASM main thread*. The result-keyed path's **promote** step (`assignPrimary`) is still synchronous and still blocks. See [Register-or-attach and attach go through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule). |
 | `IBackend::bindModel` | `Completion<ModelId>` | The one non-blocking acquire verb; its `BindRequest`'s shape selects private / register-or-attach / re-point. The default runs the synchronous verb that shape names and settles before returning, so a backend that overrides nothing is unchanged. |
 
 ## Design decisions
@@ -558,11 +568,12 @@ strictly reduces pressure on it.
   sentinel every layer (`LocalBackend::bindModel`/`assignPrimary`,
   `Bridge::assignHandlerPrimary`, `RemoteServer`'s directory operations) uses
   for "anonymous, therefore unshareable" — there is no separate encoding for
-  "a real key whose value happens to be the empty string". A model whose
-  `PrimaryKey` is `std::string` and whose legitimate key value is `""` will
-  silently get a private, unshared instance instead of an error or real
-  sharing; two callers both attaching with `primary == ""` never reach the
-  same instance. Choose a non-empty key encoding (e.g. reserve a sentinel
+  "a real key whose value happens to be the empty string". The bridge
+  therefore refuses `""` on every attach path (see [Register-or-attach and attach go
+  through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule)), and a result-keyed
+  action whose result carries `""` leaves its instance anonymous. A model whose
+  `PrimaryKey` is `std::string` and whose legitimate key value is `""` cannot
+  share that instance; choose a non-empty key encoding (e.g. reserve a sentinel
   string, or key on something that is never empty) if this applies to your
   model.
 - **Enumeration is per model type and unfiltered.** No paging, no predicate; a

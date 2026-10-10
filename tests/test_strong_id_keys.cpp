@@ -13,7 +13,9 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <morph/attributes.hpp>
 #include <morph/core/backend.hpp>
@@ -243,5 +245,37 @@ TEST_CASE("executing with an empty strong id fails the completion", "[strong-id-
     REQUIRE(failed->load());
 
     // Nothing was attached, so no instance was created for the empty key.
+    REQUIRE(settleSik(handler.instances()).empty());
+}
+
+TEST_CASE("attaching to an empty strong id is refused without throwing", "[strong-id-keys]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(exec), exec};
+    BridgeHandler<SikRowModel, AllowShared> handler{bridge, &exec};
+
+    REQUIRE_NOTHROW(handler.attach(SikRowId{}));
+    REQUIRE_FALSE(handler.primary().has_value());
+
+    // The handler holds no instance, so its calls are rejected with the
+    // refusal's own error rather than a generic "not bound".
+    std::exception_ptr failure;
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    handler.execute(SikBump{.by = 1})
+        .then([done](SikCount) { done->store(true); })
+        .onError([&failure, done](const std::exception_ptr& error) {
+            failure = error;
+            done->store(true);
+        });
+    REQUIRE(morph::testing::waitUntil([&] { return done->load(); }));
+    REQUIRE(failure);
+    // Caught by hand: REQUIRE_THROWS_WITH around a [[noreturn]] call leaves the
+    // macro's no-throw branch unreachable, which MSVC rejects under /WX (C4702).
+    std::string message;
+    try {
+        std::rethrow_exception(failure);
+    } catch (const std::exception& error) {
+        message = error.what();
+    }
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("a strong id with no value"));
     REQUIRE(settleSik(handler.instances()).empty());
 }
