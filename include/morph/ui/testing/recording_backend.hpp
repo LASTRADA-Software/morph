@@ -1171,6 +1171,8 @@ public:
     /// @param widgetId The field.
     /// @param position A byte offset into the text it shows; clamped to the text's size.
     /// @throws std::logic_error when the widget is not a text field.
+    // An id and a position: an `int` and a `std::size_t`, which convert into each other.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     void moveCursor(int widgetId, std::size_t position) {
         if (detail::Record const* const record = actionable(widgetId, "moveCursor", {"TextInput"});
             record != nullptr) {

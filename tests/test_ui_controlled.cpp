@@ -14,6 +14,7 @@
 #include <morph/util/datetime.hpp>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "test_support.hpp"
@@ -73,9 +74,9 @@ TEST_CASE("ui controlled: an accepted edit costs no setter call", "[ui]") {
     Runtime runtime{owner};
     RecordingBackend backend;
     Signal<std::string> name{runtime, "a"};
-    ui::Mounted const view{
-        runtime, backend,
-        ui::textInput({.value = [&] { return name.get(); }, .onChange = [&](std::string text) { name.set(text); }})};
+    ui::Mounted const view{runtime, backend,
+                           ui::textInput({.value = [&] { return name.get(); },
+                                          .onChange = [&](std::string text) { name.set(std::move(text)); }})};
     backend.clearLog();
     backend.edit(1, "ab");
     owner.runAll();
@@ -110,9 +111,9 @@ TEST_CASE("ui controlled: an accepted edit keeps the cursor where the user left 
     Runtime runtime{owner};
     RecordingBackend backend;
     Signal<std::string> name{runtime, ""};
-    ui::Mounted const view{
-        runtime, backend,
-        ui::textInput({.value = [&] { return name.get(); }, .onChange = [&](std::string text) { name.set(text); }})};
+    ui::Mounted const view{runtime, backend,
+                           ui::textInput({.value = [&] { return name.get(); },
+                                          .onChange = [&](std::string text) { name.set(std::move(text)); }})};
     backend.edit(1, "abc");
     backend.moveCursor(1, 1);
     owner.runAll();
@@ -156,8 +157,9 @@ TEST_CASE("ui controlled: an edit whose handler unmounts the field posts no turn
     RecordingBackend backend;
     Signal<std::string> const name{runtime, "a"};
     std::optional<ui::Mounted> view;
-    view.emplace(runtime, backend,
-                 ui::textInput({.value = [&] { return name.get(); }, .onChange = [&](std::string) { view.reset(); }}));
+    view.emplace(
+        runtime, backend,
+        ui::textInput({.value = [&] { return name.get(); }, .onChange = [&](std::string const&) { view.reset(); }}));
     backend.edit(1, "ab");
     CHECK_FALSE(view.has_value());
     CHECK_FALSE(backend.exists(1));
@@ -178,7 +180,7 @@ TEST_CASE("ui controlled: a turn posted for a field that is gone by then does no
         ui::switchOf({.selector = [&] { return ui::Key{which.get()}; },
                       .cases = {{.key = ui::Key{std::int64_t{1}},
                                  .node = ui::textInput({.value = [&] { return name.get(); },
-                                                        .onChange = [&](std::string) { which.set(0); }})}}})};
+                                                        .onChange = [&](std::string const&) { which.set(0); }})}}})};
     int const field = backend.all("TextInput").front();
     backend.edit(field, "ab");
     CHECK_NOTHROW(owner.runAll());

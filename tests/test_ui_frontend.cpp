@@ -80,12 +80,13 @@ class FakeSource final : public ui::AppSource {
 public:
     using Opened = std::expected<ui::Bundle, ui::ConnectError>;
 
-    explicit FakeSource(Events& events) : _events{&events} {}
+    explicit FakeSource(Events& events, std::vector<Opened> immediate = {}, bool keepReadyAfterClose = false)
+        : _events{&events}, _immediate{std::move(immediate)}, _keepReadyAfterClose{keepReadyAfterClose} {}
 
     void open(ui::AppContext&, std::function<void(Opened)> ready) override {
         _events->emplace_back("open");
         _ready = std::move(ready);
-        for (Opened const& opened : immediate) {
+        for (Opened const& opened : _immediate) {
             deliver(opened);
         }
     }
@@ -95,7 +96,7 @@ public:
     }
     void close() override {
         _events->emplace_back("close");
-        if (!keepReadyAfterClose) {
+        if (!_keepReadyAfterClose) {
             _ready = nullptr;
         }
     }
@@ -108,11 +109,10 @@ public:
         }
     }
 
-    std::vector<Opened> immediate;
-    bool keepReadyAfterClose = false;
-
 private:
     Events* _events;
+    std::vector<Opened> _immediate;
+    bool _keepReadyAfterClose = false;
     std::function<void(Opened)> _ready;
 };
 
@@ -376,8 +376,7 @@ TEST_CASE("ui::processEnvironment: reads the process environment", "[ui]") {
 TEST_CASE("ui::runApp: the shell goes first, then the source's connections, then the runtime", "[ui]") {
     Events events;
     RecordingBackend backend;
-    FakeSource source{events};
-    source.immediate.emplace_back(bundle());
+    FakeSource source{events, {bundle()}};
     TestFrontend frontend{events, tracedShells(backend, events), [&](TestContext&) {
                               events.push_back("loop: " + backend.dump());
                               return 7;
@@ -392,8 +391,7 @@ TEST_CASE("ui::runApp: the shell goes first, then the source's connections, then
 TEST_CASE("ui::runApp: a loop that throws still tears down in order, then rethrows", "[ui]") {
     Events events;
     RecordingBackend backend;
-    FakeSource source{events};
-    source.immediate.emplace_back(bundle());
+    FakeSource source{events, {bundle()}};
     TestFrontend frontend{events, tracedShells(backend, events), [&](TestContext&) -> int {
                               events.emplace_back("loop");
                               throw std::runtime_error{"loop failed"};
@@ -422,8 +420,7 @@ TEST_CASE("ui::runApp: a source that delivers from the loop mounts the shell the
 TEST_CASE("ui::runApp: a ready that comes after the run ended mounts nothing", "[ui]") {
     Events events;
     RecordingBackend backend;
-    FakeSource source{events};
-    source.keepReadyAfterClose = true;
+    FakeSource source{events, {}, true};
     TestFrontend frontend{events, tracedShells(backend, events), [](TestContext&) { return 0; }};
     CHECK(frontend.run(source) == 0);
     source.deliver(bundle());
@@ -435,9 +432,7 @@ TEST_CASE("ui::runApp: a ready that comes after the run ended mounts nothing", "
 TEST_CASE("ui::runApp: a second ready is ignored", "[ui]") {
     Events events;
     RecordingBackend backend;
-    FakeSource source{events};
-    source.immediate.emplace_back(bundle());
-    source.immediate.emplace_back(ui::Bundle{.applicationId = "other"});
+    FakeSource source{events, {bundle(), ui::Bundle{.applicationId = "other"}}};
     TestFrontend frontend{events, tracedShells(backend, events), [](TestContext&) { return 0; }};
     CHECK(frontend.run(source) == 0);
     CHECK(events == Events{"open", "mount demo", "shell", "close", "runtime"});
@@ -446,9 +441,9 @@ TEST_CASE("ui::runApp: a second ready is ignored", "[ui]") {
 TEST_CASE("ui::runApp: a source that cannot connect hands the shell factory the error", "[ui]") {
     Events events;
     RecordingBackend backend;
-    FakeSource source{events};
-    source.immediate.emplace_back(
-        std::unexpected{ui::ConnectError{.kind = ui::ConnectError::Kind::NoUiService, .message = "no UI here"}});
+    FakeSource source{
+        events,
+        {std::unexpected{ui::ConnectError{.kind = ui::ConnectError::Kind::NoUiService, .message = "no UI here"}}}};
     TestFrontend frontend{events, tracedShells(backend, events), [](TestContext&) { return 3; }};
     CHECK(frontend.run(source) == 3);
     CHECK(events == Events{"open", "connect error: no UI here", "close", "runtime"});
@@ -458,8 +453,7 @@ TEST_CASE("ui::runApp: a source that cannot connect hands the shell factory the 
 TEST_CASE("ui::runApp: a shell factory that throws quits with 1, and its exception leaves after the teardown",
           "[ui]") {
     Events events;
-    FakeSource source{events};
-    source.immediate.emplace_back(bundle());
+    FakeSource source{events, {bundle()}};
     std::optional<int> quitWith;
     TestFrontend frontend{
         events,

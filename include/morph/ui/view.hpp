@@ -132,7 +132,9 @@ public:
     /// @throws std::invalid_argument when `binding` is an empty `std::function` or a null function pointer.
     template <typename F>
         requires std::invocable<F&> && std::convertible_to<std::invoke_result_t<F&>, T>
-    Prop(F binding) : _value{std::in_place_index<1>, Slot{.id = std::nullopt, .read = nonEmpty(std::move(binding))}} {}
+    Prop(F binding) : _value{std::in_place_index<1>, Slot{.id = std::nullopt, .read = std::move(binding)}} {
+        refuseEmpty();
+    }
 
     /// @brief A slot with an id, as `ui::slot` makes it.
     /// @tparam F A callable taking no arguments and returning something convertible to `T`.
@@ -141,7 +143,9 @@ public:
     template <typename F>
         requires std::invocable<F&> && std::convertible_to<std::invoke_result_t<F&>, T>
     Prop(SlotBinding<F> binding)
-        : _value{std::in_place_index<1>, Slot{.id = binding.id, .read = nonEmpty(std::move(binding.read))}} {}
+        : _value{std::in_place_index<1>, Slot{.id = binding.id, .read = std::move(binding.read)}} {
+        refuseEmpty();
+    }
 
     /// @brief Whether this is a slot.
     /// @return True for a slot, false for a constant.
@@ -160,7 +164,8 @@ public:
     /// @brief The slot's id.
     /// @return The id given through `ui::slot`; `nullopt` for a constant and for a slot made from a bare callable.
     [[nodiscard]] std::optional<SlotId> slotId() const noexcept {
-        return isBound() ? std::get<1>(_value).id : std::nullopt;
+        Slot const* const bound = std::get_if<1>(&_value);
+        return bound == nullptr ? std::nullopt : bound->id;
     }
 
     /// @brief The current value: the constant, or the slot read once.
@@ -176,18 +181,12 @@ private:
         std::function<T()> read;
     };
 
-    /// @brief Wraps a read, refusing an empty one.
-    /// @tparam F The read's type.
-    /// @param binding The read.
-    /// @return The wrapped read.
-    /// @throws std::invalid_argument when @p binding is empty.
-    template <typename F>
-    [[nodiscard]] static std::function<T()> nonEmpty(F binding) {
-        std::function<T()> read{std::move(binding)};
-        if (!read) {
+    /// @brief Refuses a slot whose read is empty: an empty `std::function` or a null function pointer.
+    /// @throws std::invalid_argument when the read is empty.
+    void refuseEmpty() const {
+        if (!std::get<1>(_value).read) {
             throw std::invalid_argument{"ui::Prop: a binding must not be empty"};
         }
-        return read;
     }
 
     std::variant<T, Slot> _value;

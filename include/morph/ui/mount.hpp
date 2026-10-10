@@ -313,7 +313,7 @@ private:
             apply(value);
             shown = value;
         };
-        reactive::Computed<T>* const value = bind(scope, prop, show);
+        reactive::Computed<T> const* const value = bind(scope, prop, show);
         if (value == nullptr) {
             return {};
         }
@@ -325,11 +325,10 @@ private:
     template <typename T, typename Arg>
     [[nodiscard]] std::function<void(Arg)> inputEvent(std::function<void(Arg)> const& handler,
                                                       std::function<void(T const&)> reassert) const {
-        std::function<void(Arg)> inner = event(handler);
         if (!reassert) {
-            return inner;
+            return event(handler);
         }
-        return [inner = std::move(inner), reassert = std::move(reassert)](Arg arg) {
+        return [inner = event(handler), reassert = std::move(reassert)](Arg arg) {
             T const requested(arg);
             if (inner) {
                 inner(std::move(arg));
