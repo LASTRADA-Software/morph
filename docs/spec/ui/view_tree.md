@@ -82,23 +82,24 @@ the mount drives are [`backend_contract.md`](backend_contract.md); the frontend 
 
 ## The palette
 
-The node kinds are the base palette of the UI document design (§9): text, button, text input,
-checkbox, select, menu, column, row, grid, spacer, panel, scroll, switch, tabs, dialog, busy,
-forEach, table, date-time input, slider and file picker, with the properties a widget needs to show
-and edit them. The document's further kinds (banner, badge, progress, …, boundary), its extra common
-properties (`a11y`, `testId`, `tooltip`, `keys`, `autofocus`, `surface`), its input decorations
-(`readonly`, `required`, `errors`, `stale`) and richer menu items join the tree, and `IViewBackend`,
-with the interpreter that maps them; until then the interpreter lowers a further kind to its fallback
-subtree of base kinds.
+The node kinds are the palette of the UI document design (§9): its base kinds (text, button, text
+input, checkbox, select, menu, column, row, grid, spacer, panel, scroll, switch, tabs, dialog, busy,
+forEach, table, date-time input, slider and file picker) and its further kinds (banner, badge,
+progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone), with `custom`,
+which this mount shows as its fallback. Every other node carries the common properties, inputs and text
+carry the field state, and menu items nest. `boundary` and `customize` are not view-tree kinds: a
+boundary decides what to show from the state of the queries its children read, and a customization
+point's editor from the application's customization store, so the interpreter that owns those
+lowers them to the kinds below.
 
 | Node | Builder | Props and callbacks |
 |---|---|---|
 | `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success}`) |
 | `Button` | `button` | `label`, `onClick` |
-| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once) |
+| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
 | `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `style` (`SelectStyle{Dropdown, Radio}`, set once) |
-| `Menu` | `menu` | `items` (`MenuItem{label, onSelect}`: each label beside its handler, so there are no parallel lists; the list is set once, each label may be bound) |
+| `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
 | `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap` (set once) |
 | `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap` — all set once |
 | `Spacer` | `spacer` | none |
@@ -113,12 +114,50 @@ subtree of base kinds.
 | `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
+| `Banner` | `banner` | `tone` (`Tone{Neutral, Info, Ok, Warn, Err}`), `text`, `action` (`ActionButton{label, onClick}`; an empty label shows no button), `dismissible` (set once), `onDismiss` — a dismissal leaves the banner shown: the application hides it |
+| `Badge` | `badge` | `tone`, `text`, `icon` (set once) |
+| `Progress` | `progress` | `value` (`std::optional<double>`, 0 to 1; `nullopt` is indeterminate), `label` |
+| `Steps` | `steps` | `items` (`Step{label, state}`, `StepState{Pending, Active, Done, Failed}`), `current` (`std::optional<std::size_t>`) |
+| `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value}`) |
+| `EmptyState` | `emptyState` | `title`, `text`, `icon` (set once), `action` |
+| `Drawer` | `drawer` | A `Dialog`'s fields and rules, plus `side` (`Side{Start, End}`, set once) |
+| `Splitter` | `splitter` | `children` (a null child is skipped), `orientation` (`Axis`, set once), `sizes` (`std::vector<int>`; empty shares the space equally), `onResize` (every pane's size after the user dragged a handle) |
+| `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
+| `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |
+| `Custom` | `custom` | `name`, `fallback` (never null: `custom` throws `std::invalid_argument`). `Mounted` loads no components and mounts the fallback in the node's place; `Custom` has no `Common` of its own |
 
-The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled` and
-`dragKey`, and: Text `text` and `role`; Button `label`; TextInput `value` and `placeholder`; Checkbox
-`label` and `checked`; Select `options` and `selected`; a MenuItem's `label`; Panel `title` and
+Every node but `Custom` also carries `Common`:
+
+| Field | Meaning |
+|---|---|
+| `visible`, `enabled` | Whether the widget is shown and accepts input; both apply to everything inside it |
+| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch), set once |
+| `dragKey`, `accepts`, `onDrop` | Drag and drop ([backend contract](backend_contract.md#drag-and-drop)) |
+| `a11y` | `Accessibility{name, role}`: what assistive technology announces; `role` is set once |
+| `testId` | The stable identifier an automated test finds the widget by, set once |
+| `tooltip` | Text shown while the pointer rests on the widget |
+| `surface` | The named token set of the theme that styles the node and everything inside it, set once |
+| `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called |
+| `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
+
+Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, FilePicker) also carry
+`field`, a `FieldState`:
+
+| Field | Meaning |
+|---|---|
+| `readonly` | The user may not change the value: the widget shows it, takes focus and lets its text be selected, and reports no edit, submit or commit. Changes nothing on text |
+| `required` | A mark that the field must be given. Whether a value is missing is the application's to decide, and to show through `errors` |
+| `errors` | The messages shown with the field, in order. Which errors show, and when (spec 5's `shownErrors`), is decided before they reach this property |
+| `stale` | The value shown is the last known one while a newer one is computed |
+
+The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled`, `dragKey`,
+`a11y.name` and `tooltip`, every `FieldState` field, and: Text `text` and `role`; Button `label`; TextInput `value` and `placeholder`; Checkbox
+`label` and `checked`; Select `options` and `selected`; a MenuItem's `label`, `checked` and `enabled`; Panel `title` and
 `collapsed`; Switch `selector`; Tabs `selected`; Dialog `open` and `title`; Busy `active` and
-`label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`. Every other
+`label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`; Banner `tone`,
+`text` and the action's `label`; Badge `tone` and `text`; Progress `value` and `label`; Steps `items` and
+`current`; KeyValue `items`; EmptyState `title`, `text` and the action's `label`; Drawer `open` and `title`;
+Splitter `sizes`; Collapsible `title` and `open`. Every other
 field is fixed when the node is built.
 
 The builder for a Switch is `switchOf` because `switch` is a keyword. `switchOn<E>(selector, cases,
@@ -182,13 +221,18 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
 ### Per node
 
 1. The widget is made by its factory, under its parent, with the node's fixed parameters (a
-   TextInput's mode, a Select's style, a stack's or scroll area's axis, a DateTimeInput's mode and
-   zone, a FilePicker's mode), and adopted into the scope **first**.
+   TextInput's mode, a Select's style, a stack's, scroll area's or splitter's axis, a DateTimeInput's
+   mode and zone, a FilePicker's mode, a Drawer's side), and adopted into the scope **first**.
 2. `Common`, in this order. `visible` and `enabled` only when bound or `false`; `layout` only when
    it is not content × content; `dragKey` only when bound or engaged; the drop handler only when
-   `onDrop` is set, with an accept-everything predicate when `accepts` is empty. A new widget is
-   already visible, enabled, content-sized and neither draggable nor a drop target, so a node that
-   says nothing more costs no call.
+   `onDrop` is set, with an accept-everything predicate when `accepts` is empty; `a11y.name` and
+   `tooltip` only when bound or not empty; `a11y.role`, `testId` and `surface` only when not empty;
+   the chords only when `keys` is not empty, as one `setKeys` whose handler runs the first binding
+   of the chord pressed as a widget callback. A new widget is already visible, enabled,
+   content-sized, neither draggable nor a drop target, and has none of the rest, so a node that
+   says nothing more costs no call. Then, for text and the inputs, `FieldState` the same way:
+   `readonly`, `required` and `stale` only when bound or `true`, `errors` only when bound or not
+   empty. A new field is editable, not required, without errors and not stale.
 3. The kind's own props and callbacks. Every `Prop` is applied, even one that holds its default: a
    constant calls its setter once; a binding makes a `Computed` (equality-gated, so an unchanged
    result calls nothing) and an `Effect` that calls one setter — except a Tabs index and a
@@ -200,9 +244,18 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    the exceptions:
    - a Grid child's span is set only when it is not 1;
    - a Panel's `collapsed` and `onToggle` are applied only when it is collapsible;
-   - a Menu sends all its labels through one `setItems`; when any label is bound, one binding over
-     all of them sends every label again whenever one changes. Choosing an entry runs that entry's
-     `onSelect`; an index past the last entry runs nothing.
+   - a Drawer follows a Dialog ([below](#switch-tabs-dialog)) in every respect;
+   - a Splitter mounts its panes before it binds `sizes`, so the first `setSizes` already has its
+     panes;
+   - a Collapsible mounts its `header` first, as its first child, and names it with `setHeader`;
+     then its `child`;
+   - a Custom node mounts its fallback under its parent and returns the fallback's widget;
+   - a Menu sends its whole tree through one `setItems`, as `MenuEntry` values; when any entry at
+     any depth has a bound `label`, `checked` or `enabled`, one binding over all of them sends the
+     tree again whenever one changes. The backend reports a choice as the entry's path, its index
+     at each level from the top, and the dispatcher runs that entry's `onSelect`; a path that
+     names no entry runs nothing. Which entries can be chosen — enabled ones without a submenu,
+     inside enabled entries — is the backend's to enforce, as it is for a disabled widget.
 4. Its children, appended in order.
 
 Destroying the scope destroys in reverse creation order: every binding before the widget it
@@ -217,6 +270,20 @@ content one level deeper again. So an Effect that takes content away runs before
 bindings in the same flush, whichever was made first, and a binding never evaluates against state
 its owner is removing. A mount placed under another scope — a screen's, a row's — passes that
 scope's depth plus one, so the outer scope's Effects run first too.
+
+### Focus
+
+A widget whose node sets `autofocus` takes keyboard focus when the content it is part of mounts.
+**The first such widget in document order wins**, and it is focused once **after** the whole mount
+has completed, through `Widget::focus()`, so a later sibling is already in place.
+
+A mount is the root, or content a binding mounts later: a Switch case, a Tabs page, a Dialog's
+content, a row. Content a binding mounts while the root is mounting (a bound selector's first case,
+a dialog that starts open) is part of the root's mount, so document order decides between it and
+the rest of the root. Content mounted later — a new case, a dialog opened, a row inserted — is a
+mount of its own, and its first `autofocus` widget takes focus. Content that fails to mount gives
+up its candidate together with its widgets, and the mount around it finds the next one. A backend
+that cannot move focus leaves it where it was.
 
 ### Callbacks
 
@@ -319,8 +386,14 @@ is a request the application may refuse. An input whose value is a slot is contr
 | FilePicker | `path` | `onPicked` |
 | Panel (collapsible) | `collapsed` | `onToggle` |
 | Tabs | `selected` | `onSelect` (the bar's highlight) |
-| Dialog | `open` | `onDismiss` (a request to close) |
+| Dialog, Drawer | `open` | `onDismiss` (a request to close) |
 | Table | `selection` | `onSelectionChange` |
+| Splitter | `sizes` | `onResize` (every pane's size) |
+| Collapsible | `open` | `onToggle` |
+
+A TextInput's `onCommit` requests no value, so it posts no turn. A Banner's dismissal is not a
+request to change a value the banner shows: the banner stays as it is until the application hides
+it.
 
 The widget shows the request already — that is what the toolkit does when the user acts. The mount
 records what each controlled widget shows: the last value it set, or the user's request since. After
@@ -337,10 +410,10 @@ setter with the slot's value. So:
 
 A slot without a handler is read-only: the event is installed anyway, and the request snaps back. A
 constant is not a slot: the widget keeps what the user did, as a QML literal does once a control is
-edited. A Tabs is re-asserted to the page it shows; a Dialog whose content failed to mount stays
-closed when the application keeps `open` true, rather than opening empty, and the re-assertion does
-not retry the mount. The turn holds its check weakly, so a turn posted for content that is gone by
-then does nothing; an event whose handler destroyed its own widget posts no turn.
+edited. A Tabs is re-asserted to the page it shows; a Dialog or Drawer whose content failed to mount
+stays closed when the application keeps `open` true, rather than opening empty, and the
+re-assertion does not retry the mount. The turn holds its check weakly, so a turn posted for content
+that is gone by then does nothing; an event whose handler destroyed its own widget posts no turn.
 
 ## Failures and misuse
 

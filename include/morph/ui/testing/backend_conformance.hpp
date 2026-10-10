@@ -105,8 +105,8 @@ public:
     /// @param target The widget it is dropped on.
     virtual void drag(Widget& source, Widget& target) = 0;
 
-    /// @brief Dismisses a dialog as a user would (Esc on the TUI).
-    /// @param dialog The dialog.
+    /// @brief Dismisses a dialog or drawer as a user would (Esc on the TUI), or a dismissible banner.
+    /// @param dialog The dialog, drawer or banner.
     virtual void dismiss(Widget& dialog) = 0;
 
     /// @brief Selects rows of a table as a user would, so that the user's selection is exactly these rows.
@@ -129,6 +129,31 @@ public:
     /// @param field The text field.
     /// @return A byte offset into the text it shows.
     [[nodiscard]] virtual std::size_t cursorOf(Widget const& field) = 0;
+
+    /// @brief Presses a keyboard chord as a user would with focus on a widget.
+    /// @param focused The widget focus is on; the probe moves focus there first if it must.
+    /// @param chord The chord, as a document declares it, such as `"Ctrl+S"`.
+    virtual void press(Widget& focused, std::string_view chord) = 0;
+
+    /// @brief Whether a widget has keyboard focus.
+    /// @param widget The widget.
+    /// @return True when it is the widget that has focus.
+    [[nodiscard]] virtual bool hasFocus(Widget const& widget) = 0;
+
+    /// @brief Chooses a menu entry as a user would, opening each submenu on the path first.
+    /// @param menu The menu.
+    /// @param path The entry's index at each level, from the top.
+    virtual void chooseMenuEntry(Widget& menu, std::vector<std::size_t> const& path) = 0;
+
+    /// @brief Opens or closes a collapsible section with its own control, as a user would.
+    /// @param section The section.
+    /// @param open The state asked for.
+    virtual void expand(Widget& section, bool open) = 0;
+
+    /// @brief Drops files from the operating system onto a drop zone, as a user would.
+    /// @param zone The drop zone.
+    /// @param paths The files' paths, in the order dropped; not empty.
+    virtual void dropFiles(Widget& zone, std::vector<std::string> const& paths) = 0;
 };
 
 /// @brief One scripted case.
@@ -1142,6 +1167,220 @@ private:
     return checks.result();
 }
 
+/// @brief Case: a chord goes to the innermost widget that declares it, and one only an outer widget declares reaches
+///        that widget.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> innermostChordWins(ConformanceProbe& probe) {
+    std::vector<std::string> pressed;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::column(
+                        {.children = {ui::button(
+                             {.label = "Save",
+                              .common = {.keys = {{.chord = "Ctrl+S",
+                                                   .onPress = [&pressed] { pressed.emplace_back("inner"); }}}}})}})},
+                    .common = {.keys = {{.chord = "Ctrl+S", .onPress = [&pressed] { pressed.emplace_back("outer"); }},
+                                        {.chord = "Ctrl+Q",
+                                         .onPress = [&pressed] { pressed.emplace_back("outer quit"); }}}}})};
+    probe.settle();
+    Widget* const button = childOf(probe, childOf(probe, &view.root(), 0), 0);
+    if (button == nullptr) {
+        return "a Button in a Column in a Column is not shown";
+    }
+    probe.press(*button, "Ctrl+S");
+    probe.settle();
+    probe.press(*button, "Ctrl+Q");
+    probe.settle();
+    Checks checks;
+    checks.that(pressed == std::vector<std::string>{"inner", "outer quit"},
+                "Ctrl+S then Ctrl+Q with focus on the button ran " + std::to_string(pressed.size()) +
+                    " handlers, not the inner Ctrl+S and the outer Ctrl+Q");
+    return checks.result();
+}
+
+/// @brief Case: a chord pressed inside a container hidden two levels up runs nothing; while shown it runs once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> hiddenChordRunsNothing(ConformanceProbe& probe) {
+    reactive::Signal<bool> shown{probe.runtime(), true};
+    int presses = 0;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::column(
+                        {.children = {ui::button(
+                             {.label = "Save",
+                              .common = {.keys = {{.chord = "Ctrl+S", .onPress = [&presses] { ++presses; }}}}})}})},
+                    .common = {.visible = [&shown] { return shown.get(); }}})};
+    probe.settle();
+    Widget* const button = childOf(probe, childOf(probe, &view.root(), 0), 0);
+    if (button == nullptr) {
+        return "a Button in a Column in a Column is not shown";
+    }
+    probe.press(*button, "Ctrl+S");  // shown: the chord runs, so the probe's press is known to reach handlers
+    probe.settle();
+    shown.set(false);
+    probe.settle();
+    probe.press(*button, "Ctrl+S");
+    probe.settle();
+    Checks checks;
+    checks.that(presses == 1, "a chord ran " + std::to_string(presses) +
+                                  " times; once while shown and not again once hidden is expected");
+    return checks.result();
+}
+
+/// @brief Case: the first `autofocus` widget in document order has focus once the mount completes.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> firstAutofocusWins(ConformanceProbe& probe) {
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::text({.text = "Name"}), ui::textInput({.common = {.autofocus = true}}),
+                                 ui::textInput({.common = {.autofocus = true}})}})};
+    probe.settle();
+    Widget const* const first = childOf(probe, &view.root(), 1);
+    Widget const* const second = childOf(probe, &view.root(), 2);
+    if (first == nullptr || second == nullptr) {
+        return "a Column does not show its three children";
+    }
+    Checks checks;
+    checks.that(probe.hasFocus(*first), "the first autofocus input does not have focus");
+    checks.that(!probe.hasFocus(*second), "the second autofocus input has focus");
+    return checks.result();
+}
+
+/// @brief Case: a menu reports only an enabled entry without a submenu, and an entry enabled later can be chosen.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> onlyEnabledMenuLeavesAreChosen(ConformanceProbe& probe) {
+    reactive::Signal<bool> deletable{probe.runtime(), false};
+    std::vector<std::string> chosen;
+    auto const choose = [&chosen](std::string name) {
+        return [&chosen, name = std::move(name)] { chosen.push_back(name); };
+    };
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::menu({.items = {{.label = "Recent",
+                                            .onSelect = choose("Recent"),
+                                            .items = {{.label = "a.txt", .onSelect = choose("a.txt")}}},
+                                           {.label = "Delete", .onSelect = choose("Delete"), .enabled = [&deletable] {
+                                                return deletable.get();
+                                            }}}})};
+    probe.settle();
+    probe.chooseMenuEntry(view.root(), {0});  // opens the submenu
+    probe.chooseMenuEntry(view.root(), {0, 0});
+    probe.chooseMenuEntry(view.root(), {1});  // disabled
+    probe.settle();
+    deletable.set(true);
+    probe.settle();
+    probe.chooseMenuEntry(view.root(), {1});
+    probe.settle();
+    Checks checks;
+    checks.that(chosen == std::vector<std::string>{"a.txt", "Delete"},
+                "choosing a submenu, its entry, a disabled entry and then that entry enabled ran " +
+                    std::to_string(chosen.size()) + " handlers, not the submenu's entry and the enabled one");
+    return checks.result();
+}
+
+/// @brief Case: typing into a read-only input reaches no handler; once editable again, it does.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> readOnlyInputTakesNoEdit(ConformanceProbe& probe) {
+    reactive::Signal<bool> readonly{probe.runtime(), true};
+    std::vector<std::string> changes;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::textInput({.value = "kept",
+                                      .onChange = [&changes](std::string text) { changes.push_back(std::move(text)); },
+                                      .field = {.readonly = [&readonly] { return readonly.get(); }}})};
+    probe.settle();
+    probe.type(view.root(), "typed");
+    probe.settle();
+    Checks checks;
+    checks.that(changes.empty(), "typing into a read-only input reached onChange");
+    checks.that(probe.textOf(view.root()) == "kept",
+                "a read-only input shows '" + probe.textOf(view.root()) + "' after typing, not its value 'kept'");
+    readonly.set(false);
+    probe.settle();
+    probe.type(view.root(), "typed");
+    probe.settle();
+    checks.that(changes == std::vector<std::string>{"typed"},
+                "typing into the input once editable again did not reach onChange once with the text");
+    return checks.result();
+}
+
+/// @brief Case: dismissing a dismissible banner reaches `onDismiss` once, and the banner stays shown.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> dismissedBannerStays(ConformanceProbe& probe) {
+    int dismissed = 0;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::banner({.text = "Saved", .dismissible = true, .onDismiss = [&dismissed] { ++dismissed; }})};
+    probe.settle();
+    probe.dismiss(view.root());
+    probe.settle();
+    Checks checks;
+    checks.that(dismissed == 1,
+                "dismissing the banner ran onDismiss " + std::to_string(dismissed) + " times, not once");
+    checks.that(probe.visibleOf(view.root()), "the banner hid itself; the application hides it");
+    return checks.result();
+}
+
+/// @brief Case: a closed collapsible section's content takes no click and its header does; the user's opening
+///        reaches `onToggle`, and once the application opens it the content takes clicks.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> closedCollapsibleKeepsItsHeader(ConformanceProbe& probe) {
+    reactive::Signal<bool> open{probe.runtime(), false};
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::collapsible(
+            {.title = "Advanced",
+             .open = [&open] { return open.get(); },
+             .onToggle = [&open](bool wanted) { open.set(wanted); },
+             .header = ui::button({.label = "Reset", .onClick = [&ran] { ran.emplace_back("header"); }}),
+             .child = ui::button({.label = "Apply", .onClick = [&ran] { ran.emplace_back("content"); }})})};
+    probe.settle();
+    Widget* const header = childOf(probe, &view.root(), 0);
+    Widget* const content = childOf(probe, &view.root(), 1);
+    if (header == nullptr || content == nullptr) {
+        return "a Collapsible does not show its header and its content as its two children";
+    }
+    probe.click(*header);
+    probe.click(*content);
+    probe.settle();
+    probe.expand(view.root(), true);
+    probe.settle();
+    probe.click(*content);
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"header", "content"},
+                "clicking the header and the content while closed, then the content once opened, ran " +
+                    std::to_string(ran.size()) + " handlers, not the header's and then the content's");
+    return checks.result();
+}
+
+/// @brief Case: a drop zone takes a drop of one accepted file, compared without case, and refuses a file it does
+///        not accept and several files when it takes one.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> dropZoneTakesWholeDrops(ConformanceProbe& probe) {
+    std::vector<std::vector<std::string>> drops;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::dropZone({.accept = {".csv"}, .onDrop = [&drops](std::vector<std::string> paths) {
+                                         drops.push_back(std::move(paths));
+                                     }})};
+    probe.settle();
+    probe.dropFiles(view.root(), {"/in/RUN.CSV"});
+    probe.dropFiles(view.root(), {"/in/notes.txt"});
+    probe.dropFiles(view.root(), {"/in/a.csv", "/in/b.csv"});
+    probe.settle();
+    Checks checks;
+    checks.that(drops == std::vector<std::vector<std::string>>{{"/in/RUN.CSV"}},
+                "of an accepted file, a refused one and two at once, the zone took " + std::to_string(drops.size()) +
+                    " drops, not the accepted file alone");
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief Every conformance case, in a fixed order.
@@ -1150,7 +1389,7 @@ private:
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 26> const cases{{
+    static std::array<ConformanceCase, 34> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -1186,6 +1425,16 @@ private:
         {.name = "a drag onto an accepting target delivers the key", .run = detail::dragOntoAcceptingTarget},
         {.name = "a drag onto a refusing target delivers nothing", .run = detail::dragOntoRefusingTarget},
         {.name = "a drop target without accepts takes every key", .run = detail::dropTargetWithoutAcceptsTakesAll},
+        {.name = "a chord goes to the innermost widget that declares it", .run = detail::innermostChordWins},
+        {.name = "a chord pressed inside a hidden container runs nothing", .run = detail::hiddenChordRunsNothing},
+        {.name = "the first autofocus widget in document order has focus", .run = detail::firstAutofocusWins},
+        {.name = "a menu reports only an enabled entry without a submenu",
+         .run = detail::onlyEnabledMenuLeavesAreChosen},
+        {.name = "a read-only input takes no edit", .run = detail::readOnlyInputTakesNoEdit},
+        {.name = "a dismissed banner reports it and stays shown", .run = detail::dismissedBannerStays},
+        {.name = "a closed collapsible's content takes no input, its header does",
+         .run = detail::closedCollapsibleKeepsItsHeader},
+        {.name = "a drop zone takes a drop whole or refuses it whole", .run = detail::dropZoneTakesWholeDrops},
     }};
     return cases;
 }

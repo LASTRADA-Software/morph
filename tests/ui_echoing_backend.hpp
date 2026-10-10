@@ -25,6 +25,19 @@ public:
                         std::function<void(::morph::ui::Key)> onDrop) override {
         _inner->setDropHandler(std::move(accepts), std::move(onDrop));
     }
+    void setAccessibleName(std::string_view name) override { _inner->setAccessibleName(name); }
+    void setAccessibleRole(std::string_view role) override { _inner->setAccessibleRole(role); }
+    void setTestId(std::string_view testId) override { _inner->setTestId(testId); }
+    void setTooltip(std::string_view text) override { _inner->setTooltip(text); }
+    void setSurface(std::string_view surface) override { _inner->setSurface(surface); }
+    void setKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) override {
+        _inner->setKeys(chords, std::move(onChord));
+    }
+    void focus() override { _inner->focus(); }
+    void setReadOnly(bool readonly) override { _inner->setReadOnly(readonly); }
+    void setRequired(bool required) override { _inner->setRequired(required); }
+    void setErrors(std::vector<std::string> const& errors) override { _inner->setErrors(errors); }
+    void setStale(bool stale) override { _inner->setStale(stale); }
     void setOptions(std::vector<::morph::ui::SelectOption> const& options) override {
         _inner->setOptions(options);
         if (auto const echo = _onSelect; echo && !options.empty()) {
@@ -131,6 +144,48 @@ public:
                                                                     ::morph::ui::FilePickerMode mode) override {
         created();
         return _recording.createFilePicker(parent, mode);
+    }
+    std::unique_ptr<::morph::ui::BannerWidget> createBanner(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createBanner(parent);
+    }
+    std::unique_ptr<::morph::ui::BadgeWidget> createBadge(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createBadge(parent);
+    }
+    std::unique_ptr<::morph::ui::ProgressWidget> createProgress(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createProgress(parent);
+    }
+    std::unique_ptr<::morph::ui::StepsWidget> createSteps(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createSteps(parent);
+    }
+    std::unique_ptr<::morph::ui::KeyValueWidget> createKeyValue(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createKeyValue(parent);
+    }
+    std::unique_ptr<::morph::ui::EmptyStateWidget> createEmptyState(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createEmptyState(parent);
+    }
+    std::unique_ptr<::morph::ui::CollapsibleWidget> createCollapsible(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createCollapsible(parent);
+    }
+    std::unique_ptr<::morph::ui::DropZoneWidget> createDropZone(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createDropZone(parent);
+    }
+    std::unique_ptr<::morph::ui::DrawerWidget> createDrawer(::morph::ui::ContainerWidget* parent,
+                                                            ::morph::ui::Side side) override {
+        created();
+        return _recording.createDrawer(parent, side);
+    }
+    std::unique_ptr<::morph::ui::SplitterWidget> createSplitter(::morph::ui::ContainerWidget* parent,
+                                                                ::morph::ui::Axis axis) override {
+        created();
+        return _recording.createSplitter(parent, axis);
     }
 
 private:

@@ -174,9 +174,14 @@ API surface).
 
 - **`morph::ui`: the view tree, its mount and the frontend seam.** Header-only, in the base `morph`
   target.
-  - An immutable view tree of the UI document's base palette (`view.hpp`): every property a constant
-    or a slot, a reactive value with an optional stable id (`ui::slot`), and every event a command
-    sink; keyed `forEach` and `table` over any row type.
+  - An immutable view tree of the UI document's palette (`view.hpp`): every property a constant or a
+    slot, a reactive value with an optional stable id (`ui::slot`), and every event a command sink;
+    keyed `forEach` and `table` over any row type. Besides the base kinds it carries banner, badge,
+    progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone and `custom`
+    (mounted as its fallback); the common properties `a11y`, `testId`, `tooltip`, `surface`, `keys`
+    (keyboard chords, the innermost declaring widget takes one) and `autofocus`; a field state
+    (`readonly`, `required`, `errors`, `stale`) on text and inputs, and a text input's `onCommit`;
+    and menus with icons, shown chords, check marks, enablement and submenus.
   - The backend contract (`backend.hpp`): one widget interface per kind and an `IViewBackend` with a
     typed factory each. No setter calls a handler, a setter with the value a widget shows changes
     nothing, and a widget the user cannot reach takes no input.
@@ -184,7 +189,8 @@ API surface).
     equality-gated bindings. Switch cases, Tabs pages, Dialog content and ForEach/Table rows mount
     all or nothing into child scopes, torn down child-first, with owners' bindings running first;
     rows keep their identity per key and reorder with the fewest moves. Input widgets are
-    controlled by their slots: a refused edit snaps back, an accepted one costs no setter call.
+    controlled by their slots, as are a drawer's `open`, a splitter's `sizes` and a collapsible
+    section's `open`: a refused request snaps back, an accepted one costs no setter call.
   - The frontend seam (`frontend.hpp`): `AppContext`, `AppSource` (`open`, `switchBackend`,
     `close`), `Bundle`, `ConnectError`, `Backend`, `Frontend`, and `selectFrontend`, which picks a
     frontend from `--ui`, `MORPH_UI` or the first usable one and returns a `FrontendError` naming the

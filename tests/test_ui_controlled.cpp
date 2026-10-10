@@ -205,6 +205,9 @@ TEST_CASE("ui controlled: every input kind shows its slot again after a request 
     Signal<std::size_t> const page{runtime, 0};
     Signal<bool> const open{runtime, true};
     Signal<std::vector<ui::Key>> const picked{runtime, {}};
+    Signal<std::vector<int>> const sizes{runtime, std::vector<int>{1, 1}};
+    Signal<bool> const sectionOpen{runtime, true};
+    Signal<bool> const drawerOpen{runtime, true};
     int requests = 0;
     auto const ignore = [&requests](auto&&...) { ++requests; };
     ui::Mounted const view{
@@ -241,6 +244,16 @@ TEST_CASE("ui controlled: every input kind shows its slot again after a request 
                      {.selectionMode = ui::SelectionMode::Single,
                       .selection = [&] { return picked.get(); },
                       .onSelectionChange = ignore}),
+                 ui::splitter({.children = {ui::text({.text = "left"}), ui::text({.text = "right"})},
+                               .sizes = [&] { return sizes.get(); },
+                               .onResize = ignore}),
+                 ui::collapsible({.title = "s",
+                                  .open = [&] { return sectionOpen.get(); },
+                                  .onToggle = ignore,
+                                  .child = ui::text({.text = "body"})}),
+                 ui::drawer({.open = [&] { return drawerOpen.get(); },
+                             .child = ui::text({.text = "aside"}),
+                             .onDismiss = [&requests] { ++requests; }}),
              }})};
     int const checkbox = only(backend, "Checkbox");
     int const select = only(backend, "Select");
@@ -251,6 +264,9 @@ TEST_CASE("ui controlled: every input kind shows its slot again after a request 
     int const tabBar = only(backend, "Tabs");
     int const dialog = only(backend, "Dialog");
     int const table = only(backend, "Table");
+    int const splitter = only(backend, "Splitter");
+    int const section = only(backend, "Collapsible");
+    int const drawer = only(backend, "Drawer");
     std::string const before = backend.dump();
 
     backend.toggle(checkbox);
@@ -264,7 +280,10 @@ TEST_CASE("ui controlled: every input kind shows its slot again after a request 
     backend.chooseIndex(tabBar, 1);
     backend.dismiss(dialog);
     backend.selectRows(table, {ui::Key{std::int64_t{2}}});
-    CHECK(requests == 9);
+    backend.resize(splitter, {3, 1});
+    backend.expand(section, false);
+    backend.dismiss(drawer);
+    CHECK(requests == 12);
     CHECK(backend.prop(checkbox, "checked") == "true");
     CHECK(backend.prop(select, "selected") == "2");
     CHECK(backend.prop(slider, "value") == "9");
@@ -274,6 +293,9 @@ TEST_CASE("ui controlled: every input kind shows its slot again after a request 
     CHECK(backend.prop(tabBar, "selected") == "1");
     CHECK(backend.prop(dialog, "open") == "false");
     CHECK(backend.prop(table, "selection") == "[2]");
+    CHECK(backend.prop(splitter, "sizes") == "[3,1]");
+    CHECK(backend.prop(section, "open") == "false");
+    CHECK(backend.prop(drawer, "open") == "false");
 
     owner.runAll();
     CHECK(backend.prop(checkbox, "checked") == "false");
@@ -285,6 +307,9 @@ TEST_CASE("ui controlled: every input kind shows its slot again after a request 
     CHECK(backend.prop(tabBar, "selected") == "0");
     CHECK(backend.prop(dialog, "open") == "true");
     CHECK(backend.prop(table, "selection") == "[]");
+    CHECK(backend.prop(splitter, "sizes") == "[1,1]");
+    CHECK(backend.prop(section, "open") == "true");
+    CHECK(backend.prop(drawer, "open") == "true");
     CHECK(backend.dump() == before);
 }
 
