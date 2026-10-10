@@ -68,7 +68,10 @@ int main(int argc, char** argv) {
 #if MORPH_CLIENT_HAS_TUI
     built.push_back(tui::frontendOption());
 #endif
-    return ui::selectFrontend(built, argc, argv)->run(*source);
+    std::vector<std::string> args{argv, argv + argc};
+    auto frontend = ui::selectFrontend(built, args);  // removes --ui (spec 1 §5b)
+    if (!frontend) { std::cerr << frontend.error().message() << '\n'; return 2; }
+    return (*frontend)->run(*source);
 }
 ```
 

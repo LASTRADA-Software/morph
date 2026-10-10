@@ -66,7 +66,7 @@ TEST_CASE("ui controlled: an edit the slot refuses snaps back once the event's t
     CHECK(backend.log() == Lines{"set TextInput#1 text=a"});
 }
 
-// Mutations: in Mounter::reassert, show the slot whatever the widget shows; in Mounter::controlled, send a value the
+// Mutations: in Mounter::showSlot, show the slot whatever the widget shows; in Mounter::controlled, send a value the
 // widget already shows. Either adds a setText the field does not need.
 TEST_CASE("ui controlled: an accepted edit costs no setter call", "[ui]") {
     Owner owner;
