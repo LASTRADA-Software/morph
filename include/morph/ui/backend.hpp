@@ -104,8 +104,30 @@ public:
     virtual void moveChild(Widget& child, std::size_t index) = 0;
 };
 
+/// @brief A widget that shows a value: text, or an input. A new field is editable, not required, without errors and
+///        not stale.
+class FieldWidget : public Widget {
+public:
+    /// @brief Makes the value read-only or editable again. A read-only field still takes focus and lets its text be
+    ///        selected, and reports no edit, submit or commit.
+    /// @param readonly Whether the user may not change the value.
+    virtual void setReadOnly(bool readonly) = 0;
+
+    /// @brief Shows or clears the mark of a field that must be given.
+    /// @param required Whether to show the mark.
+    virtual void setRequired(bool required) = 0;
+
+    /// @brief Replaces the messages shown with the field.
+    /// @param errors The messages, in order, UTF-8; empty shows none.
+    virtual void setErrors(std::vector<std::string> const& errors) = 0;
+
+    /// @brief Shows or clears the mark of a value that is being recomputed.
+    /// @param stale Whether the value shown is the last known one.
+    virtual void setStale(bool stale) = 0;
+};
+
 /// @brief Read-only text.
-class TextWidget : public Widget {
+class TextWidget : public FieldWidget {
 public:
     /// @brief Replaces the text.
     /// @param text The text, UTF-8.
@@ -129,7 +151,7 @@ public:
 };
 
 /// @brief An editable text field.
-class TextInputWidget : public Widget {
+class TextInputWidget : public FieldWidget {
 public:
     /// @brief Replaces the text. Never calls the `onChange` handler. With the text the field already shows, it changes
     ///        nothing: the cursor, the selection and an input method's composition stay as they are.
@@ -147,10 +169,15 @@ public:
     /// @brief Sets what a submit (Enter in single-line mode) calls, with the text.
     /// @param onSubmit The handler; empty does nothing.
     virtual void setOnSubmit(std::function<void(std::string)> onSubmit) = 0;
+
+    /// @brief Sets what a commit calls, with the text: Enter in single-line mode, before the submit, or focus
+    ///        leaving the field after an edit.
+    /// @param onCommit The handler; empty does nothing.
+    virtual void setOnCommit(std::function<void(std::string)> onCommit) = 0;
 };
 
 /// @brief A labelled check box.
-class CheckboxWidget : public Widget {
+class CheckboxWidget : public FieldWidget {
 public:
     /// @brief Replaces the caption.
     /// @param label The caption, UTF-8.
@@ -170,7 +197,7 @@ public:
 /// The widget keeps the key last requested by `setSelected` or chosen by the user, and marks the option with that key
 /// whenever the current options contain one. A key outside the options marks none, and stays requested: options that
 /// bring it back mark it again. Options and selection may therefore arrive in either order.
-class SelectWidget : public Widget {
+class SelectWidget : public FieldWidget {
 public:
     /// @brief Replaces the options, and marks the requested key's option if they contain it.
     /// @param options The options, in order.
@@ -186,16 +213,38 @@ public:
     virtual void setOnSelect(std::function<void(Key)> onSelect) = 0;
 };
 
-/// @brief A vertical list of commands.
+/// @brief One entry of a menu as a `MenuWidget` shows it.
+struct MenuEntry {
+    /// @brief The caption.
+    std::string label;
+    /// @brief The icon's name in the theme's icon map; empty shows none.
+    std::string icon;
+    /// @brief The chord shown beside the label; empty shows none.
+    std::string keys;
+    /// @brief Engaged: a checkable entry with this mark; `nullopt`: not checkable.
+    std::optional<bool> checked;
+    /// @brief Whether the entry can be chosen, or its submenu opened.
+    bool enabled = true;
+    /// @brief The submenu; empty for an entry that is chosen.
+    std::vector<MenuEntry> items;
+
+    /// @brief Memberwise equality, submenus included.
+    /// @return Whether every field matches.
+    bool operator==(MenuEntry const&) const = default;
+};
+
+/// @brief A menu of commands, with nested submenus.
 class MenuWidget : public Widget {
 public:
     /// @brief Replaces the entries.
-    /// @param labels One caption per entry, in order.
-    virtual void setItems(std::vector<std::string> const& labels) = 0;
+    /// @param entries The entries, in order, each with its submenu.
+    virtual void setItems(std::vector<MenuEntry> const& entries) = 0;
 
-    /// @brief Sets what choosing an entry calls, with its index.
-    /// @param onActivate The handler; empty does nothing.
-    virtual void setOnActivate(std::function<void(std::size_t)> onActivate) = 0;
+    /// @brief Sets what choosing an entry calls, with its path.
+    ///
+    /// Only an enabled entry without a submenu, inside enabled entries, can be chosen.
+    /// @param onActivate The handler, given the entry's index at each level from the top; empty does nothing.
+    virtual void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) = 0;
 };
 
 /// @brief Children stacked along one axis, fixed at creation.
@@ -352,7 +401,7 @@ public:
 };
 
 /// @brief A date or date-and-time field, in the mode and display zone fixed at creation.
-class DateTimeInputWidget : public Widget {
+class DateTimeInputWidget : public FieldWidget {
 public:
     /// @brief Shows an instant. Never calls the `onChange` handler.
     /// @param value The instant; `nullopt` or an empty `Timestamp` shows an empty field.
@@ -364,7 +413,7 @@ public:
 };
 
 /// @brief An integer on a range.
-class SliderWidget : public Widget {
+class SliderWidget : public FieldWidget {
 public:
     /// @brief Sets the range and the increment.
     /// @param minimum The smallest value.
@@ -382,7 +431,7 @@ public:
 };
 
 /// @brief A file path field, in the mode fixed at creation.
-class FilePickerWidget : public Widget {
+class FilePickerWidget : public FieldWidget {
 public:
     /// @brief Shows a path. Never calls the `onPicked` handler.
     /// @param path The path, UTF-8.

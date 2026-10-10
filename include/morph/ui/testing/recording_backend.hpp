@@ -81,6 +81,39 @@ template <typename Special>
     return escape(text, [](char character) { return std::string_view{"=,[]"}.contains(character); });
 }
 
+/// @brief Formats a menu's entries: `[a,b]`, each entry its label followed by the attributes that differ from the
+///        default, as `;icon=x`, `;keys=x`, `;checked=true` or `;checked=false`, and `;enabled=false`, then its
+///        submenu in brackets. A flat menu of plain entries reads `[Open,Quit]`.
+/// @param entries The entries.
+/// @return Their text; `=`, `,`, `[`, `]` and `;` in a label or attribute are escaped.
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is formatted as a menu one level down.
+[[nodiscard]] inline std::string formatMenu(std::vector<MenuEntry> const& entries) {
+    auto const text = [](std::string_view value) {
+        return escape(value, [](char character) { return std::string_view{"=,[];"}.contains(character); });
+    };
+    std::string formatted = "[";
+    for (MenuEntry const& entry : entries) {
+        formatted += formatted.size() == 1 ? "" : ",";
+        formatted += text(entry.label);
+        if (!entry.icon.empty()) {
+            formatted += ";icon=" + text(entry.icon);
+        }
+        if (!entry.keys.empty()) {
+            formatted += ";keys=" + text(entry.keys);
+        }
+        if (entry.checked.has_value()) {
+            formatted += std::string{";checked="} + (*entry.checked ? "true" : "false");
+        }
+        if (!entry.enabled) {
+            formatted += ";enabled=false";
+        }
+        if (!entry.items.empty()) {
+            formatted += formatMenu(entry.items);
+        }
+    }
+    return formatted + "]";
+}
+
 /// @brief Formats a key: an integer in decimal, a string in double quotes, so `7` and `"7"` differ.
 /// @param key The key.
 /// @return Its text. A string key is escaped as `formatItem` escapes, and a double quote in it is preceded by a
@@ -274,11 +307,13 @@ struct Callbacks {
     std::function<void(std::string)> change;
     /// @brief From `TextInputWidget::setOnSubmit`.
     std::function<void(std::string)> submit;
+    /// @brief From `TextInputWidget::setOnCommit`.
+    std::function<void(std::string)> commit;
     /// @brief From `CheckboxWidget::setOnToggle` or `PanelWidget::setOnToggle`.
     std::function<void(bool)> toggle;
     /// @brief From `SelectWidget::setOnSelect`.
     std::function<void(Key)> select;
-    /// @brief From `MenuWidget::setOnActivate` or `TabsWidget::setOnSelect`.
+    /// @brief From `TabsWidget::setOnSelect`.
     std::function<void(std::size_t)> index;
     /// @brief From `DateTimeInputWidget::setOnChange`.
     std::function<void(std::optional<morph::time::Timestamp>)> dateTime;
@@ -298,6 +333,8 @@ struct Callbacks {
     std::function<void(Key)> drop;
     /// @brief The chord handler, from `Widget::setKeys`.
     std::function<void(std::string)> chord;
+    /// @brief A menu's activation handler, from `MenuWidget::setOnActivate`.
+    std::function<void(std::vector<std::size_t>)> path;
 };
 
 /// @brief One fake widget's state.
@@ -318,6 +355,8 @@ struct Record {
     std::optional<Key> dragKey;
     /// @brief The chords, as `setKeys` last set them.
     std::vector<std::string> chords;
+    /// @brief A menu's entries, as `setItems` last set them.
+    std::vector<MenuEntry> menu;
     /// @brief The fake widget object.
     Widget* widget = nullptr;
     /// @brief Called with a child's id once that child is destroyed; a fake table re-marks its selection with it.
@@ -656,10 +695,36 @@ public:
     }
 };
 
-/// @brief A fake `TextWidget`: properties `text`, `role`.
-class FakeText final : public FakeLeaf<TextWidget> {
+/// @brief The `FieldWidget` half of every fake field: properties `readonly`, `required`, `errors`, `stale`.
+/// @tparam Interface The field interface the fake implements.
+template <typename Interface>
+class FakeField : public FakeLeaf<Interface> {
 public:
-    using FakeLeaf<TextWidget>::FakeLeaf;
+    using FakeLeaf<Interface>::FakeLeaf;
+
+    /// @brief Records property `readonly`; `RecordingBackend`'s edits leave a read-only field alone.
+    /// @param readonly Whether the user may not change the value.
+    void setReadOnly(bool readonly) override { this->set("readonly", formatBool(readonly)); }
+
+    /// @brief Records property `required`.
+    /// @param required Whether the field is marked required.
+    void setRequired(bool required) override { this->set("required", formatBool(required)); }
+
+    /// @brief Records property `errors`, as `formatList` gives the messages.
+    /// @param errors The messages.
+    void setErrors(std::vector<std::string> const& errors) override {
+        this->set("errors", formatList(errors, [](std::string const& error) { return formatItem(error); }));
+    }
+
+    /// @brief Records property `stale`.
+    /// @param stale Whether the value is being recomputed.
+    void setStale(bool stale) override { this->set("stale", formatBool(stale)); }
+};
+
+/// @brief A fake `TextWidget`: properties `text`, `role`.
+class FakeText final : public FakeField<TextWidget> {
+public:
+    using FakeField<TextWidget>::FakeField;
     void setText(std::string_view text) override { set("text", formatText(text)); }
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
@@ -672,13 +737,13 @@ public:
     void setOnClick(Action onClick) override { callbacks().click = std::move(onClick); }
 };
 
-/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, and a text cursor.
+/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, the field state, and a text cursor.
 ///
 /// The cursor is a byte offset into the text. A user's edit puts it where the edit left it; `setText` with the text
 /// the field shows leaves it alone, as the contract requires, and `setText` with another text puts it at the end.
-class FakeTextInput final : public FakeLeaf<TextInputWidget> {
+class FakeTextInput final : public FakeField<TextInputWidget> {
 public:
-    using FakeLeaf<TextInputWidget>::FakeLeaf;
+    using FakeField<TextInputWidget>::FakeField;
 
     /// @brief Records property `text`; moves the cursor to the end only when the text changes.
     /// @param text The text, UTF-8.
@@ -707,9 +772,14 @@ public:
     /// @return A byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _cursor; }
 
+    /// @brief The text the field shows.
+    /// @return The text, unformatted.
+    [[nodiscard]] std::string const& text() const noexcept { return _shown; }
+
     void setPlaceholder(std::string_view placeholder) override { set("placeholder", formatText(placeholder)); }
     void setOnChange(std::function<void(std::string)> onChange) override { callbacks().change = std::move(onChange); }
     void setOnSubmit(std::function<void(std::string)> onSubmit) override { callbacks().submit = std::move(onSubmit); }
+    void setOnCommit(std::function<void(std::string)> onCommit) override { callbacks().commit = std::move(onCommit); }
 
 private:
     std::string _shown;
@@ -717,9 +787,9 @@ private:
 };
 
 /// @brief A fake `CheckboxWidget`: properties `label`, `checked`.
-class FakeCheckbox final : public FakeLeaf<CheckboxWidget> {
+class FakeCheckbox final : public FakeField<CheckboxWidget> {
 public:
-    using FakeLeaf<CheckboxWidget>::FakeLeaf;
+    using FakeField<CheckboxWidget>::FakeField;
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
     void setChecked(bool checked) override { set("checked", formatBool(checked)); }
     void setOnToggle(std::function<void(bool)> onToggle) override { callbacks().toggle = std::move(onToggle); }
@@ -730,9 +800,9 @@ public:
 /// `selected` shows the option the widget marks: the requested key while the options contain it, else `none`. The
 /// requested key is kept, so options that bring it back mark it again; that re-marking is the widget's own doing and
 /// is not logged.
-class FakeSelect final : public FakeLeaf<SelectWidget> {
+class FakeSelect final : public FakeField<SelectWidget> {
 public:
-    using FakeLeaf<SelectWidget>::FakeLeaf;
+    using FakeField<SelectWidget>::FakeField;
 
     /// @brief Records property `options`, and re-marks the requested key against them.
     /// @param options The options, in order.
@@ -788,11 +858,12 @@ private:
 class FakeMenu final : public FakeLeaf<MenuWidget> {
 public:
     using FakeLeaf<MenuWidget>::FakeLeaf;
-    void setItems(std::vector<std::string> const& labels) override {
-        set("items", formatList(labels, [](std::string const& label) { return formatItem(label); }));
+    void setItems(std::vector<MenuEntry> const& entries) override {
+        store().at(id()).menu = entries;
+        set("items", formatMenu(entries));
     }
-    void setOnActivate(std::function<void(std::size_t)> onActivate) override {
-        callbacks().index = std::move(onActivate);
+    void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override {
+        callbacks().path = std::move(onActivate);
     }
 };
 
@@ -843,9 +914,9 @@ public:
 };
 
 /// @brief A fake `DateTimeInputWidget`: properties `mode`, `offset`, `value`.
-class FakeDateTimeInput final : public FakeLeaf<DateTimeInputWidget> {
+class FakeDateTimeInput final : public FakeField<DateTimeInputWidget> {
 public:
-    using FakeLeaf<DateTimeInputWidget>::FakeLeaf;
+    using FakeField<DateTimeInputWidget>::FakeField;
     void setValue(std::optional<morph::time::Timestamp> const& value) override {
         set("value", formatTimestamp(value));
     }
@@ -855,9 +926,9 @@ public:
 };
 
 /// @brief A fake `SliderWidget`: properties `range` (`minimum..maximum/step`), `value`.
-class FakeSlider final : public FakeLeaf<SliderWidget> {
+class FakeSlider final : public FakeField<SliderWidget> {
 public:
-    using FakeLeaf<SliderWidget>::FakeLeaf;
+    using FakeField<SliderWidget>::FakeField;
     void setRange(std::int64_t minimum, std::int64_t maximum, std::int64_t step) override {
         set("range", std::to_string(minimum) + ".." + std::to_string(maximum) + "/" + std::to_string(step));
     }
@@ -866,9 +937,9 @@ public:
 };
 
 /// @brief A fake `FilePickerWidget`: properties `mode`, `path`.
-class FakeFilePicker final : public FakeLeaf<FilePickerWidget> {
+class FakeFilePicker final : public FakeField<FilePickerWidget> {
 public:
-    using FakeLeaf<FilePickerWidget>::FakeLeaf;
+    using FakeField<FilePickerWidget>::FakeField;
     void setPath(std::string_view path) override { set("path", formatText(path)); }
     void setOnPicked(std::function<void(std::string)> onPicked) override { callbacks().picked = std::move(onPicked); }
 };
@@ -1235,24 +1306,27 @@ public:
     /// @param text The whole new text.
     /// @throws std::logic_error when the widget is not a text field.
     void edit(int widgetId, std::string text) {
-        if (detail::Record const* const record = actionable(widgetId, "edit", {"TextInput"}); record != nullptr) {
+        if (detail::Record const* const record = editable(widgetId, "edit", {"TextInput"}); record != nullptr) {
             textInput(*record).typedByUser(text, text.size());
             invoke(record->callbacks.change, std::move(text));
         }
     }
 
-    /// @brief Submits a text field with @p text, which it then shows with the cursor at its end.
+    /// @brief Submits a text field with @p text, as Enter does: the field shows it with the cursor at its end,
+    ///        `onCommit` gets it, then `onSubmit`.
     /// @param widgetId The field.
     /// @param text The text submitted.
     /// @throws std::logic_error when the widget is not a text field.
     void submit(int widgetId, std::string text) {
-        if (detail::Record const* const record = actionable(widgetId, "submit", {"TextInput"}); record != nullptr) {
+        if (detail::Record const* const record = editable(widgetId, "submit", {"TextInput"}); record != nullptr) {
             textInput(*record).typedByUser(text, text.size());
+            invoke(record->callbacks.commit, text);
             invoke(record->callbacks.submit, std::move(text));
         }
     }
 
-    /// @brief Moves a text field's cursor, as the arrow keys or a click would; no handler runs.
+    /// @brief Moves a text field's cursor, as the arrow keys or a click would; no handler runs. A read-only field
+    ///        takes it too, since moving the cursor changes nothing.
     /// @param widgetId The field.
     /// @param position A byte offset into the text it shows; clamped to the text's size.
     /// @throws std::logic_error when the widget is not a text field.
@@ -1273,11 +1347,20 @@ public:
         return textInput(expectKind(widgetId, "cursor", {"TextInput"})).cursor();
     }
 
+    /// @brief Commits a text field as focus leaving it after an edit does: `onCommit` gets the text it shows.
+    /// @param widgetId The field.
+    /// @throws std::logic_error when the widget is not a text field.
+    void commit(int widgetId) {
+        if (detail::Record const* const record = editable(widgetId, "commit", {"TextInput"}); record != nullptr) {
+            invoke(record->callbacks.commit, textInput(*record).text());
+        }
+    }
+
     /// @brief Toggles a check box: it flips its own `checked`, then `onToggle` gets the new state.
     /// @param widgetId The check box.
     /// @throws std::logic_error when the widget is not a check box.
     void toggle(int widgetId) {
-        if (detail::Record const* const record = actionable(widgetId, "toggle", {"Checkbox"}); record != nullptr) {
+        if (detail::Record const* const record = editable(widgetId, "toggle", {"Checkbox"}); record != nullptr) {
             bool const checked = prop(widgetId, "checked") != "true";
             _store->setByUser(widgetId, "checked", detail::formatBool(checked));
             invoke(record->callbacks.toggle, checked);
@@ -1296,13 +1379,39 @@ public:
             throw std::logic_error{"RecordingBackend: choose of " + detail::formatKey(key) + ", which Select#" +
                                    std::to_string(widgetId) + " does not offer"};
         }
-        if (reachable(record)) {
+        if (reachable(record) && !flagIs(record, "readonly", true)) {
             select->chooseByUser(key);
             invoke(record.callbacks.select, std::move(key));
         }
     }
 
-    /// @brief Chooses an entry of a menu, or a tab of a tab bar (which marks it selected).
+    /// @brief Chooses an entry of a menu by its path, as a user opening each submenu on the way would.
+    ///
+    /// Nothing happens for a path that names no entry, an entry with a submenu (it opens rather than runs), or an
+    /// entry that is disabled or inside a disabled entry.
+    /// @param widgetId The menu.
+    /// @param path The entry's index at each level, from the top.
+    /// @throws std::logic_error when the widget is not a menu.
+    void chooseMenuEntry(int widgetId, std::vector<std::size_t> const& path) {
+        detail::Record const* const record = actionable(widgetId, "chooseMenuEntry", {"Menu"});
+        if (record == nullptr) {
+            return;
+        }
+        std::vector<MenuEntry> const* level = &record->menu;
+        MenuEntry const* entry = nullptr;
+        for (std::size_t const index : path) {
+            if (level == nullptr || index >= level->size() || !level->at(index).enabled) {
+                return;
+            }
+            entry = &level->at(index);
+            level = &entry->items;
+        }
+        if (entry != nullptr && entry->items.empty()) {
+            invoke(record->callbacks.path, path);
+        }
+    }
+
+    /// @brief Chooses an entry of a menu's top level, or a tab of a tab bar (which marks it selected).
     /// @param widgetId The menu or tab bar.
     /// @param index The entry or tab.
     /// @throws std::logic_error when the widget is neither a menu nor a tab bar.
@@ -1311,8 +1420,10 @@ public:
             record != nullptr) {
             if (record->kind == "Tabs") {
                 _store->setByUser(widgetId, "selected", std::to_string(index));
+                invoke(record->callbacks.index, index);
+            } else {
+                chooseMenuEntry(widgetId, {index});
             }
-            invoke(record->callbacks.index, index);
         }
     }
 
@@ -1394,7 +1505,7 @@ public:
     /// @param value The instant entered.
     /// @throws std::logic_error when the widget is not a date-time field.
     void setDateTime(int widgetId, std::optional<morph::time::Timestamp> value) {
-        if (detail::Record const* const record = actionable(widgetId, "setDateTime", {"DateTimeInput"});
+        if (detail::Record const* const record = editable(widgetId, "setDateTime", {"DateTimeInput"});
             record != nullptr) {
             _store->setByUser(widgetId, "value", detail::formatTimestamp(value));
             invoke(record->callbacks.dateTime, value);
@@ -1406,7 +1517,7 @@ public:
     /// @param value The value moved to.
     /// @throws std::logic_error when the widget is not a slider.
     void slide(int widgetId, std::int64_t value) {
-        if (detail::Record const* const record = actionable(widgetId, "slide", {"Slider"}); record != nullptr) {
+        if (detail::Record const* const record = editable(widgetId, "slide", {"Slider"}); record != nullptr) {
             _store->setByUser(widgetId, "value", std::to_string(value));
             invoke(record->callbacks.slide, value);
         }
@@ -1417,7 +1528,7 @@ public:
     /// @param path The path picked.
     /// @throws std::logic_error when the widget is not a file picker.
     void pick(int widgetId, std::string path) {
-        if (detail::Record const* const record = actionable(widgetId, "pick", {"FilePicker"}); record != nullptr) {
+        if (detail::Record const* const record = editable(widgetId, "pick", {"FilePicker"}); record != nullptr) {
             _store->setByUser(widgetId, "path", detail::formatText(path));
             invoke(record->callbacks.picked, std::move(path));
         }
@@ -1471,6 +1582,13 @@ private:
                                              std::initializer_list<std::string_view> kinds) {
         detail::Record& record = expectKind(widgetId, helper, kinds);
         return reachable(record) ? &record : nullptr;
+    }
+
+    // The widget's record when a user could reach it now and change its value, else null.
+    [[nodiscard]] detail::Record* editable(int widgetId, std::string_view helper,
+                                           std::initializer_list<std::string_view> kinds) {
+        detail::Record* const record = actionable(widgetId, helper, kinds);
+        return record != nullptr && !flagIs(*record, "readonly", true) ? record : nullptr;
     }
 
     // A user reaches a widget that is shown and enabled, inside containers that are all shown, enabled and not

@@ -28,9 +28,11 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   display zone, a Select's style, a FilePicker's mode) are factory arguments.
 - **A new widget is visible, enabled, content-sized, not draggable and not a drop target, and has
   no accessible name or role of its own, no test id, no tooltip, the theme's default surface and no
-  chords. A new dialog is closed.** The mount calls the `Widget` setters for those defaults
+  chords. A new field (text and the six inputs) is editable, not required, without errors and not
+  stale. A new dialog is closed.** The mount calls the `Widget` setters for those defaults
   (`setVisible`, `setEnabled`, `setLayout`, `setDragKey`, `setDropHandler`, `setAccessibleName`,
-  `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface`, `setKeys`) only to change them; it
+  `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface`, `setKeys`) and the `FieldWidget`
+  setters (`setReadOnly`, `setRequired`, `setErrors`, `setStale`) only to change them; it
   calls a dialog's `setOpen` at mount whatever the value, `false` included.
 - **Focus.** `focus()` moves keyboard focus to the widget. The mount calls it on the first
   `autofocus` widget in document order once a mount completes ([view tree](view_tree.md#focus)).
@@ -38,15 +40,23 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   it, and `onChord` receives the chord pressed. A chord pressed while focus is inside several
   widgets that declare it goes to the innermost of them only, and a chord pressed inside a widget
   that takes no input (below) goes to none.
+- **Read-only.** A field made read-only by `setReadOnly(true)` shows its value, takes focus and
+  lets its text be selected, and reports no edit, submit or commit; `setReadOnly(false)` makes it
+  editable again.
+- **Menus.** `setItems` replaces the whole tree of `MenuEntry{label, icon, keys, checked, enabled,
+  items}`. `keys` is only shown beside the label; `checked` engaged shows a check mark that only
+  `setItems` moves; an entry with `items` opens its submenu. `onActivate` receives the chosen
+  entry's path, its index at each level from the top, and only for an enabled entry without a
+  submenu whose ancestors are all enabled.
 - Every setter takes UTF-8. **A setter called with the value the widget already shows changes
   nothing**: in particular a text input keeps its cursor, its selection and an input method's
   composition. A controlled input's re-assertion, or another renderer, may make such a call.
 - **Input widgets are controlled.** A user's action changes what the widget shows, as the toolkit
   does by itself, and reports the request through the handler; the mount then shows what the
   application's slot says, in a turn posted after the request's flush, so a request the application
-  refuses snaps back ([`view_tree.md`, "Controlled inputs"](view_tree.md#controlled-inputs)). A user's
-  dismissal closes a dialog before `onDismiss` runs; a dialog the application keeps open is opened
-  again.
+  refuses snaps back ([`view_tree.md`, "Controlled inputs"](view_tree.md#controlled-inputs)). A
+  commit requests no value, so it is not followed by a re-assertion. A user's dismissal closes a
+  dialog before `onDismiss` runs; a dialog the application keeps open is opened again.
 - **No setter calls a handler.** Setting a value, replacing options, items or rows, requesting a
   selection, opening or closing, collapsing — none of it is a user's doing, so none of it reaches
   `onChange`, `onToggle`, `onSelect`, `onSelectionChange` or any other handler. That covers what a
@@ -101,12 +111,13 @@ reorders children, and only through this.
 |---|---|---|
 | `Widget` | `setVisible`, `setEnabled`, `setLayout(LayoutHints)`, `setDragKey(optional<Key>)`, `setAccessibleName`, `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface`, `focus()` | `setDropHandler(accepts, onDrop)`, `setKeys(chords, onChord)` (the chord pressed) |
 | `ContainerWidget` | `moveChild(child, index)` | — |
+| `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale` | — |
 | `TextWidget` | `setText`, `setRole` | — |
 | `ButtonWidget` | `setLabel` | `setOnClick` (Enter, Space or a click) |
-| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder` | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode) |
+| `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder` | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)` | `setOnSelect(Key)` |
-| `MenuWidget` | `setItems(labels)` | `setOnActivate(index)` |
+| `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |
 | `StackWidget` | `setGap` | — |
 | `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)` | — |
 | `SpacerWidget` | — | — |
@@ -166,9 +177,10 @@ The headless reference backend and the test double for everything above the cont
   order, children indented two spaces per depth, every line ending in a newline. A child whose
   parent was destroyed first becomes a root.
 - **Properties.** Every kind records `visible`, `enabled`, `layout`, `dragKey`, `drop`, `a11yName`,
-  `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run, and its own: `text`, `role` (Text); `label` (Button); `mode`, `text`, `placeholder`
+  `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
+  inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
-  `selected` is the option it marks, else `none`); `items` (Menu); `gap` (Column, Row); `columns`,
+  `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap` (Column, Row); `columns`,
   `gap`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
   `axis` (Scroll); `tabs`, `selected` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
   `columns`, `selectionMode`, `selection` (the requested keys it marks, in the order requested),
@@ -178,10 +190,14 @@ The headless reference backend and the test double for everything above the cont
   double-quoted string (`7` and `"7"` differ); `none` for an absent key or date; a date as an
   ISO-8601 UTC instant with milliseconds, `empty` for an empty `Timestamp`; sizing as `content`,
   `fixed(n)` or `stretch(n)`, a layout as `width/height`; lists as `[a,b]`; options as
-  `[key:label,…]`; columns as `[label:sizing,…]`; a slider's range as `minimum..maximum/step`.
+  `[key:label,…]`; columns as `[label:sizing,…]`; a slider's range as `minimum..maximum/step`; a
+  menu as `[label;attr=value…,…]`, where an entry's attributes follow its label only when they
+  differ from the default (`;icon=`, `;keys=`, `;checked=true` or `false`, `;enabled=false`) and
+  its submenu follows in brackets: `[File[Open;keys=Ctrl+O,Recent[a.txt]],Wrap;checked=true]`.
 - **Escaping.** Free text is escaped so that every value stays on its line and reads as one field:
   a line feed becomes `\n`, a carriage return `\r`, and a backslash or `=` is preceded by a
-  backslash. Text inside a list also escapes `,`, `[` and `]`, and a string key also escapes `"`.
+  backslash. Text inside a list also escapes `,`, `[` and `]`, text inside a menu also `;`, and a
+  string key also escapes `"`.
 - **Lookups.** `find(kind, name, value)` is the first live widget, by id, of that kind whose
   property equals `value`, compared against the escaped form; `all(kind)` lists them in creation
   order; `prop(id, name)` is the escaped value, or empty when never set, and `hasProp(id, name)`
@@ -189,16 +205,22 @@ The headless reference backend and the test double for everything above the cont
   `widget(id)`. `prop`, `hasProp`, `kindOf`, `children` and `widget` throw `std::out_of_range`
   for an id that names no live widget, where `exists` returns false; `idOf` throws it for a widget
   that is not one of this backend's live widgets.
-- **Interaction helpers** act as the user would: `click`, `edit`, `submit`, `moveCursor`, `toggle`,
-  `choose`, `chooseIndex`, `collapse`, `dismiss`, `selectRows`, `activateRow`, `setDateTime`, `slide`,
-  `pick` and `drag`. A helper first changes what the native widget would change by itself — the
-  field's text and cursor, the box's check mark, the marked option or rows, the highlighted tab, the
-  collapsed state, a dismissed dialog's `open`, the value or path — and then calls the stored
-  handler. It calls a copy of the handler, so a handler may
+- **Interaction helpers** act as the user would: `click`, `edit`, `submit` (Enter: the commit,
+  then the submit), `commit` (focus leaving: the text the field shows), `moveCursor`, `toggle`,
+  `choose`, `chooseIndex` (a menu's top-level entry or a tab), `chooseMenuEntry(id, path)`,
+  `collapse`, `dismiss`, `selectRows`, `activateRow`, `setDateTime`, `slide`, `pick` and `drag`. A
+  helper first changes what the native widget would change by itself — the field's text and
+  cursor, the box's check mark, the marked option or rows, the highlighted tab, the collapsed state,
+  a dismissed dialog's `open`, the value or path — and then calls the stored handler. It calls a
+  copy of the handler, so a handler may
   destroy its own widget.
   - A widget the user cannot reach ignores every helper: one that is hidden or disabled, or inside a
     container that is hidden, disabled or collapsed, or a closed dialog or anything inside one.
     `activateRow` asks that of the row, `drag` of both widgets.
+  - A read-only field also ignores `edit`, `submit`, `commit`, `toggle`, `choose`, `setDateTime`,
+    `slide` and `pick`.
+  - `chooseMenuEntry` and `chooseIndex` on a menu run nothing for a path that names no entry, an
+    entry with a submenu, or an entry that is disabled or inside a disabled one.
   - `press(id, chord)` presses a chord with focus on widget `id`: the innermost widget from `id`
     outwards that declares the chord receives it, and `press` returns whether one did. It changes
     no recorded focus.
@@ -253,6 +275,7 @@ after it; its reading operations report what the widget shows now.
 
 | `press(focused, chord)` | Presses a chord with focus on a widget, moving focus there first if the probe must |
 | `hasFocus(widget)` | Whether the widget has keyboard focus |
+| `chooseMenuEntry(menu, path)` | Chooses a menu entry by its path, opening each submenu on the way |
 
 A case reaches widgets only through `Mounted::root()`, `childAt` and further roots it mounts, or
 through widgets it makes with `backend()` itself, so a probe needs no lookup by name.
@@ -300,14 +323,20 @@ Each case is named by the rule it checks:
     reaches that widget.
 28. A chord pressed inside a container hidden two levels up runs nothing; while shown it runs once.
 29. The first `autofocus` widget in document order has focus once the mount completes.
+30. A menu reports only an enabled entry without a submenu, and an entry enabled later can be
+    chosen.
+31. Typing into a read-only input reaches no handler and leaves its value; once editable again,
+    typing reaches `onChange`.
 
 ### What the probe cannot reach
 
-The probe drives clicks, typing, drags, dismissals and row selection only, so some rules of this
+The probe drives clicks, typing, chords, menu choices, drags, dismissals and row selection only, so some rules of this
 contract are each backend's own tests to make:
 
 - that a widget the user cannot reach takes no `choose`, `toggle` or row activation, and that a
   drag onto an unreachable target delivers nothing;
+- that a read-only check box, select, date-time input, slider or file picker takes no change, and
+  that a read-only text input takes no submit or commit — rule 31 checks typing only;
 - that rules 22 and 23 hold for handler kinds other than a click;
 - that a hidden Table cell's neighbours are drawn under their own headers — rule 21 checks the
   row's structure only;

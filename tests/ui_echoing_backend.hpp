@@ -34,6 +34,10 @@ public:
         _inner->setKeys(chords, std::move(onChord));
     }
     void focus() override { _inner->focus(); }
+    void setReadOnly(bool readonly) override { _inner->setReadOnly(readonly); }
+    void setRequired(bool required) override { _inner->setRequired(required); }
+    void setErrors(std::vector<std::string> const& errors) override { _inner->setErrors(errors); }
+    void setStale(bool stale) override { _inner->setStale(stale); }
     void setOptions(std::vector<::morph::ui::SelectOption> const& options) override {
         _inner->setOptions(options);
         if (auto const echo = _onSelect; echo && !options.empty()) {

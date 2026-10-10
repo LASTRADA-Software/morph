@@ -139,6 +139,11 @@ public:
     /// @param widget The widget.
     /// @return True when it is the widget that has focus.
     [[nodiscard]] virtual bool hasFocus(Widget const& widget) = 0;
+
+    /// @brief Chooses a menu entry as a user would, opening each submenu on the path first.
+    /// @param menu The menu.
+    /// @param path The entry's index at each level, from the top.
+    virtual void chooseMenuEntry(Widget& menu, std::vector<std::size_t> const& path) = 0;
 };
 
 /// @brief One scripted case.
@@ -1234,6 +1239,64 @@ private:
     return checks.result();
 }
 
+/// @brief Case: a menu reports only an enabled entry without a submenu, and an entry enabled later can be chosen.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> onlyEnabledMenuLeavesAreChosen(ConformanceProbe& probe) {
+    reactive::Signal<bool> deletable{probe.runtime(), false};
+    std::vector<std::string> chosen;
+    auto const choose = [&chosen](std::string name) {
+        return [&chosen, name = std::move(name)] { chosen.push_back(name); };
+    };
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::menu({.items = {{.label = "Recent",
+                                            .onSelect = choose("Recent"),
+                                            .items = {{.label = "a.txt", .onSelect = choose("a.txt")}}},
+                                           {.label = "Delete", .onSelect = choose("Delete"), .enabled = [&deletable] {
+                                                return deletable.get();
+                                            }}}})};
+    probe.settle();
+    probe.chooseMenuEntry(view.root(), {0});  // opens the submenu
+    probe.chooseMenuEntry(view.root(), {0, 0});
+    probe.chooseMenuEntry(view.root(), {1});  // disabled
+    probe.settle();
+    deletable.set(true);
+    probe.settle();
+    probe.chooseMenuEntry(view.root(), {1});
+    probe.settle();
+    Checks checks;
+    checks.that(chosen == std::vector<std::string>{"a.txt", "Delete"},
+                "choosing a submenu, its entry, a disabled entry and then that entry enabled ran " +
+                    std::to_string(chosen.size()) + " handlers, not the submenu's entry and the enabled one");
+    return checks.result();
+}
+
+/// @brief Case: typing into a read-only input reaches no handler; once editable again, it does.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> readOnlyInputTakesNoEdit(ConformanceProbe& probe) {
+    reactive::Signal<bool> readonly{probe.runtime(), true};
+    std::vector<std::string> changes;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::textInput({.value = "kept",
+                                      .onChange = [&changes](std::string text) { changes.push_back(std::move(text)); },
+                                      .field = {.readonly = [&readonly] { return readonly.get(); }}})};
+    probe.settle();
+    probe.type(view.root(), "typed");
+    probe.settle();
+    Checks checks;
+    checks.that(changes.empty(), "typing into a read-only input reached onChange");
+    checks.that(probe.textOf(view.root()) == "kept",
+                "a read-only input shows '" + probe.textOf(view.root()) + "' after typing, not its value 'kept'");
+    readonly.set(false);
+    probe.settle();
+    probe.type(view.root(), "typed");
+    probe.settle();
+    checks.that(changes == std::vector<std::string>{"typed"},
+                "typing into the input once editable again did not reach onChange once with the text");
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief Every conformance case, in a fixed order.
@@ -1242,7 +1305,7 @@ private:
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 29> const cases{{
+    static std::array<ConformanceCase, 31> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -1281,6 +1344,9 @@ private:
         {.name = "a chord goes to the innermost widget that declares it", .run = detail::innermostChordWins},
         {.name = "a chord pressed inside a hidden container runs nothing", .run = detail::hiddenChordRunsNothing},
         {.name = "the first autofocus widget in document order has focus", .run = detail::firstAutofocusWins},
+        {.name = "a menu reports only an enabled entry without a submenu",
+         .run = detail::onlyEnabledMenuLeavesAreChosen},
+        {.name = "a read-only input takes no edit", .run = detail::readOnlyInputTakesNoEdit},
     }};
     return cases;
 }

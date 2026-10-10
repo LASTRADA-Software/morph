@@ -458,18 +458,69 @@ private:
         return widget;
     }
 
-    [[nodiscard]] static std::vector<std::string> labelsOf(std::vector<MenuItem> const& items) {
-        std::vector<std::string> labels;
-        labels.reserve(items.size());
+    // The entries as the widget shows them, each binding read once; called inside the menu's one binding.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static std::vector<MenuEntry> entriesOf(std::vector<MenuItem> const& items) {
+        std::vector<MenuEntry> entries;
+        entries.reserve(items.size());
         for (MenuItem const& item : items) {
-            labels.push_back(item.label.evaluate());
+            entries.push_back(MenuEntry{.label = item.label.evaluate(),
+                                        .icon = item.icon,
+                                        .keys = item.keys,
+                                        .checked = item.checked.evaluate(),
+                                        .enabled = item.enabled.evaluate(),
+                                        .items = entriesOf(item.items)});
         }
-        return labels;
+        return entries;
+    }
+
+    // Whether any entry, at any depth, has a bound label, check mark or enablement.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static bool anyBound(std::vector<MenuItem> const& items) {
+        return std::ranges::any_of(items, entryBound);
+    }
+
+    // Whether this entry, or one in its submenu, has a bound label, check mark or enablement.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static bool entryBound(MenuItem const& item) {
+        return item.label.isBound() || item.checked.isBound() || item.enabled.isBound() || anyBound(item.items);
+    }
+
+    // The entry a path names, or null when the path names none.
+    [[nodiscard]] static MenuItem const* itemAt(std::vector<MenuItem> const& items,
+                                                std::vector<std::size_t> const& path) {
+        std::vector<MenuItem> const* level = &items;
+        MenuItem const* found = nullptr;
+        for (std::size_t const index : path) {
+            if (level == nullptr || index >= level->size()) {
+                return nullptr;
+            }
+            found = &level->at(index);
+            level = &found->items;
+        }
+        return found;
+    }
+
+    // Like applyCommon, a constant default calls no setter.
+    void applyField(reactive::Scope& scope, FieldWidget& widget, FieldState const& field) {
+        if (field.readonly.isBound() || field.readonly.constant()) {
+            bind(scope, field.readonly, [&widget](bool readonly) { widget.setReadOnly(readonly); });
+        }
+        if (field.required.isBound() || field.required.constant()) {
+            bind(scope, field.required, [&widget](bool required) { widget.setRequired(required); });
+        }
+        if (field.errors.isBound() || !field.errors.constant().empty()) {
+            bind(scope, field.errors, [&widget](std::vector<std::string> const& errors) { widget.setErrors(errors); });
+        }
+        if (field.stale.isBound() || field.stale.constant()) {
+            bind(scope, field.stale, [&widget](bool stale) { widget.setStale(stale); });
+        }
     }
 
     Widget& mountKind(reactive::Scope& scope, Text const& spec, ContainerWidget* parent) {
         TextWidget& widget = scope.adopt(_backend->createText(parent));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
         bind(scope, spec.role, [&widget](TextRole role) { widget.setRole(role); });
         return widget;
@@ -486,16 +537,19 @@ private:
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
         TextInputWidget& widget = scope.adopt(_backend->createTextInput(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         auto reassert = controlled(scope, spec.value, [&widget](std::string const& value) { widget.setText(value); });
         bind(scope, spec.placeholder, [&widget](std::string const& text) { widget.setPlaceholder(text); });
         widget.setOnChange(inputEvent(spec.onChange, reassert));
         widget.setOnSubmit(inputEvent(spec.onSubmit, std::move(reassert)));
+        widget.setOnCommit(event(spec.onCommit));
         return widget;
     }
 
     Widget& mountKind(reactive::Scope& scope, Checkbox const& spec, ContainerWidget* parent) {
         CheckboxWidget& widget = scope.adopt(_backend->createCheckbox(parent));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
         widget.setOnToggle(inputEvent(
             spec.onToggle, controlled(scope, spec.checked, [&widget](bool checked) { widget.setChecked(checked); })));
@@ -505,6 +559,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, Select const& spec, ContainerWidget* parent) {
         SelectWidget& widget = scope.adopt(_backend->createSelect(parent, spec.style));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         bind(scope, spec.options, [&widget](std::vector<SelectOption> const& options) { widget.setOptions(options); });
         widget.setOnSelect(inputEvent(
             spec.onSelect,
@@ -516,22 +571,19 @@ private:
         MenuWidget& widget = scope.adopt(_backend->createMenu(parent));
         applyCommon(scope, widget, spec.common);
         std::vector<MenuItem> const& items = spec.items;
-        bool const anyBound = std::ranges::any_of(items, [](MenuItem const& item) { return item.label.isBound(); });
-        // One prop for the whole list: a bound label re-sends every label, which keeps setItems the one setter.
-        Prop<std::vector<std::string>> const labels =
-            anyBound ? Prop<std::vector<std::string>>([items = items] { return labelsOf(items); })
-                     : Prop<std::vector<std::string>>(labelsOf(items));
-        bind(scope, labels, [&widget](std::vector<std::string> const& texts) { widget.setItems(texts); });
-        std::vector<Action> actions;
-        actions.reserve(items.size());
-        for (MenuItem const& item : items) {
-            actions.push_back(item.onSelect);
-        }
-        widget.setOnActivate(event(std::function<void(std::size_t)>{[actions = std::move(actions)](std::size_t index) {
-            if (index < actions.size() && actions.at(index)) {
-                actions.at(index)();
-            }
-        }}));
+        // One prop for the whole tree: a bound label, mark or enablement anywhere re-sends every entry, which keeps
+        // setItems the one setter.
+        Prop<std::vector<MenuEntry>> const entries =
+            anyBound(items) ? Prop<std::vector<MenuEntry>>([items = items] { return entriesOf(items); })
+                            : Prop<std::vector<MenuEntry>>(entriesOf(items));
+        bind(scope, entries, [&widget](std::vector<MenuEntry> const& shown) { widget.setItems(shown); });
+        widget.setOnActivate(
+            event(std::function<void(std::vector<std::size_t>)>{[items = items](std::vector<std::size_t> const& path) {
+                MenuItem const* const item = itemAt(items, path);
+                if (item != nullptr && item->onSelect) {
+                    item->onSelect();
+                }
+            }}));
         return widget;
     }
 
@@ -991,6 +1043,7 @@ private:
         DateTimeInputWidget& widget =
             scope.adopt(_backend->createDateTimeInput(parent, spec.mode, spec.offsetMinutes));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         widget.setOnChange(inputEvent(
             spec.onChange,
             controlled(scope, spec.value,
@@ -1001,6 +1054,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, Slider const& spec, ContainerWidget* parent) {
         SliderWidget& widget = scope.adopt(_backend->createSlider(parent));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         widget.setRange(spec.minimum, spec.maximum, spec.step);
         widget.setOnChange(inputEvent(
             spec.onChange, controlled(scope, spec.value, [&widget](std::int64_t value) { widget.setValue(value); })));
@@ -1010,6 +1064,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, FilePicker const& spec, ContainerWidget* parent) {
         FilePickerWidget& widget = scope.adopt(_backend->createFilePicker(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         widget.setOnPicked(inputEvent(spec.onPicked, controlled(scope, spec.path, [&widget](std::string const& path) {
                                           widget.setPath(path);
                                       })));

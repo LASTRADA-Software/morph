@@ -186,6 +186,11 @@ public:
     [[nodiscard]] bool hasFocus(ui::Widget const& widget) override {
         return _backend.focused() == _backend.idOf(widget);
     }
+    void chooseMenuEntry(ui::Widget& menu, std::vector<std::size_t> const& path) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.chooseMenuEntry(_backend.idOf(menu), path);
+        }
+    }
 
 private:
     // The label of the option whose key `selected` shows, from `options`' `key:label` elements.
@@ -225,7 +230,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 29);
+    REQUIRE(cases.size() == 31);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -268,7 +273,9 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
                                         "a Table reports a user's selection as exactly the existing rows selected",
                                         "a dismissal the document refuses leaves the dialog open",
                                         "a chord goes to the innermost widget that declares it",
-                                        "a chord pressed inside a hidden container runs nothing"}) {
+                                        "a chord pressed inside a hidden container runs nothing",
+                                        "a menu reports only an enabled entry without a submenu",
+                                        "a read-only input takes no edit"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
     }

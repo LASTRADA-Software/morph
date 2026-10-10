@@ -131,7 +131,8 @@ TEST_CASE("RecordingBackend: the interaction helpers call what the widget was gi
     choice->setOnSelect([&](ui::Key key) { chosen.push_back(std::move(key)); });
     choice->setOptions({{.key = intKey(5), .label = "Five"}});
     auto menu = backend.createMenu(nullptr);
-    menu->setOnActivate([&](std::size_t index) { activated.push_back(index); });
+    menu->setItems({{.label = "First"}, {.label = "Second"}});
+    menu->setOnActivate([&](std::vector<std::size_t> const& path) { activated.push_back(path.back()); });
     auto panel = backend.createPanel(nullptr);
     panel->setOnToggle([&](bool collapsed) { collapses.push_back(collapsed); });
     panel->setCollapsible(true);
@@ -172,7 +173,18 @@ TEST_CASE("RecordingBackend: the interaction helpers call what the widget was gi
     CHECK(backend.prop(3, "checked") == "false");
     CHECK(backend.prop(4, "selected") == "5");
     CHECK(backend.prop(7, "value") == "2026-10-04T09:30:00.000Z");
-    CHECK(backend.log().size() == 11);
+    CHECK(backend.log().size() == 12);
+}
+
+// Mutations: drop the escaping of `;` (or of `[`) in formatMenu; print `enabled=true` for an enabled entry.
+TEST_CASE("RecordingBackend: a menu tree prints its attributes, escaped, and submenus in brackets", "[ui]") {
+    using ui::MenuEntry;
+    CHECK(ui::testing::detail::formatMenu({}) == "[]");
+    CHECK(ui::testing::detail::formatMenu(
+              {MenuEntry{.label = "a;b", .icon = "i[1]", .keys = "Ctrl+,", .checked = true},
+               MenuEntry{.label = "Sub", .enabled = false, .items = {MenuEntry{.label = "x=y", .checked = false}}},
+               MenuEntry{.label = "Plain"}}) ==
+          "[a\\;b;icon=i\\[1\\];keys=Ctrl+\\,;checked=true,Sub;enabled=false[x\\=y;checked=false],Plain]");
 }
 
 TEST_CASE("RecordingBackend: setText never calls onChange", "[ui]") {
@@ -384,7 +396,7 @@ TEST_CASE("RecordingBackend: text in a value cannot pass for another line, field
     auto label = backend.createText(nullptr);
     label->setText("a\nText#9 b=c\\d");
     auto menu = backend.createMenu(nullptr);
-    menu->setItems({"x,y", "[z]"});
+    menu->setItems({{.label = "x,y"}, {.label = "[z]"}});
     auto choice = backend.createSelect(nullptr, ui::SelectStyle::Dropdown);
     choice->setOptions({{.key = ui::Key{std::string{"q\"r"}}, .label = "s:t"}});
     CHECK(backend.dump() ==
@@ -407,7 +419,7 @@ TEST_CASE("RecordingBackend: every kind's setters show in the dump", "[ui]") {
     auto row = backend.createStack(nullptr, ui::Axis::Horizontal);
     row->setGap(2);
     auto menu = backend.createMenu(row.get());
-    menu->setItems({"Open", "Quit"});
+    menu->setItems({{.label = "Open"}, {.label = "Quit"}});
     auto busy = backend.createBusy(row.get());
     busy->setActive(true);
     busy->setLabel("wait");

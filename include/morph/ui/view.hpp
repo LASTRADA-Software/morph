@@ -333,6 +333,25 @@ struct Common {
     bool autofocus = false;
 };
 
+/// @brief The state of a value a user edits or reads: whether it may be changed, must be given, is wrong, or is
+///        being recomputed.
+///
+/// On text, which no user edits, `readonly` changes nothing; the other three mark it as they mark an input. A
+/// constant default calls no setter.
+struct FieldState {
+    /// @brief Whether the user may not change the value. A read-only field shows its value and can take focus and
+    ///        have its text selected; it takes no edit, submit or commit.
+    Prop<bool> readonly = false;
+    /// @brief Whether the field is marked as one that must be given. Only a mark: whether a value is missing is the
+    ///        application's to decide and show through `errors`.
+    Prop<bool> required = false;
+    /// @brief The messages shown with the field, in order; empty shows none. Which errors show, and when, is
+    ///        decided before they reach this property.
+    Prop<std::vector<std::string>> errors;
+    /// @brief Whether the value shown is the last known one while a newer one is computed.
+    Prop<bool> stale = false;
+};
+
 struct NodeData;
 
 /// @brief A view-tree node: immutable, shared data.
@@ -344,6 +363,8 @@ struct Text {
     Prop<std::string> text;
     /// @brief The style.
     Prop<TextRole> role = TextRole::Normal;
+    /// @brief Read-only, required, errors and stale.
+    FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
@@ -366,10 +387,15 @@ struct TextInput {
     std::function<void(std::string)> onChange;
     /// @brief Called with the text when the user submits (Enter in single-line mode).
     std::function<void(std::string)> onSubmit;
+    /// @brief Called with the text when the user commits it: Enter in single-line mode, or focus leaving the field
+    ///        after an edit.
+    std::function<void(std::string)> onCommit;
     /// @brief Shown while the field is empty.
     Prop<std::string> placeholder;
     /// @brief Single-line, multiline or password; set once.
     TextInputMode mode = TextInputMode::SingleLine;
+    /// @brief Read-only, required, errors and stale.
+    FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
@@ -382,6 +408,8 @@ struct Checkbox {
     Prop<bool> checked;
     /// @brief Called with the new state when the user toggles it.
     std::function<void(bool)> onToggle;
+    /// @brief Read-only, required, errors and stale.
+    FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
@@ -408,21 +436,38 @@ struct Select {
     std::function<void(Key)> onSelect;
     /// @brief Dropdown or radio; set once.
     SelectStyle style = SelectStyle::Dropdown;
+    /// @brief Read-only, required, errors and stale.
+    FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
 
 /// @brief One entry of a `Menu`: its label and its handler in one place, so there are no parallel lists.
+///
+/// An entry with `items` opens a submenu and is not itself chosen.
 struct MenuItem {
     /// @brief The caption.
     Prop<std::string> label;
     /// @brief Called when the entry is chosen.
     Action onSelect;
+    /// @brief The name of an icon in the theme's icon map; empty shows none. Set once.
+    std::string icon;
+    /// @brief The chord shown beside the label, such as `"Ctrl+S"`; empty shows none. Set once. It only shows the
+    ///        chord: the binding that handles it is a `KeyBinding` on a node.
+    std::string keys;
+    /// @brief Engaged: the entry is checkable and shows this check mark; `nullopt`: not checkable. Choosing a
+    ///        checkable entry runs `onSelect`, and the mark changes only when this binding does.
+    Prop<std::optional<bool>> checked;
+    /// @brief Whether the entry can be chosen; a disabled entry's submenu cannot be opened.
+    Prop<bool> enabled = true;
+    /// @brief The submenu's entries; empty: the entry is chosen rather than opened.
+    std::vector<MenuItem> items;
 };
 
 /// @brief A vertical list of commands.
 struct Menu {
-    /// @brief The entries, in order; the list itself is set once, each label may be bound.
+    /// @brief The entries, in order; the list itself is set once, each entry's label, check mark and enablement
+    ///        may be bound.
     std::vector<MenuItem> items;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
@@ -748,6 +793,8 @@ struct DateTimeInput {
     DateMode mode = DateMode::DateTime;
     /// @brief The display zone's offset from UTC, in minutes; set once.
     int offsetMinutes = 0;
+    /// @brief Read-only, required, errors and stale.
+    FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
@@ -764,6 +811,8 @@ struct Slider {
     std::int64_t step = 1;
     /// @brief Called with the value the user moved to.
     std::function<void(std::int64_t)> onChange;
+    /// @brief Read-only, required, errors and stale.
+    FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
@@ -776,6 +825,8 @@ struct FilePicker {
     FilePickerMode mode = FilePickerMode::Open;
     /// @brief Called with the path the user picked.
     std::function<void(std::string)> onPicked;
+    /// @brief Read-only, required, errors and stale.
+    FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };

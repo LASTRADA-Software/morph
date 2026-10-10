@@ -95,10 +95,10 @@ subtree of base kinds.
 |---|---|---|
 | `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success}`) |
 | `Button` | `button` | `label`, `onClick` |
-| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once) |
+| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
 | `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `style` (`SelectStyle{Dropdown, Radio}`, set once) |
-| `Menu` | `menu` | `items` (`MenuItem{label, onSelect}`: each label beside its handler, so there are no parallel lists; the list is set once, each label may be bound) |
+| `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
 | `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap` (set once) |
 | `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap` — all set once |
 | `Spacer` | `spacer` | none |
@@ -128,9 +128,19 @@ Every node also carries `Common`:
 | `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called |
 | `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
 
+Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, FilePicker) also carry
+`field`, a `FieldState`:
+
+| Field | Meaning |
+|---|---|
+| `readonly` | The user may not change the value: the widget shows it, takes focus and lets its text be selected, and reports no edit, submit or commit. Changes nothing on text |
+| `required` | A mark that the field must be given. Whether a value is missing is the application's to decide, and to show through `errors` |
+| `errors` | The messages shown with the field, in order. Which errors show, and when (spec 5's `shownErrors`), is decided before they reach this property |
+| `stale` | The value shown is the last known one while a newer one is computed |
+
 The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled`, `dragKey`,
-`a11y.name` and `tooltip`, and: Text `text` and `role`; Button `label`; TextInput `value` and `placeholder`; Checkbox
-`label` and `checked`; Select `options` and `selected`; a MenuItem's `label`; Panel `title` and
+`a11y.name` and `tooltip`, every `FieldState` field, and: Text `text` and `role`; Button `label`; TextInput `value` and `placeholder`; Checkbox
+`label` and `checked`; Select `options` and `selected`; a MenuItem's `label`, `checked` and `enabled`; Panel `title` and
 `collapsed`; Switch `selector`; Tabs `selected`; Dialog `open` and `title`; Busy `active` and
 `label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`. Every other
 field is fixed when the node is built.
@@ -205,7 +215,9 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    the chords only when `keys` is not empty, as one `setKeys` whose handler runs the first binding
    of the chord pressed as a widget callback. A new widget is already visible, enabled,
    content-sized, neither draggable nor a drop target, and has none of the rest, so a node that
-   says nothing more costs no call.
+   says nothing more costs no call. Then, for text and the inputs, `FieldState` the same way:
+   `readonly`, `required` and `stale` only when bound or `true`, `errors` only when bound or not
+   empty. A new field is editable, not required, without errors and not stale.
 3. The kind's own props and callbacks. Every `Prop` is applied, even one that holds its default: a
    constant calls its setter once; a binding makes a `Computed` (equality-gated, so an unchanged
    result calls nothing) and an `Effect` that calls one setter — except a Tabs index and a
@@ -217,9 +229,12 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    the exceptions:
    - a Grid child's span is set only when it is not 1;
    - a Panel's `collapsed` and `onToggle` are applied only when it is collapsible;
-   - a Menu sends all its labels through one `setItems`; when any label is bound, one binding over
-     all of them sends every label again whenever one changes. Choosing an entry runs that entry's
-     `onSelect`; an index past the last entry runs nothing.
+   - a Menu sends its whole tree through one `setItems`, as `MenuEntry` values; when any entry at
+     any depth has a bound `label`, `checked` or `enabled`, one binding over all of them sends the
+     tree again whenever one changes. The backend reports a choice as the entry's path, its index
+     at each level from the top, and the dispatcher runs that entry's `onSelect`; a path that
+     names no entry runs nothing. Which entries can be chosen — enabled ones without a submenu,
+     inside enabled entries — is the backend's to enforce, as it is for a disabled widget.
 4. Its children, appended in order.
 
 Destroying the scope destroys in reverse creation order: every binding before the widget it
