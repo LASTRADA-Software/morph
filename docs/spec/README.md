@@ -133,6 +133,13 @@ server
 [`reactive/control.md`](reactive/control.md) — signals, view state, and server
 interaction a controller declares instead of sequencing
 
+**Declarative UI**
+[`ui/view_tree.md`](ui/view_tree.md) ·
+[`ui/backend_contract.md`](ui/backend_contract.md) ·
+[`ui/frontend.md`](ui/frontend.md) — the view tree a screen mounts into,
+the widgets every renderer implements, and the seam that picks a renderer
+at runtime
+
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·
 [`util/quantity_type.md`](util/quantity_type.md) ·

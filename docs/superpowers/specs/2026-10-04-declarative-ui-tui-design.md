@@ -107,7 +107,9 @@ not meet, and each has a test in §7.
   `view.hpp` (the view tree), `backend.hpp` (widget interfaces, `IViewBackend`), `mount.hpp`,
   `frontend.hpp` (§5b: `AppContext`, `AppSource`, `Frontend`, `FrontendOption`, `EnvironmentReader`,
   `Bundle`, `ConnectError`, `FrontendError`, `Backend`), `host.hpp` (spec 6 §4: `ScreenHost`,
-  `ScreenHandle`, `ParamMap`, `MountError`), `author.hpp` (the server-side builders of spec 5 §11),
+  `ScreenHandle`, `ParamMap`, `MountError`; it lands with hosting, because `ParamMap` holds the
+  document's `Value` of spec 5 §3 and its implementers are the Qt Quick renderer and the hosting
+  layer), `author.hpp` (the server-side builders of spec 5 §11),
   `testing/recording_backend.hpp` and `testing/backend_conformance.hpp`. The test kit they need
   (`StepExecutor`, `OwnerProbeRecorder`) is provided under `include/morph/testing/`, so
   `RecordingBackend` depends on nothing outside the installed headers.
@@ -294,6 +296,14 @@ every property either a constant or a **slot** — a reactive value with a stabl
 a command sink. Node kinds, their properties and their events are spec 5 §9's palette; `Key` is
 `std::variant<std::int64_t, std::string>`, never a double.
 
+The view tree lands with spec 5 §9's base kinds (text, button, text input, checkbox, select, menu,
+column, row, grid, spacer, panel, scroll, switch, tabs, dialog, busy, forEach, table, date-time
+input, slider, file picker) and the properties a widget needs to show and edit them. The further
+kinds, the extra common properties (`a11y`, `testId`, `tooltip`, `keys`, `autofocus`, `surface`),
+the input decorations (`readonly`, `required`, `errors`, `stale`) and richer menu items each add a
+setter or a factory to `IViewBackend`, and join it with the interpreter that maps them or the
+renderer that needs them; until then the interpreter lowers a further kind to its fallback.
+
 **Mount:** `ui::Mounted(reactive::Runtime&, IViewBackend&, Node)` builds retained widgets through
 typed factories, once.
 
@@ -342,6 +352,7 @@ public:
     virtual ~AppSource() = default;
     virtual void open(AppContext& ctx, std::function<void(std::expected<Bundle, ConnectError>)> ready) = 0;
     virtual void switchBackend(Backend backend, std::function<void(std::expected<void, std::string>)> done) = 0;
+    virtual void close() = 0;                     // releases what open made; drops a ready not yet delivered
 };
 class Frontend {
 public:
@@ -359,7 +370,9 @@ std::expected<std::unique_ptr<Frontend>, FrontendError>
   **local** (the application's models and screens linked in-process). The generic client's `main`
   builds one from its arguments.
 - `run` builds the runtime and executor first, opens the source, mounts the app shell and drives its
-  loop until `quit()`; screens and connections are destroyed before the runtime.
+  loop until `quit()`; screens and connections are destroyed before the runtime. The source is
+  `main`'s and outlives `run`, so `run` ends its connections with `close()`, after the screens are
+  unmounted and before the runtime goes; `ui::runApp` fixes that order once for every frontend.
 - An `AppSource` signs the user in natively when the application needs it (before the catalog is
   requested, on the owner), and `switchBackend` replaces the dispatch target under mounted screens:
   it is `Bridge::switchBackend` posted to the owner, after which the interpreter holds the queries on

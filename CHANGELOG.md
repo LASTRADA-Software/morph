@@ -172,6 +172,29 @@ API surface).
 
 ### Added
 
+- **`morph::ui`: the view tree, its mount and the frontend seam.** Header-only, in the base `morph`
+  target.
+  - An immutable view tree of the UI document's base palette (`view.hpp`): every property a constant
+    or a slot, a reactive value with an optional stable id (`ui::slot`), and every event a command
+    sink; keyed `forEach` and `table` over any row type.
+  - The backend contract (`backend.hpp`): one widget interface per kind and an `IViewBackend` with a
+    typed factory each. No setter calls a handler, a setter with the value a widget shows changes
+    nothing, and a widget the user cannot reach takes no input.
+  - `Mounted` (`mount.hpp`) builds a tree's widgets once and keeps them current through
+    equality-gated bindings. Switch cases, Tabs pages, Dialog content and ForEach/Table rows mount
+    all or nothing into child scopes, torn down child-first, with owners' bindings running first;
+    rows keep their identity per key and reorder with the fewest moves. Input widgets are
+    controlled by their slots: a refused edit snaps back, an accepted one costs no setter call.
+  - The frontend seam (`frontend.hpp`): `AppContext`, `AppSource` (`open`, `switchBackend`,
+    `close`), `Bundle`, `ConnectError`, `Backend`, `Frontend`, and `selectFrontend`, which picks a
+    frontend from `--ui`, `MORPH_UI` or the first usable one and returns a `FrontendError` naming the
+    built ones; `runApp` fixes the order a frontend opens a source, mounts its shell and tears both
+    down.
+  - `testing::RecordingBackend`, a headless reference backend with an operation log, a golden dump
+    and user-interaction helpers, and the conformance cases every renderer runs through its own
+    `ConformanceProbe`.
+
+  See `docs/spec/ui/view_tree.md`, `backend_contract.md` and `frontend.md`.
 - **Model-free dispatch.** `RawHandler` binds a model by its registered type
   id and dispatches actions by id with a JSON body, for a client compiled
   without the model's type. Calls carry the default session, the execute

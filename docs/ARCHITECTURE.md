@@ -50,6 +50,7 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::time` | UTC timestamps for actions | `DateTime`, `Timestamp` |
 | `morph::forms` | JSON-Schema generation for auto-built GUIs | `schemaJson<A>()`, `allRequiredEngaged()`, `Choice<T, ...>`, `FixedString`, `isChoice`, `EmptyCapableField` |
 | `morph::reactive` | Signal graph, view state and declarative control (see `docs/spec/reactive/`) | `Runtime`, `RuntimeOptions`, `Signal<T>`, `Computed<T>`, `Effect`, `Scope`, `EqualityPolicy`, `kEqualityUsable`, `Store<ViewState, Msg>`, `ExhaustiveUpdate`, `request()`, `Query<A, R>`, `QueryOptions`, `InvalidationLink`, `Mutation<A, R>`, `MutationOptions<A>`, `Concurrency`, `Subscription<R>`, `Refetchable`, `errorMessage`, `Scheduler`, `TimerHandle`; `testing::ManualScheduler` |
+| `morph::ui` | View tree, mount and the frontend seam (see `docs/spec/ui/`) | `Node`, `Prop<T>`, `SlotId`, `slot()`, `Key`, the node kinds and their builders, `forEach`, `table`, `switchOn`; `Widget`, `ContainerWidget`, the widget interfaces, `IViewBackend`; `Mounted`; `AppContext`, `AppSource`, `Bundle`, `ConnectError`, `Backend`, `Frontend`, `FrontendOption`, `FrontendError`, `EnvironmentReader`, `processEnvironment`, `selectFrontend`, `MountedShell`, `ShellFactory`, `runApp`; `testing::RecordingBackend`, `testing::ConformanceProbe`, `testing::conformanceCases` |
 | `morph::testing` | The installed owner test kit | `StepExecutor`, `OwnerProbeRecorder` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 
@@ -706,6 +707,17 @@ folder.
 | `reactive/scheduler.hpp` | `Scheduler`, `TimerHandle` — timers a frontend runs on the owner, for a query's timed refresh and debounce |
 | `reactive/testing/manual_scheduler.hpp` | `testing::ManualScheduler` — a `Scheduler` whose clock moves only when a test advances it |
 | `reactive/detail/graph.hpp` | `RuntimeCore`, `Node`, `TrackingFrame`, `Colour`, `FlushBounds`, the misuse site names, `kDefaultMaxEffectRunsPerFlush`, `kDefaultMaxThrowReposts` (`morph::reactive::detail::`) |
+
+#### `ui/` — view tree, mount, frontend seam
+
+| Header | Responsibility |
+|---|---|
+| `ui/view.hpp` | `Node`, `NodeData`, `Prop<T>`, `SlotId`, `SlotBinding`, `slot()`, `Key`, `Common`, `Sizing`, `LayoutHints`, every node kind and its builder, `switchOn`, `forEach`, `table` (`morph::ui::`) — the immutable view tree whose properties are constants or slots. See `docs/spec/ui/view_tree.md`. |
+| `ui/backend.hpp` | `Widget`, `ContainerWidget`, one widget interface per kind, `IViewBackend` — the retained widgets a renderer implements. See `docs/spec/ui/backend_contract.md`. |
+| `ui/mount.hpp` | `Mounted` — builds a tree's widgets once, keeps them current through bindings, mounts content in child scopes, keeps keyed rows, controls inputs by their slots |
+| `ui/frontend.hpp` | `AppContext`, `AppSource`, `Bundle`, `ConnectError`, `Backend`, `Frontend`, `FrontendOption`, `FrontendError`, `selectFrontend`, `MountedShell`, `ShellFactory`, `runApp` — the seam `main` picks a frontend through. See `docs/spec/ui/frontend.md`. |
+| `ui/testing/recording_backend.hpp` | `testing::RecordingBackend` — the headless reference backend: operation log, golden dump, interaction helpers |
+| `ui/testing/backend_conformance.hpp` | `testing::ConformanceProbe`, `testing::ConformanceCase`, `testing::conformanceCases()` — the scripted cases every backend passes |
 
 #### `testing/` — the installed owner test kit
 
