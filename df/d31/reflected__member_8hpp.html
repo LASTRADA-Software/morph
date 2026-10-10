@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::forms::QuantityDecodeError Struct Reference</title>
+<title>morph: morph/detail/reflected_member.hpp File Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html','../../','db/dff/structmorph_1_1forms_1_1QuantityDecodeError-members'); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('df/d31/reflected__member_8hpp.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,71 +117,76 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/d1c/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::forms::QuantityDecodeError Struct Reference</div></div>
+  <div class="headertitle"><div class="title">reflected_member.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Thrown when a decoded action has a <span class="tt">Quantity</span> field whose engaged value falls outside its unit's declared bounds (<span class="tt">UnitTraits&lt;E&gt;::bounds</span>).  
- <a href="#details">More...</a></p>
-
-<p><code>#include &lt;<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>&gt;</code></p>
-<div class="dynheader">
-Inheritance diagram for morph::forms::QuantityDecodeError:</div>
-<div class="dyncontent">
- <div class="center">
-  <img src="../../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.png" alt=""/>
- </div></div>
+<p>The value glaze reads and writes under a reflected key.  
+<a href="#details">More...</a></p>
+<div class="textblock"><code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;glaze/glaze.hpp&gt;</code><br />
+<code>#include &lt;type_traits&gt;</code><br />
+</div>
+<p><a href="../../df/d31/reflected__member_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
-Public Member Functions</h2></td></tr>
-<tr class="memitem:acace8089d2ec9c984a06fd8a6b0a2313" id="r_acace8089d2ec9c984a06fd8a6b0a2313"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#acace8089d2ec9c984a06fd8a6b0a2313">QuantityDecodeError</a> (std::string_view fieldName)</td></tr>
-<tr class="memdesc:acace8089d2ec9c984a06fd8a6b0a2313"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the error with a message naming the offending field.  <br /></td></tr>
+<tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
+Functions</h2></td></tr>
+<tr class="memitem:af175eb97caadfcf367a5d6c3ea70e768" id="r_af175eb97caadfcf367a5d6c3ea70e768"><td class="memTemplParams" colspan="2">template&lt;std::size_t I, typename T&gt; </td></tr>
+<tr class="memitem:af175eb97caadfcf367a5d6c3ea70e768 template"><td class="memItemLeft">constexpr decltype(auto)&#160;</td><td class="memItemRight"><a class="el" href="#af175eb97caadfcf367a5d6c3ea70e768">morph::detail::reflectedMember</a> (T &amp;object)</td></tr>
+<tr class="memdesc:af175eb97caadfcf367a5d6c3ea70e768"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value glaze reads and writes under <span class="tt">glz::reflect&lt;T&gt;::keys[I]</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Thrown when a decoded action has a <span class="tt">Quantity</span> field whose engaged value falls outside its unit's declared bounds (<span class="tt">UnitTraits&lt;E&gt;::bounds</span>). </p>
-<p>Distinct from <span class="tt"><a class="el" href="../../d7/d1a/structmorph_1_1model_1_1ValidationError.html" title="Thrown when a decoded action fails ActionValidator&lt;Action&gt;::ready(...) on a server-side or local exec...">morph::model::ValidationError</a></span>: this is a <b>decode-level</b> rejection — a wire payload that violates a physical/unit constraint baked into the field's type, caught before an action's own <span class="tt">validate()</span> (a business-rule check) ever runs. See docs/spec/forms/forms.md, "Pre-decode
-wire validation — `checkQuantityBounds`". </p>
+<div class="textblock"><p>The value glaze reads and writes under a reflected key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03415">3415</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
-</div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="acace8089d2ec9c984a06fd8a6b0a2313" name="acace8089d2ec9c984a06fd8a6b0a2313"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#acace8089d2ec9c984a06fd8a6b0a2313">&#9670;&#160;</a></span>QuantityDecodeError()</h2>
+<p class="definition">Definition in file <a class="el" href="../../df/d31/reflected__member_8hpp_source.html">reflected_member.hpp</a>.</p>
+</div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="af175eb97caadfcf367a5d6c3ea70e768" name="af175eb97caadfcf367a5d6c3ea70e768"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af175eb97caadfcf367a5d6c3ea70e768">&#9670;&#160;</a></span>reflectedMember()</h2>
 
 <div class="memitem">
 <div class="memproto">
+<div class="memtemplate">
+template&lt;std::size_t I, typename T&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">morph::forms::QuantityDecodeError::QuantityDecodeError </td>
+          <td class="memname">decltype(auto) morph::detail::reflectedMember </td>
           <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>fieldName</em></span></td><td>)</td>
+          <td class="paramtype">T &amp;</td>          <td class="paramname"><span class="paramname"><em>object</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs the error with a message naming the offending field. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">fieldName</td><td>The wire (JSON) name of the out-of-bounds field. </td></tr>
+<p>The value glaze reads and writes under <span class="tt">glz::reflect&lt;T&gt;::keys[I]</span>. </p>
+<p><span class="tt">glz::reflect&lt;T&gt;</span> follows a <span class="tt">glz::meta&lt;T&gt;</span> when one exists, and that meta may omit, rename, reorder or compute members. <span class="tt">glz::to_tie</span> always follows the aggregate's declaration order. Indexing one with the other's <span class="tt">I</span> hands one member's value to another member's name — a hidden member offered under a public key, or a key bound to a value of a different type. This reads the value from the same source the key comes from: the declaration-order tie for a type glaze reflects by itself, the meta's <span class="tt">I</span>-th value otherwise.</p>
+<p>For a member of the object, the result is a reference to it, <span class="tt">const</span> when <code class="param">object</code> is. A meta entry that computes its value (a lambda, a glaze wrapper such as <span class="tt">glz::quoted_num</span>) yields whatever glaze's <span class="tt">get_member</span> yields for it, which may be a value rather than a reference.</p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">I</td><td>Index of the key in <span class="tt">glz::reflect&lt;std::remove_cvref_t&lt;T&gt;&gt;::keys</span>. </td></tr>
+    <tr><td class="paramname">T</td><td>The object's type, possibly <span class="tt">const</span>-qualified; a type glaze reflects by itself or one with a <span class="tt">glz::meta</span> object. </td></tr>
   </table>
   </dd>
 </dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">object</td><td>The object to read from; it must outlive the returned reference. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The value glaze reads and writes under key <span class="tt">I</span> of <code class="param">object</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l03418">3418</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d31/reflected__member_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../df/d31/reflected__member_8hpp_source.html">reflected_member.hpp</a>.</p>
 
 </div>
 </div>
-<hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/forms/<a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a></li>
-</ul>
 </div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">
@@ -195,7 +200,7 @@ wire validation — `checkQuantityBounds`". </p>
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>forms</b></li><li class="navelem"><a href="../../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html">QuantityDecodeError</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>detail</b></li><li class="navelem"><a href="../../df/d31/reflected__member_8hpp.html">reflected_member.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

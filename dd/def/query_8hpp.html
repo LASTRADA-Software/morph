@@ -135,6 +135,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/def/query_8
 <code>#include &lt;limits&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;<a class="el" href="../../df/d31/reflected__member_8hpp_source.html">morph/detail/reflected_member.hpp</a>&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../dd/d57/data__source_8hpp_source.html">morph/table/data_source.hpp</a>&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../de/d46/engine_8hpp_source.html">morph/table/engine.hpp</a>&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../d1/dd2/filter_8hpp_source.html">morph/table/filter.hpp</a>&gt;</code><br />
@@ -226,9 +227,6 @@ Functions</h2></td></tr>
 <tr class="memitem:a567dc8bcda0528998060ae2624d809f6" id="r_a567dc8bcda0528998060ae2624d809f6"><td class="memTemplParams" colspan="2">template&lt;typename T&gt; </td></tr>
 <tr class="memitem:a567dc8bcda0528998060ae2624d809f6 template"><td class="memItemLeft"><a class="el" href="../../dd/d57/data__source_8hpp.html#a320af04a37b6ab6e7c2b51afbdb90ec4">Cell</a>&#160;</td><td class="memItemRight"><a class="el" href="#a567dc8bcda0528998060ae2624d809f6">morph::table::detail::toCell</a> (T const &amp;value)</td></tr>
 <tr class="memdesc:a567dc8bcda0528998060ae2624d809f6"><td class="mdescLeft">&#160;</td><td class="mdescRight">A member value as a cell.  <br /></td></tr>
-<tr class="memitem:aeb46d6cc0fee47605c4c41f198f7b5ba" id="r_aeb46d6cc0fee47605c4c41f198f7b5ba"><td class="memTemplParams" colspan="2">template&lt;typename Row, std::size_t I&gt; </td></tr>
-<tr class="memitem:aeb46d6cc0fee47605c4c41f198f7b5ba template"><td class="memItemLeft">decltype(auto)&#160;</td><td class="memItemRight"><a class="el" href="#aeb46d6cc0fee47605c4c41f198f7b5ba">morph::table::detail::memberAt</a> (Row const &amp;row)</td></tr>
-<tr class="memdesc:aeb46d6cc0fee47605c4c41f198f7b5ba"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value glaze writes under <span class="tt">glz::reflect&lt;Row&gt;::keys[I]</span>: the I-th declared member of a row reflected by itself, the I-th entry of a row with a <span class="tt">glz::meta</span>, which may omit, reorder or compute members.  <br /></td></tr>
 <tr class="memitem:afb688b0a7d9bb109909aa26c3eca6866" id="r_afb688b0a7d9bb109909aa26c3eca6866"><td class="memTemplParams" colspan="2">template&lt;typename Row&gt; </td></tr>
 <tr class="memitem:afb688b0a7d9bb109909aa26c3eca6866 template"><td class="memItemLeft">std::vector&lt; <a class="el" href="#a648c6a63266564266b1221320fe92c0c">CellReader</a>&lt; Row &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afb688b0a7d9bb109909aa26c3eca6866">morph::table::detail::cellReaders</a> ()</td></tr>
 <tr class="memdesc:afb688b0a7d9bb109909aa26c3eca6866"><td class="mdescLeft">&#160;</td><td class="mdescRight">One cell reader per key glaze writes, in key order.  <br /></td></tr>
@@ -268,7 +266,7 @@ template&lt;typename V&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +292,7 @@ template&lt;typename Row&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00465">465</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +318,7 @@ template&lt;typename Row&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00517">517</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00503">503</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -362,7 +360,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -403,7 +401,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when one is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -444,7 +442,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when one has. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -491,7 +489,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The error, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -544,7 +542,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The first violation, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -597,7 +595,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The query with its limit clamped, or the first violation. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -638,7 +636,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The escaped text; wrap it in <span class="tt">%</span> for <span class="tt">contains</span> and so on. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00250">250</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -685,7 +683,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The page, or the typed error the client shows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -723,7 +721,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The kind. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00374">374</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -767,7 +765,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The cell: an <span class="tt">int64</span>, or text that an integer column reads as invalid when no <span class="tt">int64</span> holds the value (rather than a wrapped negative number). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00404">404</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00405">405</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -811,7 +809,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The cell. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00419">419</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00420">420</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -855,52 +853,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The cell. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00438">438</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aeb46d6cc0fee47605c4c41f198f7b5ba" name="aeb46d6cc0fee47605c4c41f198f7b5ba"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aeb46d6cc0fee47605c4c41f198f7b5ba">&#9670;&#160;</a></span>memberAt()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename Row, std::size_t I&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">decltype(auto) morph::table::detail::memberAt </td>
-          <td>(</td>
-          <td class="paramtype">Row const &amp;</td>          <td class="paramname"><span class="paramname"><em>row</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The value glaze writes under <span class="tt">glz::reflect&lt;Row&gt;::keys[I]</span>: the I-th declared member of a row reflected by itself, the I-th entry of a row with a <span class="tt">glz::meta</span>, which may omit, reorder or compute members. </p>
-<dl class="tparams"><dt>Template Parameters</dt><dd>
-  <table class="tparams">
-    <tr><td class="paramname">Row</td><td>The row type. </td></tr>
-    <tr><td class="paramname">I</td><td>The key's index. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">row</td><td>The row. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00475">475</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -938,7 +891,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The readers. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00488">488</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00472">472</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -976,7 +929,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The columns. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00499">499</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -1049,7 +1002,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The page, or the typed error the client shows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00658">658</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00644">644</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>

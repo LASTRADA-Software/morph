@@ -286,9 +286,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/dd8/model__
 <div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>        <span class="comment">// behaviour (`operator*` on a disengaged optional), and encoding it as</span></div>
 <div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>        <span class="comment">// &quot;&quot; or &quot;0&quot; would silently route every caller holding an unset id to</span></div>
 <div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>        <span class="comment">// one shared instance -- the worst possible failure, because it looks</span></div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>        <span class="comment">// like it worked. Both call sites in `BridgeHandler` turn a throw here</span></div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>        <span class="comment">// into a rejected `Completion`, so this surfaces as an error the</span></div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>        <span class="comment">// caller can see.</span></div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>        <span class="comment">// like it worked. `BridgeHandler` turns a throw here into a rejected</span></div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>        <span class="comment">// `Completion`, or for `attach` a logged refusal that rejects the</span></div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>        <span class="comment">// handler&#39;s calls, so this surfaces as an error the caller can see.</span></div>
 <div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>        <span class="keywordflow">if</span> (!key.hasValue()) {</div>
 <div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;primary key is empty: a strong id with no value names no model instance&quot;</span>);</div>
 <div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>        }</div>
