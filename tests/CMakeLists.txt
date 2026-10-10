@@ -649,3 +649,34 @@ if(WIN32 AND TARGET core-cpp-testing_dialogs)
     unset(_pass)
     unset(_fail)
 endif()
+
+# ── morph::table ─────────────────────────────────────────────────────────────
+# Its own executable so the threaded engine tests can run alone under a
+# sanitizer preset. The `[.benchmark]` cases are hidden: catch_discover_tests
+# does not list them, and they run only when asked for by tag.
+add_executable(morph_table_tests
+    table/test_table_source.cpp
+    table/test_table_sort.cpp
+    table/test_table_filter.cpp
+    table/test_table_view_change.cpp
+    table/test_table_engine.cpp
+    table/test_table_changes.cpp
+    table/test_table_query.cpp
+    table/test_table_selection.cpp
+    table/test_table_columns.cpp
+    table/test_table_pending.cpp
+    table/test_table_reentrancy.cpp
+    table/test_table_server.cpp
+    table/bench_table.cpp
+)
+target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main)
+target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(morph_table_tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/bigobj>)
+apply_warnings(morph_table_tests)
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_table_tests ${AF_SANITIZER})
+endif()
+if(AF_COVERAGE)
+    apply_coverage(morph_table_tests)
+endif()
+catch_discover_tests(morph_table_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)

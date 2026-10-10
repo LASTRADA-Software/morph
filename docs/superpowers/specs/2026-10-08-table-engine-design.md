@@ -101,29 +101,40 @@ metadata.
 namespace morph::table {
 enum class ColumnKind : std::uint8_t { Integer, Decimal, Quantity, Number, Text, Date, DateTime, Bool, Key, Custom };
 
-struct ColumnInfo { std::string id; ColumnKind kind; std::string comparator; /* Custom only */ };
+struct ColumnInfo { std::string id; ColumnKind kind; std::string comparator; /* Custom */ std::string format; /* Date, DateTime */ };
 
-using Cell = std::variant<std::monostate, std::int64_t, math::Rational, double, std::string, bool>;
+struct QuantityCell { math::Rational amount; math::Rational toCanonical; };   // a quantity in its own unit
+using Cell = std::variant<std::monostate, std::int64_t, math::Rational, double, std::string, bool, QuantityCell>;
 
-class DataSource {
+class RowSnapshot {                       // immutable: readable from any thread while held
 public:
-    virtual ~DataSource() = default;
     [[nodiscard]] virtual std::size_t rowCount() const = 0;
-    [[nodiscard]] virtual std::span<ColumnInfo const> columns() const = 0;
     [[nodiscard]] virtual RowId rowId(std::size_t row) const = 0;          // stable across reloads
     [[nodiscard]] virtual Cell cell(std::size_t row, std::size_t column) const = 0;
-    virtual void readColumn(std::size_t column, ColumnSink& sink) const;   // bulk read; the default loops over cell()
-    virtual void subscribe(ChangeListener&) = 0;                           // rows added, removed, updated
+    virtual void readColumn(std::size_t column, ColumnSink& sink, std::size_t first, std::size_t last) const;
+};
+
+class DataSource {                        // owner-affine
+public:
+    [[nodiscard]] virtual std::span<ColumnInfo const> columns() const = 0;
+    [[nodiscard]] virtual std::shared_ptr<RowSnapshot const> snapshot() const = 0;
+    virtual void subscribe(ChangeListener&) = 0;                           // rows updated, inserted, removed, reset
+    virtual void unsubscribe(ChangeListener&) = 0;
 };
 }
 ```
 
-- A column is identified by id and kind. `Quantity` and `Decimal` cells are `Rational`s (an int64
-  numerator and denominator with decimal places); a value that does not fit is invalid, never
-  saturated. Only a `Number` column holds a double.
-- The engine builds keys with `readColumn`, which hands a column's cells to a sink in one pass, so
-  100,000 rows do not cost 100,000 virtual calls and as many variant copies. A source with a faster
-  path (the query's row array) overrides it.
+- Cells are read only through a snapshot, never through the source, because the engine reads them on
+  a worker (§8) while the owner keeps changing the source. `VectorSource` holds rows in a
+  `TableSnapshot` of shared 256-row chunks, so an update copies one chunk, not the table.
+- A column is identified by id and kind. `Decimal` cells are `Rational`s (an int64 numerator and
+  denominator with decimal places). A `Quantity` cell is a `Rational` already in the column's
+  canonical unit, or a `QuantityCell` the engine converts with checked arithmetic; a value that does
+  not fit is invalid, never saturated. A string in a non-text column is parsed for the kind. Only a
+  `Number` column holds a double.
+- The engine builds keys with `readColumn`, which hands a range of a column's cells to a sink in
+  runs, so 100,000 rows do not cost 100,000 virtual calls and as many variant copies, and a key build
+  can stop between ranges. A snapshot that stores cells contiguously overrides it.
 - `RowId` is the table's `key` (spec 5 §9): `std::variant<std::int64_t, std::string>`.
 - The framework supplies **`QueryRowsSource`**, a `DataSource` over a query's row list. A refetch is
   diffed by key into added, removed and updated rows; a mutation's `patch` (spec 5 §5) is a one-row
@@ -136,15 +147,19 @@ thread-safe, or the engine clones one per task (§8).
 
 | Service | Purpose | Default | Renderer-side implementation |
 |---|---|---|---|
-| `TextCollator` | Locale-aware compare and sort key | Code-point order, case-folded | The toolkit's collator for `{"env": "locale"}` |
+| `TextCollator` | `sortKey` for order, `fold` (primary strength) for matching | Code-point order; ASCII and Latin-1 case-folded, accents kept | The toolkit's collator for `{"env": "locale"}` |
 | `DateParser` | Text to date or date-time for a format | ISO 8601 | The toolkit's parser |
-| `StopToken` | Cancel a long sort or filter | `morph::async::StopToken` | — |
-| `ProgressSink` | Optional progress | none | A progress indicator |
+| `StopToken` | Cancel a long sort or filter | `core::async::StopToken` | — |
+| `ProgressSink` | Optional progress, on the owner | none | A progress indicator |
+| Comparators | Order of a `Custom` column, by name | none (display text) | Application-supplied |
+
+A collator or date parser returns null from `cloneForTask()` when it is safe to share, or a copy one
+task uses alone.
 
 ### Engine
 
 `setFilter(FilterSpec)`, `setSort(SortChain)`, `viewRowCount()`, `sourceRowOf(viewRow)`,
-`viewRowOf(sourceRow)`, and a `ViewChange` event that describes what moved, in the vocabulary of a
+`viewRowOf(sourceRow)`, `rowIdAt(viewRow)`, `viewRowOfKey(RowId)`, `pending()`, and a `ViewChange` event that describes what moved, in the vocabulary of a
 list model (inserted, removed, moved, changed, reset). Column order and visibility are a separate
 `ColumnLayout`. Fallible calls return `std::expected` (a filter value that cannot be parsed for its
 column kind is an error naming the column); the engine does not throw across its API.
@@ -221,12 +236,19 @@ receive it:
 ```
 
 - **Operators by kind.** Text: `contains`, `startsWith`, `endsWith`, `eq`, `ne`. Numeric, date and
-  date-time: `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `between`. Any kind: `isEmpty`, `notEmpty`. Values
-  are exact text (`"1.5"`), parsed once for the column's kind when the filter is set.
+  date-time: `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `between` (both ends inclusive). Bool: `eq`, `ne`.
+  Any kind, `Custom` included: `isEmpty`, `notEmpty`. An entry sets exactly one operator. Values are
+  exact text (`"1.5"`), parsed once for the column's kind when the filter is set; an `Integer` or
+  `Key` column compares against an exact decimal, so `ge "1.5"` is meaningful on it.
+- **Empty and invalid cells.** No operator but `isEmpty` and `notEmpty` matches an empty or invalid
+  cell, of any kind: a numeric `ne` does not match an unparsable cell, and a text `ne` does not match
+  an empty one. `isEmpty` matches empty cells only; an unparsable cell is not empty.
 - **Combination.** The `include` entries of one column combine with `combine`: `any` (the default) or
   `all`. A match on an `exclude` entry rejects the row. A column's result and every other column's
   combine with AND. A **group** names several columns and matches a row when its entries match any of
-  them, which is what a quick-search box needs; a group combines with the columns by AND.
+  them, which is what a quick-search box needs; a group combines with the columns by AND. An entry
+  whose operator a group column's kind does not define, or whose value does not parse for it, does
+  not apply to that column; it is an error only when it applies to none of the group's columns.
 - **Text matching.** Text operators compare through the table's collator at primary strength, so
   `eq`, `ne`, `contains`, `startsWith` and `endsWith` ignore case and accents; an entry may set
   `"caseSensitive": true`. `contains`, `startsWith` and `endsWith` treat `%` and `_` as ordinary
@@ -239,12 +261,22 @@ receive it:
 
 - A filter change with a sort active filters the cached sorted order, O(n), with no re-sort.
 - A sort change with a filter active sorts only the surviving rows.
-- A change notification invalidates only the affected rows' keys. The order is repaired lazily, so a
-  stream of row updates does not re-sort per row.
+- An update notification invalidates only the updated rows' keys. The order is repaired lazily, once
+  per owner turn: the updated rows are re-keyed, sorted, and merged into the previous order and into
+  the cached sorted order, so a stream of row updates does not re-sort. An insert, a remove or a reset
+  recomputes the view, mapping the old view to the new rows by key; a reset that changes the columns
+  keeps the sort keys and filter entries whose columns remain.
 - **Reorder policy.** A table's `reorder` is `immediate` (the default) or `deferred`. With
   `deferred`, an updated row that would move stays in place until the view is quiet for the
   `settle` interval or the row's editor commits and loses focus; then the engine emits one `moved`.
-  A user editing a sorted column therefore does not see the row leave from under the cursor.
+  A user editing a sorted column therefore does not see the row leave from under the cursor. A held
+  row also stays visible when its update takes it out of the filter, until it is released. A sort or
+  filter change, or a structural change, releases every held row, a row being edited included; the
+  next repair holds an edited row again.
+- **Pending work.** Updated rows, and the rows owed a `changed` operation, stay pending until a
+  result that took them in is applied: a dropped or failed task hands them back. A reset that changes
+  the columns shows its columns when its view is applied, and is published as one `reset`, because
+  row operations cannot say that the columns changed.
 - `ViewChange` is computed from the old and new view order, so a renderer applies the minimum list
   operations (spec 3 §5).
 
@@ -258,14 +290,24 @@ engine does its work off the owner:
   `DataSource` that cannot share its rows hands the engine a copy-on-write array. A `DataSource` is
   never read from the worker.
 - **Tasks.** Building keys, sorting, filtering and the `ViewChange` diff run on a worker of the
-  application's thread pool, one task at a time per table. A task captures the snapshot, the compiled
-  sort and filter and its `CallbackScope` generation, and never the engine or a signal, so a task that
-  outlives its table only has its result dropped by the owner's post contract.
+  application's thread pool, one task at a time per table. A task captures the snapshot, the key
+  columns it may reuse, the compiled sort and filter, its generation and a completion gated on the
+  engine's `CallbackScope`, and never the engine or a signal, so a task that outlives its table only
+  has its result dropped. A request that makes the running task's result useless (a new sort, filter,
+  or structural change) stops the task, and the work starts from the latest state when it reports
+  back. Updated rows do not stop a task: they wait for its result and are repaired after it, so a
+  stream of updates cannot keep a task from ever finishing.
 - **Stop.** Stopping is cooperative: the task checks the `StopToken` between chunks of the key build
   and inside a chunked merge sort, so a superseded task usually stops early and may run to
   completion, its result then dropped by generation.
-- **Services.** Collator, date parser and progress sink calls happen on the worker: a service is
-  thread-safe, or the engine clones one per task; `ProgressSink` notifications are posted to the owner.
+- **Services.** Collator and date parser calls happen on the worker: a service is thread-safe, or the
+  engine clones one per task. `ProgressSink` notifications, one per task phase, are posted to the
+  owner (with no worker, one per owner step). A service that throws ends its task: the sort and filter
+  go back to those of the view shown, and the error is `serviceFailed`, returned from the call when
+  the task ran inside it and reported through the engine's error handler otherwise.
+- **Callbacks.** Every handler the engine, a source or the cell-edit committer calls may call back in
+  or destroy its caller. Each object calls out last, or checks a liveness token after the call and
+  returns if it is gone. A listener unsubscribed during a notification is not called after that.
 - **Result.** A view mapping and its `ViewChange` are posted to the owner and applied there. `pending`
   is true from the request until then, and the previous view stays visible meanwhile (like a `Query`'s
   last value, spec 1 §4b). The engine never writes a signal from the worker.
@@ -300,10 +342,12 @@ with a heavy server-side filter panel and a header filter row on the rows it ret
 
 **`TableQuery`** is `{ sort: [{column, dir}], filters: FilterSpec, page: {offset, limit} }`.
 `Page<Row>` is `{ rows, total, offset }`; `total` is optional and may be capped, since an exact count
-of a large filtered set is itself expensive. The server may implement the action with the same
+of a large filtered set is itself expensive; `table::apply` omits a total above `QueryLimits::totalCap`
+(default 100,000). The server may implement the action with the same
 engine over its own rows (`table::apply(source, query)`), or with a database query, as long as it
 honours the semantics of §5–6; a server that cannot honour an operator or a column's sort answers
-with a typed error the table shows.
+with a typed error the table shows (`TableError`, whose code travels by name, such as
+`"unsupportedOperator"`).
 
 **Limits a server applies to every `TableQuery`**, since it is an untrusted request body:
 
@@ -311,8 +355,8 @@ with a typed error the table shows.
   filter columns, `include` and `exclude` entries and groups, and the length of a text value, are
   bounded, and a request over a bound is refused with a typed error.
 - A column in `sort` or `filters` is one of the row schema's columns, from a closed set, and never an
-  interpolated name; values are bound parameters; the wildcard characters of §6 are escaped.
-- A sort or filter column is one the principal may read. The authoriser sees the action, not the
+  interpolated name; values are bound parameters; the wildcard characters of §6 are escaped (`table::escapeLikePattern`).
+- A sort or filter column is one the principal may read (`ApplyOptions::mayRead`). The authoriser sees the action, not the
   body, so the action or the model enforces it: a hidden column is not a security control (a filter on
   it is an oracle for its value).
 - The server's execute timeout and in-flight limits apply; an unindexed text scan is the usual way to
@@ -398,25 +442,43 @@ controls sets `"controls": false` and drives `sort` and `filters` itself.
 
 ## 14. Packaging
 
-Header-only, in the base `morph` target, under `include/morph/table/`: `engine.hpp`, `data_source.hpp`,
-`filter.hpp`, `sort.hpp`, `query.hpp` (`TableQuery`, `Page`, `apply`), `query_rows_source.hpp`. It
-depends on `morph::reactive` only for `QueryRowsSource`, which is in its own header, so the engine
-itself needs the standard library and `math::Rational`. The engine wraps no toolkit, so it follows
-the program's packaging rule (morph is header-only except optional components that wrap a compiled
-toolkit). Compile time of the sort and filter code is measured (§17); if it is not acceptable, the
-headers are split so a translation unit that only needs `TableQuery` and `Page` does not include the
-engine.
+Header-only, in the base `morph` target, under `include/morph/table/`: `data_source.hpp` (columns,
+cells, snapshots, sources, services), `sort.hpp` (keys and the merge sort), `filter.hpp`,
+`view_change.hpp`, `engine.hpp` (`Engine`, `ColumnLayout`), `query.hpp` (`TableQuery`, `Page`,
+`validate`, `apply`, `RowsSource`, `PageWindow`), `selection.hpp`, `edits.hpp`, and
+`query_rows_source.hpp`. It depends on `morph::reactive` only for `QueryRowsSource`, which is in its
+own header, so the engine itself needs the standard library, `math::Rational` and the executor
+primitives. The engine wraps no toolkit, so it follows the program's packaging rule (morph is
+header-only except optional components that wrap a compiled toolkit).
+
+Compile time, measured with GCC 16.2.1, `-std=c++23 -O2 -fsyntax-only`, one translation unit per
+header, best of three, CPU seconds and preprocessed lines:
+
+| Header | CPU s | Lines |
+|---|---:|---:|
+| `util/rational.hpp` (reference) | 1.78 | 292,431 |
+| `table/data_source.hpp` | 2.07 | 293,649 |
+| `table/filter.hpp` | 2.35 | 297,439 |
+| `table/engine.hpp` | 2.86 | 302,746 |
+| `table/query.hpp` | 3.03 | 304,762 |
+| `core/bridge.hpp` (reference) | 3.34 | 319,357 |
+
+Most of the cost is `Rational`'s glaze codec, which every header pays; the engine adds about 1.1 s
+over it. A translation unit that only needs `TableQuery` and `Page` pays 3.0 s, less than
+`bridge.hpp`, which a list action's translation unit includes anyway, so the headers are not split.
 
 ## 15. Measurement
 
 Performance work is driven by numbers, from two sources.
 
-- **Benchmarks.** Catch2 `BENCHMARK` cases tagged `[.benchmark]` over synthetic sets of 1,000,
-  10,000 and 100,000 rows, with integer, decimal, quantity, accented-text and date columns and a
-  share of invalid cells. Scenarios: one-key numeric and text sorts, a three-key sort, text-contains,
-  numeric-compare and group filters, sort then filter, filter then sort, toggling one filter ten
-  times, and 1,000 cell updates while sorted. Results are written to `docs/` as median and spread per
-  scenario.
+- **Benchmarks.** Catch2 cases tagged `[.benchmark]` (`tests/table/bench_table.cpp`) over synthetic
+  sets of 1,000, 10,000 and 100,000 rows, with key, integer, decimal, quantity (mixed units),
+  accented-text and date columns and about 8% empty or unparsable cells per column. Scenarios: one-key
+  numeric and text sorts, a three-key sort, text-contains, numeric-compare and group filters, sort
+  then filter, filter then sort, toggling one filter ten times, and 1,000 cell updates while sorted;
+  plus the worst owner step with and without a worker, and rows per envelope. The cases time
+  themselves and report median and the 10th-90th percentile spread, which Catch2's `BENCHMARK` (mean
+  and standard deviation) does not; the results are in `docs/spec/table/engine.md`.
 - **Traces.** Zones behind `MORPH_ENABLE_TRACY`: `table.snapshot`, `table.keyBuild`, `table.sort`,
   `table.filter`, `table.apply`, `table.change`, with the sort chain and filter summary as zone text,
   and plots for source rows, view rows and key-cache size.
@@ -425,15 +487,31 @@ Performance work is driven by numbers, from two sources.
   and memory. The result decides whether row scopes follow the view's windowing (spec 3 §5): if
   10,000 rows mount within one frame budget, every row keeps its scope; otherwise a row scope is
   created when its row is instantiated by the view, and its state is kept by row key while the row
-  exists.
-- **Provisional targets**, to be confirmed against baselines: the owner thread is never blocked for
-  more than 16 ms by a table operation at any size, with or without a worker (§8); a sort or filter
-  of 1,000 rows completes within one frame, on the owner in one step; of 10,000 rows within 100 ms;
-  of 100,000 rows within 1 s, off the owner. Rows per envelope (§9) is measured in the same run.
+  exists. It needs the reactive runtime and the view tree, so it is measured with the `table` node
+  (spec 5 §9), not with the engine.
+- **Measured** (AMD Ryzen 5 7600X, 6 cores / 12 threads, Linux; GCC 16.2.1, Release `-O3`; medians
+  on the shipped code, with CI runners loading the machine to a load average of 14; an idle run of an
+  earlier revision was 1.5 to 2 times faster; full tables in `docs/spec/table/engine.md`):
+  - A sort or filter of 1,000 rows takes 0.03-0.23 ms, within one frame, on the owner in one step.
+  - Of 10,000 rows, 0.33-2.68 ms; the three-key sort plus text filter, request to result, 4 ms on a
+    worker and 3.3 ms in owner steps.
+  - Of 100,000 rows, 2.6 ms (numeric filter) to 46 ms (text sort); request to result for the
+    three-key sort plus text filter, 96 ms on a worker and 57 ms in owner steps, within 1 s.
+  - The owner is blocked at most 0.04 ms per request with a worker at 100,000 rows, and at most
+    11.6 ms without one (8.03 ms on the idle machine): the 16 ms bound holds at every size, with or
+    without a worker.
+  - 1,000 cell updates while sorted repair in one pass: 6.5 ms (1,000 rows), 8.4 ms (10,000),
+    27 ms (100,000), with no re-sort.
+  - Rows per envelope: a page of rows of ten small cells costs 212 bytes per row inside an `ok`
+    envelope, so 39,361 rows fit in `kMaxEnvelopeBytes` (8 MiB); `client` mode suits results up to
+    that size and `server` mode beyond it.
+
+  The defaults that follow from these: `smallTable` 2,000 rows (a 2,000-row sort is well under a
+  millisecond, below a hand-off's cost), a frame budget of 8 ms, and a `ViewChange` reset above 5,000
+  operations.
 
 An application measures its own baseline on its own table before moving it, and compares against the
-same scenario names. The change that adds `server` mode runs the benchmarks first, and the measured
-numbers replace the provisional targets above in this spec before that change merges.
+same scenario names.
 
 ## 16. Tests
 
@@ -470,4 +548,9 @@ numbers replace the provisional targets above in this spec before that change me
 - **Collation differs between clients.** The sort key comes from the renderer's collator; a client
   and a server in server mode may order accented text differently. Server mode therefore uses the
   server's collator for the order it returns, and the client does not re-sort a page (§9).
-- **Provisional thresholds.** The figures in §8 and §15 are targets, not measurements.
+- **Known limits.** With no worker, the diff of a recompute is one owner step: an insert into a
+  100,000-row table blocks the owner for about 30 ms. Applying a `deferred` repair lays held rows out
+  and diffs on the owner, O(n log n): 10 to 55 ms at 100,000 rows. A typed row's date column cannot
+  name a text format (`RowsSource` takes kinds and comparator names only).
+- **Measured on one machine.** The figures in §15 come from one desktop CPU; a browser build without
+  threads, or a slower client, is measured on its own before its `client` mode cap is set (§8).

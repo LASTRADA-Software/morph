@@ -1,0 +1,633 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+/// @file table/sort.hpp
+/// @brief Typed sort keys and the chunked, stoppable merge sort over them.
+///
+/// Each column a sort or filter uses gets a `KeyColumn`: one typed array of
+/// keys plus a `CellState` per cell, built once from a snapshot. Comparing two
+/// rows is then a direct compare of two keys, with no parsing and no
+/// allocation. Exact kinds stay exact: integers, dates and booleans compare as
+/// `int64`, decimals and quantities as `Rational` (128-bit cross products);
+/// only a `Number` column holds a double.
+///
+/// Ordering rules, normative for every client and server (spec 7 §5):
+/// - an empty or invalid cell sorts after every valid one, in either direction;
+/// - each key of a chain has its own direction;
+/// - ties break by source row, so the sort is stable.
+///
+/// See `docs/spec/table/engine.md`.
+
+#include <algorithm>
+#include <array>
+#include <charconv>
+#include <chrono>
+#include <cmath>
+#include <compare>
+#include <core/async/StopToken.hpp>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <morph/table/data_source.hpp>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace morph::table {
+
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row and column indices are bounded by the snapshot's own counts, and the sort and filter loops index once per comparison, where at() would check every access
+
+/// @brief A sort key's direction.
+enum class SortDirection : std::uint8_t {
+    Ascending,   ///< Smallest first.
+    Descending,  ///< Largest first. Invalid cells still come last.
+};
+
+/// @brief One key of a sort chain.
+struct SortKey {
+    /// @brief The column's id.
+    std::string column;
+    /// @brief The key's direction.
+    SortDirection dir = SortDirection::Ascending;
+
+    /// @brief Member-wise equality.
+    /// @param other The key to compare with.
+    /// @return `true` when column and direction match.
+    [[nodiscard]] bool operator==(SortKey const& other) const = default;
+};
+
+/// @brief A multi-key sort, most significant key first. Empty means source order.
+using SortChain = std::vector<SortKey>;
+
+/// @brief Whether a cell has a key.
+enum class CellState : std::uint8_t {
+    Valid,    ///< The cell has a key.
+    Empty,    ///< The cell is empty; it sorts with invalid cells.
+    Invalid,  ///< The cell could not be read for its column's kind.
+};
+
+/// @brief A deadline for one step of work; `kNoDeadline` runs to completion.
+using Deadline = std::chrono::steady_clock::time_point;
+
+/// @brief The deadline that never passes.
+inline constexpr Deadline kNoDeadline = Deadline::max();
+
+namespace detail {
+
+/// @brief Elements of work between two looks at the clock and the stop token:
+///        often enough to keep an owner step near its budget, rarely enough
+///        that the clock read is noise.
+inline constexpr std::size_t kCheckEvery = 2048;
+
+/// @brief Whether a step should return now.
+/// @param deadline When the step must end; `kNoDeadline` never passes.
+/// @param stop     A stop request ends the step.
+/// @return `true` when stop is requested or the deadline has passed.
+[[nodiscard]] inline bool shouldYield(Deadline deadline, ::core::async::StopToken const& stop) {
+    return stop.stop_requested() || (deadline != kNoDeadline && std::chrono::steady_clock::now() >= deadline);
+}
+
+/// @brief The collator to use: the service's, or the default.
+/// @param services The services.
+/// @return The collator; the default outlives every caller.
+[[nodiscard]] inline TextCollator const& collatorOf(Services const& services) {
+    return services.collator != nullptr ? *services.collator : *services.collatorOrDefault();
+}
+
+/// @brief The date parser to use: the service's, or the default.
+/// @param services The services.
+/// @return The parser; the default outlives every caller.
+[[nodiscard]] inline DateParser const& datesOf(Services const& services) {
+    return services.dates != nullptr ? *services.dates : *services.datesOrDefault();
+}
+
+/// @brief Parses a whole decimal integer, all of @p text.
+/// @param text The text.
+/// @return The value, or nothing when @p text is not exactly an integer.
+[[nodiscard]] inline std::optional<std::int64_t> parseInteger(std::string_view text) {
+    std::int64_t value = 0;
+    auto const* const first = std::to_address(text.begin());
+    auto const* const last = std::to_address(text.end());
+    auto const [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last || text.empty()) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+/// @brief Parses a floating-point number, all of @p text.
+/// @param text The text.
+/// @return The value, or nothing when @p text is not exactly a number or is NaN.
+[[nodiscard]] inline std::optional<double> parseReal(std::string_view text) {
+    double value = 0;
+    auto const* const first = std::to_address(text.begin());
+    auto const* const last = std::to_address(text.end());
+    auto const [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last || text.empty() || std::isnan(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+}  // namespace detail
+
+/// @brief One column's keys, built once and shared, immutable, between jobs.
+///
+/// Exactly one of the typed arrays is filled, chosen by the column's kind:
+/// `ints` for `Integer`, `Key`, `Date`, `DateTime` and `Bool`; `exact` for
+/// `Decimal` and `Quantity`; `reals` for `Number`; `text`, `folded` and `raw`
+/// for `Text`; `cells` for a `Custom` column with a known comparator, and
+/// `text` for one without (ordered by display text).
+struct KeyColumn {
+    /// @brief The column's kind.
+    ColumnKind kind = ColumnKind::Text;
+    /// @brief The state of each row's cell.
+    std::vector<CellState> states;
+    /// @brief Integer keys.
+    std::vector<std::int64_t> ints;
+    /// @brief Exact keys.
+    std::vector<math::Rational> exact;
+    /// @brief Floating-point keys.
+    std::vector<double> reals;
+    /// @brief Collation keys.
+    std::vector<std::string> text;
+    /// @brief Primary-strength folds, which text filters match.
+    std::vector<std::string> folded;
+    /// @brief The text as the source gave it, for case-sensitive filters.
+    std::vector<std::string> raw;
+    /// @brief Cells of a `Custom` column with a comparator.
+    std::vector<Cell> cells;
+    /// @brief The comparator of a `Custom` column, or empty.
+    CellComparator comparator;
+
+    /// @brief Whether this column orders `Custom` cells through a comparator.
+    /// @return `true` when `comparator` is set.
+    [[nodiscard]] bool usesComparator() const noexcept { return static_cast<bool>(comparator); }
+
+    /// @brief An empty key column for @p info, sized for @p rows rows.
+    /// @param info     The column.
+    /// @param services Where a `Custom` column's comparator is looked up.
+    /// @param rows     Row count.
+    /// @return The column, every cell `Empty` until built.
+    [[nodiscard]] static KeyColumn forColumn(ColumnInfo const& info, Services const& services, std::size_t rows) {
+        KeyColumn out;
+        out.kind = info.kind;
+        out.states.assign(rows, CellState::Empty);
+        switch (info.kind) {
+            case ColumnKind::Integer:
+            case ColumnKind::Key:
+            case ColumnKind::Date:
+            case ColumnKind::DateTime:
+            case ColumnKind::Bool:
+                out.ints.assign(rows, 0);
+                break;
+            case ColumnKind::Decimal:
+            case ColumnKind::Quantity:
+                out.exact.assign(rows, math::Rational{});
+                break;
+            case ColumnKind::Number:
+                out.reals.assign(rows, 0.0);
+                break;
+            case ColumnKind::Text:
+                out.text.resize(rows);
+                out.folded.resize(rows);
+                out.raw.resize(rows);
+                break;
+            case ColumnKind::Custom:
+                if (auto const found = services.comparators.find(info.comparator);
+                    found != services.comparators.end() && found->second) {
+                    out.comparator = found->second;
+                    out.cells.resize(rows);
+                } else {
+                    out.text.resize(rows);
+                }
+                break;
+            default:
+                break;
+        }
+        return out;
+    }
+
+    /// @brief Rebuilds the key of one row from @p cell.
+    /// @param row      Row index.
+    /// @param cell     The row's cell.
+    /// @param info     The column.
+    /// @param services Collator and date parser; a null member means its default.
+    void set(std::size_t row, Cell const& cell, ColumnInfo const& info, Services const& services) {
+        states[row] = read(row, cell, info, services);
+    }
+
+private:
+    [[nodiscard]] CellState read(std::size_t row, Cell const& cell, ColumnInfo const& info, Services const& services) {
+        if (std::holds_alternative<std::monostate>(cell)) {
+            return CellState::Empty;
+        }
+        auto const* const textCell = std::get_if<std::string>(&cell);
+        if (textCell != nullptr && textCell->empty()) {
+            return CellState::Empty;
+        }
+        switch (kind) {
+            case ColumnKind::Integer:
+            case ColumnKind::Key:
+                return readInteger(row, cell);
+            case ColumnKind::Decimal:
+            case ColumnKind::Quantity:
+                return readExact(row, cell);
+            case ColumnKind::Number:
+                return readReal(row, cell);
+            case ColumnKind::Text: {
+                auto const shown = textCell != nullptr ? *textCell : displayText(cell);
+                auto const& collator = detail::collatorOf(services);
+                text[row] = collator.sortKey(shown);
+                folded[row] = collator.fold(shown);
+                raw[row] = shown;
+                return CellState::Valid;
+            }
+            case ColumnKind::Date:
+            case ColumnKind::DateTime:
+                return readDate(row, cell, info, services);
+            case ColumnKind::Bool:
+                return readBool(row, cell);
+            case ColumnKind::Custom:
+                if (usesComparator()) {
+                    cells[row] = cell;
+                } else {
+                    text[row] = detail::collatorOf(services).sortKey(displayText(cell));
+                }
+                return CellState::Valid;
+            default:
+                break;
+        }
+        return CellState::Invalid;
+    }
+
+    [[nodiscard]] CellState readInteger(std::size_t row, Cell const& cell) {
+        if (auto const* value = std::get_if<std::int64_t>(&cell)) {
+            ints[row] = *value;
+            return CellState::Valid;
+        }
+        if (auto const* value = std::get_if<math::Rational>(&cell); value != nullptr && value->isInteger()) {
+            ints[row] = value->numerator;
+            return CellState::Valid;
+        }
+        if (auto const* value = std::get_if<std::string>(&cell)) {
+            if (auto const parsed = detail::parseInteger(*value)) {
+                ints[row] = *parsed;
+                return CellState::Valid;
+            }
+        }
+        return CellState::Invalid;
+    }
+
+    [[nodiscard]] CellState readExact(std::size_t row, Cell const& cell) {
+        if (auto const* value = std::get_if<math::Rational>(&cell)) {
+            exact[row] = *value;
+            return CellState::Valid;
+        }
+        if (auto const* value = std::get_if<QuantityCell>(&cell)) {
+            // Checked: a product that does not fit int64 is an invalid cell, not
+            // a saturated value that would sort as the largest quantity.
+            auto const canonical = math::checkedMul(value->amount, value->toCanonical);
+            if (!canonical) {
+                return CellState::Invalid;
+            }
+            exact[row] = *canonical;
+            return CellState::Valid;
+        }
+        if (auto const* value = std::get_if<std::int64_t>(&cell)) {
+            exact[row] = math::Rational{*value, math::DecimalPlaces{0}};
+            return CellState::Valid;
+        }
+        if (auto const* value = std::get_if<std::string>(&cell)) {
+            if (auto const parsed = parseDecimal(*value)) {
+                exact[row] = *parsed;
+                return CellState::Valid;
+            }
+        }
+        return CellState::Invalid;
+    }
+
+    [[nodiscard]] CellState readReal(std::size_t row, Cell const& cell) {
+        std::optional<double> value;
+        if (auto const* real = std::get_if<double>(&cell)) {
+            value = *real;
+        } else if (auto const* integer = std::get_if<std::int64_t>(&cell)) {
+            value = static_cast<double>(*integer);
+        } else if (auto const* exactValue = std::get_if<math::Rational>(&cell)) {
+            value = exactValue->toDouble(math::kMaxDecimalPlaces + 1);
+        } else if (auto const* textValue = std::get_if<std::string>(&cell)) {
+            value = detail::parseReal(*textValue);
+        }
+        if (!value || std::isnan(*value)) {
+            return CellState::Invalid;
+        }
+        reals[row] = *value;
+        return CellState::Valid;
+    }
+
+    [[nodiscard]] CellState readDate(std::size_t row, Cell const& cell, ColumnInfo const& info,
+                                     Services const& services) {
+        if (auto const* value = std::get_if<std::int64_t>(&cell)) {
+            ints[row] = *value;
+            return CellState::Valid;
+        }
+        if (auto const* value = std::get_if<std::string>(&cell)) {
+            auto const& parser = detail::datesOf(services);
+            auto const parsed = kind == ColumnKind::Date ? parser.parseDate(*value, info.format)
+                                                         : parser.parseDateTime(*value, info.format);
+            if (parsed) {
+                ints[row] = *parsed;
+                return CellState::Valid;
+            }
+        }
+        return CellState::Invalid;
+    }
+
+    [[nodiscard]] CellState readBool(std::size_t row, Cell const& cell) {
+        if (auto const* value = std::get_if<bool>(&cell)) {
+            ints[row] = *value ? 1 : 0;
+            return CellState::Valid;
+        }
+        if (auto const* value = std::get_if<std::int64_t>(&cell); value != nullptr && (*value == 0 || *value == 1)) {
+            ints[row] = *value;
+            return CellState::Valid;
+        }
+        if (auto const* value = std::get_if<std::string>(&cell);
+            value != nullptr && (*value == "true" || *value == "false")) {
+            ints[row] = *value == "true" ? 1 : 0;
+            return CellState::Valid;
+        }
+        return CellState::Invalid;
+    }
+};
+
+/// @brief Builds the keys of rows `[first, last)` of one column into @p out.
+/// @param snapshot The rows.
+/// @param column   Column index in the snapshot.
+/// @param info     The column.
+/// @param services Collator and date parser; a null member means its default.
+/// @param first    First row.
+/// @param last     One past the last row.
+/// @param out      A column from `KeyColumn::forColumn` sized for the snapshot.
+inline void buildKeys(RowSnapshot const& snapshot, std::size_t column, ColumnInfo const& info,
+                      Services const& services, std::size_t first, std::size_t last, KeyColumn& out) {
+    struct Sink final : ColumnSink {
+        Sink(KeyColumn& keys, ColumnInfo const& column, Services const& with)
+            : out{&keys}, info{&column}, services{&with} {}
+        void cells(std::size_t firstRow, std::span<Cell const> run) override {
+            for (std::size_t i = 0; i < run.size(); ++i) {
+                out->set(firstRow + i, run[i], *info, *services);
+            }
+        }
+        KeyColumn* out;
+        ColumnInfo const* info;
+        Services const* services;
+    };
+    Sink sink{out, info, services};
+    snapshot.readColumn(column, sink, first, last);
+}
+
+/// @brief Compares two rows' keys in one column, valid before invalid in
+///        either direction.
+/// @param keys The column's keys.
+/// @param left  One row.
+/// @param right Another row.
+/// @param dir   The key's direction; it does not move invalid cells.
+/// @return Negative, zero or positive as row @p left orders before, with, or after @p right.
+[[nodiscard]] inline int compareKeys(KeyColumn const& keys, std::uint32_t left, std::uint32_t right,
+                                     SortDirection dir) {
+    bool const validA = keys.states[left] == CellState::Valid;
+    bool const validB = keys.states[right] == CellState::Valid;
+    if (validA != validB) {
+        return validA ? -1 : 1;
+    }
+    if (!validA) {
+        return 0;
+    }
+    auto const sign = [](auto ordering) -> int {
+        if (std::is_lt(ordering)) {
+            return -1;
+        }
+        return std::is_gt(ordering) ? 1 : 0;
+    };
+    int result = 0;
+    switch (keys.kind) {
+        case ColumnKind::Integer:
+        case ColumnKind::Key:
+        case ColumnKind::Date:
+        case ColumnKind::DateTime:
+        case ColumnKind::Bool:
+            result = sign(keys.ints[left] <=> keys.ints[right]);
+            break;
+        case ColumnKind::Decimal:
+        case ColumnKind::Quantity:
+            result = sign(keys.exact[left] <=> keys.exact[right]);
+            break;
+        case ColumnKind::Number:
+            result = sign(std::strong_order(keys.reals[left], keys.reals[right]));
+            break;
+        case ColumnKind::Text:
+            result = sign(keys.text[left].compare(keys.text[right]) <=> 0);
+            break;
+        case ColumnKind::Custom:
+            result = keys.usesComparator() ? sign(keys.comparator(keys.cells[left], keys.cells[right]))
+                                           : sign(keys.text[left].compare(keys.text[right]) <=> 0);
+            break;
+        default:
+            break;
+    }
+    return dir == SortDirection::Descending ? -result : result;
+}
+
+/// @brief A sort chain resolved to key columns: the comparator of a sort.
+///
+/// Holds pointers to key columns it does not own; whoever builds it keeps the
+/// columns alive for as long as it is used.
+class RowOrder {
+public:
+    /// @brief One resolved key.
+    struct Key {
+        /// @brief The column's keys.
+        KeyColumn const* keys = nullptr;
+        /// @brief The key's direction.
+        SortDirection dir = SortDirection::Ascending;
+    };
+
+    /// @brief Source order.
+    RowOrder() = default;
+
+    /// @brief An order over resolved keys, most significant first.
+    /// @param keys The keys.
+    explicit RowOrder(std::vector<Key> keys) : _keys{std::move(keys)} {}
+
+    /// @brief Whether row @p a orders before row @p b. Ties break by source
+    ///        row, so this is a strict total order and every sort is stable.
+    /// @param left  One row.
+    /// @param right Another row.
+    /// @return `true` when @p left comes first.
+    [[nodiscard]] bool operator()(std::uint32_t left, std::uint32_t right) const {
+        for (auto const& key : _keys) {
+            if (int const result = compareKeys(*key.keys, left, right, key.dir); result != 0) {
+                return result < 0;
+            }
+        }
+        return left < right;
+    }
+
+    /// @brief Whether this is source order.
+    /// @return `true` when no key is set.
+    [[nodiscard]] bool empty() const noexcept { return _keys.empty(); }
+
+private:
+    std::vector<Key> _keys;
+};
+
+/// @brief A bottom-up merge sort over row indices that can stop and resume.
+///
+/// Runs of `kRun` rows are sorted first, then merged pass by pass. `run`
+/// returns at a deadline or a stop request and continues from there on the
+/// next call, which is how the engine sorts 100,000 rows on an owner thread
+/// in frame-sized steps, or abandons a superseded sort on a worker.
+class ChunkedMergeSort {
+public:
+    /// @brief Rows per initial run.
+    static constexpr std::size_t kRun = 512;
+
+    /// @brief Prepares to sort @p rows by @p order.
+    /// @param rows  Row indices to sort.
+    /// @param order The comparator; its key columns must outlive the sort.
+    ChunkedMergeSort(std::vector<std::uint32_t> rows, RowOrder order)
+        : _rows{std::move(rows)}, _order{std::move(order)} {
+        _buffer.resize(_rows.size());
+    }
+
+    /// @brief Sorts until done, the deadline passes, or a stop is requested.
+    /// @param deadline When to yield.
+    /// @param stop     A stop request ends the step early.
+    /// @return `true` when the rows are sorted.
+    bool run(Deadline deadline, ::core::async::StopToken const& stop) {
+        return sortRuns(deadline, stop) && mergePasses(deadline, stop);
+    }
+
+    /// @brief Whether the sort has finished.
+    /// @return `true` once `run` returned `true`.
+    [[nodiscard]] bool done() const noexcept { return _runStart >= _rows.size() && _width >= _rows.size(); }
+
+    /// @brief The sorted rows. Valid once `done()`.
+    /// @return The rows, moved out.
+    [[nodiscard]] std::vector<std::uint32_t> take() && { return std::move(_rows); }
+
+private:
+    // Phase one: sorts each run of kRun rows in place.
+    bool sortRuns(Deadline deadline, ::core::async::StopToken const& stop) {
+        auto const count = _rows.size();
+        std::size_t work = 0;
+        while (_runStart < count) {
+            auto const end = std::min(_runStart + kRun, count);
+            std::sort(_rows.begin() + static_cast<std::ptrdiff_t>(_runStart),
+                      _rows.begin() + static_cast<std::ptrdiff_t>(end), _order);
+            work += end - _runStart;
+            _runStart = end;
+            if (work >= detail::kCheckEvery && detail::shouldYield(deadline, stop)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Phase two: merges runs pass by pass, doubling their width.
+    bool mergePasses(Deadline deadline, ::core::async::StopToken const& stop) {
+        auto const count = _rows.size();
+        while (_width < count) {
+            while (_mergeAt < count) {
+                if (!mergeOne(deadline, stop)) {
+                    return false;
+                }
+            }
+            _rows.swap(_buffer);
+            _width *= 2;
+            _mergeAt = 0;
+            if (_width < count && detail::shouldYield(deadline, stop)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Merges the two runs at `_mergeAt` into the buffer, resuming a merge a
+    // previous step left half done.
+    bool mergeOne(Deadline deadline, ::core::async::StopToken const& stop) {
+        auto const count = _rows.size();
+        if (!_merging) {
+            _left = _mergeAt;
+            _leftEnd = std::min(_mergeAt + _width, count);
+            _right = _leftEnd;
+            _rightEnd = std::min(_mergeAt + (2 * _width), count);
+            _out = _mergeAt;
+            _merging = true;
+        }
+        // The count runs across merges: a pass of narrow runs merges many
+        // short pairs, and a per-merge count would never reach a check.
+        while (_left < _leftEnd && _right < _rightEnd) {
+            _buffer[_out++] = _order(_rows[_right], _rows[_left]) ? _rows[_right++] : _rows[_left++];
+            if (++_work % detail::kCheckEvery == 0 && detail::shouldYield(deadline, stop)) {
+                return false;
+            }
+        }
+        std::copy(_rows.begin() + static_cast<std::ptrdiff_t>(_left),
+                  _rows.begin() + static_cast<std::ptrdiff_t>(_leftEnd),
+                  _buffer.begin() + static_cast<std::ptrdiff_t>(_out));
+        _out += _leftEnd - _left;
+        _left = _leftEnd;
+        std::copy(_rows.begin() + static_cast<std::ptrdiff_t>(_right),
+                  _rows.begin() + static_cast<std::ptrdiff_t>(_rightEnd),
+                  _buffer.begin() + static_cast<std::ptrdiff_t>(_out));
+        _out += _rightEnd - _right;
+        _right = _rightEnd;
+        _merging = false;
+        _mergeAt = _rightEnd;
+        return true;
+    }
+
+    std::vector<std::uint32_t> _rows;
+    std::vector<std::uint32_t> _buffer;
+    RowOrder _order;
+    std::size_t _runStart = 0;
+    std::size_t _width = kRun;
+    std::size_t _mergeAt = 0;
+    bool _merging = false;
+    std::size_t _left = 0;
+    std::size_t _leftEnd = 0;
+    std::size_t _right = 0;
+    std::size_t _rightEnd = 0;
+    std::size_t _out = 0;
+    std::size_t _work = 0;
+};
+
+/// @brief Sorts @p rows by @p order in one call.
+/// @param rows  Row indices.
+/// @param order The comparator.
+/// @return The sorted rows.
+[[nodiscard]] inline std::vector<std::uint32_t> sortRows(std::vector<std::uint32_t> rows, RowOrder order) {
+    ChunkedMergeSort sort{std::move(rows), std::move(order)};
+    static_cast<void>(sort.run(kNoDeadline, ::core::async::StopToken{}));
+    return std::move(sort).take();
+}
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
+}  // namespace morph::table
+
+/// @brief JSON names of `morph::table::SortDirection`: `asc` and `desc`.
+template <>
+struct glz::meta<morph::table::SortDirection> {
+    using enum morph::table::SortDirection;
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value = glz::enumerate("asc", Ascending, "desc", Descending);
+};

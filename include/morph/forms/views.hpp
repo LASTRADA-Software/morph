@@ -175,6 +175,115 @@ concept HasViewActions = requires {
     std::end(V::actions);
 };
 
+/// @brief The node a property's schema resolves to: its `$defs` entry when it
+///        is a `$ref`, else the property itself. A nullable property, which
+///        glaze writes for `std::optional<T>` as `anyOf` of `T` and `null`,
+///        resolves through its `T` alternative.
+/// @param rowDom The row type's schema DOM.
+/// @param prop   A property node.
+/// @return The resolved node; the unresolved one when the reference does not resolve.
+[[nodiscard]] inline glz::generic_u64 const* resolveSchemaRef(glz::generic_u64 const& rowDom,
+                                                              glz::generic_u64 const& prop) {
+    using ::morph::forms::detail::findMember;
+    auto const* node = &prop;
+    if (auto const* const anyOf = findMember(prop, "anyOf"); anyOf != nullptr && anyOf->is_array()) {
+        for (auto const& alternative : anyOf->get_array()) {
+            auto const* const type = findMember(alternative, "type");
+            if (type == nullptr || !type->is_string() || type->get_string() != "null") {
+                node = &alternative;
+                break;
+            }
+        }
+    }
+    auto const* const ref = findMember(*node, "$ref");
+    if (ref == nullptr || !ref->is_string()) {
+        return node;
+    }
+    auto const& refText = ref->get_string();
+    auto const defName = refText.substr(refText.find_last_of('/') + 1);
+    auto const* const defs = findMember(rowDom, "$defs");
+    auto const* const def = (defs == nullptr) ? nullptr : findMember(*defs, defName);
+    return def == nullptr ? node : def;
+}
+
+/// @brief A property's JSON-Schema `type`, ignoring a `null` alternative.
+/// @param node A resolved property node.
+/// @return The type name, or empty when the node declares none.
+[[nodiscard]] inline std::string schemaType(glz::generic_u64 const& node) {
+    auto const* const type = ::morph::forms::detail::findMember(node, "type");
+    if (type == nullptr) {
+        return {};
+    }
+    if (type->is_string()) {
+        return type->get_string();
+    }
+    if (type->is_array()) {
+        for (auto const& alternative : type->get_array()) {
+            if (alternative.is_string() && alternative.get_string() != "null") {
+                return alternative.get_string();
+            }
+        }
+    }
+    return {};
+}
+
+/// @brief The string a schema node holds under @p key, or empty.
+/// @param node A schema node.
+/// @param key  The member's name.
+/// @return The member's text, or empty when it is absent or not a string.
+[[nodiscard]] inline std::string schemaText(glz::generic_u64 const& node, std::string_view key) {
+    auto const* const member = ::morph::forms::detail::findMember(node, key);
+    return (member != nullptr && member->is_string()) ? member->get_string() : std::string{};
+}
+
+/// @brief The table column kind of a row property (spec 7 §4), by the names
+///        `morph::table::ColumnKind` reads: `integer`, `decimal`, `quantity`,
+///        `number`, `text`, `date`, `dateTime`, `bool`, `custom`.
+///
+/// `x-comparator` makes a column `custom`; an exact value (`num`/`den`) is
+/// `quantity` when it carries units and `decimal` otherwise; an integer with
+/// `x-widget` `epochDays` or `epochSeconds` is a `date` or `dateTime`; a
+/// string with `format` `date` or `date-time` likewise; a boolean is `bool`;
+/// any other number is `number`; anything else is `text`.
+/// @param rowDom The row type's schema DOM.
+/// @param prop   The property node.
+/// @return The kind's name.
+[[nodiscard]] inline std::string_view inferColumnKind(glz::generic_u64 const& rowDom, glz::generic_u64 const& prop) {
+    using ::morph::forms::detail::findMember;
+    if (findMember(prop, "x-comparator") != nullptr) {
+        return "custom";
+    }
+    auto const& node = *resolveSchemaRef(rowDom, prop);
+    auto const* const properties = findMember(node, "properties");
+    if (properties != nullptr && findMember(*properties, "num") != nullptr &&
+        findMember(*properties, "den") != nullptr) {
+        bool const units = findMember(prop, "ExtUnits") != nullptr || findMember(node, "ExtUnits") != nullptr;
+        return units ? "quantity" : "decimal";
+    }
+    auto const type = schemaType(node);
+    auto const widget = schemaText(prop, "x-widget");
+    auto const format = schemaText(node, "format");
+    if (type == "integer") {
+        if (widget == "epochDays") {
+            return "date";
+        }
+        return widget == "epochSeconds" ? "dateTime" : "integer";
+    }
+    if (type == "number") {
+        return "number";
+    }
+    if (type == "boolean") {
+        return "bool";
+    }
+    if (format == "date") {
+        return "date";
+    }
+    if (format == "date-time") {
+        return "dateTime";
+    }
+    return "text";
+}
+
 /// @brief Builds one `v-columns` entry, copying `x-decimalPlaces` /
 ///        `ExtUnits` off @p rowDom's property node (and, via its `$ref`, the
 ///        resolved `$def`) when @p field names a `Quantity` property.
@@ -226,21 +335,44 @@ concept HasViewActions = requires {
     // occurs on more than one property (see forms.md's "CFSharedDefFields"
     // fixture) — deriveColumns must read whichever shape schemaJson<Row>()
     // actually produced for this particular row type.
+    // What a table needs beyond the forms view: the column's kind, the
+    // schema's title (the header a table shows when no label is declared),
+    // the unit alternatives a quantity column offers, the values of a closed
+    // set, and the name of a custom comparator. Each is a write into the
+    // entry being built; see the directive above.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+    entry["kind"] = std::string{inferColumnKind(rowDom, prop)};
+    for (std::string_view const key : {"title", "x-unitAlternatives", "x-comparator"}) {
+        if (auto const* const value = ::morph::forms::detail::findMember(prop, key)) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+            entry[std::string{key}] = *value;
+        }
+    }
+    auto const& resolved = *resolveSchemaRef(rowDom, prop);
+    if (auto const* const values = ::morph::forms::detail::findMember(resolved, "enum")) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        entry["enum"] = *values;
+    } else if (auto const* const oneOf = ::morph::forms::detail::findMember(resolved, "oneOf");
+               oneOf != nullptr && oneOf->is_array()) {
+        glz::generic_u64::array_t constants;
+        for (auto const& option : oneOf->get_array()) {
+            if (auto const* const constant = ::morph::forms::detail::findMember(option, "const")) {
+                constants.push_back(*constant);
+            }
+        }
+        if (!constants.empty()) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+            entry["enum"] = constants;
+        }
+    }
     if (auto const* const units = ::morph::forms::detail::findMember(prop, "ExtUnits")) {
         // A write; see the directive above.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         entry["ExtUnits"] = *units;
-    } else if (auto const* const ref = ::morph::forms::detail::findMember(prop, "$ref")) {
-        auto const refText = ref->get_string();
-        auto const defName = refText.substr(refText.find_last_of('/') + 1);
-        auto const* const defs = ::morph::forms::detail::findMember(rowDom, "$defs");
-        auto const* const def = (defs == nullptr) ? nullptr : ::morph::forms::detail::findMember(*defs, defName);
-        auto const* const defUnits = (def == nullptr) ? nullptr : ::morph::forms::detail::findMember(*def, "ExtUnits");
-        if (defUnits != nullptr) {
-            // A write; see the directive above.
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-            entry["ExtUnits"] = *defUnits;
-        }
+    } else if (auto const* const defUnits = ::morph::forms::detail::findMember(resolved, "ExtUnits")) {
+        // A write; see the directive above.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        entry["ExtUnits"] = *defUnits;
     }
     return entry;
 }
@@ -294,6 +426,12 @@ template <typename V, typename Row>
         std::vector<std::pair<std::string, std::uint64_t>> ordered;
         ordered.reserve(propsObj.size());
         for (auto const& [name, prop] : propsObj) {
+            // A member the schema hides is not a column; an explicit override
+            // list may still name it.
+            if (auto const* const hiddenNode = ::morph::forms::detail::findMember(prop, "x-hidden");
+                hiddenNode != nullptr && hiddenNode->is_boolean() && hiddenNode->get_boolean()) {
+                continue;
+            }
             auto const* const orderNode = ::morph::forms::detail::findMember(prop, "x-order");
             auto const order = (orderNode == nullptr) ? 0 : orderNode->template get<std::uint64_t>();
             ordered.emplace_back(name, order);

@@ -122,7 +122,10 @@ before writing a durability test
 [`forms/views.md`](forms/views.md) ·
 [`forms/choice.md`](forms/choice.md) ·
 [`forms/widget_hints.md`](forms/widget_hints.md) ·
-[`forms/workflows_navigation.md`](forms/workflows_navigation.md)
+[`forms/workflows_navigation.md`](forms/workflows_navigation.md) ·
+[`table/engine.md`](table/engine.md) — sorting, filtering and view
+mapping for a table, on and off the owner thread, and `table::apply` for a
+server
 
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·

@@ -434,6 +434,14 @@ target_sources(morph
         include/morph/session/session_auth.hpp
         include/morph/util/tagged.hpp
         include/morph/forms/instance_constraints.hpp
+        include/morph/table/data_source.hpp
+        include/morph/table/sort.hpp
+        include/morph/table/filter.hpp
+        include/morph/table/view_change.hpp
+        include/morph/table/engine.hpp
+        include/morph/table/query.hpp
+        include/morph/table/selection.hpp
+        include/morph/table/edits.hpp
 )
 
 # The detail/ headers that public headers include. They are not public surface
