@@ -18,6 +18,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -81,6 +82,13 @@ public:
     void setDragKey(std::optional<ui::Key> const& /*key*/) override {}
     void setDropHandler(std::function<bool(ui::Key const&)> /*accepts*/,
                         std::function<void(ui::Key)> /*onDrop*/) override {}
+    void setAccessibleName(std::string_view /*name*/) override {}
+    void setAccessibleRole(std::string_view /*role*/) override {}
+    void setTestId(std::string_view /*testId*/) override {}
+    void setTooltip(std::string_view /*text*/) override {}
+    void setSurface(std::string_view /*surface*/) override {}
+    void setKeys(std::vector<std::string> const& /*chords*/, std::function<void(std::string)> /*onChord*/) override {}
+    void focus() override {}
 };
 
 // A container that applies `moveChild` as the contract defines it and counts the moves; the move numbered
@@ -96,6 +104,13 @@ public:
     void setDragKey(std::optional<ui::Key> const& /*key*/) override {}
     void setDropHandler(std::function<bool(ui::Key const&)> /*accepts*/,
                         std::function<void(ui::Key)> /*onDrop*/) override {}
+    void setAccessibleName(std::string_view /*name*/) override {}
+    void setAccessibleRole(std::string_view /*role*/) override {}
+    void setTestId(std::string_view /*testId*/) override {}
+    void setTooltip(std::string_view /*text*/) override {}
+    void setSurface(std::string_view /*surface*/) override {}
+    void setKeys(std::vector<std::string> const& /*chords*/, std::function<void(std::string)> /*onChord*/) override {}
+    void focus() override {}
 
     void moveChild(ui::Widget& child, std::size_t index) override {
         if (_failingMove == _moves) {

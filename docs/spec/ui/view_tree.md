@@ -114,8 +114,22 @@ subtree of base kinds.
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
 
-The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled` and
-`dragKey`, and: Text `text` and `role`; Button `label`; TextInput `value` and `placeholder`; Checkbox
+Every node also carries `Common`:
+
+| Field | Meaning |
+|---|---|
+| `visible`, `enabled` | Whether the widget is shown and accepts input; both apply to everything inside it |
+| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch), set once |
+| `dragKey`, `accepts`, `onDrop` | Drag and drop ([backend contract](backend_contract.md#drag-and-drop)) |
+| `a11y` | `Accessibility{name, role}`: what assistive technology announces; `role` is set once |
+| `testId` | The stable identifier an automated test finds the widget by, set once |
+| `tooltip` | Text shown while the pointer rests on the widget |
+| `surface` | The named token set of the theme that styles the node and everything inside it, set once |
+| `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called |
+| `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
+
+The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`, `enabled`, `dragKey`,
+`a11y.name` and `tooltip`, and: Text `text` and `role`; Button `label`; TextInput `value` and `placeholder`; Checkbox
 `label` and `checked`; Select `options` and `selected`; a MenuItem's `label`; Panel `title` and
 `collapsed`; Switch `selector`; Tabs `selected`; Dialog `open` and `title`; Busy `active` and
 `label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`. Every other
@@ -186,8 +200,11 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    zone, a FilePicker's mode), and adopted into the scope **first**.
 2. `Common`, in this order. `visible` and `enabled` only when bound or `false`; `layout` only when
    it is not content × content; `dragKey` only when bound or engaged; the drop handler only when
-   `onDrop` is set, with an accept-everything predicate when `accepts` is empty. A new widget is
-   already visible, enabled, content-sized and neither draggable nor a drop target, so a node that
+   `onDrop` is set, with an accept-everything predicate when `accepts` is empty; `a11y.name` and
+   `tooltip` only when bound or not empty; `a11y.role`, `testId` and `surface` only when not empty;
+   the chords only when `keys` is not empty, as one `setKeys` whose handler runs the first binding
+   of the chord pressed as a widget callback. A new widget is already visible, enabled,
+   content-sized, neither draggable nor a drop target, and has none of the rest, so a node that
    says nothing more costs no call.
 3. The kind's own props and callbacks. Every `Prop` is applied, even one that holds its default: a
    constant calls its setter once; a binding makes a `Computed` (equality-gated, so an unchanged
@@ -217,6 +234,20 @@ content one level deeper again. So an Effect that takes content away runs before
 bindings in the same flush, whichever was made first, and a binding never evaluates against state
 its owner is removing. A mount placed under another scope — a screen's, a row's — passes that
 scope's depth plus one, so the outer scope's Effects run first too.
+
+### Focus
+
+A widget whose node sets `autofocus` takes keyboard focus when the content it is part of mounts.
+**The first such widget in document order wins**, and it is focused once **after** the whole mount
+has completed, through `Widget::focus()`, so a later sibling is already in place.
+
+A mount is the root, or content a binding mounts later: a Switch case, a Tabs page, a Dialog's
+content, a row. Content a binding mounts while the root is mounting (a bound selector's first case,
+a dialog that starts open) is part of the root's mount, so document order decides between it and
+the rest of the root. Content mounted later — a new case, a dialog opened, a row inserted — is a
+mount of its own, and its first `autofocus` widget takes focus. Content that fails to mount gives
+up its candidate together with its widgets, and the mount around it finds the next one. A backend
+that cannot move focus leaves it where it was.
 
 ### Callbacks
 

@@ -164,6 +164,7 @@ add_executable(morph_tests
     test_ui_table.cpp
     test_ui_frontend.cpp
     test_ui_conformance.cpp
+    test_ui_common.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp

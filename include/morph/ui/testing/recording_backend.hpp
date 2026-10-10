@@ -296,6 +296,8 @@ struct Callbacks {
     std::function<bool(Key const&)> accepts;
     /// @brief The drop handler, from `Widget::setDropHandler`.
     std::function<void(Key)> drop;
+    /// @brief The chord handler, from `Widget::setKeys`.
+    std::function<void(std::string)> chord;
 };
 
 /// @brief One fake widget's state.
@@ -314,6 +316,8 @@ struct Record {
     Callbacks callbacks;
     /// @brief The drag key, as `setDragKey` last set it.
     std::optional<Key> dragKey;
+    /// @brief The chords, as `setKeys` last set them.
+    std::vector<std::string> chords;
     /// @brief The fake widget object.
     Widget* widget = nullptr;
     /// @brief Called with a child's id once that child is destroyed; a fake table re-marks its selection with it.
@@ -396,6 +400,9 @@ public:
                 _roots.push_back(child);
             }
         }
+        if (_focused == widgetId) {
+            _focused = 0;
+        }
         _ids.erase(record.widget);
         _records.erase(found);
         if (auto const parent = _records.find(parentId); parent != _records.end()) {
@@ -452,6 +459,18 @@ public:
     /// @brief Empties the operation log.
     void clearLog() noexcept { _log.clear(); }
 
+    /// @brief Records that keyboard focus moved to a widget, and logs `focus`.
+    /// @param widgetId The widget that took focus.
+    /// @throws std::out_of_range for an id that names no live widget.
+    void focus(int widgetId) {
+        _log.push_back("focus " + label(at(widgetId)));
+        _focused = widgetId;
+    }
+
+    /// @brief The widget that last took focus.
+    /// @return Its id, or 0 when none has, or it has since been destroyed.
+    [[nodiscard]] int focused() const noexcept { return _focused; }
+
     /// @brief The golden tree.
     /// @return One line per live widget, children indented two spaces per depth.
     [[nodiscard]] std::string dump() const {
@@ -493,6 +512,7 @@ private:
     std::vector<int> _roots;
     std::vector<std::string> _log;
     int _nextId = 0;
+    int _focused = 0;
 };
 
 /// @brief The `Widget` half of every fake: records itself on construction, records `Common`'s setters, and records
@@ -552,6 +572,45 @@ public:
         handlers.drop = std::move(onDrop);
         set("drop", "handler");
     }
+
+    /// @brief Records property `a11yName`.
+    /// @param name The accessible name.
+    void setAccessibleName(std::string_view name) override { set("a11yName", formatText(name)); }
+
+    /// @brief Records property `a11yRole`.
+    /// @param role The role.
+    void setAccessibleRole(std::string_view role) override { set("a11yRole", formatText(role)); }
+
+    /// @brief Records property `testId`.
+    /// @param testId The identifier.
+    void setTestId(std::string_view testId) override { set("testId", formatText(testId)); }
+
+    /// @brief Records property `tooltip`.
+    /// @param text The tooltip.
+    void setTooltip(std::string_view text) override { set("tooltip", formatText(text)); }
+
+    /// @brief Records property `surface`.
+    /// @param surface The surface's name.
+    void setSurface(std::string_view surface) override { set("surface", formatText(surface)); }
+
+    /// @brief Records property `keys`, the chords joined by commas, and keeps the chords and the handler for
+    ///        `RecordingBackend::press`.
+    /// @param chords The chords.
+    /// @param onChord Called with the chord that was pressed.
+    void setKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) override {
+        Record& record = _store->at(_id);
+        record.callbacks.chord = std::move(onChord);
+        record.chords = chords;
+        std::string joined;
+        for (std::string const& chord : chords) {
+            joined += joined.empty() ? "" : ",";
+            joined += chord;
+        }
+        set("keys", formatText(joined));
+    }
+
+    /// @brief Moves the backend's recorded focus here, and logs `focus`.
+    void focus() override { _store->focus(_id); }
 
 protected:
     /// @brief Records a property set through a setter.
@@ -1135,6 +1194,32 @@ public:
     /// @return The widget.
     /// @throws std::out_of_range for an id that names no live widget.
     [[nodiscard]] Widget* widget(int widgetId) const { return _store->at(widgetId).widget; }
+
+    /// @brief The widget that last took keyboard focus.
+    /// @return Its id, or 0 when no widget has, or it has since been destroyed.
+    [[nodiscard]] int focused() const noexcept { return _store->focused(); }
+
+    /// @brief Presses a keyboard chord with focus on a widget.
+    ///
+    /// The chord goes to the innermost widget, from @p widgetId outwards, that declares it through `setKeys`. Like
+    /// every helper it acts only when a user could reach @p widgetId.
+    /// @param widgetId The widget focus is on.
+    /// @param chord The chord, as declared, such as `"Ctrl+S"`.
+    /// @return True when a widget took the chord.
+    bool press(int widgetId, std::string const& chord) {
+        if (!reachable(_store->at(widgetId))) {
+            return false;
+        }
+        for (int candidate = widgetId; candidate != 0;) {
+            detail::Record const& record = _store->at(candidate);
+            if (std::ranges::find(record.chords, chord) != record.chords.end()) {
+                invoke(record.callbacks.chord, chord);
+                return true;
+            }
+            candidate = record.parent;
+        }
+        return false;
+    }
 
     /// @brief Activates a button.
     /// @param widgetId The button.

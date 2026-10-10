@@ -129,6 +129,16 @@ public:
     /// @param field The text field.
     /// @return A byte offset into the text it shows.
     [[nodiscard]] virtual std::size_t cursorOf(Widget const& field) = 0;
+
+    /// @brief Presses a keyboard chord as a user would with focus on a widget.
+    /// @param focused The widget focus is on; the probe moves focus there first if it must.
+    /// @param chord The chord, as a document declares it, such as `"Ctrl+S"`.
+    virtual void press(Widget& focused, std::string_view chord) = 0;
+
+    /// @brief Whether a widget has keyboard focus.
+    /// @param widget The widget.
+    /// @return True when it is the widget that has focus.
+    [[nodiscard]] virtual bool hasFocus(Widget const& widget) = 0;
 };
 
 /// @brief One scripted case.
@@ -1142,6 +1152,88 @@ private:
     return checks.result();
 }
 
+/// @brief Case: a chord goes to the innermost widget that declares it, and one only an outer widget declares reaches
+///        that widget.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> innermostChordWins(ConformanceProbe& probe) {
+    std::vector<std::string> pressed;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::column(
+                        {.children = {ui::button(
+                             {.label = "Save",
+                              .common = {.keys = {{.chord = "Ctrl+S",
+                                                   .onPress = [&pressed] { pressed.emplace_back("inner"); }}}}})}})},
+                    .common = {.keys = {{.chord = "Ctrl+S", .onPress = [&pressed] { pressed.emplace_back("outer"); }},
+                                        {.chord = "Ctrl+Q",
+                                         .onPress = [&pressed] { pressed.emplace_back("outer quit"); }}}}})};
+    probe.settle();
+    Widget* const button = childOf(probe, childOf(probe, &view.root(), 0), 0);
+    if (button == nullptr) {
+        return "a Button in a Column in a Column is not shown";
+    }
+    probe.press(*button, "Ctrl+S");
+    probe.settle();
+    probe.press(*button, "Ctrl+Q");
+    probe.settle();
+    Checks checks;
+    checks.that(pressed == std::vector<std::string>{"inner", "outer quit"},
+                "Ctrl+S then Ctrl+Q with focus on the button ran " + std::to_string(pressed.size()) +
+                    " handlers, not the inner Ctrl+S and the outer Ctrl+Q");
+    return checks.result();
+}
+
+/// @brief Case: a chord pressed inside a container hidden two levels up runs nothing; while shown it runs once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> hiddenChordRunsNothing(ConformanceProbe& probe) {
+    reactive::Signal<bool> shown{probe.runtime(), true};
+    int presses = 0;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::column(
+                        {.children = {ui::button(
+                             {.label = "Save",
+                              .common = {.keys = {{.chord = "Ctrl+S", .onPress = [&presses] { ++presses; }}}}})}})},
+                    .common = {.visible = [&shown] { return shown.get(); }}})};
+    probe.settle();
+    Widget* const button = childOf(probe, childOf(probe, &view.root(), 0), 0);
+    if (button == nullptr) {
+        return "a Button in a Column in a Column is not shown";
+    }
+    probe.press(*button, "Ctrl+S");  // shown: the chord runs, so the probe's press is known to reach handlers
+    probe.settle();
+    shown.set(false);
+    probe.settle();
+    probe.press(*button, "Ctrl+S");
+    probe.settle();
+    Checks checks;
+    checks.that(presses == 1, "a chord ran " + std::to_string(presses) +
+                                  " times; once while shown and not again once hidden is expected");
+    return checks.result();
+}
+
+/// @brief Case: the first `autofocus` widget in document order has focus once the mount completes.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> firstAutofocusWins(ConformanceProbe& probe) {
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::text({.text = "Name"}), ui::textInput({.common = {.autofocus = true}}),
+                                 ui::textInput({.common = {.autofocus = true}})}})};
+    probe.settle();
+    Widget const* const first = childOf(probe, &view.root(), 1);
+    Widget const* const second = childOf(probe, &view.root(), 2);
+    if (first == nullptr || second == nullptr) {
+        return "a Column does not show its three children";
+    }
+    Checks checks;
+    checks.that(probe.hasFocus(*first), "the first autofocus input does not have focus");
+    checks.that(!probe.hasFocus(*second), "the second autofocus input has focus");
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief Every conformance case, in a fixed order.
@@ -1150,7 +1242,7 @@ private:
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 26> const cases{{
+    static std::array<ConformanceCase, 29> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -1186,6 +1278,9 @@ private:
         {.name = "a drag onto an accepting target delivers the key", .run = detail::dragOntoAcceptingTarget},
         {.name = "a drag onto a refusing target delivers nothing", .run = detail::dragOntoRefusingTarget},
         {.name = "a drop target without accepts takes every key", .run = detail::dropTargetWithoutAcceptsTakesAll},
+        {.name = "a chord goes to the innermost widget that declares it", .run = detail::innermostChordWins},
+        {.name = "a chord pressed inside a hidden container runs nothing", .run = detail::hiddenChordRunsNothing},
+        {.name = "the first autofocus widget in document order has focus", .run = detail::firstAutofocusWins},
     }};
     return cases;
 }

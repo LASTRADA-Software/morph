@@ -285,7 +285,24 @@ struct LayoutHints {
     bool operator==(LayoutHints const&) const = default;
 };
 
-/// @brief The part every node carries: visibility, enablement, layout, and drag-and-drop.
+/// @brief What assistive technology announces for a node.
+struct Accessibility {
+    /// @brief The accessible name; empty leaves the widget's own text as its name.
+    Prop<std::string> name;
+    /// @brief The role, such as `"heading"`; empty leaves the kind's own role. Set once.
+    std::string role;
+};
+
+/// @brief A keyboard chord a node handles while focus is inside it.
+struct KeyBinding {
+    /// @brief The chord: modifiers (`Ctrl`, `Shift`, `Alt`, `Meta`) joined to a key name, such as `"Ctrl+S"`.
+    std::string chord;
+    /// @brief Called when the chord is pressed.
+    Action onPress;
+};
+
+/// @brief The part every node carries: visibility, enablement, layout, drag-and-drop, accessibility, test identity,
+///        tooltip, surface, keyboard chords and autofocus.
 struct Common {
     /// @brief Whether the widget is shown.
     Prop<bool> visible = true;
@@ -299,6 +316,21 @@ struct Common {
     std::function<bool(Key const&)> accepts;
     /// @brief Set: the widget is a drop target, called with the dropped key.
     std::function<void(Key)> onDrop;
+    /// @brief The accessible name and role.
+    Accessibility a11y{};
+    /// @brief The stable identifier an automated test finds the widget by; empty means none. Set once.
+    std::string testId;
+    /// @brief Text shown while the pointer rests on the widget; empty shows none.
+    Prop<std::string> tooltip;
+    /// @brief The named token set of the theme that styles this node and everything inside it; empty is the
+    ///        theme's default. Set once.
+    std::string surface;
+    /// @brief Chords handled while focus is inside the node; the innermost node declaring a chord takes it. For a
+    ///        chord listed twice, the first entry is the one called.
+    std::vector<KeyBinding> keys;
+    /// @brief Whether the widget takes keyboard focus when the content it is part of mounts; the first such widget
+    ///        in document order wins.
+    bool autofocus = false;
 };
 
 struct NodeData;

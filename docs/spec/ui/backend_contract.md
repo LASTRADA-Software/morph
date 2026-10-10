@@ -26,10 +26,18 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   `parent` — or makes a root when `parent` is null — and never returns null. A kind's fixed
   parameters (a TextInput's mode, a stack's or scroll area's axis, a DateTimeInput's mode and
   display zone, a Select's style, a FilePicker's mode) are factory arguments.
-- **A new widget is visible, enabled, content-sized, not draggable and not a drop target. A new
-  dialog is closed.** The mount calls the `Widget` setters for those defaults (`setVisible`,
-  `setEnabled`, `setLayout`, `setDragKey`, `setDropHandler`) only to change them; it calls a
-  dialog's `setOpen` at mount whatever the value, `false` included.
+- **A new widget is visible, enabled, content-sized, not draggable and not a drop target, and has
+  no accessible name or role of its own, no test id, no tooltip, the theme's default surface and no
+  chords. A new dialog is closed.** The mount calls the `Widget` setters for those defaults
+  (`setVisible`, `setEnabled`, `setLayout`, `setDragKey`, `setDropHandler`, `setAccessibleName`,
+  `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface`, `setKeys`) only to change them; it
+  calls a dialog's `setOpen` at mount whatever the value, `false` included.
+- **Focus.** `focus()` moves keyboard focus to the widget. The mount calls it on the first
+  `autofocus` widget in document order once a mount completes ([view tree](view_tree.md#focus)).
+- **Chords.** `setKeys(chords, onChord)` declares the chords a widget handles while focus is inside
+  it, and `onChord` receives the chord pressed. A chord pressed while focus is inside several
+  widgets that declare it goes to the innermost of them only, and a chord pressed inside a widget
+  that takes no input (below) goes to none.
 - Every setter takes UTF-8. **A setter called with the value the widget already shows changes
   nothing**: in particular a text input keeps its cursor, its selection and an input method's
   composition. A controlled input's re-assertion, or another renderer, may make such a call.
@@ -91,7 +99,7 @@ reorders children, and only through this.
 
 | Interface | Setters | Handlers |
 |---|---|---|
-| `Widget` | `setVisible`, `setEnabled`, `setLayout(LayoutHints)`, `setDragKey(optional<Key>)` | `setDropHandler(accepts, onDrop)` |
+| `Widget` | `setVisible`, `setEnabled`, `setLayout(LayoutHints)`, `setDragKey(optional<Key>)`, `setAccessibleName`, `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface`, `focus()` | `setDropHandler(accepts, onDrop)`, `setKeys(chords, onChord)` (the chord pressed) |
 | `ContainerWidget` | `moveChild(child, index)` | — |
 | `TextWidget` | `setText`, `setRole` | — |
 | `ButtonWidget` | `setLabel` | `setOnClick` (Enter, Space or a click) |
@@ -151,13 +159,14 @@ The headless reference backend and the test double for everything above the cont
   `create Kind#id in Parent#id` (`in root` for a root), `set Kind#id name=value`,
   `move Kind#id to n`, `destroy Kind#id`. Factory parameters are recorded as properties without a
   log line. Handlers are stored without a log line, except that `setDropHandler` records the
-  property `drop=handler`. What a widget changes by itself — an interaction helper's effect, a
+  property `drop=handler` and `setKeys` the property `keys`, the chords joined by commas. `focus()`
+  logs `focus Kind#id`, and `focused()` returns the id of the widget that last took focus, or 0. What a widget changes by itself — an interaction helper's effect, a
   Select or Table re-marking its selection — changes a property without a log line.
 - **Golden dump** (`dump()`): one line per live widget, `Kind#id name=value …`, properties in name
   order, children indented two spaces per depth, every line ending in a newline. A child whose
   parent was destroyed first becomes a root.
-- **Properties.** Every kind records `visible`, `enabled`, `layout`, `dragKey` and `drop` when their
-  setters run, and its own: `text`, `role` (Text); `label` (Button); `mode`, `text`, `placeholder`
+- **Properties.** Every kind records `visible`, `enabled`, `layout`, `dragKey`, `drop`, `a11yName`,
+  `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run, and its own: `text`, `role` (Text); `label` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu); `gap` (Column, Row); `columns`,
   `gap`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
@@ -190,6 +199,9 @@ The headless reference backend and the test double for everything above the cont
   - A widget the user cannot reach ignores every helper: one that is hidden or disabled, or inside a
     container that is hidden, disabled or collapsed, or a closed dialog or anything inside one.
     `activateRow` asks that of the row, `drag` of both widgets.
+  - `press(id, chord)` presses a chord with focus on widget `id`: the innermost widget from `id`
+    outwards that declares the chord receives it, and `press` returns whether one did. It changes
+    no recorded focus.
   - A helper used on a kind it does not apply to throws `std::logic_error`, and so does an action
     no user could take: choosing a key the Select does not offer, collapsing a panel that is not
     collapsible, selecting a key with no row, a row twice, any row in a `None` table or more than
@@ -239,6 +251,9 @@ after it; its reading operations report what the widget shows now.
 | `moveCursor(field, position)` | Moves a text field's cursor as the arrow keys or a click would, without changing the text |
 | `cursorOf(field)` | Where a text field's cursor is, as a byte offset into its text |
 
+| `press(focused, chord)` | Presses a chord with focus on a widget, moving focus there first if the probe must |
+| `hasFocus(widget)` | Whether the widget has keyboard focus |
+
 A case reaches widgets only through `Mounted::root()`, `childAt` and further roots it mounts, or
 through widgets it makes with `backend()` itself, so a probe needs no lookup by name.
 
@@ -281,6 +296,10 @@ Each case is named by the rule it checks:
 24. A drag onto an accepting target delivers the key once.
 25. A drag onto a refusing target delivers nothing.
 26. A drop target without `accepts` takes every key.
+27. A chord goes to the innermost widget that declares it, and one only an outer widget declares
+    reaches that widget.
+28. A chord pressed inside a container hidden two levels up runs nothing; while shown it runs once.
+29. The first `autofocus` widget in document order has focus once the mount completes.
 
 ### What the probe cannot reach
 

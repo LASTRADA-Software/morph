@@ -12,6 +12,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -190,7 +191,45 @@ public:
                           node->kind);
     }
 
+    /// @brief Mounts @p node as `mount` does, as a mount of its own: the first `autofocus` widget it mounts, in
+    ///        document order, takes keyboard focus once the whole of it has mounted.
+    /// @param scope Owns everything mounted.
+    /// @param node The node; null mounts nothing.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The node's widget, or null for a null node.
+    Widget* mountRoot(reactive::Scope& scope, Node const& node, ContainerWidget* parent) {
+        return mountPass([&] { return mount(scope, node, parent); });
+    }
+
 private:
+    // One mount: the root, or content, a page or a row a binding mounts later. The outermost pass focuses the first
+    // autofocus widget mounted during it, in document order, after everything in it has mounted; a pass nested in
+    // another (content a binding mounts while the root mounts) leaves that to the outer one. A pass that throws gives
+    // back the candidate it found, because its caller destroys what it mounted.
+    template <typename F>
+    auto mountPass(F const& body) -> std::invoke_result_t<F const&> {
+        Widget* const before = _autofocus;
+        ++_passDepth;
+        try {
+            auto result = body();
+            --_passDepth;
+            if (_passDepth == 0) {
+                if (Widget* const target = std::exchange(_autofocus, nullptr); target != nullptr) {
+                    try {
+                        target->focus();
+                    } catch (...) {  // NOLINT(bugprone-empty-catch)
+                        // Focus is a request: a backend that cannot move it leaves it where it was.
+                    }
+                }
+            }
+            return result;
+        } catch (...) {
+            _autofocus = before;
+            --_passDepth;
+            throw;
+        }
+    }
+
     // A constant is applied once; a binding becomes an equality-gated Computed plus an Effect, made in that order
     // after the widget, so the Effect dies first. Returns the Computed, or null for a constant.
     template <typename T, typename Apply>
@@ -351,17 +390,57 @@ private:
             bind(scope, common.dragKey, [&widget](std::optional<Key> const& key) { widget.setDragKey(key); });
         }
         if (common.onDrop) {
-            // No predicate accepts every key; a predicate that throws refuses the drop.
-            std::function<bool(Key const&)> accepts = [](Key const&) { return true; };
-            if (common.accepts) {
-                accepts = [runtime = _rt, predicate = common.accepts](Key const& key) {
-                    bool accepted = false;
-                    static_cast<void>(runCallback(*runtime, [&] { accepted = predicate(key); }));
-                    return accepted;
-                };
-            }
-            widget.setDropHandler(std::move(accepts), event(common.onDrop));
+            applyDrop(widget, common);
         }
+        if (common.a11y.name.isBound() || !common.a11y.name.constant().empty()) {
+            bind(scope, common.a11y.name, [&widget](std::string const& name) { widget.setAccessibleName(name); });
+        }
+        if (!common.a11y.role.empty()) {
+            widget.setAccessibleRole(common.a11y.role);
+        }
+        if (!common.testId.empty()) {
+            widget.setTestId(common.testId);
+        }
+        if (common.tooltip.isBound() || !common.tooltip.constant().empty()) {
+            bind(scope, common.tooltip, [&widget](std::string const& text) { widget.setTooltip(text); });
+        }
+        if (!common.surface.empty()) {
+            widget.setSurface(common.surface);
+        }
+        if (!common.keys.empty()) {
+            applyKeys(widget, common.keys);
+        }
+        if (common.autofocus && _autofocus == nullptr) {
+            _autofocus = &widget;
+        }
+    }
+
+    // No predicate accepts every key; a predicate that throws refuses the drop.
+    void applyDrop(Widget& widget, Common const& common) {
+        std::function<bool(Key const&)> accepts = [](Key const&) { return true; };
+        if (common.accepts) {
+            accepts = [runtime = _rt, predicate = common.accepts](Key const& key) {
+                bool accepted = false;
+                static_cast<void>(runCallback(*runtime, [&] { accepted = predicate(key); }));
+                return accepted;
+            };
+        }
+        widget.setDropHandler(std::move(accepts), event(common.onDrop));
+    }
+
+    // One setKeys for all the chords; a chord listed twice runs its first binding, as a widget callback.
+    void applyKeys(Widget& widget, std::vector<KeyBinding> const& keys) {
+        std::vector<std::string> chords;
+        chords.reserve(keys.size());
+        for (KeyBinding const& binding : keys) {
+            chords.push_back(binding.chord);
+        }
+        widget.setKeys(chords, [runtime = _rt, keys](std::string const& chord) {
+            auto const bound = std::ranges::find(keys, chord, &KeyBinding::chord);
+            if (bound != keys.end() && bound->onPress) {
+                static_cast<void>(runCallback(*runtime, bound->onPress));
+            }
+        });
     }
 
     void mountChildren(reactive::Scope& scope, std::vector<Node> const& children, ContainerWidget& container) {
@@ -512,9 +591,11 @@ private:
     // one that owns the binding, so the owner's Effects run before the content's.
     [[nodiscard]] std::unique_ptr<reactive::Scope> mountContent(std::size_t depth, Node const& node,
                                                                 ContainerWidget& host) {
-        auto content = std::make_unique<reactive::Scope>(*_rt, depth);
-        _rt->untracked([&] { static_cast<void>(mount(*content, node, &host)); });
-        return content;
+        return mountPass([&] {
+            auto content = std::make_unique<reactive::Scope>(*_rt, depth);
+            _rt->untracked([&] { static_cast<void>(mount(*content, node, &host)); });
+            return content;
+        });
     }
 
     // reset() tears the old case down, newest first, before the new one is built. The Computed behind a bound
@@ -647,11 +728,14 @@ private:
     // The page is built in a scope of its own and handed to `pageScope` once complete, so one that fails to mount
     // leaves nothing behind.
     void mountPage(TabsWidget& widget, reactive::Scope& pageScope, Pages& pages, Node const& node, std::size_t index) {
-        auto page = std::make_unique<reactive::Scope>(*_rt, pageScope.depth());
-        SlotWidget& slot = page->adopt(_backend->createSlot(&widget));
-        static_cast<void>(mount(*page, node, &slot));
-        pageScope.adopt(std::move(page));
-        pages.slots.at(index) = &slot;
+        auto page = mountPass([&] {
+            auto built = std::make_unique<reactive::Scope>(*_rt, pageScope.depth());
+            SlotWidget& slot = built->adopt(_backend->createSlot(&widget));
+            static_cast<void>(mount(*built, node, &slot));
+            return std::pair{std::move(built), &slot};
+        });
+        pageScope.adopt(std::move(page.first));
+        pages.slots.at(index) = page.second;
     }
 
     // The content is built before the overlay opens and torn down before it closes. Content that fails to mount
@@ -790,13 +874,15 @@ private:
     // takes only once the mount completed.
     [[nodiscard]] KeyedRow mountRow(std::size_t depth, ForEachSession& session, ContainerWidget& container,
                                     Key const& key, std::size_t index, RowHook const& onRow) {
-        KeyedRow row{.key = key, .scope = std::make_unique<reactive::Scope>(*_rt, depth)};
-        row.slot = &row.scope->adopt(session.makeRow(index));
-        row.widget = mount(*row.scope, row.slot->view(), &container);
-        if (row.widget != nullptr && onRow) {
-            onRow(*row.widget, key);
-        }
-        return row;
+        return mountPass([&] {
+            KeyedRow row{.key = key, .scope = std::make_unique<reactive::Scope>(*_rt, depth)};
+            row.slot = &row.scope->adopt(session.makeRow(index));
+            row.widget = mount(*row.scope, row.slot->view(), &container);
+            if (row.widget != nullptr && onRow) {
+                onRow(*row.widget, key);
+            }
+            return row;
+        });
     }
 
     // Moves the widgets into the snapshot's order, and `rows` with them. A move that throws is recorded in `failure`
@@ -932,6 +1018,9 @@ private:
 
     reactive::Runtime* _rt;
     IViewBackend* _backend;
+    // The first autofocus widget of the mount pass in progress, and how deeply passes are nested.
+    Widget* _autofocus = nullptr;
+    std::size_t _passDepth = 0;
 };
 
 }  // namespace detail
@@ -995,7 +1084,7 @@ public:
           _mounter{runtime, backend},
           _scope{runtime, depth},
           // Untracked, so mounting from inside an Effect does not subscribe that Effect to anything read here.
-          _widget{runtime.untracked([this, parent] { return _mounter.mount(_scope, _root, parent); })} {}
+          _widget{runtime.untracked([this, parent] { return _mounter.mountRoot(_scope, _root, parent); })} {}
 
     ~Mounted() = default;
     Mounted(Mounted const&) = delete;

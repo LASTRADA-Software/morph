@@ -25,6 +25,15 @@ public:
                         std::function<void(::morph::ui::Key)> onDrop) override {
         _inner->setDropHandler(std::move(accepts), std::move(onDrop));
     }
+    void setAccessibleName(std::string_view name) override { _inner->setAccessibleName(name); }
+    void setAccessibleRole(std::string_view role) override { _inner->setAccessibleRole(role); }
+    void setTestId(std::string_view testId) override { _inner->setTestId(testId); }
+    void setTooltip(std::string_view text) override { _inner->setTooltip(text); }
+    void setSurface(std::string_view surface) override { _inner->setSurface(surface); }
+    void setKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) override {
+        _inner->setKeys(chords, std::move(onChord));
+    }
+    void focus() override { _inner->focus(); }
     void setOptions(std::vector<::morph::ui::SelectOption> const& options) override {
         _inner->setOptions(options);
         if (auto const echo = _onSelect; echo && !options.empty()) {

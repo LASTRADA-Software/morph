@@ -60,6 +60,36 @@ public:
     /// @param accepts Whether a dragged key may be dropped here; the backend asks before highlighting.
     /// @param onDrop Called with the key on a drop that `accepts` allowed.
     virtual void setDropHandler(std::function<bool(Key const&)> accepts, std::function<void(Key)> onDrop) = 0;
+
+    /// @brief Sets the name assistive technology reads for the widget.
+    /// @param name The accessible name; empty leaves the widget's own text as its name.
+    virtual void setAccessibleName(std::string_view name) = 0;
+
+    /// @brief Sets the role assistive technology announces for the widget.
+    /// @param role The role, such as `"heading"`; empty leaves the kind's own role.
+    virtual void setAccessibleRole(std::string_view role) = 0;
+
+    /// @brief Sets the stable identifier an automated test finds the widget by.
+    /// @param testId The identifier; empty means none.
+    virtual void setTestId(std::string_view testId) = 0;
+
+    /// @brief Sets the text shown while the pointer rests on the widget.
+    /// @param text The tooltip; empty shows none.
+    virtual void setTooltip(std::string_view text) = 0;
+
+    /// @brief Styles the widget and everything inside it with a named token set of the theme.
+    /// @param surface The surface's name; empty is the theme's default.
+    virtual void setSurface(std::string_view surface) = 0;
+
+    /// @brief Declares the keyboard chords the widget handles while focus is inside it.
+    ///
+    /// A chord pressed while focus is inside several widgets that declare it goes to the innermost of them only.
+    /// @param chords The chords, each modifiers joined to a key name, such as `"Ctrl+S"`.
+    /// @param onChord Called with the chord that was pressed.
+    virtual void setKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) = 0;
+
+    /// @brief Moves keyboard focus to the widget.
+    virtual void focus() = 0;
 };
 
 /// @brief A widget with children. A factory given this container appends the new widget as its last child.
