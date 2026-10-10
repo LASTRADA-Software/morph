@@ -224,6 +224,38 @@ private:
     morph::reactive::Runtime _rt{_owner};
 };
 
+// A probe that renders through a real backend but delivers no input and reads nothing back: what a probe whose
+// driving and reading operations are stubs would report.
+class InertProbe final : public ui::testing::ConformanceProbe {
+public:
+    ui::IViewBackend& backend() override { return _backend; }
+    morph::reactive::Runtime& runtime() override { return _rt; }
+    void settle() override { _owner.runAll(); }
+    [[nodiscard]] std::string textOf(ui::Widget const&) override { return {}; }
+    [[nodiscard]] bool visibleOf(ui::Widget const&) override { return false; }
+    [[nodiscard]] bool enabledOf(ui::Widget const&) override { return false; }
+    [[nodiscard]] std::size_t childCount(ui::ContainerWidget const&) override { return 0; }
+    [[nodiscard]] ui::Widget* childAt(ui::ContainerWidget const&, std::size_t) override { return nullptr; }
+    void click(ui::Widget&) override {}
+    void type(ui::Widget&, std::string_view) override {}
+    void drag(ui::Widget&, ui::Widget&) override {}
+    void dismiss(ui::Widget&) override {}
+    void selectRows(ui::Widget&, std::vector<std::size_t> const&) override {}
+    [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const&) override { return {}; }
+    void moveCursor(ui::Widget&, std::size_t) override {}
+    [[nodiscard]] std::size_t cursorOf(ui::Widget const&) override { return 0; }
+    void press(ui::Widget&, std::string_view) override {}
+    [[nodiscard]] bool hasFocus(ui::Widget const&) override { return false; }
+    void chooseMenuEntry(ui::Widget&, std::vector<std::size_t> const&) override {}
+    void expand(ui::Widget&, bool) override {}
+    void dropFiles(ui::Widget&, std::vector<std::string> const&) override {}
+
+private:
+    morph::testing::StepExecutor _owner;
+    ui::testing::RecordingBackend _backend;
+    morph::reactive::Runtime _rt{_owner};
+};
+
 // The names of the cases a probe with @p fault fails.
 std::set<std::string_view> failingCases(Fault fault) {
     std::set<std::string_view> failing;
@@ -307,4 +339,22 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
 
 TEST_CASE("ui conformance: a failure message names keys of either kind", "[ui][conformance]") {
     CHECK(ui::testing::detail::keyTexts({ui::Key{std::int64_t{7}}, ui::Key{std::string{"b"}}}) == "7,\"b\"");
+}
+
+// A suite that a probe doing nothing passes measures nothing. The two cases that still pass check only that something
+// does not happen. Mutation: give any other case's failure path an early `return std::nullopt` (it then passes here).
+TEST_CASE("ui conformance: a probe that drives and reads nothing fails every case that observes something",
+          "[ui][conformance]") {
+    std::set<std::string> passed;
+    for (auto const& testCase : ui::testing::conformanceCases()) {
+        InertProbe probe;
+        std::optional<std::string> const failure = testCase.run(probe);
+        if (!failure.has_value()) {
+            passed.emplace(testCase.name);
+        } else {
+            CHECK_FALSE(failure->empty());
+        }
+    }
+    CHECK(passed ==
+          std::set<std::string>{"a drag onto a refusing target delivers nothing", "no setter calls a handler"});
 }
