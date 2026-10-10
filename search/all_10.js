@@ -19,5 +19,6 @@ var searchData=
   ['query_2ehpp_16',['query.hpp',['../dd/def/query_8hpp.html',1,'']]],
   ['querylimits_17',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
   ['queryoptions_18',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive']]],
-  ['queueitem_19',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
+  ['queueitem_19',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]],
+  ['quit_20',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
 ];

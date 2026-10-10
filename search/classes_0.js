@@ -11,8 +11,10 @@ var searchData=
   ['allowshared_8',['AllowShared',['../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html',1,'morph::bridge']]],
   ['and_9',['And',['../d3/d81/structmorph_1_1forms_1_1And.html',1,'morph::forms']]],
   ['app_10',['App',['../d8/d09/structmorph_1_1app_1_1App.html',1,'morph::app']]],
-  ['applyoptions_11',['ApplyOptions',['../d7/d2c/structmorph_1_1table_1_1ApplyOptions.html',1,'morph::table']]],
-  ['apptraits_12',['AppTraits',['../d9/dfd/structmorph_1_1app_1_1AppTraits.html',1,'morph::app']]],
-  ['atleastoneof_13',['AtLeastOneOf',['../de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html',1,'morph::forms']]],
-  ['attempts_14',['Attempts',['../d5/da0/classmorph_1_1offline_1_1Attempts.html',1,'morph::offline']]]
+  ['appcontext_11',['AppContext',['../dd/db8/classmorph_1_1ui_1_1AppContext.html',1,'morph::ui']]],
+  ['applyoptions_12',['ApplyOptions',['../d7/d2c/structmorph_1_1table_1_1ApplyOptions.html',1,'morph::table']]],
+  ['appsource_13',['AppSource',['../d5/d3d/classmorph_1_1ui_1_1AppSource.html',1,'morph::ui']]],
+  ['apptraits_14',['AppTraits',['../d9/dfd/structmorph_1_1app_1_1AppTraits.html',1,'morph::app']]],
+  ['atleastoneof_15',['AtLeastOneOf',['../de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html',1,'morph::forms']]],
+  ['attempts_16',['Attempts',['../d5/da0/classmorph_1_1offline_1_1Attempts.html',1,'morph::offline']]]
 ];

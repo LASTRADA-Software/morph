@@ -1,11 +1,25 @@
 var searchData=
 [
   ['offset_0',['offset',['../d4/d3a/structmorph_1_1table_1_1PageRequest.html#ad87ce1a83836fb5fa4d8a99bba7d5575',1,'morph::table::PageRequest::offset'],['../dc/d0f/structmorph_1_1table_1_1Page.html#a2ce721ec2b08c8221540890e079ee591',1,'morph::table::Page::offset'],['../db/db3/structmorph_1_1table_1_1PageRows.html#a9683e583732bfd4047eb947a5bd0f153',1,'morph::table::PageRows::offset']]],
-  ['onlinethreshold_1',['onlineThreshold',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a0a4a890c46b1171aeb7089517c98d042',1,'morph::offline::NetworkMonitorConfig']]],
-  ['onowner_2',['onOwner',['../dc/d5d/structmorph_1_1testing_1_1OwnerProbeRecorder_1_1Seen.html#ac6024adf7b892322700f4b11ee7a034b',1,'morph::testing::OwnerProbeRecorder::Seen']]],
-  ['op_3',['op',['../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html#a5fe95a2e2cfa4a7bd27534171280bf57',1,'morph::table::CompiledFilter::Entry::op'],['../d2/de5/structmorph_1_1table_1_1detail_1_1RawEntry.html#a03b4060ec3e62081c0e16c17ff180598',1,'morph::table::detail::RawEntry::op']]],
-  ['ops_4',['ops',['../d8/d7d/structmorph_1_1table_1_1ViewChange.html#aba45308b9b8da622715754a90a3c4d18',1,'morph::table::ViewChange']]],
-  ['outcome_5',['outcome',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353',1,'morph::journal::LogEntry']]],
-  ['owner_6',['owner',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#a114453044857e1baf79035edec098bd2',1,'morph::table::EngineOptions']]],
-  ['ownersteps_7',['ownerSteps',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a61db7a1ca34f660dce7519dc4d069278',1,'morph::table::EngineStats']]]
+  ['offsetminutes_1',['offsetMinutes',['../d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#a00b40637adfabbe60b52937779b7790a',1,'morph::ui::DateTimeInput']]],
+  ['onactivate_2',['onActivate',['../de/de3/structmorph_1_1ui_1_1Table.html#aa4ecb394ff70268027e512451328aea7',1,'morph::ui::Table::onActivate'],['../d7/d25/structmorph_1_1ui_1_1TableOptions.html#adff212bb27017abb46102bdbf8eb26f2',1,'morph::ui::TableOptions::onActivate']]],
+  ['onchange_3',['onChange',['../d3/dbc/structmorph_1_1ui_1_1TextInput.html#ac0bbdad7c15243cf6a4683b01aa4a26c',1,'morph::ui::TextInput::onChange'],['../d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#ac4ce42130e5f69b59771ae80eb9e331b',1,'morph::ui::DateTimeInput::onChange'],['../dc/d36/structmorph_1_1ui_1_1Slider.html#a25ae27a300235af841eb2db5f6397813',1,'morph::ui::Slider::onChange']]],
+  ['onchilddestroyed_4',['onChildDestroyed',['../d0/d28/structmorph_1_1ui_1_1testing_1_1detail_1_1Record.html#a07f453b143c74f105f79558be7cc306a',1,'morph::ui::testing::detail::Record']]],
+  ['onclick_5',['onClick',['../d2/d47/structmorph_1_1ui_1_1Button.html#ae3f929357a4ae57369d64918ffa2cd40',1,'morph::ui::Button']]],
+  ['ondismiss_6',['onDismiss',['../d2/dc0/structmorph_1_1ui_1_1Dialog.html#a3758ea02eef38c374b1cb5f37c730037',1,'morph::ui::Dialog']]],
+  ['ondrop_7',['onDrop',['../d1/d68/structmorph_1_1ui_1_1Common.html#a94e8ac8e1c9d795f74404cde6199447c',1,'morph::ui::Common']]],
+  ['onlinethreshold_8',['onlineThreshold',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a0a4a890c46b1171aeb7089517c98d042',1,'morph::offline::NetworkMonitorConfig']]],
+  ['onowner_9',['onOwner',['../dc/d5d/structmorph_1_1testing_1_1OwnerProbeRecorder_1_1Seen.html#ac6024adf7b892322700f4b11ee7a034b',1,'morph::testing::OwnerProbeRecorder::Seen']]],
+  ['onpicked_10',['onPicked',['../d3/da2/structmorph_1_1ui_1_1FilePicker.html#a42f9257426d505bdffcb5f0a2940ffdd',1,'morph::ui::FilePicker']]],
+  ['onselect_11',['onSelect',['../d3/d17/structmorph_1_1ui_1_1detail_1_1Pages.html#aa28bb05102f14c10eec81079fa502b42',1,'morph::ui::detail::Pages::onSelect'],['../d7/d7b/structmorph_1_1ui_1_1Select.html#afc5f4fc855ee5a55f7bbd361783b7be5',1,'morph::ui::Select::onSelect'],['../d4/dac/structmorph_1_1ui_1_1MenuItem.html#ac62e3df4349c83c33ce80ffee2d4a5d9',1,'morph::ui::MenuItem::onSelect'],['../d0/d49/structmorph_1_1ui_1_1Tabs.html#a8d1535e0598ecba4719be4d65da5e4fb',1,'morph::ui::Tabs::onSelect']]],
+  ['onselectionchange_12',['onSelectionChange',['../de/de3/structmorph_1_1ui_1_1Table.html#ab468e8742c42ea70ad5b59b45d7a98d1',1,'morph::ui::Table::onSelectionChange'],['../d7/d25/structmorph_1_1ui_1_1TableOptions.html#a8df35adb0b84b0d383c635af2ee4bd89',1,'morph::ui::TableOptions::onSelectionChange']]],
+  ['onsubmit_13',['onSubmit',['../d3/dbc/structmorph_1_1ui_1_1TextInput.html#a3d8cb4f5354b9c94d3e85f64e376e95c',1,'morph::ui::TextInput']]],
+  ['ontoggle_14',['onToggle',['../d0/db4/structmorph_1_1ui_1_1Checkbox.html#a2af49f39b62e7160031b21bb3718dcb8',1,'morph::ui::Checkbox::onToggle'],['../d4/d64/structmorph_1_1ui_1_1Panel.html#ac07eecdcebc15c730baf4767ba95987a',1,'morph::ui::Panel::onToggle']]],
+  ['op_15',['op',['../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html#a5fe95a2e2cfa4a7bd27534171280bf57',1,'morph::table::CompiledFilter::Entry::op'],['../d2/de5/structmorph_1_1table_1_1detail_1_1RawEntry.html#a03b4060ec3e62081c0e16c17ff180598',1,'morph::table::detail::RawEntry::op']]],
+  ['open_16',['open',['../d2/dc0/structmorph_1_1ui_1_1Dialog.html#ab0af8265f9c5578a803f70bf4d8b7b03',1,'morph::ui::Dialog']]],
+  ['ops_17',['ops',['../d8/d7d/structmorph_1_1table_1_1ViewChange.html#aba45308b9b8da622715754a90a3c4d18',1,'morph::table::ViewChange']]],
+  ['options_18',['options',['../d7/d7b/structmorph_1_1ui_1_1Select.html#ab1d46358f6d9413383ecb5dd1e7f0a80',1,'morph::ui::Select']]],
+  ['outcome_19',['outcome',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353',1,'morph::journal::LogEntry']]],
+  ['owner_20',['owner',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#a114453044857e1baf79035edec098bd2',1,'morph::table::EngineOptions']]],
+  ['ownersteps_21',['ownerSteps',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a61db7a1ca34f660dce7519dc4d069278',1,'morph::table::EngineStats']]]
 ];

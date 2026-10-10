@@ -287,10 +287,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/ddb/timeout
 <div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>            <span class="keywordflow">if</span> (closed) {</div>
 <div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>                <span class="keywordflow">return</span>;</div>
 <div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>            }</div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>            <span class="keyword">auto</span> [slot, inserted] = pending.try_emplace(</div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>            <span class="keyword">auto</span> [<a class="code hl_function" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">slot</a>, inserted] = pending.try_emplace(</div>
 <div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>                handle, Entry{.owner = <span class="keyword">this</span>, .handle = handle, .id = {}, .callback = std::move(callback)});</div>
 <div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>            <span class="keywordflow">if</span> (inserted) {</div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>                slot-&gt;second.id = loop.loop().addTimer(deadline, &amp;State::fire, &amp;slot-&gt;second);</div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>                <a class="code hl_function" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">slot</a>-&gt;second.id = loop.loop().addTimer(deadline, &amp;State::fire, &amp;<a class="code hl_function" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">slot</a>-&gt;second);</div>
 <div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>            }</div>
 <div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>        }</div>
 <div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment"></span> </div>
@@ -355,6 +355,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/ddb/timeout
 <div class="ttc" id="acoroutine_8hpp_html_a9b97fa15363e0367f889e83b17777cb9"><div class="ttname"><a href="../../de/de0/coroutine_8hpp.html#a9b97fa15363e0367f889e83b17777cb9">morph::async::delay</a></div><div class="ttdeci">DelayAwaiter delay(detail::TimeoutScheduler &amp;scheduler, std::chrono::milliseconds duration)</div><div class="ttdoc">Suspends the awaiting coroutine for at least duration.</div><div class="ttdef"><b>Definition</b> <a href="../../de/de0/coroutine_8hpp_source.html#l00278">coroutine.hpp:278</a></div></div>
 <div class="ttc" id="aio__loop_8hpp_html"><div class="ttname"><a href="../../d2/d85/io__loop_8hpp.html">io_loop.hpp</a></div></div>
 <div class="ttc" id="aowner__probe_8hpp_html"><div class="ttname"><a href="../../d1/d3e/owner__probe_8hpp.html">owner_probe.hpp</a></div><div class="ttdoc">The check every loop-owned body makes on entry: &quot;am I on my owner?&quot;.</div></div>
+<div class="ttc" id="aview_8hpp_html_afe853c762b44f650b9af349a90268916"><div class="ttname"><a href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">morph::ui::slot</a></div><div class="ttdeci">SlotBinding&lt; std::decay_t&lt; F &gt; &gt; slot(SlotId slotId, F &amp;&amp;read)</div><div class="ttdoc">A slot with an id.</div><div class="ttdef"><b>Definition</b> <a href="../../d8/d11/view_8hpp_source.html#l00060">view.hpp:60</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

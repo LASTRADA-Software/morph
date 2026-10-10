@@ -177,13 +177,13 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/ddc/profile
 <div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">/// Attaches @p text to @p zone, skipping an empty one so a zone without a</span></div>
 <div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">/// request id carries no blank annotation.</span></div>
 <div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="keyword">inline</span> <span class="keywordtype">void</span> zoneText(::tracy::ScopedZone&amp; zone, std::string_view text) {</div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>    <span class="keywordflow">if</span> (!text.empty()) {</div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>        zone.Text(text.data(), text.size());</div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>    <span class="keywordflow">if</span> (!<a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>.empty()) {</div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>        zone.Text(<a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>.data(), <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>.size());</div>
 <div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>    }</div>
 <div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>}</div>
 <div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="comment"></span> </div>
 <div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="comment">/// Sends @p text to the timeline as a message.</span></div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="keyword">inline</span> <span class="keywordtype">void</span> message(std::string_view text) { TracyMessage(text.data(), text.size()); }</div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="keyword">inline</span> <span class="keywordtype">void</span> message(std::string_view text) { TracyMessage(<a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>.data(), <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>.size()); }</div>
 <div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span> </div>
 <div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>}  <span class="comment">// namespace morph::profiler::detail</span></div>
 <div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span> </div>
@@ -272,6 +272,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/ddc/profile
 <div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="preprocessor">#endif</span></div>
 <div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span> </div>
 <div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">// NOLINTEND(cppcoreguidelines-macro-usage)</span></div>
+<div class="ttc" id="aview_8hpp_html_aad8adfeaad75b31095ad25cdff3b0888"><div class="ttname"><a href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">morph::ui::text</a></div><div class="ttdeci">Node text(Text spec)</div><div class="ttdoc">Static or bound text.</div><div class="ttdef"><b>Definition</b> <a href="../../d8/d11/view_8hpp_source.html#l00775">view.hpp:775</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

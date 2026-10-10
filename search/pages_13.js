@@ -10,6 +10,7 @@ var searchData=
   ['time_7',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
   ['timeout_8',['&lt;span class=&quot;tt&quot;&gt;MainThreadExecutor::runFor&lt;/span&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
   ['topologies_9',['Deployment topologies',['../index.html#deployment-topologies',1,'']]],
-  ['type_20erasure_10',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
-  ['types_11',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]]
+  ['tree_20mount_20frontend_20seam_10',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — view tree, mount, frontend seam',['../index.html#ui--view-tree-mount-frontend-seam',1,'']]],
+  ['type_20erasure_11',['Registry &amp;amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
+  ['types_12',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]]
 ];

@@ -26,6 +26,11 @@ var concepts =
           [ "MemberWrapper", "db/d94/conceptmorph_1_1table_1_1detail_1_1MemberWrapper.html", null ]
         ] ]
       ] ],
+      [ "ui", null, [
+        [ "detail", null, [
+          [ "ConstantConvertible", "d5/d2a/conceptmorph_1_1ui_1_1detail_1_1ConstantConvertible.html", null ]
+        ] ]
+      ] ],
       [ "units", null, [
         [ "UnitEnum", "d6/db7/conceptmorph_1_1units_1_1UnitEnum.html", null ],
         [ "HasUnitRelations", "d8/d4a/conceptmorph_1_1units_1_1HasUnitRelations.html", null ],

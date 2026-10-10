@@ -14,5 +14,6 @@ var searchData=
   ['—_20schemas_20for_20auto_20built_20guis_11',['&lt;span class=&quot;tt&quot;&gt;morph::forms&lt;/span&gt; — schemas for auto-built GUIs',['../index.html#morphforms--schemas-for-auto-built-guis',1,'']]],
   ['—_20signal_20graph_20view_20state_20declarative_20control_12',['&lt;span class=&quot;tt&quot;&gt;reactive/&lt;/span&gt; — signal graph, view state, declarative control',['../index.html#reactive--signal-graph-view-state-declarative-control',1,'']]],
   ['—_20the_20installed_20owner_20test_20kit_13',['&lt;span class=&quot;tt&quot;&gt;testing/&lt;/span&gt; — the installed owner test kit',['../index.html#testing--the-installed-owner-test-kit',1,'']]],
-  ['—_20why_20it_20exists_14',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['—_20view_20tree_20mount_20frontend_20seam_14',['&lt;span class=&quot;tt&quot;&gt;ui/&lt;/span&gt; — view tree, mount, frontend seam',['../index.html#ui--view-tree-mount-frontend-seam',1,'']]],
+  ['—_20why_20it_20exists_15',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
 ];

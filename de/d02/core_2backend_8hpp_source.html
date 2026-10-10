@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d5e/backend_8hpp_source.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d02/core_2backend_8hpp_source.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -1710,12 +1710,12 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d5e/backend
 <div class="line"><a id="l01515" name="l01515"></a><span class="lineno"> 1515</span><span class="comment"></span> </div>
 <div class="line"><a id="l01516" name="l01516"></a><span class="lineno"> 1516</span><span class="comment">        /// @return The reason the last `cancelPending` gave; null before the first.</span></div>
 <div class="line"><a id="l01517" name="l01517"></a><span class="lineno"> 1517</span>        [[nodiscard]] std::exception_ptr lastReason()<span class="keyword"> const </span>{</div>
-<div class="line"><a id="l01518" name="l01518"></a><span class="lineno"> 1518</span>            Node <span class="keyword">const</span>* <span class="keyword">const</span> node = _latest.load(std::memory_order_acquire);</div>
+<div class="line"><a id="l01518" name="l01518"></a><span class="lineno"> 1518</span>            <a class="code hl_typedef" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> <span class="keyword">const</span>* <span class="keyword">const</span> node = _latest.load(std::memory_order_acquire);</div>
 <div class="line"><a id="l01519" name="l01519"></a><span class="lineno"> 1519</span>            <span class="keywordflow">return</span> node == <span class="keyword">nullptr</span> ? std::exception_ptr{} : node-&gt;reason;</div>
 <div class="line"><a id="l01520" name="l01520"></a><span class="lineno"> 1520</span>        }</div>
 <div class="line"><a id="l01521" name="l01521"></a><span class="lineno"> 1521</span> </div>
 <div class="line"><a id="l01522" name="l01522"></a><span class="lineno"> 1522</span>    <span class="keyword">private</span>:</div>
-<div class="line"><a id="l01523" name="l01523"></a><span class="lineno"> 1523</span>        <span class="keyword">struct </span>Node {</div>
+<div class="line"><a id="l01523" name="l01523"></a><span class="lineno"> 1523</span>        <span class="keyword">struct </span><a class="code hl_typedef" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> {</div>
 <div class="line"><a id="l01524" name="l01524"></a><span class="lineno"> 1524</span>            std::exception_ptr reason;</div>
 <div class="line"><a id="l01525" name="l01525"></a><span class="lineno"> 1525</span>            std::unique_ptr&lt;Node&gt; previous;</div>
 <div class="line"><a id="l01526" name="l01526"></a><span class="lineno"> 1526</span>        };</div>
@@ -1986,6 +1986,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d5e/backend
 <div class="ttc" id="astructmorph_1_1backend_1_1TimeoutError_html_ac11e1e31982dea91b70cc23594e0db18"><div class="ttname"><a href="../../d5/d80/structmorph_1_1backend_1_1TimeoutError.html#ac11e1e31982dea91b70cc23594e0db18">morph::backend::TimeoutError::TimeoutError</a></div><div class="ttdeci">TimeoutError()</div><div class="ttdoc">Constructs the error with a canned diagnostic message.</div><div class="ttdef"><b>Definition</b> <a href="#l00614">backend.hpp:614</a></div></div>
 <div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00070">executor.hpp:70</a></div></div>
 <div class="ttc" id="astructmorph_1_1session_1_1Context_html"><div class="ttname"><a href="../../dd/d85/structmorph_1_1session_1_1Context.html">morph::session::Context</a></div><div class="ttdoc">Per-call session context carried through the bridge to the model.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00026">session.hpp:26</a></div></div>
+<div class="ttc" id="aview_8hpp_html_abe522dc03ec89569730174a647f1da39"><div class="ttname"><a href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">morph::ui::Node</a></div><div class="ttdeci">std::shared_ptr&lt; NodeData const  &gt; Node</div><div class="ttdoc">A view-tree node: immutable, shared data.</div><div class="ttdef"><b>Definition</b> <a href="../../d8/d11/view_8hpp_source.html#l00307">view.hpp:307</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

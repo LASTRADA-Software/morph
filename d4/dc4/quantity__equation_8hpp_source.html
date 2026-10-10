@@ -404,22 +404,22 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/dc4/quantit
 <div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span><span class="comment">    /// @return The combined rendering.</span></div>
 <div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>    [[nodiscard]] <span class="keyword">static</span> Rendered combine(<span class="keyword">const</span> std::string&amp; op, Rendered left, <span class="keyword">const</span> Rendered&amp; right) {</div>
 <div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>        <span class="keywordtype">int</span> <span class="keyword">const</span> precedence = (op == <span class="stringliteral">&quot;*&quot;</span> || op == <span class="stringliteral">&quot;/&quot;</span>) ? 2 : 1;</div>
-<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>        std::string text = std::move(left.text);</div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>        std::string <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> = std::move(left.text);</div>
 <div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>        <span class="keywordflow">if</span> (left.precedence &lt; precedence) {</div>
-<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>            text.insert(0, 1, <span class="charliteral">&#39;(&#39;</span>);</div>
-<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>            text += <span class="charliteral">&#39;)&#39;</span>;</div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span>            <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>.insert(0, 1, <span class="charliteral">&#39;(&#39;</span>);</div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span>            <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> += <span class="charliteral">&#39;)&#39;</span>;</div>
 <div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>        }</div>
-<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>        text += <span class="charliteral">&#39; &#39;</span>;</div>
-<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>        text += op;</div>
-<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>        text += <span class="charliteral">&#39; &#39;</span>;</div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>        <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> += <span class="charliteral">&#39; &#39;</span>;</div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>        <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> += op;</div>
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>        <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> += <span class="charliteral">&#39; &#39;</span>;</div>
 <div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>        <span class="keywordtype">bool</span> <span class="keyword">const</span> rightNeedsParens =</div>
 <div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span>            (right.precedence &lt; precedence) || (right.precedence == precedence &amp;&amp; (op == <span class="stringliteral">&quot;-&quot;</span> || op == <span class="stringliteral">&quot;/&quot;</span>));</div>
 <div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span>        <span class="keywordflow">if</span> (rightNeedsParens) {</div>
-<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>            text += <span class="charliteral">&#39;(&#39;</span>;</div>
-<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>            text += right.text;</div>
-<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>            text += <span class="charliteral">&#39;)&#39;</span>;</div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>            <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> += <span class="charliteral">&#39;(&#39;</span>;</div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>            <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> += right.text;</div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>            <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> += <span class="charliteral">&#39;)&#39;</span>;</div>
 <div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span>        } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>            text += right.text;</div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>            <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> += right.text;</div>
 <div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>        }</div>
 <div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>        <span class="keywordflow">return</span> Rendered{.text = std::move(text), .precedence = precedence};</div>
 <div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>    }</div>
@@ -428,8 +428,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/dc4/quantit
 <div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span><span class="comment">    /// @param operand Rendered operand.</span></div>
 <div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span><span class="comment">    /// @return The combined rendering.</span></div>
 <div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>    [[nodiscard]] <span class="keyword">static</span> Rendered combineUnary(<span class="keyword">const</span> Rendered&amp; operand) {</div>
-<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>        std::string <span class="keyword">const</span> text = (operand.precedence &lt;= 1) ? <span class="stringliteral">&quot;-(&quot;</span> + operand.text + <span class="stringliteral">&quot;)&quot;</span> : <span class="stringliteral">&quot;-&quot;</span> + operand.text;</div>
-<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>        <span class="keywordflow">return</span> Rendered{.text = text, .precedence = 3};</div>
+<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>        std::string <span class="keyword">const</span> <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a> = (operand.precedence &lt;= 1) ? <span class="stringliteral">&quot;-(&quot;</span> + operand.text + <span class="stringliteral">&quot;)&quot;</span> : <span class="stringliteral">&quot;-&quot;</span> + operand.<a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>;</div>
+<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>        <span class="keywordflow">return</span> Rendered{.text = <a class="code hl_function" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>, .precedence = 3};</div>
 <div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span>    }</div>
 <div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span><span class="comment"></span> </div>
 <div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span><span class="comment">    /// @brief The rendering of a node that stops the walk — a name, a `cK`</span></div>
@@ -644,6 +644,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/dc4/quantit
 <div class="ttc" id="aquantity_8hpp_html"><div class="ttname"><a href="../../d9/db8/quantity_8hpp.html">quantity.hpp</a></div><div class="ttdoc">Unit-tagged, optionally-empty exact values with a derivation trail.</div></div>
 <div class="ttc" id="arational_8hpp_html"><div class="ttname"><a href="../../d1/de8/rational_8hpp.html">rational.hpp</a></div><div class="ttdoc">Exact rational arithmetic for morph model/action values.</div></div>
 <div class="ttc" id="astructmorph_1_1units_1_1Quantity_html_ae92d43357a91c8a82846e542c91caa64"><div class="ttname"><a href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ae92d43357a91c8a82846e542c91caa64">morph::units::Quantity::equation</a></div><div class="ttdeci">std::vector&lt; std::string &gt; equation(std::size_t maxSteps=kDefaultEquationSteps) const</div><div class="ttdoc">The worked derivation as print-ready lines (see docs/spec/util/quantity_type.md).</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00894">quantity.hpp:894</a></div></div>
+<div class="ttc" id="aview_8hpp_html_aad8adfeaad75b31095ad25cdff3b0888"><div class="ttname"><a href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">morph::ui::text</a></div><div class="ttdeci">Node text(Text spec)</div><div class="ttdoc">Static or bound text.</div><div class="ttdef"><b>Definition</b> <a href="../../d8/d11/view_8hpp_source.html#l00775">view.hpp:775</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

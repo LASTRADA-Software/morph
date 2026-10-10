@@ -6,7 +6,7 @@ var searchData=
   ['engine_3',['Engine',['../dd/d72/classmorph_1_1table_1_1Engine.html',1,'morph::table']]],
   ['engineoptions_4',['EngineOptions',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html',1,'morph::table']]],
   ['enginestats_5',['EngineStats',['../de/d18/structmorph_1_1table_1_1EngineStats.html',1,'morph::table']]],
-  ['entry_6',['Entry',['../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html',1,'morph::table::CompiledFilter']]],
+  ['entry_6',['Entry',['../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html',1,'morph::table::CompiledFilter::Entry'],['../db/d76/structmorph_1_1ui_1_1testing_1_1detail_1_1Entry.html',1,'morph::ui::testing::detail::Entry']]],
   ['envelope_7',['Envelope',['../d5/d77/structmorph_1_1wire_1_1Envelope.html',1,'morph::wire']]],
   ['equalityusable_8',['EqualityUsable',['../de/d44/structmorph_1_1reactive_1_1detail_1_1EqualityUsable.html',1,'morph::reactive::detail']]],
   ['equalityusable_3c_20std_3a_3aoptional_3c_20t_20_3e_20_3e_9',['EqualityUsable&lt; std::optional&lt; T &gt; &gt;',['../d1/d97/structmorph_1_1reactive_1_1detail_1_1EqualityUsable_3_01std_1_1optional_3_01T_01_4_01_4.html',1,'morph::reactive::detail']]],

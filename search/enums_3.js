@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['equalitypolicy_0',['EqualityPolicy',['../dd/d5f/signal_8hpp.html#a0172f46bc8e1668baa353a56ffaa1b94',1,'morph::reactive']]]
+  ['datemode_0',['DateMode',['../d8/d11/view_8hpp.html#a15576986d2ce9f961f0e364a012bb8d5',1,'morph::ui']]]
 ];

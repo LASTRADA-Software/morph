@@ -1,14 +1,19 @@
 var searchData=
 [
-  ['actionfield_0',['actionField',['../d9/dea/structmorph_1_1views_1_1BindEntry.html#a99e098e70044e9cd459def84d45cc6fb',1,'morph::views::BindEntry']]],
-  ['actiontype_1',['actionType',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a3d0760f89cb023bdae4bbadb7a97ee95',1,'morph::wire::Envelope::actionType'],['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a64eb9f5a32f498759160e5e2697cdfae',1,'morph::journal::LogEntry::actionType']]],
-  ['actiontypeid_2',['actionTypeId',['../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html#a9c11e85e9f3c063006360a4cc8501ccd',1,'morph::views::ActionDescriptor']]],
-  ['activatelocal_3',['activateLocal',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#aba5e760a9877355a77ac7915553d0ede',1,'morph::offline::ReconnectCoordinator::Deps']]],
-  ['activateprimary_4',['activatePrimary',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a8b0c404513fccf08fe86de00b9c91047',1,'morph::offline::ReconnectCoordinator::Deps']]],
-  ['after_5',['after',['../df/d28/structmorph_1_1table_1_1detail_1_1ViewPositions.html#aadd1314b174dcdb2b9fee343c5e1f816',1,'morph::table::detail::ViewPositions']]],
-  ['afterflush_6',['afterFlush',['../d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions.html#a01c46e5a6853c49959e4a0a1e97c9d0a',1,'morph::reactive::RuntimeOptions']]],
-  ['allchanged_7',['allChanged',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#a8c92bd7e9dbeee6e3c2ae63478dbd48b',1,'morph::table::detail::JobInput']]],
-  ['allowplaintextexposure_8',['allowPlaintextExposure',['../de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#aeb30cc5b19543d22feef392669c98834',1,'morph::qt::QtWebSocketServerConfig']]],
-  ['amount_9',['amount',['../d5/d33/structmorph_1_1table_1_1QuantityCell.html#a055c2c1bdf777e331832a7c15907813c',1,'morph::table::QuantityCell']]],
-  ['attempts_10',['attempts',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f',1,'morph::offline::QueueItem']]]
+  ['accepts_0',['accepts',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a6866690fe140510eaf7034eef72825d3',1,'morph::ui::testing::detail::Callbacks::accepts'],['../d1/d68/structmorph_1_1ui_1_1Common.html#aadbd7732650a16f317a5b70b24de0635',1,'morph::ui::Common::accepts']]],
+  ['actionfield_1',['actionField',['../d9/dea/structmorph_1_1views_1_1BindEntry.html#a99e098e70044e9cd459def84d45cc6fb',1,'morph::views::BindEntry']]],
+  ['actiontype_2',['actionType',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a3d0760f89cb023bdae4bbadb7a97ee95',1,'morph::wire::Envelope::actionType'],['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a64eb9f5a32f498759160e5e2697cdfae',1,'morph::journal::LogEntry::actionType']]],
+  ['actiontypeid_3',['actionTypeId',['../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html#a9c11e85e9f3c063006360a4cc8501ccd',1,'morph::views::ActionDescriptor']]],
+  ['activate_4',['activate',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#aba30c029a68e84ac519831935ff40da4',1,'morph::ui::testing::detail::Callbacks']]],
+  ['activatelocal_5',['activateLocal',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#aba5e760a9877355a77ac7915553d0ede',1,'morph::offline::ReconnectCoordinator::Deps']]],
+  ['activateprimary_6',['activatePrimary',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a8b0c404513fccf08fe86de00b9c91047',1,'morph::offline::ReconnectCoordinator::Deps']]],
+  ['active_7',['active',['../dc/dd1/structmorph_1_1ui_1_1Busy.html#acac5bdc3bce66841b264833c63be2467',1,'morph::ui::Busy']]],
+  ['after_8',['after',['../df/d28/structmorph_1_1table_1_1detail_1_1ViewPositions.html#aadd1314b174dcdb2b9fee343c5e1f816',1,'morph::table::detail::ViewPositions']]],
+  ['afterflush_9',['afterFlush',['../d7/dbe/structmorph_1_1reactive_1_1RuntimeOptions.html#a01c46e5a6853c49959e4a0a1e97c9d0a',1,'morph::reactive::RuntimeOptions']]],
+  ['allchanged_10',['allChanged',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#a8c92bd7e9dbeee6e3c2ae63478dbd48b',1,'morph::table::detail::JobInput']]],
+  ['allowplaintextexposure_11',['allowPlaintextExposure',['../de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#aeb30cc5b19543d22feef392669c98834',1,'morph::qt::QtWebSocketServerConfig']]],
+  ['amount_12',['amount',['../d5/d33/structmorph_1_1table_1_1QuantityCell.html#a055c2c1bdf777e331832a7c15907813c',1,'morph::table::QuantityCell::amount'],['../d1/d89/structmorph_1_1ui_1_1Sizing.html#add52f643b46afc69e09b82bd0be6e810',1,'morph::ui::Sizing::amount']]],
+  ['applicationid_13',['applicationId',['../dc/dcf/structmorph_1_1ui_1_1Bundle.html#a354aaee85ec14fcffcda01a9c89c1c0c',1,'morph::ui::Bundle']]],
+  ['attempts_14',['attempts',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f',1,'morph::offline::QueueItem']]],
+  ['axis_15',['axis',['../dc/dae/structmorph_1_1ui_1_1Scroll.html#a180a20ef642f1108e5d8f08e82207000',1,'morph::ui::Scroll::axis'],['../d2/d58/structmorph_1_1ui_1_1ForEach.html#a1ce4022883b1b3e4b82a6958e0c3dc43',1,'morph::ui::ForEach::axis']]]
 ];

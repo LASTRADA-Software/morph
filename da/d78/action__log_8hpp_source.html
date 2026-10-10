@@ -554,17 +554,17 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d78/action_
 <div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span><span class="comment">/// @param log Sink to attach automatically, or `nullptr` to stop auto-attaching</span></div>
 <div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span><span class="comment">///            (existing instances keep whatever they already have).</span></div>
 <div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span><span class="keyword">inline</span> <span class="keywordtype">void</span> setActionLog(std::shared_ptr&lt;IActionLog&gt; log) {</div>
-<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>    <span class="keyword">auto</span>&amp; [mtx, slot] = detail::defaultActionLogState();</div>
+<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>    <span class="keyword">auto</span>&amp; [mtx, <a class="code hl_function" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">slot</a>] = detail::defaultActionLogState();</div>
 <div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span>    std::scoped_lock <span class="keyword">const</span> lock{mtx};</div>
-<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>    slot = std::move(log);</div>
+<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>    <a class="code hl_function" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">slot</a> = std::move(log);</div>
 <div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>}</div>
 <div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span><span class="comment"></span> </div>
 <div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span><span class="comment">/// @brief Returns the currently installed default action log, or `nullptr`</span></div>
 <div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span><span class="comment">///        if none has been set. Thread-safe.</span></div>
 <div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span>[[nodiscard]] <span class="keyword">inline</span> std::shared_ptr&lt;IActionLog&gt; defaultActionLog() {</div>
-<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span>    <span class="keyword">auto</span>&amp; [mtx, slot] = detail::defaultActionLogState();</div>
+<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span>    <span class="keyword">auto</span>&amp; [mtx, <a class="code hl_function" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">slot</a>] = detail::defaultActionLogState();</div>
 <div class="line"><a id="l00420" name="l00420"></a><span class="lineno">  420</span>    std::scoped_lock <span class="keyword">const</span> lock{mtx};</div>
-<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span>    <span class="keywordflow">return</span> slot;</div>
+<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span>    <span class="keywordflow">return</span> <a class="code hl_function" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">slot</a>;</div>
 <div class="line"><a id="l00422" name="l00422"></a><span class="lineno">  422</span>}</div>
 <div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span><span class="comment"></span> </div>
 <div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span><span class="comment">/// @brief RAII helper that installs a default action log for its lifetime and</span></div>
@@ -643,6 +643,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d78/action_
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_ada474537fac0bac3b932d4fde686f42e"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ada474537fac0bac3b932d4fde686f42e">morph::journal::LogEntry::result</a></div><div class="ttdeci">std::string result</div><div class="ttdoc">JSON-encoded result (ActionTraits&lt;A&gt;::resultToJson), captured after successful execution....</div><div class="ttdef"><b>Definition</b> <a href="#l00086">action_log.hpp:86</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_af622c4dbb839692d172057ecaec56a2d"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">morph::journal::LogEntry::seq</a></div><div class="ttdeci">uint64_t seq</div><div class="ttdoc">Monotonic order assigned by the sink on append(). Callers pass 0.</div><div class="ttdef"><b>Definition</b> <a href="#l00048">action_log.hpp:48</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1SerializationError_html"><div class="ttname"><a href="../../d6/d23/structmorph_1_1journal_1_1SerializationError.html">morph::journal::SerializationError</a></div><div class="ttdoc">Thrown by toJson/fromJson when LogEntry (de)serialisation fails.</div><div class="ttdef"><b>Definition</b> <a href="#l00152">action_log.hpp:152</a></div></div>
+<div class="ttc" id="aview_8hpp_html_afe853c762b44f650b9af349a90268916"><div class="ttname"><a href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916">morph::ui::slot</a></div><div class="ttdeci">SlotBinding&lt; std::decay_t&lt; F &gt; &gt; slot(SlotId slotId, F &amp;&amp;read)</div><div class="ttdoc">A slot with an id.</div><div class="ttdef"><b>Definition</b> <a href="../../d8/d11/view_8hpp_source.html#l00060">view.hpp:60</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

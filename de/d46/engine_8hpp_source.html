@@ -549,7 +549,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span>        <a class="code hl_define" href="../../dc/ddc/profiler_8hpp.html#a93ffe544de2fbcdfd94eda78aabfcb71">MORPH_ZONE</a>(<span class="stringliteral">&quot;table.keyBuild&quot;</span>);</div>
 <div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>        <span class="keyword">auto</span> <span class="keyword">const</span> rows = _in.snapshot-&gt;rowCount();</div>
 <div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>        <span class="keywordflow">if</span> (!_patched &amp;&amp; !_in.dirty.empty()) {</div>
-<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>            <span class="keywordflow">for</span> (std::size_t column = 0; column &lt; _result.keys.size(); ++column) {</div>
+<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>            <span class="keywordflow">for</span> (std::size_t column = 0; <a class="code hl_function" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a> &lt; _result.keys.size(); ++<a class="code hl_function" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a>) {</div>
 <div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span>                <span class="keywordflow">if</span> (_result.keys[column] == <span class="keyword">nullptr</span>) {</div>
 <div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span>                    <span class="keywordflow">continue</span>;</div>
 <div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span>                }</div>
@@ -557,12 +557,12 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span>                <span class="keywordflow">for</span> (<span class="keyword">auto</span> <span class="keyword">const</span> row : _in.dirty) {</div>
 <div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span>                    copy-&gt;set(row, _in.snapshot-&gt;cell(row, column), _in.columns[column], _in.services);</div>
 <div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span>                }</div>
-<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span>                _result.keys[column] = std::move(copy);</div>
+<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span>                _result.keys[<a class="code hl_function" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a>] = std::move(copy);</div>
 <div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span>            }</div>
 <div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>            _patched = <span class="keyword">true</span>;</div>
 <div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span>        }</div>
 <div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>        <span class="keywordflow">while</span> (_neededAt &lt; _in.needed.size()) {</div>
-<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>            <span class="keyword">auto</span> <span class="keyword">const</span> column = _in.needed[_neededAt];</div>
+<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>            <span class="keyword">auto</span> <span class="keyword">const</span> <a class="code hl_function" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a> = _in.needed[_neededAt];</div>
 <div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span>            <span class="keywordflow">if</span> (_result.keys[column] != <span class="keyword">nullptr</span> &amp;&amp; _building == <span class="keyword">nullptr</span>) {</div>
 <div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span>                ++_neededAt;</div>
 <div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span>                <span class="keywordflow">continue</span>;</div>
@@ -580,7 +580,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l00429" name="l00429"></a><span class="lineno">  429</span>                    <span class="keywordflow">return</span> <span class="keyword">false</span>;</div>
 <div class="line"><a id="l00430" name="l00430"></a><span class="lineno">  430</span>                }</div>
 <div class="line"><a id="l00431" name="l00431"></a><span class="lineno">  431</span>            }</div>
-<div class="line"><a id="l00432" name="l00432"></a><span class="lineno">  432</span>            _result.keys[column] = std::move(_building);</div>
+<div class="line"><a id="l00432" name="l00432"></a><span class="lineno">  432</span>            _result.keys[<a class="code hl_function" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a>] = std::move(_building);</div>
 <div class="line"><a id="l00433" name="l00433"></a><span class="lineno">  433</span>            _building = <span class="keyword">nullptr</span>;</div>
 <div class="line"><a id="l00434" name="l00434"></a><span class="lineno">  434</span>            ++_result.keyBuilds;</div>
 <div class="line"><a id="l00435" name="l00435"></a><span class="lineno">  435</span>            ++_neededAt;</div>
@@ -607,7 +607,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l00456" name="l00456"></a><span class="lineno">  456</span>        std::vector&lt;RowOrder::Key&gt; keys;</div>
 <div class="line"><a id="l00457" name="l00457"></a><span class="lineno">  457</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span> <span class="keyword">const</span>&amp; key : _in.sort) {</div>
 <div class="line"><a id="l00458" name="l00458"></a><span class="lineno">  458</span>            <span class="keywordflow">if</span> (<span class="keyword">auto</span> <span class="keyword">const</span> column = <a class="code hl_function" href="../../d1/dd2/filter_8hpp.html#a7430c2b7d550d70496544ffb3b522310">findColumn</a>(_in.columns, key.column)) {</div>
-<div class="line"><a id="l00459" name="l00459"></a><span class="lineno">  459</span>                keys.push_back({.keys = _result.keys[*column].get(), .dir = key.dir});</div>
+<div class="line"><a id="l00459" name="l00459"></a><span class="lineno">  459</span>                keys.push_back({.keys = _result.keys[*<a class="code hl_function" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a>].get(), .dir = key.dir});</div>
 <div class="line"><a id="l00460" name="l00460"></a><span class="lineno">  460</span>            }</div>
 <div class="line"><a id="l00461" name="l00461"></a><span class="lineno">  461</span>        }</div>
 <div class="line"><a id="l00462" name="l00462"></a><span class="lineno">  462</span>        <span class="keywordflow">return</span> RowOrder{std::move(keys)};</div>
@@ -627,7 +627,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l00476" name="l00476"></a><span class="lineno">  476</span>            <span class="keywordflow">return</span> <span class="keyword">true</span>;</div>
 <div class="line"><a id="l00477" name="l00477"></a><span class="lineno">  477</span>        }</div>
 <div class="line"><a id="l00478" name="l00478"></a><span class="lineno">  478</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span> <span class="keyword">const</span>&amp; column : _in.filter-&gt;columns()) {</div>
-<div class="line"><a id="l00479" name="l00479"></a><span class="lineno">  479</span>            <span class="keywordflow">if</span> (!<a class="code hl_function" href="../../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html#ac98277f82291ab5ff82598329d65c591">CompiledFilter::passes</a>(column, *_result.keys[column.column], row)) {</div>
+<div class="line"><a id="l00479" name="l00479"></a><span class="lineno">  479</span>            <span class="keywordflow">if</span> (!<a class="code hl_function" href="../../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html#ac98277f82291ab5ff82598329d65c591">CompiledFilter::passes</a>(column, *_result.keys[<a class="code hl_function" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a>.column], row)) {</div>
 <div class="line"><a id="l00480" name="l00480"></a><span class="lineno">  480</span>                <span class="keywordflow">return</span> <span class="keyword">false</span>;</div>
 <div class="line"><a id="l00481" name="l00481"></a><span class="lineno">  481</span>            }</div>
 <div class="line"><a id="l00482" name="l00482"></a><span class="lineno">  482</span>        }</div>
@@ -648,7 +648,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l00497" name="l00497"></a><span class="lineno">  497</span>                                                         RowOrder <span class="keyword">const</span>&amp; orderBy)<span class="keyword"> const </span>{</div>
 <div class="line"><a id="l00498" name="l00498"></a><span class="lineno">  498</span>        std::vector&lt;bool&gt; isDirty(_in.snapshot-&gt;rowCount(), <span class="keyword">false</span>);</div>
 <div class="line"><a id="l00499" name="l00499"></a><span class="lineno">  499</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span> <span class="keyword">const</span> row : _in.dirty) {</div>
-<div class="line"><a id="l00500" name="l00500"></a><span class="lineno">  500</span>            isDirty[row] = <span class="keyword">true</span>;</div>
+<div class="line"><a id="l00500" name="l00500"></a><span class="lineno">  500</span>            isDirty[<a class="code hl_function" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>] = <span class="keyword">true</span>;</div>
 <div class="line"><a id="l00501" name="l00501"></a><span class="lineno">  501</span>        }</div>
 <div class="line"><a id="l00502" name="l00502"></a><span class="lineno">  502</span>        std::vector&lt;std::uint32_t&gt; clean;</div>
 <div class="line"><a id="l00503" name="l00503"></a><span class="lineno">  503</span>        clean.reserve(previous.size());</div>
@@ -767,7 +767,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l00616" name="l00616"></a><span class="lineno">  616</span>        <span class="keyword">auto</span> <span class="keyword">const</span> rows = _in.snapshot-&gt;rowCount();</div>
 <div class="line"><a id="l00617" name="l00617"></a><span class="lineno">  617</span>        std::unordered_map&lt;RowId, std::uint32_t&gt; byKey;</div>
 <div class="line"><a id="l00618" name="l00618"></a><span class="lineno">  618</span>        byKey.reserve(rows);</div>
-<div class="line"><a id="l00619" name="l00619"></a><span class="lineno">  619</span>        <span class="keywordflow">for</span> (std::size_t row = 0; row &lt; rows; ++row) {</div>
+<div class="line"><a id="l00619" name="l00619"></a><span class="lineno">  619</span>        <span class="keywordflow">for</span> (std::size_t row = 0; <a class="code hl_function" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a> &lt; rows; ++<a class="code hl_function" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>) {</div>
 <div class="line"><a id="l00620" name="l00620"></a><span class="lineno">  620</span>            byKey.emplace(_in.snapshot-&gt;rowId(row), <span class="keyword">static_cast&lt;</span>std::uint32_t<span class="keyword">&gt;</span>(row));</div>
 <div class="line"><a id="l00621" name="l00621"></a><span class="lineno">  621</span>        }</div>
 <div class="line"><a id="l00622" name="l00622"></a><span class="lineno">  622</span>        std::vector&lt;std::uint32_t&gt; previous;</div>
@@ -1480,7 +1480,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l01307" name="l01307"></a><span class="lineno"> 1307</span>    <span class="keywordtype">void</span> holdUpdatedRows(detail::JobInput <span class="keyword">const</span>&amp; input) {</div>
 <div class="line"><a id="l01308" name="l01308"></a><span class="lineno"> 1308</span>        std::vector&lt;bool&gt; shown(input.snapshot-&gt;rowCount(), <span class="keyword">false</span>);</div>
 <div class="line"><a id="l01309" name="l01309"></a><span class="lineno"> 1309</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span> <span class="keyword">const</span> row : input.previousView) {</div>
-<div class="line"><a id="l01310" name="l01310"></a><span class="lineno"> 1310</span>            shown[row] = <span class="keyword">true</span>;</div>
+<div class="line"><a id="l01310" name="l01310"></a><span class="lineno"> 1310</span>            shown[<a class="code hl_function" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>] = <span class="keyword">true</span>;</div>
 <div class="line"><a id="l01311" name="l01311"></a><span class="lineno"> 1311</span>        }</div>
 <div class="line"><a id="l01312" name="l01312"></a><span class="lineno"> 1312</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span> <span class="keyword">const</span> row : input.dirty) {</div>
 <div class="line"><a id="l01313" name="l01313"></a><span class="lineno"> 1313</span>            <span class="keyword">auto</span> key = input.snapshot-&gt;rowId(row);</div>
@@ -1498,10 +1498,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="line"><a id="l01325" name="l01325"></a><span class="lineno"> 1325</span>        std::vector&lt;std::pair&lt;std::size_t, std::uint32_t&gt;&gt; held;  <span class="comment">// (displayed index, row)</span></div>
 <div class="line"><a id="l01326" name="l01326"></a><span class="lineno"> 1326</span>        std::vector&lt;bool&gt; isHeld(_viewSnapshot-&gt;rowCount(), <span class="keyword">false</span>);</div>
 <div class="line"><a id="l01327" name="l01327"></a><span class="lineno"> 1327</span>        <span class="keywordflow">for</span> (std::size_t i = 0; i &lt; displayed.size(); ++i) {</div>
-<div class="line"><a id="l01328" name="l01328"></a><span class="lineno"> 1328</span>            <span class="keyword">auto</span> <span class="keyword">const</span> row = displayed[i];</div>
+<div class="line"><a id="l01328" name="l01328"></a><span class="lineno"> 1328</span>            <span class="keyword">auto</span> <span class="keyword">const</span> <a class="code hl_function" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a> = displayed[i];</div>
 <div class="line"><a id="l01329" name="l01329"></a><span class="lineno"> 1329</span>            <span class="keywordflow">if</span> (_holds.contains(_viewSnapshot-&gt;rowId(row))) {</div>
 <div class="line"><a id="l01330" name="l01330"></a><span class="lineno"> 1330</span>                held.emplace_back(i, row);</div>
-<div class="line"><a id="l01331" name="l01331"></a><span class="lineno"> 1331</span>                isHeld[row] = <span class="keyword">true</span>;</div>
+<div class="line"><a id="l01331" name="l01331"></a><span class="lineno"> 1331</span>                isHeld[<a class="code hl_function" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>] = <span class="keyword">true</span>;</div>
 <div class="line"><a id="l01332" name="l01332"></a><span class="lineno"> 1332</span>            }</div>
 <div class="line"><a id="l01333" name="l01333"></a><span class="lineno"> 1333</span>        }</div>
 <div class="line"><a id="l01334" name="l01334"></a><span class="lineno"> 1334</span>        std::vector&lt;std::uint32_t&gt; out;</div>
@@ -1789,6 +1789,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d46/engine_
 <div class="ttc" id="astructmorph_1_1table_1_1detail_1_1JobResult_html_ad9512f66ad3807a4392ef079863c2528"><div class="ttname"><a href="../../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#ad9512f66ad3807a4392ef079863c2528">morph::table::detail::JobResult::change</a></div><div class="ttdeci">ViewChange change</div><div class="ttdoc">From JobInput::previousView to view.</div><div class="ttdef"><b>Definition</b> <a href="#l00266">engine.hpp:266</a></div></div>
 <div class="ttc" id="astructmorph_1_1table_1_1detail_1_1JobResult_html_af379f2a0dd7de08ec8e270399f4cb72f"><div class="ttname"><a href="../../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#af379f2a0dd7de08ec8e270399f4cb72f">morph::table::detail::JobResult::subsetSort</a></div><div class="ttdeci">bool subsetSort</div><div class="ttdoc">Only the filter&#39;s survivors were sorted.</div><div class="ttdef"><b>Definition</b> <a href="#l00270">engine.hpp:270</a></div></div>
 <div class="ttc" id="astructmorph_1_1table_1_1detail_1_1JobResult_html_afef142673ef7b526b3722c1bbea87f57"><div class="ttname"><a href="../../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#afef142673ef7b526b3722c1bbea87f57">morph::table::detail::JobResult::repaired</a></div><div class="ttdeci">bool repaired</div><div class="ttdoc">Updated rows were merged into the previous order.</div><div class="ttdef"><b>Definition</b> <a href="#l00272">engine.hpp:272</a></div></div>
+<div class="ttc" id="aview_8hpp_html_a2e0b69fba76cbc2b3df8ba03895cf808"><div class="ttname"><a href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">morph::ui::column</a></div><div class="ttdeci">Node column(Column spec)</div><div class="ttdoc">Children stacked top to bottom.</div><div class="ttdef"><b>Definition</b> <a href="../../d8/d11/view_8hpp_source.html#l00805">view.hpp:805</a></div></div>
+<div class="ttc" id="aview_8hpp_html_ac8be7e558ce139d1bfaaaeebc458bc9e"><div class="ttname"><a href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">morph::ui::row</a></div><div class="ttdeci">Node row(Row spec)</div><div class="ttdoc">Children laid out left to right.</div><div class="ttdef"><b>Definition</b> <a href="../../d8/d11/view_8hpp_source.html#l00810">view.hpp:810</a></div></div>
 <div class="ttc" id="aview__change_8hpp_html"><div class="ttname"><a href="../../d6/d59/view__change_8hpp.html">view_change.hpp</a></div><div class="ttdoc">What changed between two view orders, as list-model operations.</div></div>
 <div class="ttc" id="aview__change_8hpp_html_a105451f97cb1a62419cb9e800c802282"><div class="ttname"><a href="../../d6/d59/view__change_8hpp.html#a105451f97cb1a62419cb9e800c802282">morph::table::diffViews</a></div><div class="ttdeci">ViewChange diffViews(std::span&lt; std::uint32_t const &gt; before, std::span&lt; std::uint32_t const &gt; after, std::span&lt; std::uint32_t const &gt; changed, std::size_t identityLimit, std::size_t resetThreshold)</div><div class="ttdoc">Computes the operations that turn before into after.</div><div class="ttdef"><b>Definition</b> <a href="../../d6/d59/view__change_8hpp_source.html#l00330">view_change.hpp:330</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
