@@ -17,12 +17,12 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/session/session.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
 
 #include "bind_support.hpp"
-#include "owner_probe_recorder.hpp"
 #include "raw_dispatch_probe.hpp"
 #include "test_support.hpp"
 

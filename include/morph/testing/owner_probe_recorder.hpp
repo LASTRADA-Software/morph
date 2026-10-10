@@ -6,16 +6,21 @@
 #include <core/async/ExecutorContext.hpp>
 #include <core/async/IExecutor.hpp>
 #include <cstddef>
-#include <morph/core/detail/owner_probe.hpp>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
 
+#include "../core/detail/owner_probe.hpp"
+
+/// @file
+/// @brief `morph::testing::OwnerProbeRecorder`: observes the owner checks a test's code makes, instead of
+///        letting a debug build assert on them.
+
 namespace morph::testing {
 
-/// Records every owner check a loop-owned body makes while this object is
+/// @brief Records every owner check a loop-owned body makes while this object is
 /// alive (`morph::exec::detail::noteOwner`), and what the calling thread's
 /// executor scope said at that moment.
 ///
@@ -25,13 +30,17 @@ namespace morph::testing {
 /// The scope is read here, by the test, not taken from the component.
 class OwnerProbeRecorder {
 public:
-    /// One owner check.
+    /// @brief One owner check.
     struct Seen {
+        /// @brief The site the check named.
         std::string site;
+        /// @brief Whether the checking thread was inside a task of the owner the check named.
         bool onOwner{false};
+        /// @brief Whether the check named the owner this recorder expects.
         bool expectedOwner{false};
     };
 
+    /// @brief Installs this recorder as the process's owner probe.
     /// @param expected The owner every check is expected to name: the
     ///        `IoLoop`'s loop.
     explicit OwnerProbeRecorder(::core::async::IExecutor const& expected) : _expected{&expected} {
@@ -39,6 +48,7 @@ public:
         ::morph::exec::detail::ownerProbe().store(&OwnerProbeRecorder::record);
     }
 
+    /// @brief Uninstalls the probe, then waits for every thread still inside `record()`.
     ~OwnerProbeRecorder() {
         ::morph::exec::detail::ownerProbe().store(nullptr);
         current().store(nullptr);
@@ -55,6 +65,8 @@ public:
     OwnerProbeRecorder(OwnerProbeRecorder&&) = delete;
     OwnerProbeRecorder& operator=(OwnerProbeRecorder&&) = delete;
 
+    /// @brief The checks made at one site.
+    /// @param site The site name.
     /// @return Every check made at @p site so far.
     [[nodiscard]] std::vector<Seen> at(std::string_view site) const {
         std::scoped_lock const lock{_mtx};
@@ -67,9 +79,13 @@ public:
         return matching;
     }
 
+    /// @brief How many checks were made at one site.
+    /// @param site The site name.
     /// @return How many checks were made at @p site.
     [[nodiscard]] std::size_t count(std::string_view site) const { return at(site).size(); }
 
+    /// @brief Whether every check at one site ran posted to the expected owner.
+    /// @param site The site name.
     /// @return Whether at least one check was made at @p site, and every one
     ///         of them ran inside a task of the expected owner.
     [[nodiscard]] bool allPosted(std::string_view site) const {

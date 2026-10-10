@@ -11,10 +11,10 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <mutex>
 #include <thread>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 // ── Test models ───────────────────────────────────────────────────────────────

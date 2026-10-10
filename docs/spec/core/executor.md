@@ -302,7 +302,8 @@ A caller that wants a deterministic, hand-stepped interleaving harness against
 `RemoteServer`'s real per-model ordering does not need to touch
 `morph::exec::detail::ModelStrands` or `morph::exec::detail::ModelId` at all:
 constructing the server against a single-step, test-controlled `IExecutor` (see
-`tests/test_support.hpp`'s `morph::testing::StepExecutor`) and driving it one
+`<morph/testing/step_executor.hpp>`'s `morph::testing::StepExecutor`, which states
+an `ExecutorScope` around each task as `MainThreadExecutor` does) and driving it one
 task at a time is enough — `RemoteServer`'s own wire replies carry the model id
 as a plain `uint64_t` (`wire::Envelope::modelId`), so a test never needs the
 `ModelId` vocabulary either.

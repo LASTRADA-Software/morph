@@ -417,12 +417,21 @@ target_sources(morph
         include/morph/util/rational.hpp
         include/morph/util/quantity.hpp
         include/morph/util/datetime.hpp
+        include/morph/reactive/runtime.hpp
+        include/morph/reactive/signal.hpp
+        include/morph/reactive/scope.hpp
+        include/morph/reactive/store.hpp
+        include/morph/reactive/scheduler.hpp
+        include/morph/reactive/testing/manual_scheduler.hpp
+        include/morph/reactive/control.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
         include/morph/core/file_io_ops.hpp
         include/morph/core/model_key.hpp
         include/morph/core/payload_schema.hpp
         include/morph/core/payload_shape_tag.hpp
+        include/morph/testing/step_executor.hpp
+        include/morph/testing/owner_probe_recorder.hpp
         include/morph/forms/app.hpp
         include/morph/forms/flows.hpp
         include/morph/forms/layout.hpp
@@ -481,6 +490,7 @@ target_sources(morph
         include/morph/core/detail/instance_directory.hpp
         include/morph/core/detail/owned_state.hpp
         include/morph/core/detail/owner_affinity.hpp
+        include/morph/reactive/detail/graph.hpp
         include/morph/core/detail/owner_probe.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp

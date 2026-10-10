@@ -15,13 +15,13 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/owner_strand.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 namespace {

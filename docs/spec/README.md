@@ -127,6 +127,12 @@ before writing a durability test
 mapping for a table, on and off the owner thread, and `table::apply` for a
 server
 
+**Reactive state and control**
+[`reactive/signals.md`](reactive/signals.md) ·
+[`reactive/store.md`](reactive/store.md) ·
+[`reactive/control.md`](reactive/control.md) — signals, view state, and server
+interaction a controller declares instead of sequencing
+
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·
 [`util/quantity_type.md`](util/quantity_type.md) ·

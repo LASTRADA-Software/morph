@@ -19,12 +19,12 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 
-#include "owner_probe_recorder.hpp"
 #include "test_support.hpp"
 
 struct RssAddAction {
