@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "test_support.hpp"
+#include "ui_echoing_backend.hpp"
 
 namespace ui = morph::ui;
 
@@ -77,15 +78,32 @@ ui::Key parseKey(std::string_view text) {
     return ui::Key{std::int64_t{std::stoll(std::string{text})}};
 }
 
+// How a probe, or the backend behind it, breaks the contract on purpose. A suite that passes a correct backend
+// measures something only if it fails a broken one.
+enum class Fault : std::uint8_t {
+    None,           // the reference probe
+    NoChildren,     // a container reports its children but hands none of them out
+    WrongText,      // every widget reads as showing other text
+    DeadInput,      // user actions never reach the widgets
+    EchoingSelect,  // the backend's Select reports a choice when its options are replaced
+};
+
 // The reference probe: what a TUI or Qt Quick probe does with a rendered screen or a QQuickItem tree, this one does
-// with the recording backend's records.
+// with the recording backend's records. Given a fault, it is a broken backend the suite must flag.
 class RecordingProbe final : public ui::testing::ConformanceProbe {
 public:
-    ui::IViewBackend& backend() override { return _backend; }
+    explicit RecordingProbe(Fault fault = Fault::None) : _fault{fault} {}
+
+    ui::IViewBackend& backend() override {
+        return _fault == Fault::EchoingSelect ? static_cast<ui::IViewBackend&>(_echoing) : _backend;
+    }
     morph::reactive::Runtime& runtime() override { return _rt; }
     void settle() override { _owner.runAll(); }
 
     [[nodiscard]] std::string textOf(ui::Widget const& widget) override {
+        if (_fault == Fault::WrongText) {
+            return "?";
+        }
         int const widgetId = _backend.idOf(widget);
         std::string const kind = _backend.kindOf(widgetId);
         if (kind == "Select") {
@@ -103,17 +121,32 @@ public:
         return _backend.children(_backend.idOf(container)).size();
     }
     [[nodiscard]] ui::Widget* childAt(ui::ContainerWidget const& container, std::size_t index) override {
+        if (_fault == Fault::NoChildren) {
+            return nullptr;
+        }
         auto const children = _backend.children(_backend.idOf(container));
         return index < children.size() ? _backend.widget(children.at(index)) : nullptr;
     }
-    void click(ui::Widget& widget) override { _backend.click(_backend.idOf(widget)); }
+    void click(ui::Widget& widget) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.click(_backend.idOf(widget));
+        }
+    }
     void type(ui::Widget& widget, std::string_view text) override {
-        _backend.edit(_backend.idOf(widget), std::string{text});
+        if (_fault != Fault::DeadInput) {
+            _backend.edit(_backend.idOf(widget), std::string{text});
+        }
     }
     void drag(ui::Widget& source, ui::Widget& target) override {
-        static_cast<void>(_backend.drag(_backend.idOf(source), _backend.idOf(target)));
+        if (_fault != Fault::DeadInput) {
+            static_cast<void>(_backend.drag(_backend.idOf(source), _backend.idOf(target)));
+        }
     }
-    void dismiss(ui::Widget& dialog) override { _backend.dismiss(_backend.idOf(dialog)); }
+    void dismiss(ui::Widget& dialog) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.dismiss(_backend.idOf(dialog));
+        }
+    }
     void moveCursor(ui::Widget& field, std::size_t position) override {
         _backend.moveCursor(_backend.idOf(field), position);
     }
@@ -121,6 +154,9 @@ public:
         return _backend.cursor(_backend.idOf(field));
     }
     void selectRows(ui::Widget& table, std::vector<std::size_t> const& rows) override {
+        if (_fault == Fault::DeadInput) {
+            return;
+        }
         int const tableId = _backend.idOf(table);
         std::vector<int> const children = _backend.children(tableId);
         std::vector<ui::Key> keys;
@@ -158,10 +194,24 @@ private:
         return {};
     }
 
+    Fault _fault;
     morph::testing::StepExecutor _owner;
-    ui::testing::RecordingBackend _backend;
+    morph::testing::EchoingBackend _echoing;
+    ui::testing::RecordingBackend& _backend = _echoing.recording();
     morph::reactive::Runtime _rt{_owner};
 };
+
+// The names of the cases a probe with @p fault fails.
+std::set<std::string_view> failingCases(Fault fault) {
+    std::set<std::string_view> failing;
+    for (auto const& testCase : ui::testing::conformanceCases()) {
+        RecordingProbe probe{fault};
+        if (testCase.run(probe).has_value()) {
+            failing.insert(testCase.name);
+        }
+    }
+    return failing;
+}
 
 }  // namespace
 
@@ -176,4 +226,55 @@ TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformanc
         INFO(std::string{testCase.name} + ": " + failure.value_or("passed"));
         CHECK_FALSE(failure.has_value());
     }
+}
+
+// Each fault breaks one part of the contract, and the cases that check that part must say so. Mutation: make
+// `detail::Checks::that` or `detail::Checks::text` record nothing (every fault then passes everything).
+TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", "[ui][conformance]") {
+    std::set<std::string_view> const noChildren = failingCases(Fault::NoChildren);
+    INFO("no children: " + std::to_string(noChildren.size()) + " cases failed");
+    for (std::string_view const name :
+         {"Tabs mount a page on first selection and show only the selected one",
+          "a ForEach updates a kept row in place", "a ForEach follows inserts, removals and reorders",
+          "a moved widget keeps its native state", "a Dialog holds its content only while open",
+          "a dismissal the document refuses leaves the dialog open",
+          "a widget inside a hidden, disabled or collapsed container takes no input",
+          "a hidden Table cell keeps its column"}) {
+        INFO(name);
+        CHECK(noChildren.contains(name));
+    }
+
+    std::set<std::string_view> const wrongText = failingCases(Fault::WrongText);
+    for (std::string_view const name :
+         {"a Text shows its constant text", "a bound Text updates once per batch and not for an equal write",
+          "a Switch shows the selected case and nothing for a key without one",
+          "a text field shows what the document makes of an edit"}) {
+        INFO(name);
+        CHECK(wrongText.contains(name));
+    }
+
+    std::set<std::string_view> const deadInput = failingCases(Fault::DeadInput);
+    for (std::string_view const name : {"a click runs the button's action once",
+                                        "typing reaches onChange and a value set by the application is not echoed",
+                                        "a drag onto an accepting target delivers the key",
+                                        "a Table reports a user's selection as exactly the existing rows selected",
+                                        "a dismissal the document refuses leaves the dialog open"}) {
+        INFO(name);
+        CHECK(deadInput.contains(name));
+    }
+
+    // Only the setter case is run against the echoing backend: the probe reads widgets through the recording
+    // backend's ids, which the echoing Select's wrapper does not have.
+    auto const cases = ui::testing::conformanceCases();
+    auto const setters =
+        std::ranges::find(cases, std::string_view{"no setter calls a handler"}, &ui::testing::ConformanceCase::name);
+    REQUIRE(setters != cases.end());
+    RecordingProbe echoing{Fault::EchoingSelect};
+    std::optional<std::string> const failure = setters->run(echoing);
+    REQUIRE(failure.has_value());
+    CHECK(failure->contains("Select onSelect"));
+}
+
+TEST_CASE("ui conformance: a failure message names keys of either kind", "[ui][conformance]") {
+    CHECK(ui::testing::detail::keyTexts({ui::Key{std::int64_t{7}}, ui::Key{std::string{"b"}}}) == "7,\"b\"");
 }

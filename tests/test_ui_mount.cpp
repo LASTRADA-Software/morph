@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -22,6 +23,7 @@
 
 #include "test_support.hpp"
 #include "ui_echoing_backend.hpp"
+#include "ui_test_support.hpp"
 
 namespace ui = morph::ui;
 
@@ -518,4 +520,104 @@ TEST_CASE("ui::Mounted: mounting inside an Effect does not subscribe that Effect
     theme.set(1);
     owner.runAll();
     CHECK(hostRuns == 1);
+}
+
+// Mutations: in Mounter::applyCommon, apply `enabled` only when bound, or `dragKey` only when bound.
+TEST_CASE("ui::Mounted: a constant disabled or draggable widget says so once", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{runtime, backend,
+                           ui::text({.text = "t", .common = {.enabled = false, .dragKey = ui::Key{std::int64_t{4}}}})};
+    CHECK(backend.prop(1, "enabled") == "false");
+    CHECK(backend.prop(1, "dragKey") == "4");
+    CHECK(runtime.core()->liveNodes() == 0);
+}
+
+// Mutation: in the Menu's dispatcher, call the entry without checking it has a handler or exists.
+TEST_CASE("ui::Mounted: a menu entry without a handler, or past the last, runs nothing", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    int runs = 0;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::menu({.items = {{.label = "quiet"}, {.label = "loud", .onSelect = [&runs] { ++runs; }}}})};
+    backend.chooseIndex(1, 0);
+    backend.chooseIndex(1, 5);
+    backend.chooseIndex(1, 1);
+    owner.runAll();
+    CHECK(runs == 1);
+}
+
+// Mutation: in Mounter's Tabs, treat a constant index as bound (no page is shown).
+TEST_CASE("ui::Mounted: a constant Tabs index shows its page and leaves the user's pick on the bar", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    std::vector<std::size_t> picks;
+    ui::Mounted const view{runtime, backend,
+                           ui::tabs({.tabs = {{.label = "A", .node = ui::text({.text = "a"})},
+                                              {.label = "B", .node = ui::text({.text = "b"})}},
+                                     .selected = std::size_t{1},
+                                     .onSelect = [&picks](std::size_t index) { picks.push_back(index); }})};
+    CHECK(backend.dump() == "Tabs#1 selected=1 tabs=[A,B]\n  Slot#2\n    Text#3 role=Normal text=b\n");
+    backend.chooseIndex(1, 0);
+    owner.runAll();
+    CHECK(picks == std::vector<std::size_t>{0});
+    CHECK(backend.prop(1, "selected") == "0");  // not a slot: nothing re-asserts it
+}
+
+// Mutation: in Mounter::mountRows, dereference the model without checking it.
+TEST_CASE("ui::Mounted: a ForEach without a model shows no rows", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{runtime, backend, ui::detail::makeNode(ui::ForEach{})};
+    CHECK(backend.dump() == "Column#1 gap=0\n");
+}
+
+// Mutation: in Mounter::dismissFailed, call the dismissal without checking there is one.
+TEST_CASE("ui::Mounted: a Dialog without onDismiss whose content fails stays closed", "[ui]") {
+    Owner owner;
+    Probe const probe{owner.coreExecutor()};
+    Runtime runtime{owner};
+    EchoingBackend backend;
+    std::optional<int> spare;
+    backend.setOnCreate(morph::testing::failWhenSpent(spare));
+    Signal<bool> open{runtime, false};
+    ui::Mounted const view{runtime, backend,
+                           ui::dialog({.open = [&open] { return open.get(); }, .child = ui::text({.text = "x"})})};
+    spare = 0;
+    open.set(true);
+    owner.runAll();
+    CHECK(probe.count(morph::reactive::detail::site::kEffectThrew) == 1);
+    CHECK(backend.recording().prop(1, "open") == "false");
+}
+
+// The first of several row failures in one run is the one reported. Mutation: in Mounter::reconcile, keep the last
+// failure instead of the first.
+TEST_CASE("ui::Mounted: two rows that fail in one run are one report, and neither is left behind", "[ui]") {
+    Owner owner;
+    Probe const probe{owner.coreExecutor()};
+    Runtime runtime{owner};
+    EchoingBackend backend;
+    std::optional<int> spare;
+    backend.setOnCreate(morph::testing::failWhenSpent(spare));
+    Signal<std::vector<std::int64_t>> rows{runtime, std::vector<std::int64_t>{}};
+    int builds = 0;
+    ui::Mounted const view{runtime, backend,
+                           ui::forEach<std::int64_t>(
+                               rows, [](std::int64_t row) { return ui::Key{row}; },
+                               [&builds](Signal<std::int64_t> const& row) {
+                                   if (++builds > 2) {
+                                       throw std::runtime_error{"row " + std::to_string(row.peek())};
+                                   }
+                                   return ui::text({.text = "r"});
+                               })};
+    builds = 2;  // every row view from here on throws
+    rows.set({1, 2});
+    owner.runAll();
+    CHECK(probe.count(morph::reactive::detail::site::kEffectThrew) == 1);
+    CHECK(backend.recording().dump() == "Column#1 gap=0\n");
 }

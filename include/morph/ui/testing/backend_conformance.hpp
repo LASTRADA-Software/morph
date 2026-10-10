@@ -224,6 +224,18 @@ struct Entry {
     return dynamic_cast<ContainerWidget const*>(&widget);
 }
 
+/// @brief The root widget of a mounted container node, as the container it is.
+///
+/// The root of a mounted Switch, Tabs, Column, ForEach or Dialog is the widget the backend's `createSlot`,
+/// `createTabs`, `createStack` or `createDialog` returned, and each of those is a `ContainerWidget` by its declared
+/// type, so the downcast cannot fail for any backend that compiles.
+/// @param view The mount, of a container node.
+/// @return The root widget as a container.
+[[nodiscard]] inline ContainerWidget const& rootContainer(Mounted const& view) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast): a container by the factory's type, see above
+    return static_cast<ContainerWidget const&>(view.root());
+}
+
 /// @brief A child of a widget that should be a container.
 /// @param probe The backend under test.
 /// @param parent The widget; null, or a widget that is no container, has no children.
@@ -397,21 +409,18 @@ struct Entry {
                                      .cases = {{.key = Key{std::int64_t{0}}, .node = ui::text({.text = "zero"})},
                                                {.key = Key{std::int64_t{1}}, .node = ui::text({.text = "one"})}}})};
     probe.settle();
-    ContainerWidget const* const slot = asContainer(view.root());
-    if (slot == nullptr) {
-        return "a Switch's widget is not a ContainerWidget";
-    }
+    ContainerWidget const& slot = rootContainer(view);
     Checks checks;
-    checks.text("the case for key 0", "zero", childTexts(probe, *slot));
+    checks.text("the case for key 0", "zero", childTexts(probe, slot));
     which.set(1);
     probe.settle();
-    checks.text("the case for key 1", "one", childTexts(probe, *slot));
+    checks.text("the case for key 1", "one", childTexts(probe, slot));
     which.set(7);
     probe.settle();
-    checks.that(probe.childCount(*slot) == 0, "a key with no case and no fallback still shows a child");
+    checks.that(probe.childCount(slot) == 0, "a key with no case and no fallback still shows a child");
     which.set(0);
     probe.settle();
-    checks.text("the case for key 0 again", "zero", childTexts(probe, *slot));
+    checks.text("the case for key 0 again", "zero", childTexts(probe, slot));
     return checks.result();
 }
 
@@ -426,24 +435,21 @@ struct Entry {
                                  .selected = [&selected] { return selected.get(); },
                                  .onSelect = [&selected](std::size_t index) { selected.set(index); }})};
     probe.settle();
-    ContainerWidget const* const bar = asContainer(view.root());
-    if (bar == nullptr) {
-        return "a Tabs' widget is not a ContainerWidget";
-    }
+    ContainerWidget const& bar = rootContainer(view);
     Checks checks;
-    checks.that(probe.childCount(*bar) == 1, "Tabs mounted a page that was never selected");
+    checks.that(probe.childCount(bar) == 1, "Tabs mounted a page that was never selected");
     selected.set(1);
     probe.settle();
-    checks.that(probe.childCount(*bar) == 2, "selecting a tab did not mount its page");
-    Widget const* const first = probe.childAt(*bar, 0);
-    Widget const* const second = probe.childAt(*bar, 1);
+    checks.that(probe.childCount(bar) == 2, "selecting a tab did not mount its page");
+    Widget const* const first = probe.childAt(bar, 0);
+    Widget const* const second = probe.childAt(bar, 1);
     checks.that(first != nullptr && !probe.visibleOf(*first), "the unselected tab's page is shown");
     checks.that(second != nullptr && probe.visibleOf(*second), "the selected tab's page is hidden");
     selected.set(0);
     probe.settle();
     // Read again rather than through `first`: a backend that destroyed the page would leave that pointer dangling.
-    checks.that(probe.childCount(*bar) == 2, "re-selecting a tab mounted its page again");
-    Widget const* const reselected = probe.childAt(*bar, 0);
+    checks.that(probe.childCount(bar) == 2, "re-selecting a tab mounted its page again");
+    Widget const* const reselected = probe.childAt(bar, 0);
     checks.that(reselected != nullptr && probe.visibleOf(*reselected), "the re-selected tab's page is hidden");
     return checks.result();
 }
@@ -460,18 +466,15 @@ struct Entry {
     int builds = 0;
     Mounted const view{probe.runtime(), probe.backend(), entryList(rows, &builds)};
     probe.settle();
-    ContainerWidget const* const list = asContainer(view.root());
-    if (list == nullptr) {
-        return "a ForEach's widget is not a ContainerWidget";
-    }
-    Widget const* const before = probe.childAt(*list, 0);
+    ContainerWidget const& list = rootContainer(view);
+    Widget const* const before = probe.childAt(list, 0);
     rows.set({{.id = 1, .label = "a2"}, {.id = 2, .label = "b"}});
     probe.settle();
     Checks checks;
     checks.that(builds == 2, "updating a kept row built its view again: " + std::to_string(builds) +
                                  " row views built for two keys");
-    checks.that(probe.childAt(*list, 0) == before, "updating a kept row replaced its widget");
-    checks.text("the rows after an update", "a2,b", childTexts(probe, *list));
+    checks.that(probe.childAt(list, 0) == before, "updating a kept row replaced its widget");
+    checks.text("the rows after an update", "a2,b", childTexts(probe, list));
     return checks.result();
 }
 
@@ -483,18 +486,15 @@ struct Entry {
         probe.runtime(), {{.id = 1, .label = "a"}, {.id = 2, .label = "b"}, {.id = 3, .label = "c"}}};
     Mounted const view{probe.runtime(), probe.backend(), entryList(rows)};
     probe.settle();
-    ContainerWidget const* const list = asContainer(view.root());
-    if (list == nullptr) {
-        return "a ForEach's widget is not a ContainerWidget";
-    }
+    ContainerWidget const& list = rootContainer(view);
     Checks checks;
-    checks.text("the rows as mounted", "a,b,c", childTexts(probe, *list));
+    checks.text("the rows as mounted", "a,b,c", childTexts(probe, list));
     rows.set({{.id = 3, .label = "c"}, {.id = 1, .label = "a"}});
     probe.settle();
-    checks.text("the rows after removing b and moving c first", "c,a", childTexts(probe, *list));
+    checks.text("the rows after removing b and moving c first", "c,a", childTexts(probe, list));
     rows.set({{.id = 3, .label = "c"}, {.id = 4, .label = "d"}, {.id = 1, .label = "a"}});
     probe.settle();
-    checks.text("the rows after inserting d in the middle", "c,d,a", childTexts(probe, *list));
+    checks.text("the rows after inserting d in the middle", "c,d,a", childTexts(probe, list));
     return checks.result();
 }
 
@@ -512,20 +512,20 @@ struct Entry {
                                return ui::textInput({.placeholder = [&entry] { return entry.get().label; }});
                            })};
     probe.settle();
-    ContainerWidget const* const list = asContainer(view.root());
-    Widget* const field = list == nullptr ? nullptr : probe.childAt(*list, 0);
+    ContainerWidget const& list = rootContainer(view);
+    Widget* const field = probe.childAt(list, 0);
     if (field == nullptr) {
         return "a ForEach of text fields shows no first field";
     }
     probe.type(*field, "edited");
     probe.settle();
     Checks checks;
-    checks.text("the fields after typing into the first", "edited,,", childTexts(probe, *list));
+    checks.text("the fields after typing into the first", "edited,,", childTexts(probe, list));
     rows.set({{.id = 2, .label = "b"}, {.id = 3, .label = "c"}, {.id = 1, .label = "a"}});
     probe.settle();
-    checks.that(probe.childAt(*list, 2) == field, "moving a row replaced its widget");
+    checks.that(probe.childAt(list, 2) == field, "moving a row replaced its widget");
     checks.text("the fields after moving the edited one last; moveChild must keep a widget's native state", ",,edited",
-                childTexts(probe, *list));
+                childTexts(probe, list));
     return checks.result();
 }
 
@@ -539,18 +539,15 @@ struct Entry {
         ui::dialog(
             {.open = [&open] { return open.get(); }, .title = "Confirm", .child = ui::text({.text = "inside"})})};
     probe.settle();
-    ContainerWidget const* const dialog = asContainer(view.root());
-    if (dialog == nullptr) {
-        return "a Dialog's widget is not a ContainerWidget";
-    }
+    ContainerWidget const& dialog = rootContainer(view);
     Checks checks;
-    checks.that(probe.childCount(*dialog) == 0, "a closed Dialog holds content");
+    checks.that(probe.childCount(dialog) == 0, "a closed Dialog holds content");
     open.set(true);
     probe.settle();
-    checks.text("an open Dialog's content", "inside", childTexts(probe, *dialog));
+    checks.text("an open Dialog's content", "inside", childTexts(probe, dialog));
     open.set(false);
     probe.settle();
-    checks.that(probe.childCount(*dialog) == 0, "a Dialog closed again still holds content");
+    checks.that(probe.childCount(dialog) == 0, "a Dialog closed again still holds content");
     return checks.result();
 }
 
@@ -729,10 +726,11 @@ struct Entry {
     probe.settle();
     checks.text("the field after an edit the document refused", "kept", probe.textOf(view.root()));
     refuse = false;
-    probe.type(view.root(), "typed");
+    // A character past `z`, and a capital, are left as they are.
+    probe.type(view.root(), "ty~Ped");
     probe.settle();
-    checks.text("the field after an edit the document upper-cased", "TYPED", probe.textOf(view.root()));
-    checks.text("the value after an edit the document upper-cased", "TYPED", name.peek());
+    checks.text("the field after an edit the document upper-cased", "TY~PED", probe.textOf(view.root()));
+    checks.text("the value after an edit the document upper-cased", "TY~PED", name.peek());
     return checks.result();
 }
 
@@ -749,15 +747,12 @@ struct Entry {
                                    .child = ui::button({.label = "OK", .onClick = [&clicks] { ++clicks; }}),
                                    .onDismiss = [&dismissals] { ++dismissals; }})};
     probe.settle();
-    ContainerWidget const* const dialog = asContainer(view.root());
-    if (dialog == nullptr) {
-        return "a Dialog's widget is not a ContainerWidget";
-    }
+    ContainerWidget const& dialog = rootContainer(view);
     probe.dismiss(view.root());
     probe.settle();
     Checks checks;
     checks.that(dismissals == 1, "dismissing the dialog called onDismiss " + std::to_string(dismissals) + " times");
-    Widget* const button = probe.childAt(*dialog, 0);
+    Widget* const button = probe.childAt(dialog, 0);
     checks.that(button != nullptr, "a dialog kept open lost its content");
     if (button != nullptr) {
         probe.click(*button);

@@ -533,3 +533,113 @@ TEST_CASE("RecordingBackend: a dismissal closes the dialog before onDismiss runs
     CHECK(backend.prop(1, "open") == "false");
     CHECK(backend.log().empty());
 }
+
+// Mutation: map any enumerator to the wrong name in one of the `detail::enumName` overloads, or drop a fallback.
+TEST_CASE("RecordingBackend: every enumerator has its name, and a value outside the enumeration reads unknown",
+          "[ui]") {
+    using ui::testing::detail::enumName;
+    CHECK(enumName(ui::TextRole::Normal) == "Normal");
+    CHECK(enumName(ui::TextRole::Muted) == "Muted");
+    CHECK(enumName(ui::TextRole::Heading) == "Heading");
+    CHECK(enumName(ui::TextRole::Error) == "Error");
+    CHECK(enumName(ui::TextRole::Success) == "Success");
+    CHECK(enumName(ui::TextInputMode::SingleLine) == "SingleLine");
+    CHECK(enumName(ui::TextInputMode::Multiline) == "Multiline");
+    CHECK(enumName(ui::TextInputMode::Password) == "Password");
+    CHECK(enumName(ui::SelectStyle::Dropdown) == "Dropdown");
+    CHECK(enumName(ui::SelectStyle::Radio) == "Radio");
+    CHECK(enumName(ui::Axis::Vertical) == "Vertical");
+    CHECK(enumName(ui::Axis::Horizontal) == "Horizontal");
+    CHECK(enumName(ui::DateMode::Date) == "Date");
+    CHECK(enumName(ui::DateMode::DateTime) == "DateTime");
+    CHECK(enumName(ui::FilePickerMode::Open) == "Open");
+    CHECK(enumName(ui::FilePickerMode::Save) == "Save");
+    CHECK(enumName(ui::SelectionMode::None) == "None");
+    CHECK(enumName(ui::SelectionMode::Single) == "Single");
+    CHECK(enumName(ui::SelectionMode::Multiple) == "Multiple");
+    // The fallbacks keep a dump readable when a value the enumeration does not name reaches a setter.
+    constexpr std::uint8_t kOutside = 99;
+    CHECK(enumName(static_cast<ui::TextRole>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::TextInputMode>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::SelectStyle>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::Axis>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::DateMode>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::FilePickerMode>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::SelectionMode>(kOutside)) == "unknown");
+    CHECK(ui::testing::detail::formatSizing({.kind = static_cast<ui::Sizing::Kind>(kOutside), .amount = 1}) ==
+          "unknown");
+}
+
+// Mutations: drop the carriage-return branch of `detail::escape`; format an empty Timestamp as `none`.
+TEST_CASE("RecordingBackend: a carriage return is escaped, and an empty date reads empty", "[ui]") {
+    CHECK(ui::testing::detail::formatText("a\r\nb") == "a\\r\\nb");
+    CHECK(ui::testing::detail::formatTimestamp(morph::time::Timestamp{}) == "empty");
+    CHECK(ui::testing::detail::formatTimestamp(std::nullopt) == "none");
+}
+
+// Mutation: let `RecordStore::at` return a default record for an unknown id.
+TEST_CASE("RecordingBackend: an id that names no live widget is a test error", "[ui]") {
+    RecordingBackend backend;
+    auto field = backend.createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    CHECK_THROWS_AS(backend.prop(99, "text"), std::out_of_range);
+    CHECK_THROWS_AS(backend.kindOf(99), std::out_of_range);
+    CHECK_THROWS_AS(backend.cursor(99), std::out_of_range);
+    CHECK_FALSE(backend.find("TextInput", "text", "anything").has_value());  // never set
+}
+
+// Mutations: drop the parent check in FakeContainer::moveChild or FakeTable::setRowKey.
+TEST_CASE("RecordingBackend: moving or keying a widget that is not the container's child is a test error", "[ui]") {
+    RecordingBackend backend;
+    auto stack = backend.createStack(nullptr, ui::Axis::Vertical);
+    auto table = backend.createTable(nullptr);
+    auto stray = backend.createText(nullptr);
+    CHECK_THROWS_AS(stack->moveChild(*stray, 0), std::logic_error);
+    CHECK_THROWS_AS(table->setRowKey(*stray, intKey(1)), std::logic_error);
+}
+
+// Mutation: in FakeSelect::marked, read the requested key without checking that one is requested.
+TEST_CASE("RecordingBackend: a select asked for no key marks none", "[ui]") {
+    RecordingBackend backend;
+    auto select = backend.createSelect(nullptr, ui::SelectStyle::Dropdown);
+    select->setOptions({{.key = intKey(1), .label = "one"}});
+    select->setSelected(intKey(1));
+    CHECK(backend.prop(1, "selected") == "1");
+    select->setSelected(std::nullopt);
+    CHECK(backend.prop(1, "selected") == "none");
+}
+
+// Mutation: drop the reachability check in RecordingBackend::moveCursor.
+TEST_CASE("RecordingBackend: a hidden field's cursor does not move", "[ui]") {
+    RecordingBackend backend;
+    auto field = backend.createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    backend.edit(1, "abc");
+    field->setVisible(false);
+    backend.moveCursor(1, 1);
+    CHECK(backend.cursor(1) == 3);
+}
+
+// Mutation: drop the duplicate check in RecordingBackend::selectRows.
+TEST_CASE("RecordingBackend: selecting one row twice is a test error", "[ui]") {
+    RecordingBackend backend;
+    auto table = backend.createTable(nullptr);
+    table->setSelectionMode(ui::SelectionMode::Multiple);
+    auto row = backend.createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, intKey(1));
+    CHECK_THROWS_AS(backend.selectRows(1, {intKey(1), intKey(1)}), std::logic_error);
+}
+
+// Mutations: in RecordingBackend::drag, check only the source's reachability; or call a target with no predicate.
+TEST_CASE("RecordingBackend: no drop lands on a hidden target or one without a predicate", "[ui]") {
+    RecordingBackend backend;
+    int drops = 0;
+    auto card = backend.createText(nullptr);
+    card->setDragKey(intKey(7));
+    auto hidden = backend.createPanel(nullptr);
+    hidden->setDropHandler([](ui::Key const&) { return true; }, [&drops](ui::Key const&) { ++drops; });
+    hidden->setVisible(false);
+    auto blind = backend.createPanel(nullptr);
+    blind->setDropHandler({}, [&drops](ui::Key const&) { ++drops; });
+    CHECK_FALSE(backend.drag(1, 2));
+    CHECK_FALSE(backend.drag(1, 3));
+    CHECK(drops == 0);
+}

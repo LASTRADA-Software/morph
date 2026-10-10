@@ -116,6 +116,10 @@ FLOORS = {
     # Measured in the CI coverage leg (22 branch arms) when the test kit was installed with
     # morph::reactive.
     "include/morph/testing": (74.0, 77.27),
+    # Measured (646 branch arms) when the view tree landed, from a clang 22.1.8 coverage build of the ui tests,
+    # the only tests that reach these headers; the same build reproduced the CI leg's 569 of 660 arms exactly
+    # before the coverage tests were added.
+    "include/morph/ui": (92.0, 95.05),
     "include/morph/util": (93.0, 96.39),
 }
 
