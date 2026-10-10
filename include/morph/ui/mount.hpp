@@ -405,9 +405,11 @@ private:
 
     // Content a binding mounts (a Switch case, Dialog content), all or nothing: it is built in a scope of its own,
     // which the caller takes only once the mount completed, so content that throws partway leaves nothing behind.
-    // Built untracked, so the binding's Effect depends on its own prop alone.
-    [[nodiscard]] std::unique_ptr<reactive::Scope> mountContent(Node const& node, ContainerWidget& host) {
-        auto content = std::make_unique<reactive::Scope>(*_rt);
+    // Built untracked, so the binding's Effect depends on its own prop alone. The scope is one level deeper than the
+    // one that owns the binding, so the owner's Effects run before the content's.
+    [[nodiscard]] std::unique_ptr<reactive::Scope> mountContent(std::size_t depth, Node const& node,
+                                                                ContainerWidget& host) {
+        auto content = std::make_unique<reactive::Scope>(*_rt, depth);
         _rt->untracked([&] { static_cast<void>(mount(*content, node, &host)); });
         return content;
     }
@@ -420,20 +422,21 @@ private:
         applyCommon(scope, widget, spec.common);
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         bind(scope, spec.selector,
-             [this, &widget, &content, cases = spec.cases, fallback = spec.fallback](Key const& key) {
+             [this, &widget, &content, depth = scope.depth() + 1, cases = spec.cases,
+              fallback = spec.fallback](Key const& key) {
                  content.reset();
                  auto const chosen = std::ranges::find(cases, key, &SwitchCase::key);
                  Node const& node = chosen == cases.end() ? fallback : chosen->node;
                  if (node) {
-                     content = mountContent(node, widget);
+                     content = mountContent(depth, node, widget);
                  }
              });
         return widget;
     }
 
-    // Every page is owned by `pageScope`, made before the binding, so pages are destroyed newest first, after the
-    // binding that shows them and before the tab bar. A scope fixes that order; a vector's element destruction order
-    // differs between standard libraries.
+    // Every page is owned by `pageScope`, a child scope made before the binding, so pages are destroyed newest first,
+    // after the binding that shows them and before the tab bar. A scope fixes that order; a vector's element
+    // destruction order differs between standard libraries.
     //
     // A bound index is not equality-gated: the Effect reads the binding itself, not a Computed. After a failed page,
     // the application's onSelect writes the index back inside this Effect's own run; a Computed would keep the failed
@@ -451,7 +454,7 @@ private:
         }
         widget.setTabs(labels);
         widget.setOnSelect(event(spec.onSelect));
-        auto& pageScope = scope.make<reactive::Scope>(*_rt);
+        auto& pageScope = scope.child();
         auto& pages = scope.make<Pages>();
         pages.slots.resize(spec.tabs.size(), nullptr);
         pages.onSelect = event(spec.onSelect);
@@ -526,7 +529,7 @@ private:
     // The page is built in a scope of its own and handed to `pageScope` once complete, so one that fails to mount
     // leaves nothing behind.
     void mountPage(TabsWidget& widget, reactive::Scope& pageScope, Pages& pages, Node const& node, std::size_t index) {
-        auto page = std::make_unique<reactive::Scope>(*_rt);
+        auto page = std::make_unique<reactive::Scope>(*_rt, pageScope.depth());
         SlotWidget& slot = page->adopt(_backend->createSlot(&widget));
         static_cast<void>(mount(*page, node, &slot));
         pageScope.adopt(std::move(page));
@@ -548,12 +551,13 @@ private:
         std::function<void()> onDismiss = event(spec.onDismiss);
         widget.setOnDismiss(onDismiss);
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
-        auto show = [this, &widget, &content, child = spec.child](bool open, std::function<void()> const& dismiss) {
+        auto show = [this, &widget, &content, depth = scope.depth() + 1, child = spec.child](
+                        bool open, std::function<void()> const& dismiss) {
             if (!open) {
                 content.reset();
             } else if (content == nullptr) {
                 try {
-                    content = mountContent(child, widget);
+                    content = mountContent(depth, child, widget);
                 } catch (...) {
                     dismissFailed(dismiss);
                     throw;
@@ -620,11 +624,11 @@ private:
         scope.make<std::shared_ptr<ForEachModel const>>(model);
         ForEachSession& session = scope.adopt(model->open(*_rt));
         auto& rows = scope.make<KeyedRows>();
-        scope.effect([this, &session, &rows, &container, onRow = std::move(onRow)] {
+        scope.effect([this, &session, &rows, &container, depth = scope.depth() + 1, onRow = std::move(onRow)] {
             std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
             // Untracked: what a row view reads while it is built, or what a kept row's update touches, must not
             // become a dependency of the whole list.
-            _rt->untracked([&] { reconcile(session, rows.list, container, keys, onRow); });
+            _rt->untracked([&] { reconcile(depth, session, rows.list, container, keys, onRow); });
         });
     }
 
@@ -643,10 +647,11 @@ private:
         return order;
     }
 
-    // All or nothing: the row is built in a scope of its own, which the caller takes only once the mount completed.
-    [[nodiscard]] KeyedRow mountRow(ForEachSession& session, ContainerWidget& container, Key const& key,
-                                    std::size_t index, RowHook const& onRow) {
-        KeyedRow row{.key = key, .scope = std::make_unique<reactive::Scope>(*_rt)};
+    // All or nothing: the row is built in a scope of its own, one level deeper than the ForEach's, which the caller
+    // takes only once the mount completed.
+    [[nodiscard]] KeyedRow mountRow(std::size_t depth, ForEachSession& session, ContainerWidget& container,
+                                    Key const& key, std::size_t index, RowHook const& onRow) {
+        KeyedRow row{.key = key, .scope = std::make_unique<reactive::Scope>(*_rt, depth)};
         row.slot = &row.scope->adopt(session.makeRow(index));
         row.widget = mount(*row.scope, row.slot->view(), &container);
         if (row.widget != nullptr && onRow) {
@@ -705,7 +710,7 @@ private:
     // something throws, so a failure costs this run's remaining work and never the bookkeeping of the next one.
     // A row that fails to mount leaves nothing behind and does not stop the other rows; the first failure is
     // rethrown at the end, for the Effect to report, and the next run mounts the row again.
-    void reconcile(ForEachSession& session, std::vector<KeyedRow>& rows, ContainerWidget& container,
+    void reconcile(std::size_t depth, ForEachSession& session, std::vector<KeyedRow>& rows, ContainerWidget& container,
                    std::vector<Key> const& keys, RowHook const& onRow) {
         std::vector<std::size_t> const order = firstOccurrences(keys);
         std::unordered_map<Key, std::size_t> wanted;  // key -> snapshot index
@@ -735,7 +740,7 @@ private:
                 continue;
             }
             try {
-                rows.push_back(mountRow(session, container, keys.at(index), index, onRow));
+                rows.push_back(mountRow(depth, session, container, keys.at(index), index, onRow));
             } catch (...) {
                 if (!failure) {
                     failure = std::current_exception();
@@ -819,6 +824,12 @@ private:
 /// rows mounts it again. A key repeated in one snapshot is reported (`detail::site::kDuplicateKey`), and only its
 /// first row is shown.
 ///
+/// Bindings run in owner order. The tree's own bindings are at the depth the mount was given; the content of a Switch
+/// case, a Tabs page or a Dialog, and every ForEach or Table row, is in a scope one level deeper than the binding that
+/// mounted it. So an Effect that removes content runs before the content's own bindings in the same flush, and a
+/// binding never evaluates against state its owner is about to take away. A mount placed under an outer scope (a
+/// screen's, a row's) takes that scope's depth plus one, so the outer scope's Effects run first too.
+///
 /// A mount must run to completion: nothing it calls, a backend factory or setter or a binding's evaluation, may
 /// destroy this object, its runtime or its backend. Widget callbacks are events, not part of a mount, and may.
 class Mounted {
@@ -827,12 +838,14 @@ public:
     /// @param backend Makes the widgets. Borrowed.
     /// @param root The tree; kept alive as long as the mount.
     /// @param parent The container the root widget is appended to, or null for a backend root.
+    /// @param depth The scope depth of the tree's own bindings (`reactive::Scope::depth`): zero for a mount no other
+    ///        scope owns, one more than the owner's for a mount placed under a scope.
     /// @throws std::invalid_argument when @p root is null.
     Mounted(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, IViewBackend& backend MORPH_LIFETIMEBOUND, Node root,
-            ContainerWidget* parent = nullptr)
+            ContainerWidget* parent = nullptr, std::size_t depth = 0)
         : _root{nonNull(std::move(root))},
           _mounter{runtime, backend},
-          _scope{runtime},
+          _scope{runtime, depth},
           // Untracked, so mounting from inside an Effect does not subscribe that Effect to anything read here.
           _widget{runtime.untracked([this, parent] { return _mounter.mount(_scope, _root, parent); })} {}
 

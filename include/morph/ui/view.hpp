@@ -34,7 +34,44 @@ using Action = std::function<void()>;
 /// Never a floating-point number: morph ids can exceed 2^53.
 using Key = std::variant<std::int64_t, std::string>;
 
+/// @brief The stable identity of a slot: a bound property a renderer can refer to by number.
+///
+/// Whoever builds the tree assigns slot ids; the interpreter numbers every bound property of a document, and a
+/// code-generating renderer names the value it reads after it (`v.s17`). `Mounted` does not use them. A slot made
+/// from a bare callable has no id.
+using SlotId = std::uint32_t;
+
+/// @brief A slot's read together with its id, as `ui::slot` makes it; a `Prop` made from it is a slot with that id.
+/// @tparam F A callable taking no arguments.
+template <typename F>
+struct SlotBinding {
+    /// @brief The slot's id.
+    SlotId id = 0;
+    /// @brief Reads the slot's value; every signal it reads is a dependency.
+    F read;
+};
+
+/// @brief A slot with an id.
+/// @tparam F A callable taking no arguments.
+/// @param slotId The slot's id.
+/// @param read Reads the value; every signal it reads is a dependency.
+/// @return What a `Prop` takes as a slot with @p slotId.
+template <typename F>
+[[nodiscard]] SlotBinding<std::decay_t<F>> slot(SlotId slotId, F&& read) {
+    return SlotBinding<std::decay_t<F>>{.id = slotId, .read = std::forward<F>(read)};
+}
+
 namespace detail {
+
+/// @brief Whether a type is a `SlotBinding`: false here, true for the specialisation below.
+/// @tparam T The type.
+template <typename T>
+struct IsSlotBinding : std::false_type {};
+
+/// @brief A `SlotBinding` is one.
+/// @tparam F The read's type.
+template <typename F>
+struct IsSlotBinding<SlotBinding<F>> : std::true_type {};
 
 /// @brief Whether `From` may become a constant `Prop<To>`: an implicit conversion that does not silently change
 /// the kind of value.
@@ -48,14 +85,16 @@ namespace detail {
 template <typename From, typename To>
 concept ConstantConvertible = std::convertible_to<From, To> &&
                               !(std::is_same_v<std::remove_cv_t<To>, bool> && std::is_pointer_v<std::decay_t<From>>) &&
-                              !(std::is_integral_v<To> && std::is_floating_point_v<std::remove_cvref_t<From>>);
+                              !(std::is_integral_v<To> && std::is_floating_point_v<std::remove_cvref_t<From>>) &&
+                              !IsSlotBinding<std::remove_cvref_t<From>>::value;
 
 }  // namespace detail
 
-/// @brief A node property: a constant, or a binding the mount re-evaluates reactively.
+/// @brief A node property: a constant, or a slot — a reactive read, with a stable id when it was given one.
 ///
-/// A constant is set on the widget once and creates no reactive node. A binding becomes an equality-gated
-/// `reactive::Computed` plus an `reactive::Effect` calling one widget setter.
+/// A constant is set on the widget once and creates no reactive node. A slot becomes an equality-gated
+/// `reactive::Computed` plus an `reactive::Effect` calling one widget setter. An input whose value is a slot is
+/// controlled: after a user's edit, the widget shows what the slot says. A constant is not re-asserted.
 ///
 /// A braced list cannot initialise a `Prop`, because the constant constructor deduces its argument's type: name
 /// the type, as in `.options = std::vector<ui::SelectOption>{{...}, {...}}`.
@@ -84,41 +123,74 @@ public:
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
         : _value{std::in_place_index<0>, static_cast<T>(std::forward<U>(value))} {}
 
-    /// @brief A binding.
+    /// @brief A slot without an id.
     ///
-    /// The binding must be callable: an empty `std::function` or a null function pointer is refused here, where
-    /// the mistake is made, rather than when a mount first calls it.
+    /// The read must be callable: an empty `std::function` or a null function pointer is refused here, where the
+    /// mistake is made, rather than when a mount first calls it.
     /// @tparam F A callable taking no arguments and returning something convertible to `T`.
     /// @param binding Evaluated by the mount inside a `Computed`; every signal it reads is a dependency.
     /// @throws std::invalid_argument when `binding` is an empty `std::function` or a null function pointer.
     template <typename F>
         requires std::invocable<F&> && std::convertible_to<std::invoke_result_t<F&>, T>
-    Prop(F binding) : _value{std::in_place_index<1>, std::function<T()>{std::move(binding)}} {
-        if (!std::get<1>(_value)) {
-            throw std::invalid_argument{"ui::Prop: a binding must not be empty"};
-        }
-    }
+    Prop(F binding) : _value{std::in_place_index<1>, Slot{.id = std::nullopt, .read = nonEmpty(std::move(binding))}} {}
 
-    /// @brief Whether this is a binding.
-    /// @return True for a binding, false for a constant.
+    /// @brief A slot with an id, as `ui::slot` makes it.
+    /// @tparam F A callable taking no arguments and returning something convertible to `T`.
+    /// @param binding The id and the read.
+    /// @throws std::invalid_argument when the read is an empty `std::function` or a null function pointer.
+    template <typename F>
+        requires std::invocable<F&> && std::convertible_to<std::invoke_result_t<F&>, T>
+    Prop(SlotBinding<F> binding)
+        : _value{std::in_place_index<1>, Slot{.id = binding.id, .read = nonEmpty(std::move(binding.read))}} {}
+
+    /// @brief Whether this is a slot.
+    /// @return True for a slot, false for a constant.
     [[nodiscard]] bool isBound() const noexcept { return _value.index() == 1; }
 
     /// @brief The constant. Only valid when `!isBound()`.
     /// @return The constant.
-    /// @throws std::bad_variant_access when this is a binding.
+    /// @throws std::bad_variant_access when this is a slot.
     [[nodiscard]] T const& constant() const { return std::get<0>(_value); }
 
-    /// @brief The binding. Only valid when `isBound()`.
-    /// @return The binding.
+    /// @brief The slot's read. Only valid when `isBound()`.
+    /// @return The read.
     /// @throws std::bad_variant_access when this is a constant.
-    [[nodiscard]] std::function<T()> const& binding() const { return std::get<1>(_value); }
+    [[nodiscard]] std::function<T()> const& binding() const { return std::get<1>(_value).read; }
 
-    /// @brief The current value: the constant, or the binding called once.
+    /// @brief The slot's id.
+    /// @return The id given through `ui::slot`; `nullopt` for a constant and for a slot made from a bare callable.
+    [[nodiscard]] std::optional<SlotId> slotId() const noexcept {
+        return isBound() ? std::get<1>(_value).id : std::nullopt;
+    }
+
+    /// @brief The current value: the constant, or the slot read once.
     /// @return The value.
-    [[nodiscard]] T evaluate() const { return isBound() ? std::get<1>(_value)() : std::get<0>(_value); }
+    [[nodiscard]] T evaluate() const { return isBound() ? std::get<1>(_value).read() : std::get<0>(_value); }
 
 private:
-    std::variant<T, std::function<T()>> _value;
+    /// @brief A slot: its id, if it has one, and its read.
+    struct Slot {
+        /// @brief The id, or none.
+        std::optional<SlotId> id;
+        /// @brief The read; never empty.
+        std::function<T()> read;
+    };
+
+    /// @brief Wraps a read, refusing an empty one.
+    /// @tparam F The read's type.
+    /// @param binding The read.
+    /// @return The wrapped read.
+    /// @throws std::invalid_argument when @p binding is empty.
+    template <typename F>
+    [[nodiscard]] static std::function<T()> nonEmpty(F binding) {
+        std::function<T()> read{std::move(binding)};
+        if (!read) {
+            throw std::invalid_argument{"ui::Prop: a binding must not be empty"};
+        }
+        return read;
+    }
+
+    std::variant<T, Slot> _value;
 };
 
 /// @brief How a `Text` is styled; each backend maps a role to its theme.

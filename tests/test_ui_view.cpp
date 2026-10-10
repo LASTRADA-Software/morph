@@ -37,6 +37,30 @@ TEST_CASE("ui::Prop: a constant is not bound, a callable is", "[ui]") {
     CHECK(calls == 2);
 }
 
+// Mutations: drop the id in Prop's SlotBinding constructor (the slot reports none); return the id for a bare
+// callable too (it reports one).
+TEST_CASE("ui::Prop: a slot made by ui::slot keeps its id; a bare callable and a constant have none", "[ui]") {
+    ui::Prop<std::string> const identified = ui::slot(17, [] { return std::string{"seventeen"}; });
+    CHECK(identified.isBound());
+    CHECK(identified.slotId() == std::optional<ui::SlotId>{17});
+    CHECK(identified.evaluate() == "seventeen");
+
+    ui::Prop<std::string> const anonymous = [] { return std::string{"x"}; };
+    CHECK(anonymous.isBound());
+    CHECK_FALSE(anonymous.slotId().has_value());
+
+    ui::Prop<std::string> const fixed = "x";
+    CHECK_FALSE(fixed.slotId().has_value());
+
+    ui::Prop<bool> const flag = ui::slot(3, [] { return false; });
+    CHECK(flag.isBound());
+    CHECK_FALSE(flag.evaluate());
+    CHECK(flag.slotId() == std::optional<ui::SlotId>{3});
+
+    std::function<std::string()> const empty;
+    CHECK_THROWS_AS(ui::Prop<std::string>(ui::slot(1, empty)), std::invalid_argument);
+}
+
 TEST_CASE("ui::Prop<bool>: a captureless lambda is a binding, not a truthy constant", "[ui]") {
     ui::Prop<bool> const bound = [] { return false; };
     CHECK(bound.isBound());

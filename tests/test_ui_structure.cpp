@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/signal.hpp>
@@ -24,6 +25,7 @@ namespace ui = morph::ui;
 
 namespace {
 
+using morph::reactive::Effect;
 using morph::reactive::Runtime;
 using morph::reactive::Signal;
 using morph::testing::EchoingBackend;
@@ -102,6 +104,45 @@ TEST_CASE("ui::switchOf: the fallback answers a key with no case", "[ui]") {
                                          .cases = {{.key = intKey(0), .node = ui::text({.text = "zero"})}},
                                          .fallback = ui::text({.text = "other"})})};
     CHECK(backend.dump() == "Slot#1\n  Text#2 role=Normal text=other\n");
+}
+
+// Creation order alone would run the view's bindings first here: they are older than the outer Effect. Mutations:
+// make Mounter::mountContent's scope depth 0 (the case's binding runs first and throws); build Mounted's scope at
+// depth 0 whatever it is given (the root binding runs first and throws).
+TEST_CASE("ui::Mounted: an owner that takes content away runs before the content's bindings", "[ui]") {
+    Owner owner;
+    Probe const probe{owner.coreExecutor()};
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<std::map<std::int64_t, std::string>> names{runtime, std::map<std::int64_t, std::string>{{1, "one"}}};
+    Signal<std::int64_t> const which{runtime, 1};
+    auto const nameOne = [&] { return names.get().at(1); };  // throws once entry 1 is gone
+    std::optional<ui::Mounted> view;
+    view.emplace(runtime, backend,
+                 ui::column({.children = {ui::text({.text = nameOne}),
+                                          ui::switchOf({
+                                              .selector = [&] { return ui::Key{which.get()}; },
+                                              .cases = {{.key = intKey(1), .node = ui::text({.text = nameOne})}},
+                                          })}}),
+                 nullptr, 1);
+    CHECK(backend.dump() ==
+          "Column#1 gap=0\n"
+          "  Text#2 role=Normal text=one\n"
+          "  Slot#3\n"
+          "    Text#4 role=Normal text=one\n");
+    // The owner the view is placed under, at depth 0: it takes the view away once entry 1 is gone.
+    Effect const outer{runtime,
+                       [&] {
+                           if (!names.get().contains(1)) {
+                               view.reset();
+                           }
+                       },
+                       0};
+    names.set({});
+    owner.runAll();
+    CHECK_FALSE(view.has_value());
+    CHECK(backend.dump().empty());
+    CHECK(probe.count(morph::reactive::detail::site::kEffectThrew) == 0);
 }
 
 TEST_CASE("ui::switchOf: a case being left never runs against the state that removes it", "[ui]") {
