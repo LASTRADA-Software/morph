@@ -145,6 +145,48 @@ public:
         created();
         return _recording.createFilePicker(parent, mode);
     }
+    std::unique_ptr<::morph::ui::BannerWidget> createBanner(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createBanner(parent);
+    }
+    std::unique_ptr<::morph::ui::BadgeWidget> createBadge(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createBadge(parent);
+    }
+    std::unique_ptr<::morph::ui::ProgressWidget> createProgress(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createProgress(parent);
+    }
+    std::unique_ptr<::morph::ui::StepsWidget> createSteps(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createSteps(parent);
+    }
+    std::unique_ptr<::morph::ui::KeyValueWidget> createKeyValue(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createKeyValue(parent);
+    }
+    std::unique_ptr<::morph::ui::EmptyStateWidget> createEmptyState(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createEmptyState(parent);
+    }
+    std::unique_ptr<::morph::ui::CollapsibleWidget> createCollapsible(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createCollapsible(parent);
+    }
+    std::unique_ptr<::morph::ui::DropZoneWidget> createDropZone(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createDropZone(parent);
+    }
+    std::unique_ptr<::morph::ui::DrawerWidget> createDrawer(::morph::ui::ContainerWidget* parent,
+                                                            ::morph::ui::Side side) override {
+        created();
+        return _recording.createDrawer(parent, side);
+    }
+    std::unique_ptr<::morph::ui::SplitterWidget> createSplitter(::morph::ui::ContainerWidget* parent,
+                                                                ::morph::ui::Axis axis) override {
+        created();
+        return _recording.createSplitter(parent, axis);
+    }
 
 private:
     void created() const {

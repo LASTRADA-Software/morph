@@ -24,12 +24,13 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
 
 - `IViewBackend` has one factory per kind. Each makes the widget, appends it as the last child of
   `parent` — or makes a root when `parent` is null — and never returns null. A kind's fixed
-  parameters (a TextInput's mode, a stack's or scroll area's axis, a DateTimeInput's mode and
-  display zone, a Select's style, a FilePicker's mode) are factory arguments.
+  parameters (a TextInput's mode, a stack's, scroll area's or splitter's axis, a DateTimeInput's
+  mode and display zone, a Select's style, a FilePicker's mode, a Drawer's side) are factory
+  arguments.
 - **A new widget is visible, enabled, content-sized, not draggable and not a drop target, and has
   no accessible name or role of its own, no test id, no tooltip, the theme's default surface and no
   chords. A new field (text and the six inputs) is editable, not required, without errors and not
-  stale. A new dialog is closed.** The mount calls the `Widget` setters for those defaults
+  stale. A new dialog or drawer is closed; a new collapsible section is open.** The mount calls the `Widget` setters for those defaults
   (`setVisible`, `setEnabled`, `setLayout`, `setDragKey`, `setDropHandler`, `setAccessibleName`,
   `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface`, `setKeys`) and the `FieldWidget`
   setters (`setReadOnly`, `setRequired`, `setErrors`, `setStale`) only to change them; it
@@ -56,7 +57,9 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   application's slot says, in a turn posted after the request's flush, so a request the application
   refuses snaps back ([`view_tree.md`, "Controlled inputs"](view_tree.md#controlled-inputs)). A
   commit requests no value, so it is not followed by a re-assertion. A user's dismissal closes a
-  dialog before `onDismiss` runs; a dialog the application keeps open is opened again.
+  dialog or drawer before `onDismiss` runs; one the application keeps open is opened again. A
+  banner's dismissal changes nothing the banner shows. A splitter shows the sizes the user dragged
+  to, and a collapsible section the state the user asked for, before the handler runs.
 - **No setter calls a handler.** Setting a value, replacing options, items or rows, requesting a
   selection, opening or closing, collapsing — none of it is a user's doing, so none of it reaches
   `onChange`, `onToggle`, `onSelect`, `onSelectionChange` or any other handler. That covers what a
@@ -65,9 +68,19 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   what the user typed therefore cannot loop.
 - `setVisible(false)` hides the widget and everything inside it; `setEnabled(false)` stops input to
   the widget and everything inside it. **A widget inside a hidden, disabled or collapsed container,
-  or inside a closed dialog, takes no input**, however deep it sits; it takes input again once
-  every container around it is shown, enabled, expanded and open. A collapsed panel's own collapse
-  control still works.
+  inside a closed dialog or drawer, or inside a closed collapsible section other than in its
+  header, takes no input**, however deep it sits; it takes input again once every container around
+  it is shown, enabled, expanded and open. A collapsed panel's own collapse control, and a closed
+  section's own control and header, still work.
+- **Banners.** A dismissal of a dismissible banner reaches `onDismiss` and leaves the banner shown:
+  the application hides it. A banner or empty state with an empty action label shows no button.
+- **Drop zones.** A drop is taken whole or refused whole: every file must have an accepted
+  extension (compared without regard to case; no extensions accepts every file), and a zone that is
+  not `multiple` refuses a drop of several files. A taken drop reaches `onDrop` with the paths in
+  the order dropped.
+- **Splitters.** `setSizes` with an empty list, or with one whose length differs from the number of
+  panes, shares the space equally. A user's drag reaches `onResize` with every pane's size once the
+  user lets go.
 - A widget's destructor detaches it from its parent and frees its native resources. The mount
   destroys children before parents.
 
@@ -130,6 +143,16 @@ reorders children, and only through this.
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field) | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)` |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
+| `BannerWidget` | `setTone`, `setText`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
+| `BadgeWidget` | `setTone`, `setText`, `setIcon` (once) | — |
+| `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
+| `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
+| `KeyValueWidget` | `setItems(vector<KeyValueItem>)` | — |
+| `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
+| `DrawerWidget` | `setOpen`, `setTitle` | `setOnDismiss` (Esc on the TUI), for an open drawer |
+| `SplitterWidget` | `setSizes(vector<int>)` | `setOnResize(sizes)` |
+| `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
+| `DropZoneWidget` | `setAccept(extensions)`, `setMultiple` (both once) | `setOnDrop(paths)` |
 
 ## Selection by key
 
@@ -185,12 +208,18 @@ The headless reference backend and the test double for everything above the cont
   `axis` (Scroll); `tabs`, `selected` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
   `columns`, `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
-  (Slider); `mode`, `path` (FilePicker).
+  (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `actionLabel`, `dismissible` (Banner);
+  `tone`, `text`, `icon` (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
+  (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title` (Drawer);
+  `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
+  `accept`, `multiple` (DropZone).
 - **Values.** `true`/`false`; an enumerator by its name; a key as a decimal integer or a
   double-quoted string (`7` and `"7"` differ); `none` for an absent key or date; a date as an
   ISO-8601 UTC instant with milliseconds, `empty` for an empty `Timestamp`; sizing as `content`,
   `fixed(n)` or `stretch(n)`, a layout as `width/height`; lists as `[a,b]`; options as
-  `[key:label,…]`; columns as `[label:sizing,…]`; a slider's range as `minimum..maximum/step`; a
+  `[key:label,…]`; columns as `[label:sizing,…]`; a slider's range as `minimum..maximum/step`;
+  a fraction in its shortest decimal form (`0.25`); steps as `[label:State,…]`; key-value pairs
+  as `[label:value,…]`; sizes as `[n,…]`; a
   menu as `[label;attr=value…,…]`, where an entry's attributes follow its label only when they
   differ from the default (`;icon=`, `;keys=`, `;checked=true` or `false`, `;enabled=false`) and
   its submenu follows in brackets: `[File[Open;keys=Ctrl+O,Recent[a.txt]],Wrap;checked=true]`.
@@ -205,14 +234,17 @@ The headless reference backend and the test double for everything above the cont
   `widget(id)`. `prop`, `hasProp`, `kindOf`, `children` and `widget` throw `std::out_of_range`
   for an id that names no live widget, where `exists` returns false; `idOf` throws it for a widget
   that is not one of this backend's live widgets.
-- **Interaction helpers** act as the user would: `click`, `edit`, `submit` (Enter: the commit,
-  then the submit), `commit` (focus leaving: the text the field shows), `moveCursor`, `toggle`,
-  `choose`, `chooseIndex` (a menu's top-level entry or a tab), `chooseMenuEntry(id, path)`,
-  `collapse`, `dismiss`, `selectRows`, `activateRow`, `setDateTime`, `slide`, `pick` and `drag`. A
-  helper first changes what the native widget would change by itself — the field's text and
-  cursor, the box's check mark, the marked option or rows, the highlighted tab, the collapsed state,
-  a dismissed dialog's `open`, the value or path — and then calls the stored handler. It calls a
-  copy of the handler, so a handler may
+- **Interaction helpers** act as the user would: `click` (a button, or the action button of a
+  banner or empty state), `edit`, `submit` (Enter: the commit, then the submit), `commit` (focus
+  leaving: the text the field shows), `moveCursor`, `toggle`, `choose`, `chooseIndex` (a menu's
+  top-level entry or a tab), `chooseMenuEntry(id, path)`, `collapse`, `expand(id, open)` (a
+  collapsible section), `dismiss` (a dialog, a drawer or a dismissible banner), `resize(id,
+  sizes)`, `dropFiles(id, paths)` (true when the zone took the drop), `selectRows`, `activateRow`,
+  `setDateTime`, `slide`, `pick` and `drag`. A helper first changes what the native widget would
+  change by itself — the field's text and cursor, the box's check mark, the marked option or rows,
+  the highlighted tab, the collapsed or open state, a dismissed dialog's or drawer's `open`, the
+  pane sizes, the value or path — and then calls the stored handler. It calls a copy of the
+  handler, so a handler may
   destroy its own widget.
   - A widget the user cannot reach ignores every helper: one that is hidden or disabled, or inside a
     container that is hidden, disabled or collapsed, or a closed dialog or anything inside one.
@@ -227,8 +259,10 @@ The headless reference backend and the test double for everything above the cont
   - A helper used on a kind it does not apply to throws `std::logic_error`, and so does an action
     no user could take: choosing a key the Select does not offer, collapsing a panel that is not
     collapsible, selecting a key with no row, a row twice, any row in a `None` table or more than
-    one in a `Single` one, activating a key with no row, dragging a widget onto itself. That is a
-    mistake in the test.
+    one in a `Single` one, activating a key with no row, dragging a widget onto itself, clicking a
+    banner or empty state that shows no action button, dismissing a banner that is not
+    dismissible, resizing with a size count other than the pane count, dropping no files. That is
+    a mistake in the test.
   - `drag(source, target)` returns true when the source has a drag key, the target a drop handler,
     and the target's predicate accepted the key; then `onDrop` has run. An empty predicate accepts
     nothing here, so a drop that lands on a mounted target without `accepts` shows the mount's
@@ -267,15 +301,16 @@ after it; its reading operations report what the widget shows now.
 | `click(widget)` | Activates a button |
 | `type(widget, text)` | Replaces a field's text as typing would: the field is cleared first, so it ends up holding exactly `text`; `onChange` may see intermediate texts |
 | `drag(source, target)` | Drags one widget onto another |
-| `dismiss(dialog)` | Dismisses a dialog (Esc on the TUI) |
+| `dismiss(dialog)` | Dismisses a dialog or drawer (Esc on the TUI), or a dismissible banner |
 | `selectRows(table, rows)` | Selects rows by position, in the order the user picks them — at least one, and only one in a `Single` table — so the user's selection is exactly those rows |
 | `selectedRows(table)` | The positions of the rows the table shows as selected, ascending |
 | `moveCursor(field, position)` | Moves a text field's cursor as the arrow keys or a click would, without changing the text |
 | `cursorOf(field)` | Where a text field's cursor is, as a byte offset into its text |
-
 | `press(focused, chord)` | Presses a chord with focus on a widget, moving focus there first if the probe must |
 | `hasFocus(widget)` | Whether the widget has keyboard focus |
 | `chooseMenuEntry(menu, path)` | Chooses a menu entry by its path, opening each submenu on the way |
+| `expand(section, open)` | Opens or closes a collapsible section with its own control |
+| `dropFiles(zone, paths)` | Drops files from the operating system onto a drop zone |
 
 A case reaches widgets only through `Mounted::root()`, `childAt` and further roots it mounts, or
 through widgets it makes with `backend()` itself, so a probe needs no lookup by name.
@@ -327,10 +362,16 @@ Each case is named by the rule it checks:
     chosen.
 31. Typing into a read-only input reaches no handler and leaves its value; once editable again,
     typing reaches `onChange`.
+32. Dismissing a dismissible banner reaches `onDismiss` once, and the banner stays shown.
+33. A closed collapsible section's content takes no click and its header does; the user's opening
+    reaches `onToggle`, and once the application opens it the content takes clicks.
+34. A drop zone takes a drop of one accepted file, compared without case, and refuses a file it
+    does not accept and several files when it takes one.
 
 ### What the probe cannot reach
 
-The probe drives clicks, typing, chords, menu choices, drags, dismissals and row selection only, so some rules of this
+The probe drives clicks, typing, chords, menu choices, section toggles, file drops, drags,
+dismissals and row selection only, so some rules of this
 contract are each backend's own tests to make:
 
 - that a widget the user cannot reach takes no `choose`, `toggle` or row activation, and that a

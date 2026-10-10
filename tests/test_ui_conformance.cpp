@@ -191,6 +191,16 @@ public:
             _backend.chooseMenuEntry(_backend.idOf(menu), path);
         }
     }
+    void expand(ui::Widget& section, bool open) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.expand(_backend.idOf(section), open);
+        }
+    }
+    void dropFiles(ui::Widget& zone, std::vector<std::string> const& paths) override {
+        if (_fault != Fault::DeadInput) {
+            static_cast<void>(_backend.dropFiles(_backend.idOf(zone), paths));
+        }
+    }
 
 private:
     // The label of the option whose key `selected` shows, from `options`' `key:label` elements.
@@ -230,7 +240,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 31);
+    REQUIRE(cases.size() == 34);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -267,15 +277,18 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
     }
 
     std::set<std::string_view> const deadInput = failingCases(Fault::DeadInput);
-    for (std::string_view const name : {"a click runs the button's action once",
-                                        "typing reaches onChange and a value set by the application is not echoed",
-                                        "a drag onto an accepting target delivers the key",
-                                        "a Table reports a user's selection as exactly the existing rows selected",
-                                        "a dismissal the document refuses leaves the dialog open",
-                                        "a chord goes to the innermost widget that declares it",
-                                        "a chord pressed inside a hidden container runs nothing",
-                                        "a menu reports only an enabled entry without a submenu",
-                                        "a read-only input takes no edit"}) {
+    for (std::string_view const name :
+         {"a click runs the button's action once",
+          "typing reaches onChange and a value set by the application is not echoed",
+          "a drag onto an accepting target delivers the key",
+          "a Table reports a user's selection as exactly the existing rows selected",
+          "a dismissal the document refuses leaves the dialog open",
+          "a chord goes to the innermost widget that declares it",
+          "a chord pressed inside a hidden container runs nothing",
+          "a menu reports only an enabled entry without a submenu", "a read-only input takes no edit",
+          "a dismissed banner reports it and stays shown",
+          "a closed collapsible's content takes no input, its header does",
+          "a drop zone takes a drop whole or refuses it whole"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
     }

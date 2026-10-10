@@ -2,6 +2,9 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
+#include <cctype>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -241,6 +244,70 @@ template <typename T, typename F>
     }
 }
 
+/// @brief A tone's name.
+/// @param tone The tone.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(Tone tone) {
+    switch (tone) {
+        case Tone::Neutral:
+            return "Neutral";
+        case Tone::Info:
+            return "Info";
+        case Tone::Ok:
+            return "Ok";
+        case Tone::Warn:
+            return "Warn";
+        case Tone::Err:
+            return "Err";
+        default:
+            return "unknown";
+    }
+}
+
+/// @brief A side's name.
+/// @param side The side.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(Side side) {
+    switch (side) {
+        case Side::Start:
+            return "Start";
+        case Side::End:
+            return "End";
+        default:
+            return "unknown";
+    }
+}
+
+/// @brief A step state's name.
+/// @param state The state.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(StepState state) {
+    switch (state) {
+        case StepState::Pending:
+            return "Pending";
+        case StepState::Active:
+            return "Active";
+        case StepState::Done:
+            return "Done";
+        case StepState::Failed:
+            return "Failed";
+        default:
+            return "unknown";
+    }
+}
+
+/// @brief A fraction as its shortest decimal text, or `none`.
+/// @param value The fraction.
+/// @return The text, such as `0.25`.
+[[nodiscard]] inline std::string formatFraction(std::optional<double> value) {
+    if (!value.has_value()) {
+        return "none";
+    }
+    std::array<char, 32> buffer{};
+    auto const [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), *value);
+    return error == std::errc{} ? std::string{buffer.data(), end} : std::string{"unknown"};
+}
+
 /// @brief An axis's name.
 /// @param axis The axis.
 /// @return The enumerator's name.
@@ -309,7 +376,7 @@ struct Callbacks {
     std::function<void(std::string)> submit;
     /// @brief From `TextInputWidget::setOnCommit`.
     std::function<void(std::string)> commit;
-    /// @brief From `CheckboxWidget::setOnToggle` or `PanelWidget::setOnToggle`.
+    /// @brief From `CheckboxWidget::setOnToggle`, `PanelWidget::setOnToggle` or `CollapsibleWidget::setOnToggle`.
     std::function<void(bool)> toggle;
     /// @brief From `SelectWidget::setOnSelect`.
     std::function<void(Key)> select;
@@ -321,7 +388,7 @@ struct Callbacks {
     std::function<void(std::int64_t)> slide;
     /// @brief From `FilePickerWidget::setOnPicked`.
     std::function<void(std::string)> picked;
-    /// @brief From `DialogWidget::setOnDismiss`.
+    /// @brief From `DialogWidget::setOnDismiss`, `DrawerWidget::setOnDismiss` or `BannerWidget::setOnDismiss`.
     Action dismiss;
     /// @brief From `TableWidget::setOnSelectionChange`.
     std::function<void(std::vector<Key>)> selection;
@@ -335,6 +402,12 @@ struct Callbacks {
     std::function<void(std::string)> chord;
     /// @brief A menu's activation handler, from `MenuWidget::setOnActivate`.
     std::function<void(std::vector<std::size_t>)> path;
+    /// @brief An action button's handler, from `BannerWidget::setOnAction` or `EmptyStateWidget::setOnAction`.
+    Action action;
+    /// @brief From `SplitterWidget::setOnResize`.
+    std::function<void(std::vector<int>)> resize;
+    /// @brief From `DropZoneWidget::setOnDrop`.
+    std::function<void(std::vector<std::string>)> files;
 };
 
 /// @brief One fake widget's state.
@@ -964,6 +1037,157 @@ public:
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 
+/// @brief A fake `BannerWidget`: properties `tone`, `text`, `actionLabel`, `dismissible`.
+class FakeBanner final : public FakeLeaf<BannerWidget> {
+public:
+    using FakeLeaf<BannerWidget>::FakeLeaf;
+    void setTone(Tone tone) override { set("tone", enumName(tone)); }
+    void setText(std::string_view text) override { set("text", formatText(text)); }
+    void setActionLabel(std::string_view label) override { set("actionLabel", formatText(label)); }
+    void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
+    void setDismissible(bool dismissible) override { set("dismissible", formatBool(dismissible)); }
+    void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
+};
+
+/// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`.
+class FakeBadge final : public FakeLeaf<BadgeWidget> {
+public:
+    using FakeLeaf<BadgeWidget>::FakeLeaf;
+    void setTone(Tone tone) override { set("tone", enumName(tone)); }
+    void setText(std::string_view text) override { set("text", formatText(text)); }
+    void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
+};
+
+/// @brief A fake `ProgressWidget`: properties `value` (as `formatFraction` gives it), `label`.
+class FakeProgress final : public FakeLeaf<ProgressWidget> {
+public:
+    using FakeLeaf<ProgressWidget>::FakeLeaf;
+    void setValue(std::optional<double> value) override { set("value", formatFraction(value)); }
+    void setLabel(std::string_view label) override { set("label", formatText(label)); }
+};
+
+/// @brief A fake `StepsWidget`: properties `steps` (`[label:State,…]`), `current` (a position, or `none`).
+class FakeSteps final : public FakeLeaf<StepsWidget> {
+public:
+    using FakeLeaf<StepsWidget>::FakeLeaf;
+    void setSteps(std::vector<Step> const& steps) override {
+        set("steps",
+            formatList(steps, [](Step const& step) { return formatItem(step.label) + ":" + enumName(step.state); }));
+    }
+    void setCurrent(std::optional<std::size_t> index) override {
+        set("current", index.has_value() ? std::to_string(*index) : std::string{"none"});
+    }
+};
+
+/// @brief A fake `KeyValueWidget`: property `items` (`[label:value,…]`).
+class FakeKeyValue final : public FakeLeaf<KeyValueWidget> {
+public:
+    using FakeLeaf<KeyValueWidget>::FakeLeaf;
+    void setItems(std::vector<KeyValueItem> const& items) override {
+        set("items", formatList(items, [](KeyValueItem const& item) {
+                return formatItem(item.label) + ":" + formatItem(item.value);
+            }));
+    }
+};
+
+/// @brief A fake `EmptyStateWidget`: properties `title`, `text`, `icon`, `actionLabel`.
+class FakeEmptyState final : public FakeLeaf<EmptyStateWidget> {
+public:
+    using FakeLeaf<EmptyStateWidget>::FakeLeaf;
+    void setTitle(std::string_view title) override { set("title", formatText(title)); }
+    void setText(std::string_view text) override { set("text", formatText(text)); }
+    void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
+    void setActionLabel(std::string_view label) override { set("actionLabel", formatText(label)); }
+    void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
+};
+
+/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`.
+class FakeDrawer final : public FakeContainer<DrawerWidget> {
+public:
+    using FakeContainer<DrawerWidget>::FakeContainer;
+    void setOpen(bool open) override { set("open", formatBool(open)); }
+    void setTitle(std::string_view title) override { set("title", formatText(title)); }
+    void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
+};
+
+/// @brief A fake `SplitterWidget`: properties `axis`, `sizes` (`[n,…]`).
+class FakeSplitter final : public FakeContainer<SplitterWidget> {
+public:
+    using FakeContainer<SplitterWidget>::FakeContainer;
+    void setSizes(std::vector<int> const& sizes) override {
+        set("sizes", formatList(sizes, [](int size) { return std::to_string(size); }));
+    }
+    void setOnResize(std::function<void(std::vector<int>)> onResize) override {
+        callbacks().resize = std::move(onResize);
+    }
+};
+
+/// @brief A fake `CollapsibleWidget`: properties `title`, `header` (the header child's id), `open`.
+class FakeCollapsible final : public FakeContainer<CollapsibleWidget> {
+public:
+    using FakeContainer<CollapsibleWidget>::FakeContainer;
+    void setTitle(std::string_view title) override { set("title", formatText(title)); }
+
+    /// @brief Records property `header`, the child's id.
+    /// @param header One of this widget's children.
+    /// @throws std::logic_error when @p header is not this widget's child.
+    void setHeader(Widget& header) override {
+        int const headerId = store().idOf(header);
+        if (store().at(headerId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setHeader with a widget that is not this collapsible's child"};
+        }
+        set("header", std::to_string(headerId));
+    }
+    void setOpen(bool open) override { set("open", formatBool(open)); }
+    void setOnToggle(std::function<void(bool)> onToggle) override { callbacks().toggle = std::move(onToggle); }
+};
+
+/// @brief A fake `DropZoneWidget`: properties `accept` (`[.ext,…]`), `multiple`.
+class FakeDropZone final : public FakeContainer<DropZoneWidget> {
+public:
+    using FakeContainer<DropZoneWidget>::FakeContainer;
+    void setAccept(std::vector<std::string> const& extensions) override {
+        _accept = extensions;
+        set("accept", formatList(extensions, [](std::string const& extension) { return formatItem(extension); }));
+    }
+    void setMultiple(bool multiple) override {
+        _multiple = multiple;
+        set("multiple", formatBool(multiple));
+    }
+    void setOnDrop(std::function<void(std::vector<std::string>)> onDrop) override {
+        callbacks().files = std::move(onDrop);
+    }
+
+    /// @brief Whether the zone takes a drop of @p paths: one file unless several are allowed, each with an accepted
+    ///        extension.
+    /// @param paths The paths dropped; not empty.
+    /// @return True when the drop is taken.
+    [[nodiscard]] bool takes(std::vector<std::string> const& paths) const {
+        if (paths.size() > 1 && !_multiple) {
+            return false;
+        }
+        return std::ranges::all_of(paths, [this](std::string const& path) {
+            return _accept.empty() || std::ranges::any_of(_accept, [&path](std::string const& extension) {
+                       return endsWithIgnoringCase(path, extension);
+                   });
+        });
+    }
+
+private:
+    [[nodiscard]] static bool endsWithIgnoringCase(std::string_view text, std::string_view suffix) {
+        if (suffix.size() > text.size()) {
+            return false;
+        }
+        auto const lower = [](char character) {
+            return static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+        };
+        return std::ranges::equal(text.substr(text.size() - suffix.size()), suffix, {}, lower, lower);
+    }
+
+    std::vector<std::string> _accept;
+    bool _multiple = false;
+};
+
 /// @brief A fake `TableWidget`: properties `columns`, `selectionMode`, `selection`, and `rowKey` on a row.
 ///
 /// `selection` shows the rows the widget marks: the requested keys, in the order requested, that one of its current
@@ -1171,6 +1395,38 @@ public:
         return std::make_unique<detail::FakeFilePicker>(_store, "FilePicker", parent,
                                                         detail::PropList{{"mode", detail::enumName(mode)}});
     }
+    [[nodiscard]] std::unique_ptr<BannerWidget> createBanner(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeBanner>(_store, "Banner", parent);
+    }
+    [[nodiscard]] std::unique_ptr<BadgeWidget> createBadge(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeBadge>(_store, "Badge", parent);
+    }
+    [[nodiscard]] std::unique_ptr<ProgressWidget> createProgress(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeProgress>(_store, "Progress", parent);
+    }
+    [[nodiscard]] std::unique_ptr<StepsWidget> createSteps(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeSteps>(_store, "Steps", parent);
+    }
+    [[nodiscard]] std::unique_ptr<KeyValueWidget> createKeyValue(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeKeyValue>(_store, "KeyValue", parent);
+    }
+    [[nodiscard]] std::unique_ptr<EmptyStateWidget> createEmptyState(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeEmptyState>(_store, "EmptyState", parent);
+    }
+    [[nodiscard]] std::unique_ptr<DrawerWidget> createDrawer(ContainerWidget* parent, Side side) override {
+        return std::make_unique<detail::FakeDrawer>(_store, "Drawer", parent,
+                                                    detail::PropList{{"side", detail::enumName(side)}});
+    }
+    [[nodiscard]] std::unique_ptr<SplitterWidget> createSplitter(ContainerWidget* parent, Axis axis) override {
+        return std::make_unique<detail::FakeSplitter>(_store, "Splitter", parent,
+                                                      detail::PropList{{"axis", detail::enumName(axis)}});
+    }
+    [[nodiscard]] std::unique_ptr<CollapsibleWidget> createCollapsible(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeCollapsible>(_store, "Collapsible", parent);
+    }
+    [[nodiscard]] std::unique_ptr<DropZoneWidget> createDropZone(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeDropZone>(_store, "DropZone", parent);
+    }
 
     /// @brief The golden tree of the live widgets.
     /// @return One line per widget, `Kind#id name=value …` in property-name order, children indented two spaces
@@ -1292,12 +1548,18 @@ public:
         return false;
     }
 
-    /// @brief Activates a button.
-    /// @param widgetId The button.
-    /// @throws std::logic_error when the widget is not a button.
+    /// @brief Activates a button, or the action button of a banner or an empty state.
+    /// @param widgetId The button, banner or empty state.
+    /// @throws std::logic_error when the widget is none of those, or is a banner or empty state that shows no action
+    ///         button.
     void click(int widgetId) {
-        if (detail::Record const* const record = actionable(widgetId, "click", {"Button"}); record != nullptr) {
-            invoke(record->callbacks.click);
+        detail::Record const& record = expectKind(widgetId, "click", {"Button", "Banner", "EmptyState"});
+        if (record.kind != "Button" && prop(widgetId, "actionLabel").empty()) {
+            throw std::logic_error{"RecordingBackend: click of " + record.kind + "#" + std::to_string(widgetId) +
+                                   ", which shows no action button"};
+        }
+        if (reachable(record)) {
+            invoke(record.kind == "Button" ? record.callbacks.click : record.callbacks.action);
         }
     }
 
@@ -1445,14 +1707,70 @@ public:
         }
     }
 
-    /// @brief Dismisses an open dialog, as Esc does on the TUI: the dialog closes, then `onDismiss` runs.
-    /// @param widgetId The dialog.
-    /// @throws std::logic_error when the widget is not a dialog.
+    /// @brief Dismisses an open dialog or drawer, as Esc does on the TUI: it closes, then `onDismiss` runs. Or
+    ///        dismisses a dismissible banner, which stays shown: the application hides it.
+    /// @param widgetId The dialog, drawer or banner.
+    /// @throws std::logic_error when the widget is none of those, or is a banner that is not dismissible.
     void dismiss(int widgetId) {
-        if (detail::Record const* const record = actionable(widgetId, "dismiss", {"Dialog"}); record != nullptr) {
-            _store->setByUser(widgetId, "open", detail::formatBool(false));
-            invoke(record->callbacks.dismiss);
+        detail::Record const& record = expectKind(widgetId, "dismiss", {"Dialog", "Drawer", "Banner"});
+        if (record.kind == "Banner" && !flagIs(record, "dismissible", true)) {
+            throw std::logic_error{"RecordingBackend: dismiss of Banner#" + std::to_string(widgetId) +
+                                   ", which is not dismissible"};
         }
+        if (reachable(record)) {
+            if (record.kind != "Banner") {
+                _store->setByUser(widgetId, "open", detail::formatBool(false));
+            }
+            invoke(record.callbacks.dismiss);
+        }
+    }
+
+    /// @brief Opens or closes a collapsible section with its own control, which works while it is closed: it shows
+    ///        the state asked for, then `onToggle` gets it.
+    /// @param widgetId The section.
+    /// @param open The requested state.
+    /// @throws std::logic_error when the widget is not a collapsible section.
+    void expand(int widgetId, bool open) {
+        if (detail::Record const* const record = actionable(widgetId, "expand", {"Collapsible"}); record != nullptr) {
+            _store->setByUser(widgetId, "open", detail::formatBool(open));
+            invoke(record->callbacks.toggle, open);
+        }
+    }
+
+    /// @brief Drags a splitter's handles: it shows the sizes, then `onResize` gets them.
+    /// @param widgetId The splitter.
+    /// @param sizes Every pane's size, in order.
+    /// @throws std::logic_error when the widget is not a splitter, or @p sizes does not name one size per pane.
+    void resize(int widgetId, std::vector<int> sizes) {
+        detail::Record const& record = expectKind(widgetId, "resize", {"Splitter"});
+        if (sizes.size() != record.children.size()) {
+            throw std::logic_error{"RecordingBackend: resize of Splitter#" + std::to_string(widgetId) + " with " +
+                                   std::to_string(sizes.size()) + " sizes for " +
+                                   std::to_string(record.children.size()) + " panes"};
+        }
+        if (reachable(record)) {
+            _store->setByUser(widgetId, "sizes",
+                              detail::formatList(sizes, [](int size) { return std::to_string(size); }));
+            invoke(record.callbacks.resize, std::move(sizes));
+        }
+    }
+
+    /// @brief Drops files from the operating system onto a drop zone.
+    /// @param widgetId The drop zone.
+    /// @param paths The files' paths, in the order dropped.
+    /// @return True when the zone took the drop and `onDrop` ran; false when it is unreachable or refused the drop.
+    /// @throws std::logic_error when the widget is not a drop zone, or @p paths is empty.
+    bool dropFiles(int widgetId, std::vector<std::string> paths) {
+        detail::Record const& record = expectKind(widgetId, "dropFiles", {"DropZone"});
+        if (paths.empty()) {
+            throw std::logic_error{"RecordingBackend: dropFiles of no files"};
+        }
+        auto const* const zone = static_cast<detail::FakeDropZone const*>(record.widget);
+        if (!reachable(record) || !zone->takes(paths)) {
+            return false;
+        }
+        invoke(record.callbacks.files, std::move(paths));
+        return true;
     }
 
     /// @brief Selects rows of a table by key: the table marks them, then `onSelectionChange` gets the keys.
@@ -1598,19 +1916,30 @@ private:
         if (flagIs(record, "visible", false) || flagIs(record, "enabled", false) || isClosedDialog(record)) {
             return false;
         }
-        for (int outerId = record.parent; outerId != 0;) {
+        for (int innerId = record.id, outerId = record.parent; outerId != 0;) {
             detail::Record const& outer = _store->at(outerId);
             if (flagIs(outer, "visible", false) || flagIs(outer, "enabled", false) ||
-                flagIs(outer, "collapsed", true) || isClosedDialog(outer)) {
+                flagIs(outer, "collapsed", true) || isClosedDialog(outer) || closedAround(outer, innerId)) {
                 return false;
             }
+            innerId = outerId;
             outerId = outer.parent;
         }
         return true;
     }
 
+    // A dialog or drawer shows nothing until it is opened.
     [[nodiscard]] static bool isClosedDialog(detail::Record const& record) {
-        return record.kind == "Dialog" && !flagIs(record, "open", true);
+        return (record.kind == "Dialog" || record.kind == "Drawer") && !flagIs(record, "open", true);
+    }
+
+    // A closed collapsible section hides its content, the child on the way in, unless that child is its header.
+    [[nodiscard]] static bool closedAround(detail::Record const& outer, int childId) {
+        if (outer.kind != "Collapsible" || !flagIs(outer, "open", false)) {
+            return false;
+        }
+        auto const header = outer.props.find("header");
+        return header == outer.props.end() || header->second != std::to_string(childId);
     }
 
     [[nodiscard]] static bool flagIs(detail::Record const& record, std::string_view name, bool value) {

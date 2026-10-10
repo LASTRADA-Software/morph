@@ -232,6 +232,29 @@ enum class FilePickerMode : std::uint8_t {
     Save,  ///< A file to create or overwrite.
 };
 
+/// @brief What a message or a mark conveys, mapped to the theme's colours.
+enum class Tone : std::uint8_t {
+    Neutral,  ///< Nothing in particular.
+    Info,     ///< Information.
+    Ok,       ///< Success.
+    Warn,     ///< Something to check.
+    Err,      ///< A failure.
+};
+
+/// @brief The edge a `Drawer` slides in from, in reading direction.
+enum class Side : std::uint8_t {
+    Start,  ///< The left edge in a left-to-right layout.
+    End,    ///< The right edge in a left-to-right layout.
+};
+
+/// @brief Where one step of a `Steps` indicator stands.
+enum class StepState : std::uint8_t {
+    Pending,  ///< Not started.
+    Active,   ///< In progress.
+    Done,     ///< Completed.
+    Failed,   ///< Stopped by a failure.
+};
+
 /// @brief How many rows of a `Table` the user can select.
 enum class SelectionMode : std::uint8_t {
     None,      ///< Rows can be activated, not selected.
@@ -831,11 +854,187 @@ struct FilePicker {
     Common common{};
 };
 
+/// @brief A button inside another kind, such as a banner's action: its caption beside its handler.
+struct ActionButton {
+    /// @brief The caption; empty shows no button.
+    Prop<std::string> label;
+    /// @brief Called when the button is activated.
+    Action onClick;
+};
+
+/// @brief A message across the top of a region, with an optional action and an optional dismissal.
+struct Banner {
+    /// @brief What the message conveys.
+    Prop<Tone> tone = Tone::Info;
+    /// @brief The message.
+    Prop<std::string> text;
+    /// @brief The button beside the message; an empty label shows none.
+    ActionButton action{};
+    /// @brief Whether the user can dismiss it; set once.
+    bool dismissible = false;
+    /// @brief Called when the user dismisses it. The banner stays shown until the application hides it.
+    Action onDismiss;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief A short label marking a state, such as a count or a status.
+struct Badge {
+    /// @brief What the mark conveys.
+    Prop<Tone> tone = Tone::Neutral;
+    /// @brief The label.
+    Prop<std::string> text;
+    /// @brief The name of an icon in the theme's icon map; empty shows none. Set once.
+    std::string icon;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief A progress bar.
+struct Progress {
+    /// @brief How far along, from 0 to 1; a value outside is shown at the nearer end. `nullopt`: indeterminate.
+    Prop<std::optional<double>> value;
+    /// @brief A caption beside the bar.
+    Prop<std::string> label;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief One step of a `Steps` indicator.
+struct Step {
+    /// @brief The caption.
+    std::string label;
+    /// @brief Where it stands.
+    StepState state = StepState::Pending;
+
+    /// @brief Memberwise equality.
+    /// @return Whether label and state match.
+    bool operator==(Step const&) const = default;
+};
+
+/// @brief The steps of a process in order, each with its state.
+struct Steps {
+    /// @brief The steps.
+    Prop<std::vector<Step>> items;
+    /// @brief The step to highlight, by position; `nullopt` or a position past the last highlights none.
+    Prop<std::optional<std::size_t>> current;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief One row of a `KeyValue` list.
+struct KeyValueItem {
+    /// @brief The caption.
+    std::string label;
+    /// @brief The value, as text.
+    std::string value;
+
+    /// @brief Memberwise equality.
+    /// @return Whether label and value match.
+    bool operator==(KeyValueItem const&) const = default;
+};
+
+/// @brief Captions beside their values, one pair per row.
+struct KeyValue {
+    /// @brief The pairs, in order.
+    Prop<std::vector<KeyValueItem>> items;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief What a region shows when it has nothing to show: a title, an explanation and an optional action.
+struct EmptyState {
+    /// @brief The title.
+    Prop<std::string> title;
+    /// @brief The explanation.
+    Prop<std::string> text;
+    /// @brief The name of an icon in the theme's icon map; empty shows none. Set once.
+    std::string icon;
+    /// @brief The button below the text; an empty label shows none.
+    ActionButton action{};
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief A panel that slides in from one edge over the content: a `Dialog` with a side, and the same rules.
+struct Drawer {
+    /// @brief Whether it is shown.
+    Prop<bool> open;
+    /// @brief The title.
+    Prop<std::string> title;
+    /// @brief The content; may be null.
+    Node child;
+    /// @brief Called when the user dismisses it (Esc on the TUI).
+    Action onDismiss;
+    /// @brief The edge it slides in from; set once.
+    Side side = Side::End;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief Panes side by side, or stacked, with handles the user drags to share the space between them.
+struct Splitter {
+    /// @brief The panes, in order; a null child is skipped.
+    std::vector<Node> children;
+    /// @brief The axis the panes are laid out along; set once.
+    Axis orientation = Axis::Horizontal;
+    /// @brief Each pane's size, in backend units, in order; empty shares the space equally. A list whose length
+    ///        differs from the number of panes is shared out as an empty one.
+    Prop<std::vector<int>> sizes;
+    /// @brief Called with every pane's size after the user dragged a handle.
+    std::function<void(std::vector<int>)> onResize;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief A titled section the user opens and closes. Its header stays usable while it is closed.
+struct Collapsible {
+    /// @brief The title.
+    Prop<std::string> title;
+    /// @brief Whether the content is shown.
+    Prop<bool> open = true;
+    /// @brief Called with the state the user asked for.
+    std::function<void(bool)> onToggle;
+    /// @brief Shown beside the title, open or closed; may be null.
+    Node header;
+    /// @brief The content; may be null. Mounted once, and hidden while closed.
+    Node child;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief A region that takes files dropped from the operating system.
+struct DropZone {
+    /// @brief The extensions it takes, such as `".csv"`, compared without regard to case; empty takes every file.
+    ///        Set once.
+    std::vector<std::string> accept;
+    /// @brief Whether a drop may carry more than one file; set once.
+    bool multiple = false;
+    /// @brief Called with the paths of a drop it took. A drop with a file outside `accept`, or with several files
+    ///        when not `multiple`, is refused whole.
+    std::function<void(std::vector<std::string>)> onDrop;
+    /// @brief The content shown inside the region; may be null.
+    Node child;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief A component the toolkit's own renderer loads by name, as built-in nodes for `Mounted`.
+///
+/// `Mounted` mounts the fallback: it loads no components. The fallback carries its own `Common`.
+struct Custom {
+    /// @brief The component's name, as the document's `components` declares it.
+    std::string name;
+    /// @brief The built-in nodes shown in its place; never null.
+    Node fallback;
+};
+
 /// @brief What a `Node` points at: exactly one node kind.
 struct NodeData {
     /// @brief The node.
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
-                 Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker>
+                 Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
+                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom>
         kind;
 };
 
@@ -946,6 +1145,68 @@ template <typename Kind>
 /// @param spec The node.
 /// @return The node.
 [[nodiscard]] inline Node filePicker(FilePicker spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A message across the top of a region.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node banner(Banner spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A short label marking a state.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node badge(Badge spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A progress bar.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node progress(Progress spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief The steps of a process.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node steps(Steps spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief Captions beside their values.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node keyValue(KeyValue spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief What a region shows when it has nothing to show.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node emptyState(EmptyState spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A panel that slides in from one edge.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node drawer(Drawer spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief Panes with handles the user drags.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node splitter(Splitter spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A titled section the user opens and closes.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node collapsible(Collapsible spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A region that takes dropped files.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node dropZone(DropZone spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A component loaded by name, mounted by `Mounted` as its fallback.
+/// @param spec The node.
+/// @return The node.
+/// @throws std::invalid_argument when the fallback is null: a renderer that cannot load the component has nothing
+///         else to show.
+[[nodiscard]] inline Node custom(Custom spec) {
+    if (!spec.fallback) {
+        throw std::invalid_argument{"morph::ui::custom: the fallback of a custom node is null"};
+    }
+    return detail::makeNode(std::move(spec));
+}
 
 /// @brief A Switch over an enumeration: each enumerator becomes the `int64` key of its case.
 ///

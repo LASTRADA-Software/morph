@@ -801,6 +801,18 @@ private:
     Widget& mountKind(reactive::Scope& scope, Dialog const& spec, ContainerWidget* parent) {
         DialogWidget& widget = scope.adopt(_backend->createDialog(parent));
         applyCommon(scope, widget, spec.common);
+        return mountOverlay(scope, spec, widget);
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Drawer const& spec, ContainerWidget* parent) {
+        DrawerWidget& widget = scope.adopt(_backend->createDrawer(parent, spec.side));
+        applyCommon(scope, widget, spec.common);
+        return mountOverlay(scope, spec, widget);
+    }
+
+    // A Dialog or a Drawer: the title, the dismissal, and content that exists only while open.
+    template <typename Spec, typename OverlayWidget>
+    Widget& mountOverlay(reactive::Scope& scope, Spec const& spec, OverlayWidget& widget) {
         bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         auto& shownOpen = scope.make<std::optional<bool>>();
@@ -1037,6 +1049,104 @@ private:
         bind(scope, spec.active, [&widget](bool active) { widget.setActive(active); });
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
         return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Banner const& spec, ContainerWidget* parent) {
+        BannerWidget& widget = scope.adopt(_backend->createBanner(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
+        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        bind(scope, spec.action.label, [&widget](std::string const& label) { widget.setActionLabel(label); });
+        widget.setOnAction(event(spec.action.onClick));
+        widget.setDismissible(spec.dismissible);
+        widget.setOnDismiss(event(spec.onDismiss));
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Badge const& spec, ContainerWidget* parent) {
+        BadgeWidget& widget = scope.adopt(_backend->createBadge(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
+        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        widget.setIcon(spec.icon);
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Progress const& spec, ContainerWidget* parent) {
+        ProgressWidget& widget = scope.adopt(_backend->createProgress(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.value, [&widget](std::optional<double> value) { widget.setValue(value); });
+        bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Steps const& spec, ContainerWidget* parent) {
+        StepsWidget& widget = scope.adopt(_backend->createSteps(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.items, [&widget](std::vector<Step> const& steps) { widget.setSteps(steps); });
+        bind(scope, spec.current, [&widget](std::optional<std::size_t> index) { widget.setCurrent(index); });
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, KeyValue const& spec, ContainerWidget* parent) {
+        KeyValueWidget& widget = scope.adopt(_backend->createKeyValue(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.items, [&widget](std::vector<KeyValueItem> const& items) { widget.setItems(items); });
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, EmptyState const& spec, ContainerWidget* parent) {
+        EmptyStateWidget& widget = scope.adopt(_backend->createEmptyState(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
+        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        widget.setIcon(spec.icon);
+        bind(scope, spec.action.label, [&widget](std::string const& label) { widget.setActionLabel(label); });
+        widget.setOnAction(event(spec.action.onClick));
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Splitter const& spec, ContainerWidget* parent) {
+        SplitterWidget& widget = scope.adopt(_backend->createSplitter(parent, spec.orientation));
+        applyCommon(scope, widget, spec.common);
+        mountChildren(scope, spec.children, widget);
+        widget.setOnResize(inputEvent(
+            spec.onResize,
+            controlled(scope, spec.sizes, [&widget](std::vector<int> const& sizes) { widget.setSizes(sizes); })));
+        return widget;
+    }
+
+    // The header is mounted first, so it is the first child; the content follows it.
+    Widget& mountKind(reactive::Scope& scope, Collapsible const& spec, ContainerWidget* parent) {
+        CollapsibleWidget& widget = scope.adopt(_backend->createCollapsible(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
+        if (Widget* const header = mount(scope, spec.header, &widget); header != nullptr) {
+            widget.setHeader(*header);
+        }
+        static_cast<void>(mount(scope, spec.child, &widget));
+        widget.setOnToggle(
+            inputEvent(spec.onToggle, controlled(scope, spec.open, [&widget](bool open) { widget.setOpen(open); })));
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, DropZone const& spec, ContainerWidget* parent) {
+        DropZoneWidget& widget = scope.adopt(_backend->createDropZone(parent));
+        applyCommon(scope, widget, spec.common);
+        widget.setAccept(spec.accept);
+        widget.setMultiple(spec.multiple);
+        widget.setOnDrop(event(spec.onDrop));
+        static_cast<void>(mount(scope, spec.child, &widget));
+        return widget;
+    }
+
+    // The fallback in the custom node's place: this mount loads no components.
+    Widget& mountKind(reactive::Scope& scope, Custom const& spec, ContainerWidget* parent) {
+        Widget* const fallback = mount(scope, spec.fallback, parent);
+        if (fallback == nullptr) {
+            throw std::invalid_argument{"morph::ui::Mounted: the custom node " + spec.name + " has no fallback"};
+        }
+        return *fallback;
     }
 
     Widget& mountKind(reactive::Scope& scope, DateTimeInput const& spec, ContainerWidget* parent) {

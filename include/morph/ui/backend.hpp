@@ -442,6 +442,175 @@ public:
     virtual void setOnPicked(std::function<void(std::string)> onPicked) = 0;
 };
 
+/// @brief A message across the top of a region, with an optional action button and an optional dismissal.
+class BannerWidget : public Widget {
+public:
+    /// @brief Sets what the message conveys.
+    /// @param tone The tone, mapped to the backend's theme.
+    virtual void setTone(Tone tone) = 0;
+
+    /// @brief Replaces the message.
+    /// @param text The message, UTF-8.
+    virtual void setText(std::string_view text) = 0;
+
+    /// @brief Replaces the action button's caption.
+    /// @param label The caption, UTF-8; empty shows no button.
+    virtual void setActionLabel(std::string_view label) = 0;
+
+    /// @brief Sets what activating the action button calls.
+    /// @param onAction The handler; empty does nothing.
+    virtual void setOnAction(Action onAction) = 0;
+
+    /// @brief Sets whether the user can dismiss the banner; called once, before the banner is shown.
+    /// @param dismissible Whether to offer the dismissal.
+    virtual void setDismissible(bool dismissible) = 0;
+
+    /// @brief Sets what a dismissal calls. A dismissal leaves the banner shown: the application hides it.
+    /// @param onDismiss The handler; empty does nothing.
+    virtual void setOnDismiss(Action onDismiss) = 0;
+};
+
+/// @brief A short label marking a state.
+class BadgeWidget : public Widget {
+public:
+    /// @brief Sets what the mark conveys.
+    /// @param tone The tone, mapped to the backend's theme.
+    virtual void setTone(Tone tone) = 0;
+
+    /// @brief Replaces the label.
+    /// @param text The label, UTF-8.
+    virtual void setText(std::string_view text) = 0;
+
+    /// @brief Sets the icon; called once.
+    /// @param icon The name of an icon in the theme's icon map; empty shows none.
+    virtual void setIcon(std::string_view icon) = 0;
+};
+
+/// @brief A progress bar.
+class ProgressWidget : public Widget {
+public:
+    /// @brief Sets how far along it is.
+    /// @param value From 0 to 1, a value outside shown at the nearer end; `nullopt` shows an indeterminate bar.
+    virtual void setValue(std::optional<double> value) = 0;
+
+    /// @brief Replaces the caption beside the bar.
+    /// @param label The caption, UTF-8.
+    virtual void setLabel(std::string_view label) = 0;
+};
+
+/// @brief The steps of a process, each with its state.
+class StepsWidget : public Widget {
+public:
+    /// @brief Replaces the steps.
+    /// @param steps The steps, in order.
+    virtual void setSteps(std::vector<Step> const& steps) = 0;
+
+    /// @brief Highlights one step.
+    /// @param index The step's position; `nullopt` or a position past the last highlights none.
+    virtual void setCurrent(std::optional<std::size_t> index) = 0;
+};
+
+/// @brief Captions beside their values.
+class KeyValueWidget : public Widget {
+public:
+    /// @brief Replaces the pairs.
+    /// @param items The pairs, in order.
+    virtual void setItems(std::vector<KeyValueItem> const& items) = 0;
+};
+
+/// @brief What a region shows when it has nothing to show.
+class EmptyStateWidget : public Widget {
+public:
+    /// @brief Replaces the title.
+    /// @param title The title, UTF-8.
+    virtual void setTitle(std::string_view title) = 0;
+
+    /// @brief Replaces the explanation.
+    /// @param text The explanation, UTF-8.
+    virtual void setText(std::string_view text) = 0;
+
+    /// @brief Sets the icon; called once.
+    /// @param icon The name of an icon in the theme's icon map; empty shows none.
+    virtual void setIcon(std::string_view icon) = 0;
+
+    /// @brief Replaces the action button's caption.
+    /// @param label The caption, UTF-8; empty shows no button.
+    virtual void setActionLabel(std::string_view label) = 0;
+
+    /// @brief Sets what activating the action button calls.
+    /// @param onAction The handler; empty does nothing.
+    virtual void setOnAction(Action onAction) = 0;
+};
+
+/// @brief A panel over the content that slides in from the side fixed at creation; it follows a dialog's rules. A new
+///        drawer is closed.
+class DrawerWidget : public ContainerWidget {
+public:
+    /// @brief Shows or hides it. Never calls the `onDismiss` handler.
+    /// @param open Whether it is shown.
+    virtual void setOpen(bool open) = 0;
+
+    /// @brief Replaces the title.
+    /// @param title The title, UTF-8.
+    virtual void setTitle(std::string_view title) = 0;
+
+    /// @brief Sets what a user dismissal (Esc on the TUI) calls.
+    /// @param onDismiss The handler; empty does nothing.
+    virtual void setOnDismiss(Action onDismiss) = 0;
+};
+
+/// @brief Panes along the axis fixed at creation, with handles between them that the user drags.
+class SplitterWidget : public ContainerWidget {
+public:
+    /// @brief Sets each pane's size. Never calls the `onResize` handler.
+    /// @param sizes Each pane's size, in backend units, in order; a list that is empty or whose length differs from
+    ///              the number of panes shares the space equally.
+    virtual void setSizes(std::vector<int> const& sizes) = 0;
+
+    /// @brief Sets what dragging a handle calls, with every pane's size once the user lets go.
+    /// @param onResize The handler; empty does nothing.
+    virtual void setOnResize(std::function<void(std::vector<int>)> onResize) = 0;
+};
+
+/// @brief A titled section the user opens and closes. A new collapsible is open.
+///
+/// A widget inside it takes no input while it is closed, except the header and everything inside the header.
+class CollapsibleWidget : public ContainerWidget {
+public:
+    /// @brief Replaces the title.
+    /// @param title The title, UTF-8.
+    virtual void setTitle(std::string_view title) = 0;
+
+    /// @brief Shows one of its children beside the title, open or closed; called at most once.
+    /// @param header A child of this widget.
+    virtual void setHeader(Widget& header) = 0;
+
+    /// @brief Opens or closes it. Never calls the `onToggle` handler.
+    /// @param open Whether the content is shown.
+    virtual void setOpen(bool open) = 0;
+
+    /// @brief Sets what the user opening or closing it calls.
+    /// @param onToggle The handler, given the state the user asked for; empty does nothing.
+    virtual void setOnToggle(std::function<void(bool)> onToggle) = 0;
+};
+
+/// @brief A region that takes files dropped from the operating system.
+class DropZoneWidget : public ContainerWidget {
+public:
+    /// @brief Sets the extensions it takes; called once.
+    /// @param extensions Such as `".csv"`, compared without regard to case; empty takes every file.
+    virtual void setAccept(std::vector<std::string> const& extensions) = 0;
+
+    /// @brief Sets whether a drop may carry more than one file; called once.
+    /// @param multiple Whether several files are taken at once.
+    virtual void setMultiple(bool multiple) = 0;
+
+    /// @brief Sets what a drop it takes calls. A drop with a file outside the accepted extensions, or with several
+    ///        files when only one is taken, is refused whole and calls nothing.
+    /// @param onDrop The handler, given the paths in the order dropped; empty does nothing.
+    virtual void setOnDrop(std::function<void(std::vector<std::string>)> onDrop) = 0;
+};
+
 /// @brief Makes widgets. Each factory appends the new widget to @p parent, or makes a root when it is null, and never
 ///        returns null.
 class IViewBackend {
@@ -558,6 +727,58 @@ public:
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<FilePickerWidget> createFilePicker(ContainerWidget* parent,
                                                                              FilePickerMode mode) = 0;
+
+    /// @brief Makes a banner.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<BannerWidget> createBanner(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a badge.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<BadgeWidget> createBadge(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a progress bar.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<ProgressWidget> createProgress(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a steps indicator.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<StepsWidget> createSteps(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a key-value list.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<KeyValueWidget> createKeyValue(ContainerWidget* parent) = 0;
+
+    /// @brief Makes an empty state.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<EmptyStateWidget> createEmptyState(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a drawer.
+    /// @param parent The container to append to, or null for a root.
+    /// @param side The edge it slides in from.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<DrawerWidget> createDrawer(ContainerWidget* parent, Side side) = 0;
+
+    /// @brief Makes a splitter.
+    /// @param parent The container to append to, or null for a root.
+    /// @param axis The axis its panes are laid out along.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<SplitterWidget> createSplitter(ContainerWidget* parent, Axis axis) = 0;
+
+    /// @brief Makes a collapsible section.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<CollapsibleWidget> createCollapsible(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a drop zone.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<DropZoneWidget> createDropZone(ContainerWidget* parent) = 0;
 };
 
 }  // namespace morph::ui

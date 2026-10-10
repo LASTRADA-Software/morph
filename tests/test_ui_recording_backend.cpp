@@ -569,8 +569,21 @@ TEST_CASE("RecordingBackend: every enumerator has its name, and a value outside 
     CHECK(enumName(ui::SelectionMode::None) == "None");
     CHECK(enumName(ui::SelectionMode::Single) == "Single");
     CHECK(enumName(ui::SelectionMode::Multiple) == "Multiple");
-    // The fallbacks keep a dump readable when a value the enumeration does not name reaches a setter.
+    CHECK(enumName(ui::Tone::Neutral) == "Neutral");
+    CHECK(enumName(ui::Tone::Info) == "Info");
+    CHECK(enumName(ui::Tone::Ok) == "Ok");
+    CHECK(enumName(ui::Tone::Warn) == "Warn");
+    CHECK(enumName(ui::Tone::Err) == "Err");
+    CHECK(enumName(ui::StepState::Pending) == "Pending");
+    CHECK(enumName(ui::StepState::Active) == "Active");
+    CHECK(enumName(ui::StepState::Done) == "Done");
+    CHECK(enumName(ui::StepState::Failed) == "Failed");
+    CHECK(enumName(ui::Side::Start) == "Start");
+    CHECK(enumName(ui::Side::End) == "End");
+    // The fallbacks keep a dump readable when a value the enumeration does not name reaches a setter. A value of the
+    // underlying type outside the enumerators is a valid value of a fixed-type enum; it is the case under test.
     constexpr std::uint8_t kOutside = 99;
+    // NOLINTBEGIN(clang-analyzer-optin.core.EnumCastOutOfRange)
     CHECK(enumName(static_cast<ui::TextRole>(kOutside)) == "unknown");
     CHECK(enumName(static_cast<ui::TextInputMode>(kOutside)) == "unknown");
     CHECK(enumName(static_cast<ui::SelectStyle>(kOutside)) == "unknown");
@@ -578,8 +591,12 @@ TEST_CASE("RecordingBackend: every enumerator has its name, and a value outside 
     CHECK(enumName(static_cast<ui::DateMode>(kOutside)) == "unknown");
     CHECK(enumName(static_cast<ui::FilePickerMode>(kOutside)) == "unknown");
     CHECK(enumName(static_cast<ui::SelectionMode>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::Tone>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::Side>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::StepState>(kOutside)) == "unknown");
     CHECK(ui::testing::detail::formatSizing({.kind = static_cast<ui::Sizing::Kind>(kOutside), .amount = 1}) ==
           "unknown");
+    // NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 }
 
 // Mutations: drop the carriage-return branch of `detail::escape`; format an empty Timestamp as `none`.
