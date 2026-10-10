@@ -15,6 +15,7 @@
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -335,9 +336,22 @@ TEST_CASE("ui::detail::reorderChildren: every permutation of five ends in order 
     for (FakeItem& item : items) {
         start.push_back(&item);
     }
-    std::vector<std::size_t> permutation{0, 1, 2, 3, 4};
+    // Each rank in [0, 120) names one permutation by its mixed-radix digits (5, 4, 3, 2, 1): a digit picks among
+    // the indices not yet used. Built by hand rather than with next_permutation, whose inlined reverse GCC's
+    // -Wstrict-overflow misreads at -O2.
+    std::set<std::vector<std::size_t>> seen;
     int permutations = 0;
-    for (bool more = true; more; more = std::ranges::next_permutation(permutation).found) {
+    for (std::size_t rank = 0; rank < 120; ++rank) {
+        std::vector<std::size_t> pool{0, 1, 2, 3, 4};
+        std::vector<std::size_t> permutation;
+        std::size_t rest = rank;
+        for (std::size_t radix = pool.size(); radix > 0; --radix) {
+            std::size_t const pick = rest % radix;
+            rest /= radix;
+            permutation.push_back(pool.at(pick));
+            pool.erase(pool.begin() + static_cast<std::ptrdiff_t>(pick));
+        }
+        seen.insert(permutation);
         std::vector<ui::Widget*> target;
         target.reserve(permutation.size());
         for (std::size_t const index : permutation) {
@@ -357,6 +371,7 @@ TEST_CASE("ui::detail::reorderChildren: every permutation of five ends in order 
         ++permutations;
     }
     CHECK(permutations == 120);
+    CHECK(seen.size() == 120);  // every rank was a different permutation, so all of them were tried
 }
 
 TEST_CASE("ui::detail::reorderChildren: a move that throws leaves the order as far as it got", "[ui]") {

@@ -802,9 +802,14 @@ struct Entry {
                  ui::select(
                      {.options =
                           [odd] {
-                              return odd() ? Options{{.key = Key{std::int64_t{1}}, .label = "One"},
-                                                     {.key = Key{std::int64_t{2}}, .label = "Two"}}
-                                           : Options{{.key = Key{std::int64_t{1}}, .label = "One"}};
+                              // Built up by name rather than as two braced lists in a conditional, whose backing
+                              // arrays GCC's dangling-pointer analysis mistakes for escaping temporaries.
+                              Options options;
+                              options.push_back({.key = Key{std::int64_t{1}}, .label = "One"});
+                              if (odd()) {
+                                  options.push_back({.key = Key{std::int64_t{2}}, .label = "Two"});
+                              }
+                              return options;
                           },
                       .selected = [&phase] { return std::optional<Key>{Key{std::int64_t{phase.get() < 2 ? 2 : 1}}}; },
                       .onSelect = note("Select onSelect")}),
