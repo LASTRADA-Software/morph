@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['rationalerror_0',['RationalError',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9e',1,'morph::math']]],
-  ['roundingmode_1',['RoundingMode',['../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a',1,'morph::math']]]
+  ['kind_0',['Kind',['../d8/df9/structmorph_1_1table_1_1ViewOp.html#af5f73481cb3344d4b936e6efe69c9149',1,'morph::table::ViewOp']]]
 ];

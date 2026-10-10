@@ -1,12 +1,19 @@
 var searchData=
 [
-  ['tagged_0',['Tagged',['../dc/d7a/structmorph_1_1util_1_1Tagged.html',1,'morph::util']]],
-  ['threadpoolexecutor_1',['ThreadPoolExecutor',['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html',1,'morph::exec']]],
-  ['timeouterror_2',['TimeoutError',['../d5/d80/structmorph_1_1backend_1_1TimeoutError.html',1,'morph::backend']]],
-  ['timestamp_3',['Timestamp',['../db/dec/structmorph_1_1time_1_1Timestamp.html',1,'morph::time']]],
-  ['tokenissuanceerror_4',['TokenIssuanceError',['../d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html',1,'morph::session']]],
-  ['tokenissuer_5',['TokenIssuer',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html',1,'morph::session']]],
-  ['tokenverifier_6',['TokenVerifier',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html',1,'morph::session']]],
-  ['tracesink_7',['TraceSink',['../d5/d5e/structmorph_1_1observe_1_1TraceSink.html',1,'morph::observe']]],
-  ['type_8',['type',['../df/d19/structmorph_1_1model_1_1HandlerResult.html',1,'morph::model']]]
+  ['ranged_0',['Ranged',['../d7/d6d/structmorph_1_1forms_1_1Ranged.html',1,'morph::forms']]],
+  ['rational_1',['Rational',['../d2/d5c/structmorph_1_1math_1_1Rational.html',1,'morph::math']]],
+  ['rawentry_2',['RawEntry',['../d2/de5/structmorph_1_1table_1_1detail_1_1RawEntry.html',1,'morph::table::detail']]],
+  ['rawhandler_3',['RawHandler',['../d8/d3a/classmorph_1_1bridge_1_1RawHandler.html',1,'morph::bridge']]],
+  ['readonlywhen_4',['ReadonlyWhen',['../dd/d29/structmorph_1_1forms_1_1ReadonlyWhen.html',1,'morph::forms']]],
+  ['reconnectcoordinator_5',['ReconnectCoordinator',['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html',1,'morph::offline']]],
+  ['reconnectcoordinatorconfig_6',['ReconnectCoordinatorConfig',['../d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html',1,'morph::offline']]],
+  ['remoteserver_7',['RemoteServer',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html',1,'morph::backend']]],
+  ['requiredwhen_8',['RequiredWhen',['../d6/da7/structmorph_1_1forms_1_1RequiredWhen.html',1,'morph::forms']]],
+  ['rowchange_9',['RowChange',['../d0/dc5/structmorph_1_1table_1_1RowChange.html',1,'morph::table']]],
+  ['roworder_10',['RowOrder',['../d4/d45/classmorph_1_1table_1_1RowOrder.html',1,'morph::table']]],
+  ['rowpatcher_11',['RowPatcher',['../d1/dc6/classmorph_1_1table_1_1RowPatcher.html',1,'morph::table']]],
+  ['rowsnapshot_12',['RowSnapshot',['../d0/d78/classmorph_1_1table_1_1RowSnapshot.html',1,'morph::table']]],
+  ['rowssnapshot_13',['RowsSnapshot',['../db/d95/classmorph_1_1table_1_1RowsSnapshot.html',1,'morph::table']]],
+  ['rowssource_14',['RowsSource',['../dd/df1/classmorph_1_1table_1_1RowsSource.html',1,'morph::table']]],
+  ['rulelist_15',['RuleList',['../d3/d8b/structmorph_1_1forms_1_1RuleList.html',1,'morph::forms']]]
 ];

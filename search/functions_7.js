@@ -7,6 +7,7 @@ var searchData=
   ['hassubscribers_4',['hasSubscribers',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#adf85d1d8abbe32df6c02ce186dfbbecd',1,'morph::bridge::Bridge']]],
   ['hasvalue_5',['hasValue',['../df/d65/structmorph_1_1forms_1_1Choice.html#a13a289f9fadeea894749645063705491',1,'morph::forms::Choice::hasValue()'],['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#a89ef918a90efd8c9d97e5ec1fdbb78e2',1,'morph::forms::Ranged::hasValue()'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a41d879bad41b4e5b09f65b6cf56ce603',1,'morph::time::Timestamp::hasValue()'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#afa91555763dd9e3d0dc557a4c45ac348',1,'morph::units::Quantity::hasValue()'],['../dc/d7a/structmorph_1_1util_1_1Tagged.html#aa7778ae18ba5c97e388f4ef159c697bd',1,'morph::util::Tagged::hasValue()']]],
   ['health_6',['health',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a4e56d64c5c9a9044920337bb9b27a092',1,'morph::backend::RemoteServer']]],
-  ['hmacsha256_7',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
-  ['hmacsha256raw_8',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]]
+  ['heldrows_7',['heldRows',['../dd/d72/classmorph_1_1table_1_1Engine.html#ac316c0ecb08c5d818ea88526a266f02b',1,'morph::table::Engine']]],
+  ['hmacsha256_8',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
+  ['hmacsha256raw_9',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]]
 ];

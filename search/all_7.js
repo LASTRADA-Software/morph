@@ -28,10 +28,12 @@ var searchData=
   ['healthhandler_25',['healthHandler',['../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a1ce5548f3f49f5349bdeede99ccb300b',1,'morph::backend::ServerConfig']]],
   ['healthstatus_26',['HealthStatus',['../d1/d59/structmorph_1_1backend_1_1HealthStatus.html',1,'morph::backend']]],
   ['heap_20allocated_27',['&lt;span class=&quot;tt&quot;&gt;RemoteServer&lt;/span&gt; must be heap-allocated',['../index.html#remoteserver-must-be-heap-allocated',1,'']]],
-  ['help_28',['Help',['../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fa6a26f548831e6a8c26bfbbd9f6ec61e0',1,'morph::forms::i18n']]],
-  ['help_29',['help',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a61b338589ad21fd57f86d3e20fcf990f',1,'morph::forms::FieldMeta']]],
-  ['hidden_30',['hidden',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a8c44a9d16363c47fb2234e6c87b72d6a',1,'morph::forms::FieldMeta::hidden'],['../dd/da5/structmorph_1_1views_1_1ColumnOverride.html#ae6cbb7d5a224b48c61e57485f5d80a7d',1,'morph::views::ColumnOverride::hidden']]],
-  ['history_31',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
-  ['hmacsha256_32',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
-  ['hmacsha256raw_33',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]]
+  ['heldrows_28',['heldRows',['../dd/d72/classmorph_1_1table_1_1Engine.html#ac316c0ecb08c5d818ea88526a266f02b',1,'morph::table::Engine']]],
+  ['help_29',['Help',['../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fa6a26f548831e6a8c26bfbbd9f6ec61e0',1,'morph::forms::i18n']]],
+  ['help_30',['help',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a61b338589ad21fd57f86d3e20fcf990f',1,'morph::forms::FieldMeta']]],
+  ['hidden_31',['hidden',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a8c44a9d16363c47fb2234e6c87b72d6a',1,'morph::forms::FieldMeta::hidden'],['../dd/da5/structmorph_1_1views_1_1ColumnOverride.html#ae6cbb7d5a224b48c61e57485f5d80a7d',1,'morph::views::ColumnOverride::hidden']]],
+  ['history_32',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['hmacsha256_33',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
+  ['hmacsha256raw_34',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]],
+  ['hybrid_35',['Hybrid',['../df/d8f/selection_8hpp.html#af31b0b480b49cbe79648d1a0a8890550afb1b6e23a3767d2a31ef7899e6dd3f1e',1,'morph::table']]]
 ];

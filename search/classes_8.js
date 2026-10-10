@@ -10,5 +10,8 @@ var searchData=
   ['iofflinequeue_7',['IOfflineQueue',['../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html',1,'morph::offline']]],
   ['ioloop_8',['IoLoop',['../dd/d10/classmorph_1_1exec_1_1IoLoop.html',1,'morph::exec']]],
   ['ireplayledger_9',['IReplayLedger',['../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html',1,'morph::offline']]],
-  ['istagged_10',['IsTagged',['../d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html',1,'morph::util::detail']]]
+  ['isodateparser_10',['IsoDateParser',['../d8/dcc/classmorph_1_1table_1_1IsoDateParser.html',1,'morph::table']]],
+  ['isoptional_11',['IsOptional',['../d9/dea/structmorph_1_1table_1_1detail_1_1IsOptional.html',1,'morph::table::detail']]],
+  ['isoptional_3c_20std_3a_3aoptional_3c_20t_20_3e_20_3e_12',['IsOptional&lt; std::optional&lt; T &gt; &gt;',['../d3/d34/structmorph_1_1table_1_1detail_1_1IsOptional_3_01std_1_1optional_3_01T_01_4_01_4.html',1,'morph::table::detail']]],
+  ['istagged_13',['IsTagged',['../d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html',1,'morph::util::detail']]]
 ];

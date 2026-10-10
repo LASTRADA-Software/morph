@@ -1,14 +1,12 @@
 var searchData=
 [
-  ['payloadmigrationregistry_0',['PayloadMigrationRegistry',['../dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html',1,'morph::journal']]],
-  ['payloadshapetag_1',['PayloadShapeTag',['../d6/d37/structmorph_1_1model_1_1PayloadShapeTag.html',1,'morph::model']]],
-  ['payloadshapetag_3c_20morph_3a_3amath_3a_3arational_20_3e_2',['PayloadShapeTag&lt; morph::math::Rational &gt;',['../dd/ddb/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1math_1_1Rational_01_4.html',1,'morph::model']]],
-  ['payloadshapetag_3c_20morph_3a_3atime_3a_3adatetime_20_3e_3',['PayloadShapeTag&lt; morph::time::DateTime &gt;',['../d7/d6b/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1DateTime_01_4.html',1,'morph::model']]],
-  ['payloadshapetag_3c_20morph_3a_3atime_3a_3atimestamp_20_3e_4',['PayloadShapeTag&lt; morph::time::Timestamp &gt;',['../db/d1e/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1Timestamp_01_4.html',1,'morph::model']]],
-  ['payloadshapetag_3c_20morph_3a_3aunits_3a_3aquantity_3c_20u_2c_20dec_20_3e_20_3e_5',['PayloadShapeTag&lt; morph::units::Quantity&lt; U, Dec &gt; &gt;',['../d8/dba/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1units_1_1Quantity_3_01U_00_01Dec_01_4_01_4.html',1,'morph::model']]],
-  ['payloadshapetag_3c_20morph_3a_3autil_3a_3atagged_3c_20t_2c_20tag_20_3e_20_3e_6',['PayloadShapeTag&lt; morph::util::Tagged&lt; T, Tag &gt; &gt;',['../d2/d0d/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1util_1_1Tagged_3_01T_00_01Tag_01_4_01_4.html',1,'morph::model']]],
-  ['primarykey_7',['PrimaryKey',['../d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html',1,'morph::model']]],
-  ['principal_8',['Principal',['../d0/d26/structmorph_1_1session_1_1Principal.html',1,'morph::session']]],
-  ['promise_9',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html',1,'morph::async::Completion&lt; T &gt;::Promise'],['../dd/de7/classmorph_1_1async_1_1Completion.html',1,'morph::async::Completion&lt;::morph::exec::detail::ModelId &gt;::Promise&lt; ModelId &gt;']]],
-  ['protocolrange_10',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]]
+  ['namedquantity_0',['NamedQuantity',['../d1/d58/structmorph_1_1units_1_1NamedQuantity.html',1,'morph::units']]],
+  ['networkmonitor_1',['NetworkMonitor',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html',1,'morph::offline']]],
+  ['networkmonitorconfig_2',['NetworkMonitorConfig',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html',1,'morph::offline']]],
+  ['nosharing_3',['NoSharing',['../d8/d38/structmorph_1_1bridge_1_1NoSharing.html',1,'morph::bridge']]],
+  ['not_4',['Not',['../d1/db1/structmorph_1_1forms_1_1Not.html',1,'morph::forms']]],
+  ['notengaged_5',['NotEngaged',['../d9/d86/structmorph_1_1forms_1_1NotEngaged.html',1,'morph::forms']]],
+  ['nullsinkerror_6',['NullSinkError',['../d6/d55/structmorph_1_1journal_1_1NullSinkError.html',1,'morph::journal']]],
+  ['numerator_7',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math']]],
+  ['numericlocale_8',['NumericLocale',['../dc/ddc/structmorph_1_1render_1_1NumericLocale.html',1,'morph::render']]]
 ];

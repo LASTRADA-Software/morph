@@ -1,5 +1,27 @@
 var searchData=
 [
-  ['undelivered_0',['undelivered',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a3cc78f3c9d61cd9e106923ac5a2483ef',1,'morph::offline::SyncResult']]],
-  ['unit_1',['unit',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a85533330e32d6d465ee303dc92fab216',1,'morph::forms::FieldMeta::unit'],['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#ac3cde474578b6470296685e2a3381062',1,'morph::units::UnitAlternative::unit'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#a99b9778c1b6f0552253eafaf105717fb',1,'morph::units::Quantity::unit']]]
+  ['schedulesettle_0',['scheduleSettle',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#aab70b2db4fde5aa99000afed25da7d0e',1,'morph::table::EngineOptions']]],
+  ['schema_1',['schema',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a4bf6f8bdd1b73a40955203c9e45dd992',1,'morph::journal::LogEntry']]],
+  ['scope_2',['scope',['../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html#a897df9394a2c0a240e650e759c0713ba',1,'morph::views::ActionDescriptor']]],
+  ['selectedcount_3',['selectedCount',['../d7/d30/structmorph_1_1table_1_1TableCounts.html#a93e8197d29cba6a6aee0cf2071b15aa7',1,'morph::table::TableCounts']]],
+  ['sendtimeout_4',['sendTimeout',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec',1,'morph::net::SocketBackendConfig::sendTimeout'],['../d4/db0/structmorph_1_1net_1_1SocketServerConfig.html#ad5d6b90e070444d5ed25ca09b3a3aae2',1,'morph::net::SocketServerConfig::sendTimeout']]],
+  ['seq_5',['seq',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d',1,'morph::journal::LogEntry']]],
+  ['services_6',['services',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#a668d5829ba9c47faf428c97ab0f2e367',1,'morph::table::EngineOptions::services'],['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#a7da4c8f27978c2d31b8f116826a7c258',1,'morph::table::detail::JobInput::services'],['../d7/d2c/structmorph_1_1table_1_1ApplyOptions.html#a2c1dd9a17ec8db228b59b3d3059503e1',1,'morph::table::ApplyOptions::services']]],
+  ['session_7',['session',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a873839ca79760b994eee91b5fb516c18',1,'morph::wire::Envelope']]],
+  ['settle_8',['settle',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#ad052fed94cc00911f7bf605f917ce73f',1,'morph::table::EngineOptions']]],
+  ['shared_9',['shared',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6a9bcf3280fc77ddb3924ed83fd73141',1,'morph::wire::Envelope']]],
+  ['shouldcontinue_10',['shouldContinue',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a0fdab8abff2392967b5da3565f3eea76',1,'morph::offline::ReconnectCoordinator::Deps']]],
+  ['sink_11',['sink',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570',1,'morph::journal::OutboxRelay']]],
+  ['sleep_12',['sleep',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a5a256ea38f2a9cb7adef0aaf8bc17cf1',1,'morph::offline::ReconnectCoordinator::Deps']]],
+  ['smalltable_13',['smallTable',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#a12c72c900c5118110511afbfe1f5b457',1,'morph::table::EngineOptions']]],
+  ['snapshot_14',['snapshot',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#ad6730ae7e51f8c684a683b275aae54ce',1,'morph::table::detail::JobInput']]],
+  ['sort_15',['sort',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#afa909f58e078060099436e4413402662',1,'morph::table::detail::JobInput::sort'],['../d6/db9/structmorph_1_1table_1_1TableQuery.html#aca0fe7d246eb6c34e6f840e0396763e9',1,'morph::table::TableQuery::sort']]],
+  ['sorted_16',['sorted',['../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#a147a8fa317601cddce03c87a4285cecc',1,'morph::table::detail::JobResult']]],
+  ['sourcecount_17',['sourceCount',['../d7/d30/structmorph_1_1table_1_1TableCounts.html#af212863424e0d01773691b107ea3dea7',1,'morph::table::TableCounts']]],
+  ['startswith_18',['startsWith',['../dd/d3f/structmorph_1_1table_1_1FilterEntry.html#afcb3d254b74c05f82b928dfb9403447b',1,'morph::table::FilterEntry']]],
+  ['states_19',['states',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ab580527faaf6803fb48d9dfcb8a8ae35',1,'morph::table::KeyColumn']]],
+  ['subsetsort_20',['subsetSort',['../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#af379f2a0dd7de08ec8e270399f4cb72f',1,'morph::table::detail::JobResult']]],
+  ['subsetsorts_21',['subsetSorts',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a8c7634e2d97ff017cb94765147f69de2',1,'morph::table::EngineStats']]],
+  ['successful_22',['successful',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc',1,'morph::offline::SyncResult']]],
+  ['syncpath_23',['syncPath',['../db/d00/structmorph_1_1core_1_1FileIoOps.html#a8f449d6b2bb7b518b9a528d5e66ed691',1,'morph::core::FileIoOps']]]
 ];

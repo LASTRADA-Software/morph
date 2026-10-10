@@ -53,11 +53,13 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"d3/d58/file__io__ops_8hpp_source.html",
-"d5/dda/structmorph_1_1units_1_1Quantity.html#ad7d272b726f815feba425a6c56ecafea",
-"d9/ded/tagged_8hpp.html",
-"dd/da5/structmorph_1_1views_1_1ColumnOverride.html#afa03338e1e731ff0e88c7ef3560ca6e9",
-"functions_func_m.html"
+"d2/d5c/structmorph_1_1math_1_1Rational.html#abd3c4d2829cd78c8f1b45f618770d415",
+"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#af8a6235cbbe77ead17ea779d99d6011a",
+"d7/d80/structmorph_1_1render_1_1detail_1_1DigitMatch.html#a299e55c5134915b20651bea464a0df19",
+"da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa",
+"dd/d10/classmorph_1_1exec_1_1IoLoop.html#a251b1113b7ee6a05a5eb3a50946babeb",
+"de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#afef142673ef7b526b3722c1bbea87f57",
+"index.html#action-log--ordered-coalescing-identity-aware-execution-history"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

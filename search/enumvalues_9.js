@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['omit_0',['Omit',['../d4/d11/forms_8hpp.html#a08a85983649d14d984e6686cf52fa2a4a3f9823fc8c5bf8d5efbb0ad3be5f16c9',1,'morph::forms']]],
-  ['overflow_1',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]]
+  ['label_0',['Label',['../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fab021df6aac4654c454f46c77646e745f',1,'morph::forms::i18n']]],
+  ['limitexceeded_1',['LimitExceeded',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0a2453589f6d709ada4015d828f93325a5',1,'morph::table']]]
 ];

@@ -18,6 +18,11 @@ var concepts =
         [ "RawModelKey", "dc/d43/conceptmorph_1_1model_1_1RawModelKey.html", null ],
         [ "WrappedModelKey", "d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html", null ]
       ] ],
+      [ "table", null, [
+        [ "detail", null, [
+          [ "MemberWrapper", "db/d94/conceptmorph_1_1table_1_1detail_1_1MemberWrapper.html", null ]
+        ] ]
+      ] ],
       [ "units", null, [
         [ "UnitEnum", "d6/db7/conceptmorph_1_1units_1_1UnitEnum.html", null ],
         [ "HasUnitRelations", "d8/d4a/conceptmorph_1_1units_1_1HasUnitRelations.html", null ],

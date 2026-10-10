@@ -1,10 +1,26 @@
 var searchData=
 [
-  ['tags_0',['tags',['../de/dce/structmorph_1_1observe_1_1MetricEvent.html#ac1971434ee76f16975316a9616498949',1,'morph::observe::MetricEvent']]],
-  ['timestampms_1',['timestampMs',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07',1,'morph::journal::LogEntry']]],
-  ['title_2',['title',['../d1/d66/structmorph_1_1forms_1_1FieldGroup.html#ac1902327ba79995e339572c1d4aecf2f',1,'morph::forms::FieldGroup']]],
-  ['to_3',['to',['../da/d8f/structmorph_1_1units_1_1UnitRelation.html#ae64e4ed613a1f3ac93abb413bbdbcbc4',1,'morph::units::UnitRelation']]],
-  ['token_4',['token',['../dd/d85/structmorph_1_1session_1_1Context.html#a31e455b3253d2c25b24a73e3000aa103',1,'morph::session::Context']]],
-  ['tryreconnect_5',['tryReconnect',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#adb8457d14b2b1bf531c6c070ea667403',1,'morph::offline::ReconnectCoordinator::Deps']]],
-  ['typeid_6',['typeId',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192',1,'morph::wire::Envelope']]]
+  ['raw_0',['raw',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#aeda91b8a23b476a904d798d859938ac3',1,'morph::table::KeyColumn']]],
+  ['readonly_1',['readOnly',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a3634033e187d0c6ce5c3c4239b13f602',1,'morph::forms::FieldMeta']]],
+  ['ready_2',['ready',['../d1/d59/structmorph_1_1backend_1_1HealthStatus.html#a1ad58997d6bb39d5bcfb32a4abc244e9',1,'morph::backend::HealthStatus']]],
+  ['reals_3',['reals',['../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html#ad2c334f00417e09cd6caaf2b553978d1',1,'morph::table::CompiledFilter::Entry::reals'],['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#a47ea74fcfb19568d6027930ca267e538',1,'morph::table::KeyColumn::reals']]],
+  ['reconnectenabled_4',['reconnectEnabled',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#ae502aa3027e50788b13def4e14136fb9',1,'morph::net::SocketBackendConfig::reconnectEnabled'],['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#ac3c821f0b4d2405c5b1b5f70640a212a',1,'morph::qt::QtWebSocketBackendConfig::reconnectEnabled']]],
+  ['relayed_5',['relayed',['../d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html#aad7cc68f6dfeb636b309b94c2888f90d',1,'morph::journal::OutboxRelayResult']]],
+  ['reorder_6',['reorder',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#a040972883371e772594fa0cd57b4d5f6',1,'morph::table::EngineOptions']]],
+  ['repair_7',['repair',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#a4563b35857b43289bb2545c59b794f3c',1,'morph::table::detail::JobInput']]],
+  ['repaired_8',['repaired',['../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html#afef142673ef7b526b3722c1bbea87f57',1,'morph::table::detail::JobResult']]],
+  ['repairs_9',['repairs',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a7ce94b667674a7f33869740ea298181d',1,'morph::table::EngineStats']]],
+  ['replay_10',['replay',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#ac5fef6c6ab926415cc9deb19eeaa446b',1,'morph::offline::ReconnectCoordinator::Deps']]],
+  ['request_11',['request',['../d3/d18/structmorph_1_1table_1_1PageFetch.html#aa129ca94830dc82330d8b78e7e4fc7b3',1,'morph::table::PageFetch']]],
+  ['requestid_12',['requestId',['../dd/d85/structmorph_1_1session_1_1Context.html#a985070c36f98f59186888105e2d57e46',1,'morph::session::Context']]],
+  ['resetthreshold_13',['resetThreshold',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#a04ebb8711d8ba00f23618b2827756d05',1,'morph::table::EngineOptions::resetThreshold'],['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#a1f29c81b21d578661a69b21ff1ad2f0f',1,'morph::table::detail::JobInput::resetThreshold']]],
+  ['resizefile_14',['resizeFile',['../db/d00/structmorph_1_1core_1_1FileIoOps.html#a3c5a72a799fadf837c40a17b87da6fd4',1,'morph::core::FileIoOps']]],
+  ['result_15',['result',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ada474537fac0bac3b932d4fde686f42e',1,'morph::journal::LogEntry']]],
+  ['retrydelay_16',['retryDelay',['../d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html#a05af269a1ab61cf5205eadf00a14102c',1,'morph::offline::ReconnectCoordinatorConfig']]],
+  ['rhs_17',['rhs',['../d1/d59/structmorph_1_1forms_1_1Greater.html#a3e146d7b5db8aa56a064517f3370adf4',1,'morph::forms::Greater::rhs'],['../d1/df3/structmorph_1_1forms_1_1GreaterOrEqual.html#a089e039c0615fccd8d9607857b0b3a61',1,'morph::forms::GreaterOrEqual::rhs'],['../dd/da0/structmorph_1_1forms_1_1Less.html#aa0e1361ec7235397534e9121097c2c29',1,'morph::forms::Less::rhs'],['../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6171e62ba9b89a9bd05d88be115d2efc',1,'morph::forms::LessOrEqual::rhs']]],
+  ['roles_18',['roles',['../d0/d26/structmorph_1_1session_1_1Principal.html#a593aec2dfea0ee6d4c842e48053272cc',1,'morph::session::Principal::roles'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ab5babcea61c0929008503e675bb9a90c',1,'morph::session::SessionToken::roles']]],
+  ['row_19',['row',['../d4/dcb/structmorph_1_1table_1_1EditRequest.html#a44685378d9c7e0f7f0b6903f6a86106a',1,'morph::table::EditRequest']]],
+  ['rowfield_20',['rowField',['../d9/dea/structmorph_1_1views_1_1BindEntry.html#a05cc81586265d3aec9b74942adfa4115',1,'morph::views::BindEntry']]],
+  ['rows_21',['rows',['../d0/dc5/structmorph_1_1table_1_1RowChange.html#aa7948e297261523e052f5ac49534f31b',1,'morph::table::RowChange::rows'],['../dc/d0f/structmorph_1_1table_1_1Page.html#a9fe2a578ac35bd44b26236bb45bfa608',1,'morph::table::Page::rows'],['../db/db3/structmorph_1_1table_1_1PageRows.html#a9b1d6e3043f8bd626d546ffec11f2ce9',1,'morph::table::PageRows::rows']]],
+  ['rules_22',['rules',['../d3/d8b/structmorph_1_1forms_1_1RuleList.html#a04b00f8f7ca42ec629c0b1a26d54d32f',1,'morph::forms::RuleList']]]
 ];

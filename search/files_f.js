@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['widget_5fhints_2ehpp_0',['widget_hints.hpp',['../d6/ddd/widget__hints_8hpp.html',1,'']]],
-  ['ws_5fconnection_2ehpp_1',['ws_connection.hpp',['../d7/dd2/ws__connection_8hpp.html',1,'']]]
+  ['view_5fchange_2ehpp_0',['view_change.hpp',['../d6/d59/view__change_8hpp.html',1,'']]],
+  ['views_2ehpp_1',['views.hpp',['../de/d49/views_8hpp.html',1,'']]]
 ];
