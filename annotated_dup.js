@@ -318,6 +318,12 @@ var annotated_dup =
         [ "ScopedNowOverride", "d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html", "d3/d86/classmorph_1_1time_1_1ScopedNowOverride" ],
         [ "Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", "db/dec/structmorph_1_1time_1_1Timestamp" ]
       ] ],
+      [ "tui", null, [
+        [ "Backend", "d2/d8e/classmorph_1_1tui_1_1Backend.html", "d2/d8e/classmorph_1_1tui_1_1Backend" ],
+        [ "Frontend", "dc/d4f/classmorph_1_1tui_1_1Frontend.html", "dc/d4f/classmorph_1_1tui_1_1Frontend" ],
+        [ "FrontendConfig", "d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html", "d7/d6b/structmorph_1_1tui_1_1FrontendConfig" ],
+        [ "LoopExecutor", "d4/d86/classmorph_1_1tui_1_1LoopExecutor.html", "d4/d86/classmorph_1_1tui_1_1LoopExecutor" ]
+      ] ],
       [ "ui", null, [
         [ "detail", null, [
           [ "Binding", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding.html", "dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding" ],

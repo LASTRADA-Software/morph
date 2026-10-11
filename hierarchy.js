@@ -34,7 +34,8 @@ var hierarchy =
       [ "morph::exec::OwnerStrand", "dc/db1/classmorph_1_1exec_1_1OwnerStrand.html", null ],
       [ "morph::exec::ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", null ],
       [ "morph::qt::QtExecutor", "d4/d30/classmorph_1_1qt_1_1QtExecutor.html", null ],
-      [ "morph::testing::StepExecutor", "d1/dfb/classmorph_1_1testing_1_1StepExecutor.html", null ]
+      [ "morph::testing::StepExecutor", "d1/dfb/classmorph_1_1testing_1_1StepExecutor.html", null ],
+      [ "morph::tui::LoopExecutor", "d4/d86/classmorph_1_1tui_1_1LoopExecutor.html", null ]
     ] ],
     [ "morph::exec::IoLoop", "dd/d10/classmorph_1_1exec_1_1IoLoop.html", null ],
     [ "morph::exec::IoLoop::Weak", "d2/d75/classmorph_1_1exec_1_1IoLoop_1_1Weak.html", null ],
@@ -282,6 +283,7 @@ var hierarchy =
     [ "morph::time::DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", null ],
     [ "morph::time::ScopedNowOverride", "d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html", null ],
     [ "morph::time::Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", null ],
+    [ "morph::tui::FrontendConfig", "d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html", null ],
     [ "morph::ui::Accessibility", "d9/d03/structmorph_1_1ui_1_1Accessibility.html", null ],
     [ "morph::ui::ActionButton", "da/d14/structmorph_1_1ui_1_1ActionButton.html", null ],
     [ "morph::ui::ActionInfo", "d0/db7/structmorph_1_1ui_1_1ActionInfo.html", null ],
@@ -370,7 +372,9 @@ var hierarchy =
     [ "morph::ui::ForEach", "d2/d58/structmorph_1_1ui_1_1ForEach.html", null ],
     [ "morph::ui::FormatContext", "db/d4c/structmorph_1_1ui_1_1FormatContext.html", null ],
     [ "morph::ui::FormattedMessage", "d8/d21/structmorph_1_1ui_1_1FormattedMessage.html", null ],
-    [ "morph::ui::Frontend", "dd/dcc/classmorph_1_1ui_1_1Frontend.html", null ],
+    [ "morph::ui::Frontend", "dd/dcc/classmorph_1_1ui_1_1Frontend.html", [
+      [ "morph::tui::Frontend", "dc/d4f/classmorph_1_1tui_1_1Frontend.html", null ]
+    ] ],
     [ "morph::ui::FrontendError", "d6/d90/structmorph_1_1ui_1_1FrontendError.html", null ],
     [ "morph::ui::FrontendOption", "da/d01/structmorph_1_1ui_1_1FrontendOption.html", null ],
     [ "morph::ui::Grid", "de/d85/structmorph_1_1ui_1_1Grid.html", null ],
@@ -379,6 +383,7 @@ var hierarchy =
     [ "morph::ui::InterpreterHost", "dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html", null ],
     [ "morph::ui::InterpreterOptions", "d5/d55/structmorph_1_1ui_1_1InterpreterOptions.html", null ],
     [ "morph::ui::IViewBackend", "df/dae/classmorph_1_1ui_1_1IViewBackend.html", [
+      [ "morph::tui::Backend", "d2/d8e/classmorph_1_1tui_1_1Backend.html", null ],
       [ "morph::ui::testing::RecordingBackend", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html", null ]
     ] ],
     [ "morph::ui::KeyBinding", "d3/d7b/structmorph_1_1ui_1_1KeyBinding.html", null ],

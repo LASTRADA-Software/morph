@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/db8/classmo
 <p>What a frontend lends the source it opens and the screens it mounts.  
  <a href="#details">More...</a></p>
 
-<p><code>#include &lt;<a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>&gt;</code></p>
+<p><code>#include &lt;<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>&gt;</code></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -140,7 +140,7 @@ AppContext &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppContext
 <tr class="memdesc:a6950ef8491705aeb255bdccf28a359d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The runtime the screens are mounted in. Owned by the frontend.  <br /></td></tr>
 <tr class="memitem:ad5f81914af3d8d186ee66d32c7b57d8e" id="r_ad5f81914af3d8d186ee66d32c7b57d8e"><td class="memItemLeft">virtual <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ad5f81914af3d8d186ee66d32c7b57d8e">executor</a> ()=0</td></tr>
 <tr class="memdesc:ad5f81914af3d8d186ee66d32c7b57d8e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The runtime's owner, and the callback executor of every bridge handler the source and the screens make.  <br /></td></tr>
-<tr class="memitem:a9f3ec8f9da8dbb85054d860015196bf6" id="r_a9f3ec8f9da8dbb85054d860015196bf6"><td class="memItemLeft">virtual <a class="el" href="../../d7/ddf/frontend_8hpp.html#ae1f9176286b88e3eeecdc03f56c7b7e4">Scheduler</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a9f3ec8f9da8dbb85054d860015196bf6">scheduler</a> ()=0</td></tr>
+<tr class="memitem:a9f3ec8f9da8dbb85054d860015196bf6" id="r_a9f3ec8f9da8dbb85054d860015196bf6"><td class="memItemLeft">virtual <a class="el" href="../../de/df6/ui_2frontend_8hpp.html#ae1f9176286b88e3eeecdc03f56c7b7e4">Scheduler</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a9f3ec8f9da8dbb85054d860015196bf6">scheduler</a> ()=0</td></tr>
 <tr class="memdesc:a9f3ec8f9da8dbb85054d860015196bf6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Timers that fire on the owner executor.  <br /></td></tr>
 <tr class="memitem:a3ada433c56b9c02de00ff312e9eabf06" id="r_a3ada433c56b9c02de00ff312e9eabf06"><td class="memItemLeft">virtual <a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">exec::IoLoop</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a3ada433c56b9c02de00ff312e9eabf06">ioLoop</a> ()=0</td></tr>
 <tr class="memdesc:a3ada433c56b9c02de00ff312e9eabf06"><td class="mdescLeft">&#160;</td><td class="mdescRight">The I/O loop the frontend runs on, for sockets and timers that share its one thread.  <br /></td></tr>
@@ -149,9 +149,9 @@ AppContext &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppContext
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a frontend lends the source it opens and the screens it mounts. </p>
-<p>Everything it lends (the runtime, the executor, the scheduler, the loop) outlives the screens and the connections made with it: a frontend destroys those, through <span class="tt"><a class="el" href="../../d7/ddf/frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8" title="Runs one source inside a frontend: opens it, mounts the shell when it is ready, runs the loop,...">runApp</a></span>, before its runtime. </p>
+<p>Everything it lends (the runtime, the executor, the scheduler, the loop) outlives the screens and the connections made with it: a frontend destroys those, through <span class="tt"><a class="el" href="../../de/df6/ui_2frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8" title="Runs one source inside a frontend: opens it, mounts the shell when it is ready, runs the loop,...">runApp</a></span>, before its runtime. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a6950ef8491705aeb255bdccf28a359d5" name="a6950ef8491705aeb255bdccf28a359d5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6950ef8491705aeb255bdccf28a359d5">&#9670;&#160;</a></span>runtime()</h2>
@@ -219,7 +219,7 @@ AppContext &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppContext
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">virtual <a class="el" href="../../d7/ddf/frontend_8hpp.html#ae1f9176286b88e3eeecdc03f56c7b7e4">Scheduler</a> &amp; morph::ui::AppContext::scheduler </td>
+          <td class="memname">virtual <a class="el" href="../../de/df6/ui_2frontend_8hpp.html#ae1f9176286b88e3eeecdc03f56c7b7e4">Scheduler</a> &amp; morph::ui::AppContext::scheduler </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
@@ -300,7 +300,7 @@ contract") states them. </p><dl class="section return"><dt>Returns</dt><dd>The s
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>morph/ui/<a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a></li>
+<li>morph/ui/<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->

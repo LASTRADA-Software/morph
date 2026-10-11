@@ -48,6 +48,7 @@ var index =
         [ "<span class=\"tt\">ui/</span> — the UI document, <span class=\"tt\">expr/1</span>, view tree, mount, frontend seam", "index.html#ui--the-ui-document-expr1-view-tree-mount-frontend-seam", null ],
         [ "<span class=\"tt\">testing/</span> — the installed owner test kit", "index.html#testing--the-installed-owner-test-kit", null ]
       ] ],
+      [ "Terminal frontend headers (<span class=\"tt\">include/morph/tui/</span>, sources in <span class=\"tt\">src/tui/</span>)", "index.html#terminal-frontend-headers-includemorphtui-sources-in-srctui", null ],
       [ "Qt integration headers (<span class=\"tt\">include/morph/qt/</span>)", "index.html#qt-integration-headers-includemorphqt", null ]
     ] ],
     [ "Known limitations", "index.html#known-limitations", [

@@ -10,5 +10,6 @@ var searchData=
   ['loadoptions_7',['LoadOptions',['../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html',1,'morph::ui']]],
   ['localbackend_8',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
   ['logentry_9',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]],
-  ['lowerctx_10',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]]
+  ['loopexecutor_10',['LoopExecutor',['../d4/d86/classmorph_1_1tui_1_1LoopExecutor.html',1,'morph::tui']]],
+  ['lowerctx_11',['LowerCtx',['../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html',1,'morph::ui::detail']]]
 ];

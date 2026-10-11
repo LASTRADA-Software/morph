@@ -27,7 +27,7 @@ var searchData=
   ['selectedcount_24',['selectedCount',['../d9/da0/classmorph_1_1table_1_1Selection.html#a8d48bd32465fb2e7973a0a6692498126',1,'morph::table::Selection']]],
   ['selectedrows_25',['selectedRows',['../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a220996b523fb123eb2841cf4778c8af6',1,'morph::ui::testing::ConformanceProbe']]],
   ['selectedtexts_26',['selectedTexts',['../d8/d3e/backend__conformance_8hpp.html#aa39dba2462689df93c5972d665beea97',1,'morph::ui::testing::detail']]],
-  ['selectfrontend_27',['selectFrontend',['../d7/ddf/frontend_8hpp.html#ac91077a3a13afdc2e6d6befd40aef598',1,'morph::ui']]],
+  ['selectfrontend_27',['selectFrontend',['../de/df6/ui_2frontend_8hpp.html#ac91077a3a13afdc2e6d6befd40aef598',1,'morph::ui']]],
   ['selectoptions_28',['selectOptions',['../db/d42/interpreter_8hpp.html#aa5f628b5d3fb7aae801e4659e4c9a343',1,'morph::ui::detail']]],
   ['selectreresolvesrequestedkey_29',['selectReResolvesRequestedKey',['../d8/d3e/backend__conformance_8hpp.html#a9d34ab3ab10b628a46cdb9276ec506f7',1,'morph::ui::testing::detail']]],
   ['selectrows_30',['selectRows',['../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a1c4eecec7151c1fa2d7dfe89ce5d64e8',1,'morph::ui::testing::ConformanceProbe::selectRows()'],['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a08d9d6224edc7130a12913232eb99f49',1,'morph::ui::testing::RecordingBackend::selectRows()']]],

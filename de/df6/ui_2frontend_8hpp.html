@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/ddf/frontend_8hpp.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('de/df6/ui_2frontend_8hpp.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/ddf/fronten
 <code>#include &quot;<a class="el" href="../../d0/df9/runtime_8hpp_source.html">../reactive/runtime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/de8/scheduler_8hpp_source.html">../reactive/scheduler.hpp</a>&quot;</code><br />
 </div>
-<p><a href="../../d7/ddf/frontend_8hpp_source.html">Go to the source code of this file.</a></p>
+<p><a href="../../de/df6/ui_2frontend_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
@@ -195,7 +195,7 @@ Functions</h2></td></tr>
 <div class="textblock"><p>The frontend seam: <span class="tt">main</span> picks a frontend at runtime, and the frontend runs whatever an <span class="tt">AppSource</span> opens. </p>
 <p>Specified in <span class="tt">docs/spec/ui/frontend.md</span>. </p>
 
-<p class="definition">Definition in file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition in file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
 <a id="ae1f9176286b88e3eeecdc03f56c7b7e4" name="ae1f9176286b88e3eeecdc03f56c7b7e4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae1f9176286b88e3eeecdc03f56c7b7e4">&#9670;&#160;</a></span>Scheduler</h2>
@@ -211,7 +211,7 @@ Functions</h2></td></tr>
 
 <p>Timers on the frontend's owner executor; see <span class="tt">reactive::Scheduler</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -229,7 +229,7 @@ Functions</h2></td></tr>
 
 <p>Owns one scheduled timer and cancels it when destroyed; see <span class="tt">reactive::TimerHandle</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -247,7 +247,7 @@ Functions</h2></td></tr>
 
 <p>Reads an environment variable: its value, or <span class="tt">nullopt</span> when it is unset. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -264,11 +264,11 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line"> </div>
 <div class="line">std::function&lt;std::unique_ptr&lt;MountedShell&gt;(<a class="code hl_class" href="../../dd/db8/classmorph_1_1ui_1_1AppContext.html">AppContext</a>&amp; context, std::expected&lt;Bundle, ConnectError&gt; opened)&gt;</div>
-<div class="ttc" id="aclassmorph_1_1ui_1_1AppContext_html"><div class="ttname"><a href="../../dd/db8/classmorph_1_1ui_1_1AppContext.html">morph::ui::AppContext</a></div><div class="ttdoc">What a frontend lends the source it opens and the screens it mounts.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/ddf/frontend_8hpp_source.html#l00048">frontend.hpp:48</a></div></div>
+<div class="ttc" id="aclassmorph_1_1ui_1_1AppContext_html"><div class="ttname"><a href="../../dd/db8/classmorph_1_1ui_1_1AppContext.html">morph::ui::AppContext</a></div><div class="ttdoc">What a frontend lends the source it opens and the screens it mounts.</div><div class="ttdef"><b>Definition</b> <a href="../../de/df6/ui_2frontend_8hpp_source.html#l00048">frontend.hpp:48</a></div></div>
 </div><!-- fragment -->
 <p>Mounts the shell for what the source delivered. Called once, on the owner; it may return null to mount nothing (after calling <span class="tt">AppContext::quit</span>, for example). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00383">383</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00383">383</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -299,7 +299,7 @@ Functions</h2></td></tr>
 <p>The process environment, read through <span class="tt">std::getenv</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>A reader over the process environment. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -335,7 +335,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The choice. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -382,7 +382,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The frontend, made; or why there is none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -442,7 +442,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00404">404</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00404">404</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>
@@ -459,7 +459,7 @@ Functions</h2></td></tr>
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>ui</b></li><li class="navelem"><a href="../../d7/ddf/frontend_8hpp.html">frontend.hpp</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>ui</b></li><li class="navelem"><a href="../../de/df6/ui_2frontend_8hpp.html">frontend.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

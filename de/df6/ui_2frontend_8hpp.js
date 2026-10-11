@@ -1,4 +1,4 @@
-var frontend_8hpp =
+var ui_2frontend_8hpp =
 [
     [ "morph::ui::AppContext", "dd/db8/classmorph_1_1ui_1_1AppContext.html", "dd/db8/classmorph_1_1ui_1_1AppContext" ],
     [ "morph::ui::Bundle", "dc/dcf/structmorph_1_1ui_1_1Bundle.html", "dc/dcf/structmorph_1_1ui_1_1Bundle" ],
@@ -10,12 +10,12 @@ var frontend_8hpp =
     [ "morph::ui::FrontendError", "d6/d90/structmorph_1_1ui_1_1FrontendError.html", "d6/d90/structmorph_1_1ui_1_1FrontendError" ],
     [ "morph::ui::detail::CommandLineChoice", "d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html", "d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice" ],
     [ "morph::ui::MountedShell", "d9/d90/classmorph_1_1ui_1_1MountedShell.html", null ],
-    [ "morph::ui::Scheduler", "d7/ddf/frontend_8hpp.html#ae1f9176286b88e3eeecdc03f56c7b7e4", null ],
-    [ "morph::ui::TimerHandle", "d7/ddf/frontend_8hpp.html#a5d25296274c03a7180c76be3b6277fab", null ],
-    [ "morph::ui::EnvironmentReader", "d7/ddf/frontend_8hpp.html#a51ad713a37ae34b0e4030a01831755d8", null ],
-    [ "morph::ui::ShellFactory", "d7/ddf/frontend_8hpp.html#aabd84f51c7dc7db8d12851c954d8b92c", null ],
-    [ "morph::ui::processEnvironment", "d7/ddf/frontend_8hpp.html#a5f03cb90c092fa1ca4a934197966416b", null ],
-    [ "morph::ui::detail::readCommandLine", "d7/ddf/frontend_8hpp.html#aac0bfdcb4036d082eaf433c9ba09c5bd", null ],
-    [ "morph::ui::selectFrontend", "d7/ddf/frontend_8hpp.html#ac91077a3a13afdc2e6d6befd40aef598", null ],
-    [ "morph::ui::runApp", "d7/ddf/frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8", null ]
+    [ "morph::ui::Scheduler", "de/df6/ui_2frontend_8hpp.html#ae1f9176286b88e3eeecdc03f56c7b7e4", null ],
+    [ "morph::ui::TimerHandle", "de/df6/ui_2frontend_8hpp.html#a5d25296274c03a7180c76be3b6277fab", null ],
+    [ "morph::ui::EnvironmentReader", "de/df6/ui_2frontend_8hpp.html#a51ad713a37ae34b0e4030a01831755d8", null ],
+    [ "morph::ui::ShellFactory", "de/df6/ui_2frontend_8hpp.html#aabd84f51c7dc7db8d12851c954d8b92c", null ],
+    [ "morph::ui::processEnvironment", "de/df6/ui_2frontend_8hpp.html#a5f03cb90c092fa1ca4a934197966416b", null ],
+    [ "morph::ui::detail::readCommandLine", "de/df6/ui_2frontend_8hpp.html#aac0bfdcb4036d082eaf433c9ba09c5bd", null ],
+    [ "morph::ui::selectFrontend", "de/df6/ui_2frontend_8hpp.html#ac91077a3a13afdc2e6d6befd40aef598", null ],
+    [ "morph::ui::runApp", "de/df6/ui_2frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8", null ]
 ];

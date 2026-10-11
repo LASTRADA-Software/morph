@@ -41,8 +41,10 @@ var searchData=
   ['modelid_38',['modelId',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a658710447abce83c9392698bdd1ca5a1',1,'morph::wire::Envelope']]],
   ['models_39',['models',['../d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html#a15e5c104aa68b81cdf6e643f8d958b8c',1,'morph::ui::ScopeDecl::models'],['../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#af53926741aa088253d97e31e39ea1493',1,'morph::ui::detail::RtScope::models']]],
   ['modeltype_40',['modelType',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a2ff3cb841aa7a258ad6f9b65dd6a70ab',1,'morph::wire::Envelope::modelType'],['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3e73309d5145498bd68fed82167c3771',1,'morph::journal::LogEntry::modelType'],['../d0/db7/structmorph_1_1ui_1_1ActionInfo.html#ab85a5553fa29dc12a09c267f4d59b90c',1,'morph::ui::ActionInfo::modelType']]],
-  ['multiple_41',['multiple',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html#a5986168c2e32b21a02564ed7460995ee',1,'morph::ui::DropZone']]],
-  ['multipleof_42',['multipleOf',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a3740c426ffb300b255ca32b690e8979c',1,'morph::forms::FieldMeta']]],
-  ['mutation_43',['mutation',['../d6/d22/structmorph_1_1ui_1_1detail_1_1NameRef.html#a39922767633ef07e22f6d9f186ec77aa',1,'morph::ui::detail::NameRef']]],
-  ['mutations_44',['mutations',['../d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html#a68b8d3c9558212b816b931ff758ae92f',1,'morph::ui::ScopeDecl::mutations'],['../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a0fbf036e6af7a4bf52fb4f0841f5a113',1,'morph::ui::detail::RtScope::mutations']]]
+  ['mountshell_41',['mountShell',['../d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#a95fd38c9fffc5367bb0534fe2f64814e',1,'morph::tui::FrontendConfig']]],
+  ['mouse_42',['mouse',['../d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#af937b0640b87b72aa0733b46c5f0b73a',1,'morph::tui::FrontendConfig']]],
+  ['multiple_43',['multiple',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html#a5986168c2e32b21a02564ed7460995ee',1,'morph::ui::DropZone']]],
+  ['multipleof_44',['multipleOf',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a3740c426ffb300b255ca32b690e8979c',1,'morph::forms::FieldMeta']]],
+  ['mutation_45',['mutation',['../d6/d22/structmorph_1_1ui_1_1detail_1_1NameRef.html#a39922767633ef07e22f6d9f186ec77aa',1,'morph::ui::detail::NameRef']]],
+  ['mutations_46',['mutations',['../d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html#a68b8d3c9558212b816b931ff758ae92f',1,'morph::ui::ScopeDecl::mutations'],['../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a0fbf036e6af7a4bf52fb4f0841f5a113',1,'morph::ui::detail::RtScope::mutations']]]
 ];

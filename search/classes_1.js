@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['backend_0',['Backend',['../d3/d00/structmorph_1_1ui_1_1Backend.html',1,'morph::ui']]],
+  ['backend_0',['Backend',['../d2/d8e/classmorph_1_1tui_1_1Backend.html',1,'morph::tui::Backend'],['../d3/d00/structmorph_1_1ui_1_1Backend.html',1,'morph::ui::Backend']]],
   ['backendchangederror_1',['BackendChangedError',['../dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html',1,'morph::backend']]],
   ['badge_2',['Badge',['../d1/df1/structmorph_1_1ui_1_1Badge.html',1,'morph::ui']]],
   ['badgewidget_3',['BadgeWidget',['../d1/d05/classmorph_1_1ui_1_1BadgeWidget.html',1,'morph::ui']]],

@@ -1,9 +1,9 @@
 var searchData=
 [
   ['back_0',['back',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a29dd07a64f9bdb1ad3e537db4e1d30f7',1,'morph::flows::FlowSession']]],
-  ['backend_1',['Backend',['../d3/d00/structmorph_1_1ui_1_1Backend.html',1,'morph::ui']]],
+  ['backend_1',['Backend',['../d2/d8e/classmorph_1_1tui_1_1Backend.html',1,'morph::tui::Backend'],['../d3/d00/structmorph_1_1ui_1_1Backend.html',1,'morph::ui::Backend'],['../d2/d8e/classmorph_1_1tui_1_1Backend.html#aa2f5d25aa29f4fc9a3bf9a7ecc869995',1,'morph::tui::Backend::Backend()']]],
   ['backend_2',['backend',['../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a3ce5ac62ebd304294599ba1696be87ce',1,'morph::ui::testing::ConformanceProbe']]],
-  ['backend_2ehpp_3',['backend.hpp',['../d0/dc2/ui_2backend_8hpp.html',1,'']]],
+  ['backend_2ehpp_3',['backend.hpp',['../dd/d0d/tui_2backend_8hpp.html',1,'(Global Namespace)'],['../d0/dc2/ui_2backend_8hpp.html',1,'(Global Namespace)']]],
   ['backend_5fconformance_2ehpp_4',['backend_conformance.hpp',['../d8/d3e/backend__conformance_8hpp.html',1,'']]],
   ['backendchanged_5',['backendChanged',['../df/d20/classmorph_1_1ui_1_1Session.html#aeef475aab80a70609d4c20fcb72755c6',1,'morph::ui::Session']]],
   ['backendchangederror_6',['BackendChangedError',['../dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html',1,'morph::backend::BackendChangedError'],['../dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html#a5cf75f058d5fcf1ed3bbb9a60acd91e6',1,'morph::backend::BackendChangedError::BackendChangedError()']]],

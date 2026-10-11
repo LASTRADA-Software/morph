@@ -99,8 +99,9 @@ var searchData=
   ['formkeys_96',['FormKeys',['../d8/ddc/structmorph_1_1ui_1_1detail_1_1ExprParser_1_1FormKeys.html',1,'morph::ui::detail::ExprParser']]],
   ['formscontrollercore_97',['FormsControllerCore',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html',1,'morph::qt::forms']]],
   ['formscreen_98',['FormScreen',['../d6/d0e/structmorph_1_1app_1_1FormScreen.html',1,'morph::app']]],
-  ['frontend_99',['Frontend',['../dd/dcc/classmorph_1_1ui_1_1Frontend.html',1,'morph::ui']]],
-  ['frontenderror_100',['FrontendError',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html',1,'morph::ui']]],
-  ['frontendoption_101',['FrontendOption',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html',1,'morph::ui']]],
-  ['functionspec_102',['FunctionSpec',['../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html',1,'morph::ui::detail']]]
+  ['frontend_99',['Frontend',['../dc/d4f/classmorph_1_1tui_1_1Frontend.html',1,'morph::tui::Frontend'],['../dd/dcc/classmorph_1_1ui_1_1Frontend.html',1,'morph::ui::Frontend']]],
+  ['frontendconfig_100',['FrontendConfig',['../d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html',1,'morph::tui']]],
+  ['frontenderror_101',['FrontendError',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html',1,'morph::ui']]],
+  ['frontendoption_102',['FrontendOption',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html',1,'morph::ui']]],
+  ['functionspec_103',['FunctionSpec',['../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html',1,'morph::ui::detail']]]
 ];

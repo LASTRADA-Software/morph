@@ -124,7 +124,16 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dcc/classmo
 <p>A frontend: owns an event loop and a renderer, and runs one source's screens.  
  <a href="#details">More...</a></p>
 
-<p><code>#include &lt;<a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>&gt;</code></p>
+<p><code>#include &lt;<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>&gt;</code></p>
+<div class="dynheader">
+Inheritance diagram for morph::ui::Frontend:</div>
+<div class="dyncontent">
+ <div class="center">
+  <img src="../../dd/dcc/classmorph_1_1ui_1_1Frontend.png" usemap="#morph_3A_3Aui_3A_3AFrontend_map" alt=""/>
+  <map id="morph_3A_3Aui_3A_3AFrontend_map" name="morph_3A_3Aui_3A_3AFrontend_map">
+<area href="../../dc/d4f/classmorph_1_1tui_1_1Frontend.html" title="Runs a morph application in a terminal, on one thread." alt="morph::tui::Frontend" shape="rect" coords="0,56,123,80"/>
+  </map>
+</div></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -137,14 +146,14 @@ Frontend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Frontend con
 <tr class="memitem:a9677a96e92a94c7b2d3d63ce51c5aef2" id="r_a9677a96e92a94c7b2d3d63ce51c5aef2"><td class="memItemLeft"><a id="a9677a96e92a94c7b2d3d63ce51c5aef2" name="a9677a96e92a94c7b2d3d63ce51c5aef2"></a>
 Frontend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Frontend &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a164b86a057f8177aceb245c0dcb29a6e" id="r_a164b86a057f8177aceb245c0dcb29a6e"><td class="memItemLeft">virtual std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a164b86a057f8177aceb245c0dcb29a6e">name</a> () const =0</td></tr>
-<tr class="memdesc:a164b86a057f8177aceb245c0dcb29a6e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name <span class="tt"><a class="el" href="../../d7/ddf/frontend_8hpp.html#ac91077a3a13afdc2e6d6befd40aef598" title="Picks the frontend to run: the last --ui=&lt;name&gt; (or --ui &lt;name&gt;) before a --, else a non-empty MORPH_...">selectFrontend</a></span> matches.  <br /></td></tr>
+<tr class="memdesc:a164b86a057f8177aceb245c0dcb29a6e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name <span class="tt"><a class="el" href="../../de/df6/ui_2frontend_8hpp.html#ac91077a3a13afdc2e6d6befd40aef598" title="Picks the frontend to run: the last --ui=&lt;name&gt; (or --ui &lt;name&gt;) before a --, else a non-empty MORPH_...">selectFrontend</a></span> matches.  <br /></td></tr>
 <tr class="memitem:ab0dd0fd8da772357590d2c8100468c41" id="r_ab0dd0fd8da772357590d2c8100468c41"><td class="memItemLeft">virtual int&#160;</td><td class="memItemRight"><a class="el" href="#ab0dd0fd8da772357590d2c8100468c41">run</a> (<a class="el" href="../../d5/d3d/classmorph_1_1ui_1_1AppSource.html">AppSource</a> &amp;source)=0</td></tr>
 <tr class="memdesc:ab0dd0fd8da772357590d2c8100468c41"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds the runtime and its executor, opens <code class="param">source</code>, mounts the app shell and drives the loop until <span class="tt"><a class="el" href="../../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b" title="Makes Frontend::run return once the current event has been handled.">AppContext::quit</a></span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A frontend: owns an event loop and a renderer, and runs one source's screens. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/ddf/frontend_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a164b86a057f8177aceb245c0dcb29a6e" name="a164b86a057f8177aceb245c0dcb29a6e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a164b86a057f8177aceb245c0dcb29a6e">&#9670;&#160;</a></span>name()</h2>
@@ -169,8 +178,10 @@ Frontend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Frontend &am
 </table>
 </div><div class="memdoc">
 
-<p>The name <span class="tt"><a class="el" href="../../d7/ddf/frontend_8hpp.html#ac91077a3a13afdc2e6d6befd40aef598" title="Picks the frontend to run: the last --ui=&lt;name&gt; (or --ui &lt;name&gt;) before a --, else a non-empty MORPH_...">selectFrontend</a></span> matches. </p>
+<p>The name <span class="tt"><a class="el" href="../../de/df6/ui_2frontend_8hpp.html#ac91077a3a13afdc2e6d6befd40aef598" title="Picks the frontend to run: the last --ui=&lt;name&gt; (or --ui &lt;name&gt;) before a --, else a non-empty MORPH_...">selectFrontend</a></span> matches. </p>
 <dl class="section return"><dt>Returns</dt><dd>The name. </dd></dl>
+
+<p>Implemented in <a class="el" href="../../dc/d4f/classmorph_1_1tui_1_1Frontend.html#a1281f7a5f047dced050409228e329f6d">morph::tui::Frontend</a>.</p>
 
 </div>
 </div>
@@ -198,7 +209,7 @@ Frontend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Frontend &am
 </div><div class="memdoc">
 
 <p>Builds the runtime and its executor, opens <code class="param">source</code>, mounts the app shell and drives the loop until <span class="tt"><a class="el" href="../../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b" title="Makes Frontend::run return once the current event has been handled.">AppContext::quit</a></span>. </p>
-<p>Tears down in reverse: the screens, then the source's connections, then the runtime, then the loop and the toolkit. A frontend leaves the first two to <span class="tt"><a class="el" href="../../d7/ddf/frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8" title="Runs one source inside a frontend: opens it, mounts the shell when it is ready, runs the loop,...">runApp</a></span>, which fixes that order, and keeps the rest by declaring its members or locals in construction order. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Tears down in reverse: the screens, then the source's connections, then the runtime, then the loop and the toolkit. A frontend leaves the first two to <span class="tt"><a class="el" href="../../de/df6/ui_2frontend_8hpp.html#a320bf16445e7b08ba5fa1f066e8dc9b8" title="Runs one source inside a frontend: opens it, mounts the shell when it is ready, runs the loop,...">runApp</a></span>, which fixes that order, and keeps the rest by declaring its members or locals in construction order. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">source</td><td>Where the screens and the models are; it outlives the call. </td></tr>
   </table>
@@ -206,10 +217,12 @@ Frontend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Frontend &am
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exit code passed to <span class="tt">quit</span>; a frontend may also end the run on its own (end of input, an interrupt) with a code it documents. </dd></dl>
 
+<p>Implemented in <a class="el" href="../../dc/d4f/classmorph_1_1tui_1_1Frontend.html#aa45e5c33b9459a70884732aff2321255">morph::tui::Frontend</a>.</p>
+
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
-<li>morph/ui/<a class="el" href="../../d7/ddf/frontend_8hpp_source.html">frontend.hpp</a></li>
+<li>morph/ui/<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->

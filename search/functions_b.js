@@ -33,6 +33,7 @@ var searchData=
   ['longestincreasing_30',['longestIncreasing',['../d6/d59/view__change_8hpp.html#a5f9b7e5894ed71d213eceee7037ff923',1,'morph::table::detail']]],
   ['lookup_31',['lookup',['../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#a91612627509fdc050129b853af9b8f3a',1,'morph::offline::IReplayLedger::lookup(std::string_view scope, std::string_view opId) const'],['../d8/dd3/structmorph_1_1offline_1_1IReplayLedger.html#a1214498987f3cbd377d214c35437db1a',1,'morph::offline::IReplayLedger::lookup(::morph::exec::IExecutor &amp;replyExec, std::string_view scope, std::string_view opId) const'],['../d5/d14/classmorph_1_1ui_1_1detail_1_1DocumentValidator.html#a92363e9f2dcf67195e248a00cf0bfd98',1,'morph::ui::detail::DocumentValidator::lookup()']]],
   ['loop_32',['loop',['../dd/d10/classmorph_1_1exec_1_1IoLoop.html#a251b1113b7ee6a05a5eb3a50946babeb',1,'morph::exec::IoLoop']]],
-  ['lower_33',['lower',['../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab0e0356595c888ecda8e3182d524de57',1,'morph::ui::detail::ScreenCore']]],
-  ['lowerall_34',['lowerAll',['../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afc9b26ecab4c765cb138847d08f2dc48',1,'morph::ui::detail::ScreenCore']]]
+  ['loopexecutor_33',['LoopExecutor',['../d4/d86/classmorph_1_1tui_1_1LoopExecutor.html#a36a022fe35d3aa1f0ade7f86288b6270',1,'morph::tui::LoopExecutor']]],
+  ['lower_34',['lower',['../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab0e0356595c888ecda8e3182d524de57',1,'morph::ui::detail::ScreenCore']]],
+  ['lowerall_35',['lowerAll',['../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afc9b26ecab4c765cb138847d08f2dc48',1,'morph::ui::detail::ScreenCore']]]
 ];
