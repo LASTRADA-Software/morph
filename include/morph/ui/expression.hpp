@@ -11,12 +11,14 @@
 #include <expected>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <initializer_list>
 #include <limits>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -895,6 +897,437 @@ namespace detail {
     std::string out;
     static_cast<void>(glz::write_json(json, out));
     return out;
+}
+
+/// @brief Where in a document something is, and what is wrong there.
+struct Problem {
+    /// @brief The JSON pointer of the offending node, from the document's root (for example `/body/0/text`).
+    std::string path;
+    /// @brief Why it is refused, in a sentence a document's author can act on.
+    std::string reason;
+
+    /// @brief Same path, same reason.
+    /// @return Whether the two are equal.
+    bool operator==(Problem const&) const = default;
+};
+
+/// @brief The most nodes one expression may hold; a larger one is refused at load.
+inline constexpr std::size_t kMaxExpressionNodes = 256;
+
+/// @brief A function of `expr/1`, and how many arguments it takes.
+struct FunctionSignature {
+    /// @brief The name a `{"fn": ...}` form calls it by.
+    std::string_view name;
+    /// @brief The fewest arguments it takes.
+    std::uint8_t minArgs;
+    /// @brief The most arguments it takes; `kVariadic` for no bound.
+    std::uint8_t maxArgs;
+};
+
+/// @brief The `maxArgs` of a function that takes any number of arguments.
+inline constexpr std::uint8_t kVariadic = 255;
+
+/// @brief The function library `expr/1`, by name.
+inline constexpr std::array<FunctionSignature, 40> kFunctions{{
+    {.name = "and", .minArgs = 1, .maxArgs = kVariadic},
+    {.name = "or", .minArgs = 1, .maxArgs = kVariadic},
+    {.name = "not", .minArgs = 1, .maxArgs = 1},
+    {.name = "eq", .minArgs = 2, .maxArgs = 2},
+    {.name = "ne", .minArgs = 2, .maxArgs = 2},
+    {.name = "lt", .minArgs = 2, .maxArgs = 2},
+    {.name = "le", .minArgs = 2, .maxArgs = 2},
+    {.name = "gt", .minArgs = 2, .maxArgs = 2},
+    {.name = "ge", .minArgs = 2, .maxArgs = 2},
+    {.name = "add", .minArgs = 2, .maxArgs = 2},
+    {.name = "sub", .minArgs = 2, .maxArgs = 2},
+    {.name = "mul", .minArgs = 2, .maxArgs = 2},
+    {.name = "div", .minArgs = 2, .maxArgs = 2},
+    {.name = "neg", .minArgs = 1, .maxArgs = 1},
+    {.name = "round", .minArgs = 2, .maxArgs = 2},
+    {.name = "engaged", .minArgs = 1, .maxArgs = 1},
+    {.name = "coalesce", .minArgs = 1, .maxArgs = kVariadic},
+    {.name = "concat", .minArgs = 1, .maxArgs = kVariadic},
+    {.name = "format", .minArgs = 1, .maxArgs = kVariadic},
+    {.name = "trim", .minArgs = 1, .maxArgs = 1},
+    {.name = "length", .minArgs = 1, .maxArgs = 1},
+    {.name = "isEmpty", .minArgs = 1, .maxArgs = 1},
+    {.name = "contains", .minArgs = 2, .maxArgs = 2},
+    {.name = "count", .minArgs = 1, .maxArgs = 1},
+    {.name = "sum", .minArgs = 1, .maxArgs = 1},
+    {.name = "mean", .minArgs = 1, .maxArgs = 1},
+    {.name = "min", .minArgs = 1, .maxArgs = 1},
+    {.name = "max", .minArgs = 1, .maxArgs = 1},
+    {.name = "any", .minArgs = 1, .maxArgs = 1},
+    {.name = "all", .minArgs = 1, .maxArgs = 1},
+    {.name = "first", .minArgs = 1, .maxArgs = 1},
+    {.name = "includes", .minArgs = 2, .maxArgs = 2},
+    {.name = "indexOf", .minArgs = 2, .maxArgs = 2},
+    {.name = "number", .minArgs = 1, .maxArgs = 1},
+    {.name = "decimal", .minArgs = 2, .maxArgs = 2},
+    {.name = "quantity", .minArgs = 1, .maxArgs = 2},
+    {.name = "money", .minArgs = 2, .maxArgs = 2},
+    {.name = "date", .minArgs = 1, .maxArgs = 2},
+    {.name = "dateTime", .minArgs = 1, .maxArgs = 2},
+    {.name = "t", .minArgs = 1, .maxArgs = 3},
+}};
+
+/// @brief An `expr/1` expression: an immutable tree parsed once from a document's JSON.
+///
+/// Every node records its JSON path, which names it in a load-time refusal and in a runtime report.
+struct Expr {
+    /// @brief The forms of spec 5 §4.
+    enum class Form : std::uint8_t {
+        Literal,    ///< A JSON scalar or `{"lit": v}`: `literal`.
+        Ref,        ///< `{"ref": "name.path"}`: `name`.
+        Event,      ///< `{"ref": "event"}` or `{"ref": "event.path"}`: `name` is the path after `event`.
+        Row,        ///< `{"row": "path"}`: `name`.
+        Query,      ///< `{"query": "q"}`: `name`.
+        Result,     ///< `{"result": "m"}`: `name`.
+        Pending,    ///< `{"pending": "q"}`, a query's or a mutation's: `name`.
+        Error,      ///< `{"error": "q"}`, a query's or a mutation's: `name`.
+        ErrorKind,  ///< `{"errorKind": "m"}`: `name`.
+        Can,        ///< `{"can": "m"}`: `name`.
+        Pref,       ///< `{"pref": "point.path"}`: `name`.
+        Env,        ///< `{"env": "widthClass"}`: `name`.
+        Session,    ///< `{"session": "displayName"}`: `name`.
+        Host,       ///< `{"host": "name"}`: `name`.
+        Call,       ///< `{"fn": "name", "args": [...]}`: `name` and `args`.
+        Translate,  ///< `{"t": "key", "fallback": "text", "args": {...}}`: `name`, `fallback`, `keys` and `args`.
+        If,         ///< `{"if": [cond, then, else]}`: `args`.
+        Object,     ///< `{"obj": {"k": e}}`: `keys` and `args`.
+        List,       ///< `{"list": [e, ...]}`: `args`.
+        Map,        ///< `{"map": e, "as": "x", "to": e}`: `args` (the list, then the body) and `name` (the `as`).
+        Filter,     ///< `{"filter": e, "as": "x", "where": e}`: `args` (the list, then the test) and `name`.
+    };
+
+    /// @brief Which form this node is.
+    Form form = Form::Literal;
+    /// @brief The JSON pointer of this node in its document.
+    std::string path;
+    /// @brief The constant of a `Literal`.
+    Value literal;
+    /// @brief The name, path or key the form carries; empty when it carries none.
+    std::string name;
+    /// @brief The fallback text of a `Translate`.
+    std::string fallback;
+    /// @brief The operands, in order: a call's arguments, `if`'s three, a list's elements, a comprehension's list
+    ///        and body, an `obj`'s fields or a `t`'s arguments.
+    std::vector<Expr> args;
+    /// @brief The names of an `obj`'s fields or a `t`'s arguments, one per operand in `args`, in the order written.
+    std::vector<std::string> keys;
+
+    /// @brief How many nodes the tree rooted here holds, this one included.
+    /// @return The count.
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes once parsed.
+    [[nodiscard]] std::size_t size() const {
+        std::size_t total = 1;
+        for (Expr const& operand : args) {
+            total += operand.size();
+        }
+        return total;
+    }
+};
+
+/// @brief The signature of the `expr/1` function @p name.
+/// @param name The function's name.
+/// @return Its signature, or null when `expr/1` has no such function.
+[[nodiscard]] inline FunctionSignature const* findFunction(std::string_view name) noexcept {
+    auto const found = std::ranges::find(kFunctions, name, &FunctionSignature::name);
+    return found == kFunctions.end() ? nullptr : &*found;
+}
+
+namespace detail {
+
+// The single-string forms, by their key.
+inline constexpr std::array<std::pair<std::string_view, Expr::Form>, 12> kNameForms{{
+    {"ref", Expr::Form::Ref},
+    {"row", Expr::Form::Row},
+    {"query", Expr::Form::Query},
+    {"result", Expr::Form::Result},
+    {"pending", Expr::Form::Pending},
+    {"error", Expr::Form::Error},
+    {"errorKind", Expr::Form::ErrorKind},
+    {"can", Expr::Form::Can},
+    {"pref", Expr::Form::Pref},
+    {"env", Expr::Form::Env},
+    {"session", Expr::Form::Session},
+    {"host", Expr::Form::Host},
+}};
+
+// Escapes a key for a JSON pointer: `~` as `~0`, `/` as `~1`.
+[[nodiscard]] inline std::string pointerToken(std::string_view key) {
+    std::string out;
+    for (char const letter : key) {
+        if (letter == '~') {
+            out += "~0";
+        } else if (letter == '/') {
+            out += "~1";
+        } else {
+            out += letter;
+        }
+    }
+    return out;
+}
+
+// Parses one node; `nodes` counts what has been parsed so far, so an oversized tree stops at the first node
+// past the bound instead of being built whole.
+struct ExprParser {
+    std::size_t nodes = 0;
+
+    [[nodiscard]] static std::unexpected<Problem> refuse(std::string path, std::string reason) {
+        return std::unexpected(Problem{.path = std::move(path), .reason = std::move(reason)});
+    }
+
+    // Refuses every key of @p object outside @p allowed.
+    [[nodiscard]] static std::optional<Problem> onlyKeys(Json::object_t const& object, std::string const& path,
+                                                         std::string_view form,
+                                                         std::initializer_list<std::string_view> allowed) {
+        for (auto const& [key, member] : object) {
+            if (std::ranges::find(allowed, key) == allowed.end()) {
+                return Problem{.path = path + "/" + pointerToken(key),
+                               .reason = "`" + key + "` is not a key of the `" + std::string{form} + "` form"};
+            }
+        }
+        return std::nullopt;
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes.
+    [[nodiscard]] std::expected<std::vector<Expr>, Problem> many(Json const& json, std::string const& path) {
+        std::vector<Expr> out;
+        std::size_t index = 0;
+        for (Json const& element : json.get_array()) {
+            std::expected<Expr, Problem> operand = parse(element, path + "/" + std::to_string(index++));
+            if (!operand) {
+                return std::unexpected(std::move(operand.error()));
+            }
+            out.push_back(std::move(*operand));
+        }
+        return out;
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxExpressionNodes.
+    // Parses each member of the object @p json into @p node's `keys` and `args`.
+    [[nodiscard]] std::optional<Problem> named(Json const& json, std::string const& path, Expr& node) {
+        for (auto const& [key, member] : json.get_object()) {
+            std::expected<Expr, Problem> operand = parse(member, path + "/" + pointerToken(key));
+            if (!operand) {
+                return std::move(operand.error());
+            }
+            node.keys.push_back(key);
+            node.args.push_back(std::move(*operand));
+        }
+        return std::nullopt;
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion,readability-function-cognitive-complexity): one branch per form.
+    [[nodiscard]] std::expected<Expr, Problem> parse(Json const& json, std::string const& path) {
+        if (++nodes > kMaxExpressionNodes) {
+            return refuse(path, "the expression holds more than " + std::to_string(kMaxExpressionNodes) + " nodes");
+        }
+        Expr node{.path = path};
+        if (json.is_array()) {
+            return refuse(path, R"(a list is written {"list": [...]}, or {"lit": [...]} for a constant)");
+        }
+        if (!json.is_object()) {
+            std::expected<Value, std::string> constant = decodeUntyped(json);
+            if (!constant) {
+                return refuse(path, constant.error());
+            }
+            node.literal = std::move(*constant);
+            return node;
+        }
+        auto const& object = json.get_object();
+        auto const has = [&object](std::string_view key) { return object.contains(key); };
+        auto const stringAt = [&json, &path](std::string_view key) -> std::expected<std::string, Problem> {
+            Json const& member = json[key];
+            if (!member.is_string() || member.get_string().empty()) {
+                return refuse(path + "/" + std::string{key}, "`" + std::string{key} + "` takes a non-empty name");
+            }
+            return member.get_string();
+        };
+        if (has("lit")) {
+            if (std::optional<Problem> extra = onlyKeys(object, path, "lit", {"lit"})) {
+                return std::unexpected(std::move(*extra));
+            }
+            std::expected<Value, std::string> constant = decodeUntyped(json["lit"]);
+            if (!constant) {
+                return refuse(path + "/lit", constant.error());
+            }
+            node.literal = std::move(*constant);
+            return node;
+        }
+        for (auto const& [key, form] : kNameForms) {
+            if (!has(key)) {
+                continue;
+            }
+            if (std::optional<Problem> extra = onlyKeys(object, path, key, {key})) {
+                return std::unexpected(std::move(*extra));
+            }
+            std::expected<std::string, Problem> name = stringAt(key);
+            if (!name) {
+                return std::unexpected(std::move(name.error()));
+            }
+            node.form = form;
+            node.name = std::move(*name);
+            if (form == Expr::Form::Ref && (node.name == "event" || node.name.starts_with("event."))) {
+                node.form = Expr::Form::Event;
+                node.name = node.name == "event" ? std::string{} : node.name.substr(std::string_view{"event."}.size());
+            }
+            return node;
+        }
+        if (has("fn")) {
+            if (std::optional<Problem> extra = onlyKeys(object, path, "fn", {"fn", "args"})) {
+                return std::unexpected(std::move(*extra));
+            }
+            std::expected<std::string, Problem> name = stringAt("fn");
+            if (!name) {
+                return std::unexpected(std::move(name.error()));
+            }
+            FunctionSignature const* const signature = findFunction(*name);
+            if (signature == nullptr) {
+                return refuse(path + "/fn", "`" + *name + "` is not a function of expr/1");
+            }
+            if (has("args")) {
+                if (!json["args"].is_array()) {
+                    return refuse(path + "/args", "`args` is a list of expressions");
+                }
+                std::expected<std::vector<Expr>, Problem> operands = many(json["args"], path + "/args");
+                if (!operands) {
+                    return std::unexpected(std::move(operands.error()));
+                }
+                node.args = std::move(*operands);
+            }
+            if (node.args.size() < signature->minArgs || node.args.size() > signature->maxArgs) {
+                std::string const wanted =
+                    signature->maxArgs == kVariadic ? "at least " + std::to_string(signature->minArgs)
+                    : signature->minArgs == signature->maxArgs
+                        ? std::to_string(signature->minArgs)
+                        : std::to_string(signature->minArgs) + " to " + std::to_string(signature->maxArgs);
+                bool const one =
+                    signature->maxArgs == 1 || (signature->maxArgs == kVariadic && signature->minArgs == 1);
+                return refuse(path, "`" + *name + "` takes " + wanted +
+                                        (one ? " argument, not " : " arguments, not ") +
+                                        std::to_string(node.args.size()));
+            }
+            node.form = Expr::Form::Call;
+            node.name = std::move(*name);
+            return node;
+        }
+        if (has("t")) {
+            if (std::optional<Problem> extra = onlyKeys(object, path, "t", {"t", "fallback", "args"})) {
+                return std::unexpected(std::move(*extra));
+            }
+            std::expected<std::string, Problem> key = stringAt("t");
+            if (!key) {
+                return std::unexpected(std::move(key.error()));
+            }
+            node.form = Expr::Form::Translate;
+            node.name = std::move(*key);
+            if (has("fallback")) {
+                if (!json["fallback"].is_string()) {
+                    return refuse(path + "/fallback", "`fallback` is the message's text");
+                }
+                node.fallback = json["fallback"].get_string();
+            }
+            if (has("args")) {
+                if (!json["args"].is_object()) {
+                    return refuse(path + "/args", "`args` is an object of named expressions");
+                }
+                if (std::optional<Problem> problem = named(json["args"], path + "/args", node)) {
+                    return std::unexpected(std::move(*problem));
+                }
+            }
+            return node;
+        }
+        if (has("if")) {
+            if (std::optional<Problem> extra = onlyKeys(object, path, "if", {"if"})) {
+                return std::unexpected(std::move(*extra));
+            }
+            if (!json["if"].is_array() || json["if"].get_array().size() != 3) {
+                return refuse(path + "/if", "`if` takes [condition, then, else]");
+            }
+            std::expected<std::vector<Expr>, Problem> operands = many(json["if"], path + "/if");
+            if (!operands) {
+                return std::unexpected(std::move(operands.error()));
+            }
+            node.form = Expr::Form::If;
+            node.args = std::move(*operands);
+            return node;
+        }
+        if (has("obj")) {
+            if (std::optional<Problem> extra = onlyKeys(object, path, "obj", {"obj"})) {
+                return std::unexpected(std::move(*extra));
+            }
+            if (!json["obj"].is_object()) {
+                return refuse(path + "/obj", "`obj` takes an object of named expressions");
+            }
+            if (std::optional<Problem> problem = named(json["obj"], path + "/obj", node)) {
+                return std::unexpected(std::move(*problem));
+            }
+            node.form = Expr::Form::Object;
+            return node;
+        }
+        if (has("list")) {
+            if (std::optional<Problem> extra = onlyKeys(object, path, "list", {"list"})) {
+                return std::unexpected(std::move(*extra));
+            }
+            if (!json["list"].is_array()) {
+                return refuse(path + "/list", "`list` takes a list of expressions");
+            }
+            std::expected<std::vector<Expr>, Problem> operands = many(json["list"], path + "/list");
+            if (!operands) {
+                return std::unexpected(std::move(operands.error()));
+            }
+            node.form = Expr::Form::List;
+            node.args = std::move(*operands);
+            return node;
+        }
+        for (auto const& [key, body, form] :
+             {std::tuple{std::string_view{"map"}, std::string_view{"to"}, Expr::Form::Map},
+              std::tuple{std::string_view{"filter"}, std::string_view{"where"}, Expr::Form::Filter}}) {
+            if (!has(key)) {
+                continue;
+            }
+            if (std::optional<Problem> extra = onlyKeys(object, path, key, {key, "as", body})) {
+                return std::unexpected(std::move(*extra));
+            }
+            if (!has("as") || !has(body)) {
+                return refuse(path, "`" + std::string{key} + "` takes `as` and `" + std::string{body} + "`");
+            }
+            std::expected<std::string, Problem> name = stringAt("as");
+            if (!name) {
+                return std::unexpected(std::move(name.error()));
+            }
+            std::expected<Expr, Problem> source = parse(json[key], path + "/" + std::string{key});
+            if (!source) {
+                return source;
+            }
+            std::expected<Expr, Problem> each = parse(json[body], path + "/" + std::string{body});
+            if (!each) {
+                return each;
+            }
+            node.form = form;
+            node.name = std::move(*name);
+            node.args.push_back(std::move(*source));
+            node.args.push_back(std::move(*each));
+            return node;
+        }
+        std::string const first = object.empty() ? std::string{} : object.begin()->first;
+        return refuse(path, object.empty() ? "an empty object is not an expression; a constant is {\"lit\": {}}"
+                                           : "`" + first + "` is not an expression form");
+    }
+};
+
+}  // namespace detail
+
+/// @brief Parses an expression from a document's JSON.
+/// @param json The expression's JSON.
+/// @param path The JSON pointer of @p json in its document; every node's path extends it.
+/// @return The tree, or the first problem: an unknown form, an unknown function or a wrong argument count, a
+///         malformed operand, a fractional number, or more than `kMaxExpressionNodes` nodes.
+[[nodiscard]] inline std::expected<Expr, Problem> parseExpression(Json const& json, std::string path = {}) {
+    detail::ExprParser parser;
+    return parser.parse(json, path);
 }
 
 }  // namespace morph::ui
