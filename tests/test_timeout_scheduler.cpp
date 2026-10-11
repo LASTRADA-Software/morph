@@ -357,3 +357,28 @@ TEST_CASE("TimeoutScheduler: 0 is never a handle, so cancel(0) cancels nothing",
     scheduler.cancel(0);
     REQUIRE(waitFor([&] { return fired.load() == 3; }));
 }
+
+// Mutation: start the thread for a Caller loop too (the callback fires on another thread).
+TEST_CASE("TimeoutScheduler: on a caller-driven loop, a callback fires in the driving thread's turn",
+          "[timeout_scheduler][caller]") {
+    morph::exec::IoLoop loop{morph::exec::IoLoopDriver::Caller};
+    TimeoutScheduler scheduler{loop};
+    bool fired = false;
+    bool cancelledFired = false;
+    std::thread::id where;
+    static_cast<void>(scheduler.schedule(5ms, [&] {
+        fired = true;
+        where = std::this_thread::get_id();
+    }));
+    auto const cancelled = scheduler.schedule(5ms, [&] { cancelledFired = true; });
+    scheduler.cancel(cancelled);
+
+    auto const deadline = std::chrono::steady_clock::now() + 2s;
+    while (!fired && std::chrono::steady_clock::now() < deadline) {
+        static_cast<void>(loop.loop().runOnce(5ms));
+    }
+    static_cast<void>(loop.loop().runOnce(20ms));
+    CHECK(fired);
+    CHECK(where == std::this_thread::get_id());
+    CHECK_FALSE(cancelledFired);
+}

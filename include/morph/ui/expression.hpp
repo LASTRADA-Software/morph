@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <expected>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -560,23 +561,25 @@ private:
         if (name == nullptr) {
             return refuse(namePath, "`fn` names a function as a string").error();
         }
-        auto const found = std::ranges::find(kFunctions, *name, &FunctionSpec::name);
-        if (found == kFunctions.end()) {
+        auto const index =
+            std::ranges::distance(kFunctions.begin(), std::ranges::find(kFunctions, *name, &FunctionSpec::name));
+        if (std::cmp_equal(index, kFunctions.size())) {
             return refuse(namePath, "the function `" + *name + "` is not in expr/1").error();
         }
-        made.function = static_cast<FunctionId>(found - kFunctions.begin());
+        FunctionSpec const& spec = *std::next(kFunctions.begin(), index);
+        made.function = static_cast<FunctionId>(index);
         if (Json const* const args = member(object, "args")) {
             if (auto refused = operands(made.args, *args, pointerAppend(path, "args"), 0,
                                         "`args` takes an array of expressions")) {
                 return refused;
             }
         }
-        if (made.args.size() < found->minArgs || made.args.size() > found->maxArgs) {
-            std::string arity = std::to_string(static_cast<unsigned>(found->minArgs));
-            if (found->maxArgs == 255) {
+        if (made.args.size() < spec.minArgs || made.args.size() > spec.maxArgs) {
+            std::string arity = std::to_string(static_cast<unsigned>(spec.minArgs));
+            if (spec.maxArgs == 255) {
                 arity += " or more";
-            } else if (found->maxArgs != found->minArgs) {
-                arity += " to " + std::to_string(static_cast<unsigned>(found->maxArgs));
+            } else if (spec.maxArgs != spec.minArgs) {
+                arity += " to " + std::to_string(static_cast<unsigned>(spec.maxArgs));
             }
             return refuse(path,
                           "`" + *name + "` takes " + arity + " arguments, not " + std::to_string(made.args.size()))

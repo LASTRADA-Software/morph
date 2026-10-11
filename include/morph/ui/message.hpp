@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -278,12 +280,13 @@ inline constexpr std::array<std::pair<std::string_view, PluralRule>, 13> kPlural
         .whole = shown.denominator == 1,
         .visibleFraction = places != 0,
     };
-    auto const rule =
-        std::ranges::find(detail::kPluralRules, language, &std::pair<std::string_view, detail::PluralRule>::first);
-    if (rule == detail::kPluralRules.end()) {
+    auto const index = std::ranges::distance(
+        detail::kPluralRules.begin(),
+        std::ranges::find(detail::kPluralRules, language, &std::pair<std::string_view, detail::PluralRule>::first));
+    if (std::cmp_equal(index, detail::kPluralRules.size())) {
         return PluralCategory::Other;
     }
-    return rule->second(operands);
+    return std::next(detail::kPluralRules.begin(), index)->second(operands);
 }
 
 /// @brief The formatting function a placeholder or a declaration names.

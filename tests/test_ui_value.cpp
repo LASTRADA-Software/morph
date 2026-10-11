@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <morph/ui/value.hpp>
 #include <string>
@@ -11,6 +12,7 @@ using morph::math::Numerator;
 using morph::math::Rational;
 using morph::ui::Decimal;
 using morph::ui::Json;
+using morph::ui::kMaxJsonDepth;
 using morph::ui::parseJson;
 using morph::ui::parseType;
 using morph::ui::Quantity;
@@ -208,4 +210,26 @@ TEST_CASE("ui value: each part of an exact value takes part in equality and deco
     auto decimal = valueFromJson(*parseJson(R"({"num":3,"den":2,"dp":1})"), Type::of(TypeKind::Decimal));
     REQUIRE(decimal.has_value());
     CHECK(*decimal == Value{dec(3, 2, 1)});
+}
+
+// Mutation: drop the nesting check in parseJson -> the over-deep text is parsed, and on a 1 MB stack a few hundred
+// levels overflow it.
+TEST_CASE("ui value: JSON nested deeper than the bound is refused before it is parsed", "[ui][value]") {
+    auto nested = [](std::size_t levels) { return std::string(levels, '[') + std::string(levels, ']'); };
+    CHECK(parseJson(nested(kMaxJsonDepth)).has_value());
+    auto refused = parseJson(nested(kMaxJsonDepth + 1));
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().contains("nests deeper than"));
+    CHECK_FALSE(parseJson(nested(600)).has_value());
+
+    // Brackets inside a string, escaped quotes included, are text rather than nesting.
+    std::string const brackets(kMaxJsonDepth + 1, '[');
+    CHECK(parseJson("\"" + brackets + "\"").has_value());
+    CHECK(parseJson(R"("a \" )" + brackets + "\"").has_value());
+    CHECK(parseJson(R"("a \\")").has_value());
+
+    // A stray closing bracket is the parser's error to report, not a nesting one.
+    auto stray = parseJson("]");
+    REQUIRE_FALSE(stray.has_value());
+    CHECK_FALSE(stray.error().contains("nests deeper than"));
 }

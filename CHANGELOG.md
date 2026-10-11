@@ -47,7 +47,7 @@ API surface).
   strand to drain before it returns. See `docs/spec/core/coroutines.md`,
   "Teardown".
 
-- **morph depends on core-cpp v0.5.0.** It is fetched through CPM, and
+- **morph depends on core-cpp v0.7.0.** It is fetched through CPM, and
   `morph::morph` links its `core::base`, `core::async`, `core::net` and, natively,
   `core::platform`. morph stays header-only, but those are static libraries, so
   a project that links morph now builds them. `TimeoutScheduler` runs on
@@ -55,7 +55,7 @@ API surface).
   single-threaded WebAssembly on a loop the browser's timer pumps, where
   `cancel()` now also retires the timer. An install of morph installs
   core-cpp's package next to it, and `find_package(morph)` finds it through
-  `find_dependency(core-cpp 0.5)`.
+  `find_dependency(core-cpp 0.7)`.
 
 - **Dependencies are fetched through CPM, and cached by CPM.** glaze, Catch2,
   doxygen-awesome-css and Lightweight come through `CPMAddPackage` when no
@@ -524,6 +524,21 @@ API surface).
 
   Measured numbers are in `docs/spec/table/engine.md`. `QueryRowsSource`
   follows with `morph::reactive`.
+
+- **`exec::IoLoopDriver::Caller`: an I/O loop turned by the thread that built it.**
+  `IoLoop(IoLoopDriver::Caller)` starts no thread; the constructing thread turns
+  the loop (`loop().runOnce()`, `runUntilIdle()`, a `blockOn()`), and
+  `runningHere()` holds there between turns too, so `runAndWait` and a
+  component's close run inline, inside a scope naming the loop. Other threads
+  still `post()`. A debug build asserts when a task posted through the
+  `IoLoop` runs on another thread. `TimeoutScheduler` and `SocketBackend` work
+  on such a loop. `IoLoop()` keeps its own thread (`IoLoopDriver::OwnThread`),
+  unchanged. `IoLoop::runAndWait` now rethrows a task's exception to the
+  waiter and ends the wait, rather than hanging, when the loop drops the task
+  unrun. The destructors that close through it (`SocketBackend`, `SocketServer`,
+  `TimeoutScheduler`, `NetworkMonitor`) are `noexcept`, so a close that throws
+  terminates the process; from another thread that used to hang. Specified in
+  `docs/spec/core/executor.md`, "The I/O loop".
 
 ### Changed
 

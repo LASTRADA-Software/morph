@@ -51,7 +51,9 @@ refusals and diagnostics name.
 
 **Size bound.** An expression of more than 256 nodes is refused (`kMaxExpressionNodes`). A node is
 one JSON expression: a literal, however large its value, is one node. The parser counts as it
-descends, so a deep tree is refused before it can exhaust the stack.
+descends. The text underneath is bounded first: `parseJson` refuses JSON nested deeper than 64
+objects and arrays (`kMaxJsonDepth`) before the JSON parser runs, because that parser and every pass
+over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
 
 ## Semantics
 
