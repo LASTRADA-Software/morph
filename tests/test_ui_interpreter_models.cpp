@@ -161,3 +161,14 @@ TEST_CASE("interpreter models: a dialog's own model handle is released when it c
     CHECK(h.dispatcher.binds.size() == 2);
     CHECK(h.dispatcher.calls.size() == 2);
 }
+
+TEST_CASE("interpreter models: a screen unmounted while a sequence waits drops the rest of it", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(kRegister);
+    h.backend.click(h.byTestId("Button", "go"));
+    h.settle();
+    REQUIRE(h.dispatcher.calls.size() == 1);
+    screen.reset();
+    h.reply(0, R"({"id":7})");
+    CHECK(h.dispatcher.calls.size() == 1);
+}

@@ -3223,20 +3223,27 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             return;
         }
         case CommandKind::Seq: {
-            auto bindings = std::make_shared<Bindings>(*ctx.bindings);
-            CommandCtx const inner{
-                .scope = ctx.scope, .bindings = bindings, .cancelClose = ctx.cancelClose, .boundary = ctx.boundary};
+            // A step that waits for a reply keeps the rest of the sequence in that reply's handler, which the
+            // dispatcher may hold past the screen: the sequence holds its scope weakly and stops once it is gone.
+            CommandCtx const inner = detached(CommandCtx{.scope = nullptr,
+                                                         .bindings = std::make_shared<Bindings>(*ctx.bindings),
+                                                         .cancelClose = ctx.cancelClose,
+                                                         .boundary = ctx.boundary});
+            std::weak_ptr<RtScope> const weak = ctx.scope;
             auto step = std::make_shared<std::function<void(std::size_t)>>();
-            *step = [this, inner, list = &command.commands, done = std::move(done),
+            *step = [this, inner, weak, list = &command.commands, done = std::move(done),
                      weakStep = std::weak_ptr<std::function<void(std::size_t)>>{step}](std::size_t index) {
-                if (index == list->size()) {
+                auto const held = weak.lock();
+                if (index == list->size() || !held) {
                     if (done) {
-                        done(true);
+                        done(held != nullptr);
                     }
                     return;
                 }
                 auto const self = weakStep.lock();
-                runOne(list->at(index), inner, [self, index, done](bool succeeded) {
+                CommandCtx current = inner;
+                current.scope = held;
+                runOne(list->at(index), current, [self, index, done](bool succeeded) {
                     if (!succeeded) {
                         if (done) {
                             done(false);
