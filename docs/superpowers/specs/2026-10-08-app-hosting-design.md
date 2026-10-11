@@ -524,8 +524,8 @@ auto limsSample = ui::screen<"lims.sample">([](ui::Scope& s) {
                 ui::column(
                     ui::custom<"SeriesGrid">({.props = {.rows = series.at(&Series::rows)}}),
                     ui::custom<"RecoveryCurve">({.props = {.rows = series.at(&Series::rows)}})),
-                ui::pill({.text = ui::format(ui::t("lims.outside", "{0} outside limits"),
-                                             ui::count(ui::filter(series.at(&Series::rows), &Row::outsideLimits)))}))),
+                ui::pill({.text = ui::t("lims.outside", "{$n} outside limits",
+                                        {.n = ui::count(ui::filter(series.at(&Series::rows), &Row::outsideLimits))})}))),
         ui::dialog(project, {.title = ui::t("lims.chooseProject", "Choose project")},
             ui::dataTable<ListProjects>(sample, {.mode = ui::TableMode::Server, .selection = ui::Selection::Single,
                                                  .onActivate = {ui::run(pick, {.projectId = ui::row("id")})}})));

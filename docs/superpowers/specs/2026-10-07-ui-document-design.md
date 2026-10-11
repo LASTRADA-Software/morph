@@ -98,8 +98,15 @@ deregisters on destruction.
 The catalog tells the client, per model type, whether it is **stateless** (a shared singleton is
 equivalent to a private instance) and whether it is **keyed** (it can be shared by an instance key). A
 model that is not keyed cannot be given an `instance` expression; the document is refused at load.
-These seams, the `ui` envelope kinds of §12 and their authorisation rules are specified in the wire
-and bridge documents when the interpreter lands, and come before it in the delivery order.
+
+The seams come before the document and its interpreter in the delivery order, and are specified in
+the bridge document. The `ui` envelope kinds of §12 and their authorisation rules come after them,
+with the UI service, which also builds the catalog and bundles. Load-time validation does not wait
+for them: it reads the catalog's facts — `stateless`, `keyed`, and the action facts of §5's rules —
+through two lookups its caller supplies (`ui::Catalog`, `docs/spec/ui/document.md`). Local mode
+answers them in-process from the model registry, the server answers them at registration (§11), and
+a remote client answers them from the `ui-catalog` reply. A rule whose facts are not supplied is
+skipped; the server, which always has them, runs every rule.
 
 ## 3. Document structure
 
@@ -115,12 +122,14 @@ A **bundle** is everything an application serves: its screens, its app shell (me
 ```
 
 - **Names.** Every declaration has a name matching `[A-Za-z_][A-Za-z0-9_]*`, unique within its
-  scope. A reference resolves in the innermost scope first, then outward.
-- **Scopes.** The screen is a scope. So is every dialog, every `switch` case, and every row of a
-  `forEach` or `table`. Any scope may declare `models`, `state`, `let`, `queries`, `mutations`,
-  `watch` and `checks`. A scope is created when its content mounts and destroyed when it unmounts. A
-  row scope is keyed by its row key, so its state survives reordering and is kept while the row
-  exists.
+  scope; element ids and transfer ids share that namespace. `event`, `app`, `boundary`, `props`,
+  `result` and `body` are reserved. A reference resolves in the innermost scope first, then outward.
+- **Scopes.** The screen is a scope. So is every dialog and drawer, every `switch` case, and every
+  row of a `forEach` or `table`. Any scope may declare `models`, `state`, `let`, `queries`,
+  `mutations`, `watch` and `checks`: the screen at its top level, a nested scope under its node's
+  (or case's) `"scope"` key. A scope is created when its content mounts and destroyed when it
+  unmounts. A row scope is keyed by its row key, so its state survives reordering and is kept while
+  the row exists.
 - **Params** are the screen's typed inputs, set by navigation (§8).
 - **Lifecycle keys.** A screen may also declare `title` (an expression), `dirty` (a bool expression),
   `identity` (an expression; equal identities are one screen), `onMount`, `onUnmount`, `onClose`
@@ -135,9 +144,10 @@ A **bundle** is everything an application serves: its screens, its app shell (me
 - **Load-time validation.** A client refuses a document before mounting it when a reference does not
   resolve, a type does not check, the `let` graph or the `watch` graph has a cycle (§6), an
   expression exceeds the size bound (§4), or a node kind or function is not in the document's
-  `vocab`. The refusal names the document, the path inside it and the reason. The server runs the
-  same validation when a screen is registered (§11), so a refused document is a server defect found
-  in the server's own tests.
+  `vocab`. The refusal names the document, the path inside it (a JSON Pointer) and the reason. The
+  server runs the same validation when a screen is registered (§11), so a refused document is a
+  server defect found in the server's own tests. The full list of rules is
+  `docs/spec/ui/document.md`.
 
 ## 4. Expressions
 
@@ -146,7 +156,7 @@ one.
 
 | Form | Meaning |
 |---|---|
-| a JSON scalar, or `{"lit": v}` | A constant. `lit` wraps an object or array. |
+| a JSON scalar, or `{"lit": v}` | A constant. `lit` wraps an object or array. A number with a fraction is refused: an exact value is `{"num", "den", "dp"}`. |
 | `{"ref": "name.path"}` | A param, state, `let`, element value (§6) or record field, by name then path. |
 | `{"row": "path"}` | A field of the innermost row. |
 | `{"query": "q"}`, `{"pending": "q"}`, `{"error": "q"}` | A query's value, whether it is in flight, its error text. |
@@ -175,7 +185,14 @@ one.
 - **Errors are values.** Overflow, division by zero or a type mismatch at runtime yields `null` and
   is reported once per expression path on the client's diagnostic channel; it never throws into a
   renderer.
-- **Size bound.** A document whose single expression exceeds 256 nodes is refused at load.
+- **Size bound.** A document whose single expression exceeds 256 nodes is refused at load, and so is
+  one whose JSON nests deeper than 64 objects and arrays; the second is checked before the JSON is
+  parsed, so a hostile document cannot exhaust a thread's stack.
+- **Rounding** is half to even wherever `expr/1` rounds: `round`, `mean` and the display functions.
+- **Quantities** combine when their units convert, through the exact factors the server's unit
+  systems declare (`x-unitAlternatives`); the result is in the left operand's unit. A quantity over
+  a quantity is a decimal ratio. A product of two quantities has no declared unit and is an error,
+  as is a sum of a quantity and a plain number.
 
 **Function library `expr/1`.** Every function is exact where its inputs are:
 
@@ -183,7 +200,8 @@ one.
   `decimal` and `quantity` exactly, converting quantity units by their declared exact factors;
 - arithmetic: `add`, `sub`, `mul`, `div`, `neg`, `round(x, dp)` over `int`, `decimal`, `quantity`;
 - optional: `engaged`, `coalesce`;
-- string: `concat`, `format(template, args...)`, `trim`, `length`, `isEmpty`, `contains`;
+- string: `concat`, `format(template, args...)` (placeholders `{0}`, `{1}`, …; `{{` and `}}` are
+  literal braces), `trim`, `length`, `isEmpty`, `contains`;
 - list: `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`
   (`mean` is the exact sum over the count, at the operands' declared places, rounded half to even);
 - display: `number`, `decimal(x, dp)`, `quantity(x, unit?)`, `money(x, currency)`,
@@ -193,8 +211,9 @@ one.
   over `(key, locale)`). A message and its `fallback` are Unicode MessageFormat 2 patterns, and `args`
   is an object of named arguments. `ui/1` accepts the subset of MessageFormat 2 that a UI needs:
   placeholders (`{$count}`), `:number` and `:string` formatting, and `.match` on a `:number` (CLDR
-  plural categories for the active locale, and exact values such as `=0`) or on a `:string` (a
-  select). So `".input {$n :number} .match $n one {{{$n} sample}} * {{{$n} samples}}"` reads
+  plural categories for the active locale, and exact values written `0` as MessageFormat 2 spells
+  them, or `=0`) or on a `:string` (a select). A literal placeholder such as `{0}` is outside the
+  subset. So `".input {$n :number} .match $n one {{{$n} sample}} * {{{$n} samples}}"` reads
   "1 sample" and "3 samples" in English and takes Polish's or Arabic's forms from their catalogues.
   A pattern outside the subset is refused when the catalogue loads, and the fallback is shown.
 
@@ -292,7 +311,8 @@ fetcher that goes through the cache.
 
 - `concurrency` decides what a run does while another is in flight:
   - `exclusive` (default): the run is refused. Elements bound to `{"pending": "capture"}` disable.
-  - `serial`: runs are queued and sent in order; `serialKey` (an expression) makes one queue per key.
+  - `serial`: runs are queued and sent in order; `serialKey` (an expression, valid only with
+    `serial`) makes one queue per key.
   - `latest`: every run is sent; only the newest reply is applied.
   - `parallel`: every run is sent; replies are applied as they arrive.
 - `invalidates` refetches the named queries after a success, in one batch with the result, so the
@@ -493,7 +513,7 @@ execute and every evaluation, whatever the client sent.
 |---|---|
 | `{"set": "name.path", "value": e}` | Writes state, or an element's draft. |
 | `{"reset": "name"}` | Restores state to its `init`. |
-| `{"run": "m", "body": e?, "as": "x"?, "each": e?}` | Runs a mutation, optionally with a body override, once per element of `each`. |
+| `{"run": "m", "body": e?, "as": "x"?, "each": e?}` | Runs a mutation, optionally with a body override, once per element of `each`. With `each`, `as` names the element inside `body`; without it, `as` names the reply for the later steps of the enclosing `seq`. |
 | `{"refetch": "q"}` | Refetches a query. |
 | `{"open": "dialog"}`, `{"close": "dialog"}` | Opens or closes a dialog. |
 | `{"navigate": "screen", "params": e, "as": "tab"\|"dialog"\|"drawer"\|"window", "onResult": [...], "onCancel": [...]}` | Opens another screen: as a tab the shell decides (spec 6 §7), as a dialog, drawer or window it can answer (spec 6 §16). |
@@ -523,7 +543,9 @@ and the browser's address bar open a screen.
 This section is the one normative palette of the program (spec 1 §5 refers here). The kinds are text,
 button, text input, checkbox, select, menu, column, row, grid, spacer, panel, scroll, switch, tabs,
 dialog, busy, forEach, table, date-time input, slider and file picker, written as
-`{"kind": "...", ...}` with every property an expression and every event a command list.
+`{"kind": "...", ...}` with every property an expression and every event a command list. The `kind`
+spellings (`textInput`, `dateTimeInput`, `filePicker`, `keyValue`, `emptyState`, `dropZone`, …) and
+each kind's keys are the kind table of `docs/spec/ui/document.md`.
 
 **Common properties.** `id`, `visible`, `enabled`, `a11y`, `testId`, `tooltip`, `keys` and `autofocus`
 (spec 6 §17), `surface` (a named token set for the subtree, spec 6 §6), `sizing` (`"content"`,
