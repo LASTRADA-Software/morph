@@ -4184,6 +4184,10 @@ bool enrollScreen(Make const& make) noexcept {
 /// @brief Concatenates two tokens after expanding them.
 #define MORPH_UI_AUTHOR_CAT(a, b) MORPH_UI_AUTHOR_CAT_(a, b)
 
+// The registrar is a namespace-scope `const bool` initialised before main. `enrollScreen` is noexcept and keeps
+// any failure as a refusal, but clang-tidy does not see through the template call and attributes a possible throw
+// to every expansion site, so the check is suppressed here, once.
+// NOLINTBEGIN(bugprone-throwing-static-initialization,cert-err58-cpp)
 /// @brief Enrols a screen into the process's registry at static initialisation. A refusal is kept in
 ///        `screenRegistry().refusals()`, which a server's test asserts is empty.
 /// @param SCREEN The screen: an expression, such as a call of a function that returns it, or an object defined
@@ -4195,4 +4199,5 @@ bool enrollScreen(Make const& make) noexcept {
         return (SCREEN);                                                                                  \
     });                                                                                                   \
     }
+// NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp)
 // NOLINTEND(cppcoreguidelines-macro-usage)

@@ -1037,8 +1037,11 @@ ui::Screen refusedScreen() {
 
 }  // namespace
 
+// enrollScreen is noexcept; clang-tidy cannot see that through the macro's template call.
+// NOLINTBEGIN(bugprone-throwing-static-initialization,cert-err58-cpp)
 MORPH_REGISTER_SCREEN(registeredScreen())
 MORPH_REGISTER_SCREEN(refusedScreen())
+// NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp)
 
 TEST_CASE("MORPH_REGISTER_SCREEN enrols at static initialisation and keeps refusals", "[ui][author][registration]") {
     ui::ScreenRegistry const& registry = ui::screenRegistry();
