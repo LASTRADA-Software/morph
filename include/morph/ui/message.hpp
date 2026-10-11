@@ -278,7 +278,7 @@ inline constexpr std::array<std::pair<std::string_view, PluralRule>, 13> kPlural
         .whole = shown.denominator == 1,
         .visibleFraction = places != 0,
     };
-    auto const* const rule =
+    auto const rule =
         std::ranges::find(detail::kPluralRules, language, &std::pair<std::string_view, detail::PluralRule>::first);
     if (rule == detail::kPluralRules.end()) {
         return PluralCategory::Other;

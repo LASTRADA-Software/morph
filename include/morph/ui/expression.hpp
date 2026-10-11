@@ -560,7 +560,7 @@ private:
         if (name == nullptr) {
             return refuse(namePath, "`fn` names a function as a string").error();
         }
-        auto const* const found = std::ranges::find(kFunctions, *name, &FunctionSpec::name);
+        auto const found = std::ranges::find(kFunctions, *name, &FunctionSpec::name);
         if (found == kFunctions.end()) {
             return refuse(namePath, "the function `" + *name + "` is not in expr/1").error();
         }
@@ -1640,7 +1640,7 @@ private:
             if (!ordering) {
                 return mismatch(expr, "the elements are not of one comparable kind");
             }
-            bool const better = expr.function == FunctionId::Min ? *ordering < 0 : *ordering > 0;
+            bool const better = expr.function == FunctionId::Min ? std::is_lt(*ordering) : std::is_gt(*ordering);
             if (better) {
                 best = &item;
             }
@@ -1751,15 +1751,15 @@ private:
                     return mismatch(expr, "the operands are not of one comparable kind");
                 }
                 if (expr.function == FunctionId::Lt) {
-                    return *ordering < 0;
+                    return std::is_lt(*ordering);
                 }
                 if (expr.function == FunctionId::Le) {
-                    return *ordering <= 0;
+                    return std::is_lteq(*ordering);
                 }
                 if (expr.function == FunctionId::Gt) {
-                    return *ordering > 0;
+                    return std::is_gt(*ordering);
                 }
-                return *ordering >= 0;
+                return std::is_gteq(*ordering);
             }
             case FunctionId::Add:
             case FunctionId::Sub:
