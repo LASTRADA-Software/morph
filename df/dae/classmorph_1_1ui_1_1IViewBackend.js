@@ -18,5 +18,15 @@ var classmorph_1_1ui_1_1IViewBackend =
     [ "createTable", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a4472eb65b0ce59376d2bc47c48e76d29", null ],
     [ "createDateTimeInput", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2739229e5dbbaba964f65231da91a47a", null ],
     [ "createSlider", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a734309f8c777004f7d206c3146819ac9", null ],
-    [ "createFilePicker", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#aae0f5189a7f38e639594687d7e4ffb96", null ]
+    [ "createFilePicker", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#aae0f5189a7f38e639594687d7e4ffb96", null ],
+    [ "createBanner", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#aa606329bb8d42736501d43a80e5a1d8e", null ],
+    [ "createBadge", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a7acf9f5029789f509edda0d84090018a", null ],
+    [ "createProgress", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2f29af9562d158d8c8d74c61547114f6", null ],
+    [ "createSteps", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6d44e4ac49474fb4f8ed59c907096c69", null ],
+    [ "createKeyValue", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae445beefd4cf40ede51fa368457674aa", null ],
+    [ "createEmptyState", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a55fd611d62ad8c732bd86f538c83d5e0", null ],
+    [ "createDrawer", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2f0fd93a4538e13753d79c90d459da58", null ],
+    [ "createSplitter", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2a6d526e4cfa5b49a188efa67830d3f9", null ],
+    [ "createCollapsible", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2cf5fd3cde2b484942a83b0dd6f7379c", null ],
+    [ "createDropZone", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#adb0d4528494cfbf9a2b53f49c295d93c", null ]
 ];

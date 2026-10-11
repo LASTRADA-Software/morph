@@ -160,7 +160,7 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 <tr class="memitem:a9ba4fc4917bf531b7f7793199cd94019" id="r_a9ba4fc4917bf531b7f7793199cd94019"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a9ba4fc4917bf531b7f7793199cd94019">drag</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;source, <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;target)=0</td></tr>
 <tr class="memdesc:a9ba4fc4917bf531b7f7793199cd94019"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drags one widget onto another as a user would.  <br /></td></tr>
 <tr class="memitem:a94eb049d3c87d78053e32583e7eeca00" id="r_a94eb049d3c87d78053e32583e7eeca00"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a94eb049d3c87d78053e32583e7eeca00">dismiss</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;dialog)=0</td></tr>
-<tr class="memdesc:a94eb049d3c87d78053e32583e7eeca00"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dismisses a dialog as a user would (Esc on the TUI).  <br /></td></tr>
+<tr class="memdesc:a94eb049d3c87d78053e32583e7eeca00"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dismisses a dialog or drawer as a user would (Esc on the TUI), or a dismissible banner.  <br /></td></tr>
 <tr class="memitem:a1c4eecec7151c1fa2d7dfe89ce5d64e8" id="r_a1c4eecec7151c1fa2d7dfe89ce5d64e8"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a1c4eecec7151c1fa2d7dfe89ce5d64e8">selectRows</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;table, std::vector&lt; std::size_t &gt; const &amp;rows)=0</td></tr>
 <tr class="memdesc:a1c4eecec7151c1fa2d7dfe89ce5d64e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Selects rows of a table as a user would, so that the user's selection is exactly these rows.  <br /></td></tr>
 <tr class="memitem:a220996b523fb123eb2841cf4778c8af6" id="r_a220996b523fb123eb2841cf4778c8af6"><td class="memItemLeft">virtual std::vector&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a220996b523fb123eb2841cf4778c8af6">selectedRows</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;table)=0</td></tr>
@@ -169,6 +169,16 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 <tr class="memdesc:a20fa7e5d841aea70d010035e97418a56"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves a text field's cursor as a user would (the arrow keys, a click), without changing the text.  <br /></td></tr>
 <tr class="memitem:abbf6ab8b783d44e9be88ffa085b52ac7" id="r_abbf6ab8b783d44e9be88ffa085b52ac7"><td class="memItemLeft">virtual std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#abbf6ab8b783d44e9be88ffa085b52ac7">cursorOf</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;field)=0</td></tr>
 <tr class="memdesc:abbf6ab8b783d44e9be88ffa085b52ac7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a text field's cursor is.  <br /></td></tr>
+<tr class="memitem:ab2530460f69e292e1b666eae4fb0b5b3" id="r_ab2530460f69e292e1b666eae4fb0b5b3"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ab2530460f69e292e1b666eae4fb0b5b3">press</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;focused, std::string_view chord)=0</td></tr>
+<tr class="memdesc:ab2530460f69e292e1b666eae4fb0b5b3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Presses a keyboard chord as a user would with focus on a widget.  <br /></td></tr>
+<tr class="memitem:a4c6798cff77a66f110f083b3b15312b8" id="r_a4c6798cff77a66f110f083b3b15312b8"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#a4c6798cff77a66f110f083b3b15312b8">hasFocus</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;widget)=0</td></tr>
+<tr class="memdesc:a4c6798cff77a66f110f083b3b15312b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a widget has keyboard focus.  <br /></td></tr>
+<tr class="memitem:a5158ffa2f6eaa9d22bc022ee0d1eed0a" id="r_a5158ffa2f6eaa9d22bc022ee0d1eed0a"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a5158ffa2f6eaa9d22bc022ee0d1eed0a">chooseMenuEntry</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;menu, std::vector&lt; std::size_t &gt; const &amp;path)=0</td></tr>
+<tr class="memdesc:a5158ffa2f6eaa9d22bc022ee0d1eed0a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Chooses a menu entry as a user would, opening each submenu on the path first.  <br /></td></tr>
+<tr class="memitem:acd96cdee9dbd020cddc43d192bd24600" id="r_acd96cdee9dbd020cddc43d192bd24600"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#acd96cdee9dbd020cddc43d192bd24600">expand</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;section, bool open)=0</td></tr>
+<tr class="memdesc:acd96cdee9dbd020cddc43d192bd24600"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens or closes a collapsible section with its own control, as a user would.  <br /></td></tr>
+<tr class="memitem:ac5fc06f5c06036f4aed7c62881e2332e" id="r_ac5fc06f5c06036f4aed7c62881e2332e"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ac5fc06f5c06036f4aed7c62881e2332e">dropFiles</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;zone, std::vector&lt; std::string &gt; const &amp;paths)=0</td></tr>
+<tr class="memdesc:ac5fc06f5c06036f4aed7c62881e2332e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drops files from the operating system onto a drop zone, as a user would.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>How the conformance cases read and drive one backend under test. </p>
@@ -540,10 +550,10 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Dismisses a dialog as a user would (Esc on the TUI). </p>
+<p>Dismisses a dialog or drawer as a user would (Esc on the TUI), or a dismissible banner. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">dialog</td><td>The dialog. </td></tr>
+    <tr><td class="paramname">dialog</td><td>The dialog, drawer or banner. </td></tr>
   </table>
   </dd>
 </dl>
@@ -691,6 +701,192 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A byte offset into the text it shows. </dd></dl>
+
+</div>
+</div>
+<a id="ab2530460f69e292e1b666eae4fb0b5b3" name="ab2530460f69e292e1b666eae4fb0b5b3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab2530460f69e292e1b666eae4fb0b5b3">&#9670;&#160;</a></span>press()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::testing::ConformanceProbe::press </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>focused</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>chord</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Presses a keyboard chord as a user would with focus on a widget. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">focused</td><td>The widget focus is on; the probe moves focus there first if it must. </td></tr>
+    <tr><td class="paramname">chord</td><td>The chord, as a document declares it, such as <span class="tt">"Ctrl+S"</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a4c6798cff77a66f110f083b3b15312b8" name="a4c6798cff77a66f110f083b3b15312b8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4c6798cff77a66f110f083b3b15312b8">&#9670;&#160;</a></span>hasFocus()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool morph::ui::testing::ConformanceProbe::hasFocus </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>widget</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether a widget has keyboard focus. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">widget</td><td>The widget. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>True when it is the widget that has focus. </dd></dl>
+
+</div>
+</div>
+<a id="a5158ffa2f6eaa9d22bc022ee0d1eed0a" name="a5158ffa2f6eaa9d22bc022ee0d1eed0a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5158ffa2f6eaa9d22bc022ee0d1eed0a">&#9670;&#160;</a></span>chooseMenuEntry()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::testing::ConformanceProbe::chooseMenuEntry </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>menu</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; std::size_t &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>path</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Chooses a menu entry as a user would, opening each submenu on the path first. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">menu</td><td>The menu. </td></tr>
+    <tr><td class="paramname">path</td><td>The entry's index at each level, from the top. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="acd96cdee9dbd020cddc43d192bd24600" name="acd96cdee9dbd020cddc43d192bd24600"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acd96cdee9dbd020cddc43d192bd24600">&#9670;&#160;</a></span>expand()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::testing::ConformanceProbe::expand </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>section</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>open</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Opens or closes a collapsible section with its own control, as a user would. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">section</td><td>The section. </td></tr>
+    <tr><td class="paramname">open</td><td>The state asked for. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ac5fc06f5c06036f4aed7c62881e2332e" name="ac5fc06f5c06036f4aed7c62881e2332e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac5fc06f5c06036f4aed7c62881e2332e">&#9670;&#160;</a></span>dropFiles()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::testing::ConformanceProbe::dropFiles </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>zone</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>paths</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Drops files from the operating system onto a drop zone, as a user would. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">zone</td><td>The drop zone. </td></tr>
+    <tr><td class="paramname">paths</td><td>The files' paths, in the order dropped; not empty. </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>

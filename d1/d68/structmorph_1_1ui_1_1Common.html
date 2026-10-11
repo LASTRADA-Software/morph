@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d68/structm
 </div><!--header-->
 <div class="contents">
 
-<p>The part every node carries: visibility, enablement, layout, and drag-and-drop.  
+<p>The part every node carries: visibility, enablement, layout, drag-and-drop, accessibility, test identity, tooltip, surface, keyboard chords and autofocus.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>&gt;</code></p>
@@ -140,11 +140,23 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:aadbd7732650a16f317a5b70b24de0635"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a drop of a key is accepted; empty accepts every key. Used only when <span class="tt"><a class="el" href="#a94e8ac8e1c9d795f74404cde6199447c" title="Set: the widget is a drop target, called with the dropped key.">onDrop</a></span> is set.  <br /></td></tr>
 <tr class="memitem:a94e8ac8e1c9d795f74404cde6199447c" id="r_a94e8ac8e1c9d795f74404cde6199447c"><td class="memItemLeft">std::function&lt; void(<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a94e8ac8e1c9d795f74404cde6199447c">onDrop</a></td></tr>
 <tr class="memdesc:a94e8ac8e1c9d795f74404cde6199447c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Set: the widget is a drop target, called with the dropped key.  <br /></td></tr>
+<tr class="memitem:a5f63cec89bdc22a967f40c0a8cce5ec5" id="r_a5f63cec89bdc22a967f40c0a8cce5ec5"><td class="memItemLeft"><a class="el" href="../../d9/d03/structmorph_1_1ui_1_1Accessibility.html">Accessibility</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5f63cec89bdc22a967f40c0a8cce5ec5">a11y</a> {}</td></tr>
+<tr class="memdesc:a5f63cec89bdc22a967f40c0a8cce5ec5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The accessible name and role.  <br /></td></tr>
+<tr class="memitem:aab1ee93f768cedbae69abaa22e377e8a" id="r_aab1ee93f768cedbae69abaa22e377e8a"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aab1ee93f768cedbae69abaa22e377e8a">testId</a></td></tr>
+<tr class="memdesc:aab1ee93f768cedbae69abaa22e377e8a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The stable identifier an automated test finds the widget by; empty means none. Set once.  <br /></td></tr>
+<tr class="memitem:a2eecd3185b430971000997777e6d8df5" id="r_a2eecd3185b430971000997777e6d8df5"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2eecd3185b430971000997777e6d8df5">tooltip</a></td></tr>
+<tr class="memdesc:a2eecd3185b430971000997777e6d8df5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> shown while the pointer rests on the widget; empty shows none.  <br /></td></tr>
+<tr class="memitem:aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa" id="r_aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa">surface</a></td></tr>
+<tr class="memdesc:aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">The named token set of the theme that styles this node and everything inside it; empty is the theme's default. Set once.  <br /></td></tr>
+<tr class="memitem:a7bb02d1b2131df391380c0a4ed812f52" id="r_a7bb02d1b2131df391380c0a4ed812f52"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d3/d7b/structmorph_1_1ui_1_1KeyBinding.html">KeyBinding</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7bb02d1b2131df391380c0a4ed812f52">keys</a></td></tr>
+<tr class="memdesc:a7bb02d1b2131df391380c0a4ed812f52"><td class="mdescLeft">&#160;</td><td class="mdescRight">Chords handled while focus is inside the node; the innermost node declaring a chord takes it. For a chord listed twice, the first entry is the one called.  <br /></td></tr>
+<tr class="memitem:a7f54131036a7d87c2c8e770fe72048dc" id="r_a7f54131036a7d87c2c8e770fe72048dc"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a7f54131036a7d87c2c8e770fe72048dc">autofocus</a> = false</td></tr>
+<tr class="memdesc:a7f54131036a7d87c2c8e770fe72048dc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the widget takes keyboard focus when the content it is part of mounts; the first such widget in document order wins.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>The part every node carries: visibility, enablement, layout, and drag-and-drop. </p>
+<div class="textblock"><p>The part every node carries: visibility, enablement, layout, drag-and-drop, accessibility, test identity, tooltip, surface, keyboard chords and autofocus. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aed00f558bf74507b2d6e8157c3a81441" name="aed00f558bf74507b2d6e8157c3a81441"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aed00f558bf74507b2d6e8157c3a81441">&#9670;&#160;</a></span>visible</h2>
@@ -160,7 +172,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the widget is shown. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00291">291</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -178,7 +190,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the widget accepts input. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -196,7 +208,7 @@ Public Attributes</h2></td></tr>
 
 <p>The size request; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00295">295</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00335">335</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +226,7 @@ Public Attributes</h2></td></tr>
 
 <p>Engaged: the widget can be dragged, and a drop delivers this key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00337">337</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +244,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether a drop of a key is accepted; empty accepts every key. Used only when <span class="tt"><a class="el" href="#a94e8ac8e1c9d795f74404cde6199447c" title="Set: the widget is a drop target, called with the dropped key.">onDrop</a></span> is set. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00299">299</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +262,115 @@ Public Attributes</h2></td></tr>
 
 <p>Set: the widget is a drop target, called with the dropped key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00341">341</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5f63cec89bdc22a967f40c0a8cce5ec5" name="a5f63cec89bdc22a967f40c0a8cce5ec5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5f63cec89bdc22a967f40c0a8cce5ec5">&#9670;&#160;</a></span>a11y</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/d03/structmorph_1_1ui_1_1Accessibility.html">Accessibility</a> morph::ui::Common::a11y {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The accessible name and role. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00343">343</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aab1ee93f768cedbae69abaa22e377e8a" name="aab1ee93f768cedbae69abaa22e377e8a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aab1ee93f768cedbae69abaa22e377e8a">&#9670;&#160;</a></span>testId</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Common::testId</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The stable identifier an automated test finds the widget by; empty means none. Set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00345">345</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2eecd3185b430971000997777e6d8df5" name="a2eecd3185b430971000997777e6d8df5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2eecd3185b430971000997777e6d8df5">&#9670;&#160;</a></span>tooltip</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::Common::tooltip</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> shown while the pointer rests on the widget; empty shows none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa" name="aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa0e62ed0ab31ed0e1c8ff3c3a8c1f3fa">&#9670;&#160;</a></span>surface</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Common::surface</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The named token set of the theme that styles this node and everything inside it; empty is the theme's default. Set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7bb02d1b2131df391380c0a4ed812f52" name="a7bb02d1b2131df391380c0a4ed812f52"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7bb02d1b2131df391380c0a4ed812f52">&#9670;&#160;</a></span>keys</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../d3/d7b/structmorph_1_1ui_1_1KeyBinding.html">KeyBinding</a>&gt; morph::ui::Common::keys</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Chords handled while focus is inside the node; the innermost node declaring a chord takes it. For a chord listed twice, the first entry is the one called. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7f54131036a7d87c2c8e770fe72048dc" name="a7f54131036a7d87c2c8e770fe72048dc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7f54131036a7d87c2c8e770fe72048dc">&#9670;&#160;</a></span>autofocus</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Common::autofocus = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the widget takes keyboard focus when the content it is part of mounts; the first such widget in document order wins. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

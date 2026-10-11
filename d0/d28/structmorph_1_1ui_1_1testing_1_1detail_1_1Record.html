@@ -142,6 +142,10 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ac70da51d5f2c3f53360b2cbddf8fe4db"><td class="mdescLeft">&#160;</td><td class="mdescRight">The handlers set so far.  <br /></td></tr>
 <tr class="memitem:a8f642582000c6be505c66ea408c83299" id="r_a8f642582000c6be505c66ea408c83299"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f642582000c6be505c66ea408c83299">dragKey</a></td></tr>
 <tr class="memdesc:a8f642582000c6be505c66ea408c83299"><td class="mdescLeft">&#160;</td><td class="mdescRight">The drag key, as <span class="tt">setDragKey</span> last set it.  <br /></td></tr>
+<tr class="memitem:a973aaff1acfe1bba406d67b30112b91a" id="r_a973aaff1acfe1bba406d67b30112b91a"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a973aaff1acfe1bba406d67b30112b91a">chords</a></td></tr>
+<tr class="memdesc:a973aaff1acfe1bba406d67b30112b91a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The chords, as <span class="tt">setKeys</span> last set them.  <br /></td></tr>
+<tr class="memitem:ab74de867e806d21348c830b3696aa967" id="r_ab74de867e806d21348c830b3696aa967"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d6/d3f/structmorph_1_1ui_1_1MenuEntry.html">MenuEntry</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab74de867e806d21348c830b3696aa967">menu</a></td></tr>
+<tr class="memdesc:ab74de867e806d21348c830b3696aa967"><td class="mdescLeft">&#160;</td><td class="mdescRight">A menu's entries, as <span class="tt">setItems</span> last set them.  <br /></td></tr>
 <tr class="memitem:a6d633faf47271e41548d64c0e472abd9" id="r_a6d633faf47271e41548d64c0e472abd9"><td class="memItemLeft"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a6d633faf47271e41548d64c0e472abd9">widget</a> = nullptr</td></tr>
 <tr class="memdesc:a6d633faf47271e41548d64c0e472abd9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The fake widget object.  <br /></td></tr>
 <tr class="memitem:a07f453b143c74f105f79558be7cc306a" id="r_a07f453b143c74f105f79558be7cc306a"><td class="memItemLeft">std::function&lt; void(int)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a07f453b143c74f105f79558be7cc306a">onChildDestroyed</a></td></tr>
@@ -150,7 +154,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One fake widget's state. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00302">302</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a5720a0a7b195c60c4dc95e8c4fc8c1a4" name="a5720a0a7b195c60c4dc95e8c4fc8c1a4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5720a0a7b195c60c4dc95e8c4fc8c1a4">&#9670;&#160;</a></span>id</h2>
@@ -166,7 +170,7 @@ Public Attributes</h2></td></tr>
 
 <p>The widget's id: its creation number, from 1. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -184,7 +188,7 @@ Public Attributes</h2></td></tr>
 
 <p>The kind shown in the log and the dump. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -202,7 +206,7 @@ Public Attributes</h2></td></tr>
 
 <p>The parent's id; 0 for a root. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -220,7 +224,7 @@ Public Attributes</h2></td></tr>
 
 <p>The children's ids, in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00310">310</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00419">419</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,7 +242,7 @@ Public Attributes</h2></td></tr>
 
 <p>Every property set so far, formatted, in name order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00421">421</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,7 +260,7 @@ Public Attributes</h2></td></tr>
 
 <p>The handlers set so far. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00314">314</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -274,7 +278,43 @@ Public Attributes</h2></td></tr>
 
 <p>The drag key, as <span class="tt">setDragKey</span> last set it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00425">425</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a973aaff1acfe1bba406d67b30112b91a" name="a973aaff1acfe1bba406d67b30112b91a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a973aaff1acfe1bba406d67b30112b91a">&#9670;&#160;</a></span>chords</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;std::string&gt; morph::ui::testing::detail::Record::chords</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The chords, as <span class="tt">setKeys</span> last set them. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00427">427</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab74de867e806d21348c830b3696aa967" name="ab74de867e806d21348c830b3696aa967"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab74de867e806d21348c830b3696aa967">&#9670;&#160;</a></span>menu</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../d6/d3f/structmorph_1_1ui_1_1MenuEntry.html">MenuEntry</a>&gt; morph::ui::testing::detail::Record::menu</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A menu's entries, as <span class="tt">setItems</span> last set them. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00429">429</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -292,7 +332,7 @@ Public Attributes</h2></td></tr>
 
 <p>The fake widget object. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -310,7 +350,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with a child's id once that child is destroyed; a fake table re-marks its selection with it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00433">433</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

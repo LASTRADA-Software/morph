@@ -12,5 +12,9 @@ var searchData=
   ['dialog_9',['Dialog',['../d2/dc0/structmorph_1_1ui_1_1Dialog.html',1,'morph::ui']]],
   ['dialogwidget_10',['DialogWidget',['../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html',1,'morph::ui']]],
   ['digitmatch_11',['DigitMatch',['../d7/d80/structmorph_1_1render_1_1detail_1_1DigitMatch.html',1,'morph::render::detail']]],
-  ['disconnectederror_12',['DisconnectedError',['../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html',1,'morph::backend']]]
+  ['disconnectederror_12',['DisconnectedError',['../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html',1,'morph::backend']]],
+  ['drawer_13',['Drawer',['../d3/df7/structmorph_1_1ui_1_1Drawer.html',1,'morph::ui']]],
+  ['drawerwidget_14',['DrawerWidget',['../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html',1,'morph::ui']]],
+  ['dropzone_15',['DropZone',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html',1,'morph::ui']]],
+  ['dropzonewidget_16',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]]
 ];

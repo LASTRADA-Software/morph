@@ -60,18 +60,20 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"d1/d58/structmorph_1_1units_1_1NamedQuantity.html#a85733c6a8917efe7dfa6f50896a295eb",
-"d2/dc0/structmorph_1_1ui_1_1Dialog.html#a3758ea02eef38c374b1cb5f37c730037",
-"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a14b96cba86de7417c184bb6c913705d4",
-"d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a04c4e54b323722ccb2071f433223d79c",
-"d7/d2c/structmorph_1_1table_1_1ApplyOptions.html#a2c1dd9a17ec8db228b59b3d3059503e1",
-"d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7aa0bf169f2539e893e00d7b1296bc4d8e",
-"d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#a70d99aa856b188844215849f1dd01c64",
-"db/d94/conceptmorph_1_1table_1_1detail_1_1MemberWrapper.html",
-"dc/ddc/profiler_8hpp.html#a18eab21ec4e4b13904850be0c6eda5c5",
-"dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aecbebe0a379ae9566008ee2d8c5002c5",
-"de/dce/structmorph_1_1observe_1_1MetricEvent.html",
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab"
+"d1/d05/structmorph_1_1ui_1_1Column.html#ad66e1f42f134870150c499443261a406",
+"d2/d47/structmorph_1_1ui_1_1Button.html#a611569ffa0415b72497fe3e2c77401fe",
+"d3/d9f/classmorph_1_1reactive_1_1detail_1_1UpdateGuard.html",
+"d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#abfe9f8e1ed2759f606aa3ffc0f3766d3",
+"d5/dda/structmorph_1_1units_1_1Quantity.html#af19ad973981224caceb822181204afaf",
+"d7/d3a/classmorph_1_1reactive_1_1detail_1_1RuntimeCore.html#ad54b4904e33087b18fdd54a58f3cfffa",
+"d8/d11/view_8hpp.html#a9d01587a3c42b6527cd565009f5e618bac9cc8cce247e49bae79f15173ce97354",
+"d9/d60/structmorph_1_1ui_1_1Switch.html#aaf8bfa15c2875e275d1f8d75fa609d8a",
+"db/d00/structmorph_1_1core_1_1FileIoOps.html#a8f449d6b2bb7b518b9a528d5e66ed691",
+"dc/d91/classmorph_1_1table_1_1detail_1_1ViewJob.html#a555be3b543a4df0241e4bc8e10e2aa9d",
+"dd/d5b/structmorph_1_1ui_1_1Banner.html#ac9e3fee86bb010283e437de8c1f36b3c",
+"de/d18/classmorph_1_1reactive_1_1TimerHandle.html#a42cdbd68e8625563591aca1a239a7f1b",
+"df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af6a72b2805560d317866b924d4cb8039",
+"df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#a74902719604bfe14f02b1c32c00e49fc"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

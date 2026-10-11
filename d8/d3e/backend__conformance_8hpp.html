@@ -233,6 +233,22 @@ Functions</h2></td></tr>
 <tr class="memdesc:a0ba139a7d61891767421b93269aea9c3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a drag onto a target that refuses the key delivers nothing.  <br /></td></tr>
 <tr class="memitem:aade0c877f9f6bc238ced27b017133169" id="r_aade0c877f9f6bc238ced27b017133169"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aade0c877f9f6bc238ced27b017133169">morph::ui::testing::detail::dropTargetWithoutAcceptsTakesAll</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
 <tr class="memdesc:aade0c877f9f6bc238ced27b017133169"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a drop target without <span class="tt">accepts</span> takes every key.  <br /></td></tr>
+<tr class="memitem:a5123f3bb37d2f783f84034ff358f4e56" id="r_a5123f3bb37d2f783f84034ff358f4e56"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5123f3bb37d2f783f84034ff358f4e56">morph::ui::testing::detail::innermostChordWins</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a5123f3bb37d2f783f84034ff358f4e56"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a chord goes to the innermost widget that declares it, and one only an outer widget declares reaches that widget.  <br /></td></tr>
+<tr class="memitem:a17d70b159529b91e31a4631dcac6cf20" id="r_a17d70b159529b91e31a4631dcac6cf20"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a17d70b159529b91e31a4631dcac6cf20">morph::ui::testing::detail::hiddenChordRunsNothing</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a17d70b159529b91e31a4631dcac6cf20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a chord pressed inside a container hidden two levels up runs nothing; while shown it runs once.  <br /></td></tr>
+<tr class="memitem:af6f12af051d7563eba92386d1d4adee7" id="r_af6f12af051d7563eba92386d1d4adee7"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af6f12af051d7563eba92386d1d4adee7">morph::ui::testing::detail::firstAutofocusWins</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:af6f12af051d7563eba92386d1d4adee7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: the first <span class="tt">autofocus</span> widget in document order has focus once the mount completes.  <br /></td></tr>
+<tr class="memitem:aff3caa3ca594a683977b0623370efba6" id="r_aff3caa3ca594a683977b0623370efba6"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aff3caa3ca594a683977b0623370efba6">morph::ui::testing::detail::onlyEnabledMenuLeavesAreChosen</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:aff3caa3ca594a683977b0623370efba6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a menu reports only an enabled entry without a submenu, and an entry enabled later can be chosen.  <br /></td></tr>
+<tr class="memitem:a5f5f2f4eca3d49d623dd482b3ed9c18e" id="r_a5f5f2f4eca3d49d623dd482b3ed9c18e"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5f5f2f4eca3d49d623dd482b3ed9c18e">morph::ui::testing::detail::readOnlyInputTakesNoEdit</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a5f5f2f4eca3d49d623dd482b3ed9c18e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: typing into a read-only input reaches no handler; once editable again, it does.  <br /></td></tr>
+<tr class="memitem:a3db1e706e55f51fe4abb39d0c9d31063" id="r_a3db1e706e55f51fe4abb39d0c9d31063"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3db1e706e55f51fe4abb39d0c9d31063">morph::ui::testing::detail::dismissedBannerStays</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a3db1e706e55f51fe4abb39d0c9d31063"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: dismissing a dismissible banner reaches <span class="tt">onDismiss</span> once, and the banner stays shown.  <br /></td></tr>
+<tr class="memitem:a4257249ddc9ffb36ed7799f9f6bdca47" id="r_a4257249ddc9ffb36ed7799f9f6bdca47"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4257249ddc9ffb36ed7799f9f6bdca47">morph::ui::testing::detail::closedCollapsibleKeepsItsHeader</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a4257249ddc9ffb36ed7799f9f6bdca47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a closed collapsible section's content takes no click and its header does; the user's opening reaches <span class="tt">onToggle</span>, and once the application opens it the content takes clicks.  <br /></td></tr>
+<tr class="memitem:aacdc29891eeb6afa21068e646c93256e" id="r_aacdc29891eeb6afa21068e646c93256e"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aacdc29891eeb6afa21068e646c93256e">morph::ui::testing::detail::dropZoneTakesWholeDrops</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:aacdc29891eeb6afa21068e646c93256e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a drop zone takes a drop of one accepted file, compared without case, and refuses a file it does not accept and several files when it takes one.  <br /></td></tr>
 <tr class="memitem:a40f3611811880916195ad1becfbe3d46" id="r_a40f3611811880916195ad1becfbe3d46"><td class="memItemLeft">std::span&lt; <a class="el" href="../../db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html">ConformanceCase</a> const &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a40f3611811880916195ad1becfbe3d46">morph::ui::testing::conformanceCases</a> ()</td></tr>
 <tr class="memdesc:a40f3611811880916195ad1becfbe3d46"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every conformance case, in a fixed order.  <br /></td></tr>
 </table>
@@ -279,7 +295,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00196">196</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00221">221</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +336,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,7 +372,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, or null when it is not a <span class="tt">ContainerWidget</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -392,7 +408,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The root widget as a container. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -439,7 +455,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The child, or null. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00269">269</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -480,7 +496,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>For example <span class="tt">a,b,c</span>; a missing child reads <span class="tt">&lt;null&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00253">253</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -521,7 +537,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>For example <span class="tt">a,c</span>; a row without a first cell reads <span class="tt">&lt;null&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00269">269</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -557,7 +573,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>For example <span class="tt">1,"b"</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00284">284</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00309">309</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -593,7 +609,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00302">302</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -629,7 +645,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -665,7 +681,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00340">340</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -701,7 +717,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00360">360</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -737,7 +753,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00377">377</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00402">402</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -773,7 +789,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00405">405</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00430">430</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -809,7 +825,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00430">430</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -845,7 +861,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00489">489</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -881,7 +897,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00509">509</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -917,7 +933,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00504">504</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -953,7 +969,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00560">560</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -989,7 +1005,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00561">561</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1025,7 +1041,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00601">601</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00626">626</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1061,7 +1077,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00687">687</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1097,7 +1113,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00707">707</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00732">732</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1133,7 +1149,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00740">740</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00765">765</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1169,7 +1185,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00771">771</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00796">796</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1205,7 +1221,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00855">855</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00880">880</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1241,7 +1257,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00891">891</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00916">916</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1277,7 +1293,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00950">950</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00975">975</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1313,7 +1329,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00975">975</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01000">1000</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1349,7 +1365,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01001">1001</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01026">1026</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1385,7 +1401,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01064">1064</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01089">1089</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1426,7 +1442,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The keys the panel's <span class="tt">onDrop</span> received. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01099">1099</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01124">1124</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1462,7 +1478,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01117">1117</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01142">1142</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1498,7 +1514,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01128">1128</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01153">1153</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1534,7 +1550,295 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01138">1138</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01163">1163</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5123f3bb37d2f783f84034ff358f4e56" name="a5123f3bb37d2f783f84034ff358f4e56"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5123f3bb37d2f783f84034ff358f4e56">&#9670;&#160;</a></span>innermostChordWins()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::innermostChordWins </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a chord goes to the innermost widget that declares it, and one only an outer widget declares reaches that widget. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01174">1174</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a17d70b159529b91e31a4631dcac6cf20" name="a17d70b159529b91e31a4631dcac6cf20"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a17d70b159529b91e31a4631dcac6cf20">&#9670;&#160;</a></span>hiddenChordRunsNothing()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::hiddenChordRunsNothing </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a chord pressed inside a container hidden two levels up runs nothing; while shown it runs once. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01205">1205</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af6f12af051d7563eba92386d1d4adee7" name="af6f12af051d7563eba92386d1d4adee7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af6f12af051d7563eba92386d1d4adee7">&#9670;&#160;</a></span>firstAutofocusWins()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::firstAutofocusWins </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: the first <span class="tt">autofocus</span> widget in document order has focus once the mount completes. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01235">1235</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aff3caa3ca594a683977b0623370efba6" name="aff3caa3ca594a683977b0623370efba6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aff3caa3ca594a683977b0623370efba6">&#9670;&#160;</a></span>onlyEnabledMenuLeavesAreChosen()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::onlyEnabledMenuLeavesAreChosen </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a menu reports only an enabled entry without a submenu, and an entry enabled later can be chosen. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01255">1255</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5f5f2f4eca3d49d623dd482b3ed9c18e" name="a5f5f2f4eca3d49d623dd482b3ed9c18e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5f5f2f4eca3d49d623dd482b3ed9c18e">&#9670;&#160;</a></span>readOnlyInputTakesNoEdit()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::readOnlyInputTakesNoEdit </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: typing into a read-only input reaches no handler; once editable again, it does. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01287">1287</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3db1e706e55f51fe4abb39d0c9d31063" name="a3db1e706e55f51fe4abb39d0c9d31063"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3db1e706e55f51fe4abb39d0c9d31063">&#9670;&#160;</a></span>dismissedBannerStays()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::dismissedBannerStays </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: dismissing a dismissible banner reaches <span class="tt">onDismiss</span> once, and the banner stays shown. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01313">1313</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4257249ddc9ffb36ed7799f9f6bdca47" name="a4257249ddc9ffb36ed7799f9f6bdca47"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4257249ddc9ffb36ed7799f9f6bdca47">&#9670;&#160;</a></span>closedCollapsibleKeepsItsHeader()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::closedCollapsibleKeepsItsHeader </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a closed collapsible section's content takes no click and its header does; the user's opening reaches <span class="tt">onToggle</span>, and once the application opens it the content takes clicks. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01331">1331</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aacdc29891eeb6afa21068e646c93256e" name="aacdc29891eeb6afa21068e646c93256e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aacdc29891eeb6afa21068e646c93256e">&#9670;&#160;</a></span>dropZoneTakesWholeDrops()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::dropZoneTakesWholeDrops </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a drop zone takes a drop of one accepted file, compared without case, and refuses a file it does not accept and several files when it takes one. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01366">1366</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1564,7 +1868,7 @@ Functions</h2></td></tr>
 <p>Every conformance case, in a fixed order. </p>
 <p>Run each on a fresh probe; <span class="tt">nullopt</span> is a pass, anything else is the failure message. A backend's test suite loops over these with its own <span class="tt">ConformanceProbe</span>. </p><dl class="section return"><dt>Returns</dt><dd>The cases. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01152">1152</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01391">1391</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>

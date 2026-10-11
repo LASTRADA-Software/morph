@@ -271,16 +271,22 @@ var hierarchy =
     [ "morph::time::DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", null ],
     [ "morph::time::ScopedNowOverride", "d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html", null ],
     [ "morph::time::Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", null ],
+    [ "morph::ui::Accessibility", "d9/d03/structmorph_1_1ui_1_1Accessibility.html", null ],
+    [ "morph::ui::ActionButton", "da/d14/structmorph_1_1ui_1_1ActionButton.html", null ],
     [ "morph::ui::AppContext", "dd/db8/classmorph_1_1ui_1_1AppContext.html", null ],
     [ "morph::ui::AppSource", "d5/d3d/classmorph_1_1ui_1_1AppSource.html", null ],
     [ "morph::ui::Backend", "d3/d00/structmorph_1_1ui_1_1Backend.html", null ],
+    [ "morph::ui::Badge", "d1/df1/structmorph_1_1ui_1_1Badge.html", null ],
+    [ "morph::ui::Banner", "dd/d5b/structmorph_1_1ui_1_1Banner.html", null ],
     [ "morph::ui::Bundle", "dc/dcf/structmorph_1_1ui_1_1Bundle.html", null ],
     [ "morph::ui::Busy", "dc/dd1/structmorph_1_1ui_1_1Busy.html", null ],
     [ "morph::ui::Button", "d2/d47/structmorph_1_1ui_1_1Button.html", null ],
     [ "morph::ui::Checkbox", "d0/db4/structmorph_1_1ui_1_1Checkbox.html", null ],
+    [ "morph::ui::Collapsible", "d0/db5/structmorph_1_1ui_1_1Collapsible.html", null ],
     [ "morph::ui::Column", "d1/d05/structmorph_1_1ui_1_1Column.html", null ],
     [ "morph::ui::Common", "d1/d68/structmorph_1_1ui_1_1Common.html", null ],
     [ "morph::ui::ConnectError", "d8/dcd/structmorph_1_1ui_1_1ConnectError.html", null ],
+    [ "morph::ui::Custom", "db/d27/structmorph_1_1ui_1_1Custom.html", null ],
     [ "morph::ui::DateTimeInput", "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html", null ],
     [ "morph::ui::detail::CommandLineChoice", "d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html", null ],
     [ "morph::ui::detail::ForEachModel", "db/dba/classmorph_1_1ui_1_1detail_1_1ForEachModel.html", [
@@ -295,6 +301,10 @@ var hierarchy =
     [ "morph::ui::detail::Pages", "d3/d17/structmorph_1_1ui_1_1detail_1_1Pages.html", null ],
     [ "morph::ui::detail::RowSlot", "d2/dd9/classmorph_1_1ui_1_1detail_1_1RowSlot.html", null ],
     [ "morph::ui::Dialog", "d2/dc0/structmorph_1_1ui_1_1Dialog.html", null ],
+    [ "morph::ui::Drawer", "d3/df7/structmorph_1_1ui_1_1Drawer.html", null ],
+    [ "morph::ui::DropZone", "d0/dcb/structmorph_1_1ui_1_1DropZone.html", null ],
+    [ "morph::ui::EmptyState", "d8/d99/structmorph_1_1ui_1_1EmptyState.html", null ],
+    [ "morph::ui::FieldState", "d1/d36/structmorph_1_1ui_1_1FieldState.html", null ],
     [ "morph::ui::FilePicker", "d3/da2/structmorph_1_1ui_1_1FilePicker.html", null ],
     [ "morph::ui::ForEach", "d2/d58/structmorph_1_1ui_1_1ForEach.html", null ],
     [ "morph::ui::Frontend", "dd/dcc/classmorph_1_1ui_1_1Frontend.html", null ],
@@ -305,13 +315,18 @@ var hierarchy =
     [ "morph::ui::IViewBackend", "df/dae/classmorph_1_1ui_1_1IViewBackend.html", [
       [ "morph::ui::testing::RecordingBackend", "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html", null ]
     ] ],
+    [ "morph::ui::KeyBinding", "d3/d7b/structmorph_1_1ui_1_1KeyBinding.html", null ],
+    [ "morph::ui::KeyValue", "dc/df0/structmorph_1_1ui_1_1KeyValue.html", null ],
+    [ "morph::ui::KeyValueItem", "d4/d73/structmorph_1_1ui_1_1KeyValueItem.html", null ],
     [ "morph::ui::LayoutHints", "dc/d30/structmorph_1_1ui_1_1LayoutHints.html", null ],
     [ "morph::ui::Menu", "de/dce/structmorph_1_1ui_1_1Menu.html", null ],
+    [ "morph::ui::MenuEntry", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html", null ],
     [ "morph::ui::MenuItem", "d4/dac/structmorph_1_1ui_1_1MenuItem.html", null ],
     [ "morph::ui::Mounted", "d1/d57/classmorph_1_1ui_1_1Mounted.html", null ],
     [ "morph::ui::MountedShell", "d9/d90/classmorph_1_1ui_1_1MountedShell.html", null ],
     [ "morph::ui::NodeData", "d9/d5b/structmorph_1_1ui_1_1NodeData.html", null ],
     [ "morph::ui::Panel", "d4/d64/structmorph_1_1ui_1_1Panel.html", null ],
+    [ "morph::ui::Progress", "d8/d67/structmorph_1_1ui_1_1Progress.html", null ],
     [ "morph::ui::Prop&lt; T &gt;", "db/d73/classmorph_1_1ui_1_1Prop.html", null ],
     [ "morph::ui::Row", "d7/da8/structmorph_1_1ui_1_1Row.html", null ],
     [ "morph::ui::Scroll", "dc/dae/structmorph_1_1ui_1_1Scroll.html", null ],
@@ -321,6 +336,9 @@ var hierarchy =
     [ "morph::ui::Slider", "dc/d36/structmorph_1_1ui_1_1Slider.html", null ],
     [ "morph::ui::SlotBinding&lt; F &gt;", "d7/d69/structmorph_1_1ui_1_1SlotBinding.html", null ],
     [ "morph::ui::Spacer", "d9/d8f/structmorph_1_1ui_1_1Spacer.html", null ],
+    [ "morph::ui::Splitter", "d7/d07/structmorph_1_1ui_1_1Splitter.html", null ],
+    [ "morph::ui::Step", "dd/da6/structmorph_1_1ui_1_1Step.html", null ],
+    [ "morph::ui::Steps", "d8/d3b/structmorph_1_1ui_1_1Steps.html", null ],
     [ "morph::ui::Switch", "d9/d60/structmorph_1_1ui_1_1Switch.html", null ],
     [ "morph::ui::SwitchCase", "d9/d64/structmorph_1_1ui_1_1SwitchCase.html", null ],
     [ "morph::ui::Tab", "d2/d33/structmorph_1_1ui_1_1Tab.html", null ],
@@ -334,7 +352,8 @@ var hierarchy =
     [ "morph::ui::testing::detail::Checks", "d0/d7d/classmorph_1_1ui_1_1testing_1_1detail_1_1Checks.html", null ],
     [ "morph::ui::testing::detail::Entry", "db/d76/structmorph_1_1ui_1_1testing_1_1detail_1_1Entry.html", null ],
     [ "morph::ui::testing::detail::FakeLeaf&lt; Interface &gt;", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-      [ "morph::ui::testing::detail::FakeContainer< Interface >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", null ]
+      [ "morph::ui::testing::detail::FakeContainer< Interface >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", null ],
+      [ "morph::ui::testing::detail::FakeField< Interface >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", null ]
     ] ],
     [ "morph::ui::testing::detail::HandlerLife", "d4/d6b/structmorph_1_1ui_1_1testing_1_1detail_1_1HandlerLife.html", null ],
     [ "morph::ui::testing::detail::LifeSentinel", "da/dc9/classmorph_1_1ui_1_1testing_1_1detail_1_1LifeSentinel.html", null ],
@@ -343,6 +362,16 @@ var hierarchy =
     [ "morph::ui::Text", "dd/dfe/structmorph_1_1ui_1_1Text.html", null ],
     [ "morph::ui::TextInput", "d3/dbc/structmorph_1_1ui_1_1TextInput.html", null ],
     [ "morph::ui::Widget", "dc/dcb/classmorph_1_1ui_1_1Widget.html", [
+      [ "morph::ui::BadgeWidget", "d1/d05/classmorph_1_1ui_1_1BadgeWidget.html", [
+        [ "morph::ui::testing::detail::FakeLeaf< BadgeWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+          [ "morph::ui::testing::detail::FakeBadge", "df/d0f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBadge.html", null ]
+        ] ]
+      ] ],
+      [ "morph::ui::BannerWidget", "d6/d9f/classmorph_1_1ui_1_1BannerWidget.html", [
+        [ "morph::ui::testing::detail::FakeLeaf< BannerWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+          [ "morph::ui::testing::detail::FakeBanner", "d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner.html", null ]
+        ] ]
+      ] ],
       [ "morph::ui::BusyWidget", "d3/d98/classmorph_1_1ui_1_1BusyWidget.html", [
         [ "morph::ui::testing::detail::FakeLeaf< BusyWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
           [ "morph::ui::testing::detail::FakeBusy", "d8/d40/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBusy.html", null ]
@@ -353,16 +382,32 @@ var hierarchy =
           [ "morph::ui::testing::detail::FakeButton", "dc/d9e/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeButton.html", null ]
         ] ]
       ] ],
-      [ "morph::ui::CheckboxWidget", "de/da9/classmorph_1_1ui_1_1CheckboxWidget.html", [
-        [ "morph::ui::testing::detail::FakeLeaf< CheckboxWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-          [ "morph::ui::testing::detail::FakeCheckbox", "de/d3d/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCheckbox.html", null ]
-        ] ]
-      ] ],
       [ "morph::ui::ContainerWidget", "d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html", [
+        [ "morph::ui::CollapsibleWidget", "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< CollapsibleWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeContainer< CollapsibleWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
+              [ "morph::ui::testing::detail::FakeCollapsible", "d2/d72/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCollapsible.html", null ]
+            ] ]
+          ] ]
+        ] ],
         [ "morph::ui::DialogWidget", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html", [
           [ "morph::ui::testing::detail::FakeLeaf< DialogWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
             [ "morph::ui::testing::detail::FakeContainer< DialogWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
               [ "morph::ui::testing::detail::FakeDialog", "dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::DrawerWidget", "de/d3c/classmorph_1_1ui_1_1DrawerWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< DrawerWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeContainer< DrawerWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
+              [ "morph::ui::testing::detail::FakeDrawer", "d7/d5a/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDrawer.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::DropZoneWidget", "df/df5/classmorph_1_1ui_1_1DropZoneWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< DropZoneWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeContainer< DropZoneWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
+              [ "morph::ui::testing::detail::FakeDropZone", "da/d2f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDropZone.html", null ]
             ] ]
           ] ]
         ] ],
@@ -382,6 +427,13 @@ var hierarchy =
         ] ],
         [ "morph::ui::ScrollWidget", "d1/d8b/classmorph_1_1ui_1_1ScrollWidget.html", null ],
         [ "morph::ui::SlotWidget", "de/d98/classmorph_1_1ui_1_1SlotWidget.html", null ],
+        [ "morph::ui::SplitterWidget", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< SplitterWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeContainer< SplitterWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
+              [ "morph::ui::testing::detail::FakeSplitter", "d5/d19/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSplitter.html", null ]
+            ] ]
+          ] ]
+        ] ],
         [ "morph::ui::StackWidget", "d4/d07/classmorph_1_1ui_1_1StackWidget.html", [
           [ "morph::ui::testing::detail::FakeLeaf< StackWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
             [ "morph::ui::testing::detail::FakeContainer< StackWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
@@ -404,14 +456,65 @@ var hierarchy =
           ] ]
         ] ]
       ] ],
-      [ "morph::ui::DateTimeInputWidget", "db/d9b/classmorph_1_1ui_1_1DateTimeInputWidget.html", [
-        [ "morph::ui::testing::detail::FakeLeaf< DateTimeInputWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-          [ "morph::ui::testing::detail::FakeDateTimeInput", "d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html", null ]
+      [ "morph::ui::EmptyStateWidget", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html", [
+        [ "morph::ui::testing::detail::FakeLeaf< EmptyStateWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+          [ "morph::ui::testing::detail::FakeEmptyState", "d5/d33/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeEmptyState.html", null ]
         ] ]
       ] ],
-      [ "morph::ui::FilePickerWidget", "d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html", [
-        [ "morph::ui::testing::detail::FakeLeaf< FilePickerWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-          [ "morph::ui::testing::detail::FakeFilePicker", "dc/dd7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeFilePicker.html", null ]
+      [ "morph::ui::FieldWidget", "d5/dbb/classmorph_1_1ui_1_1FieldWidget.html", [
+        [ "morph::ui::CheckboxWidget", "de/da9/classmorph_1_1ui_1_1CheckboxWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< CheckboxWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeField< CheckboxWidget >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", [
+              [ "morph::ui::testing::detail::FakeCheckbox", "de/d3d/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCheckbox.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::DateTimeInputWidget", "db/d9b/classmorph_1_1ui_1_1DateTimeInputWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< DateTimeInputWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeField< DateTimeInputWidget >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", [
+              [ "morph::ui::testing::detail::FakeDateTimeInput", "d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::FilePickerWidget", "d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< FilePickerWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeField< FilePickerWidget >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", [
+              [ "morph::ui::testing::detail::FakeFilePicker", "dc/dd7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeFilePicker.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::SelectWidget", "d6/d9f/classmorph_1_1ui_1_1SelectWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< SelectWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeField< SelectWidget >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", [
+              [ "morph::ui::testing::detail::FakeSelect", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::SliderWidget", "d4/d7d/classmorph_1_1ui_1_1SliderWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< SliderWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeField< SliderWidget >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", [
+              [ "morph::ui::testing::detail::FakeSlider", "d4/d56/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSlider.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::TextInputWidget", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< TextInputWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeField< TextInputWidget >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", [
+              [ "morph::ui::testing::detail::FakeTextInput", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::TextWidget", "de/d89/classmorph_1_1ui_1_1TextWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< TextWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeField< TextWidget >", "de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html", [
+              [ "morph::ui::testing::detail::FakeText", "d6/d74/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeText.html", null ]
+            ] ]
+          ] ]
+        ] ]
+      ] ],
+      [ "morph::ui::KeyValueWidget", "dd/df9/classmorph_1_1ui_1_1KeyValueWidget.html", [
+        [ "morph::ui::testing::detail::FakeLeaf< KeyValueWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+          [ "morph::ui::testing::detail::FakeKeyValue", "da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html", null ]
         ] ]
       ] ],
       [ "morph::ui::MenuWidget", "d4/dfc/classmorph_1_1ui_1_1MenuWidget.html", [
@@ -419,25 +522,15 @@ var hierarchy =
           [ "morph::ui::testing::detail::FakeMenu", "de/db8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeMenu.html", null ]
         ] ]
       ] ],
-      [ "morph::ui::SelectWidget", "d6/d9f/classmorph_1_1ui_1_1SelectWidget.html", [
-        [ "morph::ui::testing::detail::FakeLeaf< SelectWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-          [ "morph::ui::testing::detail::FakeSelect", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html", null ]
-        ] ]
-      ] ],
-      [ "morph::ui::SliderWidget", "d4/d7d/classmorph_1_1ui_1_1SliderWidget.html", [
-        [ "morph::ui::testing::detail::FakeLeaf< SliderWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-          [ "morph::ui::testing::detail::FakeSlider", "d4/d56/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSlider.html", null ]
+      [ "morph::ui::ProgressWidget", "d9/d83/classmorph_1_1ui_1_1ProgressWidget.html", [
+        [ "morph::ui::testing::detail::FakeLeaf< ProgressWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+          [ "morph::ui::testing::detail::FakeProgress", "db/d84/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeProgress.html", null ]
         ] ]
       ] ],
       [ "morph::ui::SpacerWidget", "d7/d87/classmorph_1_1ui_1_1SpacerWidget.html", null ],
-      [ "morph::ui::TextInputWidget", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html", [
-        [ "morph::ui::testing::detail::FakeLeaf< TextInputWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-          [ "morph::ui::testing::detail::FakeTextInput", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html", null ]
-        ] ]
-      ] ],
-      [ "morph::ui::TextWidget", "de/d89/classmorph_1_1ui_1_1TextWidget.html", [
-        [ "morph::ui::testing::detail::FakeLeaf< TextWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
-          [ "morph::ui::testing::detail::FakeText", "d6/d74/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeText.html", null ]
+      [ "morph::ui::StepsWidget", "d1/d8e/classmorph_1_1ui_1_1StepsWidget.html", [
+        [ "morph::ui::testing::detail::FakeLeaf< StepsWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+          [ "morph::ui::testing::detail::FakeSteps", "db/dd3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSteps.html", null ]
         ] ]
       ] ]
     ] ],

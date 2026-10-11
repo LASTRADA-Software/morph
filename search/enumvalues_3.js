@@ -7,5 +7,6 @@ var searchData=
   ['descending_4',['Descending',['../d4/d54/sort_8hpp.html#a4bf8bff3068017a35668bddb3600b79aae3cf5ac19407b1a62c6fccaff675a53b',1,'morph::table']]],
   ['dirty_5',['Dirty',['../d9/de9/graph_8hpp.html#acbe9ee40590fbc2c7d377c3fe7937067a99feffc57dae9a01652065178fae5b19',1,'morph::reactive::detail']]],
   ['divisionbyzero_6',['DivisionByZero',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea34e540e6594987eef203290f0a593bd2',1,'morph::math']]],
-  ['dropdown_7',['Dropdown',['../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38',1,'morph::ui']]]
+  ['done_7',['Done',['../d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0af92965e2c8a7afb3c1b9a5c09a263636',1,'morph::ui']]],
+  ['dropdown_8',['Dropdown',['../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38',1,'morph::ui']]]
 ];

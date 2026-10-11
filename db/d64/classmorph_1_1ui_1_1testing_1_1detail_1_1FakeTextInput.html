@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/d64/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a></span>, <span class="tt">placeholder</span>, and a text cursor.  
+<p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, the field state, and a text cursor.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -131,28 +131,43 @@ Inheritance diagram for morph::ui::testing::detail::FakeTextInput:</div>
  <div class="center">
   <img src="../../db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.png" usemap="#morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeTextInput_map" alt=""/>
   <map id="morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeTextInput_map" name="morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeTextInput_map">
-<area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; TextInputWidget &gt;" shape="rect" coords="0,112,312,136"/>
-<area href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field." alt="morph::ui::TextInputWidget" shape="rect" coords="0,56,312,80"/>
-<area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,312,24"/>
+<area href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html" alt="morph::ui::testing::detail::FakeField&lt; TextInputWidget &gt;" shape="rect" coords="0,224,315,248"/>
+<area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; TextInputWidget &gt;" shape="rect" coords="0,168,315,192"/>
+<area href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field." alt="morph::ui::TextInputWidget" shape="rect" coords="0,112,315,136"/>
+<area href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html" title="A widget that shows a value: text, or an input. A new field is editable, not required,..." alt="morph::ui::FieldWidget" shape="rect" coords="0,56,315,80"/>
+<area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,315,24"/>
   </map>
 </div></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:afe78fab8c4a9468427c6e56d757dc129" id="r_afe78fab8c4a9468427c6e56d757dc129"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#afe78fab8c4a9468427c6e56d757dc129">setText</a> (std::string_view text) override</td></tr>
-<tr class="memdesc:afe78fab8c4a9468427c6e56d757dc129"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a></span>; moves the cursor to the end only when the text changes.  <br /></td></tr>
+<tr class="memdesc:afe78fab8c4a9468427c6e56d757dc129"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>; moves the cursor to the end only when the text changes.  <br /></td></tr>
 <tr class="memitem:aa58dbec222f368389bc64070c245d518" id="r_aa58dbec222f368389bc64070c245d518"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa58dbec222f368389bc64070c245d518">typedByUser</a> (std::string text, std::size_t cursor)</td></tr>
 <tr class="memdesc:aa58dbec222f368389bc64070c245d518"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text the user typed: the field shows it, and the cursor is at <code class="param">cursor</code>; nothing is logged.  <br /></td></tr>
 <tr class="memitem:aa0a4f541871fc9386466e0ef7dd9ca44" id="r_aa0a4f541871fc9386466e0ef7dd9ca44"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa0a4f541871fc9386466e0ef7dd9ca44">moveCursorByUser</a> (std::size_t cursor) noexcept</td></tr>
 <tr class="memdesc:aa0a4f541871fc9386466e0ef7dd9ca44"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the cursor as the user's arrow keys or a click would.  <br /></td></tr>
 <tr class="memitem:acbaf15e1d6bb20c22fa1c1e4de6b0ff2" id="r_acbaf15e1d6bb20c22fa1c1e4de6b0ff2"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#acbaf15e1d6bb20c22fa1c1e4de6b0ff2">cursor</a> () const noexcept</td></tr>
 <tr class="memdesc:acbaf15e1d6bb20c22fa1c1e4de6b0ff2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the cursor is.  <br /></td></tr>
+<tr class="memitem:a3548f2b728bd82490dab53cc5e1e910f" id="r_a3548f2b728bd82490dab53cc5e1e910f"><td class="memItemLeft">std::string const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f">text</a> () const noexcept</td></tr>
+<tr class="memdesc:a3548f2b728bd82490dab53cc5e1e910f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text the field shows.  <br /></td></tr>
 <tr class="memitem:a8329be7b8f20b0da3b2969794fa24206" id="r_a8329be7b8f20b0da3b2969794fa24206"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8329be7b8f20b0da3b2969794fa24206">setPlaceholder</a> (std::string_view placeholder) override</td></tr>
 <tr class="memdesc:a8329be7b8f20b0da3b2969794fa24206"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the field is empty.  <br /></td></tr>
 <tr class="memitem:a4e6d2e3511b8b7cbb9954ce3188c14ac" id="r_a4e6d2e3511b8b7cbb9954ce3188c14ac"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4e6d2e3511b8b7cbb9954ce3188c14ac">setOnChange</a> (std::function&lt; void(std::string)&gt; onChange) override</td></tr>
 <tr class="memdesc:a4e6d2e3511b8b7cbb9954ce3188c14ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user edit calls, with the whole new text.  <br /></td></tr>
 <tr class="memitem:ab598b40bcdd6ad0fb7f204e7009b366e" id="r_ab598b40bcdd6ad0fb7f204e7009b366e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab598b40bcdd6ad0fb7f204e7009b366e">setOnSubmit</a> (std::function&lt; void(std::string)&gt; onSubmit) override</td></tr>
 <tr class="memdesc:ab598b40bcdd6ad0fb7f204e7009b366e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a submit (Enter in single-line mode) calls, with the text.  <br /></td></tr>
+<tr class="memitem:a5cd9b47a73e1e75c8a7ffbd29060c5cd" id="r_a5cd9b47a73e1e75c8a7ffbd29060c5cd"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5cd9b47a73e1e75c8a7ffbd29060c5cd">setOnCommit</a> (std::function&lt; void(std::string)&gt; onCommit) override</td></tr>
+<tr class="memdesc:a5cd9b47a73e1e75c8a7ffbd29060c5cd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a commit calls, with the text: Enter in single-line mode, before the submit, or focus leaving the field after an edit.  <br /></td></tr>
+<tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html">morph::ui::testing::detail::FakeField&lt; TextInputWidget &gt;</a></td></tr>
+<tr class="memitem:ac17b4650ec74211510a3fdf3a989903e pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField" id="r_ac17b4650ec74211510a3fdf3a989903e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#ac17b4650ec74211510a3fdf3a989903e">setReadOnly</a> (bool readonly) override</td></tr>
+<tr class="memdesc:ac17b4650ec74211510a3fdf3a989903e pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">readonly</span>; <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html" title="A headless IViewBackend: fake widgets that record every operation, a golden dump of the live tree,...">RecordingBackend</a></span>'s edits leave a read-only field alone.  <br /></td></tr>
+<tr class="memitem:aae49a1ba54e5b4834d46da19bf907f90 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField" id="r_aae49a1ba54e5b4834d46da19bf907f90"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#aae49a1ba54e5b4834d46da19bf907f90">setRequired</a> (bool required) override</td></tr>
+<tr class="memdesc:aae49a1ba54e5b4834d46da19bf907f90 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">required</span>.  <br /></td></tr>
+<tr class="memitem:a43959d49c9f7ef8e092f34767d80ef5f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField" id="r_a43959d49c9f7ef8e092f34767d80ef5f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a43959d49c9f7ef8e092f34767d80ef5f">setErrors</a> (std::vector&lt; std::string &gt; const &amp;errors) override</td></tr>
+<tr class="memdesc:a43959d49c9f7ef8e092f34767d80ef5f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">errors</span>, as <span class="tt"><a class="el" href="../../de/dd9/recording__backend_8hpp.html#aa6fbf75d22b98da76525eff2f51dc9d7" title="Formats a list as [a,b,c].">formatList</a></span> gives the messages.  <br /></td></tr>
+<tr class="memitem:a194266ed2d9a38f9a56838529e5285f7 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField" id="r_a194266ed2d9a38f9a56838529e5285f7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">setStale</a> (bool stale) override</td></tr>
+<tr class="memdesc:a194266ed2d9a38f9a56838529e5285f7 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">stale</span>.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf&lt; TextInputWidget &gt;</a></td></tr>
 <tr class="memitem:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a3315df8bc8818827aafd77198af851be"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
 <tr class="memdesc:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
@@ -170,6 +185,20 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab21499df9e1789d033f6a3d9b1bc04bf pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">dragKey</span> and keeps the key for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a44d4e6aec562919cb4e1419df983928d" title="Drags one widget onto another. Any kind of widget can be a source or a target.">RecordingBackend::drag</a></span>.  <br /></td></tr>
 <tr class="memitem:af502844d9854cd422b004b6f6dc65b57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_af502844d9854cd422b004b6f6dc65b57"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#af502844d9854cd422b004b6f6dc65b57">setDropHandler</a> (std::function&lt; bool(<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;)&gt; accepts, std::function&lt; void(<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>)&gt; onDrop) override</td></tr>
 <tr class="memdesc:af502844d9854cd422b004b6f6dc65b57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">drop=handler</span> and keeps both handlers for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a44d4e6aec562919cb4e1419df983928d" title="Drags one widget onto another. Any kind of widget can be a source or a target.">RecordingBackend::drag</a></span>.  <br /></td></tr>
+<tr class="memitem:a76928c3db7bfe56d2a9bf7ae5850e282 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a76928c3db7bfe56d2a9bf7ae5850e282"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a76928c3db7bfe56d2a9bf7ae5850e282">setAccessibleName</a> (std::string_view name) override</td></tr>
+<tr class="memdesc:a76928c3db7bfe56d2a9bf7ae5850e282 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">a11yName</span>.  <br /></td></tr>
+<tr class="memitem:ab2a4163fa4c102032c44026161596a3f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ab2a4163fa4c102032c44026161596a3f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ab2a4163fa4c102032c44026161596a3f">setAccessibleRole</a> (std::string_view role) override</td></tr>
+<tr class="memdesc:ab2a4163fa4c102032c44026161596a3f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">a11yRole</span>.  <br /></td></tr>
+<tr class="memitem:aed53e3f643f7685ce70d185ee4452742 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aed53e3f643f7685ce70d185ee4452742"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aed53e3f643f7685ce70d185ee4452742">setTestId</a> (std::string_view testId) override</td></tr>
+<tr class="memdesc:aed53e3f643f7685ce70d185ee4452742 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">testId</span>.  <br /></td></tr>
+<tr class="memitem:a36034c8491ff9457c9d20d851b713b77 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a36034c8491ff9457c9d20d851b713b77"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a36034c8491ff9457c9d20d851b713b77">setTooltip</a> (std::string_view text) override</td></tr>
+<tr class="memdesc:a36034c8491ff9457c9d20d851b713b77 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">tooltip</span>.  <br /></td></tr>
+<tr class="memitem:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_af8aea5416b8dd99e6888f53bc87d00d0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#af8aea5416b8dd99e6888f53bc87d00d0">setSurface</a> (std::string_view surface) override</td></tr>
+<tr class="memdesc:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">surface</span>.  <br /></td></tr>
+<tr class="memitem:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a872fcbbddffe07279c5594bc00feec57"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a872fcbbddffe07279c5594bc00feec57">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord) override</td></tr>
+<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget.">RecordingBackend::press</a></span>.  <br /></td></tr>
+<tr class="memitem:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_adca561be0edc99b3359b9cf29af4784f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a> () override</td></tr>
+<tr class="memdesc:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the backend's recorded focus here, and logs <span class="tt"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a></span>.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1Widget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">morph::ui::Widget</a></td></tr>
 <tr class="memitem:abbc2ba04f9c9e2e29b8b9c6993e9b46b pub_methods_classmorph_1_1ui_1_1Widget" id="r_abbc2ba04f9c9e2e29b8b9c6993e9b46b"><td class="memItemLeft">
 &#160;</td><td class="memItemRight"><b>Widget</b> (Widget const &amp;)=delete</td></tr>
@@ -193,10 +222,10 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a></span>, <span class="tt">placeholder</span>, and a text cursor. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, the field state, and a text cursor. </p>
 <p>The cursor is a byte offset into the text. A user's edit puts it where the edit left it; <span class="tt"><a class="el" href="#afe78fab8c4a9468427c6e56d757dc129" title="Records property text; moves the cursor to the end only when the text changes.">setText</a></span> with the text the field shows leaves it alone, as the contract requires, and <span class="tt"><a class="el" href="#afe78fab8c4a9468427c6e56d757dc129" title="Records property text; moves the cursor to the end only when the text changes.">setText</a></span> with another text puts it at the end. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00620">620</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00814">814</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="afe78fab8c4a9468427c6e56d757dc129" name="afe78fab8c4a9468427c6e56d757dc129"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afe78fab8c4a9468427c6e56d757dc129">&#9670;&#160;</a></span>setText()</h2>
@@ -221,7 +250,7 @@ Additional Inherited Members</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Records property <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a></span>; moves the cursor to the end only when the text changes. </p>
+<p>Records property <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>; moves the cursor to the end only when the text changes. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">text</td><td>The text, UTF-8. </td></tr>
@@ -231,7 +260,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#aad96ac37b2f72fb9c275abec61352148">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00626">626</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00820">820</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +300,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00637">637</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00831">831</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +335,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00645">645</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00839">839</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +365,37 @@ Additional Inherited Members</h2></td></tr>
 <p>Where the cursor is. </p>
 <dl class="section return"><dt>Returns</dt><dd>A byte offset into the text shown. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00649">649</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00843">843</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3548f2b728bd82490dab53cc5e1e910f" name="a3548f2b728bd82490dab53cc5e1e910f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3548f2b728bd82490dab53cc5e1e910f">&#9670;&#160;</a></span>text()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string const  &amp; morph::ui::testing::detail::FakeTextInput::text </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The text the field shows. </p>
+<dl class="section return"><dt>Returns</dt><dd>The text, unformatted. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00847">847</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -373,7 +432,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a5af001846d473ed5242e08e651b44908">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00651">651</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00849">849</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -410,7 +469,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a0e937b2ee04f7d2b402ac6b64157b13f">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00652">652</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00850">850</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -447,7 +506,44 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#aae1eb31ad6bb2c3bcad03efbc830cef6">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00653">653</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00851">851</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5cd9b47a73e1e75c8a7ffbd29060c5cd" name="a5cd9b47a73e1e75c8a7ffbd29060c5cd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5cd9b47a73e1e75c8a7ffbd29060c5cd">&#9670;&#160;</a></span>setOnCommit()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTextInput::setOnCommit </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(std::string)&gt;</td>          <td class="paramname"><span class="paramname"><em>onCommit</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets what a commit calls, with the text: Enter in single-line mode, before the submit, or focus leaving the field after an edit. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">onCommit</td><td>The handler; empty does nothing. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#af53435cb83156025dc7db2f041870e96">morph::ui::TextInputWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00852">852</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

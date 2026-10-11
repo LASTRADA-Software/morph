@@ -3,6 +3,7 @@ var structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks =
     [ "click", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a4d2e1d385b3c23d9ae83c3692f67aab7", null ],
     [ "change", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a686c25ab54d848987a3039c06f1d6d82", null ],
     [ "submit", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a0cbce2bbf31c8b072ebf8472fb832762", null ],
+    [ "commit", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#aa3814fdc441041a7b020dfb22e7b3969", null ],
     [ "toggle", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a12d28a031352040e3c33745133327efe", null ],
     [ "select", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a3c8139c848f505e868a95c37edd026f2", null ],
     [ "index", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ae855041cd6c69a511ec1838183e27e51", null ],
@@ -13,5 +14,10 @@ var structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks =
     [ "selection", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a9e4fdbb5d265120a331ddc4d769d1001", null ],
     [ "activate", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#aba30c029a68e84ac519831935ff40da4", null ],
     [ "accepts", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a6866690fe140510eaf7034eef72825d3", null ],
-    [ "drop", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#abfe3466abc65c12552e91a380f9b2ae7", null ]
+    [ "drop", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#abfe3466abc65c12552e91a380f9b2ae7", null ],
+    [ "chord", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a5ffee24591aef75778da4373ff5ac188", null ],
+    [ "path", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#af06a82b6e286797e97260a55cee5de35", null ],
+    [ "action", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a59b7b9de38d21f86d3c8741320b93c83", null ],
+    [ "resize", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a07df1ae2b55da82c8172cd645a432419", null ],
+    [ "files", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#af1dccd534e81318b6a18db7d782d3ed9", null ]
 ];

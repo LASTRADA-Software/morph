@@ -134,17 +134,21 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ac0bbdad7c15243cf6a4683b01aa4a26c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the new text after every user edit.  <br /></td></tr>
 <tr class="memitem:a3d8cb4f5354b9c94d3e85f64e376e95c" id="r_a3d8cb4f5354b9c94d3e85f64e376e95c"><td class="memItemLeft">std::function&lt; void(std::string)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3d8cb4f5354b9c94d3e85f64e376e95c">onSubmit</a></td></tr>
 <tr class="memdesc:a3d8cb4f5354b9c94d3e85f64e376e95c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the text when the user submits (Enter in single-line mode).  <br /></td></tr>
+<tr class="memitem:a6df7632e202210c197f647a07db5b64d" id="r_a6df7632e202210c197f647a07db5b64d"><td class="memItemLeft">std::function&lt; void(std::string)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6df7632e202210c197f647a07db5b64d">onCommit</a></td></tr>
+<tr class="memdesc:a6df7632e202210c197f647a07db5b64d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the text when the user commits it: Enter in single-line mode, or focus leaving the field after an edit.  <br /></td></tr>
 <tr class="memitem:ab1d3ab5d396408e56e1b4a3359564a27" id="r_ab1d3ab5d396408e56e1b4a3359564a27"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab1d3ab5d396408e56e1b4a3359564a27">placeholder</a></td></tr>
 <tr class="memdesc:ab1d3ab5d396408e56e1b4a3359564a27"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shown while the field is empty.  <br /></td></tr>
 <tr class="memitem:a61594e9c748375608f597daf9ac5475b" id="r_a61594e9c748375608f597daf9ac5475b"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a0ef02872a2a71ca2d785c60b53ecfd37">TextInputMode</a>&#160;</td><td class="memItemRight"><a class="el" href="#a61594e9c748375608f597daf9ac5475b">mode</a> = <a class="el" href="../../d8/d11/view_8hpp.html#a0ef02872a2a71ca2d785c60b53ecfd37a3e5c1fb76b6543ac61af54b185f02af9">TextInputMode::SingleLine</a></td></tr>
 <tr class="memdesc:a61594e9c748375608f597daf9ac5475b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Single-line, multiline or password; set once.  <br /></td></tr>
+<tr class="memitem:a14dd07a488938ad090de13f03bce82ac" id="r_a14dd07a488938ad090de13f03bce82ac"><td class="memItemLeft"><a class="el" href="../../d1/d36/structmorph_1_1ui_1_1FieldState.html">FieldState</a>&#160;</td><td class="memItemRight"><a class="el" href="#a14dd07a488938ad090de13f03bce82ac">field</a> {}</td></tr>
+<tr class="memdesc:a14dd07a488938ad090de13f03bce82ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read-only, required, errors and stale.  <br /></td></tr>
 <tr class="memitem:a88c0581a7c3dd2bc791f4d6bcb73a0e3" id="r_a88c0581a7c3dd2bc791f4d6bcb73a0e3"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a88c0581a7c3dd2bc791f4d6bcb73a0e3">common</a> {}</td></tr>
 <tr class="memdesc:a88c0581a7c3dd2bc791f4d6bcb73a0e3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>An editable text field. The backend never reports its own <span class="tt">setText</span> back through <span class="tt"><a class="el" href="#ac0bbdad7c15243cf6a4683b01aa4a26c" title="Called with the new text after every user edit.">onChange</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00330">330</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ac8c71bf231f015c7dd956b2f6fae417e" name="ac8c71bf231f015c7dd956b2f6fae417e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac8c71bf231f015c7dd956b2f6fae417e">&#9670;&#160;</a></span>value</h2>
@@ -160,7 +164,7 @@ Public Attributes</h2></td></tr>
 
 <p>The text the field shows. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -178,7 +182,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the new text after every user edit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00410">410</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -196,7 +200,25 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the text when the user submits (Enter in single-line mode). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00336">336</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00412">412</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6df7632e202210c197f647a07db5b64d" name="a6df7632e202210c197f647a07db5b64d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6df7632e202210c197f647a07db5b64d">&#9670;&#160;</a></span>onCommit</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;void(std::string)&gt; morph::ui::TextInput::onCommit</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Called with the text when the user commits it: Enter in single-line mode, or focus leaving the field after an edit. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +236,7 @@ Public Attributes</h2></td></tr>
 
 <p>Shown while the field is empty. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +254,25 @@ Public Attributes</h2></td></tr>
 
 <p>Single-line, multiline or password; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00340">340</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00419">419</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a14dd07a488938ad090de13f03bce82ac" name="a14dd07a488938ad090de13f03bce82ac"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a14dd07a488938ad090de13f03bce82ac">&#9670;&#160;</a></span>field</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/d36/structmorph_1_1ui_1_1FieldState.html">FieldState</a> morph::ui::TextInput::field {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Read-only, required, errors and stale. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00421">421</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +290,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

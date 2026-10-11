@@ -15,11 +15,12 @@ var searchData=
   ['dir_12',['dir',['../d3/d56/structmorph_1_1table_1_1SortKey.html#a8b579bcbc90af868fd101358df68874d',1,'morph::table::SortKey::dir'],['../dc/d69/structmorph_1_1table_1_1RowOrder_1_1Key.html#a1b1f232dd42e268dbe3a1efd15eef0a9',1,'morph::table::RowOrder::Key::dir']]],
   ['dirty_13',['dirty',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html#a57fe691f07d3edbbebfdcc692a9166bc',1,'morph::table::detail::JobInput']]],
   ['dismiss_14',['dismiss',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a1ec5f56eac7fba871bb6e53cba8ef517',1,'morph::ui::testing::detail::Callbacks']]],
-  ['display_15',['display',['../d8/dab/structmorph_1_1units_1_1UnitMeta.html#a3b276e041fdefe30b6105e3835f9573f',1,'morph::units::UnitMeta']]],
-  ['documents_16',['documents',['../dc/dcf/structmorph_1_1ui_1_1Bundle.html#a165048d99f40473abd7d013999a94648',1,'morph::ui::Bundle']]],
-  ['dp_17',['dp',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a78d32fb54074ac3bbec65a64bdfdbdd8',1,'morph::math::Rational::Wire']]],
-  ['dragkey_18',['dragKey',['../d0/d28/structmorph_1_1ui_1_1testing_1_1detail_1_1Record.html#a8f642582000c6be505c66ea408c83299',1,'morph::ui::testing::detail::Record::dragKey'],['../d1/d68/structmorph_1_1ui_1_1Common.html#a31559cd83000f3a79f5a33e783ebc678',1,'morph::ui::Common::dragKey']]],
-  ['drainoutbox_19',['drainOutbox',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a46bff3ee88485624fe3b6c9184ad0906',1,'morph::journal::OutboxRelay']]],
-  ['drop_20',['drop',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#abfe3466abc65c12552e91a380f9b2ae7',1,'morph::ui::testing::detail::Callbacks']]],
-  ['dropped_21',['dropped',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a76e1588c19b7722fd37c556643f8682f',1,'morph::table::EngineStats']]]
+  ['dismissible_15',['dismissible',['../dd/d5b/structmorph_1_1ui_1_1Banner.html#a39bfb317c75d2faf9cac9ba4a80fd0d2',1,'morph::ui::Banner']]],
+  ['display_16',['display',['../d8/dab/structmorph_1_1units_1_1UnitMeta.html#a3b276e041fdefe30b6105e3835f9573f',1,'morph::units::UnitMeta']]],
+  ['documents_17',['documents',['../dc/dcf/structmorph_1_1ui_1_1Bundle.html#a165048d99f40473abd7d013999a94648',1,'morph::ui::Bundle']]],
+  ['dp_18',['dp',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a78d32fb54074ac3bbec65a64bdfdbdd8',1,'morph::math::Rational::Wire']]],
+  ['dragkey_19',['dragKey',['../d0/d28/structmorph_1_1ui_1_1testing_1_1detail_1_1Record.html#a8f642582000c6be505c66ea408c83299',1,'morph::ui::testing::detail::Record::dragKey'],['../d1/d68/structmorph_1_1ui_1_1Common.html#a31559cd83000f3a79f5a33e783ebc678',1,'morph::ui::Common::dragKey']]],
+  ['drainoutbox_20',['drainOutbox',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a46bff3ee88485624fe3b6c9184ad0906',1,'morph::journal::OutboxRelay']]],
+  ['drop_21',['drop',['../dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#abfe3466abc65c12552e91a380f9b2ae7',1,'morph::ui::testing::detail::Callbacks']]],
+  ['dropped_22',['dropped',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a76e1588c19b7722fd37c556643f8682f',1,'morph::table::EngineStats']]]
 ];

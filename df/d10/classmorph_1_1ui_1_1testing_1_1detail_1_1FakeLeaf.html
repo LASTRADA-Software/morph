@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('df/d10/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>The <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ...">Widget</a></span> half of every fake: records itself on construction, records <span class="tt"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html" title="The part every node carries: visibility, enablement, layout, and drag-and-drop.">Common</a></span>'s setters, and records its destruction.  
+<p>The <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ...">Widget</a></span> half of every fake: records itself on construction, records <span class="tt"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html" title="The part every node carries: visibility, enablement, layout, drag-and-drop, accessibility,...">Common</a></span>'s setters, and records its destruction.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -132,6 +132,7 @@ Inheritance diagram for morph::ui::testing::detail::FakeLeaf&lt; Interface &gt;:
   <img src="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.png" usemap="#morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeLeaf_3C_20Interface_20_3E_map" alt=""/>
   <map id="morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeLeaf_3C_20Interface_20_3E_map" name="morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeLeaf_3C_20Interface_20_3E_map">
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" title="The ContainerWidget half of every fake container." alt="morph::ui::testing::detail::FakeContainer&lt; Interface &gt;" shape="rect" coords="0,56,304,80"/>
+<area href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html" title="The FieldWidget half of every fake field: properties readonly, required, errors, stale." alt="morph::ui::testing::detail::FakeField&lt; Interface &gt;" shape="rect" coords="314,56,618,80"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -159,6 +160,20 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab21499df9e1789d033f6a3d9b1bc04bf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">dragKey</span> and keeps the key for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a44d4e6aec562919cb4e1419df983928d" title="Drags one widget onto another. Any kind of widget can be a source or a target.">RecordingBackend::drag</a></span>.  <br /></td></tr>
 <tr class="memitem:af502844d9854cd422b004b6f6dc65b57" id="r_af502844d9854cd422b004b6f6dc65b57"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af502844d9854cd422b004b6f6dc65b57">setDropHandler</a> (std::function&lt; bool(<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;)&gt; accepts, std::function&lt; void(<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>)&gt; onDrop) override</td></tr>
 <tr class="memdesc:af502844d9854cd422b004b6f6dc65b57"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">drop=handler</span> and keeps both handlers for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a44d4e6aec562919cb4e1419df983928d" title="Drags one widget onto another. Any kind of widget can be a source or a target.">RecordingBackend::drag</a></span>.  <br /></td></tr>
+<tr class="memitem:a76928c3db7bfe56d2a9bf7ae5850e282" id="r_a76928c3db7bfe56d2a9bf7ae5850e282"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a76928c3db7bfe56d2a9bf7ae5850e282">setAccessibleName</a> (std::string_view name) override</td></tr>
+<tr class="memdesc:a76928c3db7bfe56d2a9bf7ae5850e282"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">a11yName</span>.  <br /></td></tr>
+<tr class="memitem:ab2a4163fa4c102032c44026161596a3f" id="r_ab2a4163fa4c102032c44026161596a3f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab2a4163fa4c102032c44026161596a3f">setAccessibleRole</a> (std::string_view role) override</td></tr>
+<tr class="memdesc:ab2a4163fa4c102032c44026161596a3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">a11yRole</span>.  <br /></td></tr>
+<tr class="memitem:aed53e3f643f7685ce70d185ee4452742" id="r_aed53e3f643f7685ce70d185ee4452742"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aed53e3f643f7685ce70d185ee4452742">setTestId</a> (std::string_view testId) override</td></tr>
+<tr class="memdesc:aed53e3f643f7685ce70d185ee4452742"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">testId</span>.  <br /></td></tr>
+<tr class="memitem:a36034c8491ff9457c9d20d851b713b77" id="r_a36034c8491ff9457c9d20d851b713b77"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a36034c8491ff9457c9d20d851b713b77">setTooltip</a> (std::string_view text) override</td></tr>
+<tr class="memdesc:a36034c8491ff9457c9d20d851b713b77"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">tooltip</span>.  <br /></td></tr>
+<tr class="memitem:af8aea5416b8dd99e6888f53bc87d00d0" id="r_af8aea5416b8dd99e6888f53bc87d00d0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af8aea5416b8dd99e6888f53bc87d00d0">setSurface</a> (std::string_view surface) override</td></tr>
+<tr class="memdesc:af8aea5416b8dd99e6888f53bc87d00d0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">surface</span>.  <br /></td></tr>
+<tr class="memitem:a872fcbbddffe07279c5594bc00feec57" id="r_a872fcbbddffe07279c5594bc00feec57"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a872fcbbddffe07279c5594bc00feec57">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord) override</td></tr>
+<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget.">RecordingBackend::press</a></span>.  <br /></td></tr>
+<tr class="memitem:adca561be0edc99b3359b9cf29af4784f" id="r_adca561be0edc99b3359b9cf29af4784f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#adca561be0edc99b3359b9cf29af4784f">focus</a> () override</td></tr>
+<tr class="memdesc:adca561be0edc99b3359b9cf29af4784f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the backend's recorded focus here, and logs <span class="tt"><a class="el" href="#adca561be0edc99b3359b9cf29af4784f" title="Moves the backend&#39;s recorded focus here, and logs focus.">focus</a></span>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
@@ -173,7 +188,7 @@ Protected Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Interface&gt;<br />
-class morph::ui::testing::detail::FakeLeaf&lt; Interface &gt;</div><p>The <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ...">Widget</a></span> half of every fake: records itself on construction, records <span class="tt"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html" title="The part every node carries: visibility, enablement, layout, and drag-and-drop.">Common</a></span>'s setters, and records its destruction. </p>
+class morph::ui::testing::detail::FakeLeaf&lt; Interface &gt;</div><p>The <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ...">Widget</a></span> half of every fake: records itself on construction, records <span class="tt"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html" title="The part every node carries: visibility, enablement, layout, drag-and-drop, accessibility,...">Common</a></span>'s setters, and records its destruction. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Interface</td><td>The widget interface the fake implements. </td></tr>
@@ -181,7 +196,7 @@ class morph::ui::testing::detail::FakeLeaf&lt; Interface &gt;</div><p>The <span 
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00502">502</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00631">631</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a3315df8bc8818827aafd77198af851be" name="a3315df8bc8818827aafd77198af851be"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3315df8bc8818827aafd77198af851be">&#9670;&#160;</a></span>FakeLeaf()</h2>
@@ -233,7 +248,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00509">509</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00638">638</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -264,7 +279,7 @@ template&lt;typename Interface&gt; </div>
 
 <p>Forgets the widget and logs its destruction; its remaining children become roots. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00514">514</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00643">643</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -302,7 +317,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00658">658</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -339,7 +354,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00533">533</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00662">662</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +391,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00537">537</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00666">666</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -413,7 +428,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00541">541</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00670">670</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -455,7 +470,265 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00549">549</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00678">678</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a76928c3db7bfe56d2a9bf7ae5850e282" name="a76928c3db7bfe56d2a9bf7ae5850e282"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a76928c3db7bfe56d2a9bf7ae5850e282">&#9670;&#160;</a></span>setAccessibleName()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Interface&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf</a>&lt; Interface &gt;::setAccessibleName </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">a11yName</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>The accessible name. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00687">687</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab2a4163fa4c102032c44026161596a3f" name="ab2a4163fa4c102032c44026161596a3f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab2a4163fa4c102032c44026161596a3f">&#9670;&#160;</a></span>setAccessibleRole()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Interface&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf</a>&lt; Interface &gt;::setAccessibleRole </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>role</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">a11yRole</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">role</td><td>The role. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00691">691</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aed53e3f643f7685ce70d185ee4452742" name="aed53e3f643f7685ce70d185ee4452742"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aed53e3f643f7685ce70d185ee4452742">&#9670;&#160;</a></span>setTestId()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Interface&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf</a>&lt; Interface &gt;::setTestId </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>testId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">testId</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">testId</td><td>The identifier. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00695">695</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a36034c8491ff9457c9d20d851b713b77" name="a36034c8491ff9457c9d20d851b713b77"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a36034c8491ff9457c9d20d851b713b77">&#9670;&#160;</a></span>setTooltip()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Interface&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf</a>&lt; Interface &gt;::setTooltip </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">tooltip</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The tooltip. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00699">699</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af8aea5416b8dd99e6888f53bc87d00d0" name="af8aea5416b8dd99e6888f53bc87d00d0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af8aea5416b8dd99e6888f53bc87d00d0">&#9670;&#160;</a></span>setSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Interface&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf</a>&lt; Interface &gt;::setSurface </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>surface</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">surface</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">surface</td><td>The surface's name. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00703">703</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a872fcbbddffe07279c5594bc00feec57" name="a872fcbbddffe07279c5594bc00feec57"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a872fcbbddffe07279c5594bc00feec57">&#9670;&#160;</a></span>setKeys()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Interface&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf</a>&lt; Interface &gt;::setKeys </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>chords</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(std::string)&gt;</td>          <td class="paramname"><span class="paramname"><em>onChord</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget.">RecordingBackend::press</a></span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">chords</td><td>The chords. </td></tr>
+    <tr><td class="paramname">onChord</td><td>Called with the chord that was pressed. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00709">709</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adca561be0edc99b3359b9cf29af4784f" name="adca561be0edc99b3359b9cf29af4784f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adca561be0edc99b3359b9cf29af4784f">&#9670;&#160;</a></span>focus()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Interface&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf</a>&lt; Interface &gt;::focus </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Moves the backend's recorded focus here, and logs <span class="tt"><a class="el" href="#adca561be0edc99b3359b9cf29af4784f" title="Moves the backend&#39;s recorded focus here, and logs focus.">focus</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00722">722</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -497,7 +770,7 @@ template&lt;typename Interface&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00560">560</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00728">728</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -529,7 +802,7 @@ template&lt;typename Interface&gt; </div>
 <p>This widget's handlers. </p>
 <dl class="section return"><dt>Returns</dt><dd>The handlers, for a setter to store into. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00564">564</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00732">732</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -561,7 +834,7 @@ template&lt;typename Interface&gt; </div>
 <p>The store this widget records into. </p>
 <dl class="section return"><dt>Returns</dt><dd>The store. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00568">568</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00736">736</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -593,7 +866,7 @@ template&lt;typename Interface&gt; </div>
 <p>This widget's id. </p>
 <dl class="section return"><dt>Returns</dt><dd>The id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00740">740</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

@@ -15,5 +15,10 @@ var classmorph_1_1ui_1_1testing_1_1ConformanceProbe =
     [ "selectRows", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a1c4eecec7151c1fa2d7dfe89ce5d64e8", null ],
     [ "selectedRows", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a220996b523fb123eb2841cf4778c8af6", null ],
     [ "moveCursor", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a20fa7e5d841aea70d010035e97418a56", null ],
-    [ "cursorOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#abbf6ab8b783d44e9be88ffa085b52ac7", null ]
+    [ "cursorOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#abbf6ab8b783d44e9be88ffa085b52ac7", null ],
+    [ "press", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ab2530460f69e292e1b666eae4fb0b5b3", null ],
+    [ "hasFocus", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a4c6798cff77a66f110f083b3b15312b8", null ],
+    [ "chooseMenuEntry", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a5158ffa2f6eaa9d22bc022ee0d1eed0a", null ],
+    [ "expand", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#acd96cdee9dbd020cddc43d192bd24600", null ],
+    [ "dropFiles", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac5fc06f5c06036f4aed7c62881e2332e", null ]
 ];

@@ -41,5 +41,13 @@ var backend__conformance_8hpp =
     [ "morph::ui::testing::detail::dragOntoAcceptingTarget", "d8/d3e/backend__conformance_8hpp.html#a7c8b5691bf95cda7c49bb666e9a5673d", null ],
     [ "morph::ui::testing::detail::dragOntoRefusingTarget", "d8/d3e/backend__conformance_8hpp.html#a0ba139a7d61891767421b93269aea9c3", null ],
     [ "morph::ui::testing::detail::dropTargetWithoutAcceptsTakesAll", "d8/d3e/backend__conformance_8hpp.html#aade0c877f9f6bc238ced27b017133169", null ],
+    [ "morph::ui::testing::detail::innermostChordWins", "d8/d3e/backend__conformance_8hpp.html#a5123f3bb37d2f783f84034ff358f4e56", null ],
+    [ "morph::ui::testing::detail::hiddenChordRunsNothing", "d8/d3e/backend__conformance_8hpp.html#a17d70b159529b91e31a4631dcac6cf20", null ],
+    [ "morph::ui::testing::detail::firstAutofocusWins", "d8/d3e/backend__conformance_8hpp.html#af6f12af051d7563eba92386d1d4adee7", null ],
+    [ "morph::ui::testing::detail::onlyEnabledMenuLeavesAreChosen", "d8/d3e/backend__conformance_8hpp.html#aff3caa3ca594a683977b0623370efba6", null ],
+    [ "morph::ui::testing::detail::readOnlyInputTakesNoEdit", "d8/d3e/backend__conformance_8hpp.html#a5f5f2f4eca3d49d623dd482b3ed9c18e", null ],
+    [ "morph::ui::testing::detail::dismissedBannerStays", "d8/d3e/backend__conformance_8hpp.html#a3db1e706e55f51fe4abb39d0c9d31063", null ],
+    [ "morph::ui::testing::detail::closedCollapsibleKeepsItsHeader", "d8/d3e/backend__conformance_8hpp.html#a4257249ddc9ffb36ed7799f9f6bdca47", null ],
+    [ "morph::ui::testing::detail::dropZoneTakesWholeDrops", "d8/d3e/backend__conformance_8hpp.html#aacdc29891eeb6afa21068e646c93256e", null ],
     [ "morph::ui::testing::conformanceCases", "d8/d3e/backend__conformance_8hpp.html#a40f3611811880916195ad1becfbe3d46", null ]
 ];

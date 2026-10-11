@@ -11,5 +11,7 @@ var classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore =
     [ "records", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html#ae24e46db4702bc80d6dab8890f78b6d3", null ],
     [ "log", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html#ac9125af3e841513d49f652a9012c1682", null ],
     [ "clearLog", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html#aaeca1f48df7384743dcce553283d2393", null ],
+    [ "focus", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html#a051bf51d0122a3ad5727d38473aaae42", null ],
+    [ "focused", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html#a55ece55b5c25e3ff0734fb4b2d1de863", null ],
     [ "dump", "d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html#a586c7116b15b0cde7915e67f2fb74f69", null ]
 ];
