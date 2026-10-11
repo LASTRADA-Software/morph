@@ -123,11 +123,12 @@ callback executor. So:
 | Name | Thread |
 |---|---|
 | `morph.pool` | every `ThreadPoolExecutor` worker |
-| `morph.io` | the thread an `IoLoop` runs; it carries every socket, every `TimeoutScheduler` deadline and the connectivity probe built on that loop |
+| `morph.io` | the thread an `OwnThread` `IoLoop` runs; it carries every socket, every `TimeoutScheduler` deadline and the connectivity probe built on that loop |
 
 An application runs one `IoLoop`, so there is one `morph.io` thread; a
 `TimeoutScheduler` constructed without a loop owns one of its own, which is
-named the same.
+named the same. A `Caller` loop starts no thread: its work runs on the thread
+that turns it, under that thread's own name.
 
 ## One definition everywhere
 

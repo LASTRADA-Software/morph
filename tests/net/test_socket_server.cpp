@@ -1212,8 +1212,8 @@ TEST_CASE("acceptListenerIsDead: a failure that recurs on every accept ends the 
     auto const dead = [](NetErrorCode code, int systemCode) {
         return morph::net::detail::acceptListenerIsDead(::core::net::NetError{.code = code, .systemCode = systemCode});
     };
-    // Dead: newer core-cpp's own classification, and the SystemError + errno
-    // spelling the pinned release reports for the same conditions.
+    // Dead: core-cpp's own classification, and the SystemError + errno
+    // spelling of a failure it leaves unclassified.
     CHECK(dead(NetErrorCode::BadHandle, EBADF));
     CHECK(dead(NetErrorCode::Unsupported, 0));
     for (int const errnoValue : {EINVAL, EBADF, ENOTSOCK, EOPNOTSUPP}) {
@@ -1223,6 +1223,7 @@ TEST_CASE("acceptListenerIsDead: a failure that recurs on every accept ends the 
     // Retried: exhaustion clears once descriptors or memory are freed.
     for (int const errnoValue : {EMFILE, ENFILE, ENOBUFS, ENOMEM}) {
         CAPTURE(errnoValue);
+        CHECK_FALSE(dead(NetErrorCode::ResourceExhausted, errnoValue));
         CHECK_FALSE(dead(NetErrorCode::SystemError, errnoValue));
     }
     // Retried: one peer's failure, not the listener's -- even carrying an
