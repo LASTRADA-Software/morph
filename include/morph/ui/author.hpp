@@ -4097,7 +4097,10 @@ public:
     /// @brief Registers a screen and keeps its refusal rather than returning it, for registration at static
     ///        initialisation, where nothing could report it; a server's test asserts `refusals()` is empty.
     /// @param screen The screen.
-    void enroll(Screen const& screen) {
+    ///
+    /// `noexcept` because its caller is a static initialiser, where an exception terminates the program anyway:
+    /// a builder's own exceptions are already refusals, and what remains is an allocation failure.
+    void enroll(Screen const& screen) noexcept {
         if (auto added = add(screen); !added) {
             _refusals.push_back(std::move(added.error()));
         }
@@ -4152,7 +4155,8 @@ private:
 
 /// @brief Enrols a screen into the process's registry at static initialisation. A refusal is kept in
 ///        `screenRegistry().refusals()`, which a server's test asserts is empty.
-/// @param SCREEN The screen, an object defined before the macro in the same translation unit.
+/// @param SCREEN The screen: an expression, such as a call of a function that returns it, or an object defined
+///               before the macro in the same translation unit.
 #define MORPH_REGISTER_SCREEN(SCREEN)                                              \
     namespace {                                                                    \
     [[maybe_unused]] bool const MORPH_UI_AUTHOR_CAT(morphUiScreen_, __COUNTER__) = \

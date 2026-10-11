@@ -1028,13 +1028,18 @@ TEST_CASE("accessibility: every node of the view and of each fallback is walked"
 
 namespace {
 
-ui::Screen const registeredScreen = ui::screen("author.registered", [](ui::Scope&) { return ui::spacer(); });
-ui::Screen const refusedScreen = ui::screen("author.refused", [](ui::Scope&) { return ui::button({}); });
+ui::Screen registeredScreen() {
+    return ui::screen("author.registered", [](ui::Scope&) { return ui::spacer(); });
+}
+
+ui::Screen refusedScreen() {
+    return ui::screen("author.refused", [](ui::Scope&) { return ui::button({}); });
+}
 
 }  // namespace
 
-MORPH_REGISTER_SCREEN(registeredScreen)
-MORPH_REGISTER_SCREEN(refusedScreen)
+MORPH_REGISTER_SCREEN(registeredScreen())
+MORPH_REGISTER_SCREEN(refusedScreen())
 
 TEST_CASE("MORPH_REGISTER_SCREEN enrols at static initialisation and keeps refusals", "[ui][author][registration]") {
     ui::ScreenRegistry const& registry = ui::screenRegistry();
