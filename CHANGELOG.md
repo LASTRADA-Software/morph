@@ -172,6 +172,21 @@ API surface).
 
 ### Added
 
+- **`morph::ui`: the UI document and `expr/1`.** Header-only, in the base `morph` target.
+  - `expression.hpp`: `ui::Value` and `ui::Type` (spec 5 §3), type-directed JSON decoding (a
+    fractional JSON number is refused; an exact fraction is `{num, den, dp}`), the `expr/1` tree with
+    its JSON paths and 256-node bound, and `evaluate`, which never throws: a runtime error is null,
+    reported once per expression path. Logic is Kleene's; arithmetic and comparison are exact across
+    `int`, `decimal` and `quantity`, converting units through a `UnitTable`; `round` and `mean` round
+    half to even; dates go through a `DisplayFormatter`.
+  - `message.hpp`: the MessageFormat 2 subset `t` reads, and CLDR plural rules for en, de, fr, pl
+    and ar.
+  - `document.hpp`: `parseDocument` reads a `ui/1` screen into plain structs, honouring
+    must-understand `!` keys; `validate` checks it against a `Catalog` and returns every refusal with
+    the document, the JSON pointer and the reason.
+  - A served action schema carries `x-reply`, the JSON Schema of the action's result.
+
+  See `docs/spec/ui/document.md` and `expressions.md`; the corpora are `tests/data/ui/`.
 - **`morph::ui`: the view tree, its mount and the frontend seam.** Header-only, in the base `morph`
   target.
   - An immutable view tree of the UI document's palette (`view.hpp`): every property a constant or a

@@ -130,8 +130,10 @@ A **bundle** is everything an application serves: its screens, its app shell (me
 - **Types.** `bool`, `int` (int64, exact), `string`, `decimal` (`{num, den, dp}`, exact),
   `quantity` (`{num, den, dp, unit}`), `timestamp` (UTC), `key` (`int` or `string`), `list<T>`,
   records, and `T?` for an optional value (`null`). Query and mutation results take their record
-  types from the action schemas the server already emits; a document refers to them by action id
-  and never restates them.
+  types from the action schemas the server emits: each served schema carries `x-reply`, the JSON
+  Schema of the action's result, beside the request's. A document refers to them by action id and
+  never restates them. A fractional JSON number is refused in a document, because it has been
+  rounded through a double before it is read; an exact fraction is written `{num, den, dp}`.
 - **Load-time validation.** A client refuses a document before mounting it when a reference does not
   resolve, a type does not check, the `let` graph or the `watch` graph has a cycle (§6), an
   expression exceeds the size bound (§4), or a node kind or function is not in the document's
@@ -180,15 +182,21 @@ one.
 **Function library `expr/1`.** Every function is exact where its inputs are:
 
 - logic and comparison: `and`, `or`, `not`, `eq`, `ne`, `lt`, `le`, `gt`, `ge` — comparing `int`,
-  `decimal` and `quantity` exactly, converting quantity units by their declared exact factors;
+  `decimal` and `quantity` exactly, converting quantity units by their declared exact factors.
+  The factors come from the bundle's unit table: per unit id, its display text, default places and
+  exact ratios to the other units of its dimension, generated from `UnitTraits` as
+  `x-unitAlternatives` is. A quantity in a unit the table cannot convert compares and adds as `null`;
 - arithmetic: `add`, `sub`, `mul`, `div`, `neg`, `round(x, dp)` over `int`, `decimal`, `quantity`;
 - optional: `engaged`, `coalesce`;
 - string: `concat`, `format(template, args...)`, `trim`, `length`, `isEmpty`, `contains`;
 - list: `count`, `sum`, `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`
   (`mean` is the exact sum over the count, at the operands' declared places, rounded half to even);
 - display: `number`, `decimal(x, dp)`, `quantity(x, unit?)`, `money(x, currency)`,
-  `date(x, style)`, `dateTime(x, style)` — using the client's locale and display zone through
-  `render/locale_format.hpp`;
+  `date(x, style)`, `dateTime(x, style)` — numbers using the client's locale through
+  `render/locale_format.hpp`; dates, times and money through a display formatter the client
+  supplies, whose default writes ISO-8601 in the display zone (`short`: the date; `medium`: the
+  date and minutes; `long`: the date and seconds), since morph carries no CLDR date patterns and a
+  renderer's toolkit does;
 - text: `t(key, fallback, args)`, the i18n lookup of `render/i18n.hpp` (a `TranslationProvider`
   over `(key, locale)`). A message and its `fallback` are Unicode MessageFormat 2 patterns, and `args`
   is an object of named arguments. `ui/1` accepts the subset of MessageFormat 2 that a UI needs:

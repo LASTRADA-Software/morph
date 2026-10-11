@@ -136,9 +136,11 @@ interaction a controller declares instead of sequencing
 **Declarative UI**
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
-[`ui/frontend.md`](ui/frontend.md) — the view tree a screen mounts into,
-the widgets every renderer implements, and the seam that picks a renderer
-at runtime
+[`ui/frontend.md`](ui/frontend.md) ·
+[`ui/document.md`](ui/document.md) ·
+[`ui/expressions.md`](ui/expressions.md) — the view tree a screen mounts into,
+the widgets every renderer implements, the seam that picks a renderer
+at runtime, and the screen document and expression language a server sends
 
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·

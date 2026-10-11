@@ -103,7 +103,8 @@ not meet, and each has a test in §7.
 
 - Header-only, in the base `morph` target. Depends on `morph::reactive`, never the reverse.
 - Headers: `document.hpp` (the document model and its load-time validation, spec 5 §3),
-  `expression.hpp` (the `expr/1` evaluator), `interpreter.hpp` (document to reactive nodes),
+  `expression.hpp` (the `expr/1` evaluator), `message.hpp` (the MessageFormat 2 subset, its
+  catalogue check and the CLDR plural rules behind `t`), `interpreter.hpp` (document to reactive nodes),
   `view.hpp` (the view tree), `backend.hpp` (widget interfaces, `IViewBackend`), `mount.hpp`,
   `frontend.hpp` (§5b: `AppContext`, `AppSource`, `Frontend`, `FrontendOption`, `EnvironmentReader`,
   `Bundle`, `ConnectError`, `FrontendError`, `Backend`), `host.hpp` (spec 6 §4: `ScreenHost`,
