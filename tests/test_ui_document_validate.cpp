@@ -96,6 +96,18 @@ struct Corpus {
     return out;
 }
 
+// The refusals one per line, so a mismatch prints both sides readably.
+[[nodiscard]] std::string described(std::vector<std::pair<std::string, std::string>> const& refusals) {
+    std::string out;
+    for (auto const& [path, reason] : refusals) {
+        out += path;
+        out += ": ";
+        out += reason;
+        out += "\n";
+    }
+    return out;
+}
+
 }  // namespace
 
 // Each corpus document is refused with exactly the paths and reasons it lists, and the valid ones with none.
@@ -105,7 +117,7 @@ TEST_CASE("ui::validate: the document-validation corpus", "[ui][document]") {
     Corpus const& data = corpus();
     for (CorpusDocument const& entry : data.documents) {
         INFO(entry.name);
-        CHECK(refusalsOf(entry.document, data.catalog) == entry.refusals);
+        CHECK(described(refusalsOf(entry.document, data.catalog)) == described(entry.refusals));
     }
 }
 

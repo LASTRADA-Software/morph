@@ -164,3 +164,84 @@ TEST_CASE("ui::typeFromSchema: a served reply schema becomes the type of the rep
     REQUIRE(reply.element().field("amount").has_value());
     CHECK(reply.element().field("amount")->places() == 2U);
 }
+
+// Mutations: accept a value of the wrong JSON kind for any one type (its row then decodes).
+TEST_CASE("ui::decode: each type refuses the JSON of another kind", "[ui][expr]") {
+    struct Row {
+        std::string_view json;
+        std::string_view type;
+        std::string_view reason;
+    };
+    for (Row const& row : {
+             Row{.json = "1", .type = "bool", .reason = "not a bool"},
+             Row{.json = "true", .type = "int", .reason = "not an int"},
+             Row{.json = "1", .type = "string", .reason = "not a string"},
+             Row{.json = "true", .type = "key", .reason = "not a key"},
+             Row{.json = "1", .type = "timestamp", .reason = "not a timestamp"},
+             Row{.json = R"({"num":1,"den":1,"dp":0})",
+                 .type = "quantity",
+                 .reason = "a quantity is written {num, den, dp, unit}"},
+             Row{.json = R"("x")", .type = "decimal", .reason = "a decimal is written {num, den, dp}"},
+             Row{.json = "{}", .type = "list<int>", .reason = "not a list<int>"},
+             Row{.json = "[1, true]", .type = "list<int>", .reason = "not an int"},
+             Row{.json = "[]", .type = "{id: int}", .reason = "not a {id: int}"},
+             Row{.json = R"({"num":1,"den":1,"dp":1,"unit":3})",
+                 .type = "quantity",
+                 .reason = "a quantity is written {num, den, dp, unit}"},
+         }) {
+        INFO(row.json << " as " << row.type);
+        std::expected<ui::Value, std::string> const read = ui::decode(json(row.json), type(row.type));
+        REQUIRE_FALSE(read.has_value());
+        CHECK(read.error() == row.reason);
+    }
+    CHECK(ui::decode(json("3"), type("decimal")).value() == ui::Value{math::Rational{3, math::DecimalPlaces{0}}});
+    CHECK(ui::decode(json("[1, 2]"), type("any")).value() ==
+          ui::Value{ui::ValueList{std::int64_t{1}, std::int64_t{2}}});
+    CHECK(ui::decodeUntyped(json(R"([1, 0.5])")).error() ==
+          "a number must be an int64; write a fraction as {num, den, dp}");
+    CHECK(ui::decodeUntyped(json(R"({"a": 0.5})")).error() ==
+          "a number must be an int64; write a fraction as {num, den, dp}");
+    CHECK(ui::decodeUntyped(json("18446744073709551615")).error() ==
+          "a number must be an int64; write a fraction as {num, den, dp}");
+}
+
+// Mutation: let a written type end early (drop the trailing-text check in parseType).
+TEST_CASE("ui::parseType: malformed written types are refused with the reason", "[ui][expr]") {
+    struct Row {
+        std::string_view text;
+        std::string_view reason;
+    };
+    for (Row const& row : {
+             Row{.text = "list", .reason = "`list` must be written `list<T>`"},
+             Row{.text = "list<money>", .reason = "unknown type `money`"},
+             Row{.text = "{id int}", .reason = "a record field must be written `name: type`"},
+             Row{.text = "{id: money}", .reason = "unknown type `money`"},
+             Row{.text = "{id: int", .reason = "a record type must end with `}`"},
+             Row{.text = "int int", .reason = "unexpected `int` after the type"},
+             Row{.text = "", .reason = "unknown type ``"},
+         }) {
+        INFO(row.text);
+        std::expected<ui::Type, std::string> const parsed = ui::parseType(row.text);
+        REQUIRE_FALSE(parsed.has_value());
+        CHECK(parsed.error() == row.reason);
+    }
+    CHECK(type("{a: {b: list<key?>}}?").text() == "{a: {b: list<key?>}}?");
+    CHECK(type("{ }").text() == "{}");
+}
+
+// Mutations: read an unknown `type` as a string; follow a `$ref` the document does not define.
+TEST_CASE("ui::typeFromSchema: shapes it cannot read are `any`", "[ui][expr]") {
+    ui::Json const root = json(R"({"$defs": {}})");
+    for (std::string_view const schema :
+         {R"(3)", R"({"$ref": "#/$defs/Missing"})", R"({"type": "number"})", R"({"type": "object"})", R"({})"}) {
+        INFO(schema);
+        CHECK(ui::typeFromSchema(json(schema), root).kind() == ui::Type::Kind::Any);
+    }
+    CHECK(ui::typeFromSchema(json(R"({"type": "boolean"})"), root).text() == "bool");
+    CHECK(ui::typeFromSchema(json(R"({"type": "array"})"), root).text() == "list<any>");
+    CHECK(ui::typeFromSchema(json(R"({"type": ["object", "null"]})"), root).text() == "any");
+    CHECK(ui::typeFromSchema(json(R"({"type": "object", "properties": {"num": {}, "den": {}, "dp": {}, "unit": {}}})"),
+                             root)
+              .text() == "quantity");
+    CHECK(ui::typeFromSchema(json(R"({"type": "string", "x-decimalPlaces": "two"})"), root).text() == "string");
+}

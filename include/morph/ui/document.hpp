@@ -836,9 +836,10 @@ public:
         return nullptr;
     }
 
-    // The JSON pointer of member @p key, as written.
+    // The JSON pointer of member @p key, as written: with its must-understand mark when it carries one.
     [[nodiscard]] static std::string memberPath(Json const& json, std::string const& path, std::string_view key) {
-        bool const marked = json.is_object() && !json.get_object().contains(key);
+        bool const marked =
+            json.is_object() && !json.get_object().contains(key) && json.get_object().contains("!" + std::string{key});
         return path + "/" + (marked ? "!" : "") + pointerToken(key);
     }
 
@@ -1363,7 +1364,7 @@ public:
         }
         if (!json.is_array()) {
             refuse(path, shape.empty() ? "a node list is a list of nodes"
-                                       : "a list of `" + std::string{shape} + "` entries");
+                                       : "`" + std::string{shape} + "` entries are a list");
             return out;
         }
         std::size_t index = 0;
@@ -1381,7 +1382,8 @@ public:
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per key role.
     std::optional<Node> node(Json const& json, std::string const& path, std::string_view shape = {}) {
         if (!json.is_object()) {
-            refuse(path, shape.empty() ? "a node is an object" : "a `" + std::string{shape} + "` entry is an object");
+            refuse(path,
+                   shape.empty() ? "a node is an object" : "each `" + std::string{shape} + "` entry is an object");
             return std::nullopt;
         }
         Node out;
@@ -1831,10 +1833,13 @@ template <typename T>
     return type.kind() != Type::Kind::Any && std::ranges::find(kinds, type.kind()) == kinds.end();
 }
 
-/// @brief A type as a refusal names it: "a string", "an int".
+/// @brief A type as a refusal names it: "a string", "an int", "a record {id: int}".
 /// @param type The type.
 /// @return The words.
-[[nodiscard]] inline std::string described(Type const& type) { return withArticle(type.withOptional(false).text()); }
+[[nodiscard]] inline std::string described(Type const& type) {
+    std::string const text = type.withOptional(false).text();
+    return type.kind() == Type::Kind::Record ? "a record " + text : withArticle(text);
+}
 
 // The validator's view of one scope: its declarations, the element ids declared in it, and what it binds.
 struct Frame {
@@ -2235,6 +2240,14 @@ private:
                 return Type{K::Quantity, true};
             }
             return Type{integral && name != "div" ? K::Int : K::Decimal, true};
+        }
+        if (name == "concat" || name == "trim" || name == "length" || name == "contains") {
+            each({K::String}, name == "concat" || name == "contains" ? "strings" : "a string");
+        }
+        static constexpr std::array<std::string_view, 10> kOverLists{"count", "sum", "mean",  "min",      "max",
+                                                                     "any",   "all", "first", "includes", "indexOf"};
+        if (std::ranges::find(kOverLists, name) != kOverLists.end() && knownOtherThan(types.front(), {K::List})) {
+            refuse(expr.args.front().path, "`" + expr.name + "` takes a list, not " + described(types.front()));
         }
         if (name == "eq" || name == "ne" || name == "lt" || name == "le" || name == "gt" || name == "ge" ||
             name == "engaged" || name == "isEmpty" || name == "contains" || name == "includes" || name == "any" ||

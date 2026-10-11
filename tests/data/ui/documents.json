@@ -214,6 +214,214 @@
                   {"path": "/view/children/3/visible", "reason": "`nothing` is not a query or a mutation in scope"},
                   {"path": "/view/children/4/text", "reason": "`nothing` is not a customization point of the screen"},
                   {"path": "/view/children/5", "reason": "`Ghost` is not a component of the bundle"},
-                  {"path": "/view/children/6", "reason": "a `customize` node names a customization point of the screen"}]}
+                  {"path": "/view/children/6", "reason": "a `customize` node names a customization point of the screen"}]},
+
+    {"name": "parse: the document is not an object", "refusals": [{"path": "", "reason": "a screen document is an object"}], "document": [1]},
+
+    {"name": "parse: a vocabulary that is not a string", "refusals": [{"path": "/vocab", "reason": "`vocab` is a string"}], "document": {"vocab": 3, "id": "p", "view": {"kind": "spacer"}}},
+
+    {"name": "parse: params that are not an object", "refusals": [{"path": "/params", "reason": "`params` is an object of declarations"}], "document": {"vocab": "ui/1", "id": "p", "params": [], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a param type that is not a string", "refusals": [{"path": "/params/p", "reason": "a param's type is a string"}], "document": {"vocab": "ui/1", "id": "p", "params": {"p": 3}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a title outside expr/1", "refusals": [{"path": "/title/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "title": {"fn": "nope"}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: showErrors that is not a string", "refusals": [{"path": "/showErrors", "reason": "`showErrors` is a string"}], "document": {"vocab": "ui/1", "id": "p", "showErrors": 3, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: prefetch that is not a list", "refusals": [{"path": "/prefetch", "reason": "`prefetch` is a list of names"}], "document": {"vocab": "ui/1", "id": "p", "prefetch": "q", "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a lifecycle list that is not a list", "refusals": [{"path": "/onMount", "reason": "a command list is a list of commands"}], "document": {"vocab": "ui/1", "id": "p", "onMount": "go", "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a command that is not an object", "refusals": [{"path": "/onMount/0", "reason": "a command is an object"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [3], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: an empty command", "refusals": [{"path": "/onMount/0", "reason": "an empty object is not a command"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: navigate with an object but no route", "refusals": [{"path": "/onMount/0/navigate", "reason": "`navigate` takes a screen id or {\"route\": e}"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"navigate": {}}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: navigate to a route outside expr/1", "refusals": [{"path": "/onMount/0/navigate/route/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"navigate": {"route": {"fn": "nope"}}}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: signIn without from", "refusals": [{"path": "/onMount/0/signIn", "reason": "`signIn` takes {\"from\": \"mutation\"}"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"signIn": "m"}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a target that is not a string", "refusals": [{"path": "/onMount/0/refetch", "reason": "`refetch`'s operand is a string"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"refetch": 3}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: return outside expr/1", "refusals": [{"path": "/onMount/0/return/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"return": {"fn": "nope"}}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: an if condition outside expr/1", "refusals": [{"path": "/onMount/0/if/0/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"if": [{"fn": "nope"}, [], []]}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a literal operand that is not a string", "refusals": [{"path": "/onMount/0/as", "reason": "`as` is a string"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"run": "m", "as": 3}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: an expression operand outside expr/1", "refusals": [{"path": "/onMount/0/body/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"run": "m", "body": {"fn": "nope"}}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a nested list that is not a list", "refusals": [{"path": "/onMount/0/seq", "reason": "a command list is a list of commands"}], "document": {"vocab": "ui/1", "id": "p", "onMount": [{"seq": "go"}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a model that is not an object", "refusals": [{"path": "/models/m", "reason": "a model is an object"}], "document": {"vocab": "ui/1", "id": "p", "models": {"m": 3}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a model type that is not a string", "refusals": [{"path": "/models/m/type", "reason": "`type` is a string"}], "document": {"vocab": "ui/1", "id": "p", "models": {"m": {"type": 3}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a model instance outside expr/1", "refusals": [{"path": "/models/m/instance/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "models": {"m": {"type": "T", "instance": {"fn": "nope"}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a state type that is not a string", "refusals": [{"path": "/state/s/type", "reason": "`type` is a string"}], "document": {"vocab": "ui/1", "id": "p", "state": {"s": {"type": 3}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a state init outside expr/1", "refusals": [{"path": "/state/s/init/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "state": {"s": {"init": {"fn": "nope"}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a let outside expr/1", "refusals": [{"path": "/let/l/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "let": {"l": {"fn": "nope"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: watch that is not a list", "refusals": [{"path": "/watch", "reason": "`watch` is a list of watches"}], "document": {"vocab": "ui/1", "id": "p", "watch": {}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a watch that is not an object", "refusals": [{"path": "/watch/0", "reason": "a watch is an object"}], "document": {"vocab": "ui/1", "id": "p", "watch": [3], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a watched value outside expr/1", "refusals": [{"path": "/watch/0/on/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "watch": [{"on": {"fn": "nope"}, "do": []}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a watch source that is neither user nor any", "refusals": [{"path": "/watch/0/source", "reason": "`source` is `user` or `any`"}], "document": {"vocab": "ui/1", "id": "p", "watch": [{"on": 1, "source": "self", "do": []}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: checks that are not a list", "refusals": [{"path": "/checks", "reason": "`checks` is a list of checks"}], "document": {"vocab": "ui/1", "id": "p", "checks": {}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a check without assert", "refusals": [{"path": "/checks/0", "reason": "a check has an `assert`"}], "document": {"vocab": "ui/1", "id": "p", "checks": [{}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: an assert outside expr/1", "refusals": [{"path": "/checks/0/assert/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "checks": [{"assert": {"fn": "nope"}}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a check message outside expr/1", "refusals": [{"path": "/checks/0/message/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "checks": [{"assert": true, "message": {"fn": "nope"}}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: check targets that are not a list", "refusals": [{"path": "/checks/0/targets", "reason": "`targets` is a list of names"}], "document": {"vocab": "ui/1", "id": "p", "checks": [{"assert": true, "targets": "x"}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a check target that is not a string", "refusals": [{"path": "/checks/0/targets/0", "reason": "`targets` is a string"}], "document": {"vocab": "ui/1", "id": "p", "checks": [{"assert": true, "targets": [3]}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: blocking that is not a bool", "refusals": [{"path": "/checks/0/blocking", "reason": "`blocking` is a bool"}], "document": {"vocab": "ui/1", "id": "p", "checks": [{"assert": true, "blocking": "yes"}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a query model that is not a string", "refusals": [{"path": "/queries/q/model", "reason": "`model` is a string"}], "document": {"vocab": "ui/1", "id": "p", "queries": {"q": {"model": 3, "action": "A"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a query body outside expr/1", "refusals": [{"path": "/queries/q/body/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "queries": {"q": {"model": "m", "action": "A", "body": {"fn": "nope"}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a query gate outside expr/1", "refusals": [{"path": "/queries/q/when/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "queries": {"q": {"model": "m", "action": "A", "when": {"fn": "nope"}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: refreshOn that is not a list", "refusals": [{"path": "/queries/q/refreshOn", "reason": "`refreshOn` is a list of names"}], "document": {"vocab": "ui/1", "id": "p", "queries": {"q": {"model": "m", "action": "A", "refreshOn": "B"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a mutation without an action", "refusals": [{"path": "/mutations/m", "reason": "a mutation names its `model` and `action`"}], "document": {"vocab": "ui/1", "id": "p", "mutations": {"m": {"model": "m"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: offline other than queue", "refusals": [{"path": "/mutations/m/offline", "reason": "`offline` is `queue`"}], "document": {"vocab": "ui/1", "id": "p", "mutations": {"m": {"model": "m", "action": "A", "offline": "drop"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a patch that is not an object", "refusals": [{"path": "/mutations/m/patch", "reason": "a patch is an object"}], "document": {"vocab": "ui/1", "id": "p", "mutations": {"m": {"model": "m", "action": "A", "patch": 3}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a patch without key and with", "refusals": [{"path": "/mutations/m/patch", "reason": "a patch is {\"query\": \"q\", \"key\": e, \"with\": e}"}], "document": {"vocab": "ui/1", "id": "p", "mutations": {"m": {"model": "m", "action": "A", "patch": {"query": "q"}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a patch query that is not a string", "refusals": [{"path": "/mutations/m/optimistic/query", "reason": "`query` is a string"}], "document": {"vocab": "ui/1", "id": "p", "mutations": {"m": {"model": "m", "action": "A", "optimistic": {"query": 3, "key": 1, "with": 1}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a serial key outside expr/1", "refusals": [{"path": "/mutations/m/serialKey/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "mutations": {"m": {"model": "m", "action": "A", "serialKey": {"fn": "nope"}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: invalidates that is not a list", "refusals": [{"path": "/mutations/m/invalidates", "reason": "`invalidates` is a list of names"}], "document": {"vocab": "ui/1", "id": "p", "mutations": {"m": {"model": "m", "action": "A", "invalidates": "q"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: onError that is not a list", "refusals": [{"path": "/mutations/m/onError", "reason": "a command list is a list of commands"}], "document": {"vocab": "ui/1", "id": "p", "mutations": {"m": {"model": "m", "action": "A", "onError": "x"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a view that is not an object", "refusals": [{"path": "/view", "reason": "a node is an object"}], "document": {"vocab": "ui/1", "id": "p", "view": 3}},
+
+    {"name": "parse: a kind that is not a string", "refusals": [{"path": "/view", "reason": "a node names its `kind`"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": 3}}},
+
+    {"name": "parse: children that are not a list", "refusals": [{"path": "/view/children", "reason": "a node list is a list of nodes"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "column", "children": 3}}},
+
+    {"name": "parse: a child that is not an object", "refusals": [{"path": "/view/children/0", "reason": "a node is an object"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "column", "children": [3]}}},
+
+    {"name": "parse: columns that are not a list", "refusals": [{"path": "/view/columns", "reason": "`column` entries are a list"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "table", "columns": 3}}},
+
+    {"name": "parse: a column that is not an object", "refusals": [{"path": "/view/columns/0", "reason": "each `column` entry is an object"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "table", "columns": [3]}}},
+
+    {"name": "parse: an entry that is not an object", "refusals": [{"path": "/view/action", "reason": "each `action` entry is an object"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "banner", "action": 3}}},
+
+    {"name": "parse: a literal key that is not a string", "refusals": [{"path": "/view/commitOn", "reason": "`commitOn` is a string"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "textInput", "commitOn": 3}}},
+
+    {"name": "parse: an expression map that is not an object", "refusals": [{"path": "/view/a11y", "reason": "`a11y` is an object of expressions"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "text", "a11y": 3}}},
+
+    {"name": "parse: an expression map entry outside expr/1", "refusals": [{"path": "/view/a11y/name/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "text", "a11y": {"name": {"fn": "nope"}}}}},
+
+    {"name": "parse: on that is not an object", "refusals": [{"path": "/view/on", "reason": "`on` is an object of command lists"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "custom", "name": "C", "on": 3}}},
+
+    {"name": "parse: a scope that is not an object", "refusals": [{"path": "/view/scope", "reason": "a scope is an object"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "table", "scope": 3}}},
+
+    {"name": "parse: a scope with an unknown must-understand key", "refusals": [{"path": "/view/scope/!cache", "reason": "`!cache` must be understood, and a scope has no such key"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "table", "scope": {"!cache": 1}}}},
+
+    {"name": "parse: an event outside expr/1", "refusals": [{"path": "/view/onClick/0/value/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "p", "view": {"kind": "button", "onClick": [{"set": "x", "value": {"fn": "nope"}}]}}},
+
+    {"name": "parse: component props that are not an object", "refusals": [{"path": "/components/C/props", "reason": "`props` is an object of types"}], "document": {"vocab": "ui/1", "id": "p", "components": {"C": {"host": "H", "props": 3}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a component prop type that is not a string", "refusals": [{"path": "/components/C/events/e", "reason": "a type is a string"}], "document": {"vocab": "ui/1", "id": "p", "components": {"C": {"host": "H", "events": {"e": 3}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a component fallback that is not a node", "refusals": [{"path": "/components/C/fallback", "reason": "a node list is a list of nodes"}], "document": {"vocab": "ui/1", "id": "p", "components": {"C": {"qml": "sha256:1", "fallback": 3}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a point type that is not a type", "refusals": [{"path": "/customize/p/type", "reason": "unknown type `money`"}], "document": {"vocab": "ui/1", "id": "p", "customize": {"p": {"kind": "value", "type": "money"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: an untyped default with a fraction", "refusals": [{"path": "/customize/p/default", "reason": "a number must be an int64; write a fraction as {num, den, dp}"}], "document": {"vocab": "ui/1", "id": "p", "customize": {"p": {"kind": "value", "default": 0.5}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: point options that are not a list", "refusals": [{"path": "/customize/p/options", "reason": "`options` is a list of names"}], "document": {"vocab": "ui/1", "id": "p", "customize": {"p": {"kind": "choice", "options": "a"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "validate: types flow through a let, a query, a result and a comprehension", "refusals": [{"path": "/let/saved", "reason": "`capture` is not declared in scope"}, {"path": "/view/children/9/text/args/0", "reason": "`length` takes a string, not a record {a: list<int>}"}], "document": {"vocab": "ui/1", "id": "v", "models": {"sample": {"type": "Lims_SampleModel", "instance": "shared"}}, "queries": {"results": {"model": "sample", "action": "Lims_ListResults", "body": {"obj": {"sampleId": 1}}}}, "mutations": {"capture": {"model": "sample", "action": "Lims_Capture"}}, "state": {"note": {"type": "string?", "init": null}, "flag": {"type": "bool", "init": true}}, "let": {"ids": {"map": {"query": "results"}, "as": "r", "to": {"ref": "r.id"}}, "total": {"fn": "sum", "args": [{"ref": "ids"}]}, "first": {"fn": "first", "args": [{"query": "results"}]}, "mass": {"ref": "first.mass"}, "saved": {"ref": "capture"}}, "view": {"kind": "column", "children": [{"kind": "text", "text": {"fn": "number", "args": [{"fn": "coalesce", "args": [{"result": "capture"}, 0]}]}}, {"kind": "text", "text": {"fn": "concat", "args": [{"fn": "coalesce", "args": [{"ref": "note"}, ""]}, {"error": "results"}, {"errorKind": "capture"}]}}, {"kind": "text", "visible": {"fn": "and", "args": [{"ref": "flag"}, {"pending": "results"}, {"can": "host:export"}, {"env": "online"}, {"session": "authenticated"}]}}, {"kind": "text", "text": {"fn": "number", "args": [{"fn": "mean", "args": [{"map": {"query": "results"}, "as": "r", "to": {"fn": "round", "args": [{"ref": "r.mass"}, 2]}}]}]}}, {"kind": "text", "text": {"if": [{"fn": "engaged", "args": [{"ref": "mass"}]}, "heavy", "light"]}}, {"kind": "text", "text": {"fn": "format", "args": ["{0}", {"fn": "div", "args": [{"ref": "total"}, {"fn": "count", "args": [{"ref": "ids"}]}]}]}}, {"kind": "text", "text": {"t": "k", "fallback": "x", "args": {"n": {"fn": "neg", "args": [1]}}}}, {"kind": "text", "text": {"ref": "app.theme"}}, {"kind": "text", "text": {"host": "sync.count"}}, {"kind": "text", "text": {"fn": "length", "args": [{"obj": {"a": {"list": [1, 2]}}}]}}]}}},
+
+    {"name": "validate: references that miss", "refusals": [{"path": "/view/children/0/visible", "reason": "`nothing` is not a query or a mutation in scope"}, {"path": "/view/children/1/text", "reason": "`nothing` is not a mutation in scope"}, {"path": "/view/children/2/text", "reason": "`shoeSize` is not a session attribute"}, {"path": "/view/children/3/visible", "reason": "`nothing` is not a query or a mutation in scope"}, {"path": "/view/children/4/text", "reason": "`boundary` is not declared in scope"}, {"path": "/view/children/5/text/args/0", "reason": "`results` is not declared in scope"}], "document": {"vocab": "ui/1", "id": "v", "models": {"sample": {"type": "Lims_SampleModel", "instance": "shared"}}, "queries": {"results": {"model": "sample", "action": "Lims_ListResults", "body": {"obj": {"sampleId": 1}}}}, "view": {"kind": "column", "children": [{"kind": "text", "visible": {"pending": "nothing"}}, {"kind": "text", "text": {"result": "nothing"}}, {"kind": "text", "text": {"session": "shoeSize"}}, {"kind": "text", "visible": {"can": "nothing"}}, {"kind": "text", "text": {"ref": "boundary.error"}}, {"kind": "text", "text": {"fn": "number", "args": [{"ref": "results"}]}}]}}},
+
+    {"name": "validate: bool positions and operand types", "refusals": [{"path": "/checks/0/assert", "reason": "`assert` is a bool, not an int"}, {"path": "/dirty", "reason": "`dirty` is a bool, not a string"}, {"path": "/view/children/0/text/if/0", "reason": "`if`'s condition is a bool, not an int"}, {"path": "/view/children/1/text/where", "reason": "`where` is a bool, not a string"}, {"path": "/view/children/2/text/map", "reason": "`map` takes a list, not an int"}, {"path": "/view/children/3/text/args/0", "reason": "`not` takes bools, not a string"}, {"path": "/view/children/4/rows", "reason": "`rows` is a list, not a string"}, {"path": "/view/children/5/checked", "reason": "`checked` is a bool, not an int"}, {"path": "/view/children/5/enabled", "reason": "`enabled` is a bool, not a list<int>"}], "document": {"vocab": "ui/1", "id": "v", "state": {"n": {"init": 1}, "s": {"init": "x"}, "l": {"init": {"lit": [1]}}}, "dirty": {"ref": "s"}, "queries": {}, "checks": [{"assert": {"ref": "n"}}], "view": {"kind": "column", "children": [{"kind": "text", "text": {"if": [{"ref": "n"}, 1, 2]}}, {"kind": "text", "text": {"filter": {"ref": "l"}, "as": "x", "where": {"ref": "s"}}}, {"kind": "text", "text": {"map": {"ref": "n"}, "as": "x", "to": 1}}, {"kind": "text", "text": {"fn": "not", "args": [{"ref": "s"}]}}, {"kind": "forEach", "rows": {"ref": "s"}, "key": {"row": "id"}, "children": []}, {"kind": "checkbox", "checked": {"ref": "n"}, "enabled": {"ref": "l"}}]}}},
+
+    {"name": "validate: a mutation's names and patches", "refusals": [{"path": "/mutations/capture/invalidates", "reason": "`nothing` is not a query in scope"}, {"path": "/mutations/capture/patch/query", "reason": "`nothing` is not a query in scope"}, {"path": "/mutations/capture/patch/with", "reason": "`result` has no field `idx`"}, {"path": "/checks/0/targets", "reason": "`ghost` is not an element in scope"}], "document": {"vocab": "ui/1", "id": "v", "models": {"sample": {"type": "Lims_SampleModel", "instance": "shared"}}, "queries": {"results": {"model": "sample", "action": "Lims_ListResults", "body": {"obj": {"sampleId": 1}}}}, "mutations": {"capture": {"model": "sample", "action": "Lims_Capture", "invalidates": ["nothing"], "patch": {"query": "nothing", "key": {"ref": "result.id"}, "with": {"ref": "result.idx"}}, "onSuccess": [{"run": "capture", "as": "again"}, {"notify": {"ref": "again.mass"}}]}}, "checks": [{"assert": true, "targets": ["ghost"]}], "view": {"kind": "spacer"}}},
+
+    {"name": "validate: elements, dialogs, uploads and sign-in", "refusals": [{"path": "/view/children/2/onClick/5", "reason": "`nothing` is not a mutation in scope"}, {"path": "/view/children/2/onClick/7", "reason": "`upload` sends to a mutation in scope"}, {"path": "/view/children/2/onClick/9/if/0", "reason": "`if`'s condition is a bool, not an int"}], "document": {"vocab": "ui/1", "id": "v", "models": {"session": {"type": "Auth_SessionModel"}}, "mutations": {"signIn": {"model": "session", "action": "Auth_SignIn"}}, "view": {"kind": "column", "children": [{"kind": "textInput", "id": "name"}, {"kind": "drawer", "id": "side", "children": []}, {"kind": "button", "onClick": [{"set": "name.draft", "value": "x"}, {"open": "side"}, {"close": "side"}, {"focus": "name"}, {"signIn": {"from": "signIn"}}, {"signIn": {"from": "nothing"}}, {"upload": {"ref": "event"}, "to": "signIn"}, {"upload": {"ref": "event"}, "to": "nothing"}, {"if": [{"ref": "event"}, [{"resetPrefs": "all"}], []]}, {"if": [1, [], []]}]}]}}},
+
+    {"name": "validate: forms, tables and points against the catalog", "refusals": [{"path": "/prefetch", "reason": "`nothing` is not a query of the screen"}, {"path": "/customize/order/of", "reason": "`ghost` is not an element of the screen"}, {"path": "/customize/size/default", "reason": "the default is not one of the point's `options`"}, {"path": "/view/children/1/model", "reason": "`ghost` is not a model alias in scope"}, {"path": "/view/children/2", "reason": "`Lims_ListClients` is not an action of `Lims_SampleModel`"}, {"path": "/view/children/4/text", "reason": "`limit` has no field `min`"}], "document": {"vocab": "ui/1", "id": "v", "models": {"sample": {"type": "Lims_SampleModel", "instance": "shared"}}, "customize": {"order": {"kind": "columns", "of": "ghost"}, "size": {"kind": "choice", "options": ["s", "m"], "default": "xl"}, "limit": {"kind": "value", "type": "{max: int}", "default": {"max": 3}}}, "prefetch": ["nothing"], "view": {"kind": "column", "children": [{"kind": "form", "model": "sample", "action": "Lims_Capture"}, {"kind": "form", "model": "ghost", "action": "Lims_Capture"}, {"kind": "table", "model": "sample", "action": "Lims_ListClients", "columns": []}, {"kind": "text", "text": {"fn": "number", "args": [{"pref": "limit.max"}]}}, {"kind": "text", "text": {"pref": "limit.min"}}, {"kind": "customize", "point": "size"}]}}},
+
+    {"name": "validate: a refused node is not validated", "refusals": [], "document": {"vocab": "ui/1", "id": "v", "view": {"kind": "column", "children": [{"kind": "text", "!glow": true, "text": {"ref": "nothing"}}]}}},
+
+    {"name": "validate: a let that reads another is no cycle; one that reads itself is", "refusals": [{"path": "/let/c", "reason": "the `let` entries form a cycle: c → c"}], "document": {"vocab": "ui/1", "id": "v", "let": {"a": {"ref": "b"}, "b": 1, "c": {"fn": "add", "args": [{"ref": "c"}, 1]}}, "view": {"kind": "spacer"}}},
+
+    {"name": "validate: a watch that writes what it observes", "refusals": [{"path": "/watch/0", "reason": "the watches form a cycle: /watch/0 → /watch/0"}], "document": {"vocab": "ui/1", "id": "v", "state": {"x": {"init": 0}}, "watch": [{"on": {"ref": "x"}, "do": [{"set": "x", "value": 1}]}], "view": {"kind": "spacer"}}},
+
+    {"name": "validate: a dialog's scope and a switch case's scope", "refusals": [{"path": "/view/children/1/text", "reason": "`inner` is not declared in scope"}], "document": {"vocab": "ui/1", "id": "v", "view": {"kind": "column", "children": [{"kind": "dialog", "id": "d", "scope": {"state": {"inner": {"init": 1}}}, "children": [{"kind": "text", "text": {"fn": "number", "args": [{"ref": "inner"}]}}]}, {"kind": "text", "text": {"ref": "inner"}}, {"kind": "switch", "value": 1, "cases": [{"when": 1, "scope": {"let": {"k": 2}}, "children": [{"kind": "text", "text": {"fn": "number", "args": [{"ref": "k"}]}}]}]}]}}},
+
+    {"name": "validate: string and list operands", "refusals": [{"path": "/view/children/0/text/args/1", "reason": "`concat` takes strings, not an int"}, {"path": "/view/children/1/text/args/0/args/0", "reason": "`count` takes a list, not a string"}], "document": {"vocab": "ui/1", "id": "v", "view": {"kind": "column", "children": [{"kind": "text", "text": {"fn": "concat", "args": ["a", 1]}}, {"kind": "text", "text": {"fn": "number", "args": [{"fn": "count", "args": ["abc"]}]}}]}}},
+
+    {"name": "parse: a state entry with an unknown must-understand key", "refusals": [{"path": "/state/s/!x", "reason": "`!x` must be understood, and a state entry has no such key"}], "document": {"vocab": "ui/1", "id": "c", "state": {"s": {"!x": 1}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a check with an unknown must-understand key", "refusals": [{"path": "/checks/0/!x", "reason": "`!x` must be understood, and a check has no such key"}], "document": {"vocab": "ui/1", "id": "c", "checks": [{"assert": true, "!x": 1}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a mutation with an unknown must-understand key", "refusals": [{"path": "/mutations/m/!x", "reason": "`!x` must be understood, and a mutation has no such key"}], "document": {"vocab": "ui/1", "id": "c", "mutations": {"m": {"model": "m", "action": "A", "!x": 1}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a component with an unknown must-understand key", "refusals": [{"path": "/components/C/!x", "reason": "`!x` must be understood, and a component has no such key"}], "document": {"vocab": "ui/1", "id": "c", "components": {"C": {"host": "H", "!x": 1}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a point with an unknown must-understand key", "refusals": [{"path": "/customize/p/!x", "reason": "`!x` must be understood, and a customization point has no such key"}], "document": {"vocab": "ui/1", "id": "c", "customize": {"p": {"kind": "value", "!x": 1}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: if that is not a list", "refusals": [{"path": "/onMount/0/if", "reason": "`if` takes [condition, [then...], [else...]]"}], "document": {"vocab": "ui/1", "id": "c", "onMount": [{"if": 3}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a flag written false", "refusals": [{"path": "/onMount/0/signOut", "reason": "`signOut` is written `true`"}], "document": {"vocab": "ui/1", "id": "c", "onMount": [{"signOut": false}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: signIn from a non-string", "refusals": [{"path": "/onMount/0/signIn", "reason": "`signIn` takes {\"from\": \"mutation\"}"}], "document": {"vocab": "ui/1", "id": "c", "onMount": [{"signIn": {"from": 3}}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a patch without a key", "refusals": [{"path": "/mutations/m/patch", "reason": "a patch is {\"query\": \"q\", \"key\": e, \"with\": e}"}], "document": {"vocab": "ui/1", "id": "c", "mutations": {"m": {"model": "m", "action": "A", "patch": {"query": "q", "with": 1}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a patch key outside expr/1", "refusals": [{"path": "/mutations/m/patch/key/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "c", "mutations": {"m": {"model": "m", "action": "A", "patch": {"query": "q", "key": {"fn": "nope"}, "with": 1}}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a watch without do", "refusals": [{"path": "/watch/0", "reason": "a watch is {\"on\": e, \"do\": [...]}"}], "document": {"vocab": "ui/1", "id": "c", "watch": [{"on": 1}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a watch source that is not a string", "refusals": [{"path": "/watch/0/source", "reason": "`source` is `user` or `any`"}], "document": {"vocab": "ui/1", "id": "c", "watch": [{"on": 1, "source": 3, "do": []}], "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a query without a model", "refusals": [{"path": "/queries/q", "reason": "a query names its `model` and one of `action` or `evaluate`"}], "document": {"vocab": "ui/1", "id": "c", "queries": {"q": {"action": "A"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a mutation without a model", "refusals": [{"path": "/mutations/m", "reason": "a mutation names its `model` and `action`"}], "document": {"vocab": "ui/1", "id": "c", "mutations": {"m": {"action": "A"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a concurrency that is not a string", "refusals": [{"path": "/mutations/m/concurrency", "reason": "`concurrency` is `exclusive`, `serial`, `latest` or `parallel`"}], "document": {"vocab": "ui/1", "id": "c", "mutations": {"m": {"model": "m", "action": "A", "concurrency": 3}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: offline that is not a string", "refusals": [{"path": "/mutations/m/offline", "reason": "`offline` is `queue`"}], "document": {"vocab": "ui/1", "id": "c", "mutations": {"m": {"model": "m", "action": "A", "offline": true}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a point without a kind", "refusals": [{"path": "/customize/p/kind", "reason": "a point's `kind` is `columns`, `choice`, `value`, `layout`, `saved`, `pins` or `arrange`"}], "document": {"vocab": "ui/1", "id": "c", "customize": {"p": {}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a point kind that is not a string", "refusals": [{"path": "/customize/p/kind", "reason": "a point's `kind` is `columns`, `choice`, `value`, `layout`, `saved`, `pins` or `arrange`"}], "document": {"vocab": "ui/1", "id": "c", "customize": {"p": {"kind": 3}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: an entry's unknown key is ignored, and its bad expression refused", "refusals": [{"path": "/view/action/label/fn", "reason": "`nope` is not a function of expr/1"}], "document": {"vocab": "ui/1", "id": "c", "view": {"kind": "banner", "action": {"label": {"fn": "nope"}, "later": 1}}}},
+
+    {"name": "parse: a debounce that is not an int", "refusals": [{"path": "/queries/q/debounce", "reason": "`debounce` is a non-negative int"}], "document": {"vocab": "ui/1", "id": "c", "queries": {"q": {"model": "m", "action": "A", "debounce": "x"}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a name with a character outside the name set", "refusals": [{"path": "/state/a-b", "reason": "`a-b` is not a name: a name is [A-Za-z_][A-Za-z0-9_]*"}], "document": {"vocab": "ui/1", "id": "c", "state": {"a-b": {}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: an empty name", "refusals": [{"path": "/state/", "reason": "`` is not a name: a name is [A-Za-z_][A-Za-z0-9_]*"}], "document": {"vocab": "ui/1", "id": "c", "state": {"": {}}, "view": {"kind": "spacer"}}},
+
+    {"name": "parse: a known must-understand verb and operand", "refusals": [], "document": {"vocab": "ui/1", "id": "c", "mutations": {"m": {"model": "sample", "action": "Lims_Capture"}}, "models": {"sample": {"type": "Lims_SampleModel", "instance": "shared"}}, "onMount": [{"!run": "m", "!as": "x"}], "view": {"kind": "spacer"}}},
+
+    {"name": "validate: the rest of the catalog's checks", "refusals": [{"path": "/queries/results/refreshOn", "reason": "`Nope_Action` is not an action of `Lims_SampleModel`"}, {"path": "/queries/ghost", "reason": "`Nope_Action` is not an action of the catalog"}, {"path": "/queries/ghost/refreshOn", "reason": "`Nope_Other` is not an action of the query's model"}, {"path": "/mutations/phantom", "reason": "`Nope_Action` is not an action of the catalog"}, {"path": "/customize/c2/default", "reason": "the default is not one of the point's `options`"}, {"path": "/view/children/1", "reason": "`` is not a component of the bundle"}, {"path": "/view/children/2", "reason": "a `customize` node names a customization point of the screen"}, {"path": "/view/children/3/model", "reason": "`` is not a model alias in scope"}, {"path": "/view/children/5/onClick/0", "reason": "`ghost` is not a dialog or a drawer in scope"}, {"path": "/view/children/5/onClick/1", "reason": "`upload` sends to a mutation in scope"}], "document": {"vocab": "ui/1", "id": "c", "models": {"sample": {"type": "Lims_SampleModel", "instance": "shared"}, "clients": {"type": "Lims_ClientModel", "instance": "private"}}, "queries": {"results": {"model": "sample", "action": "Lims_ListResults", "body": {"obj": {"sampleId": 1}}, "when": {"fn": "gt", "args": [1, 0]}, "refreshOn": ["Nope_Action"]}, "ghost": {"model": "sample", "action": "Nope_Action", "refreshOn": ["Nope_Other"]}}, "mutations": {"capture": {"model": "sample", "action": "Lims_Capture", "body": {"obj": {"id": 1}}, "serialKey": 1, "offline": "queue", "optimistic": {"query": "ghost", "key": 1, "with": {"obj": {"concentration": 1}}}}, "phantom": {"model": "sample", "action": "Nope_Action", "patch": {"query": "results", "key": 1, "with": 1}, "optimistic": {"query": "results", "key": 1, "with": 1}}}, "checks": [{"assert": true, "message": {"fn": "concat", "args": ["a", "b"]}}], "customize": {"lay": {"kind": "layout", "of": "tabsNode"}, "arr": {"kind": "arrange", "of": "tabsNode"}, "c1": {"kind": "choice", "options": ["a"], "default": null}, "c2": {"kind": "choice", "options": ["a"], "default": 1}}, "view": {"kind": "column", "children": [{"kind": "tabs", "id": "tabsNode", "tabs": []}, {"kind": "custom"}, {"kind": "customize"}, {"kind": "table", "action": "Lims_ListResults", "columns": []}, {"kind": "forEach", "rows": {"query": "results"}, "key": {"row": "id"}, "scope": {"models": {"m": {"type": "Lims_ClientModel", "instance": "shared"}}}, "children": []}, {"kind": "button", "onClick": [{"open": "ghost"}, {"upload": {"ref": "event"}}]}]}}},
+
+    {"name": "validate: literal types and an if's branches", "refusals": [{"path": "/state/bad/init", "reason": "`init` is a decimal, not an int"}, {"path": "/view/text/if/2/args/0", "reason": "`nothingHere` is not declared in scope"}], "document": {"vocab": "ui/1", "id": "c", "state": {"d": {"type": "decimal", "init": {"lit": {"num": 1, "den": 2, "dp": 1}}}, "q": {"type": "quantity", "init": {"lit": {"num": 1, "den": 1, "dp": 0, "unit": "g"}}}, "r": {"type": "{a: int}", "init": {"lit": {"a": 1}}}, "e": {"type": "list<int>", "init": {"lit": []}}, "bad": {"type": "int", "init": {"lit": {"num": 1, "den": 2, "dp": 1}}}}, "view": {"kind": "text", "text": {"if": [true, "a", {"fn": "coalesce", "args": [{"ref": "nothingHere"}]}]}, "visible": {"if": [true, {"env": "online"}, {"session": "authenticated"}]}}}}
   ]
 }
