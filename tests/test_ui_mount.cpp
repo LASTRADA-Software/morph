@@ -222,6 +222,103 @@ TEST_CASE("ui::Mounted: a menu entry runs its own action and its label may be bo
     CHECK(backend.log() == Lines{"set Menu#1 items=[Count 2,Quit]"});
 }
 
+// A submenu entry is reached by its path. Mutation: resolve the path one level only in itemAt (keep the first index).
+TEST_CASE("ui::Mounted: a menu entry inside a submenu runs its own action", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Lines ran;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::menu({.items = {{.label = "File",
+                             .items = {{.label = "Open", .onSelect = [&] { ran.emplace_back("open"); }},
+                                       {.label = "Recent",
+                                        .items = {{.label = "a.txt", .onSelect = [&] { ran.emplace_back("a"); }},
+                                                  {.label = "b.txt", .onSelect = [&] { ran.emplace_back("b"); }}}}}},
+                            {.label = "Quit", .onSelect = [&] { ran.emplace_back("quit"); }}}})};
+    CHECK(backend.prop(1, "items") == "[File[Open,Recent[a.txt,b.txt]],Quit]");
+    backend.chooseMenuEntry(1, {0, 1, 1});
+    backend.chooseMenuEntry(1, {0, 0});
+    backend.chooseMenuEntry(1, {0, 1, 2});  // out of range: nothing runs
+    backend.chooseMenuEntry(1, {0, 1});     // opens the submenu: nothing runs
+    CHECK(ran == Lines{"b", "open"});
+}
+
+// Mutations: skip the enabled check (on the entry, or on an entry above it) in RecordingBackend::chooseMenuEntry.
+TEST_CASE("ui::Mounted: a disabled menu entry, or one inside a disabled entry, runs nothing", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> enabled{runtime, false};
+    Lines ran;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::menu({.items = {{.label = "Delete",
+                             .onSelect = [&] { ran.emplace_back("delete"); },
+                             .enabled = [&] { return enabled.get(); }},
+                            {.label = "Export",
+                             .enabled = [&] { return enabled.get(); },
+                             .items = {{.label = "CSV", .onSelect = [&] { ran.emplace_back("csv"); }}}}}})};
+    CHECK(backend.prop(1, "items") == "[Delete;enabled=false,Export;enabled=false[CSV]]");
+    backend.chooseMenuEntry(1, {0});
+    backend.chooseMenuEntry(1, {1, 0});
+    CHECK(ran.empty());
+    enabled.set(true);
+    owner.runAll();
+    CHECK(backend.prop(1, "items") == "[Delete,Export[CSV]]");
+    backend.chooseMenuEntry(1, {0});
+    backend.chooseMenuEntry(1, {1, 0});
+    CHECK(ran == Lines{"delete", "csv"});
+}
+
+// Mutation: drop the `item->onSelect` check in the menu's dispatcher (the empty action then throws, and the probe
+// sees a reported callback failure).
+TEST_CASE("ui::Mounted: a menu entry without an action runs nothing when chosen", "[ui]") {
+    Owner owner;
+    Probe const probe{owner.coreExecutor()};
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{runtime, backend, ui::menu({.items = {{.label = "About"}}})};
+    backend.chooseIndex(1, 0);
+    CHECK(probe.count(ui::detail::site::kCallbackThrew) == 0);
+}
+
+// Mutation: stop anyBound at the top level (drop its recursion): a binding only a submenu entry has is then read
+// once and never followed.
+TEST_CASE("ui::Mounted: a binding inside a submenu updates the menu", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<int> count{runtime, 1};
+    ui::Mounted const view{
+        runtime, backend,
+        ui::menu({.items = {{.label = "File",
+                             .items = {{.label = [&] { return "Recent (" + std::to_string(count.get()) + ")"; }}}}}})};
+    CHECK(backend.prop(1, "items") == "[File[Recent (1)]]");
+    count.set(2);
+    owner.runAll();
+    CHECK(backend.prop(1, "items") == "[File[Recent (2)]]");
+}
+
+// The check mark is the binding's: choosing the entry runs its action, and only a change to the binding moves the
+// mark. Icon and shortcut text are set once. Mutations: drop `checked` from entriesOf, or `checked.isBound()` from
+// anyBound (the mark then never follows).
+TEST_CASE("ui::Mounted: a checkable menu entry shows the mark its binding gives", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> wrap{runtime, false};
+    ui::Mounted const view{runtime, backend,
+                           ui::menu({.items = {{.label = "Wrap",
+                                                .onSelect = [&] { wrap.set(!wrap.get()); },
+                                                .checked = [&] { return std::optional<bool>{wrap.get()}; }},
+                                               {.label = "Save", .icon = "save", .keys = "Ctrl+S"}}})};
+    CHECK(backend.prop(1, "items") == "[Wrap;checked=false,Save;icon=save;keys=Ctrl+S]");
+    backend.chooseIndex(1, 0);
+    owner.runAll();
+    CHECK(backend.prop(1, "items") == "[Wrap;checked=true,Save;icon=save;keys=Ctrl+S]");
+}
+
 TEST_CASE("ui::Mounted: a collapsible panel reports a toggle and follows its collapsed prop", "[ui]") {
     Owner owner;
     Runtime runtime{owner};

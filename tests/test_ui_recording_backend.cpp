@@ -131,7 +131,8 @@ TEST_CASE("RecordingBackend: the interaction helpers call what the widget was gi
     choice->setOnSelect([&](ui::Key key) { chosen.push_back(std::move(key)); });
     choice->setOptions({{.key = intKey(5), .label = "Five"}});
     auto menu = backend.createMenu(nullptr);
-    menu->setOnActivate([&](std::size_t index) { activated.push_back(index); });
+    menu->setItems({{.label = "First"}, {.label = "Second"}});
+    menu->setOnActivate([&](std::vector<std::size_t> const& path) { activated.push_back(path.back()); });
     auto panel = backend.createPanel(nullptr);
     panel->setOnToggle([&](bool collapsed) { collapses.push_back(collapsed); });
     panel->setCollapsible(true);
@@ -172,7 +173,18 @@ TEST_CASE("RecordingBackend: the interaction helpers call what the widget was gi
     CHECK(backend.prop(3, "checked") == "false");
     CHECK(backend.prop(4, "selected") == "5");
     CHECK(backend.prop(7, "value") == "2026-10-04T09:30:00.000Z");
-    CHECK(backend.log().size() == 11);
+    CHECK(backend.log().size() == 12);
+}
+
+// Mutations: drop the escaping of `;` (or of `[`) in formatMenu; print `enabled=true` for an enabled entry.
+TEST_CASE("RecordingBackend: a menu tree prints its attributes, escaped, and submenus in brackets", "[ui]") {
+    using ui::MenuEntry;
+    CHECK(ui::testing::detail::formatMenu({}) == "[]");
+    CHECK(ui::testing::detail::formatMenu(
+              {MenuEntry{.label = "a;b", .icon = "i[1]", .keys = "Ctrl+,", .checked = true},
+               MenuEntry{.label = "Sub", .enabled = false, .items = {MenuEntry{.label = "x=y", .checked = false}}},
+               MenuEntry{.label = "Plain"}}) ==
+          "[a\\;b;icon=i\\[1\\];keys=Ctrl+\\,;checked=true,Sub;enabled=false[x\\=y;checked=false],Plain]");
 }
 
 TEST_CASE("RecordingBackend: setText never calls onChange", "[ui]") {
@@ -384,7 +396,7 @@ TEST_CASE("RecordingBackend: text in a value cannot pass for another line, field
     auto label = backend.createText(nullptr);
     label->setText("a\nText#9 b=c\\d");
     auto menu = backend.createMenu(nullptr);
-    menu->setItems({"x,y", "[z]"});
+    menu->setItems({{.label = "x,y"}, {.label = "[z]"}});
     auto choice = backend.createSelect(nullptr, ui::SelectStyle::Dropdown);
     choice->setOptions({{.key = ui::Key{std::string{"q\"r"}}, .label = "s:t"}});
     CHECK(backend.dump() ==
@@ -407,7 +419,7 @@ TEST_CASE("RecordingBackend: every kind's setters show in the dump", "[ui]") {
     auto row = backend.createStack(nullptr, ui::Axis::Horizontal);
     row->setGap(2);
     auto menu = backend.createMenu(row.get());
-    menu->setItems({"Open", "Quit"});
+    menu->setItems({{.label = "Open"}, {.label = "Quit"}});
     auto busy = backend.createBusy(row.get());
     busy->setActive(true);
     busy->setLabel("wait");
@@ -557,8 +569,21 @@ TEST_CASE("RecordingBackend: every enumerator has its name, and a value outside 
     CHECK(enumName(ui::SelectionMode::None) == "None");
     CHECK(enumName(ui::SelectionMode::Single) == "Single");
     CHECK(enumName(ui::SelectionMode::Multiple) == "Multiple");
-    // The fallbacks keep a dump readable when a value the enumeration does not name reaches a setter.
+    CHECK(enumName(ui::Tone::Neutral) == "Neutral");
+    CHECK(enumName(ui::Tone::Info) == "Info");
+    CHECK(enumName(ui::Tone::Ok) == "Ok");
+    CHECK(enumName(ui::Tone::Warn) == "Warn");
+    CHECK(enumName(ui::Tone::Err) == "Err");
+    CHECK(enumName(ui::StepState::Pending) == "Pending");
+    CHECK(enumName(ui::StepState::Active) == "Active");
+    CHECK(enumName(ui::StepState::Done) == "Done");
+    CHECK(enumName(ui::StepState::Failed) == "Failed");
+    CHECK(enumName(ui::Side::Start) == "Start");
+    CHECK(enumName(ui::Side::End) == "End");
+    // The fallbacks keep a dump readable when a value the enumeration does not name reaches a setter. A value of the
+    // underlying type outside the enumerators is a valid value of a fixed-type enum; it is the case under test.
     constexpr std::uint8_t kOutside = 99;
+    // NOLINTBEGIN(clang-analyzer-optin.core.EnumCastOutOfRange)
     CHECK(enumName(static_cast<ui::TextRole>(kOutside)) == "unknown");
     CHECK(enumName(static_cast<ui::TextInputMode>(kOutside)) == "unknown");
     CHECK(enumName(static_cast<ui::SelectStyle>(kOutside)) == "unknown");
@@ -566,8 +591,12 @@ TEST_CASE("RecordingBackend: every enumerator has its name, and a value outside 
     CHECK(enumName(static_cast<ui::DateMode>(kOutside)) == "unknown");
     CHECK(enumName(static_cast<ui::FilePickerMode>(kOutside)) == "unknown");
     CHECK(enumName(static_cast<ui::SelectionMode>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::Tone>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::Side>(kOutside)) == "unknown");
+    CHECK(enumName(static_cast<ui::StepState>(kOutside)) == "unknown");
     CHECK(ui::testing::detail::formatSizing({.kind = static_cast<ui::Sizing::Kind>(kOutside), .amount = 1}) ==
           "unknown");
+    // NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 }
 
 // Mutations: drop the carriage-return branch of `detail::escape`; format an empty Timestamp as `none`.

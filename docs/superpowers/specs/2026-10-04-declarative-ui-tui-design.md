@@ -296,13 +296,16 @@ every property either a constant or a **slot** — a reactive value with a stabl
 a command sink. Node kinds, their properties and their events are spec 5 §9's palette; `Key` is
 `std::variant<std::int64_t, std::string>`, never a double.
 
-The view tree lands with spec 5 §9's base kinds (text, button, text input, checkbox, select, menu,
+The view tree carries spec 5 §9's base kinds (text, button, text input, checkbox, select, menu,
 column, row, grid, spacer, panel, scroll, switch, tabs, dialog, busy, forEach, table, date-time
-input, slider, file picker) and the properties a widget needs to show and edit them. The further
-kinds, the extra common properties (`a11y`, `testId`, `tooltip`, `keys`, `autofocus`, `surface`),
-the input decorations (`readonly`, `required`, `errors`, `stale`) and richer menu items each add a
-setter or a factory to `IViewBackend`, and join it with the interpreter that maps them or the
-renderer that needs them; until then the interpreter lowers a further kind to its fallback.
+input, slider, file picker) and its further kinds (banner, badge, progress, steps, keyValue,
+emptyState, drawer, splitter, collapsible, dropZone), with `custom`, which `Mounted` shows as its
+fallback; the common properties (`a11y`, `testId`, `tooltip`, `keys`, `autofocus`, `surface`), the
+input decorations (`readonly`, `required`, `errors`, `stale`), `onCommit`, and menu items with an
+icon, a shown chord, a check mark, enablement and submenus. Each has its setter or factory on
+`IViewBackend`. `boundary` and `customize` are not view-tree kinds: what a boundary shows depends on
+the state of the queries its children read, and a customization point's editor on the
+application's customization store, so the interpreter lowers both to the kinds above.
 
 **Mount:** `ui::Mounted(reactive::Runtime&, IViewBackend&, Node)` builds retained widgets through
 typed factories, once.

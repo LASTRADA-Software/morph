@@ -12,6 +12,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -190,7 +191,45 @@ public:
                           node->kind);
     }
 
+    /// @brief Mounts @p node as `mount` does, as a mount of its own: the first `autofocus` widget it mounts, in
+    ///        document order, takes keyboard focus once the whole of it has mounted.
+    /// @param scope Owns everything mounted.
+    /// @param node The node; null mounts nothing.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The node's widget, or null for a null node.
+    Widget* mountRoot(reactive::Scope& scope, Node const& node, ContainerWidget* parent) {
+        return mountPass([&] { return mount(scope, node, parent); });
+    }
+
 private:
+    // One mount: the root, or content, a page or a row a binding mounts later. The outermost pass focuses the first
+    // autofocus widget mounted during it, in document order, after everything in it has mounted; a pass nested in
+    // another (content a binding mounts while the root mounts) leaves that to the outer one. A pass that throws gives
+    // back the candidate it found, because its caller destroys what it mounted.
+    template <typename F>
+    auto mountPass(F const& body) -> std::invoke_result_t<F const&> {
+        Widget* const before = _autofocus;
+        ++_passDepth;
+        try {
+            auto result = body();
+            --_passDepth;
+            if (_passDepth == 0) {
+                if (Widget* const target = std::exchange(_autofocus, nullptr); target != nullptr) {
+                    try {
+                        target->focus();
+                    } catch (...) {  // NOLINT(bugprone-empty-catch)
+                        // Focus is a request: a backend that cannot move it leaves it where it was.
+                    }
+                }
+            }
+            return result;
+        } catch (...) {
+            _autofocus = before;
+            --_passDepth;
+            throw;
+        }
+    }
+
     // A constant is applied once; a binding becomes an equality-gated Computed plus an Effect, made in that order
     // after the widget, so the Effect dies first. Returns the Computed, or null for a constant.
     template <typename T, typename Apply>
@@ -351,17 +390,57 @@ private:
             bind(scope, common.dragKey, [&widget](std::optional<Key> const& key) { widget.setDragKey(key); });
         }
         if (common.onDrop) {
-            // No predicate accepts every key; a predicate that throws refuses the drop.
-            std::function<bool(Key const&)> accepts = [](Key const&) { return true; };
-            if (common.accepts) {
-                accepts = [runtime = _rt, predicate = common.accepts](Key const& key) {
-                    bool accepted = false;
-                    static_cast<void>(runCallback(*runtime, [&] { accepted = predicate(key); }));
-                    return accepted;
-                };
-            }
-            widget.setDropHandler(std::move(accepts), event(common.onDrop));
+            applyDrop(widget, common);
         }
+        if (common.a11y.name.isBound() || !common.a11y.name.constant().empty()) {
+            bind(scope, common.a11y.name, [&widget](std::string const& name) { widget.setAccessibleName(name); });
+        }
+        if (!common.a11y.role.empty()) {
+            widget.setAccessibleRole(common.a11y.role);
+        }
+        if (!common.testId.empty()) {
+            widget.setTestId(common.testId);
+        }
+        if (common.tooltip.isBound() || !common.tooltip.constant().empty()) {
+            bind(scope, common.tooltip, [&widget](std::string const& text) { widget.setTooltip(text); });
+        }
+        if (!common.surface.empty()) {
+            widget.setSurface(common.surface);
+        }
+        if (!common.keys.empty()) {
+            applyKeys(widget, common.keys);
+        }
+        if (common.autofocus && _autofocus == nullptr) {
+            _autofocus = &widget;
+        }
+    }
+
+    // No predicate accepts every key; a predicate that throws refuses the drop.
+    void applyDrop(Widget& widget, Common const& common) {
+        std::function<bool(Key const&)> accepts = [](Key const&) { return true; };
+        if (common.accepts) {
+            accepts = [runtime = _rt, predicate = common.accepts](Key const& key) {
+                bool accepted = false;
+                static_cast<void>(runCallback(*runtime, [&] { accepted = predicate(key); }));
+                return accepted;
+            };
+        }
+        widget.setDropHandler(std::move(accepts), event(common.onDrop));
+    }
+
+    // One setKeys for all the chords; a chord listed twice runs its first binding, as a widget callback.
+    void applyKeys(Widget& widget, std::vector<KeyBinding> const& keys) {
+        std::vector<std::string> chords;
+        chords.reserve(keys.size());
+        for (KeyBinding const& binding : keys) {
+            chords.push_back(binding.chord);
+        }
+        widget.setKeys(chords, [runtime = _rt, keys](std::string const& chord) {
+            auto const bound = std::ranges::find(keys, chord, &KeyBinding::chord);
+            if (bound != keys.end() && bound->onPress) {
+                static_cast<void>(runCallback(*runtime, bound->onPress));
+            }
+        });
     }
 
     void mountChildren(reactive::Scope& scope, std::vector<Node> const& children, ContainerWidget& container) {
@@ -379,18 +458,69 @@ private:
         return widget;
     }
 
-    [[nodiscard]] static std::vector<std::string> labelsOf(std::vector<MenuItem> const& items) {
-        std::vector<std::string> labels;
-        labels.reserve(items.size());
+    // The entries as the widget shows them, each binding read once; called inside the menu's one binding.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static std::vector<MenuEntry> entriesOf(std::vector<MenuItem> const& items) {
+        std::vector<MenuEntry> entries;
+        entries.reserve(items.size());
         for (MenuItem const& item : items) {
-            labels.push_back(item.label.evaluate());
+            entries.push_back(MenuEntry{.label = item.label.evaluate(),
+                                        .icon = item.icon,
+                                        .keys = item.keys,
+                                        .checked = item.checked.evaluate(),
+                                        .enabled = item.enabled.evaluate(),
+                                        .items = entriesOf(item.items)});
         }
-        return labels;
+        return entries;
+    }
+
+    // Whether any entry, at any depth, has a bound label, check mark or enablement.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static bool anyBound(std::vector<MenuItem> const& items) {
+        return std::ranges::any_of(items, entryBound);
+    }
+
+    // Whether this entry, or one in its submenu, has a bound label, check mark or enablement.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static bool entryBound(MenuItem const& item) {
+        return item.label.isBound() || item.checked.isBound() || item.enabled.isBound() || anyBound(item.items);
+    }
+
+    // The entry a path names, or null when the path names none.
+    [[nodiscard]] static MenuItem const* itemAt(std::vector<MenuItem> const& items,
+                                                std::vector<std::size_t> const& path) {
+        std::vector<MenuItem> const* level = &items;
+        MenuItem const* found = nullptr;
+        for (std::size_t const index : path) {
+            if (level == nullptr || index >= level->size()) {
+                return nullptr;
+            }
+            found = &level->at(index);
+            level = &found->items;
+        }
+        return found;
+    }
+
+    // Like applyCommon, a constant default calls no setter.
+    void applyField(reactive::Scope& scope, FieldWidget& widget, FieldState const& field) {
+        if (field.readonly.isBound() || field.readonly.constant()) {
+            bind(scope, field.readonly, [&widget](bool readonly) { widget.setReadOnly(readonly); });
+        }
+        if (field.required.isBound() || field.required.constant()) {
+            bind(scope, field.required, [&widget](bool required) { widget.setRequired(required); });
+        }
+        if (field.errors.isBound() || !field.errors.constant().empty()) {
+            bind(scope, field.errors, [&widget](std::vector<std::string> const& errors) { widget.setErrors(errors); });
+        }
+        if (field.stale.isBound() || field.stale.constant()) {
+            bind(scope, field.stale, [&widget](bool stale) { widget.setStale(stale); });
+        }
     }
 
     Widget& mountKind(reactive::Scope& scope, Text const& spec, ContainerWidget* parent) {
         TextWidget& widget = scope.adopt(_backend->createText(parent));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
         bind(scope, spec.role, [&widget](TextRole role) { widget.setRole(role); });
         return widget;
@@ -407,16 +537,19 @@ private:
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
         TextInputWidget& widget = scope.adopt(_backend->createTextInput(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         auto reassert = controlled(scope, spec.value, [&widget](std::string const& value) { widget.setText(value); });
         bind(scope, spec.placeholder, [&widget](std::string const& text) { widget.setPlaceholder(text); });
         widget.setOnChange(inputEvent(spec.onChange, reassert));
         widget.setOnSubmit(inputEvent(spec.onSubmit, std::move(reassert)));
+        widget.setOnCommit(event(spec.onCommit));
         return widget;
     }
 
     Widget& mountKind(reactive::Scope& scope, Checkbox const& spec, ContainerWidget* parent) {
         CheckboxWidget& widget = scope.adopt(_backend->createCheckbox(parent));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
         widget.setOnToggle(inputEvent(
             spec.onToggle, controlled(scope, spec.checked, [&widget](bool checked) { widget.setChecked(checked); })));
@@ -426,6 +559,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, Select const& spec, ContainerWidget* parent) {
         SelectWidget& widget = scope.adopt(_backend->createSelect(parent, spec.style));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         bind(scope, spec.options, [&widget](std::vector<SelectOption> const& options) { widget.setOptions(options); });
         widget.setOnSelect(inputEvent(
             spec.onSelect,
@@ -437,22 +571,19 @@ private:
         MenuWidget& widget = scope.adopt(_backend->createMenu(parent));
         applyCommon(scope, widget, spec.common);
         std::vector<MenuItem> const& items = spec.items;
-        bool const anyBound = std::ranges::any_of(items, [](MenuItem const& item) { return item.label.isBound(); });
-        // One prop for the whole list: a bound label re-sends every label, which keeps setItems the one setter.
-        Prop<std::vector<std::string>> const labels =
-            anyBound ? Prop<std::vector<std::string>>([items = items] { return labelsOf(items); })
-                     : Prop<std::vector<std::string>>(labelsOf(items));
-        bind(scope, labels, [&widget](std::vector<std::string> const& texts) { widget.setItems(texts); });
-        std::vector<Action> actions;
-        actions.reserve(items.size());
-        for (MenuItem const& item : items) {
-            actions.push_back(item.onSelect);
-        }
-        widget.setOnActivate(event(std::function<void(std::size_t)>{[actions = std::move(actions)](std::size_t index) {
-            if (index < actions.size() && actions.at(index)) {
-                actions.at(index)();
-            }
-        }}));
+        // One prop for the whole tree: a bound label, mark or enablement anywhere re-sends every entry, which keeps
+        // setItems the one setter.
+        Prop<std::vector<MenuEntry>> const entries =
+            anyBound(items) ? Prop<std::vector<MenuEntry>>([items = items] { return entriesOf(items); })
+                            : Prop<std::vector<MenuEntry>>(entriesOf(items));
+        bind(scope, entries, [&widget](std::vector<MenuEntry> const& shown) { widget.setItems(shown); });
+        widget.setOnActivate(
+            event(std::function<void(std::vector<std::size_t>)>{[items = items](std::vector<std::size_t> const& path) {
+                MenuItem const* const item = itemAt(items, path);
+                if (item != nullptr && item->onSelect) {
+                    item->onSelect();
+                }
+            }}));
         return widget;
     }
 
@@ -512,9 +643,11 @@ private:
     // one that owns the binding, so the owner's Effects run before the content's.
     [[nodiscard]] std::unique_ptr<reactive::Scope> mountContent(std::size_t depth, Node const& node,
                                                                 ContainerWidget& host) {
-        auto content = std::make_unique<reactive::Scope>(*_rt, depth);
-        _rt->untracked([&] { static_cast<void>(mount(*content, node, &host)); });
-        return content;
+        return mountPass([&] {
+            auto content = std::make_unique<reactive::Scope>(*_rt, depth);
+            _rt->untracked([&] { static_cast<void>(mount(*content, node, &host)); });
+            return content;
+        });
     }
 
     // reset() tears the old case down, newest first, before the new one is built. The Computed behind a bound
@@ -647,11 +780,14 @@ private:
     // The page is built in a scope of its own and handed to `pageScope` once complete, so one that fails to mount
     // leaves nothing behind.
     void mountPage(TabsWidget& widget, reactive::Scope& pageScope, Pages& pages, Node const& node, std::size_t index) {
-        auto page = std::make_unique<reactive::Scope>(*_rt, pageScope.depth());
-        SlotWidget& slot = page->adopt(_backend->createSlot(&widget));
-        static_cast<void>(mount(*page, node, &slot));
-        pageScope.adopt(std::move(page));
-        pages.slots.at(index) = &slot;
+        auto page = mountPass([&] {
+            auto built = std::make_unique<reactive::Scope>(*_rt, pageScope.depth());
+            SlotWidget& slot = built->adopt(_backend->createSlot(&widget));
+            static_cast<void>(mount(*built, node, &slot));
+            return std::pair{std::move(built), &slot};
+        });
+        pageScope.adopt(std::move(page.first));
+        pages.slots.at(index) = page.second;
     }
 
     // The content is built before the overlay opens and torn down before it closes. Content that fails to mount
@@ -665,6 +801,18 @@ private:
     Widget& mountKind(reactive::Scope& scope, Dialog const& spec, ContainerWidget* parent) {
         DialogWidget& widget = scope.adopt(_backend->createDialog(parent));
         applyCommon(scope, widget, spec.common);
+        return mountOverlay(scope, spec, widget);
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Drawer const& spec, ContainerWidget* parent) {
+        DrawerWidget& widget = scope.adopt(_backend->createDrawer(parent, spec.side));
+        applyCommon(scope, widget, spec.common);
+        return mountOverlay(scope, spec, widget);
+    }
+
+    // A Dialog or a Drawer: the title, the dismissal, and content that exists only while open.
+    template <typename Spec, typename OverlayWidget>
+    Widget& mountOverlay(reactive::Scope& scope, Spec const& spec, OverlayWidget& widget) {
         bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         auto& shownOpen = scope.make<std::optional<bool>>();
@@ -790,13 +938,15 @@ private:
     // takes only once the mount completed.
     [[nodiscard]] KeyedRow mountRow(std::size_t depth, ForEachSession& session, ContainerWidget& container,
                                     Key const& key, std::size_t index, RowHook const& onRow) {
-        KeyedRow row{.key = key, .scope = std::make_unique<reactive::Scope>(*_rt, depth)};
-        row.slot = &row.scope->adopt(session.makeRow(index));
-        row.widget = mount(*row.scope, row.slot->view(), &container);
-        if (row.widget != nullptr && onRow) {
-            onRow(*row.widget, key);
-        }
-        return row;
+        return mountPass([&] {
+            KeyedRow row{.key = key, .scope = std::make_unique<reactive::Scope>(*_rt, depth)};
+            row.slot = &row.scope->adopt(session.makeRow(index));
+            row.widget = mount(*row.scope, row.slot->view(), &container);
+            if (row.widget != nullptr && onRow) {
+                onRow(*row.widget, key);
+            }
+            return row;
+        });
     }
 
     // Moves the widgets into the snapshot's order, and `rows` with them. A move that throws is recorded in `failure`
@@ -901,10 +1051,109 @@ private:
         return widget;
     }
 
+    Widget& mountKind(reactive::Scope& scope, Banner const& spec, ContainerWidget* parent) {
+        BannerWidget& widget = scope.adopt(_backend->createBanner(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
+        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        bind(scope, spec.action.label, [&widget](std::string const& label) { widget.setActionLabel(label); });
+        widget.setOnAction(event(spec.action.onClick));
+        widget.setDismissible(spec.dismissible);
+        widget.setOnDismiss(event(spec.onDismiss));
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Badge const& spec, ContainerWidget* parent) {
+        BadgeWidget& widget = scope.adopt(_backend->createBadge(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
+        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        widget.setIcon(spec.icon);
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Progress const& spec, ContainerWidget* parent) {
+        ProgressWidget& widget = scope.adopt(_backend->createProgress(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.value, [&widget](std::optional<double> value) { widget.setValue(value); });
+        bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Steps const& spec, ContainerWidget* parent) {
+        StepsWidget& widget = scope.adopt(_backend->createSteps(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.items, [&widget](std::vector<Step> const& steps) { widget.setSteps(steps); });
+        bind(scope, spec.current, [&widget](std::optional<std::size_t> index) { widget.setCurrent(index); });
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, KeyValue const& spec, ContainerWidget* parent) {
+        KeyValueWidget& widget = scope.adopt(_backend->createKeyValue(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.items, [&widget](std::vector<KeyValueItem> const& items) { widget.setItems(items); });
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, EmptyState const& spec, ContainerWidget* parent) {
+        EmptyStateWidget& widget = scope.adopt(_backend->createEmptyState(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
+        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        widget.setIcon(spec.icon);
+        bind(scope, spec.action.label, [&widget](std::string const& label) { widget.setActionLabel(label); });
+        widget.setOnAction(event(spec.action.onClick));
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Splitter const& spec, ContainerWidget* parent) {
+        SplitterWidget& widget = scope.adopt(_backend->createSplitter(parent, spec.orientation));
+        applyCommon(scope, widget, spec.common);
+        mountChildren(scope, spec.children, widget);
+        widget.setOnResize(inputEvent(
+            spec.onResize,
+            controlled(scope, spec.sizes, [&widget](std::vector<int> const& sizes) { widget.setSizes(sizes); })));
+        return widget;
+    }
+
+    // The header is mounted first, so it is the first child; the content follows it.
+    Widget& mountKind(reactive::Scope& scope, Collapsible const& spec, ContainerWidget* parent) {
+        CollapsibleWidget& widget = scope.adopt(_backend->createCollapsible(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
+        if (Widget* const header = mount(scope, spec.header, &widget); header != nullptr) {
+            widget.setHeader(*header);
+        }
+        static_cast<void>(mount(scope, spec.child, &widget));
+        widget.setOnToggle(
+            inputEvent(spec.onToggle, controlled(scope, spec.open, [&widget](bool open) { widget.setOpen(open); })));
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, DropZone const& spec, ContainerWidget* parent) {
+        DropZoneWidget& widget = scope.adopt(_backend->createDropZone(parent));
+        applyCommon(scope, widget, spec.common);
+        widget.setAccept(spec.accept);
+        widget.setMultiple(spec.multiple);
+        widget.setOnDrop(event(spec.onDrop));
+        static_cast<void>(mount(scope, spec.child, &widget));
+        return widget;
+    }
+
+    // The fallback in the custom node's place: this mount loads no components.
+    Widget& mountKind(reactive::Scope& scope, Custom const& spec, ContainerWidget* parent) {
+        Widget* const fallback = mount(scope, spec.fallback, parent);
+        if (fallback == nullptr) {
+            throw std::invalid_argument{"morph::ui::Mounted: the custom node " + spec.name + " has no fallback"};
+        }
+        return *fallback;
+    }
+
     Widget& mountKind(reactive::Scope& scope, DateTimeInput const& spec, ContainerWidget* parent) {
         DateTimeInputWidget& widget =
             scope.adopt(_backend->createDateTimeInput(parent, spec.mode, spec.offsetMinutes));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         widget.setOnChange(inputEvent(
             spec.onChange,
             controlled(scope, spec.value,
@@ -915,6 +1164,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, Slider const& spec, ContainerWidget* parent) {
         SliderWidget& widget = scope.adopt(_backend->createSlider(parent));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         widget.setRange(spec.minimum, spec.maximum, spec.step);
         widget.setOnChange(inputEvent(
             spec.onChange, controlled(scope, spec.value, [&widget](std::int64_t value) { widget.setValue(value); })));
@@ -924,6 +1174,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, FilePicker const& spec, ContainerWidget* parent) {
         FilePickerWidget& widget = scope.adopt(_backend->createFilePicker(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
+        applyField(scope, widget, spec.field);
         widget.setOnPicked(inputEvent(spec.onPicked, controlled(scope, spec.path, [&widget](std::string const& path) {
                                           widget.setPath(path);
                                       })));
@@ -932,6 +1183,9 @@ private:
 
     reactive::Runtime* _rt;
     IViewBackend* _backend;
+    // The first autofocus widget of the mount pass in progress, and how deeply passes are nested.
+    Widget* _autofocus = nullptr;
+    std::size_t _passDepth = 0;
 };
 
 }  // namespace detail
@@ -995,7 +1249,7 @@ public:
           _mounter{runtime, backend},
           _scope{runtime, depth},
           // Untracked, so mounting from inside an Effect does not subscribe that Effect to anything read here.
-          _widget{runtime.untracked([this, parent] { return _mounter.mount(_scope, _root, parent); })} {}
+          _widget{runtime.untracked([this, parent] { return _mounter.mountRoot(_scope, _root, parent); })} {}
 
     ~Mounted() = default;
     Mounted(Mounted const&) = delete;

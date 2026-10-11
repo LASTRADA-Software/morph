@@ -108,13 +108,12 @@ spec in this pull request and said on #888.
   `virtual void close() = 0`: it releases what `open` made and drops a `ready` not yet delivered; `run` calls it
   after unmounting and before the runtime goes.
 - **S2 — spec 1 §5: the palette this part carries.** Spec 5 §9 is the normative palette of the document. The view
-  tree in this part carries its base kinds (text, button, text input, checkbox, select, menu, column, row, grid,
-  spacer, panel, scroll, switch, tabs, dialog, busy, forEach, table, date-time input, slider, file picker) with
-  the properties a widget needs to show and edit them. The further kinds (banner, badge, …, boundary), the extra
-  common properties (`a11y`, `testId`, `tooltip`, `keys`, `autofocus`, `surface`), the input decorations
-  (`readonly`, `required`, `errors`, `stale`) and the richer menu items each add a widget setter or a factory, and
-  join `IViewBackend` in the part whose interpreter maps them (#890) or whose renderer needs them; until then the
-  interpreter lowers a further kind to its fallback. §5 says so.
+  tree carries its base kinds, its further kinds (banner, badge, progress, steps, keyValue, emptyState, drawer,
+  splitter, collapsible, dropZone) and `custom`, the common properties (`a11y`, `testId`, `tooltip`, `keys`,
+  `autofocus`, `surface`), the input decorations (`readonly`, `required`, `errors`, `stale`), `onCommit` and the
+  richer menu items (Task 6). `boundary` and `customize` are not view-tree kinds: a boundary's choice depends on the
+  queries its children read, and a customization point's editor on the customization store, both of which the
+  interpreter (#890) owns; it lowers them to view-tree kinds. §5 says so.
 - **S3 — spec 1 §2: `host.hpp` lands with hosting.** Spec 6 §4's `ScreenHost` needs `ParamMap =
   std::map<std::string, Value>`, where `Value` is the document's typed value (spec 5 §3), defined with the document
   in #890, and its only implementers are the Qt Quick renderer (#891) and the hosting part (#893), whose tests (spec
@@ -137,7 +136,7 @@ sink id would be needed; adding one here would be a field nothing reads.
 | `include/morph/ui/frontend.hpp` | `Scheduler`/`TimerHandle` aliases, `AppContext`, `Bundle`, `ConnectError`, `Backend`, `AppSource`, `Frontend`, `FrontendOption`, `FrontendError`, `EnvironmentReader`, `processEnvironment`, `selectFrontend`, `MountedShell`, `ShellFactory`, `runApp` |
 | `include/morph/ui/testing/recording_backend.hpp` | `testing::RecordingBackend`: fake widgets, operation log, golden dump, interaction helpers, text cursor |
 | `include/morph/ui/testing/backend_conformance.hpp` | `testing::ConformanceProbe`, `ConformanceCase`, `conformanceCases()` |
-| `tests/test_ui_{view,recording_backend,mount,structure,foreach,table,frontend,conformance}.cpp`, `tests/ui_echoing_backend.hpp`, `tests/ui_test_support.hpp` | The §7 tests |
+| `tests/test_ui_{view,recording_backend,mount,structure,foreach,table,frontend,conformance,controlled}.cpp`, `tests/test_ui_{common,field,kinds}.cpp` (Task 6), `tests/ui_echoing_backend.hpp`, `tests/ui_test_support.hpp` | The §7 tests |
 | `docs/spec/ui/view_tree.md`, `backend_contract.md`, `frontend.md` | Authoritative specs |
 | `CMakeLists.txt`, `tests/CMakeLists.txt`, `docs/spec/README.md`, `docs/ARCHITECTURE.md`, `CHANGELOG.md` | Registration, maps, changelog |
 | `docs/superpowers/specs/2026-10-04-declarative-ui-tui-design.md`, `2026-10-04-examples-migration-design.md` | S1–S3 and the spec 4 sketch |
@@ -305,7 +304,40 @@ Commit `ui: specify the view tree, the backend contract and the frontend seam`.
 
 ---
 
-### Task 6: Gates
+### Task 6: The rest of the palette
+
+A second implementation of this part, built from the same base, carried the common properties, the field state,
+the richer menus and the further kinds. They are ported onto Tasks 1–5, one commit each, under Tasks 1–5's design:
+a bound value a user can change is controlled.
+
+**Files:** `view.hpp`, `backend.hpp`, `mount.hpp`, `testing/recording_backend.hpp`,
+`testing/backend_conformance.hpp`; `tests/test_ui_{common,field,kinds}.cpp`, `tests/test_ui_{mount,controlled,
+conformance,recording_backend}.cpp`; the three `docs/spec/ui/` pages; S2.
+
+- **Common properties.** `Common` gains `a11y{name, role}`, `testId`, `tooltip`, `surface`, `keys`
+  (`KeyBinding{chord, onPress}`) and `autofocus`; `Widget` gains a setter each and `focus()`. A chord goes to the
+  innermost widget that declares it. The first `autofocus` widget in document order is focused once a mount pass
+  completes; content mounted later is a pass of its own, and a pass that throws gives its candidate back.
+- **Field state and commit.** `FieldState{readonly, required, errors, stale}` on Text and the six inputs through a
+  `FieldWidget` base. `TextInput::onCommit` (Enter before the submit, or focus leaving after an edit) requests no
+  value, so it is not re-asserted.
+- **Menus.** `MenuItem{label, onSelect, icon, keys, checked, enabled, items}`; `setItems` takes the whole
+  `MenuEntry` tree; `onActivate` reports a path, and only for an enabled leaf under enabled ancestors.
+- **Further kinds.** Each kind's widget interface and factory. Drawer shares the Dialog's mount, so its `open` is
+  controlled the same way; Splitter `sizes` and Collapsible `open` are controlled inputs; a Banner's dismissal
+  changes nothing it shows; DropZone takes a drop whole or refuses it whole; Custom mounts its fallback.
+- **Kept from Tasks 2 and 4, where the second implementation differed:** slots are `ui::slot(id, read)` with
+  `Prop::slotId()`; `selectFrontend` keeps §5b's signature and `FrontendError::Kind`, and takes the arguments with or
+  without the program name, so no `commandLineArguments` helper is added.
+- Conformance cases 27–34, each failed by the dead-input fault probe; a probe that drives and reads nothing fails
+  every case that observes something.
+
+**Tests:** each test states its mutation; among those run: RecordingBackend's dismiss leaving a drawer open (the
+refused-dismissal test fails), and Collapsible bound without `controlled` (the every-kind snap-back test fails).
+
+---
+
+### Task 7: Gates
 
 - [ ] Full `morph_tests` on the Debug build (`[ui]` and everything else).
 - [ ] Docs build (`MORPH_BUILD_DOCUMENTATION=ON`, target `doc`).
