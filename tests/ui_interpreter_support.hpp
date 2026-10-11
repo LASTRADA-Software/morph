@@ -82,7 +82,9 @@ public:
     [[nodiscard]] std::size_t count(std::string_view action) const {
         std::size_t total = 0;
         for (Call const& call : calls) {
-            total += call.action == action ? 1 : 0;
+            if (call.action == action) {
+                ++total;
+            }
         }
         return total;
     }

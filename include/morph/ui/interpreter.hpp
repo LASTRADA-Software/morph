@@ -654,8 +654,6 @@ public:
     /// @return It.
     [[nodiscard]] bool lastWriteByUser() const noexcept { return _lastWriteUser; }
 
-    /// @cond INTERNAL
-
     /// @brief Records a write to a document source.
     void noteWrite() noexcept { _lastWriteUser = _userDepth > 0; }
 
@@ -813,8 +811,6 @@ public:
     /// @param typeId   The model type.
     /// @param actionId The action.
     void actionSucceeded(std::string const& typeId, std::string const& actionId);
-
-    /// @endcond
 
 private:
     void settleReply(detail::CacheEntry& entry, std::string const& reply) {
@@ -2069,7 +2065,8 @@ inline bool RtScope::ready() const {
         if (element->errors == nullptr) {
             continue;
         }
-        bool const* const visible = core.elementValue(*element, "visible").asBool();
+        Value const shown = core.elementValue(*element, "visible");
+        bool const* const visible = shown.asBool();
         ValueList const* const errors = element->errors->get().asList();
         if ((visible == nullptr || *visible) && errors != nullptr && !errors->empty()) {
             return false;
@@ -2775,7 +2772,8 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
         auto made = std::make_unique<CheckRuntime>();
         made->decl = &check;
         made->failing = &scope.nodes.computed([&scope, expr = check.assertion] {
-            bool const* const flag = evalIn(scope, nullptr, expr).asBool();
+            Value const asserted = evalIn(scope, nullptr, expr);
+            bool const* const flag = asserted.asBool();
             return flag != nullptr && !*flag;
         });
         made->message = &scope.nodes.computed([&scope, expr = check.message, session = &session] {
@@ -2910,7 +2908,8 @@ inline void ScreenCore::wireElement(ElementState& element) {
         RtScope const& owner = *element.scope;
         std::vector<std::string> errors;
         if (ExprPtr const required = field.prop("required")) {
-            bool const* const flag = evalIn(owner, nullptr, required).asBool();
+            Value const requiredNow = evalIn(owner, nullptr, required);
+            bool const* const flag = requiredNow.asBool();
             if (flag != nullptr && *flag && !engaged(inputValue(element))) {
                 errors.emplace_back("Required");
             }
@@ -2960,7 +2959,8 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         if (!expr) {
             return fallback;
         }
-        bool const* const flag = evalIn(scope, nullptr, expr).asBool();
+        Value const value = evalIn(scope, nullptr, expr);
+        bool const* const flag = value.asBool();
         return flag != nullptr && *flag;
     };
     auto errors = [&]() -> Value { return element.errors == nullptr ? Value{ValueList{}} : element.errors->get(); };
@@ -2975,7 +2975,8 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         return errors();
     }
     if (name == "valid") {
-        ValueList const* const items = errors().asList();
+        Value const current = errors();
+        ValueList const* const items = current.asList();
         return items == nullptr || items->empty();
     }
     if (name == "shownErrors") {
@@ -3854,7 +3855,8 @@ inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> p
         if (ExprPtr const checked = part->prop("checked")) {
             item.checked = slotProp<std::optional<bool>>(
                 [scope = ctx.scope, bindings = ctx.bindings, checked]() -> std::optional<bool> {
-                    bool const* const flag = evalIn(*scope, bindings.get(), checked).asBool();
+                    Value const value = evalIn(*scope, bindings.get(), checked);
+                    bool const* const flag = value.asBool();
                     return flag == nullptr ? std::nullopt : std::optional<bool>{*flag};
                 });
         }
@@ -3891,7 +3893,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         ExprPtr const expr = node.prop(key);
         return expr ? textOf(once(ctx, expr), format) : std::string{};
     };
-    auto text = [&](std::string_view key) {
+    auto textProp = [&](std::string_view key) {
         return bindProp<std::string>(ctx, node.prop(key), std::string{}, stringOf);
     };
     auto action = [&](std::string_view key) -> Action {
@@ -3916,13 +3918,14 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     };
 
     if (kind == "text") {
-        Text spec{.text = text("text"), .role = bindProp<TextRole>(ctx, node.prop("role"), TextRole::Normal, roleOf)};
+        Text spec{.text = textProp("text"),
+                  .role = bindProp<TextRole>(ctx, node.prop("role"), TextRole::Normal, roleOf)};
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         return ui::text(std::move(spec));
     }
     if (kind == "button") {
-        Button spec{.label = text("label")};
+        Button spec{.label = textProp("label")};
         Commands const* const onClick = node.event("onClick");
         Commands const* const onActivate = node.event("onActivate");
         if (onClick != nullptr || onActivate != nullptr) {
@@ -3967,7 +3970,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             commit("enter", text);
             runEvent(onSubmit, ctx, Value{text});
         };
-        spec.placeholder = text("placeholder");
+        spec.placeholder = textProp("placeholder");
         std::string const mode = onceText("mode");
         spec.mode = mode == "multiline"  ? TextInputMode::Multiline
                     : mode == "password" ? TextInputMode::Password
@@ -3977,10 +3980,11 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return ui::textInput(std::move(spec));
     }
     if (kind == "checkbox") {
-        Checkbox spec{.label = text("label"), .checked = slotProp<bool>([read = read("checked")] {
-                                                  bool const* const flag = read().asBool();
-                                                  return flag != nullptr && *flag;
-                                              })};
+        Checkbox spec{.label = textProp("label"), .checked = slotProp<bool>([read = read("checked")] {
+                                                      Value const value = read();
+                                                      bool const* const flag = value.asBool();
+                                                      return flag != nullptr && *flag;
+                                                  })};
         spec.onToggle = [this, ctx, element, onToggle = node.event("onToggle"),
                          onChange = node.event("onChange")](bool checked) {
             if (element->bound == nullptr) {
@@ -4117,7 +4121,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return ui::spacer(std::move(spec));
     }
     if (kind == "panel") {
-        Panel spec{.title = text("title"), .padding = static_cast<int>(onceInt("padding", 0))};
+        Panel spec{.title = textProp("title"), .padding = static_cast<int>(onceInt("padding", 0))};
         spec.child = child("children");
         spec.collapsible = onceBool("collapsible", false);
         spec.collapsed = bindProp<bool>(ctx, node.prop("collapsed"), false, boolOf);
@@ -4149,7 +4153,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return lowerDialog(node, ctx, element);
     }
     if (kind == "busy") {
-        Busy spec{.active = bindProp<bool>(ctx, node.prop("active"), false, boolOf), .label = text("label")};
+        Busy spec{.active = bindProp<bool>(ctx, node.prop("active"), false, boolOf), .label = textProp("label")};
         commonOf(node, ctx, element, spec.common);
         return ui::busy(std::move(spec));
     }
@@ -4157,7 +4161,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return lowerRows(node, ctx, element);
     }
     if (kind == "banner") {
-        Banner spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Info, toneOf), .text = text("text")};
+        Banner spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Info, toneOf), .text = textProp("text")};
         spec.action = actionPart();
         spec.dismissible = onceBool("dismissible", false);
         spec.onDismiss = action("onDismiss");
@@ -4165,7 +4169,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return ui::banner(std::move(spec));
     }
     if (kind == "badge") {
-        Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf), .text = text("text")};
+        Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf), .text = textProp("text")};
         spec.icon = onceText("icon");
         commonOf(node, ctx, element, spec.common);
         return ui::badge(std::move(spec));
@@ -4183,7 +4187,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                 }
                 return std::nullopt;
             });
-        spec.label = text("label");
+        spec.label = textProp("label");
         commonOf(node, ctx, element, spec.common);
         return ui::progress(std::move(spec));
     }
@@ -4237,7 +4241,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return ui::keyValue(std::move(spec));
     }
     if (kind == "emptyState") {
-        EmptyState spec{.title = text("title"), .text = text("text")};
+        EmptyState spec{.title = textProp("title"), .text = textProp("text")};
         spec.icon = onceText("icon");
         spec.action = actionPart();
         commonOf(node, ctx, element, spec.common);
@@ -4253,7 +4257,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return ui::splitter(std::move(spec));
     }
     if (kind == "collapsible") {
-        Collapsible spec{.title = text("title"), .open = bindProp<bool>(ctx, node.prop("open"), true, boolOf)};
+        Collapsible spec{.title = textProp("title"), .open = bindProp<bool>(ctx, node.prop("open"), true, boolOf)};
         if (Commands const* const commands = node.event("onToggle")) {
             spec.onToggle = [this, ctx, commands](bool open) { runEvent(commands, ctx, Value{open}); };
         }
@@ -4291,7 +4295,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
 inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     Prop<bool> open = node.prop("open") ? bindProp<bool>(ctx, node.prop("open"), false, boolOf)
                                         : slotProp<bool>([element] { return element->open.get(); });
-    Node content = lazy([this, ctx, &node, element]() -> Node {
+    Node body = lazy([this, ctx, &node, element]() -> Node {
         auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
         inner->owner = element;
         inner->submitted = &element->submitted;
@@ -4336,7 +4340,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
         Drawer spec{
             .open = std::move(open),
             .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
-            .child = std::move(content),
+            .child = std::move(body),
             .onDismiss = std::move(onDismiss),
             .side = side && textOf(once(ctx, side), session.formatting()) == "start" ? Side::Start : Side::End};
         commonOf(node, ctx, element, spec.common);
@@ -4344,7 +4348,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
     }
     Dialog spec{.open = std::move(open),
                 .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
-                .child = std::move(content),
+                .child = std::move(body),
                 .onDismiss = std::move(onDismiss)};
     commonOf(node, ctx, element, spec.common);
     return ui::dialog(std::move(spec));
