@@ -1681,7 +1681,7 @@ public:
         if (commands == nullptr || commands->empty()) {
             return;
         }
-        auto bindings = std::make_shared<Bindings>(ctx.bindings ? *ctx.bindings : Bindings{});
+        auto bindings = std::make_shared<Bindings>(*ctx.bindings);
         bindings->push_back(Binding{.name = "event", .read = [event = std::move(event)] { return event; }});
         CommandCtx const command{.scope = ctx.scope,
                                  .bindings = std::move(bindings),
@@ -1738,6 +1738,7 @@ public:
 
 private:
     void wireElement(ElementState& element);
+    void wireErrors(ElementState& element);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
     Node lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
@@ -2062,9 +2063,6 @@ inline RtScope::~RtScope() {
 
 inline bool RtScope::ready() const {
     for (auto const& element : elements) {
-        if (element->errors == nullptr) {
-            continue;
-        }
         Value const shown = core.elementValue(*element, "visible");
         bool const* const visible = shown.asBool();
         ValueList const* const errors = element->errors->get().asList();
@@ -2097,7 +2095,8 @@ inline Value ScopeEnv::ref(std::string_view head, std::span<std::string const> p
             return walk(name->param, path);
         case NameCategory::State:
             _scope->core.initState(*name->state->scope, *name->state);
-            return name->state->value ? walk(name->state->value->get(), path) : Value{};
+            // State inits are acyclic (`loadDocument` checks it), so the value is made by now.
+            return walk(name->state->value->get(), path);
         case NameCategory::Let:
             return walk(name->let->get(), path);
         case NameCategory::Query:
@@ -2163,7 +2162,7 @@ inline Value ScopeEnv::control(ExprKind form, std::string_view name) const {
         }
         return form == ExprKind::ErrorKind ? mutation.errorKind() : Value{};
     }
-    return form == ExprKind::Pending ? Value{false} : Value{};
+    return Value{};
 }
 
 inline Value ScopeEnv::pref(std::string_view point, std::span<std::string const> path) const {
@@ -2186,7 +2185,7 @@ inline void ScopeEnv::report(std::string_view path, std::string_view reason) con
 
 inline QueryRuntime::QueryRuntime(QueryDecl const& decl, RtScope& scope, ModelAlias* alias)
     : _decl{&decl},
-      _typeId{alias == nullptr ? std::string{} : alias->decl->type},
+      _typeId{alias->decl->type},
       _scope{&scope},
       _alias{alias},
       _entry{scope.core.runtime()},
@@ -2204,9 +2203,7 @@ inline QueryRuntime::~QueryRuntime() {
     }
 }
 
-inline std::shared_ptr<ModelChannel> QueryRuntime::channel() const {
-    return _alias == nullptr ? nullptr : channelOf(*_alias, _scope->core);
-}
+inline std::shared_ptr<ModelChannel> QueryRuntime::channel() const { return channelOf(*_alias, _scope->core); }
 
 inline void QueryRuntime::start() {
     RtScope& scope = *_scope;
@@ -2218,9 +2215,6 @@ inline void QueryRuntime::start() {
             if (flag == nullptr || !*flag) {
                 return target;
             }
-        }
-        if (_alias == nullptr) {
-            return target;
         }
         std::string token = _alias->token->get();
         if (token.empty()) {
@@ -2368,7 +2362,7 @@ inline MutationRuntime::MutationRuntime(MutationDecl const& decl, RtScope& scope
     : _decl{&decl},
       _scope{&scope},
       _alias{alias},
-      _typeId{alias == nullptr ? std::string{} : alias->decl->type},
+      _typeId{alias->decl->type},
       _inFlight{scope.core.runtime(), 0},
       _result{scope.core.runtime()},
       _error{scope.core.runtime()},
@@ -2400,7 +2394,7 @@ inline void MutationRuntime::send(std::shared_ptr<Run> const& run) {
     run->id = ++_runs;
     _latest = run->id;
     applyOptimistic(*run);
-    std::shared_ptr<ModelChannel> const channel = _alias == nullptr ? nullptr : channelOf(*_alias, _scope->core);
+    std::shared_ptr<ModelChannel> const channel = channelOf(*_alias, _scope->core);
     if (channel == nullptr) {
         settle(run, std::nullopt, std::make_exception_ptr(std::runtime_error{"the model alias has no instance"}));
         return;
@@ -2446,7 +2440,7 @@ inline void MutationRuntime::applyOptimistic(Run& run) {
     if (!entry) {
         return;
     }
-    Bindings bindings = run.bindings ? *run.bindings : Bindings{};
+    Bindings bindings = *run.bindings;
     bindings.push_back(Binding{.name = "body", .read = [body = run.body] { return body; }});
     Value key = _scope->core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->optimistic->key); });
     Value with = _scope->core.runtime().untracked([&] { return evalIn(*_scope, &bindings, _decl->optimistic->with); });
@@ -2509,7 +2503,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
             _error.set(Value{});
             _errorKind.set(Value{});
             if (_decl->patch) {
-                Bindings bindings = run->bindings ? *run->bindings : Bindings{};
+                Bindings bindings = *run->bindings;
                 bindings.push_back(Binding{.name = "result", .read = [value = *reply] { return value; }});
                 NameRef const* const target = _scope->find(_decl->patch->query);
                 if (target != nullptr && target->category == NameCategory::Query) {
@@ -2532,7 +2526,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
                 }
             }
             session.actionSucceeded(_typeId, _decl->action);
-            core.runList(_decl->onSuccess, commandCtx(run->bindings ? *run->bindings : Bindings{}), {});
+            core.runList(_decl->onSuccess, commandCtx(*run->bindings), {});
             if (!secret.empty()) {
                 _result.set(delivered);
             }
@@ -2543,7 +2537,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
         if (applied) {
             _error.set(Value{failureText(error)});
             _errorKind.set(Value{kind});
-            core.runList(_decl->onError, commandCtx(run->bindings ? *run->bindings : Bindings{}), {});
+            core.runList(_decl->onError, commandCtx(*run->bindings), {});
         }
         if (kind == "denied" && core.host != nullptr) {
             core.host->permissionsStale();
@@ -2552,9 +2546,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
     if (_decl->concurrency == Concurrency::Serial) {
         next(run->serialKey);
     }
-    if (run->done) {
-        run->done(succeeded, delivered);
-    }
+    run->done(succeeded, delivered);
 }
 
 inline void MutationRuntime::next(std::string const& serialKey) {
@@ -2615,6 +2607,7 @@ inline void ScreenCore::collect(DocNode const& node, RtScope& scope, std::vector
             name.element = element.get();
             scope.names.insert_or_assign(node.id, name);
         }
+        wireErrors(*element);
         scope.elements.push_back(std::move(element));
     }
     bool const createsScope = spec != nullptr && (spec->flags & kScope) != 0;
@@ -2848,6 +2841,45 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
     return Value{};
 }
 
+inline void ScreenCore::wireErrors(ElementState& element) {
+    RtScope& scope = *element.scope;
+    element.errors = &scope.nodes.computed([this, &element]() -> Value {
+        static_cast<void>(element.checksVersion.get());
+        DocNode const& field = *element.node;
+        RtScope const& owner = *element.scope;
+        std::vector<std::string> errors;
+        if (ExprPtr const required = field.prop("required")) {
+            Value const requiredNow = evalIn(owner, nullptr, required);
+            bool const* const flag = requiredNow.asBool();
+            if (flag != nullptr && *flag && !engaged(inputValue(element))) {
+                errors.emplace_back("Required");
+            }
+        }
+        for (std::string& text : stringsOf(evalIn(owner, nullptr, field.prop("errors")))) {
+            errors.push_back(std::move(text));
+        }
+        if (!field.id.empty()) {
+            std::vector<std::string> const path{"errors", field.id};
+            for (auto const& query : owner.queries) {
+                for (std::string& text : stringsOf(walk(query->value(), path))) {
+                    errors.push_back(std::move(text));
+                }
+            }
+            for (auto const& mutation : owner.mutations) {
+                for (std::string& text : stringsOf(walk(mutation->result(), path))) {
+                    errors.push_back(std::move(text));
+                }
+            }
+        }
+        for (CheckRuntime const* const check : element.checks) {
+            if (check->failing->get()) {
+                errors.push_back(check->message->get());
+            }
+        }
+        return listOfStrings(errors);
+    });
+}
+
 inline void ScreenCore::wireElement(ElementState& element) {
     DocNode const& node = *element.node;
     RtScope& scope = *element.scope;
@@ -2902,41 +2934,6 @@ inline void ScreenCore::wireElement(ElementState& element) {
         element.rows =
             &scope.nodes.computed([&scope, expr = node.prop("rows")] { return evalIn(scope, nullptr, expr); });
     }
-    element.errors = &scope.nodes.computed([this, &element]() -> Value {
-        static_cast<void>(element.checksVersion.get());
-        DocNode const& field = *element.node;
-        RtScope const& owner = *element.scope;
-        std::vector<std::string> errors;
-        if (ExprPtr const required = field.prop("required")) {
-            Value const requiredNow = evalIn(owner, nullptr, required);
-            bool const* const flag = requiredNow.asBool();
-            if (flag != nullptr && *flag && !engaged(inputValue(element))) {
-                errors.emplace_back("Required");
-            }
-        }
-        for (std::string& text : stringsOf(evalIn(owner, nullptr, field.prop("errors")))) {
-            errors.push_back(std::move(text));
-        }
-        if (!field.id.empty()) {
-            std::vector<std::string> const path{"errors", field.id};
-            for (auto const& query : owner.queries) {
-                for (std::string& text : stringsOf(walk(query->value(), path))) {
-                    errors.push_back(std::move(text));
-                }
-            }
-            for (auto const& mutation : owner.mutations) {
-                for (std::string& text : stringsOf(walk(mutation->result(), path))) {
-                    errors.push_back(std::move(text));
-                }
-            }
-        }
-        for (CheckRuntime const* const check : element.checks) {
-            if (check->failing->get()) {
-                errors.push_back(check->message->get());
-            }
-        }
-        return listOfStrings(errors);
-    });
 }
 
 inline Value ScreenCore::inputValue(ElementState const& element) const {
@@ -2963,7 +2960,7 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         bool const* const flag = value.asBool();
         return flag != nullptr && *flag;
     };
-    auto errors = [&]() -> Value { return element.errors == nullptr ? Value{ValueList{}} : element.errors->get(); };
+    auto errors = [&]() -> Value { return element.errors->get(); };
     auto count = [](Value const& list) -> Value {
         ValueList const* const items = list.asList();
         return static_cast<std::int64_t>(items == nullptr ? 0 : items->size());
@@ -3061,10 +3058,11 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
 // --- Commands --------------------------------------------------------------------------------------------------
 
 inline void ScreenCore::runList(Commands const& commands, CommandCtx const& ctx, Done done) {
+    if (!done) {
+        done = [](bool) {};
+    }
     if (commands.empty()) {
-        if (done) {
-            done(true);
-        }
+        done(true);
         return;
     }
     struct Join {
@@ -3075,7 +3073,7 @@ inline void ScreenCore::runList(Commands const& commands, CommandCtx const& ctx,
     auto join = std::make_shared<Join>(Join{.left = commands.size() + 1, .ok = true, .done = std::move(done)});
     auto finish = [join](bool succeeded) {
         join->ok = join->ok && succeeded;
-        if (--join->left == 0 && join->done) {
+        if (--join->left == 0) {
             join->done(join->ok);
         }
     };
@@ -3087,13 +3085,12 @@ inline void ScreenCore::runList(Commands const& commands, CommandCtx const& ctx,
 
 // NOLINTBEGIN(misc-no-recursion): command lists nest
 inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Done done) {
+    if (!done) {
+        done = [](bool) {};
+    }
     RtScope const& scope = *ctx.scope;
     auto eval = [&](ExprPtr const& expr) { return evalIn(scope, ctx.bindings.get(), expr); };
-    auto finish = [&done](bool succeeded) {
-        if (done) {
-            done(succeeded);
-        }
-    };
+    auto finish = [&done](bool succeeded) { done(succeeded); };
     switch (command.kind) {
         case CommandKind::Set:
             runSet(command, ctx, done);
@@ -3105,31 +3102,20 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             runMutation(command, ctx, std::move(done));
             return;
         case CommandKind::Refetch: {
-            NameRef const* const found = scope.find(command.target);
-            if (found == nullptr || found->category != NameCategory::Query) {
-                report(command.path, "`refetch` names no query here");
-                finish(false);
-                return;
-            }
-            found->query->refetch();
+            // A loaded document's `refetch` names a query in scope (`loadDocument` checks it), as `run` names a
+            // mutation and `open` a dialog.
+            scope.find(command.target)->query->refetch();
             finish(true);
             return;
         }
         case CommandKind::Open:
         case CommandKind::Close: {
             if (command.kind == CommandKind::Close && command.target == "self") {
-                finish(host != nullptr
-                           ? host->closeSelf(_doc->id, std::nullopt) || unsupported(command, "`close: self`")
-                           : unsupported(command, "`close: self`"));
+                finish((host != nullptr && host->closeSelf(_doc->id, std::nullopt)) ||
+                       unsupported(command, "`close: self`"));
                 return;
             }
-            NameRef const* const found = scope.find(command.target);
-            if (found == nullptr || found->category != NameCategory::Element) {
-                report(command.path, "`open` and `close` name no dialog here");
-                finish(false);
-                return;
-            }
-            ElementState& element = *found->element;
+            ElementState& element = *scope.find(command.target)->element;
             if (element.node->prop("open")) {
                 report(command.path, "the dialog's `open` is bound to an expression");
                 finish(false);
@@ -3236,9 +3222,7 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
                      weakStep = std::weak_ptr<std::function<void(std::size_t)>>{step}](std::size_t index) {
                 auto const held = weak.lock();
                 if (index == list->size() || !held) {
-                    if (done) {
-                        done(held != nullptr);
-                    }
+                    done(held != nullptr);
                     return;
                 }
                 auto const self = weakStep.lock();
@@ -3246,9 +3230,7 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
                 current.scope = held;
                 runOne(list->at(index), current, [self, index, done](bool succeeded) {
                     if (!succeeded) {
-                        if (done) {
-                            done(false);
-                        }
+                        done(false);
                         return;
                     }
                     (*self)(index + 1);
@@ -3276,17 +3258,14 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             return;
         }
         case CommandKind::CancelClose:
-            if (ctx.cancelClose) {
-                *ctx.cancelClose = true;
-            }
+            *ctx.cancelClose = true;
             finish(true);
             return;
         case CommandKind::Retry:
-            if (ctx.boundary) {
-                for (QueryRuntime* const query : ctx.boundary->queries) {
-                    if (!runtime().untracked([&] { return query->error(); }).isNull()) {
-                        query->refetch();
-                    }
+            // `retry` is valid only inside a boundary's `error`, which is lowered with its boundary.
+            for (QueryRuntime* const query : ctx.boundary->queries) {
+                if (!runtime().untracked([&] { return query->error(); }).isNull()) {
+                    query->refetch();
                 }
             }
             finish(true);
@@ -3318,23 +3297,13 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
 
 inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ctx, Done done) {
     RtScope const& scope = *ctx.scope;
-    NameRef const* const found = scope.find(command.target);
-    if (found == nullptr || found->category != NameCategory::Mutation) {
-        report(command.path, "`run` names no mutation here");
-        if (done) {
-            done(false);
-        }
-        return;
-    }
-    MutationRuntime& mutation = *found->mutation;
+    MutationRuntime& mutation = *scope.find(command.target)->mutation;
     RtScope const& policy = scope.policyScope();
     if (policy.submitted != nullptr) {
         policy.submitted->set(true);
     }
     if (policy.owner != nullptr && !runtime().untracked([&] { return policy.ready(); })) {
-        if (done) {
-            done(false);
-        }
+        done(false);
         return;
     }
     RtScope const& declaring = *[&]() -> RtScope const* {
@@ -3362,18 +3331,14 @@ inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ct
                          if (succeeded && !as.empty()) {
                              bindings->push_back(Binding{.name = as, .read = [reply] { return reply; }});
                          }
-                         if (done) {
-                             done(succeeded);
-                         }
+                         done(succeeded);
                      });
         return;
     }
     Value const each = evalIn(scope, ctx.bindings.get(), command.extra);
     ValueList const items = each.asList() == nullptr ? ValueList{} : *each.asList();
     if (items.empty()) {
-        if (done) {
-            done(true);
-        }
+        done(true);
         return;
     }
     struct Each {
@@ -3396,7 +3361,7 @@ inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ct
         for (std::size_t index = 0; index < bodies.size(); ++index) {
             mutation.run(bodies.at(index), bound.at(index), [state](bool succeeded, Value const&) {
                 state->ok = state->ok && succeeded;
-                if (--state->left == 0 && state->done) {
+                if (--state->left == 0) {
                     state->done(state->ok);
                 }
             });
@@ -3408,17 +3373,13 @@ inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ct
     *step = [&mutation, bodies, bound, state,
              weakStep = std::weak_ptr<std::function<void(std::size_t)>>{step}](std::size_t index) {
         if (index == bodies.size()) {
-            if (state->done) {
-                state->done(state->ok);
-            }
+            state->done(state->ok);
             return;
         }
         auto const self = weakStep.lock();
         mutation.run(bodies.at(index), bound.at(index), [self, state, index](bool succeeded, Value const&) {
             if (!succeeded) {
-                if (state->done) {
-                    state->done(false);
-                }
+                state->done(false);
                 return;
             }
             (*self)(index + 1);
@@ -3429,11 +3390,7 @@ inline void ScreenCore::runMutation(Command const& command, CommandCtx const& ct
 
 inline void ScreenCore::runSet(Command const& command, CommandCtx const& ctx, Done const& done) {
     RtScope const& scope = *ctx.scope;
-    auto finish = [&done](bool succeeded) {
-        if (done) {
-            done(succeeded);
-        }
-    };
+    auto finish = [&done](bool succeeded) { done(succeeded); };
     auto path = splitPath(command.target);
     if (!path || path->empty()) {
         finish(false);
@@ -3514,9 +3471,7 @@ inline void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, 
         report(command.path, "`reset` names no state or dialog here");
         ok = false;
     }
-    if (done) {
-        done(ok);
-    }
+    done(ok);
 }
 
 inline void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, Done done) {
@@ -3525,9 +3480,7 @@ inline void ScreenCore::runHostCommand(Command const& command, CommandCtx const&
     if (!known) {
         report(command.path, "host command `" + command.target + "` is missing");
     }
-    if (done) {
-        done(known);
-    }
+    done(known);
 }
 
 inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ctx, Done done) {
@@ -3552,16 +3505,12 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
                         found->state->value->set(*reply);
                     }
                 }
-                if (done) {
-                    done(ok);
-                }
+                done(ok);
             });
         };
         if (host == nullptr || !host->download(file, command.option, name, settled)) {
             unsupported(command, "`download`");
-            if (done) {
-                done(false);
-            }
+            done(false);
         }
         return;
     }
@@ -3585,18 +3534,10 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
                 transfer->error.set(reply ? Value{} : Value{reply.error()});
             }
             if (!reply) {
-                if (done) {
-                    done(false);
-                }
+                done(false);
                 return;
             }
             NameRef const* const found = held->find(command->target);
-            if (found == nullptr || found->category != NameCategory::Mutation) {
-                if (done) {
-                    done(false);
-                }
-                return;
-            }
             // The mutation's body cannot name the reference (a body is checked where the mutation is declared),
             // so the reference is added to it under `as`, `file` by default.
             MutationRuntime& mutation = *found->mutation;
@@ -3604,18 +3545,12 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
             ValueRecord fields = base.asRecord() == nullptr ? ValueRecord{} : *base.asRecord();
             fields.insert_or_assign(command->binding.empty() ? std::string{"file"} : command->binding, *reply);
             mutation.run(Value{std::move(fields)}, std::make_shared<Bindings const>(*kept.bindings),
-                         [done](bool succeeded, Value const&) {
-                             if (done) {
-                                 done(succeeded);
-                             }
-                         });
+                         [done](bool succeeded, Value const&) { done(succeeded); });
         });
     };
     if (host == nullptr) {
         unsupported(command, "`upload`");
-        if (done) {
-            done(false);
-        }
+        done(false);
         return;
     }
     if (transfer != nullptr) {
@@ -3626,11 +3561,10 @@ inline void ScreenCore::runTransfer(Command const& command, CommandCtx const& ct
     if (!host->upload(file, progress, settled)) {
         if (transfer != nullptr) {
             transfer->pending.set(false);
+            transfer->progress.set(Value{});
         }
         unsupported(command, "`upload`");
-        if (done) {
-            done(false);
-        }
+        done(false);
     }
 }
 
@@ -3829,7 +3763,7 @@ inline void ScreenCore::fieldOf(DocNode const& node, LowerCtx const& ctx, Elemen
     field.readonly = bindProp<bool>(ctx, node.prop("readonly"), false, boolOf);
     field.required = bindProp<bool>(ctx, node.prop("required"), false, boolOf);
     field.stale = bindProp<bool>(ctx, node.prop("stale"), false, boolOf);
-    if (element != nullptr && element->errors != nullptr) {
+    if (element != nullptr) {
         field.errors = slotProp<std::vector<std::string>>(
             [this, scope = ctx.scope, element] { return stringsOf(elementValue(*element, "shownErrors")); });
     } else if (ExprPtr const errors = node.prop("errors")) {
@@ -4594,7 +4528,7 @@ inline Node ScreenCore::lowerBoundary(DocNode const& node, LowerCtx const& ctx) 
     for (DocNodePtr const& child : node.nodes("children")) {
         ownQueries(*child, *ctx.scope, *boundary, seen);
     }
-    auto bindings = std::make_shared<Bindings>(ctx.bindings ? *ctx.bindings : Bindings{});
+    auto bindings = std::make_shared<Bindings>(*ctx.bindings);
     bindings->push_back(Binding{.name = "boundary", .read = [boundary] {
                                     for (QueryRuntime const* const query : boundary->queries) {
                                         Value const error = query->error();
@@ -4630,11 +4564,8 @@ inline Node ScreenCore::lowerBoundary(DocNode const& node, LowerCtx const& ctx) 
 
 inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
     std::string const name{node.name("name")};
-    auto const found = _doc->components.find(name);
-    if (found == _doc->components.end() || !found->second.fallback) {
-        report(node.path, "component `" + name + "` is not declared");
-        return ui::text(Text{.text = name});
-    }
+    // A loaded document's custom node names a declared component, and every component has a fallback.
+    Component const& component = _doc->components.at(name);
     std::vector<std::pair<std::string, ExprPtr>> props;
     for (DocNodePtr const& record : node.partList("props")) {
         for (auto const& [key, expr] : record->props) {
@@ -4651,7 +4582,7 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
                     return Value{std::move(record)};
                 }});
     auto scope = std::make_shared<RtScope>(*this, nullptr, nullptr, ctx.scope->nodes.depth() + 1);
-    DocNode const& fallback = *found->second.fallback;
+    DocNode const& fallback = *component.fallback;
     declare(*scope, nullptr, {&fallback}, {});
     Node lowered = lower(fallback, LowerCtx{.scope = scope, .bindings = bindings, .boundary = nullptr});
     return ui::custom(Custom{.name = name, .fallback = std::move(lowered)});
@@ -4659,12 +4590,8 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
 
 inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx) {
     std::string const point{node.name("point")};
-    auto const found = _doc->customize.find(point);
-    if (found == _doc->customize.end()) {
-        report(node.path, "customization point `" + point + "` is not declared");
-        return ui::text(Text{.text = point});
-    }
-    CustomizePoint const& spec = found->second;
+    // A loaded document's customize node names a declared point, and every point has a choice in `prefs`.
+    CustomizePoint const& spec = _doc->customize.at(point);
     auto choose = [this, point](Value value) {
         session.asUser([&] {
             ValueRecord next = prefs.peek();
@@ -4683,11 +4610,8 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
         }
         select.options = std::move(options);
         select.selected = slotProp<std::optional<Key>>([this, point]() -> std::optional<Key> {
-            auto const chosen = prefs.get().find(point);
-            if (chosen == prefs.get().end() || chosen->second.isNull()) {
-                return std::nullopt;
-            }
-            return keyOf(chosen->second);
+            Value const& chosen = prefs.get().at(point);
+            return chosen.isNull() ? std::nullopt : std::optional<Key>{keyOf(chosen)};
         });
         select.onSelect = [choose](Key key) { choose(valueOfKey(key)); };
         commonOf(node, ctx, nullptr, select.common);
@@ -4695,10 +4619,8 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
     }
     if (spec.kind == "value" && (spec.type.kind == TypeKind::String || spec.type.isAny())) {
         TextInput input;
-        input.value = slotProp<std::string>([this, point] {
-            auto const chosen = prefs.get().find(point);
-            return chosen == prefs.get().end() ? std::string{} : textOf(chosen->second, session.formatting());
-        });
+        input.value =
+            slotProp<std::string>([this, point] { return textOf(prefs.get().at(point), session.formatting()); });
         input.onChange = [choose](std::string text) { choose(Value{std::move(text)}); };
         commonOf(node, ctx, nullptr, input.common);
         return ui::textInput(std::move(input));
