@@ -823,7 +823,8 @@ an opt-in `negotiateProtocolVersion`.
 `RemoteServer` answers the `"schemas"` kind with
 `ActionDispatcher::schemasJson(typeId)` — the `{actionType: schema}` document
 for every action registered under that model type, each schema carrying the
-action's `x-payloadFingerprint` and `x-payloadShape`. It is the only way a
+action's `x-payloadFingerprint`, `x-payloadShape` and `x-reply` (the result's
+schema, see `registry.md`). It is the only way a
 client that is not linked against the model's C++ can learn an action's shape.
 
 The gate is `authorize(session, typeId, {})`, deliberately the same hook

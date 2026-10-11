@@ -560,8 +560,8 @@ struct EscapingWriteOpts : glz::opts {
 /// `PayloadCompleteness::RequireDeclaredFields` gate reads `required` — so the
 /// rule the server enforces is by construction the rule it published.
 struct ActionDescription {
-    /// @brief `morph::forms::schemaJson<A>()` with two extra top-level keys
-    ///        merged in: `x-payloadFingerprint` and `x-payloadShape`.
+    /// @brief `morph::forms::schemaJson<A>()` with extra top-level keys merged in: `x-payloadFingerprint`,
+    ///        `x-payloadShape`, and `x-reply`, the JSON Schema of the action's result.
     ///
     /// Empty only when schema generation produced nothing usable at all.
     std::string schema;
@@ -572,6 +572,39 @@ struct ActionDescription {
     /// gate insists on is exactly a field the schema told the client about.
     std::vector<std::string> required;
 };
+
+/// @brief Whether a type is a `std::vector`.
+/// @tparam T The type.
+template <typename T>
+inline constexpr bool kIsVector = false;
+
+// A `std::vector` of any element type.
+template <typename T, typename Alloc>
+inline constexpr bool kIsVector<std::vector<T, Alloc>> = true;
+
+/// @brief The JSON Schema of an action's result, as a client that decodes replies without the result's C++ type
+///        needs it.
+///
+/// A struct and a vector of structs carry the forms engine's annotations (`x-decimalPlaces`, units, `format`), which
+/// tell a decimal from a three-field record and a timestamp from a string; any other result takes glaze's plain
+/// schema.
+/// @tparam R The result type.
+/// @return The schema's JSON text; empty when glaze writes none.
+template <typename R>
+[[nodiscard]] std::string replySchemaJson() {
+    if constexpr (::morph::forms::detail::ReflectableAggregate<R>) {
+        return ::morph::forms::schemaJson<R>();
+    } else if constexpr (kIsVector<R>) {
+        using Element = typename R::value_type;
+        if constexpr (::morph::forms::detail::ReflectableAggregate<Element>) {
+            return R"({"type":"array","items":)" + ::morph::forms::schemaJson<Element>() + "}";
+        } else {
+            return glz::write_json_schema<R>().value_or(std::string{});
+        }
+    } else {
+        return glz::write_json_schema<R>().value_or(std::string{});
+    }
+}
 
 /// @brief Builds `A`'s `ActionDescription`.
 ///
@@ -603,6 +636,12 @@ template <typename A>
     }
     dom["x-payloadFingerprint"] = payloadFingerprint<A>();
     dom["x-payloadShape"] = payloadShapeString<A>();
+    if (std::string const reply = replySchemaJson<typename ActionTraits<A>::Result>(); !reply.empty()) {
+        glz::generic_u64 replyDom{};
+        if (!glz::read_json(replyDom, reply)) {
+            dom["x-reply"] = std::move(replyDom);
+        }
+    }
     std::string merged;
     // COVERAGE GAP, documented not closed: glz::write_json never fails on
     // this always-well-formed `dom` (every field just came from a

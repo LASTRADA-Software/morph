@@ -658,18 +658,28 @@ Alongside the runner, `registerAction` files a **thunk** returning `A`'s
 
 ```cpp
 struct ActionDescription {
-    std::string schema;                 // forms::schemaJson<A>() + two x- keys
+    std::string schema;                 // forms::schemaJson<A>() + three x- keys
     std::vector<std::string> required;  // read back out of that schema
 };
 ```
 
 `schema` is `morph::forms::schemaJson<A>()` with `x-payloadFingerprint`
-(`payloadFingerprint<A>()`) and `x-payloadShape` (`payloadShapeString<A>()`)
-merged in over a `glz::generic_u64` DOM — `u64` number mode for the same
+(`payloadFingerprint<A>()`), `x-payloadShape` (`payloadShapeString<A>()`) and
+`x-reply` merged in over a `glz::generic_u64` DOM — `u64` number mode for the same
 reason `mergeSchemaExtras` uses it, so `int64`/`uint64` bounds in `$defs`
 survive the round trip exactly. On a DOM read failure the raw schema text is
 served unannotated and `required` stays empty: a description facility degrades,
 it does not throw.
+
+`x-reply` is the JSON Schema of `ActionTraits<A>::Result`. A struct result takes
+`forms::schemaJson<Result>()` and a vector of structs takes an array whose
+`items` is the element's, so both carry the forms engine's annotations
+(`x-decimalPlaces`, units, `format: date-time`); any other result takes glaze's
+plain schema. A client that decodes replies without the result's C++ type —
+the UI document's interpreter typing `{"query": "q"}` — needs exactly those
+annotations: a decimal and a three-field record, or a timestamp and a string,
+share their JSON. The key is additive: a reader that does not know it ignores
+it, as it does any `x-` keyword.
 
 `required` is read back **out of** the served document rather than recomputed,
 so a field the completeness gate insists on is exactly a field the schema told
@@ -1358,7 +1368,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 | Symbol | Kind | Purpose |
 |---|---|---|
 | `ActionDispatcher` | class | Maps `(modelId, actionId)` → one `ActionEntry` (runner, coalesce flag, payload fingerprint, `ActionDescription` thunk); server-side dispatch. Looked up by `PairKeyView`, so a lookup allocates nothing. |
-| `ActionDescription` | struct | `{schema, required}` for one action: `forms::schemaJson<A>()` plus `x-payloadFingerprint`/`x-payloadShape`, and the `required` names read back out of it. |
+| `ActionDescription` | struct | `{schema, required}` for one action: `forms::schemaJson<A>()` plus `x-payloadFingerprint`/`x-payloadShape`/`x-reply`, and the `required` names read back out of it. |
 | `actionDescription<A>()` | function template | The process-lifetime `ActionDescription` for `A`; `buildActionDescription<A>()` is the uncached builder behind it. |
 | `ModelRegistryFactory` | class | Maps `modelId` → factory; server-side model instantiation. |
 | `closeRegistrationPhase()` | function | Declares the registration phase over. From then on a debug build asserts on every `register*Once` call. See ["The registration-phase latch"](#the-registration-phase-latch). |

@@ -28,10 +28,13 @@
 #include <morph/core/wire.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
+#include <morph/util/datetime.hpp>
 #include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "test_support.hpp"
 
@@ -141,6 +144,26 @@ struct WireSchemasLedgerModel {
         return WireSchemasDepositResult{.balanceCents = balanceCents};
     }
 };
+
+/// One row of a list reply: an exact amount and an instant, which a client decoding the reply without its C++ type
+/// can tell from a three-field record and a string only through the reply schema.
+struct WireSchemasEntry {
+    std::int64_t id = 0;
+    morph::math::Rational amount = morph::math::Rational::zero(morph::math::DecimalPlaces{2});
+    morph::time::Timestamp at;
+};
+
+struct WireSchemasList {};
+struct WireSchemasCount {};
+
+struct WireSchemasJournalModel {
+    std::vector<WireSchemasEntry> execute(const WireSchemasList& /*action*/) { return {}; }
+    std::int64_t execute(const WireSchemasCount& /*action*/) { return 0; }
+};
+
+BRIDGE_REGISTER_MODEL(WireSchemasJournalModel, "WireSchemas_Journal")
+BRIDGE_REGISTER_ACTION(WireSchemasJournalModel, WireSchemasList, "WireSchemas_List")
+BRIDGE_REGISTER_ACTION(WireSchemasJournalModel, WireSchemasCount, "WireSchemas_Count")
 
 BRIDGE_REGISTER_MODEL(WireSchemasLedgerModel, "WireSchemas_Ledger")
 BRIDGE_REGISTER_ACTION(WireSchemasLedgerModel, WireSchemasDeposit, "WireSchemas_Deposit")
@@ -277,6 +300,35 @@ TEST_CASE("a served schema carries the action's payload fingerprint and shape", 
     REQUIRE(entry["x-payloadFingerprint"].get<std::string>() ==
             morph::model::payloadFingerprint<WireSchemasDeposit>());
     REQUIRE(entry["x-payloadShape"].get<std::string>() == morph::model::payloadShapeString<WireSchemasDeposit>());
+}
+
+// A client that decodes replies without the result's C++ type reads their types here. Mutations: leave `x-reply` out
+// of `buildActionDescription`; write a vector of structs through glaze's plain schema (its members then carry no
+// `x-order`).
+TEST_CASE("a served schema carries the reply's schema, annotated for a struct and a list of structs",
+          "[remote][schemas]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<RemoteServer>(pool);
+
+    glz::generic_u64 ledger{};
+    REQUIRE_FALSE(glz::read_json(ledger, fetchSchemas(*server, "WireSchemas_Ledger")));
+    auto& deposit = ledger["WireSchemas_Deposit"];
+    REQUIRE(deposit.contains("x-reply"));
+    CHECK(deposit["x-reply"]["properties"].contains("balanceCents"));
+
+    glz::generic_u64 journal{};
+    REQUIRE_FALSE(glz::read_json(journal, fetchSchemas(*server, "WireSchemas_Journal")));
+    auto& list = journal["WireSchemas_List"]["x-reply"];
+    CHECK(list["type"].get<std::string>() == "array");
+    auto& entry = list["items"]["properties"];
+    REQUIRE(entry.contains("at"));
+    CHECK(entry["id"].contains("x-order"));  // written by the forms engine only
+    std::string atSchema;
+    REQUIRE_FALSE(glz::write_json(entry["at"], atSchema));
+    CHECK(atSchema.find("date-time") != std::string::npos);
+    std::string countSchema;
+    REQUIRE_FALSE(glz::write_json(journal["WireSchemas_Count"]["x-reply"], countSchema));
+    CHECK(countSchema.find("integer") != std::string::npos);
 }
 
 TEST_CASE("schemas without a typeId is refused", "[remote][schemas]") {
