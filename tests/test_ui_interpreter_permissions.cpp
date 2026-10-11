@@ -149,3 +149,23 @@ TEST_CASE("interpreter permissions: customization points read the user's choice,
     CHECK(h.text("filter") == "-");
     CHECK(h.host.log.back() == "resetPrefs prefs all");
 }
+
+TEST_CASE("interpreter permissions: env, session and host values follow the session", "[ui][interpreter]") {
+    Harness h;
+    h.session.setEnvironment({{"widthClass", ui::Value{"phone"}}});
+    h.session.setSessionValues({{"displayName", ui::Value{"Ann"}}});
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "client",
+      "models": { "auth": { "type": "Auth_SessionModel" } },
+      "queries": { "tokens": { "model": "auth", "action": "Auth_Token" } },
+      "view": { "kind": "text", "testId": "t", "text": { "fn": "format", "args": [ "{0} {1} {2}",
+        { "env": "widthClass" }, { "session": "displayName" }, { "fn": "coalesce", "args": [ { "host": "sync.count" }, "-" ] } ] } } })");
+    CHECK(h.text("t") == "phone Ann -");
+    h.session.setHostValues({{"sync.count", ui::Value{std::int64_t{4}}}});
+    h.session.setEnvironment({{"widthClass", ui::Value{"wide"}}});
+    h.settle();
+    CHECK(h.text("t") == "wide Ann 4");
+    // A secret field is removed from every row of a list reply too.
+    h.reply(0, R"([{"token":"a","user":"x"},{"token":"b","user":"y"}])");
+    CHECK(readJson(*screen, R"({"query": "tokens"})") == R"([{"user":"x"},{"user":"y"}])");
+}

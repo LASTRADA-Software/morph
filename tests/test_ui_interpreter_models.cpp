@@ -172,3 +172,50 @@ TEST_CASE("interpreter models: a screen unmounted while a sequence waits drops t
     h.reply(0, R"({"id":7})");
     CHECK(h.dispatcher.calls.size() == 1);
 }
+
+namespace {
+
+constexpr char const* kEach = R"({
+  "vocab": "ui/1", "id": "each",
+  "models": { "catalog": { "type": "Lims_CatalogModel" } },
+  "state": { "items": { "init": { "lit": [ 1, 2 ] } }, "none": { "init": { "lit": [] } }, "done": { "init": "no" } },
+  "mutations": { "one": { "model": "catalog", "action": "Lims_CatOne" },
+                 "all": { "model": "catalog", "action": "Lims_CatAll", "concurrency": "parallel" } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "one", "label": "one", "onClick": { "seq": [
+      { "run": "one", "each": { "ref": "items" }, "as": "x", "body": { "ref": "x" } }, { "set": "done", "value": "one" } ] } },
+    { "kind": "button", "testId": "all", "label": "all", "onClick": { "seq": [
+      { "run": "all", "each": { "ref": "items" }, "as": "x", "body": { "ref": "x" } }, { "set": "done", "value": "all" } ] } },
+    { "kind": "button", "testId": "none", "label": "none", "onClick": { "seq": [
+      { "run": "one", "each": { "ref": "none" } }, { "set": "done", "value": "none" } ] } } ] } })";
+
+}  // namespace
+
+TEST_CASE("interpreter models: `each` runs an exclusive mutation one element at a time and stops at a failure",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(kEach);
+    h.backend.click(h.byTestId("Button", "one"));
+    h.settle();
+    REQUIRE(h.dispatcher.calls.size() == 1);
+    h.fail(0);
+    CHECK(h.dispatcher.calls.size() == 1);
+    CHECK(readJson(*screen, R"({"ref": "done"})") == R"("no")");
+    h.backend.click(h.byTestId("Button", "none"));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "done"})") == R"("none")");
+}
+
+TEST_CASE("interpreter models: `each` runs a parallel mutation for every element at once", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(kEach);
+    h.backend.click(h.byTestId("Button", "all"));
+    h.settle();
+    REQUIRE(h.dispatcher.calls.size() == 2);
+    CHECK(h.dispatcher.calls.at(0).body == "1");
+    CHECK(h.dispatcher.calls.at(1).body == "2");
+    h.reply(1, "{}");
+    CHECK(readJson(*screen, R"({"ref": "done"})") == R"("no")");
+    h.reply(0, "{}");
+    CHECK(readJson(*screen, R"({"ref": "done"})") == R"("all")");
+}

@@ -293,6 +293,7 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
         { "kind": "filePicker", "id": "file", "testId": "file", "mode": "save", "onPick": [ { "set": "tick", "value": 7 } ] },
         { "kind": "dateTimeInput", "id": "when", "testId": "when", "mode": "date", "onChange": [ { "set": "date", "value": { "ref": "event" } } ] },
         { "kind": "slider", "testId": "slider", "min": 1, "max": 5, "step": 1 },
+        { "kind": "text", "testId": "date", "text": { "ref": "date" } },
         { "kind": "drawer", "id": "drawer", "side": "start", "children": [ { "kind": "spacer" } ] },
         { "kind": "custom", "name": "Chart", "props": { "title": "Trend" } },
         { "kind": "form", "model": "sample", "action": "Lims_CaptureConcentration" },
@@ -317,6 +318,7 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     h.backend.setDateTime(h.byTestId("DateTimeInput", "when"), morph::time::Timestamp{morph::time::DateTime{}});
     h.settle();
     CHECK(readJson(*screen, R"({"ref": "date"})") != "null");
+    CHECK(h.text("date").find('T') != std::string::npos);
     h.backend.selectRows(h.backend.all("Table").front(), {ui::Key{std::int64_t{1}}});
     h.settle();
     CHECK(h.text("selection") == "1");
@@ -342,4 +344,168 @@ TEST_CASE("interpreter commands: every node kind lowers to the view tree", "[ui]
     CHECK(readJson(*screen, R"({"ref": "tick"})") == "5");
     // The forms engine and the table engine nodes are reported, not lowered.
     CHECK(h.diagnostics.size() == 2);
+}
+
+TEST_CASE("interpreter commands: roles, tones and step states map by name", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "names",
+      "state": { "flag": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "text", "testId": "success", "text": { "fn": "format", "args": [ "{0}", { "ref": "flag" } ] }, "role": "success" },
+        { "kind": "text", "testId": "muted", "text": "m", "role": "muted" },
+        { "kind": "text", "testId": "heading", "text": "h", "role": "heading" },
+        { "kind": "text", "testId": "error", "text": "e", "role": "error" },
+        { "kind": "text", "testId": "normal", "text": "n", "role": "plain" },
+        { "kind": "badge", "testId": "info", "tone": "info" },
+        { "kind": "badge", "testId": "success", "tone": "success" },
+        { "kind": "badge", "testId": "warning", "tone": "warning" },
+        { "kind": "badge", "testId": "err", "tone": "err" },
+        { "kind": "badge", "testId": "error", "tone": "error" },
+        { "kind": "badge", "testId": "neutral", "tone": "other" },
+        { "kind": "steps", "items": { "lit": [ { "label": "x", "state": "failed" }, { "label": "y", "state": "pending" }, { "state": "done" } ] } } ] } })");
+    CHECK(h.backend.prop(h.byTestId("Text", "success"), "role") == "Success");
+    CHECK(h.text("success") == "true");
+    CHECK(h.backend.prop(h.byTestId("Text", "muted"), "role") == "Muted");
+    CHECK(h.backend.prop(h.byTestId("Text", "heading"), "role") == "Heading");
+    CHECK(h.backend.prop(h.byTestId("Text", "error"), "role") == "Error");
+    CHECK(h.backend.prop(h.byTestId("Text", "normal"), "role") == "Normal");
+    CHECK(h.backend.prop(h.byTestId("Badge", "info"), "tone") == "Info");
+    CHECK(h.backend.prop(h.byTestId("Badge", "success"), "tone") == "Ok");
+    CHECK(h.backend.prop(h.byTestId("Badge", "warning"), "tone") == "Warn");
+    CHECK(h.backend.prop(h.byTestId("Badge", "err"), "tone") == "Err");
+    CHECK(h.backend.prop(h.byTestId("Badge", "error"), "tone") == "Err");
+    CHECK(h.backend.prop(h.byTestId("Badge", "neutral"), "tone") == "Neutral");
+}
+
+TEST_CASE("interpreter commands: a table's element values, and onActivate in the row's scope", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "grid",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "state": { "picked": { "init": null } },
+      "queries": { "rows": { "model": "sample", "action": "Lims_ListResults" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "id": "t", "rows": { "query": "rows" }, "selectionMode": "single",
+          "scope": { "state": { "label": { "init": { "fn": "concat", "args": [ "row ", { "row": "name" } ] } } } },
+          "columns": [ { "id": "name", "label": "Name", "width": { "lit": { "stretch": 1 } } } ],
+          "onActivate": [ { "set": "picked", "value": { "ref": "label" } } ] },
+        { "kind": "text", "testId": "values", "text": { "fn": "format", "args": [ "{0}/{1}/{2}/{3}",
+            { "ref": "t.viewCount" }, { "ref": "t.sourceCount" }, { "ref": "t.pending" }, { "ref": "t.selectedCount" } ] } },
+        { "kind": "text", "testId": "error", "text": { "fn": "coalesce", "args": [ { "ref": "t.error" }, { "ref": "t.sort" }, "-" ] } } ] } })");
+    CHECK(h.text("values") == "0/0/true/0");
+    h.reply(0, R"([{"id":1,"name":"a"},{"id":2,"name":"b"}])");
+    CHECK(h.text("values") == "2/2/false/0");
+    int const table = h.backend.all("Table").front();
+    h.backend.activateRow(table, ui::Key{std::int64_t{2}});
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "picked"})") == R"("row b")");
+    CHECK(readJson(*screen, R"({"ref": "t.activeKey"})") == "2");
+    h.backend.selectRows(table, {ui::Key{std::int64_t{1}}});
+    h.settle();
+    CHECK(h.text("values") == "2/2/false/1");
+    CHECK(readJson(*screen, R"({"ref": "t.selection"})") == "[1]");
+    CHECK(h.text("error") == "-");
+}
+
+TEST_CASE("interpreter commands: transfers a host cannot make fail their command", "[ui][interpreter]") {
+    Harness h;
+    h.host.refuseTransfers = true;
+    auto screen = h.mount(kCommands, who(3));
+    h.backend.click(h.byTestId("Button", "upload"));
+    h.backend.click(h.byTestId("Button", "download"));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "up.pending"})") == "false");
+    CHECK(readJson(*screen, R"({"ref": "up.progress"})") == "null");
+    REQUIRE(h.diagnostics.size() == 2);
+    CHECK(h.diagnostics.at(0).reason == "`upload` is not supported by the host");
+    h.host.refuseTransfers = false;
+    h.backend.click(h.byTestId("Button", "download"));
+    h.settle();
+    h.host.downloadDone(std::unexpected(std::string{"gone"}));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "url"})") == "null");
+    // A transfer whose screen is gone settles nothing.
+    h.backend.click(h.byTestId("Button", "upload"));
+    h.settle();
+    auto progress = h.host.uploadProgress;
+    auto done = h.host.uploadDone;
+    screen.reset();
+    progress(ui::Value{std::int64_t{1}});
+    done(ui::Value{"late"});
+    h.settle();
+    CHECK(h.dispatcher.count("Lims_Attach") == 0);
+}
+
+TEST_CASE("interpreter commands: a host that refuses a request fails the command and reports it once",
+          "[ui][interpreter]") {
+    Harness h;
+    h.host.refuseAll = true;
+    auto screen = h.mount(kCommands, who(3));
+    for (char const* const button : {"pick", "focus", "notify", "return", "self", "app", "pick"}) {
+        h.backend.click(h.byTestId("Button", button));
+        h.settle();
+    }
+    std::vector<std::string> reasons;
+    for (ui::Refusal const& refusal : h.diagnostics) {
+        reasons.push_back(refusal.reason);
+    }
+    CHECK(reasons == std::vector<std::string>{
+                         "`navigate` is not supported by the host", "`focus` is not supported by the host",
+                         "`notify` is not supported by the host", "`return` is not supported by the host",
+                         "`close: self` is not supported by the host", "`set` of `app` is not supported by the host"});
+    CHECK(screen->diagnostics().size() == reasons.size());
+}
+
+TEST_CASE("interpreter commands: optional parts of nodes fall back to their defaults", "[ui][interpreter]") {
+    Harness h;
+    ui::Interpreter quiet{h.session, h.dispatcher};
+    auto doc = ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "defaults",
+      "state": { "flag": { "init": true }, "typed": { "type": "int", "init": 1 }, "key": { "init": "k-1" }, "dlg": { "init": false } },
+      "models": { "byName": { "type": "Lims_SampleModel", "instance": { "ref": "key" } } },
+      "queries": { "q": { "model": "byName", "action": "Lims_Info" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "text", "testId": "flag", "text": { "ref": "flag" } },
+        { "kind": "text", "testId": "app", "text": { "fn": "coalesce", "args": [ { "ref": "app.tenant" }, "-" ] } },
+        { "kind": "select", "testId": "options", "options": { "lit": [ { "value": "v" }, { "id": 2, "label": "two" }, { "label": "none" } ] } },
+        { "kind": "tabs", "tabs": [ { "children": [ { "kind": "spacer" } ] }, { "label": "empty" } ] },
+        { "kind": "keyValue", "items": { "lit": [ { "label": "only" }, { "value": 1 } ] } },
+        { "kind": "steps", "items": { "lit": [ { "label": "s" }, { } ] } },
+        { "kind": "grid", "children": [ { "kind": "spacer" } ] },
+        { "kind": "scroll", "children": [ { "kind": "spacer" } ] },
+        { "kind": "splitter", "children": [ { "kind": "spacer" } ] },
+        { "kind": "drawer", "id": "d", "open": { "ref": "dlg" }, "children": [ { "kind": "spacer" } ] },
+        { "kind": "table", "rows": { "lit": [ { "name": "x" } ] }, "columns": { "lit": [ { "id": "name" }, { "label": "No id" } ] } },
+        { "kind": "table", "rows": { "lit": [ { "id": 1 } ] }, "columns": [ { "label": "A" }, { "id": "id" } ] },
+        { "kind": "text", "testId": "drop", "text": "drop",
+          "drop": { "accepts": 5, "onDrop": [ { "set": "typed", "value": { "ref": "event" } } ] } },
+        { "kind": "text", "testId": "dropAny", "text": "any", "drop": { "onDrop": [ { "set": "typed", "value": 9 } ] } },
+        { "kind": "text", "testId": "five", "text": "5", "drag": { "payload": 5 } },
+        { "kind": "text", "testId": "six", "text": "6", "drag": { "payload": "six" } },
+        { "kind": "button", "testId": "wrong", "label": "w", "onClick": [ { "set": "typed", "value": { "fn": "first", "args": [ { "lit": [ "text" ] } ] } } ] },
+        { "kind": "button", "testId": "closeDrawer", "label": "c", "onClick": [ { "close": "d" } ] },
+        { "kind": "button", "testId": "same", "label": "s", "onClick": [ { "set": "typed", "value": { "fn": "first", "args": [ { "lit": [ "text" ] } ] } } ] } ] } })");
+    auto screen = quiet.mount(doc, {}, h.backend);
+    REQUIRE(screen);
+    h.settle();
+    CHECK(h.text("flag") == "true");
+    CHECK(h.text("app") == "-");
+    CHECK(h.backend.prop(h.byTestId("Select", "options"), "options") == R"(["v":v,2:two,"null":none])");
+    REQUIRE(h.dispatcher.calls.size() == 1);
+    CHECK(h.dispatcher.calls.at(0).instanceKey == "k-1");
+    int const drop = h.byTestId("Text", "drop");
+    CHECK_FALSE(h.backend.drag(h.byTestId("Text", "six"), drop));
+    CHECK(h.backend.drag(h.byTestId("Text", "five"), drop));
+    CHECK(h.backend.drag(h.byTestId("Text", "six"), h.byTestId("Text", "dropAny")));
+    h.settle();
+    CHECK(readJson(**screen, R"({"ref": "typed"})") == "9");
+    h.backend.click(h.byTestId("Button", "wrong"));
+    h.backend.click(h.byTestId("Button", "wrong"));
+    h.backend.click(h.byTestId("Button", "closeDrawer"));
+    h.settle();
+    CHECK(readJson(**screen, R"({"ref": "typed"})") == "9");
+    REQUIRE((*screen)->diagnostics().size() == 2);
+    CHECK((*screen)->diagnostics().at(0).reason == "`set` writes a value that is not a int");
+    CHECK((*screen)->diagnostics().at(1).reason == "the dialog's `open` is bound to an expression");
 }

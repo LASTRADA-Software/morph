@@ -219,3 +219,83 @@ TEST_CASE("interpreter relations: options that depend on another element, with o
         CHECK(h.text("chosen") == "none");
     }
 }
+
+TEST_CASE("interpreter relations: element values read the input's draft, state and decorations", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "values",
+      "state": { "name": { "init": "ann" }, "shown": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "textInput", "id": "who", "testId": "who", "value": { "ref": "name" }, "mode": "password",
+          "visible": { "ref": "shown" }, "commitOn": "enter",
+          "onChange": [ { "set": "name", "value": { "ref": "event" } } ] },
+        { "kind": "textInput", "id": "note", "testId": "note", "mode": "multiline", "commitOn": "blur",
+          "errors": { "lit": [ "server says no" ] } },
+        { "kind": "select", "id": "pick", "testId": "pick", "style": "radio", "options": { "lit": [ { "key": 1, "label": "one" } ] } },
+        { "kind": "button", "testId": "set", "label": "set", "onClick": [ { "set": "note", "value": "typed" }, { "set": "shown", "value": false } ] },
+        { "kind": "button", "testId": "reset", "label": "reset", "onClick": [ { "reset": "name" } ] } ] } })");
+    int const who = h.byTestId("TextInput", "who");
+    CHECK(h.backend.prop(who, "mode") == "Password");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "note"), "mode") == "Multiline");
+    CHECK(h.backend.prop(h.byTestId("Select", "pick"), "style") == "Radio");
+    h.backend.edit(who, "bob");
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "who.draft"})") == R"("bob")");
+    CHECK(readJson(*screen, R"({"ref": "who.dirty"})") == "true");
+    CHECK(readJson(*screen, R"({"ref": "who.value"})") == R"("ann")");
+    CHECK(readJson(*screen, R"({"ref": "who.focused"})") == "false");
+    h.backend.submit(who, "bob");
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "who.value"})") == R"("bob")");
+    CHECK(readJson(*screen, R"({"ref": "who.dirty"})") == "false");
+    CHECK(readJson(*screen, R"({"ref": "who.touched"})") == "true");
+    CHECK(readJson(*screen, R"({"ref": "who.visible"})") == "true");
+    CHECK(readJson(*screen, R"({"ref": "note.errors"})") == R"(["server says no"])");
+    CHECK(readJson(*screen, R"({"ref": "note.valid"})") == "false");
+    h.backend.click(h.byTestId("Button", "set"));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "note.value"})") == R"("typed")");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "note"), "text") == "typed");
+    CHECK(readJson(*screen, R"({"ref": "who.visible"})") == "false");
+    h.backend.commit(h.byTestId("TextInput", "note"));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "note.touched"})") == "true");
+    h.backend.click(h.byTestId("Button", "reset"));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "name"})") == R"("ann")");
+}
+
+TEST_CASE("interpreter relations: reset of a dialog restores its content and clears submitted", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "resetdlg",
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+        { "kind": "button", "testId": "close", "label": "close", "onClick": { "close": "dlg" } },
+        { "kind": "dialog", "id": "dlg",
+          "scope": { "state": { "count": { "init": 0 } } },
+          "default": [ { "set": "count", "value": 1 } ],
+          "cancel": [ { "reset": "dlg" } ],
+          "children": [
+            { "kind": "checkbox", "id": "c", "testId": "c", "checked": true },
+            { "kind": "text", "testId": "count", "text": { "fn": "format", "args": [ "{0}", { "ref": "count" } ] } },
+            { "kind": "textInput", "id": "t", "testId": "t" },
+            { "kind": "button", "testId": "reset", "label": "reset", "onClick": [ { "reset": "dlg" } ] } ] } ] } })");
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    int const input = h.byTestId("TextInput", "t");
+    h.backend.edit(input, "x");
+    h.backend.press(input, "Enter");
+    h.settle();
+    CHECK(h.text("count") == "1");
+    h.backend.click(h.byTestId("Button", "reset"));
+    h.settle();
+    CHECK(h.text("count") == "0");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "t"), "text").empty());
+    CHECK(readJson(*screen, R"({"ref": "dlg.submitted"})") == "false");
+    h.backend.press(input, "Escape");
+    h.backend.click(h.byTestId("Button", "close"));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "dlg.open"})") == "false");
+    CHECK(readJson(*screen, R"({"ref": "dlg.ready"})") == "false");
+}

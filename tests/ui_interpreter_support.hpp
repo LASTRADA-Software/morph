@@ -182,6 +182,10 @@ public:
     std::vector<Value> signedIn;
     /// @brief How often permissions went stale.
     int stale = 0;
+    /// @brief Whether `upload` and `download` answer "not supported".
+    bool refuseTransfers = false;
+    /// @brief Whether every other request answers "not supported".
+    bool refuseAll = false;
 
     bool navigate(NavigateRequest const& request, std::function<void(Value)> result,
                   std::function<void()> cancel) override {
@@ -189,15 +193,15 @@ public:
                       glz::write_json(valueToJson(request.params)).value_or(""));
         onResult = std::move(result);
         onCancel = std::move(cancel);
-        return true;
+        return !refuseAll;
     }
     bool closeSelf(std::string const& screen, std::optional<Value> result) override {
         log.push_back("close " + screen + (result ? " " + glz::write_json(valueToJson(*result)).value_or("") : ""));
-        return true;
+        return !refuseAll;
     }
     bool focus(std::string const& screen, std::string const& element) override {
         log.push_back("focus " + screen + " " + element);
-        return true;
+        return !refuseAll;
     }
     bool hostCommand(std::string const& name, Value const& args) override {
         log.push_back("host " + name + " " + glz::write_json(valueToJson(args)).value_or(""));
@@ -213,31 +217,31 @@ public:
     void setLocale(std::string const& locale) override { log.push_back("setLocale " + locale); }
     bool notify(std::string const& text, std::string const& role) override {
         log.push_back("notify " + role + " " + text);
-        return true;
+        return !refuseAll;
     }
     bool signIn(Value const& reply) override {
         signedIn.push_back(reply);
         log.push_back("signIn");
-        return true;
+        return !refuseAll;
     }
     void signOut() override { log.push_back("signOut"); }
     bool setAppValue(std::string const& name, Value const& value) override {
         log.push_back("app " + name + " " + glz::write_json(valueToJson(value)).value_or(""));
-        return true;
+        return !refuseAll;
     }
     bool upload(Value const& file, std::function<void(Value)> progress,
                 std::function<void(std::expected<Value, std::string>)> done) override {
         log.push_back("upload " + glz::write_json(valueToJson(file)).value_or(""));
         uploadProgress = std::move(progress);
         uploadDone = std::move(done);
-        return true;
+        return !refuseTransfers;
     }
     bool download(Value const& file, std::string const& option, Value const& name,
                   std::function<void(std::expected<Value, std::string>)> done) override {
         log.push_back("download " + glz::write_json(valueToJson(file)).value_or("") + " " + option + " " +
                       glz::write_json(valueToJson(name)).value_or(""));
         downloadDone = std::move(done);
-        return true;
+        return !refuseTransfers;
     }
     void preferenceChanged(std::string const& screen, std::string const& point, Value const& value) override {
         log.push_back("pref " + screen + " " + point + " " + glz::write_json(valueToJson(value)).value_or(""));

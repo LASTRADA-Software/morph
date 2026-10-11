@@ -462,3 +462,93 @@ TEST_CASE("interpreter control: a boundary shows loading, then its children, or 
     CHECK(h.dispatcher.calls.size() == 3);
     CHECK(h.text("count") == "2");
 }
+
+TEST_CASE("interpreter control: a boundary owns the queries read anywhere inside its children", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "nested",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "queries": { "a": { "model": "sample", "action": "Lims_ListResults" },
+                   "b": { "model": "sample", "action": "Lims_GetLimits" },
+                   "inner": { "model": "sample", "action": "Lims_Info" } },
+      "view": { "kind": "boundary", "children": [
+        { "kind": "column", "children": [
+          { "kind": "tabs", "tabs": [ { "label": "t", "children": [ { "kind": "text", "testId": "a", "text": { "fn": "format", "args": [ "{0}", { "pending": "a" } ] } } ] } ] },
+          { "kind": "text", "testId": "b", "text": { "fn": "coalesce", "args": [ { "error": "b" }, { "errorKind": "b" }, "-" ] } },
+          { "kind": "boundary", "children": [ { "kind": "text", "text": { "query": "inner" } } ] } ] } ] } })");
+    // The outer boundary shows its (empty) loading content until `a` and `b` settle; `inner` is the nested
+    // boundary's.
+    CHECK(h.backend.find("Text", "testId", "a") == std::nullopt);
+    h.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+    CHECK(h.backend.find("Text", "testId", "a") == std::nullopt);
+    h.reply(h.dispatcher.last("Lims_GetLimits"), "{}");
+    CHECK(h.text("b") == "-");
+}
+
+TEST_CASE("interpreter control: an entry no query uses is dropped after five minutes", "[ui][interpreter]") {
+    Harness h;
+    // A shared instance: a private one is a new instance, and so a new entry, on every mount.
+    std::string const doc = R"({
+      "vocab": "ui/1", "id": "evict",
+      "models": { "clients": { "type": "Lims_ClientModel" } },
+      "queries": { "q": { "model": "clients", "action": "Lims_ClientList" } },
+      "view": { "kind": "text", "testId": "out", "text": { "ref": "q.name" } } })";
+    auto screen = h.mount(doc);
+    h.reply(0, R"({"name":"one"})");
+    CHECK(h.session.cacheSize() == 1);
+    screen.reset();
+    h.advance(std::chrono::minutes{4});
+    CHECK(h.session.cacheSize() == 1);
+    auto again = h.mount(doc);
+    // Remounted within the five minutes, the entry is shown at once (and refetched, its staleTime being 0).
+    CHECK(h.text("out") == "one");
+    again.reset();
+    h.advance(std::chrono::minutes{5});
+    CHECK(h.session.cacheSize() == 0);
+}
+
+TEST_CASE("interpreter control: refetch ends a debounce wait; a reply that is not a document value fails",
+          "[ui][interpreter]") {
+    Harness h;
+    std::string doc = keyed(300);
+    doc.replace(doc.find(R"({ "kind": "text", "testId": "out")"), 0,
+                R"({ "kind": "button", "testId": "refetch", "label": "r", "onClick": { "refetch": "q" } },)");
+    auto screen = h.mount(doc);
+    h.reply(0, "1.5");
+    CHECK(h.text("error").starts_with("the reply is not a document value"));
+    h.backend.edit(h.byTestId("TextInput", "in"), "2");
+    h.settle();
+    h.backend.click(h.byTestId("Button", "refetch"));
+    h.settle();
+    REQUIRE(h.dispatcher.calls.size() == 2);
+    CHECK(h.dispatcher.calls.at(1).body == R"({"id":"2"})");
+    h.backend.click(h.byTestId("Button", "refetch"));
+    h.settle();
+    CHECK(h.dispatcher.calls.size() == 3);
+    h.reply(2, R"({"name":"two"})");
+    h.reply(1, R"({"name":"old"})");
+    CHECK(h.text("out") == "two");
+}
+
+TEST_CASE(
+    "interpreter control: a mutation whose reply is not a document value fails; patch of an idle query is a no-op",
+    "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "badreply",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "state": { "on": { "init": false } },
+      "queries": { "rows": { "model": "sample", "action": "Lims_ListResults", "when": { "ref": "on" } } },
+      "mutations": { "m": { "model": "sample", "action": "Lims_Save",
+                            "patch": { "query": "rows", "key": 1, "with": { "ref": "result" } },
+                            "optimistic": { "query": "rows", "key": 1, "with": { "ref": "body" } } } },
+      "view": { "kind": "button", "testId": "go", "label": "go", "onClick": { "run": "m" } } })");
+    h.backend.click(h.byTestId("Button", "go"));
+    h.settle();
+    h.reply(0, "2.5");
+    CHECK(readJson(*screen, R"({"error": "m"})").find("not a document value") != std::string::npos);
+    h.backend.click(h.byTestId("Button", "go"));
+    h.settle();
+    h.reply(1, R"({"id":1})");
+    CHECK(readJson(*screen, R"({"result": "m"})") == R"({"id":1})");
+}
