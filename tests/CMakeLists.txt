@@ -173,6 +173,7 @@ add_executable(morph_tests
     test_ui_document.cpp
     test_ui_interpreter_control.cpp
     test_ui_interpreter_relations.cpp
+    test_ui_interpreter_calculation.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
