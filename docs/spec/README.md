@@ -137,6 +137,8 @@ interaction a controller declares instead of sequencing
 [`ui/document.md`](ui/document.md) ·
 [`ui/expressions.md`](ui/expressions.md) — the UI document a server serves, its
 load-time validation, and the `expr/1` language its properties are written in ·
+[`ui/interpreter.md`](ui/interpreter.md) — how a loaded document mounts: its scopes, queries and the
+session's cache, mutations, relations and commands ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
 [`ui/frontend.md`](ui/frontend.md) ·

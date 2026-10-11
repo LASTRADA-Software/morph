@@ -286,6 +286,29 @@ permissions,commands}.cpp`; `docs/spec/ui/interpreter.md`.
 - **Open for B:** `instance: {"from": ...}` (spec 6 §16) is checked when a screen is opened, because only the opener
   knows whether it is a dialog; what a `null` command `if` condition runs.
 
+### PR B refined (implementation detail)
+
+- **Own control machinery, not `reactive::Query`/`Mutation`.** The query cache must be the single source of a
+  query's value, because `patch` and `optimistic` write into it and two screens share one entry; `reactive::Query`
+  keeps its value privately. The interpreter therefore builds queries and mutations from `Signal`, `Computed`,
+  `Effect` and the `Scheduler` directly, with the same rules (latest wins by generation, value kept while
+  refetching, debounce, a tick skipped while in flight, the four concurrency modes).
+- **Seams.** `ModelChannel`/`Dispatcher` (one bound alias; `BridgeDispatcher` over `RawHandler`), `InterpreterHost`
+  (every command the hosting part answers; each default reports "not supported"), `Session` (the query cache,
+  `refreshOn` bookkeeping, permitted actions, formatting and client values), `Interpreter::mount` → `Screen`.
+- **Lazy scopes.** Dialog, drawer and switch-case content is lowered behind a one-row `forEach`, so its scope is
+  built when the content mounts and released when it unmounts; row scopes are built by the row view. A scope lives
+  while the view nodes that read it do (they hold it by `shared_ptr`); replies and timers hold it weakly.
+- **`source: "user"`.** Every source records the write sequence number and whether a user event wrote it; a watch
+  runs when the newest write among the sources its `on` read was the user's.
+- **Deferred to later parts, reported when met:** `form`, `collection`, `wizard` (forms engine), a model-backed
+  `table` (table engine), component loading (the fallback renders), `prefetch` on hover (the host starts it through
+  `Session::prefetch`), the offline queue itself (a dispatcher that has one honours `CallOptions::queueOffline`).
+
+Tasks, one commit each: (B1) dispatch, session and query cache, scopes, lowering and the control corpus; (B2) the
+relations corpus; (B3) server-calculated values; (B4) several models; (B5) permissions; (B6) commands; (B7) spec,
+maps, changelog; (B8) gates — coverage, GCC 16, Doxygen, clang-format, mutations.
+
 ## PR C: authoring (planned here, implemented later)
 
 **Files:** `include/morph/ui/author.hpp`; `tests/test_ui_author.cpp`; `tests/ui/golden/*.json`;

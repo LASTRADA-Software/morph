@@ -23,9 +23,9 @@
 #include <vector>
 
 #include "../attributes.hpp"
+#include "../core/backend.hpp"
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
-#include "backend.hpp"
 #include "completion.hpp"
 #include "detail/owner_probe.hpp"
 #include "detail/reply_router.hpp"
