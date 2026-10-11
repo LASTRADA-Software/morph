@@ -442,7 +442,7 @@ cmake --build build/clang-release --target morph_tests
 ```
 
 Relevant CMake options: `MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
-`MORPH_BUILD_QT`, `MORPH_BUILD_TUI`, `MORPH_BUILD_FORMS_QML`,
+`MORPH_BUILD_QT`, `MORPH_BUILD_TUI`, `MORPH_BUILD_QT_QUICK`, `MORPH_BUILD_FORMS_QML`,
 `MORPH_BUILD_DOCUMENTATION`, `MORPH_INSTALL` (on by default when morph is the
 top-level project).
 
@@ -481,8 +481,9 @@ target_link_libraries(your_app PRIVATE morph::net morph::offline_sqlite)
 
 The components are `net` (`MORPH_BUILD_NET`, POSIX only), `tui`
 (`MORPH_BUILD_TUI`; installed when libunicode was found rather than fetched),
-`offline_sqlite` (`MORPH_BUILD_OFFLINE_SQLITE`), `qt` (`MORPH_BUILD_QT`), and
-`qt_forms` and `forms_qml` (both `MORPH_BUILD_FORMS_QML`). Asking for one that
+`offline_sqlite` (`MORPH_BUILD_OFFLINE_SQLITE`), `qt` (`MORPH_BUILD_QT`),
+`qt_quick` (`MORPH_BUILD_QT_QUICK`, which needs `qt`), and `qt_forms` and
+`forms_qml` (both `MORPH_BUILD_FORMS_QML`). Asking for one that
 was not installed fails at `find_package` and says which.
 
 An install that carries `tui` needs libunicode findable by every consumer, even

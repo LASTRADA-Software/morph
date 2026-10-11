@@ -54,6 +54,7 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::testing` | The installed owner test kit | `StepExecutor`, `OwnerProbeRecorder` |
 | `morph::tui` | The terminal renderer and frontend (built only when `MORPH_BUILD_TUI=ON`; see `docs/spec/tui/`) | `Backend`, `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `kInterruptExitCode`, `LoopExecutor` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
+| `morph::qt_quick` | The Qt Quick renderer and frontend (built only when `MORPH_BUILD_QT_QUICK=ON`; see `docs/spec/qt_quick/`) | `Backend`, `BackendOptions`, `CustomWidget`, `CustomRequest`, `widthClassOf`, `Components`, `ComponentFailure`, `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `usableHere`, `QtScheduler` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
 
@@ -749,6 +750,18 @@ Built only when `MORPH_BUILD_TUI=ON`, as the compiled STATIC library `morph::tui
 | `qt_executor.hpp` | `QtExecutor` — posts callables via `QMetaObject::invokeMethod` |
 | `qt_websocket_backend.hpp` | `QtWebSocketBackend` — WebSocket client; implements `IBackend` |
 | `qt_websocket_server.hpp` | `QtWebSocketServer` — QObject server; forwards messages to `RemoteServer` |
+
+### Qt Quick renderer headers (`include/morph/qt_quick/`, sources in `src/qt_quick/`)
+
+Built only when `MORPH_BUILD_QT_QUICK=ON`, as the compiled STATIC library `morph::qt_quick` with the private QML
+module `MorphUi`. The headers hold declarations only.
+
+| Header | Responsibility |
+|---|---|
+| `qt_quick/backend.hpp` | `Backend`, `BackendOptions`, `CustomWidget`, `CustomRequest`, `widthClassOf` (`morph::qt_quick::`) — `ui::IViewBackend` over Qt Quick: every widget kind as an item made from its `MorphUi` component. See `docs/spec/qt_quick/backend.md`. |
+| `qt_quick/components.hpp` | `Components`, `ComponentFailure` — bundle components verified by digest and compiled in a contained engine, host components by version, and the restyle map |
+| `qt_quick/frontend.hpp` | `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `usableHere` — runs an `AppSource` in a Qt Quick window on Qt's event loop. See `docs/spec/qt_quick/frontend.md`. |
+| `qt_quick/scheduler.hpp` | `QtScheduler` — `reactive::Scheduler` on `QTimer`s, with the owner current in every callback |
 
 ## Known limitations
 
