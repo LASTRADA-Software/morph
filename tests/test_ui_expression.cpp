@@ -212,7 +212,7 @@ TEST_CASE("ui expressions: the size bound is 256 nodes", "[ui][expr]") {
     for (int level = 0; level < 300; ++level) {
         deep = std::format(R"({{"fn": "neg", "args": [{}]}})", deep);
     }
-    CHECK_FALSE(parseExpression(*parseJson(deep)).has_value());
+    CHECK_FALSE(parseJson(deep).has_value());
 }
 
 // Mutation: drop the once-per-path check in StaticEnvironment::report -> the second evaluation adds a report.

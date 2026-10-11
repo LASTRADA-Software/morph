@@ -185,7 +185,9 @@ one.
 - **Errors are values.** Overflow, division by zero or a type mismatch at runtime yields `null` and
   is reported once per expression path on the client's diagnostic channel; it never throws into a
   renderer.
-- **Size bound.** A document whose single expression exceeds 256 nodes is refused at load.
+- **Size bound.** A document whose single expression exceeds 256 nodes is refused at load, and so is
+  one whose JSON nests deeper than 64 objects and arrays; the second is checked before the JSON is
+  parsed, so a hostile document cannot exhaust a thread's stack.
 - **Rounding** is half to even wherever `expr/1` rounds: `round`, `mean` and the display functions.
 - **Quantities** combine when their units convert, through the exact factors the server's unit
   systems declare (`x-unitAlternatives`); the result is in the left operand's unit. A quantity over

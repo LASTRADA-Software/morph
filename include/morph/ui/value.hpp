@@ -697,10 +697,53 @@ namespace detail {
     return out;
 }
 
+/// @brief The deepest a document's JSON may nest, counting each object and array as one level.
+///
+/// Documents written by hand or by the builders nest a dozen levels or so. The bound is checked before the JSON
+/// parser runs, because the parser and every later pass over the tree descend recursively, and a hostile document
+/// nested a few hundred levels deep overflows a 1 MB thread stack before anything else can refuse it.
+inline constexpr std::size_t kMaxJsonDepth = 64;
+
+namespace detail {
+
+/// @brief Whether JSON text nests objects and arrays deeper than `kMaxJsonDepth`.
+/// @param text The JSON text; brackets inside string literals do not count.
+/// @return True when some point of the text is inside more than `kMaxJsonDepth` objects and arrays.
+[[nodiscard]] inline bool nestsTooDeep(std::string_view text) {
+    std::size_t depth = 0;
+    bool inString = false;
+    bool escaped = false;
+    for (char const c : text) {
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                inString = false;
+            }
+        } else if (c == '"') {
+            inString = true;
+        } else if (c == '{' || c == '[') {
+            if (++depth > kMaxJsonDepth) {
+                return true;
+            }
+        } else if ((c == '}' || c == ']') && depth > 0) {
+            --depth;
+        }
+    }
+    return false;
+}
+
+}  // namespace detail
+
 /// @brief Parses JSON text into the document layer's JSON tree.
 /// @param text The JSON text.
-/// @return The tree, or the reason the text is not JSON.
+/// @return The tree, or the reason the text is not JSON or nests deeper than `kMaxJsonDepth`.
 [[nodiscard]] inline std::expected<Json, std::string> parseJson(std::string_view text) {
+    if (detail::nestsTooDeep(text)) {
+        return std::unexpected("the JSON nests deeper than " + std::to_string(kMaxJsonDepth) + " levels");
+    }
     Json json;
     if (auto const error = glz::read_json(json, text)) {
         return std::unexpected("not JSON: " + glz::format_error(error, text));

@@ -235,7 +235,8 @@ an alias's default instance, which is the interpreter's.
 
 `ui::Refusal` is the document id, a JSON Pointer (RFC 6901) into the document, and the reason;
 `message()` prints `document <id> at <path>: <reason>`. A refusal from inside an expression points
-at the expression node. Text that is not JSON (`loadDocumentText`) is refused at the root.
+at the expression node. Text that is not JSON (`loadDocumentText`) is refused at the root, and so is text nested deeper than 64
+objects and arrays (`kMaxJsonDepth`), which is checked before the JSON parser runs.
 
 ## Design decisions
 
