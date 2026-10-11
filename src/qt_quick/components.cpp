@@ -12,8 +12,11 @@
 #include <QUrl>
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <format>
 #include <map>
 #include <morph/qt_quick/components.hpp>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <utility>
@@ -98,6 +101,32 @@ struct Components::State {
         return *contained;
     }
 
+    /// Why @p name cannot be loaded at @p minVersion, or none: not registered, a host component below the version,
+    /// a bundle component whose text does not match its digest.
+    [[nodiscard]] std::optional<std::string> refusal(std::string const& name, int minVersion) const {
+        if (auto const host = hosts.find(name); host != hosts.end()) {
+            if (host->second.version < minVersion) {
+                return "host component " + name + " is version " + std::to_string(host->second.version) +
+                       ", below the " + std::to_string(minVersion) + " the document needs";
+            }
+            return std::nullopt;
+        }
+        auto const bundle = bundles.find(name);
+        if (bundle == bundles.end()) {
+            return "component " + name + " is not registered";
+        }
+        QByteArray const hash =
+            QCryptographicHash::hash(QByteArray::fromStdString(bundle->second.qml), QCryptographicHash::Sha256)
+                .toHex();
+        std::string given = bundle->second.digest;
+        std::ranges::transform(given, given.begin(),
+                               [](unsigned char chr) { return static_cast<char>(std::tolower(chr)); });
+        if (given != "sha256:" + hash.toStdString()) {
+            return "component " + name + " does not match its digest";
+        }
+        return std::nullopt;
+    }
+
     [[nodiscard]] std::unique_ptr<QQmlComponent> compile(QQmlEngine& engine, std::string const& name) {
         if (auto const host = hosts.find(name); host != hosts.end()) {
             return std::make_unique<QQmlComponent>(&engine, host->second.source, QQmlComponent::PreferSynchronous);
@@ -107,8 +136,11 @@ struct Components::State {
             return nullptr;
         }
         auto component = std::make_unique<QQmlComponent>(&containedEngine());
-        component->setData(QByteArray::fromStdString(bundle->second.qml),
-                           QUrl{QStringLiteral("bundle:/") + detail::toQString(name) + QStringLiteral(".qml")});
+        // A `qrc:` base URL compiles synchronously, and one in a directory no resource has leaves a relative import
+        // nothing to find.
+        component->setData(
+            QByteArray::fromStdString(bundle->second.qml),
+            QUrl{QStringLiteral("qrc:/morph-bundle/") + detail::toQString(name) + QStringLiteral(".qml")});
         return component;
     }
 };
@@ -123,13 +155,15 @@ Components::~Components() {
 }
 
 void Components::addHost(std::string name, int version, QUrl const& source) {
-    _state->compiled.erase(name);
+    std::erase_if(_state->compiled,
+                  [&name](auto const& entry) { return entry.first == name || entry.first.starts_with(name + "@"); });
     _state->bundles.erase(name);
     _state->hosts.insert_or_assign(std::move(name), State::Host{.version = version, .source = source});
 }
 
 void Components::addBundle(std::string name, std::string qml, std::string digest) {
-    _state->compiled.erase(name);
+    std::erase_if(_state->compiled,
+                  [&name](auto const& entry) { return entry.first == name || entry.first.starts_with(name + "@"); });
     _state->hosts.erase(name);
     _state->bundles.insert_or_assign(std::move(name),
                                      State::Bundle{.qml = std::move(qml), .digest = std::move(digest)});
@@ -154,28 +188,15 @@ std::expected<QQmlComponent*, ComponentFailure> Components::load(QQmlEngine& eng
         report(failure);
         return std::unexpected{std::move(failure)};
     };
-    if (auto const host = _state->hosts.find(name); host != _state->hosts.end()) {
-        if (host->second.version < minVersion) {
-            return fail("host component " + name + " is version " + std::to_string(host->second.version) +
-                        ", below the " + std::to_string(minVersion) + " the document needs");
-        }
-    } else if (auto const bundle = _state->bundles.find(name); bundle != _state->bundles.end()) {
-        QByteArray const hash =
-            QCryptographicHash::hash(QByteArray::fromStdString(bundle->second.qml), QCryptographicHash::Sha256)
-                .toHex();
-        std::string const expected = "sha256:" + hash.toStdString();
-        std::string given = bundle->second.digest;
-        std::ranges::transform(given, given.begin(),
-                               [](unsigned char chr) { return static_cast<char>(std::tolower(chr)); });
-        if (given != expected) {
-            return fail("component " + name + " does not match its digest");
-        }
-    } else {
-        return fail("component " + name + " is not registered");
+    if (std::optional<std::string> refused = _state->refusal(name, minVersion)) {
+        return fail(std::move(*refused));
     }
-    auto found = _state->compiled.find(name);
+    // A host component compiles in the engine it is asked for, a bundle component in the contained one.
+    std::string const key =
+        _state->hosts.contains(name) ? std::format("{}@{}", name, static_cast<void const*>(&engine)) : name;
+    auto found = _state->compiled.find(key);
     if (found == _state->compiled.end()) {
-        found = _state->compiled.emplace(name, _state->compile(engine, name)).first;
+        found = _state->compiled.emplace(key, _state->compile(engine, name)).first;
     }
     QQmlComponent* const component = found->second.get();
     if (component == nullptr || !component->isReady()) {
@@ -196,14 +217,18 @@ std::expected<void, ComponentFailure> Components::restyle(QQmlEngine& engine, st
     if (known == kRestylable.end()) {
         return fail("`" + kind + "` is not a kind that can be restyled");
     }
-    auto loaded = load(engine, component);
-    if (!loaded) {
-        return fail("restyle of `" + kind + "`: " + loaded.error().reason);
+    if (std::optional<std::string> const refused = _state->refusal(component, 0)) {
+        return fail("restyle of `" + kind + "`: " + *refused);
+    }
+    std::unique_ptr<QQmlComponent> const loaded = _state->compile(engine, component);
+    if (loaded == nullptr || !loaded->isReady()) {
+        return fail("restyle of `" + kind + "`: component " + component +
+                    " does not compile: " + (loaded != nullptr ? errorsOf(*loaded) : std::string{}));
     }
     QQmlComponent base{&engine};
     base.loadFromModule(QStringLiteral("MorphUi"), detail::toQString(known->type), QQmlComponent::PreferSynchronous);
     std::unique_ptr<QObject> const baseObject{base.create()};
-    std::unique_ptr<QObject> const candidate{(*loaded)->create()};
+    std::unique_ptr<QObject> const candidate{loaded->create()};
     if (baseObject == nullptr || candidate == nullptr) {
         return fail("restyle of `" + kind + "`: " + component + " does not make an object");
     }

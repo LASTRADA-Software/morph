@@ -16,6 +16,8 @@ add_executable(morph_qt_quick_tests
     test_qt_quick_overlays.cpp
     test_qt_quick_table.cpp
     test_qt_quick_interpreter.cpp
+    test_qt_quick_components.cpp
+    test_qt_quick_scheduler.cpp
 )
 target_link_libraries(morph_qt_quick_tests
     PRIVATE
@@ -33,7 +35,11 @@ target_include_directories(morph_qt_quick_tests PRIVATE ${PROJECT_SOURCE_DIR}/sr
 set_target_properties(morph_qt_quick_tests PROPERTIES AUTOMOC ON)
 apply_warnings(morph_qt_quick_tests)
 
-foreach(_morph_qq_tests IN ITEMS morph_qt_quick_tests)
+add_executable(morph_qt_quick_frontend_tests test_qt_quick_frontend.cpp)
+target_link_libraries(morph_qt_quick_frontend_tests PRIVATE morph::qt_quick Catch2::Catch2 morph_test_log_level)
+apply_warnings(morph_qt_quick_frontend_tests)
+
+foreach(_morph_qq_tests IN ITEMS morph_qt_quick_tests morph_qt_quick_frontend_tests)
     if(DEFINED AF_SANITIZER)
         apply_sanitizers(${_morph_qq_tests} ${AF_SANITIZER})
     endif()
@@ -48,7 +54,7 @@ include(Catch)
 # LD_LIBRARY_PATH / DYLD_LIBRARY_PATH. LABELS "qt_quick" is what makes `ctest -L qt_quick` select these suites.
 get_target_property(_morph_qq_core_dll Qt6::Core IMPORTED_LOCATION)
 cmake_path(GET _morph_qq_core_dll PARENT_PATH _morph_qq_bin_dir)
-foreach(_morph_qq_tests IN ITEMS morph_qt_quick_tests)
+foreach(_morph_qq_tests IN ITEMS morph_qt_quick_tests morph_qt_quick_frontend_tests)
     catch_discover_tests(${_morph_qq_tests}
         DISCOVERY_MODE PRE_TEST
         DL_PATHS "${_morph_qq_bin_dir}"

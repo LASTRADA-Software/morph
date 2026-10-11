@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QJSValue>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -236,14 +237,17 @@ void CustomImpl::setOnEvent(std::function<void(std::string event, std::string pa
         if (!onEvent) {
             return;
         }
+        // A JavaScript array or object arrives wrapped as a QJSValue.
+        QVariant const value =
+            payload.metaType() == QMetaType::fromType<QJSValue>() ? payload.value<QJSValue>().toVariant() : payload;
         std::string text;
-        QJsonValue const json = QJsonValue::fromVariant(payload);
+        QJsonValue const json = QJsonValue::fromVariant(value);
         if (json.isObject()) {
             text = QJsonDocument{json.toObject()}.toJson(QJsonDocument::Compact).toStdString();
         } else if (json.isArray()) {
             text = QJsonDocument{json.toArray()}.toJson(QJsonDocument::Compact).toStdString();
-        } else if (payload.isValid() && !payload.isNull()) {
-            text = toUtf8(payload.toString());
+        } else if (value.isValid() && !value.isNull()) {
+            text = toUtf8(value.toString());
         }
         onEvent(toUtf8(event), std::move(text));
     });

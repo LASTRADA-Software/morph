@@ -99,10 +99,15 @@ int Frontend::run(ui::AppSource& source) {
     }
     std::optional<QGuiApplication> application;
     if (QCoreApplication::instance() == nullptr) {
-        QQuickStyle::setStyle(QStringLiteral("Basic"));
+        // The style and the graphics API are process-wide and fixed once Qt Quick has loaded: a second run in the
+        // same process keeps what the first chose.
+        if (QQuickStyle::name().isEmpty()) {
+            QQuickStyle::setStyle(QStringLiteral("Basic"));
+        }
         application.emplace(*_argc, _argv);
     }
-    if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {
+    if (QGuiApplication::platformName() == QStringLiteral("offscreen") &&
+        QQuickWindow::graphicsApi() != QSGRendererInterface::Software) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     }
     QObject anchor;
