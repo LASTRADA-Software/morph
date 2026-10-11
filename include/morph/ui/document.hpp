@@ -272,19 +272,19 @@ struct Scope {
     std::vector<CheckDecl> checks;
 };
 
-struct Node;
+struct DocNode;
 
 /// @brief A node list under a name: a node's `children`, a boundary's `loading`, a column's `cell`.
 struct NodeSlot {
     /// @brief The slot's key.
     std::string name;
     /// @brief The nodes.
-    std::vector<Node> nodes;
+    std::vector<DocNode> nodes;
 };
 
 /// @brief A view node (spec 5 §9), or a structured entry of one: a table's column, a `switch` case, a tab, a menu
 ///        item, a banner's action, a drop target.
-struct Node {
+struct DocNode {
     /// @brief The kind: a node kind of `ui/1`, or for an entry its shape (`column`, `case`, `tab`, `menuItem`,
     ///        `action`, `drop`).
     std::string kind;
@@ -335,7 +335,7 @@ struct Node {
     /// @brief The slot @p name.
     /// @param name The slot's key.
     /// @return Its nodes, or null when the node has none.
-    [[nodiscard]] std::vector<Node> const* slot(std::string_view name) const noexcept {
+    [[nodiscard]] std::vector<DocNode> const* slot(std::string_view name) const noexcept {
         auto const found = std::ranges::find(slots, name, &NodeSlot::name);
         return found == slots.end() ? nullptr : &found->nodes;
     }
@@ -359,7 +359,7 @@ struct ComponentDecl {
     /// @brief The events and their payload types.
     std::vector<NamedText> events;
     /// @brief The fallback subtree; empty when the component declares none.
-    std::vector<Node> fallback;
+    std::vector<DocNode> fallback;
 };
 
 /// @brief A customization point (spec 5 §12b).
@@ -407,7 +407,7 @@ struct Document {
     /// @brief The customization points.
     std::vector<CustomizePoint> customize;
     /// @brief The view; a refused document has none.
-    std::optional<Node> view;
+    std::optional<DocNode> view;
 };
 
 /// @brief What a key of a node or entry holds.
@@ -1354,10 +1354,10 @@ public:
         return decl;
     }
 
-    std::vector<Node> nodes(Json const& json, std::string const& path, std::string_view shape = {}) {
-        std::vector<Node> out;
+    std::vector<DocNode> nodes(Json const& json, std::string const& path, std::string_view shape = {}) {
+        std::vector<DocNode> out;
         if (json.is_object()) {
-            if (std::optional<Node> one = node(json, path, shape)) {
+            if (std::optional<DocNode> one = node(json, path, shape)) {
                 out.push_back(std::move(*one));
             }
             return out;
@@ -1369,7 +1369,7 @@ public:
         }
         std::size_t index = 0;
         for (Json const& entry : json.get_array()) {
-            std::optional<Node> one = node(entry, path + "/" + std::to_string(index++), shape);
+            std::optional<DocNode> one = node(entry, path + "/" + std::to_string(index++), shape);
             if (!one) {
                 return out;
             }
@@ -1380,13 +1380,13 @@ public:
 
     // A node, or with @p shape an entry of that shape.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per key role.
-    std::optional<Node> node(Json const& json, std::string const& path, std::string_view shape = {}) {
+    std::optional<DocNode> node(Json const& json, std::string const& path, std::string_view shape = {}) {
         if (!json.is_object()) {
             refuse(path,
                    shape.empty() ? "a node is an object" : "each `" + std::string{shape} + "` entry is an object");
             return std::nullopt;
         }
-        Node out;
+        DocNode out;
         out.path = path;
         if (shape.empty()) {
             Json const* const kind = member(json, "kind");
@@ -1448,7 +1448,7 @@ public:
                     out.slots.push_back(NodeSlot{.name = name, .nodes = nodes(member, place, keySpec->shape)});
                     break;
                 case KeyRole::Entry:
-                    if (std::optional<Node> entry = node(member, place, keySpec->shape)) {
+                    if (std::optional<DocNode> entry = node(member, place, keySpec->shape)) {
                         out.slots.push_back(NodeSlot{.name = name, .nodes = {std::move(*entry)}});
                     }
                     break;
@@ -1896,11 +1896,11 @@ public:
         points();
         for (ComponentDecl const& component : _document->components) {
             Frame props{.scope = nullptr, .names = {{"props", Type{}}}, .elements = {}, .row = false, .rowType = {}};
-            for (Node const& node : component.fallback) {
+            for (DocNode const& node : component.fallback) {
                 collectElements(node, props);
             }
             _frames.push_back(std::move(props));
-            for (Node const& node : component.fallback) {
+            for (DocNode const& node : component.fallback) {
                 visit(node);
             }
             _frames.pop_back();
@@ -2491,12 +2491,12 @@ private:
 
     // ---- Nodes.
 
-    [[nodiscard]] static bool opensFrame(Node const& node) {
+    [[nodiscard]] static bool opensFrame(DocNode const& node) {
         return node.scope != nullptr || node.kind == "forEach" || node.kind == "table";
     }
 
     // Records the element ids of @p node's subtree in @p frame, stopping at a node that opens a frame of its own.
-    static void collectElements(Node const& node, Frame& frame) {
+    static void collectElements(DocNode const& node, Frame& frame) {
         if (std::string const* const elementId = node.text("id")) {
             frame.elements.emplace_back(*elementId, node.kind);
         }
@@ -2504,14 +2504,14 @@ private:
             return;
         }
         for (NodeSlot const& slot : node.slots) {
-            for (Node const& child : slot.nodes) {
+            for (DocNode const& child : slot.nodes) {
                 collectElements(child, frame);
             }
         }
     }
 
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one block per node concern.
-    void visit(Node const& node) {
+    void visit(DocNode const& node) {
         if (!node.refused.empty()) {
             return;
         }
@@ -2566,7 +2566,7 @@ private:
         if (frame) {
             Frame inner{.scope = node.scope.get(), .names = {}, .elements = {}, .row = rows, .rowType = rowType};
             for (NodeSlot const& slot : node.slots) {
-                for (Node const& child : slot.nodes) {
+                for (DocNode const& child : slot.nodes) {
                     collectElements(child, inner);
                 }
             }
@@ -2587,7 +2587,7 @@ private:
                 _inBoundaryError = true;
                 _locals.emplace_back("boundary", Type{});
             }
-            for (Node const& child : slot.nodes) {
+            for (DocNode const& child : slot.nodes) {
                 visit(child);
             }
             if (node.kind == "boundary" && slot.name == "error") {

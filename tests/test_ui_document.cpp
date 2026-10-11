@@ -157,21 +157,21 @@ TEST_CASE("ui::parseDocument: a screen's declarations are read whole", "[ui][doc
 TEST_CASE("ui::parseDocument: the view's nodes, entries, scopes and commands", "[ui][document]") {
     ui::Document const document = parsed(kResults);
     REQUIRE(document.view.has_value());
-    std::vector<ui::Node> const& children = *document.view->slot("children");
+    std::vector<ui::DocNode> const& children = *document.view->slot("children");
     REQUIRE(children.size() == 7);
     CHECK(document.view->prop("gap") != nullptr);
 
-    ui::Node const& input = children[0];
+    ui::DocNode const& input = children[0];
     CHECK(*input.text("id") == "filterInput");
     CHECK(*input.text("commitOn") == "change");
     CHECK(input.event("onChange")->at(0).expr("value")->form == Form::Event);
     CHECK(input.maps.at(0).first == "a11y");
 
-    ui::Node const& table = children[1];
+    ui::DocNode const& table = children[1];
     REQUIRE(table.scope != nullptr);
     CHECK(table.scope->state.at(0).name == "draft");
     CHECK(table.scope->path == "/view/children/1/scope");
-    std::vector<ui::Node> const& columns = *table.slot("columns");
+    std::vector<ui::DocNode> const& columns = *table.slot("columns");
     REQUIRE(columns.size() == 2);
     CHECK(columns[0].kind == "column");
     CHECK(columns[0].slot("cell")->at(0).kind == "text");
@@ -184,18 +184,18 @@ TEST_CASE("ui::parseDocument: the view's nodes, entries, scopes and commands", "
     CHECK(sequence.list("seq")->at(0).target == "capture");
     CHECK(*sequence.list("seq")->at(0).text("as") == "c");
 
-    ui::Node const& boundary = children[2];
+    ui::DocNode const& boundary = children[2];
     CHECK(boundary.slot("error")->at(0).event("onClick")->at(0).verb == "retry");
-    ui::Node const& custom = boundary.slot("children")->at(0);
+    ui::DocNode const& custom = boundary.slot("children")->at(0);
     CHECK(*custom.text("name") == "Chart");
     CHECK(custom.maps.at(0).second.at(0).name == "series");
     CHECK(custom.event("on.pointSelected") != nullptr);
 
-    ui::Node const& menu = children[3];
+    ui::DocNode const& menu = children[3];
     CHECK(menu.slot("items")->at(0).slot("items")->at(0).event("onClick")->at(0).expr("args") != nullptr);
     CHECK(children[4].slot("cases")->at(0).prop("when") != nullptr);
     CHECK(children[5].raw.at(0).first == "fields");
-    ui::Node const& dialog = children[6];
+    ui::DocNode const& dialog = children[6];
     CHECK(dialog.scope->state.at(0).name == "choice");
     std::vector<ui::Command> const& leave = *dialog.slot("children")->at(0).event("onClick");
     CHECK(leave.at(0).expr("route") != nullptr);

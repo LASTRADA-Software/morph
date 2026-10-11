@@ -718,7 +718,7 @@ folder.
 | `ui/frontend.hpp` | `AppContext`, `AppSource`, `Bundle`, `ConnectError`, `Backend`, `Frontend`, `FrontendOption`, `FrontendError`, `selectFrontend`, `MountedShell`, `ShellFactory`, `runApp` — the seam `main` picks a frontend through. See `docs/spec/ui/frontend.md`. |
 | `ui/expression.hpp` | `Value`, `Type`, `parseType`, `typeFromSchema`, `decode`, `encode`, `canonicalJson`, `Expr`, `parseExpression`, `ExpressionContext`, `Diagnostics`, `UnitTable`, `DisplayFormatter`, `evaluate` — the `expr/1` values, types, tree, evaluator and function library. See `docs/spec/ui/expressions.md`. |
 | `ui/message.hpp` | `Message`, `parseMessage`, `formatMessage`, `pluralCategory`, `decimalText` — the MessageFormat 2 subset and the CLDR plural rules behind `t` |
-| `ui/document.hpp` | `Document`, `Scope`, `Node`, `Command`, the declarations, `nodeVocabulary`, `commandVocabulary`, `parseDocument`, `Catalog`, `Refusal`, `validate` — the `ui/1` screen document, its parser and its load-time validation. See `docs/spec/ui/document.md`. |
+| `ui/document.hpp` | `Document`, `Scope`, `DocNode`, `Command`, the declarations, `nodeVocabulary`, `commandVocabulary`, `parseDocument`, `Catalog`, `Refusal`, `validate` — the `ui/1` screen document, its parser and its load-time validation. See `docs/spec/ui/document.md`. |
 | `ui/testing/recording_backend.hpp` | `testing::RecordingBackend` — the headless reference backend: operation log, golden dump, interaction helpers |
 | `ui/testing/backend_conformance.hpp` | `testing::ConformanceProbe`, `testing::ConformanceCase`, `testing::conformanceCases()` — the scripted cases every backend passes |
 

@@ -27,7 +27,7 @@ A `Scope` holds a scope's declarations: `ModelDecl` (alias, type, and an instanc
 concurrency, `patch`, `optimistic`, `invalidates`, command lists and `offline`), `WatchDecl` and `CheckDecl`.
 Every declaration records its JSON pointer.
 
-A `Node` is a view node or a structured entry of one. Its `kind` is a node kind, or for an entry its shape
+A `DocNode` is a view node or a structured entry of one. Its `kind` is a node kind, or for an entry its shape
 (`column`, `case`, `tab`, `menuItem`, `action`, `drop`). It holds expression properties, literal keys (`id`,
 `model`, `action`, policies), events as command lists (a custom component's `on` events named `on.<event>`),
 slots of nodes (`children`, `cell`, `columns`, `cases`, `loading`, `error`), objects of expressions (`a11y`,
@@ -114,7 +114,7 @@ and the interpreter are meant to read the same file.
 ## Design decisions
 
 - **Tables, not a struct per kind.** About forty node kinds and two dozen verbs differ in which keys they take,
-  not in how a key is read. One `Node` and one `Command` shape, driven by tables, keep the parser one function
+  not in how a key is read. One `DocNode` and one `Command` shape, driven by tables, keep the parser one function
   per role, and the validator one walk.
 - **Parse stops at the first problem; validation collects them all.** A parse failure leaves no structure to
   check further; a validated document is whole, and an author fixes several refusals in one pass.
