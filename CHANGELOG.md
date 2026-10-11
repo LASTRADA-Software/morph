@@ -193,6 +193,20 @@ API surface).
     `:string`, and `.match` on CLDR plural categories, exact numbers and strings.
   - Shared JSON corpora of documents, expressions and messages under `tests/ui/corpus/`.
 
+- **`morph::ui`: the document interpreter.** `ui::Interpreter::mount` (`interpreter.hpp`) turns a
+  loaded document into reactive state and a view tree mounted through `ui::Mounted`, on any backend.
+  - Queries share a per-session cache (`ui::Session`) keyed by model type, instance, action and
+    canonical body: the latest key wins, `debounce`, `refreshEvery`, `staleTime` and `refreshOn`
+    across screens; mutations run `exclusive`, `serial`, `latest` or `parallel`, with `patch`,
+    optimistic writes that roll back in any order, and invalidation in the success batch.
+  - Relations: controlled inputs that never overwrite the user's edit, checks, `ready`, the
+    `showErrors` policies, watches with `source: "user"`, dependent options with `onStale`.
+  - Every command of `ui/1`; those only the application can carry out (`navigate`, `focus`, `host`,
+    `switchBackend`, transfers, `signIn`, …) go through `ui::InterpreterHost`.
+  - Model calls go through `ui::Dispatcher`; `ui::BridgeDispatcher` sends them over the bridge's
+    model-free seams (`bindByType`, `executeRaw`, `attach`).
+  - `form`, `collection`, `wizard` and a model-backed `table` are reported and not yet lowered.
+
 - **`morph::ui`: the view tree, its mount and the frontend seam.** Header-only, in the base `morph`
   target.
   - An immutable view tree of the UI document's palette (`view.hpp`): every property a constant or a
