@@ -315,14 +315,16 @@ fetcher that goes through the cache.
   - `parallel`: every run is sent; replies are applied as they arrive.
 - `invalidates` refetches the named queries after a success, in one batch with the result, so the
   screen updates in one frame.
-- `patch` replaces one row of a query's cached list (the row whose key equals `key`) with `with`,
+- `patch` replaces one row of a query's cached list (the row whose `id` field equals `key`) with
+  `with` — a record `with` is merged over a record row, its fields replacing the row's —
   without refetching. `key` and `with` are evaluated against the reply, bound as `result`.
 - `optimistic` has `patch`'s shape — `{"query": "q", "key": e, "with": e}` — but is applied when the run
-  starts, evaluated against the run's body bound as `body`. The reply replaces it (and `patch`, when
-  declared, applies to the reply); a failure rolls the row back to its value before the run, and
+  starts, evaluated against the run's body bound as `body`. A success confirms the written fields
+  (and `patch`, when declared, then applies the reply); a failure rolls the row back to its value
+  without that run's write, and
   `onError` runs after the rollback. Only client-owned fields may be written optimistically: a field
   the server calculates (§7) is never predicted, and a document whose `with` names one is refused at
-  load. Overlapping optimistic runs on one row roll back in reverse order, so the row ends at its
+  load. Overlapping optimistic runs on one row are layers over the confirmed value, so whatever order they settle in, the row ends at its
   last confirmed value.
 - `onSuccess` and `onError` are command lists (§8). The reply is readable as `{"result": "capture"}`
   until the next run.
@@ -468,7 +470,8 @@ without refetching the list.
    draft's generation, and the client applies a reply's input values only to inputs whose draft is
    unchanged since that generation. The server may normalise an untouched input, such as rounding it
    to its declared decimals.
-2. **Triggering.** An input's `commitOn` is `change`, `blur` or `enter`. `debounce` on the query
+2. **Triggering.** An input's `commitOn` is `change` (the default), `blur` or `enter`: the edit
+   commits, and the input's `onChange` runs, on every edit, on focus leaving or on Enter. `debounce` on the query
    batches fast typing into one request.
 3. **Latest wins, per row.** A reply from a superseded request is dropped. Rows are independent:
    editing row B while row A is in flight affects neither.
@@ -523,11 +526,11 @@ execute and every evaluation, whatever the client sent.
 | `{"setLocale": "de"}` | Changes the active locale and re-resolves every `t`; stored as a preference (spec 6 §19). |
 | `{"notify": e, "role": "success"}` | Shows a transient message. |
 | `{"seq": [...]}`, `{"all": [...]}` | Runs commands in order, stopping at a failure; or together, waiting for all. |
-| `{"if": [cond, [...], [...]]}` | Runs one branch. |
+| `{"if": [cond, [...], [...]]}` | Runs one branch; a condition that is not a `bool` (`null` included) runs neither. |
 | `{"cancelClose": true}` | Keeps the screen open; valid only in `onClose` (spec 6 §3). |
 | `{"retry": true}` | Refetches the failed queries of the innermost `boundary`; valid only inside a boundary's `error` (§9). |
 | `{"signIn": {"from": "m"}}`, `{"signOut": true}` | Installs the session token mutation `m` replied with and reloads the catalog; or ends the session and unmounts every screen (spec 6 §5). |
-| `{"upload": e, "to": "m", "as": "x"?, "id": "t"?}` | Sends a file the user picked or dropped through the server's file side channel, then runs mutation `m` with its reference (vocabulary `files/1`); `id` names the transfer for `progress`. |
+| `{"upload": e, "to": "m", "as": "x"?, "id": "t"?}` | Sends a file the user picked or dropped through the server's file side channel, then runs mutation `m` with its reference added to the mutation's body under `as` (`file` by default), since a mutation's body is checked where it is declared and cannot name the reference (vocabulary `files/1`); `id` names the transfer for `progress`. |
 | `{"download": e, "save": "dialog", "name": e?}` or `{"download": e, "to": "preview", "as": "url"}` | Fetches a file by reference through the side channel and lets the user save it, or binds a local temporary reference to state `url` for a viewer (`files/1`, spec 6 §18). |
 
 A command list triggered by one event runs in one batch: the screen updates once.
