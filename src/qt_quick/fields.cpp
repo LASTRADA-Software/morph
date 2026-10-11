@@ -5,6 +5,7 @@
 #include <QVariantList>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <utility>
 
 #include "qt_quick/kinds.hpp"
@@ -322,7 +323,7 @@ void SliderImpl::setOnChange(std::function<void(std::int64_t)> onChange) {
 
 std::int64_t SliderImpl::value() const {
     QObject const* const control = part("control");
-    return control != nullptr ? static_cast<std::int64_t>(std::llround(control->property("value").toDouble())) : 0;
+    return control != nullptr ? static_cast<std::int64_t>(std::round(control->property("value").toDouble())) : 0;
 }
 
 // ── FilePicker ────────────────────────────────────────────────────────────
