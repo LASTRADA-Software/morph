@@ -88,5 +88,6 @@ var searchData=
   ['owner_5fstrand_2ehpp_85',['owner_strand.hpp',['../de/dc5/owner__strand_8hpp.html',1,'']]],
   ['ownerproberecorder_86',['OwnerProbeRecorder',['../d4/d2d/classmorph_1_1testing_1_1OwnerProbeRecorder.html',1,'morph::testing::OwnerProbeRecorder'],['../d4/d2d/classmorph_1_1testing_1_1OwnerProbeRecorder.html#a610539fd2e368f75573e4afdb1569719',1,'morph::testing::OwnerProbeRecorder::OwnerProbeRecorder()']]],
   ['ownersteps_87',['ownerSteps',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a61db7a1ca34f660dce7519dc4d069278',1,'morph::table::EngineStats']]],
-  ['ownerstrand_88',['OwnerStrand',['../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html',1,'morph::exec::OwnerStrand'],['../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html#ad9af1812fe0fdc7c7e8a6f1f1bd4d7b8',1,'morph::exec::OwnerStrand::OwnerStrand()']]]
+  ['ownerstrand_88',['OwnerStrand',['../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html',1,'morph::exec::OwnerStrand'],['../dc/db1/classmorph_1_1exec_1_1OwnerStrand.html#ad9af1812fe0fdc7c7e8a6f1f1bd4d7b8',1,'morph::exec::OwnerStrand::OwnerStrand()']]],
+  ['ownthread_89',['OwnThread',['../d2/d85/io__loop_8hpp.html#a3d06d20eacf04e68aca35ec8931b46ffa9931420c734ac191e1aa16582b98f263',1,'morph::exec']]]
 ];

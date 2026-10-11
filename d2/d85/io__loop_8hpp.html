@@ -120,8 +120,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d85/io__loo
   <div class="headertitle"><div class="title">io_loop.hpp File Reference</div></div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><code>#include &lt;core/net/EventLoop.hpp&gt;</code><br />
+<div class="textblock"><code>#include &lt;cassert&gt;</code><br />
+<code>#include &lt;core/async/ExecutorContext.hpp&gt;</code><br />
+<code>#include &lt;core/net/EventLoop.hpp&gt;</code><br />
 <code>#include &lt;core/net/PlatformLoop.hpp&gt;</code><br />
+<code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;exception&gt;</code><br />
 <code>#include &lt;future&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
@@ -137,21 +140,62 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d85/io__loo
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aexec_3A_3AIoLoop" id="r_morph_3A_3Aexec_3A_3AIoLoop"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html">morph::exec::IoLoop</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Owns a <span class="tt">core::net::PlatformLoop</span> and, natively, the one thread that runs it.  <a href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Owns a <span class="tt">core::net::PlatformLoop</span> and, for <span class="tt"><a class="el" href="#a3d06d20eacf04e68aca35ec8931b46ffa9931420c734ac191e1aa16582b98f263" title="The IoLoop starts one thread that runs the loop until it is destroyed.">IoLoopDriver::OwnThread</a></span> natively, the one thread that runs it.  <a href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aexec_3A_3AIoLoop_3A_3AWeak" id="r_morph_3A_3Aexec_3A_3AIoLoop_3A_3AWeak"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d75/classmorph_1_1exec_1_1IoLoop_1_1Weak.html">morph::exec::IoLoop::Weak</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A non-owning handle that posts to the loop only while it exists.  <a href="../../d2/d75/classmorph_1_1exec_1_1IoLoop_1_1Weak.html#details">More...</a><br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:a3d06d20eacf04e68aca35ec8931b46ff" id="r_a3d06d20eacf04e68aca35ec8931b46ff"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a3d06d20eacf04e68aca35ec8931b46ff">morph::exec::IoLoopDriver</a> : std::uint8_t { <a class="el" href="#a3d06d20eacf04e68aca35ec8931b46ffa9931420c734ac191e1aa16582b98f263">OwnThread</a>
+, <a class="el" href="#a3d06d20eacf04e68aca35ec8931b46ffa14e7dd71a82eb3c2500ac2687efef82b">Caller</a>
+ }</td></tr>
+<tr class="memdesc:a3d06d20eacf04e68aca35ec8931b46ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Who turns an <span class="tt"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html" title="Owns a core::net::PlatformLoop and, for IoLoopDriver::OwnThread natively, the one thread that runs it...">IoLoop</a></span>.  <a href="#a3d06d20eacf04e68aca35ec8931b46ff">More...</a><br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">IoLoop</span> — the one I/O loop an application runs, and the owner of every socket, timer and probe built on it.</p>
 <p><span class="tt"><a class="el" href="../../d5/d98/classmorph_1_1net_1_1SocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over a raw-socket RFC 6455 WebSocket co...">morph::net::SocketBackend</a></span>, <span class="tt"><a class="el" href="../../dc/d9a/classmorph_1_1net_1_1SocketServer.html" title="Raw-socket WebSocket server front for morph::backend::RemoteServer.">morph::net::SocketServer</a></span>, <span class="tt">TimeoutScheduler</span> and <span class="tt">offline::NetworkMonitor</span> own no thread. Each keeps its state on a <span class="tt">core::net::PlatformLoop</span> and touches it only in tasks that loop runs; its public verbs post to the loop and return. An application constructs one <span class="tt">IoLoop</span> and hands it to every one of them, so one thread carries every connection, every deadline and the connectivity probe.</p>
 <dl class="section user"><dt>Who turns the loop</dt><dd><ul>
-<li><b>Native:</b> the <span class="tt">IoLoop</span> owns one thread that runs the loop until the <span class="tt">IoLoop</span> is destroyed.</li>
-<li><b>Single-threaded WebAssembly</b> (<span class="tt">__EMSCRIPTEN__</span> without <span class="tt">__EMSCRIPTEN_PTHREADS__</span>): there is no thread to start. The loop is host-driven — the browser's timer pumps it — and the one thread there is is always the loop's, so a verb runs its body inline. </li>
+<li><b><span class="tt">IoLoopDriver::OwnThread</span></b> (native default): the <span class="tt">IoLoop</span> owns one thread that runs the loop until the <span class="tt">IoLoop</span> is destroyed.</li>
+<li><b><span class="tt">IoLoopDriver::Caller</span></b>: no thread is started. The constructing thread is the loop's and turns it — <span class="tt">loop().runOnce()</span>, <span class="tt">loop().runUntilIdle()</span> or a <span class="tt">blockOn()</span> — so a terminal UI and its sockets, timers and bridge callbacks share that one thread. No other thread may turn it.</li>
+<li><b>Single-threaded WebAssembly</b> (<span class="tt">__EMSCRIPTEN__</span> without <span class="tt">__EMSCRIPTEN_PTHREADS__</span>): there is no thread to start whichever driver is asked for. The loop is host-driven — the browser's timer pumps it — and the one thread there is is always the loop's, so a verb runs its body inline. </li>
 </ul>
 </dd></dl>
 
 <p class="definition">Definition in file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
-</div></div><!-- contents -->
+</div><a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+<a id="a3d06d20eacf04e68aca35ec8931b46ff" name="a3d06d20eacf04e68aca35ec8931b46ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3d06d20eacf04e68aca35ec8931b46ff">&#9670;&#160;</a></span>IoLoopDriver</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#a3d06d20eacf04e68aca35ec8931b46ff">morph::exec::IoLoopDriver</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Who turns an <span class="tt">IoLoop</span>. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="a3d06d20eacf04e68aca35ec8931b46ffa9931420c734ac191e1aa16582b98f263" name="a3d06d20eacf04e68aca35ec8931b46ffa9931420c734ac191e1aa16582b98f263"></a>OwnThread&#160;</td><td class="fielddoc"><p>The <span class="tt"><a class="el" href="../../dd/d10/classmorph_1_1exec_1_1IoLoop.html" title="Owns a core::net::PlatformLoop and, for IoLoopDriver::OwnThread natively, the one thread that runs it...">IoLoop</a></span> starts one thread that runs the loop until it is destroyed. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a3d06d20eacf04e68aca35ec8931b46ffa14e7dd71a82eb3c2500ac2687efef82b" name="a3d06d20eacf04e68aca35ec8931b46ffa14e7dd71a82eb3c2500ac2687efef82b"></a>Caller&#160;</td><td class="fielddoc"><p>No thread is started: the constructing thread turns the loop, and is the loop's between turns as well as inside them. No other thread may turn it; a debug build asserts when a task posted to it runs on another. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/d85/io__loop_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d2/d85/io__loop_8hpp_source.html">io_loop.hpp</a>.</p>
+
+</div>
+</div>
+</div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">
 <div id="page-nav-resize-handle"></div>

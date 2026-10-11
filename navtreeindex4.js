@@ -1,5 +1,7 @@
 var NAVTREEINDEX4 =
 {
+"d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#ab5694053ad981a7aae63777bf3cd29d4":[3,0,0,23,28,0],
+"d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#abfe9f8e1ed2759f606aa3ffc0f3766d3":[1,0,0,1,27,2],
 "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#abfe9f8e1ed2759f606aa3ffc0f3766d3":[3,0,0,23,28,2],
 "d4/d8d/structmorph_1_1forms_1_1Or.html":[3,0,0,8,21],
 "d4/d8d/structmorph_1_1forms_1_1Or.html#a637fff1e1257ce2f4c099b77191b712b":[3,0,0,8,21,2],
@@ -247,7 +249,5 @@ var NAVTREEINDEX4 =
 "d5/dda/structmorph_1_1units_1_1Quantity.html#a79fb7b381de1399ff0fe3ffba0bba7bd":[3,0,0,24,5,3],
 "d5/dda/structmorph_1_1units_1_1Quantity.html#a7a80d984d0cc6760a677a2c4f802d58f":[3,0,0,24,5,15],
 "d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee":[3,0,0,24,5,6],
-"d5/dda/structmorph_1_1units_1_1Quantity.html#ad7d272b726f815feba425a6c56ecafea":[3,0,0,24,5,9],
-"d5/dda/structmorph_1_1units_1_1Quantity.html#ae92d43357a91c8a82846e542c91caa64":[3,0,0,24,5,13],
-"d5/dda/structmorph_1_1units_1_1Quantity.html#aea78e51ec8a09cd171380657543455ff":[3,0,0,24,5,1]
+"d5/dda/structmorph_1_1units_1_1Quantity.html#ad7d272b726f815feba425a6c56ecafea":[3,0,0,24,5,9]
 };
