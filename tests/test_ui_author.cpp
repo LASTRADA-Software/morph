@@ -1044,3 +1044,69 @@ TEST_CASE("MORPH_REGISTER_SCREEN enrols at static initialisation and keeps refus
     CHECK(registry.refusals().front().document == "author.refused");
     CHECK(registry.refusals().front().path == "/view");
 }
+
+TEST_CASE("only a ref or row read has fields and names a target", "[ui][author]") {
+    // A form with companion keys, and a form whose value is not a name, are not named reads.
+    CHECK_THROWS_AS(ui::t("k", "Fallback").at("x"), ui::AuthoringError);
+    CHECK_THROWS_AS(ui::list({1}).at("x"), ui::AuthoringError);
+    CHECK_THROWS_AS(ui::AnyHandle{1}.at("x"), ui::AuthoringError);
+    // A row field is read, but never written.
+    CHECK_THROWS_AS(ui::set(ui::row("x"), 1), ui::AuthoringError);
+    CHECK_THROWS_AS(ui::reset(ui::env("locale")), ui::AuthoringError);
+}
+
+TEST_CASE("options left unset write no key", "[ui][author]") {
+    CHECK(text(ui::spacer().a11y({}, "separator")) == R"({"kind":"spacer","a11y":{"role":"separator"}})");
+    CHECK(text(ui::select({.label = "Pick"})) == R"({"kind":"select","label":"Pick"})");
+    ui::ModelHandle<SampleModel> const sample{"sample"};
+    CHECK(text(ui::dataTable<ListProjects>(sample)) ==
+          R"({"kind":"table","model":"sample","action":"Lims_ListProjects"})");
+}
+
+TEST_CASE("a scope that declares one kind of thing writes it", "[ui][author]") {
+    auto const emitted = ui::screen("author.scopes", [](ui::Scope& screen) {
+                             auto sample = screen.model<SampleModel>("sample", {.instance = ui::Instance::Private});
+                             auto withLet = [](ui::DeclScope& scope) {
+                                 static_cast<void>(scope.let("doubled", ui::AnyHandle{2} * 2));
+                                 return ui::spacer();
+                             };
+                             auto withQuery = [&sample](ui::DeclScope& scope) {
+                                 static_cast<void>(scope.query<GetHeader>("inner", sample));
+                                 return ui::spacer();
+                             };
+                             auto withMutation = [&sample](ui::DeclScope& scope) {
+                                 static_cast<void>(scope.mutation<LoadSample>("innerLoad", sample));
+                                 return ui::spacer();
+                             };
+                             auto withCheck = [](ui::DeclScope& scope) {
+                                 scope.check({.name = "always", .assertion = true});
+                                 return ui::spacer();
+                             };
+                             return ui::column({ui::dialog(ui::element("a"), {.title = "A"}, withLet),
+                                                ui::dialog(ui::element("b"), {.title = "B"}, withQuery),
+                                                ui::dialog(ui::element("c"), {.title = "C"}, withMutation),
+                                                ui::dialog(ui::element("d"), {.title = "D"}, withCheck)});
+                         }).emit();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.find(R"("scope":{"let":{"doubled")") != std::string::npos);
+    CHECK(emitted->text.find(R"("scope":{"queries":{"inner")") != std::string::npos);
+    CHECK(emitted->text.find(R"("scope":{"mutations":{"innerLoad")") != std::string::npos);
+    CHECK(emitted->text.find(R"("scope":{"checks":[{"id":"always")") != std::string::npos);
+}
+
+TEST_CASE("a component without a fallback is refused when the screen loads", "[ui][author][registration]") {
+    auto const refusal = refusalOf(ui::screen("author.noFallback", [](ui::Scope& screen) {
+        auto chart = screen.component("Chart", {.host = "Chart", .version = 1});
+        return ui::custom(chart).a11y("Chart");
+    }));
+    REQUIRE(refusal.has_value());
+    CHECK(refusal->path == "/components/Chart");
+    CHECK(refusal->reason == "a component names a `fallback` of built-in nodes");
+}
+
+TEST_CASE("accessibility skips what a hand-built document leaves out", "[ui][author][a11y]") {
+    morph::ui::Document document;
+    document.id = "built";
+    document.components.emplace("Chart", morph::ui::Component{});
+    CHECK_FALSE(ui::checkAccessibility(document).has_value());
+}

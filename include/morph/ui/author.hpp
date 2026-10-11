@@ -370,10 +370,10 @@ inline void putSection(Json& object, std::string_view key, Json const& section) 
     }
 }
 
-/// @brief Whether a JSON object has no members.
+/// @brief How many members a JSON object has.
 /// @param object The object.
-/// @return True when it has none.
-[[nodiscard]] inline bool emptyObject(Json const& object) { return std::get<Json::object_t>(object.data).empty(); }
+/// @return The count.
+[[nodiscard]] inline std::size_t members(Json const& object) { return std::get<Json::object_t>(object.data).size(); }
 
 /// @brief A document value as a constant expression: a scalar as itself, a list, record, decimal or quantity
 ///        wrapped in `{"lit": v}`.
@@ -1243,7 +1243,7 @@ public:
     template <typename Member, typename V>
         requires detail::Operand<V> && (detail::assignable<typename detail::ValueOf<V>::type, Member>())
     BodyField(Member Action::* member, V const& value)
-        : _name{detail::memberName(member)}, _json{detail::operandJson(value)} {}
+        : _name{detail::memberName(member)}, _json(detail::operandJson(value)) {}
 
     /// @brief The field's JSON name.
     /// @return The name.
@@ -1475,7 +1475,9 @@ class Command {
 public:
     /// @brief A command over its JSON, for a form no builder spells.
     /// @param json The command.
-    explicit Command(Json json) : _json{std::move(json)} {}
+    // Parentheses, not braces: a braced Json from one Json may take glaze's initializer-list constructor and wrap
+    // it in an array.
+    explicit Command(Json json) : _json(std::move(json)) {}
 
     /// @brief The command's JSON.
     /// @return The JSON.
@@ -1584,7 +1586,7 @@ public:
     /// @brief A node over its JSON, for a kind no builder spells.
     /// @param json  The node.
     /// @param facts The catalog facts of the models and actions it names.
-    explicit Node(Json json, CatalogFacts facts = {}) : _json{std::move(json)}, _facts{std::move(facts)} {}
+    explicit Node(Json json, CatalogFacts facts = {}) : _json(std::move(json)), _facts{std::move(facts)} {}
 
     /// @brief The node's JSON.
     /// @return The JSON.
@@ -1952,8 +1954,10 @@ public:
     /// @brief Whether the scope declares nothing.
     /// @return True when it declares nothing.
     [[nodiscard]] bool empty() const {
-        return detail::emptyObject(_models) && detail::emptyObject(_state) && detail::emptyObject(_lets) &&
-               detail::emptyObject(_queries) && detail::emptyObject(_mutations) && _watches.empty() && _checks.empty();
+        std::size_t const declared = detail::members(_models) + detail::members(_state) + detail::members(_lets) +
+                                     detail::members(_queries) + detail::members(_mutations) + _watches.size() +
+                                     _checks.size();
+        return declared == 0;
     }
 
     /// @brief Writes the declarations into a document or a `"scope"` object, in the document's order.
