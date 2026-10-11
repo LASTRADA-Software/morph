@@ -172,6 +172,8 @@ add_executable(morph_tests
     test_ui_expression_eval.cpp
     test_ui_message.cpp
     test_ui_document.cpp
+    test_ui_document_validate.cpp
+    test_ui_expression_corpus.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
@@ -214,7 +216,9 @@ target_compile_definitions(morph_tests PRIVATE
 # because that half cannot be handed a path at runtime; this half can.
 target_compile_definitions(morph_tests PRIVATE
     MORPH_FORMS_RULE_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/../src/qt/forms/tests/data/rule_corpus.json"
-    MORPH_FORMS_INSTANCE_BOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/../src/qt/forms/tests/data/instance_bounds.json")
+    MORPH_FORMS_INSTANCE_BOUNDS="${CMAKE_CURRENT_SOURCE_DIR}/../src/qt/forms/tests/data/instance_bounds.json"
+    MORPH_UI_DOCUMENT_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/data/ui/documents.json"
+    MORPH_UI_EXPRESSION_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/data/ui/expressions.json")
 
 target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 

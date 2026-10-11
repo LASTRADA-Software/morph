@@ -1,0 +1,91 @@
+{
+  "units": {
+    "units": [{"id": "mg_per_l", "display": "mg/L", "places": 1}, {"id": "g_per_l", "display": "g/L", "places": 3},
+              {"id": "kg_per_m3", "display": "kg/m³", "places": 3}, {"id": "furlong", "display": "fur", "places": 0}],
+    "ratios": [{"from": "g_per_l", "to": "mg_per_l", "fromTo": {"num": 1000, "den": 1, "dp": 0}},
+               {"from": "kg_per_m3", "to": "g_per_l", "fromTo": {"num": 1, "den": 1, "dp": 0}}]
+  },
+  "names": {
+    "n": 7, "big": 9223372036854775807, "half": {"num": 1, "den": 2, "dp": 1}, "s": "Zoë",
+    "flag": true, "nothing": null, "xs": [4, 1, 3], "words": ["b", "a"],
+    "dose": {"num": 1500, "den": 1, "dp": 1, "unit": "mg_per_l"},
+    "rows": [{"id": 1, "open": true, "mass": {"num": 267, "den": 100, "dp": 2}},
+             {"id": 2, "open": null, "mass": {"num": 268, "den": 100, "dp": 2}},
+             {"id": 3, "open": false, "mass": null}]
+  },
+  "cases": [
+    {"name": "a constant", "expr": 42, "value": 42},
+    {"name": "lit wraps an object", "expr": {"lit": {"fn": "x"}}, "value": {"fn": "x"}},
+    {"name": "a name and its path", "expr": {"ref": "rows"}, "value": [{"id": 1, "open": true, "mass": {"num": 267, "den": 100, "dp": 2}}, {"id": 2, "open": null, "mass": {"num": 268, "den": 100, "dp": 2}}, {"id": 3, "open": false, "mass": null}]},
+    {"name": "a missing field is null", "expr": {"ref": "n.deeper"}, "value": null},
+
+    {"name": "and: false decides over null", "expr": {"fn": "and", "args": [null, false]}, "value": false},
+    {"name": "and: null without false", "expr": {"fn": "and", "args": [true, null]}, "value": null},
+    {"name": "or: true decides over null", "expr": {"fn": "or", "args": [null, true]}, "value": true},
+    {"name": "or: null without true", "expr": {"fn": "or", "args": [false, null]}, "value": null},
+    {"name": "not null", "expr": {"fn": "not", "args": [null]}, "value": null},
+    {"name": "not on an int", "expr": {"fn": "not", "args": [1]}, "report": "`not` takes a bool"},
+
+    {"name": "eq across int and decimal", "expr": {"fn": "eq", "args": [{"lit": {"num": 5, "den": 10, "dp": 1}}, {"ref": "half"}]}, "value": true},
+    {"name": "eq across units", "expr": {"fn": "eq", "args": [{"ref": "dose"}, {"lit": {"num": 3, "den": 2, "dp": 3, "unit": "g_per_l"}}]}, "value": true},
+    {"name": "lt across a chain of ratios", "expr": {"fn": "lt", "args": [{"ref": "dose"}, {"lit": {"num": 2, "den": 1, "dp": 0, "unit": "kg_per_m3"}}]}, "value": true},
+    {"name": "ne on strings", "expr": {"fn": "ne", "args": ["a", "b"]}, "value": true},
+    {"name": "ge on strings", "expr": {"fn": "ge", "args": ["b", "a"]}, "value": true},
+    {"name": "le with null", "expr": {"fn": "le", "args": [{"ref": "nothing"}, 1]}, "value": null},
+    {"name": "gt on unconvertible units", "expr": {"fn": "gt", "args": [{"ref": "dose"}, {"lit": {"num": 1, "den": 1, "dp": 0, "unit": "furlong"}}]}, "report": "no conversion from `furlong` to `mg_per_l`"},
+
+    {"name": "add ints", "expr": {"fn": "add", "args": [{"ref": "n"}, 3]}, "value": 10},
+    {"name": "add int and decimal", "expr": {"fn": "add", "args": [1, {"ref": "half"}]}, "value": {"num": 3, "den": 2, "dp": 1}},
+    {"name": "add across units keeps the left unit", "expr": {"fn": "add", "args": [{"ref": "dose"}, {"lit": {"num": 1, "den": 2, "dp": 1, "unit": "g_per_l"}}]}, "value": {"num": 2000, "den": 1, "dp": 1, "unit": "mg_per_l"}},
+    {"name": "add overflows", "expr": {"fn": "add", "args": [{"ref": "big"}, 1]}, "report": "overflow"},
+    {"name": "sub", "expr": {"fn": "sub", "args": [1, {"ref": "half"}]}, "value": {"num": 1, "den": 2, "dp": 1}},
+    {"name": "mul a quantity", "expr": {"fn": "mul", "args": [{"ref": "dose"}, 2]}, "value": {"num": 3000, "den": 1, "dp": 1, "unit": "mg_per_l"}},
+    {"name": "mul overflows", "expr": {"fn": "mul", "args": [{"ref": "big"}, 2]}, "report": "overflow"},
+    {"name": "div is exact", "expr": {"fn": "div", "args": [1, 3]}, "value": {"num": 1, "den": 3, "dp": 0}},
+    {"name": "div by zero", "expr": {"fn": "div", "args": [{"ref": "n"}, 0]}, "report": "division by zero"},
+    {"name": "neg", "expr": {"fn": "neg", "args": [{"ref": "half"}]}, "value": {"num": -1, "den": 2, "dp": 1}},
+    {"name": "round half to even, down", "expr": {"fn": "round", "args": [{"lit": {"num": 5, "den": 2, "dp": 1}}, 0]}, "value": {"num": 2, "den": 1, "dp": 0}},
+    {"name": "round half to even, up", "expr": {"fn": "round", "args": [{"lit": {"num": 7, "den": 2, "dp": 1}}, 0]}, "value": {"num": 4, "den": 1, "dp": 0}},
+    {"name": "add with null", "expr": {"fn": "add", "args": [{"ref": "nothing"}, 1]}, "value": null},
+
+    {"name": "engaged", "expr": {"fn": "engaged", "args": [{"ref": "nothing"}]}, "value": false},
+    {"name": "coalesce", "expr": {"fn": "coalesce", "args": [{"ref": "nothing"}, "fallback"]}, "value": "fallback"},
+
+    {"name": "concat", "expr": {"fn": "concat", "args": ["a", "b"]}, "value": "ab"},
+    {"name": "format", "expr": {"fn": "format", "args": ["{0} of {1}", {"ref": "half"}, {"ref": "n"}]}, "value": "0.5 of 7"},
+    {"name": "trim", "expr": {"fn": "trim", "args": ["  x \n"]}, "value": "x"},
+    {"name": "length counts code points", "expr": {"fn": "length", "args": [{"ref": "s"}]}, "value": 3},
+    {"name": "isEmpty", "expr": {"fn": "isEmpty", "args": [""]}, "value": true},
+    {"name": "contains", "expr": {"fn": "contains", "args": [{"ref": "s"}, "ë"]}, "value": true},
+
+    {"name": "count", "expr": {"fn": "count", "args": [{"ref": "xs"}]}, "value": 3},
+    {"name": "sum", "expr": {"fn": "sum", "args": [{"ref": "xs"}]}, "value": 8},
+    {"name": "mean is exact and rounds half to even", "expr": {"fn": "mean", "args": [{"list": [{"lit": {"num": 267, "den": 100, "dp": 2}}, {"lit": {"num": 268, "den": 100, "dp": 2}}]}]}, "value": {"num": 268, "den": 100, "dp": 2}},
+    {"name": "mean with a null element", "expr": {"fn": "mean", "args": [{"map": {"ref": "rows"}, "as": "r", "to": {"ref": "r.mass"}}]}, "value": null},
+    {"name": "min", "expr": {"fn": "min", "args": [{"ref": "xs"}]}, "value": 1},
+    {"name": "max of strings", "expr": {"fn": "max", "args": [{"ref": "words"}]}, "value": "b"},
+    {"name": "any is Kleene", "expr": {"fn": "any", "args": [{"map": {"ref": "rows"}, "as": "r", "to": {"ref": "r.open"}}]}, "value": true},
+    {"name": "all is Kleene", "expr": {"fn": "all", "args": [{"list": [true, null]}]}, "value": null},
+    {"name": "first", "expr": {"fn": "first", "args": [{"ref": "words"}]}, "value": "b"},
+    {"name": "includes", "expr": {"fn": "includes", "args": [{"ref": "xs"}, 3]}, "value": true},
+    {"name": "indexOf", "expr": {"fn": "indexOf", "args": [{"ref": "xs"}, 1]}, "value": 1},
+    {"name": "count on a string", "expr": {"fn": "count", "args": ["abc"]}, "report": "`count` takes a list"},
+
+    {"name": "number", "expr": {"fn": "number", "args": [{"ref": "half"}]}, "value": "0.5"},
+    {"name": "decimal", "expr": {"fn": "decimal", "args": [{"ref": "half"}, 3]}, "value": "0.500"},
+    {"name": "quantity in another unit", "expr": {"fn": "quantity", "args": [{"ref": "dose"}, "g_per_l"]}, "value": "1.5\u00a0g/L"},
+    {"name": "money", "expr": {"fn": "money", "args": [{"ref": "half"}, "EUR"]}, "value": "0.5\u00a0EUR"},
+    {"name": "t falls back", "expr": {"t": "missing", "fallback": "{$n :number} left", "args": {"n": {"ref": "n"}}}, "value": "7 left"},
+    {"name": "t plural in Polish", "locale": "pl", "expr": {"t": "missing", "fallback": ".input {$n :number} .match $n one {{{$n} próbka}} few {{{$n} próbki}} * {{{$n} próbek}}", "args": {"n": {"ref": "n"}}}, "value": "7 próbek"},
+    {"name": "t plural in Arabic", "locale": "ar", "expr": {"t": "missing", "fallback": ".input {$n :number} .match $n zero {{zero}} one {{one}} two {{two}} few {{few}} many {{many}} * {{other}}", "args": {"n": 103}}, "value": "few"},
+
+    {"name": "if", "expr": {"if": [{"ref": "flag"}, "yes", "no"]}, "value": "yes"},
+    {"name": "if on null", "expr": {"if": [{"ref": "nothing"}, "yes", "no"]}, "value": null},
+    {"name": "obj and list", "expr": {"obj": {"a": {"list": [1, {"ref": "n"}]}}}, "value": {"a": [1, 7]}},
+    {"name": "map", "expr": {"map": {"ref": "rows"}, "as": "r", "to": {"ref": "r.id"}}, "value": [1, 2, 3]},
+    {"name": "filter drops null and false", "expr": {"map": {"filter": {"ref": "rows"}, "as": "r", "where": {"ref": "r.open"}}, "as": "r", "to": {"ref": "r.id"}}, "value": [1]},
+    {"name": "map over null", "expr": {"map": {"ref": "nothing"}, "as": "r", "to": 1}, "value": null},
+
+    {"name": "the size bound", "expr": {"list": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]}, "refused": "the expression holds more than 256 nodes"}
+  ]
+}
