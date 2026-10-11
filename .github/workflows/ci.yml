@@ -3172,6 +3172,28 @@ jobs:
           sys.exit(1 if missing else 0)
           PY
 
+      # libunicode, which core::tui links when MORPH_BUILD_TUI is on, writes its UCD tables and enum headers
+      # (`ucd_enums.h` and the rest) at build time, from a custom command, unless a previous build left them in its
+      # source tree. Without them every src/tui translation unit stops at `'libunicode/ucd_enums.h' file not found`,
+      # and clang-tidy then reports what the half-parsed file seems to say -- a variable that is assigned "can be
+      # const". Building the one output runs the generator and nothing else; the check after it fails the step when
+      # the header is still missing, whichever way it got there.
+      - name: Generate libunicode's UCD headers the tui sources include
+        run: |
+          cd build/clang-debug
+          generated="$(ninja -t targets all | sed -n 's|^\(.*libunicode/ucd_enums\.h\): .*|\1|p' | head -1)"  # pipefail-ok: head closes the pipe early
+          if [ -n "$generated" ]; then
+            ninja "$generated"
+          else
+            echo "ucd_enums.h has no build edge: libunicode found its generated files already in place"
+          fi
+          found="$(find "$GITHUB_WORKSPACE" -path '*/src/libunicode/ucd_enums.h' -print -quit)"
+          if [ -z "$found" ]; then
+            echo "::error::libunicode/ucd_enums.h is still missing; the src/tui translation units cannot be analysed"
+            exit 1
+          fi
+          echo "ok: $found"
+
       - name: Run clang-tidy-diff on changed lines
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
