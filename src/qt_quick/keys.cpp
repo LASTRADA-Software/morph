@@ -108,7 +108,7 @@ std::optional<Qt::Key> keyNamed(std::string_view name) {
         int number = 0;
         std::string_view const digits = name.substr(1);
         char const* const last = std::to_address(digits.cend());
-        auto const [end, error] = std::from_chars(digits.data(), last, number);
+        auto const [end, error] = std::from_chars(std::to_address(digits.cbegin()), last, number);
         if (error == std::errc{} && end == last && number >= 1 && number <= 24) {
             return static_cast<Qt::Key>(Qt::Key_F1 + (number - 1));
         }
