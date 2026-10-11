@@ -409,14 +409,19 @@ after its destruction. It must be destroyed on the loop's thread, outside a turn
 `core::tui::Component` subclasses, private to `src/tui/`: a stack and grid layout solver in cells;
 panels; labels with text roles as theme colours; buttons, checkboxes and text inputs over
 `InputField`; selects as lists or overlays; tabs; dialogs as overlays with focus kept inside them;
-scroll; busy spinners; tables; date-time fields; sliders; a file path field. A key reaches an
-ancestor only when the ancestor opts in. Drag-and-drop (spec 5 §9) uses core-cpp 0.7's pointer
-capture; a terminal without mouse reporting ignores `drag` and `drop`.
+scroll; busy spinners; tables; date-time fields; sliders; a file path field; and the further kinds
+of spec 5 §9 (banners, badges, progress, steps, key-value lists, empty states, drawers as side
+overlays, splitters, collapsibles, and drop zones that take a terminal's pasted paths). A key reaches
+an ancestor only when the widgets inside leave it. Drag-and-drop (spec 5 §9) uses core-cpp 0.7's
+pointer capture; a terminal without mouse reporting ignores `drag` and `drop`. Several roots share
+the screen as a column. `docs/spec/tui/frontend.md` specifies each widget.
 
-**`tui::Frontend`** (`tui::frontendOption()`, named `"tui"`, usable when stdin is a terminal):
+**`tui::Frontend`** (`tui::frontendOption(config)`, named `"tui"`, usable when stdin is a terminal):
 `IoLoop{Caller}`, a `LoopExecutor`, the runtime, `Screen` and `TuiRuntime` with interrupt handling
 enabled, so Ctrl+C and SIGINT both quit with exit code 130 after restoring the terminal. A terminal
-the frontend initialises is shut down when `run` returns.
+the frontend initialises is shut down when `run` returns. `run(source)` goes through `ui::runApp`;
+the shell is mounted by `FrontendConfig::mountShell`, a `tui::ShellFactory`, which is given the
+terminal backend beside the context, since `ui::AppContext` names no renderer.
 
 **Platforms:** Linux and macOS in CI; Windows builds when core-cpp's Windows console does.
 

@@ -141,9 +141,10 @@ load-time validation, and the `expr/1` language its properties are written in ·
 session's cache, mutations, relations and commands ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
-[`ui/frontend.md`](ui/frontend.md) — the view tree a screen mounts into,
-the widgets every renderer implements, and the seam that picks a renderer
-at runtime
+[`ui/frontend.md`](ui/frontend.md) ·
+[`tui/frontend.md`](tui/frontend.md) — the view tree a screen mounts into,
+the widgets every renderer implements, the seam that picks a renderer at
+runtime, and the terminal renderer
 
 **Exact values on the wire**
 [`util/rational.md`](util/rational.md) ·

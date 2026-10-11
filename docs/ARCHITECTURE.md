@@ -52,6 +52,7 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::reactive` | Signal graph, view state and declarative control (see `docs/spec/reactive/`) | `Runtime`, `RuntimeOptions`, `Signal<T>`, `Computed<T>`, `Effect`, `Scope`, `EqualityPolicy`, `kEqualityUsable`, `Store<ViewState, Msg>`, `ExhaustiveUpdate`, `request()`, `Query<A, R>`, `QueryOptions`, `InvalidationLink`, `Mutation<A, R>`, `MutationOptions<A>`, `Concurrency`, `Subscription<R>`, `Refetchable`, `errorMessage`, `Scheduler`, `TimerHandle`; `testing::ManualScheduler` |
 | `morph::ui` | The UI document and `expr/1`, its interpreter, the view tree, mount and the frontend seam (see `docs/spec/ui/`) | `Value`, `Type`, `Document`, `DocNode`, `Command`, `Catalog`, `loadDocument`, `Interpreter`, `Screen`, `Session`, `Dispatcher`, `BridgeDispatcher`, `ModelChannel`, `InterpreterHost`, `Expr`, `parseExpression`, `checkExpression`, `evaluate`, `Environment`, `StaticEnvironment`, `parseMessage`, `formatMessage`, `Node`, `Prop<T>`, `SlotId`, `slot()`, `Key`, `Common`, `Accessibility`, `KeyBinding`, `FieldState`, `MenuItem`, `ActionButton`, `Step`, `KeyValueItem`, the node kinds and their builders, `forEach`, `table`, `switchOn`; `Widget`, `ContainerWidget`, `FieldWidget`, the widget interfaces, `MenuEntry`, `IViewBackend`; `Mounted`; `AppContext`, `AppSource`, `Bundle`, `ConnectError`, `Backend`, `Frontend`, `FrontendOption`, `FrontendError`, `EnvironmentReader`, `processEnvironment`, `selectFrontend`, `MountedShell`, `ShellFactory`, `runApp`; `testing::RecordingBackend`, `testing::ConformanceProbe`, `testing::conformanceCases` |
 | `morph::testing` | The installed owner test kit | `StepExecutor`, `OwnerProbeRecorder` |
+| `morph::tui` | The terminal renderer and frontend (built only when `MORPH_BUILD_TUI=ON`; see `docs/spec/tui/`) | `Backend`, `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `kInterruptExitCode`, `LoopExecutor` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
@@ -730,6 +731,16 @@ folder.
 |---|---|
 | `testing/step_executor.hpp` | `StepExecutor` (`morph::testing::`) — an executor whose posted tasks run only when a test steps it |
 | `testing/owner_probe_recorder.hpp` | `OwnerProbeRecorder` (`morph::testing::`) — records every owner check while it is alive, instead of a debug build asserting |
+
+### Terminal frontend headers (`include/morph/tui/`, sources in `src/tui/`)
+
+Built only when `MORPH_BUILD_TUI=ON`, as the compiled STATIC library `morph::tui` over core-cpp's `core::tui`.
+
+| Header | Responsibility |
+|---|---|
+| `tui/backend.hpp` | `Backend` (`morph::tui::`) — `ui::IViewBackend` over a `core::tui::Screen`: every widget kind as a `core::tui` component, laid out in cells. See `docs/spec/tui/frontend.md`. |
+| `tui/frontend.hpp` | `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `kInterruptExitCode` — runs an `AppSource` in a terminal on one caller-driven `IoLoop`. |
+| `tui/loop_executor.hpp` | `LoopExecutor` — the `IExecutor` that runs tasks in later turns of a `core::net::EventLoop`; the runtime's owner and every handler's callback executor. |
 
 ### Qt integration headers (`include/morph/qt/`)
 

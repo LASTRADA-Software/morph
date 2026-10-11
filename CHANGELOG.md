@@ -193,6 +193,17 @@ API surface).
     `:string`, and `.match` on CLDR plural categories, exact numbers and strings.
   - Shared JSON corpora of documents, expressions and messages under `tests/ui/corpus/`.
 
+- **`morph::tui`: the terminal renderer and frontend** (`MORPH_BUILD_TUI`, default off). A compiled STATIC library
+  over core-cpp's `core::tui`, linking libunicode 0.9.3 (found, else fetched).
+  - `tui::Backend` implements every `ui::IViewBackend` factory with terminal widgets laid out in cells, and passes
+    all 34 cases of `ui::testing::conformanceCases()` with a probe that drives it through `core::tui` input events.
+  - `tui::Frontend` (`tui::frontendOption`, named `"tui"`, usable when stdin is a terminal) runs an `AppSource` on one
+    caller-driven `IoLoop`; `FrontendConfig::mountShell` mounts the shell on the terminal backend. Ctrl+C and SIGINT
+    quit with exit code 130 after restoring the terminal.
+  - `tui::LoopExecutor` runs tasks in later turns of the loop, as the runtime's owner and every handler's callback
+    executor.
+  - A terminal's pasted paths are a drop zone's file drop. See `docs/spec/tui/frontend.md`.
+
 - **`morph::ui`: the document interpreter.** `ui::Interpreter::mount` (`interpreter.hpp`) turns a
   loaded document into reactive state and a view tree mounted through `ui::Mounted`, on any backend.
   - Queries share a per-session cache (`ui::Session`) keyed by model type, instance, action and

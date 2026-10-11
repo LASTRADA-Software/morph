@@ -1,4 +1,8 @@
 ---
+# clang-analyzer-optin.core.EnumCastOutOfRange is off: it reports any value that is not an enumerator, and the
+# dependencies' enums are not closed sets. core::tui's Modifier is a set of flags combined with `|`, and its KeyCode
+# carries every Unicode codepoint beside its named keys; Catch2's ResultDisposition is flags too. The report lands in
+# the dependency's header, where no suppression of ours can reach it.
 Checks: >
   clang-diagnostic-*,
   clang-analyzer-*,
@@ -16,7 +20,8 @@ Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
   -misc-non-private-member-variables-in-classes,
   -portability-avoid-pragma-once,
-  -misc-include-cleaner
+  -misc-include-cleaner,
+  -clang-analyzer-optin.core.EnumCastOutOfRange
 
 WarningsAsErrors: "*"
 

@@ -49,6 +49,13 @@ endif()
 
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_NET           "Build the morph::net raw-socket WebSocket transport (POSIX only; see docs/spec/core/backend.md)" OFF)
+option(MORPH_BUILD_TUI           "Build morph::tui, the terminal frontend over core-cpp's core::tui (a compiled library; fetches libunicode if not installed)" OFF)
+# core-cpp builds no core::tui under Emscripten, so there is nothing for
+# morph::tui to wrap there.
+if(MORPH_BUILD_TUI AND EMSCRIPTEN)
+    message(WARNING "MORPH_BUILD_TUI is ignored under Emscripten: core-cpp builds no core::tui there.")
+    set(MORPH_BUILD_TUI OFF)
+endif()
 option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
 option(MORPH_BUILD_LOAD_TESTS    "Build the soak + throughput/latency benchmark targets" OFF)
 # Opt-in reference durable IOfflineQueue backed by SQLite (raw sqlite3 C API).
@@ -255,15 +262,44 @@ if(MORPH_ENABLE_TRACY)
     unset(_morph_tracy_defs)
 endif()
 
+# ── libunicode (MORPH_BUILD_TUI) ────────────────────────────────────────────
+# core::tui segments graphemes and measures display widths with libunicode.
+# core-cpp is added below with CORE_CPP_FETCH_DEPS OFF, so it takes the
+# unicode::unicode target its parent already provides; this block provides it.
+# Found first and fetched only when no installed one satisfies the bound, as
+# glaze and Tracy are. The version and options are core-cpp's own row for the
+# same dependency (its cmake/CoreCppDependencies.cmake), so an application that
+# links both libraries gets one libunicode. A fetch runs libunicode's own
+# configure, which downloads UCD.zip from www.unicode.org.
+set(MORPH_LIBUNICODE_VERSION 0.9.3)
+if(MORPH_BUILD_TUI AND NOT TARGET unicode::unicode)
+    find_package(libunicode ${MORPH_LIBUNICODE_VERSION} CONFIG QUIET)
+    if(NOT libunicode_FOUND)
+        morph_use_cpm(libunicode)
+        CPMAddPackage(
+            NAME libunicode
+            VERSION ${MORPH_LIBUNICODE_VERSION}
+            GITHUB_REPOSITORY contour-terminal/libunicode
+            GIT_TAG v${MORPH_LIBUNICODE_VERSION}
+            EXCLUDE_FROM_ALL YES
+            SYSTEM YES
+            OPTIONS "LIBUNICODE_TESTING OFF" "LIBUNICODE_BENCHMARK OFF" "LIBUNICODE_TOOLS OFF"
+                    "LIBUNICODE_EXAMPLES OFF" "PEDANTIC_COMPILER OFF" "PEDANTIC_COMPILER_WERROR OFF"
+                    "BUILD_SHARED_LIBS OFF")
+    endif()
+endif()
+
 # ── core-cpp ────────────────────────────────────────────────────────────────
 # The shared C++23 foundation of the Contour Terminal projects: morph takes
 # its event loop and timers, base64 and the wakeup primitive from it. Only the
 # modules morph links are built (EXCLUDE_FROM_ALL, unless morph installs; see
-# below), none of core-cpp's own tests, examples, TUI or TLS, and nothing is
-# fetched on its behalf: with those off it needs no dependency but the thread
-# library. Under Emscripten it
-# builds its single-threaded WebAssembly subset, which is what morph uses
-# there. SYSTEM, so morph's warning set does not apply to core-cpp's headers.
+# below), none of core-cpp's own tests, examples or TLS, and its TUI only with
+# MORPH_BUILD_TUI (without image decoding). With the TUI off core-cpp needs no
+# dependency but the thread library and nothing is fetched on its behalf; with
+# it on, core::tui needs libunicode, which the block above provides. Under
+# Emscripten it builds its single-threaded WebAssembly subset, which is what
+# morph uses there. SYSTEM, so morph's warning set does not apply to
+# core-cpp's headers.
 #
 # morph stays a header-only INTERFACE target, but core::base, core::net and
 # core::platform are static libraries, so every consumer of morph now builds
@@ -313,9 +349,20 @@ if(NOT core-cpp_FOUND)
         VERSION 0.7.0
         SYSTEM YES
         EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
-        OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF" "CORE_CPP_WITH_TUI OFF"
+        OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF"
+                "CORE_CPP_WITH_TUI ${MORPH_BUILD_TUI}" "CORE_CPP_WITH_IMAGES OFF"
                 "CORE_CPP_WITH_TLS OFF" "CORE_CPP_FETCH_DEPS OFF" "CORE_CPP_INSTALL ${MORPH_INSTALL}")
     unset(_morph_core_cpp_exclude_from_all)
+endif()
+
+# A core-cpp found installed brings whatever modules it was built with. One
+# built with CORE_CPP_WITH_TUI=OFF has no core::tui, and morph::tui would fail
+# much later, at link time, naming a target nobody created.
+if(MORPH_BUILD_TUI AND NOT TARGET core::tui)
+    message(FATAL_ERROR
+        "MORPH_BUILD_TUI=ON, but the core-cpp this configure found (${core-cpp_DIR}) was built without "
+        "core::tui (CORE_CPP_WITH_TUI=OFF). Install a core-cpp built with CORE_CPP_WITH_TUI=ON, or take "
+        "it off CMAKE_PREFIX_PATH so morph fetches one.")
 endif()
 
 # A sanitizer leg instruments core-cpp's compiled modules with morph's own
@@ -511,6 +558,72 @@ target_sources(morph
 )
 set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 
+# ── morph::tui terminal frontend (optional, compiled) ───────────────────────
+# A STATIC library, unlike every other morph component: its widgets are
+# core::tui components, compiled once here rather than in every consumer.
+# Created before the public-header guard below, so include/morph/tui/ is
+# checked whenever the option is on. Its tests are added after the Tests
+# section, which provides Catch2.
+if(MORPH_BUILD_TUI)
+    add_library(morph_tui STATIC
+        src/tui/backend.cpp
+        src/tui/chord.cpp
+        src/tui/chord.hpp
+        src/tui/container_widgets.cpp
+        src/tui/container_widgets.hpp
+        src/tui/context.cpp
+        src/tui/context.hpp
+        src/tui/display_widgets.cpp
+        src/tui/display_widgets.hpp
+        src/tui/drag.cpp
+        src/tui/drag.hpp
+        src/tui/field_widgets.cpp
+        src/tui/field_widgets.hpp
+        src/tui/frontend.cpp
+        src/tui/layout.cpp
+        src/tui/layout.hpp
+        src/tui/leaf_widgets.cpp
+        src/tui/leaf_widgets.hpp
+        src/tui/list_widgets.cpp
+        src/tui/list_widgets.hpp
+        src/tui/loop_executor.cpp
+        src/tui/region_widgets.cpp
+        src/tui/region_widgets.hpp
+        src/tui/scheduler.cpp
+        src/tui/scheduler.hpp
+        src/tui/session.cpp
+        src/tui/session.hpp
+        src/tui/table_widget.cpp
+        src/tui/table_widget.hpp
+        src/tui/widget.cpp
+        src/tui/widget.hpp
+    )
+    add_library(morph::tui ALIAS morph_tui)
+    target_sources(morph_tui
+        PUBLIC
+        FILE_SET HEADERS
+        BASE_DIRS include
+        FILES
+            include/morph/tui/backend.hpp
+            include/morph/tui/frontend.hpp
+            include/morph/tui/loop_executor.hpp
+    )
+    # Same standalone-compile check the core target gets.
+    set_target_properties(morph_tui PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
+    target_include_directories(morph_tui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(morph_tui PUBLIC morph core::tui)
+    apply_warnings(morph_tui)
+    # Every consumer of this archive (tests/tui, the examples that choose a
+    # frontend) carries an AF_SANITIZER block of its own, which is what makes
+    # instrumenting a static library safe (see morph_qt_impl below).
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_tui ${AF_SANITIZER})
+    endif()
+    if(AF_COVERAGE)
+        apply_coverage(morph_tui)
+    endif()
+endif()
+
 # ── Guard: every public header must belong to some target's FILE_SET ─────────
 #
 # VERIFY_INTERFACE_HEADER_SETS compiles each *listed* header standalone and is
@@ -526,18 +639,18 @@ set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)
 #   * anything under a detail/ directory -- not public surface;
 #   * headers owned by an optional component whose target this configuration
 #     did not create (morph::net, morph::qt, morph::qt_forms,
-#     morph::offline_sqlite). Those have their own FILE_SETs and now carry
-#     VERIFY_INTERFACE_HEADER_SETS themselves, so they are genuinely checked
-#     whenever their option is ON -- they were not before morph#230, which is
-#     the same blindness one level down. The mapping below is by *component*,
-#     not by header,
-#     so adding a header to an existing component still gets caught -- which is
-#     the drift that actually happens.
+#     morph::offline_sqlite, morph::tui). Those have their own FILE_SETs and
+#     now carry VERIFY_INTERFACE_HEADER_SETS themselves, so they are genuinely
+#     checked whenever their option is ON -- they were not before morph#230,
+#     which is the same blindness one level down. The mapping below is by
+#     *component*, not by header, so adding a header to an existing component
+#     still gets caught -- which is the drift that actually happens.
 set(_morph_optional_components
     "include/morph/net/:morph_net"
     "include/morph/qt/forms/:morph_qt_forms"
     "include/morph/qt/:morph_qt"
-    "include/morph/offline/sqlite_offline_queue.hpp:morph_offline_sqlite")
+    "include/morph/offline/sqlite_offline_queue.hpp:morph_offline_sqlite"
+    "include/morph/tui/:morph_tui")
 
 file(GLOB_RECURSE _morph_public_headers
      RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -545,7 +658,7 @@ file(GLOB_RECURSE _morph_public_headers
 
 # Union of every header set this configuration actually created.
 set(_morph_listed_headers "")
-foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_qt_forms morph_offline_sqlite)
+foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_qt_forms morph_offline_sqlite morph_tui)
     if(TARGET ${_morph_target})
         get_target_property(_morph_target_headers ${_morph_target} HEADER_SET)
         if(_morph_target_headers)
@@ -1022,6 +1135,13 @@ if(MORPH_BUILD_NET)
     endif()
 endif()
 
+# ── morph::tui tests (optional) ─────────────────────────────────────────────
+# The target itself is created before the public-header guard; its suite is
+# added here, after the Tests section has provided Catch2 and morph_test_main.
+if(MORPH_BUILD_TUI AND MORPH_BUILD_TESTS)
+    add_subdirectory(tests/tui)
+endif()
+
 # ── SQLite-backed durable offline queue: tests (optional) ───────────────────
 # The morph::offline_sqlite target itself is created much earlier (see
 # "SQLite-backed durable offline queue: library target" above, before
@@ -1115,6 +1235,33 @@ if(MORPH_INSTALL)
         )
     endif()
 
+    # morph::tui is a compiled archive, like morph_qt_impl: it installs its
+    # headers and its library. It links core::tui, which core-cpp installs only
+    # when libunicode was found rather than fetched -- a fetched dependency is in
+    # no export set, so core-cpp leaves core::tui out of its package and says
+    # why. Exporting morph::tui then would name a target no installed package
+    # provides, so it is left out too, and says so.
+    if(TARGET morph_tui)
+        get_target_property(_morph_core_tui_imported core::tui IMPORTED)
+        get_target_property(_morph_unicode_imported unicode::unicode IMPORTED)
+        if(_morph_core_tui_imported OR _morph_unicode_imported)
+            set_target_properties(morph_tui PROPERTIES EXPORT_NAME tui)
+            install(TARGETS morph_tui
+                EXPORT morphTargets
+                FILE_SET HEADERS DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+                ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+            )
+            list(APPEND MORPH_INSTALLED_COMPONENTS tui)
+        else()
+            message(STATUS
+                "morph: the tui component is not installed: libunicode was fetched, so core-cpp cannot "
+                "install core::tui for it to link. Install libunicode ${MORPH_LIBUNICODE_VERSION} and put "
+                "it on CMAKE_PREFIX_PATH to install morph::tui.")
+        endif()
+        unset(_morph_core_tui_imported)
+        unset(_morph_unicode_imported)
+    endif()
+
     # The MorphForms QML module (MORPH_BUILD_FORMS_QML): its backing library,
     # its plugin, and the object libraries a static QML module carries --
     # without the latter an installed module links but registers no QML types
@@ -1180,15 +1327,23 @@ if(MORPH_INSTALL)
     # SameMajorVersion follows docs/spec/VERSIONING.md, which is what decides
     # this: there, minor releases are "additive and source-compatible" and
     # only a major breaks the stable surface, so an install of 0.2 does
-    # satisfy a consumer asking for 0.1. ARCH_INDEPENDENT because a
-    # header-only package has no ABI to match -- without it CMake rejects an
-    # install made on a differently-sized-void* machine.
+    # satisfy a consumer asking for 0.1. ARCH_INDEPENDENT only while every
+    # installed component is header-only: without it CMake rejects an install
+    # made on a differently-sized-void* machine, which is exactly right once a
+    # compiled archive (morph_qt_impl, the MorphForms module, morph::tui) is in
+    # the package.
+    set(_morph_arch_independent ARCH_INDEPENDENT)
+    if(TARGET morph_qt_impl OR "forms_qml" IN_LIST MORPH_INSTALLED_COMPONENTS
+       OR "tui" IN_LIST MORPH_INSTALLED_COMPONENTS)
+        set(_morph_arch_independent "")
+    endif()
     write_basic_package_version_file(
         "${CMAKE_CURRENT_BINARY_DIR}/morphConfigVersion.cmake"
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion
-        ARCH_INDEPENDENT
+        ${_morph_arch_independent}
     )
+    unset(_morph_arch_independent)
 
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/morphConfig.cmake"
