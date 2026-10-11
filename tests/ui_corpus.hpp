@@ -18,7 +18,7 @@ namespace morph::ui::testing {
 /// @param path The file's absolute path.
 /// @return The parsed JSON tree; the test fails when the file is missing or not JSON.
 inline Json loadCorpus(char const* path) {
-    std::ifstream file{path};
+    std::ifstream const file{path};
     REQUIRE(file.good());
     std::stringstream text;
     text << file.rdbuf();
@@ -35,7 +35,7 @@ inline Json loadCorpus(char const* path) {
 /// @return The member.
 inline Json const& member(Json const& object, std::string_view name) {
     auto const& fields = std::get<Json::object_t>(object.data);
-    auto const found = fields.find(name);
+    auto const* const found = fields.find(name);
     REQUIRE(found != fields.end());
     return found->second;
 }
@@ -46,7 +46,7 @@ inline Json const& member(Json const& object, std::string_view name) {
 /// @return The member, or `nullptr`.
 inline Json const* optionalMember(Json const& object, std::string_view name) {
     auto const& fields = std::get<Json::object_t>(object.data);
-    auto const found = fields.find(name);
+    auto const* const found = fields.find(name);
     return found == fields.end() ? nullptr : &found->second;
 }
 

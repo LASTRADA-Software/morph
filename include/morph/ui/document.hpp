@@ -7,11 +7,13 @@
 #include <cstdint>
 #include <deque>
 #include <expected>
+#include <format>
 #include <functional>
 #include <initializer_list>
 #include <map>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <span>
 #include <stdexcept>
@@ -505,7 +507,7 @@ struct KeySpec {
     /// @brief Its shape.
     Shape shape;
     /// @brief The part kind, for `Part`, `Parts` and `PartsOrExpr`.
-    std::string_view part = {};
+    std::string_view part = {};  // NOLINT(readability-redundant-member-init): table rows leave it out
     /// @brief `kInner`, `kRequired`, `kBoundaryError`.
     std::uint8_t flags = 0;
 };
@@ -532,9 +534,10 @@ struct KindSpec {
     /// @brief `kScope`, `kRowScope`, `kField`, `kPart`, `kWritable`, `kOpenValues`.
     std::uint8_t flags = 0;
     /// @brief The element values beyond those every element has.
-    std::span<std::string_view const> values = {};
+    std::span<std::string_view const> values = {};  // NOLINT(readability-redundant-member-init): rows leave it out
 };
 
+// NOLINTBEGIN(modernize-use-designated-initializers): the kind table reads as rows; names on every field would not.
 /// @brief The keys every node takes.
 inline constexpr std::array<KeySpec, 13> kCommonKeys = {{
     {"id", Shape::Name},
@@ -801,6 +804,7 @@ inline constexpr std::array<KindSpec, 46> kKinds = {{
     {"drop", kDropKeys, kPart},
     {"fields", {}, kPart},
 }};
+// NOLINTEND(modernize-use-designated-initializers)
 
 /// @brief Looks up a node kind or a part kind.
 /// @param kind The kind.
@@ -838,6 +842,7 @@ inline void refuseMustUnderstand(Json::object_t const& object, std::string const
 /// @brief Parses a key chord, and refuses one the workspace shell reserves.
 /// @param chord The chord, such as `Ctrl+Shift+K`.
 /// @param path  Its JSON Pointer.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): a chord's grammar, modifiers then one key name.
 inline void checkChord(std::string const& chord, std::string const& path) {
     static constexpr std::array<std::string_view, 4> kModifiers = {"Ctrl", "Shift", "Alt", "Meta"};
     static constexpr std::array<std::string_view, 9> kNamedKeys = {"Enter", "Esc",   "Tab",   "Up",    "Down",
@@ -877,6 +882,7 @@ inline void checkChord(std::string const& chord, std::string const& path) {
     }
 }
 
+// NOLINTBEGIN(misc-no-recursion): a document is a tree of nodes and command lists, and parsing descends it.
 /// @brief Turns the JSON of a document into its model, refusing what does not parse.
 class DocumentParser {
 public:
@@ -941,7 +947,7 @@ public:
 
 private:
     [[nodiscard]] static Json const* member(Json::object_t const& object, std::string_view key) {
-        auto const found = object.find(key);
+        auto const* const found = object.find(key);
         return found == object.end() ? nullptr : &found->second;
     }
 
@@ -1057,20 +1063,21 @@ private:
         return value == nullptr ? nullptr : expr(*value, pointerAppend(path, key));
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per kind of declaration.
     [[nodiscard]] ScopeDecl scope(Json::object_t const& object, std::string const& path) {
         ScopeDecl decl;
         if (Json const* const models = member(object, "models")) {
-            std::string const at = pointerAppend(path, "models");
-            for (auto const& [name, entry] : objectOf(*models, at, "`models` maps aliases to models")) {
-                decl.models.push_back(model(name, entry, pointerAppend(at, name)));
+            std::string const where = pointerAppend(path, "models");
+            for (auto const& [name, entry] : objectOf(*models, where, "`models` maps aliases to models")) {
+                decl.models.push_back(model(name, entry, pointerAppend(where, name)));
             }
         }
         if (Json const* const state = member(object, "state")) {
-            std::string const at = pointerAppend(path, "state");
-            for (auto const& [name, entry] : objectOf(*state, at, "`state` maps names to declarations")) {
-                std::string const entryPath = pointerAppend(at, name);
+            std::string const where = pointerAppend(path, "state");
+            for (auto const& [name, entry] : objectOf(*state, where, "`state` maps names to declarations")) {
+                std::string const entryPath = pointerAppend(where, name);
                 checkName(name, entryPath);
-                auto const& fields = objectOf(entry, entryPath, "a state declaration is {\"init\": e, \"type\": T}");
+                auto const& fields = objectOf(entry, entryPath, R"(a state declaration is {"init": e, "type": T})");
                 refuseMustUnderstand(fields, entryPath);
                 StateDecl stateDecl{.name = name, .path = entryPath, .type = Type::any(), .init = nullptr};
                 if (Json const* const type = member(fields, "type")) {
@@ -1081,43 +1088,43 @@ private:
             }
         }
         if (Json const* const lets = member(object, "let")) {
-            std::string const at = pointerAppend(path, "let");
-            for (auto const& [name, entry] : objectOf(*lets, at, "`let` maps names to expressions")) {
-                std::string const entryPath = pointerAppend(at, name);
+            std::string const where = pointerAppend(path, "let");
+            for (auto const& [name, entry] : objectOf(*lets, where, "`let` maps names to expressions")) {
+                std::string const entryPath = pointerAppend(where, name);
                 checkName(name, entryPath);
                 decl.lets.push_back(LetDecl{.name = name, .path = entryPath, .value = expr(entry, entryPath)});
             }
         }
         if (Json const* const queries = member(object, "queries")) {
-            std::string const at = pointerAppend(path, "queries");
-            for (auto const& [name, entry] : objectOf(*queries, at, "`queries` maps names to queries")) {
-                decl.queries.push_back(query(name, entry, pointerAppend(at, name)));
+            std::string const where = pointerAppend(path, "queries");
+            for (auto const& [name, entry] : objectOf(*queries, where, "`queries` maps names to queries")) {
+                decl.queries.push_back(query(name, entry, pointerAppend(where, name)));
             }
         }
         if (Json const* const mutations = member(object, "mutations")) {
-            std::string const at = pointerAppend(path, "mutations");
-            for (auto const& [name, entry] : objectOf(*mutations, at, "`mutations` maps names to mutations")) {
-                decl.mutations.push_back(mutation(name, entry, pointerAppend(at, name)));
+            std::string const where = pointerAppend(path, "mutations");
+            for (auto const& [name, entry] : objectOf(*mutations, where, "`mutations` maps names to mutations")) {
+                decl.mutations.push_back(mutation(name, entry, pointerAppend(where, name)));
             }
         }
         if (Json const* const watches = member(object, "watch")) {
-            std::string const at = pointerAppend(path, "watch");
+            std::string const where = pointerAppend(path, "watch");
             auto const* const array = std::get_if<Json::array_t>(&watches->data);
             if (array == nullptr) {
-                refuse(at, "`watch` is an array");
+                refuse(where, "`watch` is an array");
             }
             for (std::size_t index = 0; index < array->size(); ++index) {
-                decl.watches.push_back(watch(array->at(index), pointerAppend(at, index)));
+                decl.watches.push_back(watch(array->at(index), pointerAppend(where, index)));
             }
         }
         if (Json const* const checks = member(object, "checks")) {
-            std::string const at = pointerAppend(path, "checks");
+            std::string const where = pointerAppend(path, "checks");
             auto const* const array = std::get_if<Json::array_t>(&checks->data);
             if (array == nullptr) {
-                refuse(at, "`checks` is an array");
+                refuse(where, "`checks` is an array");
             }
             for (std::size_t index = 0; index < array->size(); ++index) {
-                decl.checks.push_back(check(array->at(index), pointerAppend(at, index)));
+                decl.checks.push_back(check(array->at(index), pointerAppend(where, index)));
             }
         }
         return decl;
@@ -1125,7 +1132,7 @@ private:
 
     [[nodiscard]] static ModelDecl model(std::string const& name, Json const& json, std::string const& path) {
         checkName(name, path);
-        auto const& fields = objectOf(json, path, "a model alias is {\"type\": ..., \"instance\": ...}");
+        auto const& fields = objectOf(json, path, R"(a model alias is {"type": ..., "instance": ...})");
         refuseMustUnderstand(fields, path);
         ModelDecl decl{.name = name,
                        .path = path,
@@ -1137,7 +1144,7 @@ private:
         if (instance == nullptr) {
             return decl;
         }
-        std::string const at = pointerAppend(path, "instance");
+        std::string const where = pointerAppend(path, "instance");
         auto const* const word = std::get_if<std::string>(&instance->data);
         if (word != nullptr && (*word == "private" || *word == "shared")) {
             decl.instance = *word == "private" ? InstanceMode::Private : InstanceMode::Shared;
@@ -1147,7 +1154,7 @@ private:
             if (Json const* const from = member(*object, "from")) {
                 auto const* const alias = std::get_if<std::string>(&from->data);
                 if (alias == nullptr || !isName(*alias) || object->size() != 1) {
-                    refuse(at, "a borrowed instance is {\"from\": alias}");
+                    refuse(where, R"(a borrowed instance is {"from": alias})");
                 }
                 decl.instance = InstanceMode::Borrowed;
                 decl.borrowedFrom = *alias;
@@ -1155,7 +1162,7 @@ private:
             }
         }
         decl.instance = InstanceMode::Keyed;
-        decl.key = expr(*instance, at);
+        decl.key = expr(*instance, where);
         return decl;
     }
 
@@ -1186,12 +1193,12 @@ private:
     }
 
     [[nodiscard]] static PatchDecl patch(Json const& json, std::string const& path) {
-        auto const& fields = objectOf(json, path, "a patch is {\"query\": q, \"key\": e, \"with\": e}");
+        auto const& fields = objectOf(json, path, R"(a patch is {"query": q, "key": e, "with": e})");
         refuseMustUnderstand(fields, path);
         Json const* const key = member(fields, "key");
         Json const* const with = member(fields, "with");
         if (key == nullptr || with == nullptr) {
-            refuse(path, "a patch is {\"query\": q, \"key\": e, \"with\": e}");
+            refuse(path, R"(a patch is {"query": q, "key": e, "with": e})");
         }
         return PatchDecl{.query = text(fields, "query", path, true),
                          .key = expr(*key, pointerAppend(path, "key")),
@@ -1242,23 +1249,23 @@ private:
     }
 
     [[nodiscard]] WatchDecl watch(Json const& json, std::string const& path) {
-        auto const& fields = objectOf(json, path, "a watch is {\"on\": e, \"do\": [...]}");
+        auto const& fields = objectOf(json, path, R"(a watch is {"on": e, "do": [...]})");
         refuseMustUnderstand(fields, path);
-        Json const* const on = member(fields, "on");
+        Json const* const watched = member(fields, "on");
         Json const* const body = member(fields, "do");
-        if (on == nullptr || body == nullptr) {
-            refuse(path, "a watch is {\"on\": e, \"do\": [...]}");
+        if (watched == nullptr || body == nullptr) {
+            refuse(path, R"(a watch is {"on": e, "do": [...]})");
         }
         static constexpr std::array<std::string_view, 2> kSources = {"any", "user"};
         return WatchDecl{
             .path = path,
-            .on = expr(*on, pointerAppend(path, "on")),
+            .on = expr(*watched, pointerAppend(path, "on")),
             .source = choiceOf(fields, "source", path, kSources) == "user" ? WatchSource::User : WatchSource::Any,
             .body = commandList(*body, pointerAppend(path, "do"))};
     }
 
     [[nodiscard]] static CheckDecl check(Json const& json, std::string const& path) {
-        auto const& fields = objectOf(json, path, "a check is {\"id\": ..., \"assert\": e, ...}");
+        auto const& fields = objectOf(json, path, R"(a check is {"id": ..., "assert": e, ...})");
         refuseMustUnderstand(fields, path);
         Json const* const assertion = member(fields, "assert");
         if (assertion == nullptr) {
@@ -1282,6 +1289,7 @@ private:
         std::array<std::string_view, 4> companions;
     };
 
+    // NOLINTBEGIN(modernize-use-designated-initializers): one row per command reads as a table.
     static constexpr std::array<CommandSpec, 23> kCommands = {{
         {"set", CommandKind::Set, {"value"}},
         {"reset", CommandKind::Reset, {}},
@@ -1307,6 +1315,7 @@ private:
         {"upload", CommandKind::Upload, {"to", "as", "id"}},
         {"download", CommandKind::Download, {"save", "name", "to", "as"}},
     }};
+    // NOLINTEND(modernize-use-designated-initializers)
 
     [[nodiscard]] Commands commandList(Json const& json, std::string const& path) {
         Commands commands;
@@ -1351,8 +1360,9 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per command of ui/1.
     [[nodiscard]] Command command(Json const& json, std::string const& path) {
-        auto const& fields = objectOf(json, path, "a command is an object such as {\"set\": ..., \"value\": ...}");
+        auto const& fields = objectOf(json, path, R"(a command is an object such as {"set": ..., "value": ...})");
         CommandSpec const* chosen = nullptr;
         for (auto const& [key, value] : fields) {
             static_cast<void>(value);
@@ -1374,10 +1384,10 @@ private:
         cmd.kind = chosen->kind;
         cmd.path = path;
         Json const& primary = *member(fields, chosen->key);
-        std::string const at = pointerAppend(path, chosen->key);
+        std::string const where = pointerAppend(path, chosen->key);
         switch (chosen->kind) {
             case CommandKind::Set: {
-                cmd.target = nameOf(primary, at, "`set` names state or an element as `name.path`", true);
+                cmd.target = nameOf(primary, where, "`set` names state or an element as `name.path`", true);
                 Json const* const value = member(fields, "value");
                 if (value == nullptr) {
                     refuse(path, "`set` needs a `value`");
@@ -1386,7 +1396,7 @@ private:
                 break;
             }
             case CommandKind::Run:
-                cmd.target = nameOf(primary, at, "`run` names a mutation");
+                cmd.target = nameOf(primary, where, "`run` names a mutation");
                 cmd.value = optionalExpr(fields, "body", path);
                 cmd.extra = optionalExpr(fields, "each", path);
                 if (Json const* const binding = member(fields, "as")) {
@@ -1397,30 +1407,30 @@ private:
             case CommandKind::Refetch:
             case CommandKind::Open:
             case CommandKind::Focus:
-                cmd.target = nameOf(primary, at, "the command names a declaration or an element");
+                cmd.target = nameOf(primary, where, "the command names a declaration or an element");
                 break;
             case CommandKind::Close:
-                cmd.target = nameOf(primary, at, "`close` names a dialog, or `self`");
+                cmd.target = nameOf(primary, where, "`close` names a dialog, or `self`");
                 break;
             case CommandKind::Navigate:
                 navigate(cmd, fields, primary, path);
                 break;
             case CommandKind::Return:
-                cmd.value = expr(primary, at);
+                cmd.value = expr(primary, where);
                 break;
             case CommandKind::Host:
-                cmd.target = nonEmpty(primary, at, "`host` names a registered command");
+                cmd.target = nonEmpty(primary, where, "`host` names a registered command");
                 cmd.value = optionalExpr(fields, "args", path);
                 break;
             case CommandKind::SwitchBackend:
             case CommandKind::SetLocale:
-                cmd.target = nonEmpty(primary, at, "the command takes a non-empty string");
+                cmd.target = nonEmpty(primary, where, "the command takes a non-empty string");
                 break;
             case CommandKind::ResetPrefs:
-                cmd.target = nameOf(primary, at, "`resetPrefs` names a customization point, or `all`");
+                cmd.target = nameOf(primary, where, "`resetPrefs` names a customization point, or `all`");
                 break;
             case CommandKind::Notify: {
-                cmd.value = expr(primary, at);
+                cmd.value = expr(primary, where);
                 static constexpr std::array<std::string_view, 4> kRoles = {"info", "success", "warning", "error"};
                 cmd.option = choiceOf(fields, "role", path, kRoles);
                 break;
@@ -1428,44 +1438,44 @@ private:
             case CommandKind::Seq:
             case CommandKind::All: {
                 if (!std::holds_alternative<Json::array_t>(primary.data)) {
-                    refuse(at, "`" + std::string{chosen->key} + "` takes an array of commands");
+                    refuse(where, "`" + std::string{chosen->key} + "` takes an array of commands");
                 }
-                cmd.commands = commandList(primary, at);
+                cmd.commands = commandList(primary, where);
                 break;
             }
             case CommandKind::If: {
                 auto const* const array = std::get_if<Json::array_t>(&primary.data);
                 if (array == nullptr || array->size() < 2 || array->size() > 3) {
-                    refuse(at, "`if` takes [condition, [then...], [else...]]");
+                    refuse(where, "`if` takes [condition, [then...], [else...]]");
                 }
-                cmd.value = expr(array->at(0), pointerAppend(at, std::size_t{0}));
-                cmd.commands = commandList(array->at(1), pointerAppend(at, 1));
+                cmd.value = expr(array->at(0), pointerAppend(where, std::size_t{0}));
+                cmd.commands = commandList(array->at(1), pointerAppend(where, 1));
                 if (array->size() == 3) {
-                    cmd.alternative = commandList(array->at(2), pointerAppend(at, 2));
+                    cmd.alternative = commandList(array->at(2), pointerAppend(where, 2));
                 }
                 break;
             }
             case CommandKind::CancelClose:
             case CommandKind::Retry:
             case CommandKind::SignOut:
-                requireTrue(primary, at, chosen->key);
+                requireTrue(primary, where, chosen->key);
                 break;
             case CommandKind::SignIn: {
                 auto const* const object = std::get_if<Json::object_t>(&primary.data);
                 Json const* const from = object == nullptr ? nullptr : member(*object, "from");
                 if (from == nullptr) {
-                    refuse(at, "`signIn` is {\"from\": mutation}");
+                    refuse(where, R"(`signIn` is {"from": mutation})");
                 }
-                cmd.target = nameOf(*from, pointerAppend(at, "from"), "`signIn` names its mutation");
+                cmd.target = nameOf(*from, pointerAppend(where, "from"), "`signIn` names its mutation");
                 break;
             }
             case CommandKind::Upload: {
-                cmd.value = expr(primary, at);
-                Json const* const to = member(fields, "to");
-                if (to == nullptr) {
+                cmd.value = expr(primary, where);
+                Json const* const destination = member(fields, "to");
+                if (destination == nullptr) {
                     refuse(path, "`upload` names its mutation with `to`");
                 }
-                cmd.target = nameOf(*to, pointerAppend(path, "to"), "`to` names a mutation");
+                cmd.target = nameOf(*destination, pointerAppend(path, "to"), "`to` names a mutation");
                 if (Json const* const binding = member(fields, "as")) {
                     cmd.binding = nameOf(*binding, pointerAppend(path, "as"), "`as` is a name");
                 }
@@ -1483,15 +1493,15 @@ private:
     }
 
     void navigate(Command& cmd, Json::object_t const& fields, Json const& primary, std::string const& path) {
-        std::string const at = pointerAppend(path, "navigate");
+        std::string const where = pointerAppend(path, "navigate");
         if (auto const* const route = std::get_if<Json::object_t>(&primary.data)) {
             Json const* const value = member(*route, "route");
             if (value == nullptr || route->size() != 1) {
-                refuse(at, "`navigate` names a screen, or is {\"route\": e}");
+                refuse(where, R"(`navigate` names a screen, or is {"route": e})");
             }
-            cmd.extra = expr(*value, pointerAppend(at, "route"));
+            cmd.extra = expr(*value, pointerAppend(where, "route"));
         } else {
-            cmd.target = nonEmpty(primary, at, "`navigate` names a screen, or is {\"route\": e}");
+            cmd.target = nonEmpty(primary, where, R"(`navigate` names a screen, or is {"route": e})");
         }
         cmd.value = optionalExpr(fields, "params", path);
         static constexpr std::array<std::string_view, 4> kModes = {"tab", "dialog", "drawer", "window"};
@@ -1507,13 +1517,13 @@ private:
     static void download(Command& cmd, Json::object_t const& fields, Json const& primary, std::string const& path) {
         cmd.value = expr(primary, pointerAppend(path, "download"));
         std::string const save = text(fields, "save", path, false);
-        std::string const to = text(fields, "to", path, false);
-        if (save == "dialog" && to.empty()) {
+        std::string const destination = text(fields, "to", path, false);
+        if (save == "dialog" && destination.empty()) {
             cmd.option = "dialog";
             cmd.extra = optionalExpr(fields, "name", path);
             return;
         }
-        if (to == "preview" && save.empty()) {
+        if (destination == "preview" && save.empty()) {
             Json const* const binding = member(fields, "as");
             if (binding == nullptr) {
                 refuse(path, "a download to preview binds a state with `as`");
@@ -1522,19 +1532,20 @@ private:
             cmd.target = nameOf(*binding, pointerAppend(path, "as"), "`as` names a state");
             return;
         }
-        refuse(path, "`download` takes `\"save\": \"dialog\"` or `\"to\": \"preview\"`");
+        refuse(path, R"(`download` takes `"save": "dialog"` or `"to": "preview"`)");
     }
 
     [[nodiscard]] std::map<std::string, Commands, std::less<>> keyBindings(Json const& json, std::string const& path) {
         std::map<std::string, Commands, std::less<>> keys;
         for (auto const& [chord, commands] : objectOf(json, path, "`keys` maps chords to commands")) {
-            std::string const at = pointerAppend(path, chord);
-            checkChord(chord, at);
-            keys.emplace(chord, commandList(commands, at));
+            std::string const where = pointerAppend(path, chord);
+            checkChord(chord, where);
+            keys.emplace(chord, commandList(commands, where));
         }
         return keys;
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): a component's rules, one after another.
     [[nodiscard]] Component component(std::string const& name, Json const& json, std::string const& path) {
         checkName(name, path);
         auto const& fields = objectOf(json, path, "a component is an object");
@@ -1566,19 +1577,19 @@ private:
         static constexpr std::array<std::string_view, 6> kPropTypes = {"string", "bool",   "int",
                                                                        "exact",  "number", "json"};
         if (Json const* const props = member(fields, "props")) {
-            std::string const at = pointerAppend(path, "props");
-            for (auto const& [prop, type] : objectOf(*props, at, "`props` maps names to prop types")) {
+            std::string const where = pointerAppend(path, "props");
+            for (auto const& [prop, type] : objectOf(*props, where, "`props` maps names to prop types")) {
                 auto const* const spelled = std::get_if<std::string>(&type.data);
                 if (spelled == nullptr || !listed(kPropTypes, *spelled)) {
-                    refuse(pointerAppend(at, prop), "a prop type is string, bool, int, exact, number or json");
+                    refuse(pointerAppend(where, prop), "a prop type is string, bool, int, exact, number or json");
                 }
                 decl.props.emplace(prop, *spelled);
             }
         }
         if (Json const* const events = member(fields, "events")) {
-            std::string const at = pointerAppend(path, "events");
-            for (auto const& [event, type] : objectOf(*events, at, "`events` maps names to payload types")) {
-                decl.events.emplace(event, typeOf(type, pointerAppend(at, event)));
+            std::string const where = pointerAppend(path, "events");
+            for (auto const& [event, type] : objectOf(*events, where, "`events` maps names to payload types")) {
+                decl.events.emplace(event, typeOf(type, pointerAppend(where, event)));
             }
         }
         Json const* const fallback = member(fields, "fallback");
@@ -1685,24 +1696,24 @@ private:
         }
         if ((spec.flags & kScope) != 0) {
             if (Json const* const declarations = member(object, "scope")) {
-                std::string const at = pointerAppend(path, "scope");
-                auto const& fields = objectOf(*declarations, at, "`scope` holds a scope's declarations");
-                refuseMustUnderstand(fields, at);
-                made.scope = scope(fields, at);
+                std::string const where = pointerAppend(path, "scope");
+                auto const& fields = objectOf(*declarations, where, "`scope` holds a scope's declarations");
+                refuseMustUnderstand(fields, where);
+                made.scope = scope(fields, where);
             } else {
                 made.scope = ScopeDecl{};
             }
         }
         if (made.kind == "fields") {
             for (auto const& [field, overlay] : object) {
-                std::string const at = pointerAppend(path, field);
-                auto const& settings = objectOf(overlay, at, "a field overlay is an object");
+                std::string const where = pointerAppend(path, field);
+                auto const& settings = objectOf(overlay, where, "a field overlay is an object");
                 auto part = std::make_shared<DocNode>();
                 part->kind = "field";
                 part->id = field;
-                part->path = at;
+                part->path = where;
                 for (auto const& [key, value] : settings) {
-                    part->props.emplace(key, expr(value, pointerAppend(at, key)));
+                    part->props.emplace(key, expr(value, pointerAppend(where, key)));
                 }
                 made.parts["fields"].push_back(std::move(part));
             }
@@ -1720,6 +1731,7 @@ private:
         return made;
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per shape a key takes.
     void entry(DocNode& made, KeySpec const& key, Json const& value, std::string const& path) {
         std::string const name{key.key};
         switch (key.shape) {
@@ -1790,7 +1802,8 @@ private:
             }
             case Shape::CommandRecord:
                 for (auto const& [event, commands] : objectOf(value, path, "a record of command lists")) {
-                    made.events.emplace(name + "." + event, commandList(commands, pointerAppend(path, event)));
+                    made.events.emplace(std::format("{}.{}", name, event),
+                                        commandList(commands, pointerAppend(path, event)));
                 }
                 break;
             case Shape::Keys:
@@ -1799,6 +1812,7 @@ private:
                 break;
         }
     }
+    // NOLINTEND(misc-no-recursion)
 };
 
 /// @brief What a name in a scope declares.
@@ -1940,6 +1954,7 @@ private:
            (declared.kind == TypeKind::Key && (integer || actual.kind == TypeKind::String));
 }
 
+// NOLINTBEGIN(misc-no-recursion): a document is a tree of scopes, nodes and command lists, and checking descends it.
 /// @brief Checks a parsed document against its own names and the catalog: every load-time rule that needs more
 ///        than one place in the document.
 class DocumentValidator {
@@ -1947,66 +1962,66 @@ public:
     /// @brief Validates @p doc.
     /// @param doc     The parsed document.
     /// @param options The catalog facts.
-    DocumentValidator(Document const& doc, LoadOptions const& options) : _doc{doc}, _options{options} {}
+    DocumentValidator(Document const& doc, LoadOptions const& options) : _doc{&doc}, _options{&options} {}
 
     /// @brief Runs every rule; throws `DocumentRefused` on the first refusal.
     void run() {
         ScopeInfo& screen = newScope(nullptr, false);
         screen.screen = true;
-        for (auto const& [name, type] : _doc.params) {
+        for (auto const& [name, type] : _doc->params) {
             NameEntry entry;
             entry.category = NameCategory::Param;
             entry.path = pointerAppend("/params", name);
             entry.type = type;
             add(screen, name, std::move(entry));
         }
-        declare(_doc.scope, screen);
-        for (auto const& [key, commands] : _doc.lifecycle) {
+        declare(_doc->scope, screen);
+        for (auto const& [key, commands] : _doc->lifecycle) {
             static_cast<void>(key);
             collectTransfers(commands, screen);
         }
-        for (auto const& [chord, commands] : _doc.keys) {
+        for (auto const& [chord, commands] : _doc->keys) {
             static_cast<void>(chord);
             collectTransfers(commands, screen);
         }
-        if (_doc.view) {
-            collect(*_doc.view, screen);
+        if (_doc->view) {
+            collect(*_doc->view, screen);
         }
         std::vector<ScopeInfo*> componentScopes;
-        for (auto const& [name, component] : _doc.components) {
+        for (auto const& [name, component] : _doc->components) {
             static_cast<void>(name);
             ScopeInfo& fallbackScope = newScope(nullptr, false);
             collect(*component.fallback, fallbackScope);
             componentScopes.push_back(&fallbackScope);
         }
 
-        CheckContext root{
+        CheckContext const root{
             .scope = &screen, .commands = false, .boundaryError = false, .onClose = false, .bindings = {}};
-        checkScope(_doc.scope, root);
-        if (_doc.title) {
-            checkExpr(*_doc.title, root);
+        checkScope(_doc->scope, root);
+        if (_doc->title) {
+            checkExpr(*_doc->title, root);
         }
-        if (_doc.identity) {
-            checkExpr(*_doc.identity, root);
+        if (_doc->identity) {
+            checkExpr(*_doc->identity, root);
         }
-        if (_doc.dirty) {
-            checkCondition(*_doc.dirty, root, "`dirty`");
+        if (_doc->dirty) {
+            checkCondition(*_doc->dirty, root, "`dirty`");
         }
-        for (auto const& [key, commands] : _doc.lifecycle) {
+        for (auto const& [key, commands] : _doc->lifecycle) {
             CheckContext context = root;
             context.onClose = key == "onClose";
             checkCommands(commands, context);
         }
-        for (auto const& [chord, commands] : _doc.keys) {
+        for (auto const& [chord, commands] : _doc->keys) {
             static_cast<void>(chord);
             checkCommands(commands, root);
         }
         checkPrefetch();
-        if (_doc.view) {
-            checkNode(*_doc.view, root);
+        if (_doc->view) {
+            checkNode(*_doc->view, root);
         }
         std::size_t index = 0;
-        for (auto const& [name, component] : _doc.components) {
+        for (auto const& [name, component] : _doc->components) {
             static_cast<void>(name);
             CheckContext context{.scope = componentScopes.at(index++),
                                  .commands = false,
@@ -2054,9 +2069,9 @@ public:
         }
         entry.visit = 1;
         _deriving.emplace_back(name);
-        CheckContext context{
+        CheckContext const context{
             .scope = entry.scope, .commands = false, .boundaryError = false, .onClose = false, .bindings = {}};
-        Type const type = checkExpr(*entry.derivedFrom, context);
+        Type type = checkExpr(*entry.derivedFrom, context);
         _deriving.pop_back();
         entry.visit = 2;
         entry.type = type;
@@ -2065,7 +2080,7 @@ public:
 
     /// @brief The document.
     /// @return It.
-    [[nodiscard]] Document const& document() const noexcept { return _doc; }
+    [[nodiscard]] Document const& document() const noexcept { return *_doc; }
 
 private:
     ScopeInfo& newScope(ScopeInfo* parent, bool row) {
@@ -2097,8 +2112,8 @@ private:
             if (!scope.screen && model.instance == InstanceMode::Borrowed) {
                 refuse(model.path, "only a screen's own aliases borrow the opener's instance");
             }
-            if (_options.catalog.model) {
-                auto const info = _options.catalog.model(model.type);
+            if (_options->catalog.model) {
+                auto const info = _options->catalog.model(model.type);
                 if (!info) {
                     refuse(pointerAppend(model.path, "type"),
                            "the model type `" + model.type + "` is not in the catalog");
@@ -2181,6 +2196,7 @@ private:
         if (spec != nullptr && (spec->flags & kScope) != 0) {
             inner = &newScope(&scope, (spec->flags & kRowScope) != 0);
             _scopeOf.emplace(&node, inner);
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the parser gives every scope-creating node a scope.
             declare(*node.scope, *inner);
         }
         _innerOf.emplace(&node, inner);
@@ -2210,6 +2226,7 @@ private:
         if (spec != nullptr && (spec->flags & kScope) != 0) {
             inner = &newScope(&outer, false);
             _scopeOf.emplace(&part, inner);
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the parser gives every switch case a scope.
             declare(*part.scope, *inner);
         }
         _innerOf.emplace(&part, inner);
@@ -2268,8 +2285,9 @@ private:
         }
     }
 
-    [[nodiscard]] NameEntry& require(CheckContext const& context, std::string const& name, std::string const& path,
-                                     std::initializer_list<NameCategory> categories, std::string_view what) {
+    [[nodiscard]] static NameEntry& require(CheckContext const& context, std::string const& name,
+                                            std::string const& path, std::initializer_list<NameCategory> categories,
+                                            std::string_view what) {
         NameEntry* const entry = lookup(context.scope, name);
         if (entry == nullptr || std::ranges::find(categories, entry->category) == categories.end()) {
             refuse(path, "`" + name + "` is not " + std::string{what} + " of this scope");
@@ -2277,14 +2295,15 @@ private:
         return *entry;
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the alias, then the action it runs, as a query reads.
     std::optional<ActionInfo> checkModelAction(CheckContext const& context, std::string const& alias,
                                                std::string const& action, std::string const& path) {
-        NameEntry const& model =
-            require(context, alias, pointerAppend(path, "model"), {NameCategory::Model}, "a model alias");
-        if (!_options.catalog.action) {
+        std::string const modelPath = pointerAppend(path, "model");
+        NameEntry const& model = require(context, alias, modelPath, {NameCategory::Model}, "a model alias");
+        if (!_options->catalog.action) {
             return std::nullopt;
         }
-        auto const info = _options.catalog.action(action);
+        auto const info = _options->catalog.action(action);
         if (!info) {
             refuse(path, "the action `" + action + "` is not in the catalog");
         }
@@ -2311,7 +2330,9 @@ private:
                 refuse(state.init->path,
                        "the init of `" + state.name + "` does not have its type " + state.type.name());
             }
-            static_cast<void>(derivedType(*lookup(context.scope, state.name), state.name));
+            // The type is derived now, so a state no expression reads is still checked.
+            auto const derived = derivedType(*lookup(context.scope, state.name), state.name);
+            static_cast<void>(derived);
         }
         for (LetDecl const& let : decl.lets) {
             auto type = derivedType(*lookup(context.scope, let.name), let.name);
@@ -2332,8 +2353,7 @@ private:
         }
         for (WatchDecl const& watch : decl.watches) {
             checkExpr(*watch.on, context);
-            CheckContext commands = context;
-            checkCommands(watch.body, commands);
+            checkCommands(watch.body, context);
         }
         for (CheckDecl const& check : decl.checks) {
             checkCondition(*check.assertion, context, "the `assert` of a check");
@@ -2349,12 +2369,12 @@ private:
     }
 
     void checkRefreshOn(QueryDecl const& query, ModelDecl const& model) {
-        if (!_options.catalog.action) {
+        if (!_options->catalog.action) {
             return;
         }
         for (std::size_t index = 0; index < query.refreshOn.size(); ++index) {
             std::string const& action = query.refreshOn.at(index);
-            auto const info = _options.catalog.action(action);
+            auto const info = _options->catalog.action(action);
             if (!info || info->modelType != model.type) {
                 refuse(pointerAppend(pointerAppend(query.path, "refreshOn"), index),
                        "`refreshOn` names actions of the query's model type; `" + action + "` is not one");
@@ -2376,6 +2396,7 @@ private:
                        "`" + mutation.invalidates.at(index) + "` is not a query of this document");
             }
         }
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the key of the patch, then the name its reply is bound to.
         auto patch = [&](PatchDecl const& decl, std::string_view key, std::string_view bound) {
             std::string const path = pointerAppend(mutation.path, key);
             auto const target = _queries.find(decl.query);
@@ -2393,7 +2414,7 @@ private:
         }
         if (mutation.optimistic) {
             QueryDecl const* const query = patch(*mutation.optimistic, "optimistic", "body");
-            checkOptimistic(*mutation.optimistic, *query, mutation.path);
+            checkOptimistic(*mutation.optimistic, *query);
         }
         if (mutation.offlineQueue && action) {
             if (action->credential || !action->secretFields.empty()) {
@@ -2405,30 +2426,28 @@ private:
         checkCommands(mutation.onError, context);
     }
 
-    void checkOptimistic(PatchDecl const& decl, QueryDecl const& query, std::string const& path) {
-        if (!_options.catalog.action || decl.with->kind != ExprKind::Object) {
+    void checkOptimistic(PatchDecl const& decl, QueryDecl const& query) {
+        if (!_options->catalog.action || decl.with->kind != ExprKind::Object) {
             return;
         }
-        auto const info = _options.catalog.action(query.action);
+        auto const info = _options->catalog.action(query.action);
         if (!info) {
             return;
         }
         for (auto const& [field, value] : decl.with->fields) {
             if (std::ranges::find(info->calculatedFields, field) != info->calculatedFields.end()) {
-                refuse(value->path, "`" + field +
-                                        "` is calculated by the server and is never written "
-                                        "optimistically (" +
-                                        path + ")");
+                refuse(value->path,
+                       std::format("`{}` is calculated by the server and is never written optimistically", field));
             }
         }
     }
 
     void checkPrefetch() {
-        for (std::size_t index = 0; index < _doc.prefetch.size(); ++index) {
-            std::string const& name = _doc.prefetch.at(index);
+        for (std::size_t index = 0; index < _doc->prefetch.size(); ++index) {
+            std::string const& name = _doc->prefetch.at(index);
             std::string const path = pointerAppend("/prefetch", index);
-            auto const found = std::ranges::find(_doc.scope.queries, name, &QueryDecl::name);
-            if (found == _doc.scope.queries.end()) {
+            auto const found = std::ranges::find(_doc->scope.queries, name, &QueryDecl::name);
+            if (found == _doc->scope.queries.end()) {
                 refuse(path, "`" + name + "` is not a query of the screen");
             }
             if (found->body && !readsOnlyParams(*found->body)) {
@@ -2439,8 +2458,8 @@ private:
 
     [[nodiscard]] bool readsOnlyParams(Expr const& expr) const {
         if (expr.kind == ExprKind::Ref) {
-            return std::ranges::find(_doc.params, expr.name, &std::pair<std::string, Type>::first) !=
-                   _doc.params.end();
+            return std::ranges::find(_doc->params, expr.name, &std::pair<std::string, Type>::first) !=
+                   _doc->params.end();
         }
         if (expr.kind != ExprKind::Literal && expr.kind != ExprKind::Call && expr.kind != ExprKind::If &&
             expr.kind != ExprKind::Object && expr.kind != ExprKind::List) {
@@ -2458,9 +2477,9 @@ private:
     }
 
     void checkCustomizePoints() {
-        for (auto const& [name, point] : _doc.customize) {
+        for (auto const& [name, point] : _doc->customize) {
             static_cast<void>(name);
-            if (point.kind != "columns" || !_doc.view) {
+            if (point.kind != "columns" || !_doc->view) {
                 continue;
             }
             auto const found = _elements.find(point.of);
@@ -2483,6 +2502,7 @@ private:
         KindSpec const* const spec = findKind(node.kind, part);
         CheckContext const inner = innerContext(node, outer);
         if (auto const found = _scopeOf.find(&node); found != _scopeOf.end()) {
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): a node or case with a scope of its own has its declarations.
             checkScope(*node.scope, inner);
         }
         for (auto const& [key, expr] : node.props) {
@@ -2522,8 +2542,8 @@ private:
     }
 
     void checkCustomEvent(DocNode const& node, std::string const& event, std::string const& path) {
-        auto const found = _doc.components.find(node.name("name"));
-        if (found != _doc.components.end() && !found->second.events.contains(event)) {
+        auto const found = _doc->components.find(node.name("name"));
+        if (found != _doc->components.end() && !found->second.events.contains(event)) {
             refuse(pointerAppend(pointerAppend(path, "on"), event),
                    "the component `" + found->second.name + "` declares no event `" + event + "`");
         }
@@ -2531,8 +2551,8 @@ private:
 
     void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
-            auto const found = _doc.components.find(node.name("name"));
-            if (found == _doc.components.end()) {
+            auto const found = _doc->components.find(node.name("name"));
+            if (found == _doc->components.end()) {
                 refuse(pointerAppend(node.path, "name"),
                        "`" + std::string{node.name("name")} + "` is not a component of this document");
             }
@@ -2543,7 +2563,7 @@ private:
                     }
                 }
             }
-        } else if (node.kind == "customize" && !_doc.customize.contains(node.name("point"))) {
+        } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
         } else if (node.kind == "textInput") {
@@ -2586,24 +2606,25 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per command of ui/1.
     void checkCommand(Command const& cmd, CheckContext const& context) {
-        std::string const at = cmd.path;
+        std::string const where = cmd.path;
         switch (cmd.kind) {
             case CommandKind::Set:
                 checkSet(cmd, context);
                 break;
             case CommandKind::Reset: {
-                NameEntry const& entry = require(context, cmd.target, at, {NameCategory::State, NameCategory::Element},
-                                                 "state or a dialog");
+                NameEntry const& entry = require(context, cmd.target, where,
+                                                 {NameCategory::State, NameCategory::Element}, "state or a dialog");
                 if (entry.category == NameCategory::Element && entry.element->kind != "dialog" &&
                     entry.element->kind != "drawer") {
-                    refuse(at, "`reset` restores state, or the state of a dialog; `" + cmd.target + "` is a " +
-                                   entry.element->kind);
+                    refuse(where, "`reset` restores state, or the state of a dialog; `" + cmd.target + "` is a " +
+                                      entry.element->kind);
                 }
                 break;
             }
             case CommandKind::Run: {
-                static_cast<void>(require(context, cmd.target, at, {NameCategory::Mutation}, "a mutation"));
+                static_cast<void>(require(context, cmd.target, where, {NameCategory::Mutation}, "a mutation"));
                 CheckContext body = context;
                 if (cmd.extra) {
                     checkExpr(*cmd.extra, context);
@@ -2617,7 +2638,7 @@ private:
                 break;
             }
             case CommandKind::Refetch:
-                static_cast<void>(require(context, cmd.target, at, {NameCategory::Query}, "a query"));
+                static_cast<void>(require(context, cmd.target, where, {NameCategory::Query}, "a query"));
                 break;
             case CommandKind::Open:
             case CommandKind::Close:
@@ -2627,11 +2648,11 @@ private:
                 checkDialog(cmd, context);
                 break;
             case CommandKind::Focus:
-                static_cast<void>(require(context, cmd.target, at, {NameCategory::Element}, "an element"));
+                static_cast<void>(require(context, cmd.target, where, {NameCategory::Element}, "an element"));
                 break;
             case CommandKind::ResetPrefs:
-                if (cmd.target != "all" && !_doc.customize.contains(cmd.target)) {
-                    refuse(at, "`" + cmd.target + "` is not a customization point of this document");
+                if (cmd.target != "all" && !_doc->customize.contains(cmd.target)) {
+                    refuse(where, "`" + cmd.target + "` is not a customization point of this document");
                 }
                 break;
             case CommandKind::If:
@@ -2655,19 +2676,19 @@ private:
                 break;
             case CommandKind::CancelClose:
                 if (!context.onClose) {
-                    refuse(at, "`cancelClose` is valid only in `onClose`");
+                    refuse(where, "`cancelClose` is valid only in `onClose`");
                 }
                 break;
             case CommandKind::Retry:
                 if (!context.boundaryError) {
-                    refuse(at, "`retry` is valid only inside a boundary's `error`");
+                    refuse(where, "`retry` is valid only inside a boundary's `error`");
                 }
                 break;
             case CommandKind::SignIn:
-                static_cast<void>(require(context, cmd.target, at, {NameCategory::Mutation}, "a mutation"));
+                static_cast<void>(require(context, cmd.target, where, {NameCategory::Mutation}, "a mutation"));
                 break;
             case CommandKind::Upload:
-                static_cast<void>(require(context, cmd.target, at, {NameCategory::Mutation}, "a mutation"));
+                static_cast<void>(require(context, cmd.target, where, {NameCategory::Mutation}, "a mutation"));
                 checkExpr(*cmd.value, context);
                 break;
             case CommandKind::Download:
@@ -2676,7 +2697,7 @@ private:
                     checkExpr(*cmd.extra, context);
                 }
                 if (cmd.option == "preview") {
-                    static_cast<void>(require(context, cmd.target, at, {NameCategory::State}, "state"));
+                    static_cast<void>(require(context, cmd.target, where, {NameCategory::State}, "state"));
                 }
                 break;
             case CommandKind::Return:
@@ -2693,7 +2714,7 @@ private:
         }
     }
 
-    void checkDialog(Command const& cmd, CheckContext const& context) {
+    static void checkDialog(Command const& cmd, CheckContext const& context) {
         NameEntry const& entry = require(context, cmd.target, cmd.path, {NameCategory::Element}, "a dialog");
         if (entry.element->kind != "dialog" && entry.element->kind != "drawer") {
             refuse(cmd.path, "`" + cmd.target + "` is a " + entry.element->kind + ", not a dialog or drawer");
@@ -2814,8 +2835,8 @@ private:
         }
     }
 
-    Document const& _doc;
-    LoadOptions const& _options;
+    Document const* _doc;
+    LoadOptions const* _options;
     std::deque<ScopeInfo> _scopes;
     std::map<DocNode const*, ScopeInfo*> _scopeOf;
     std::map<DocNode const*, ScopeInfo*> _innerOf;
@@ -2823,13 +2844,15 @@ private:
     std::map<std::string, DocNode const*, std::less<>> _elements;
     std::vector<std::pair<WatchDecl const*, ScopeInfo*>> _watches;
     std::vector<std::string> _deriving;
+    // NOLINTEND(misc-no-recursion)
 };
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of name.
 inline std::expected<Type, std::string> ScopeResolver::ref(std::string_view head,
                                                            std::span<std::string const> path) const {
-    for (auto binding = _context.bindings.rbegin(); binding != _context.bindings.rend(); ++binding) {
-        if (binding->first == head) {
-            return typeAlong(binding->second, head, path);
+    for (auto const& [name, type] : std::views::reverse(_context.bindings)) {
+        if (name == head) {
+            return typeAlong(type, head, path);
         }
     }
     if (head == "event") {
@@ -2956,12 +2979,12 @@ inline std::expected<Type, std::string> ScopeResolver::pref(std::string_view poi
 /// @param options The catalog facts.
 /// @return The document, or the first refusal, naming the document id, the JSON Pointer and the reason.
 [[nodiscard]] inline std::expected<Document, Refusal> loadDocument(Json const& json, LoadOptions const& options = {}) {
-    std::string id;
+    std::string documentId;
     if (auto const* const object = std::get_if<Json::object_t>(&json.data)) {
-        auto const found = object->find("id");
+        auto const* const found = object->find("id");
         if (found != object->end()) {
             if (auto const* const text = std::get_if<std::string>(&found->second.data)) {
-                id = *text;
+                documentId = *text;
             }
         }
     }
@@ -2971,7 +2994,7 @@ inline std::expected<Type, std::string> ScopeResolver::pref(std::string_view poi
         return doc;
     } catch (detail::DocumentRefused const& refused) {
         Refusal refusal = refused.refusal();
-        refusal.document = id;
+        refusal.document = documentId;
         return std::unexpected(std::move(refusal));
     }
 }

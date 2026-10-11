@@ -101,6 +101,160 @@ namespace detail {
     return render::formatCanonicalNumber(detail::decimalText(number->first, number->second), numeric);
 }
 
+namespace detail {
+
+/// @brief CLDR's plural operands of a number as it is shown.
+struct PluralOperands {
+    /// @brief `i`: the integer digits of the absolute value.
+    std::uint64_t integer = 0;
+    /// @brief Whether `n` has no fraction.
+    bool whole = false;
+    /// @brief `v != 0`: whether the number shows fraction digits.
+    bool visibleFraction = false;
+};
+
+/// @brief Whether an operand lies in a CLDR range `low..high`.
+/// @param operand The operand.
+/// @param low     The range's start.
+/// @param high    The range's end.
+/// @return Whether `low <= operand <= high`.
+[[nodiscard]] constexpr bool between(std::uint64_t operand, std::uint64_t low, std::uint64_t high) noexcept {
+    return operand >= low && operand <= high;
+}
+
+/// @brief CLDR's `many` of the Romance languages: an integer that is a non-zero multiple of a million.
+/// @param n The operands.
+/// @return Whether the number is a whole million.
+[[nodiscard]] constexpr bool wholeMillion(PluralOperands const& n) noexcept {
+    return !n.visibleFraction && n.integer != 0 && n.integer % 1000000U == 0;
+}
+
+/// @brief `en`, `de`, `nl`, `sv`: `one` is `i = 1 and v = 0`.
+/// @param n The operands.
+/// @return The category.
+[[nodiscard]] constexpr PluralCategory germanicPlural(PluralOperands const& n) noexcept {
+    return n.integer == 1 && !n.visibleFraction ? PluralCategory::One : PluralCategory::Other;
+}
+
+/// @brief `it`: as English, and `many` for a whole million.
+/// @param n The operands.
+/// @return The category.
+[[nodiscard]] constexpr PluralCategory italianPlural(PluralOperands const& n) noexcept {
+    if (n.integer == 1 && !n.visibleFraction) {
+        return PluralCategory::One;
+    }
+    return wholeMillion(n) ? PluralCategory::Many : PluralCategory::Other;
+}
+
+/// @brief `es`: `one` is `n = 1`, and `many` a whole million.
+/// @param n The operands.
+/// @return The category.
+[[nodiscard]] constexpr PluralCategory spanishPlural(PluralOperands const& n) noexcept {
+    if (n.whole && n.integer == 1) {
+        return PluralCategory::One;
+    }
+    return wholeMillion(n) ? PluralCategory::Many : PluralCategory::Other;
+}
+
+/// @brief `fr`, `pt`: `one` is `i = 0..1`, and `many` a whole million.
+/// @param n The operands.
+/// @return The category.
+[[nodiscard]] constexpr PluralCategory frenchPlural(PluralOperands const& n) noexcept {
+    if (n.integer <= 1) {
+        return PluralCategory::One;
+    }
+    return wholeMillion(n) ? PluralCategory::Many : PluralCategory::Other;
+}
+
+/// @brief `pl`: `one`, `few` for 2..4 outside 12..14, `many` for other integers, `other` for fractions.
+/// @param n The operands.
+/// @return The category.
+[[nodiscard]] constexpr PluralCategory polishPlural(PluralOperands const& n) noexcept {
+    if (n.visibleFraction) {
+        return PluralCategory::Other;
+    }
+    if (n.integer == 1) {
+        return PluralCategory::One;
+    }
+    if (between(n.integer % 10U, 2, 4) && !between(n.integer % 100U, 12, 14)) {
+        return PluralCategory::Few;
+    }
+    return PluralCategory::Many;
+}
+
+/// @brief `ru`, `uk`: `one` for 1 outside 11, `few` for 2..4 outside 12..14, `many` for other integers.
+/// @param n The operands.
+/// @return The category.
+[[nodiscard]] constexpr PluralCategory eastSlavicPlural(PluralOperands const& n) noexcept {
+    if (n.visibleFraction) {
+        return PluralCategory::Other;
+    }
+    if (n.integer % 10U == 1 && n.integer % 100U != 11) {
+        return PluralCategory::One;
+    }
+    if (between(n.integer % 10U, 2, 4) && !between(n.integer % 100U, 12, 14)) {
+        return PluralCategory::Few;
+    }
+    return PluralCategory::Many;
+}
+
+/// @brief `cs`: `one`, `few` for 2..4, `many` for fractions.
+/// @param n The operands.
+/// @return The category.
+[[nodiscard]] constexpr PluralCategory czechPlural(PluralOperands const& n) noexcept {
+    if (n.visibleFraction) {
+        return PluralCategory::Many;
+    }
+    if (n.integer == 1) {
+        return PluralCategory::One;
+    }
+    return between(n.integer, 2, 4) ? PluralCategory::Few : PluralCategory::Other;
+}
+
+/// @brief `ar`: `zero`, `one`, `two`, `few` for 3..10 and `many` for 11..99 (both modulo 100).
+/// @param n The operands.
+/// @return The category.
+[[nodiscard]] constexpr PluralCategory arabicPlural(PluralOperands const& n) noexcept {
+    if (!n.whole) {
+        return PluralCategory::Other;
+    }
+    if (n.integer == 0) {
+        return PluralCategory::Zero;
+    }
+    if (n.integer == 1) {
+        return PluralCategory::One;
+    }
+    if (n.integer == 2) {
+        return PluralCategory::Two;
+    }
+    if (between(n.integer % 100U, 3, 10)) {
+        return PluralCategory::Few;
+    }
+    return between(n.integer % 100U, 11, 99) ? PluralCategory::Many : PluralCategory::Other;
+}
+
+/// @brief A language's plural rule.
+using PluralRule = PluralCategory (*)(PluralOperands const&) noexcept;
+
+/// @brief The languages whose rules are carried, by language subtag.
+inline constexpr std::array<std::pair<std::string_view, PluralRule>, 13> kPluralRules = {{
+    {"en", &germanicPlural},
+    {"de", &germanicPlural},
+    {"nl", &germanicPlural},
+    {"sv", &germanicPlural},
+    {"it", &italianPlural},
+    {"es", &spanishPlural},
+    {"fr", &frenchPlural},
+    {"pt", &frenchPlural},
+    {"pl", &polishPlural},
+    {"ru", &eastSlavicPlural},
+    {"uk", &eastSlavicPlural},
+    {"cs", &czechPlural},
+    {"ar", &arabicPlural},
+}};
+
+}  // namespace detail
+
 /// @brief The CLDR plural category of a number in a locale.
 ///
 /// The operands are CLDR's: `n` the absolute value, `i` its integer digits, `v` the count of visible fraction
@@ -114,89 +268,22 @@ namespace detail {
 [[nodiscard]] inline PluralCategory pluralCategory(std::string_view locale, math::Rational const& value,
                                                    std::uint32_t places) {
     std::string language;
-    for (char const chr : locale) {
-        if (chr == '-' || chr == '_') {
-            break;
-        }
+    for (char const chr : locale.substr(0, locale.find_first_of("-_"))) {
         language += static_cast<char>(std::tolower(static_cast<unsigned char>(chr)));
     }
     math::Rational const shown =
         math::roundToDecimalPlaces(value, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
-    std::uint64_t const integer =
-        math::detail::absU64(shown.numerator) / static_cast<std::uint64_t>(shown.denominator);
-    bool const whole = shown.denominator == 1;
-    bool const visibleFraction = places != 0;  // CLDR `v != 0`
-    auto const in = [](std::uint64_t operand, std::uint64_t low, std::uint64_t high) {
-        return operand >= low && operand <= high;
+    detail::PluralOperands const operands{
+        .integer = math::detail::absU64(shown.numerator) / static_cast<std::uint64_t>(shown.denominator),
+        .whole = shown.denominator == 1,
+        .visibleFraction = places != 0,
     };
-    std::uint64_t const mod10 = integer % 10U;
-    std::uint64_t const mod100 = integer % 100U;
-    bool const million = !visibleFraction && integer != 0 && integer % 1000000U == 0;
-
-    if (language == "en" || language == "de" || language == "nl" || language == "sv" || language == "it") {
-        if (integer == 1 && !visibleFraction) {
-            return PluralCategory::One;
-        }
-        return language == "it" && million ? PluralCategory::Many : PluralCategory::Other;
+    auto const* const rule =
+        std::ranges::find(detail::kPluralRules, language, &std::pair<std::string_view, detail::PluralRule>::first);
+    if (rule == detail::kPluralRules.end()) {
+        return PluralCategory::Other;
     }
-    if (language == "es") {
-        if (whole && integer == 1) {
-            return PluralCategory::One;
-        }
-        return million ? PluralCategory::Many : PluralCategory::Other;
-    }
-    if (language == "fr" || language == "pt") {
-        if (integer <= 1) {
-            return PluralCategory::One;
-        }
-        return million ? PluralCategory::Many : PluralCategory::Other;
-    }
-    if (language == "pl") {
-        if (integer == 1 && !visibleFraction) {
-            return PluralCategory::One;
-        }
-        if (visibleFraction) {
-            return PluralCategory::Other;
-        }
-        if (in(mod10, 2, 4) && !in(mod100, 12, 14)) {
-            return PluralCategory::Few;
-        }
-        return PluralCategory::Many;
-    }
-    if (language == "ru" || language == "uk") {
-        if (visibleFraction) {
-            return PluralCategory::Other;
-        }
-        if (mod10 == 1 && mod100 != 11) {
-            return PluralCategory::One;
-        }
-        if (in(mod10, 2, 4) && !in(mod100, 12, 14)) {
-            return PluralCategory::Few;
-        }
-        return PluralCategory::Many;
-    }
-    if (language == "cs") {
-        if (visibleFraction) {
-            return PluralCategory::Many;
-        }
-        if (integer == 1) {
-            return PluralCategory::One;
-        }
-        return in(integer, 2, 4) ? PluralCategory::Few : PluralCategory::Other;
-    }
-    if (language == "ar") {
-        if (!whole) {
-            return PluralCategory::Other;
-        }
-        if (integer <= 2) {
-            return integer == 0 ? PluralCategory::Zero : (integer == 1 ? PluralCategory::One : PluralCategory::Two);
-        }
-        if (in(mod100, 3, 10)) {
-            return PluralCategory::Few;
-        }
-        return in(mod100, 11, 99) ? PluralCategory::Many : PluralCategory::Other;
-    }
-    return PluralCategory::Other;
+    return rule->second(operands);
 }
 
 /// @brief The formatting function a placeholder or a declaration names.
@@ -265,9 +352,9 @@ public:
 
 private:
     [[nodiscard]] bool atEnd() const noexcept { return _pos >= _text.size(); }
-    [[nodiscard]] char peek() const noexcept { return _text.at(_pos); }
+    [[nodiscard]] char peek() const { return _text.at(_pos); }
 
-    void skipSpace() noexcept {
+    void skipSpace() {
         while (!atEnd() && (peek() == ' ' || peek() == '\t' || peek() == '\n' || peek() == '\r')) {
             ++_pos;
         }
@@ -458,66 +545,70 @@ private:
     }
 
     [[nodiscard]] std::expected<MessagePattern, std::string> parseMatch(MessagePattern& message) {
-        for (;;) {
-            skipSpace();
-            if (atEnd() || peek() != '$') {
-                break;
-            }
-            auto selector = readVariable();
-            if (!selector) {
-                return std::unexpected(selector.error());
-            }
-            bool annotated = false;
-            for (auto const& [name, function] : message.inputs) {
-                annotated = annotated || (name == *selector && function != MessageFunction::None);
-            }
-            if (!annotated) {
-                return std::unexpected("the selector `$" + *selector +
-                                       "` needs an `.input` declaration with `:number` or `:string`");
-            }
-            message.selectors.push_back(std::move(*selector));
-        }
-        if (message.selectors.empty()) {
-            return std::unexpected(std::string{"`.match` needs at least one selector"});
+        if (auto refused = parseSelectors(message)) {
+            return std::unexpected(std::move(*refused));
         }
         bool catchAll = false;
-        for (;;) {
-            skipSpace();
-            if (atEnd()) {
-                break;
+        for (skipSpace(); !atEnd(); skipSpace()) {
+            auto variant = parseVariant(message.selectors.size());
+            if (!variant) {
+                return std::unexpected(variant.error());
             }
-            MessageVariant variant;
-            while (!atEnd() && !_text.substr(_pos).starts_with("{{")) {
-                auto key = readKey();
-                if (!key) {
-                    return std::unexpected(key.error());
-                }
-                variant.keys.push_back(std::move(*key));
-                skipSpace();
-            }
-            if (atEnd()) {
-                return std::unexpected(std::string{"a variant needs a quoted pattern `{{...}}`"});
-            }
-            if (variant.keys.size() != message.selectors.size()) {
-                return std::unexpected(std::string{"a variant has one key per selector"});
-            }
-            _pos += 2;
-            auto pattern = parsePattern(true);
-            if (!pattern) {
-                return std::unexpected(pattern.error());
-            }
-            variant.pattern = std::move(*pattern);
-            bool allStars = true;
-            for (std::string const& key : variant.keys) {
-                allStars = allStars && key == "*";
-            }
-            catchAll = catchAll || allStars;
-            message.variants.push_back(std::move(variant));
+            catchAll =
+                catchAll || std::ranges::all_of(variant->keys, [](std::string const& key) { return key == "*"; });
+            message.variants.push_back(std::move(*variant));
         }
         if (!catchAll) {
             return std::unexpected(std::string{"`.match` needs a catch-all variant `*`"});
         }
         return message;
+    }
+
+    /// Reads the selectors of `.match`, each a variable declared with `:number` or `:string`.
+    [[nodiscard]] std::optional<std::string> parseSelectors(MessagePattern& message) {
+        for (skipSpace(); !atEnd() && peek() == '$'; skipSpace()) {
+            auto selector = readVariable();
+            if (!selector) {
+                return std::move(selector.error());
+            }
+            bool const annotated = std::ranges::any_of(message.inputs, [&selector](auto const& input) {
+                return input.first == *selector && input.second != MessageFunction::None;
+            });
+            if (!annotated) {
+                return "the selector `$" + *selector + "` needs an `.input` declaration with `:number` or `:string`";
+            }
+            message.selectors.push_back(std::move(*selector));
+        }
+        if (message.selectors.empty()) {
+            return std::string{"`.match` needs at least one selector"};
+        }
+        return std::nullopt;
+    }
+
+    /// Reads one variant: a key per selector, then its quoted pattern.
+    [[nodiscard]] std::expected<MessageVariant, std::string> parseVariant(std::size_t selectors) {
+        MessageVariant variant;
+        while (!atEnd() && !_text.substr(_pos).starts_with("{{")) {
+            auto key = readKey();
+            if (!key) {
+                return std::unexpected(key.error());
+            }
+            variant.keys.push_back(std::move(*key));
+            skipSpace();
+        }
+        if (atEnd()) {
+            return std::unexpected(std::string{"a variant needs a quoted pattern `{{...}}`"});
+        }
+        if (variant.keys.size() != selectors) {
+            return std::unexpected(std::string{"a variant has one key per selector"});
+        }
+        _pos += 2;
+        auto pattern = parsePattern(true);
+        if (!pattern) {
+            return std::unexpected(pattern.error());
+        }
+        variant.pattern = std::move(*pattern);
+        return variant;
     }
 
     std::string_view _text;

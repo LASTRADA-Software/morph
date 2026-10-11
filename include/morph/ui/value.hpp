@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <array>
 #include <compare>
 #include <concepts>
@@ -63,6 +64,7 @@ struct Refusal {
 /// @param base  The pointer to extend, `""` for the root.
 /// @param token The object key to append.
 /// @return `base + "/" + escaped(token)`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the pointer, then the token appended to it, as they read.
 [[nodiscard]] inline std::string pointerAppend(std::string_view base, std::string_view token) {
     std::string out{base};
     out += '/';
@@ -92,7 +94,7 @@ struct Refusal {
 /// because they display differently. `expr/1`'s `eq` compares magnitudes.
 struct Decimal {
     /// @brief The exact value, with its declared places.
-    math::Rational value{};
+    math::Rational value;
 
     /// @brief Equality of magnitude and places.
     /// @param other The decimal to compare with.
@@ -106,7 +108,7 @@ struct Decimal {
 /// @brief An exact decimal with a unit: the id of a unit of the server's unit systems (`x-unitAlternatives`).
 struct Quantity {
     /// @brief The exact magnitude, with its declared places.
-    math::Rational value{};
+    math::Rational value;
     /// @brief The unit id, such as `mg/L`.
     std::string unit;
 
@@ -262,6 +264,7 @@ public:
     /// @brief Deep equality: same kind and equal content; a decimal's places take part.
     /// @param other The value to compare with.
     /// @return Whether the two values are equal.
+    // NOLINTNEXTLINE(misc-no-recursion): a list or a record compares its elements, which are values.
     [[nodiscard]] bool operator==(Value const& other) const {
         if (_data.index() != other._data.index()) {
             return false;
@@ -331,6 +334,7 @@ struct Type {
 
     /// @brief The type as a document spells it.
     /// @return For example `int`, `decimal?`, `list<key>`.
+    // NOLINTNEXTLINE(misc-no-recursion): a list type names its element type.
     [[nodiscard]] std::string name() const {
         constexpr std::array<std::string_view, 10> kNames = {"any",      "bool",      "int", "string", "decimal",
                                                              "quantity", "timestamp", "key", "record", "list"};
@@ -350,6 +354,7 @@ struct Type {
     /// list conforms when every element conforms to the element type.
     /// @param value The value to test.
     /// @return Whether @p value is a value of this type.
+    // NOLINTNEXTLINE(misc-no-recursion): a list type admits a list whose elements its element type admits.
     [[nodiscard]] bool admits(Value const& value) const {
         if (kind == TypeKind::Any) {
             return true;
@@ -376,17 +381,14 @@ struct Type {
         if (items == nullptr) {
             return false;
         }
-        for (Value const& item : *items) {
-            if (element && !element->admits(item)) {
-                return false;
-            }
-        }
-        return true;
+        // NOLINTNEXTLINE(misc-no-recursion): each element is admitted by the element type.
+        return std::ranges::all_of(*items, [this](Value const& item) { return !element || element->admits(item); });
     }
 
     /// @brief Deep equality.
     /// @param other The type to compare with.
     /// @return Whether kind, optionality and element type are equal.
+    // NOLINTNEXTLINE(misc-no-recursion): a list type compares its element types.
     [[nodiscard]] bool operator==(Type const& other) const {
         if (kind != other.kind || optional != other.optional) {
             return false;
@@ -404,16 +406,23 @@ namespace detail {
 /// @param text  The remaining text; on success, what follows the type.
 /// @param depth The `list<>` nesting depth so far, bounded so a hostile type cannot recurse without limit.
 /// @return The type, or the reason it does not parse.
+// NOLINTNEXTLINE(misc-no-recursion): `list<T>` parses `T`; the depth bound stops a hostile nesting.
 [[nodiscard]] inline std::expected<Type, std::string> parseTypePrefix(std::string_view& text, int depth) {
     constexpr int kMaxDepth = 8;
     if (depth > kMaxDepth) {
         return std::unexpected(std::string{"type nests list<> too deeply"});
     }
-    static constexpr std::pair<std::string_view, TypeKind> kScalars[] = {
-        {"bool", TypeKind::Bool},       {"int", TypeKind::Int},           {"string", TypeKind::String},
-        {"decimal", TypeKind::Decimal}, {"quantity", TypeKind::Quantity}, {"timestamp", TypeKind::Timestamp},
-        {"key", TypeKind::Key},         {"record", TypeKind::Record},     {"any", TypeKind::Any},
-    };
+    static constexpr std::array<std::pair<std::string_view, TypeKind>, 9> kScalars = {{
+        {"bool", TypeKind::Bool},
+        {"int", TypeKind::Int},
+        {"string", TypeKind::String},
+        {"decimal", TypeKind::Decimal},
+        {"quantity", TypeKind::Quantity},
+        {"timestamp", TypeKind::Timestamp},
+        {"key", TypeKind::Key},
+        {"record", TypeKind::Record},
+        {"any", TypeKind::Any},
+    }};
     Type result;
     if (text.starts_with("list<")) {
         text.remove_prefix(5);
@@ -517,15 +526,15 @@ namespace detail {
     }
     auto const numerator = jsonInt(*num);
     auto const denominator = jsonInt(*den);
-    auto const dp = jsonInt(*places);
-    if (!numerator || !denominator || !dp) {
+    auto const decimals = jsonInt(*places);
+    if (!numerator || !denominator || !decimals) {
         return std::unexpected(std::string{"num, den and dp of an exact value are integers"});
     }
-    if (*dp < 0 || *dp > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+    if (*decimals < 0 || std::cmp_greater(*decimals, math::kMaxDecimalPlaces)) {
         return std::unexpected(std::string{"dp of an exact value is between 0 and 18"});
     }
     auto rational = math::Rational::from(math::Numerator{*numerator}, math::Denominator{*denominator},
-                                         math::DecimalPlaces{static_cast<std::uint32_t>(*dp)});
+                                         math::DecimalPlaces{static_cast<std::uint32_t>(*decimals)});
     if (!rational) {
         return std::unexpected(std::string{"den of an exact value is not zero"});
     }
@@ -563,7 +572,7 @@ namespace detail {
         std::expected<Value, std::string> operator()(double number) const {
             static_cast<void>(number);
             return std::unexpected(
-                std::string{"a number with a fraction is not exact; write a decimal as {\"num\", \"den\", \"dp\"}"});
+                std::string{R"(a number with a fraction is not exact; write a decimal as {"num", "den", "dp"})"});
         }
         std::expected<Value, std::string> operator()(std::string const& text) const { return Value{text}; }
         std::expected<Value, std::string> operator()(Json::array_t const& array) const {
@@ -603,6 +612,7 @@ namespace detail {
 /// @param json The JSON value.
 /// @param type The type the value must have.
 /// @return The value, or the reason it is refused.
+// NOLINTNEXTLINE(misc-no-recursion): a list is read element by element, as its element type.
 [[nodiscard]] inline std::expected<Value, std::string> valueFromJson(Json const& json, Type const& type) {
     if (type.kind == TypeKind::Timestamp) {
         if (auto const* const text = std::get_if<std::string>(&json.data)) {
@@ -645,6 +655,7 @@ namespace detail {
 /// @brief Writes a value in its JSON form: the inverse of `valueFromJson`, with a timestamp as ISO-8601 text.
 /// @param value The value.
 /// @return The JSON value.
+// NOLINTNEXTLINE(misc-no-recursion): a list or a record is written element by element.
 [[nodiscard]] inline Json valueToJson(Value const& value) {
     Json out;
     auto exact = [](math::Rational const& rational) {

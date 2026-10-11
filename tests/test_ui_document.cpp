@@ -8,7 +8,6 @@
 #include "ui_corpus.hpp"
 
 using morph::ui::ActionInfo;
-using morph::ui::Catalog;
 using morph::ui::CommandKind;
 using morph::ui::Concurrency;
 using morph::ui::Document;
@@ -104,7 +103,7 @@ TEST_CASE("ui document: the invalid corpus is refused with its path and reason",
         REQUIRE_FALSE(loaded.has_value());
         CAPTURE(loaded.error().message());
         CHECK(loaded.error().path == std::get<std::string>(member(entry, "at").data));
-        CHECK(loaded.error().reason.find(std::get<std::string>(member(entry, "reason").data)) != std::string::npos);
+        CHECK(loaded.error().reason.contains(std::get<std::string>(member(entry, "reason").data)));
         if (needsCatalog) {
             // The catalog rules are the only ones these documents break.
             auto const withoutCatalog = loadDocument(doc);

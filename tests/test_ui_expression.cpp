@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <morph/ui/expression.hpp>
 #include <string>
 
@@ -165,7 +166,7 @@ TEST_CASE("ui expressions: the refusal corpus", "[ui][expr]") {
         auto parsed = parseExpression(member(entry, "expr"));
         REQUIRE_FALSE(parsed.has_value());
         CAPTURE(parsed.error().message());
-        CHECK(parsed.error().reason.find(std::get<std::string>(member(entry, "reason").data)) != std::string::npos);
+        CHECK(parsed.error().reason.contains(std::get<std::string>(member(entry, "reason").data)));
         CHECK(parsed.error().path == std::get<std::string>(member(entry, "at").data));
     }
 }
@@ -182,7 +183,7 @@ TEST_CASE("ui expressions: the static check corpus", "[ui][expr]") {
         if (Json const* const reason = optionalMember(entry, "reason")) {
             REQUIRE_FALSE(checked.has_value());
             CAPTURE(checked.error().message());
-            CHECK(checked.error().reason.find(std::get<std::string>(reason->data)) != std::string::npos);
+            CHECK(checked.error().reason.contains(std::get<std::string>(reason->data)));
             CHECK(checked.error().path == std::get<std::string>(member(entry, "at").data));
             continue;
         }
@@ -205,11 +206,11 @@ TEST_CASE("ui expressions: the size bound is 256 nodes", "[ui][expr]") {
     CHECK(parseExpression(*parseJson(listOf(255)), "/x").has_value());
     auto refused = parseExpression(*parseJson(listOf(256)), "/x");
     REQUIRE_FALSE(refused.has_value());
-    CHECK(refused.error().reason.find("more than 256 nodes") != std::string::npos);
+    CHECK(refused.error().reason.contains("more than 256 nodes"));
 
     std::string deep = "1";
     for (int level = 0; level < 300; ++level) {
-        deep = R"({"fn": "neg", "args": [)" + deep + "]}";
+        deep = std::format(R"({{"fn": "neg", "args": [{}]}})", deep);
     }
     CHECK_FALSE(parseExpression(*parseJson(deep)).has_value());
 }
@@ -254,22 +255,23 @@ TEST_CASE("ui expressions: the display functions use the client's formatting", "
 // Mutation: make PermissiveResolver refuse refs -> the comprehension check of a plain ref fails.
 TEST_CASE("ui expressions: a resolver decides what names mean", "[ui][expr]") {
     struct Refusing final : morph::ui::NameResolver {
-        std::expected<morph::ui::Type, std::string> ref(std::string_view head,
-                                                        std::span<std::string const> path) const override {
+        [[nodiscard]] std::expected<morph::ui::Type, std::string> ref(
+            std::string_view head, std::span<std::string const> path) const override {
             static_cast<void>(path);
             return std::unexpected("no `" + std::string{head} + "`");
         }
-        std::expected<morph::ui::Type, std::string> row(std::span<std::string const> path) const override {
+        [[nodiscard]] std::expected<morph::ui::Type, std::string> row(
+            std::span<std::string const> path) const override {
             static_cast<void>(path);
             return std::unexpected(std::string{"no row"});
         }
-        std::expected<morph::ui::Type, std::string> control(morph::ui::ExprKind form,
-                                                            std::string_view name) const override {
+        [[nodiscard]] std::expected<morph::ui::Type, std::string> control(morph::ui::ExprKind form,
+                                                                          std::string_view name) const override {
             static_cast<void>(form);
             return std::unexpected("no `" + std::string{name} + "`");
         }
-        std::expected<morph::ui::Type, std::string> pref(std::string_view point,
-                                                         std::span<std::string const> path) const override {
+        [[nodiscard]] std::expected<morph::ui::Type, std::string> pref(
+            std::string_view point, std::span<std::string const> path) const override {
             static_cast<void>(path);
             return std::unexpected("no point `" + std::string{point} + "`");
         }

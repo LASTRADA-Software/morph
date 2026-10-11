@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <span>
 #include <string>
@@ -184,6 +185,7 @@ struct FunctionSpec {
 };
 
 /// @brief The library, indexed by `FunctionId`.
+// NOLINTBEGIN(modernize-use-designated-initializers): one row per function reads as a table; names on every field would not.
 inline constexpr std::array<FunctionSpec, 40> kFunctions = {{
     {"and", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"or", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
@@ -242,11 +244,12 @@ inline constexpr std::array<FunctionSpec, 40> kFunctions = {{
      TypeKind::String},
     {"t", 2, 3, {kindBit(TypeKind::String), kindBit(TypeKind::String), kindBit(TypeKind::Record)}, TypeKind::String},
 }};
+// NOLINTEND(modernize-use-designated-initializers)
 
 /// @brief The signature of a function.
 /// @param function The function.
 /// @return Its entry in `kFunctions`.
-[[nodiscard]] constexpr FunctionSpec const& functionSpec(FunctionId function) noexcept {
+[[nodiscard]] constexpr FunctionSpec const& functionSpec(FunctionId function) {
     return kFunctions.at(static_cast<std::size_t>(function));
 }
 
@@ -274,7 +277,8 @@ template <std::size_t N>
     std::size_t start = 0;
     for (;;) {
         std::size_t const dot = text.find('.', start);
-        std::string_view const segment = text.substr(start, dot == std::string_view::npos ? text.npos : dot - start);
+        std::string_view const segment =
+            text.substr(start, dot == std::string_view::npos ? std::string_view::npos : dot - start);
         if (segment.empty()) {
             return std::unexpected("`" + std::string{text} + "` has an empty segment");
         }
@@ -287,6 +291,7 @@ template <std::size_t N>
 }
 
 /// @brief Reads one JSON expression tree into `Expr` nodes, counting them against the size bound.
+// NOLINTBEGIN(misc-no-recursion): an expression is a tree and parsing descends it; the node bound limits the depth.
 class ExprParser {
 public:
     /// @brief The keys a form may carry beside its own.
@@ -308,6 +313,7 @@ public:
     }
 
 private:
+    // NOLINTBEGIN(modernize-use-designated-initializers): one row per form reads as a table.
     static constexpr std::array<FormKeys, 20> kForms = {{
         {"lit", ExprKind::Literal, {}},
         {"ref", ExprKind::Ref, {}},
@@ -330,6 +336,7 @@ private:
         {"session", ExprKind::Session, {}},
         {"host", ExprKind::Host, {}},
     }};
+    // NOLINTEND(modernize-use-designated-initializers)
 
     [[nodiscard]] static std::unexpected<Refusal> refuse(std::string const& path, std::string reason) {
         return std::unexpected(Refusal{.document = {}, .path = path, .reason = std::move(reason)});
@@ -338,7 +345,7 @@ private:
     [[nodiscard]] static std::string const* text(Json const& json) { return std::get_if<std::string>(&json.data); }
 
     [[nodiscard]] static Json const* member(Json::object_t const& object, std::string_view key) {
-        auto const found = object.find(key);
+        auto const* const found = object.find(key);
         return found == object.end() ? nullptr : &found->second;
     }
 
@@ -356,7 +363,7 @@ private:
                                     " nodes, the bound of expr/1");
         }
         if (std::holds_alternative<Json::array_t>(json.data)) {
-            return refuse(path, "a list is written {\"list\": [...]}, a constant list {\"lit\": [...]}");
+            return refuse(path, R"(a list is written {"list": [...]}, a constant list {"lit": [...]})");
         }
         auto const* const object = std::get_if<Json::object_t>(&json.data);
         if (object == nullptr) {
@@ -553,7 +560,7 @@ private:
         if (name == nullptr) {
             return refuse(namePath, "`fn` names a function as a string").error();
         }
-        auto const found = std::ranges::find(kFunctions, *name, &FunctionSpec::name);
+        auto const* const found = std::ranges::find(kFunctions, *name, &FunctionSpec::name);
         if (found == kFunctions.end()) {
             return refuse(namePath, "the function `" + *name + "` is not in expr/1").error();
         }
@@ -633,6 +640,7 @@ private:
     }
 
     std::size_t _count = 0;
+    // NOLINTEND(misc-no-recursion)
 };
 
 }  // namespace detail
@@ -652,6 +660,7 @@ private:
 /// @return The names.
 [[nodiscard]] inline std::vector<std::string_view> functionNames() {
     std::vector<std::string_view> names;
+    names.reserve(detail::kFunctions.size());
     for (auto const& spec : detail::kFunctions) {
         names.push_back(spec.name);
     }
@@ -769,11 +778,12 @@ namespace detail {
 }
 
 /// @brief Walks an expression once, resolving names and checking the statically known types.
+// NOLINTBEGIN(misc-no-recursion): an expression is a tree and checking descends it; the node bound limits the depth.
 class ExprChecker {
 public:
     /// @brief Checks against @p resolver.
     /// @param resolver What the names resolve to.
-    explicit ExprChecker(NameResolver const& resolver) : _resolver{resolver} {}
+    explicit ExprChecker(NameResolver const& resolver) : _resolver{&resolver} {}
 
     /// @brief Checks one node and its operands.
     /// @param expr The node.
@@ -785,16 +795,16 @@ public:
             case ExprKind::Ref:
                 return reference(expr);
             case ExprKind::Row:
-                return wrap(expr, _resolver.row(expr.fieldPath));
+                return wrap(expr, _resolver->row(expr.fieldPath));
             case ExprKind::Query:
             case ExprKind::Pending:
             case ExprKind::Error:
             case ExprKind::Result:
             case ExprKind::ErrorKind:
             case ExprKind::Can:
-                return wrap(expr, _resolver.control(expr.kind, expr.name));
+                return wrap(expr, _resolver->control(expr.kind, expr.name));
             case ExprKind::Pref:
-                return wrap(expr, _resolver.pref(expr.name, expr.fieldPath));
+                return wrap(expr, _resolver->pref(expr.name, expr.fieldPath));
             case ExprKind::Env:
                 return Type::of(expr.name == "online" ? TypeKind::Bool : TypeKind::String, expr.name != "online");
             case ExprKind::Session:
@@ -845,12 +855,12 @@ private:
     }
 
     [[nodiscard]] std::expected<Type, Refusal> reference(Expr const& expr) {
-        for (auto local = _locals.rbegin(); local != _locals.rend(); ++local) {
-            if (local->first == expr.name) {
-                return wrap(expr, typeAlong(local->second, expr.name, expr.fieldPath));
+        for (auto const& [name, type] : std::views::reverse(_locals)) {
+            if (name == expr.name) {
+                return wrap(expr, typeAlong(type, expr.name, expr.fieldPath));
             }
         }
-        return wrap(expr, _resolver.ref(expr.name, expr.fieldPath));
+        return wrap(expr, _resolver->ref(expr.name, expr.fieldPath));
     }
 
     [[nodiscard]] static bool admitsKind(Type const& type, KindSet accepted) {
@@ -966,8 +976,9 @@ private:
         return function == FunctionId::Div ? Type::any() : Type::of(TypeKind::Decimal, true);
     }
 
-    NameResolver const& _resolver;
+    NameResolver const* _resolver;
     std::vector<std::pair<std::string, Type>> _locals;
+    // NOLINTEND(misc-no-recursion)
 };
 
 }  // namespace detail
@@ -1142,15 +1153,15 @@ struct Number {
 }
 
 /// @brief Converts an exact value between two units of one dimension.
-/// @param value The value in @p from.
-/// @param from  Its unit.
-/// @param to    The wanted unit.
-/// @param units The unit table.
-/// @return The value in @p to, its places widened by the decimal places of the conversion ratio; `std::nullopt`
+/// @param value  The value in @p from.
+/// @param from   Its unit.
+/// @param target The wanted unit.
+/// @param units  The unit table.
+/// @return The value in @p target, its places widened by the decimal places of the conversion ratio; `std::nullopt`
 ///         when the units do not convert or the result overflows.
 [[nodiscard]] inline std::optional<math::Rational> convertUnit(math::Rational const& value, std::string_view from,
-                                                               std::string_view to, UnitTable const& units) {
-    if (from == to) {
+                                                               std::string_view target, UnitTable const& units) {
+    if (from == target) {
         return value;
     }
     auto factor = [&units](std::string_view unit) {
@@ -1161,7 +1172,7 @@ struct Number {
         return std::pair{found->second.canonical, found->second.toCanonical};
     };
     auto const [fromBase, fromFactor] = factor(from);
-    auto const [toBase, toFactor] = factor(to);
+    auto const [toBase, toFactor] = factor(target);
     if (fromBase != toBase) {
         return std::nullopt;
     }
@@ -1179,7 +1190,7 @@ struct Number {
     }
     // The places widen by the ratio's own decimal places, so 1500 mg shows as 1.500 g rather than rounding to 2 g;
     // a ratio that is not a terminating decimal adds none.
-    std::uint64_t denominator = static_cast<std::uint64_t>(ratio->denominator);
+    auto denominator = static_cast<std::uint64_t>(ratio->denominator);
     std::uint32_t twos = 0;
     std::uint32_t fives = 0;
     for (; denominator % 2U == 0; denominator /= 2U) {
@@ -1196,7 +1207,7 @@ struct Number {
 
 /// @brief The display text of a unit.
 /// @param unit  The unit id.
-/// @param units The unit table.
+/// @param units  The unit table.
 /// @return Its display text, or the id.
 [[nodiscard]] inline std::string unitDisplay(std::string const& unit, UnitTable const& units) {
     auto const found = units.find(unit);
@@ -1217,11 +1228,12 @@ struct Number {
 }
 
 /// @brief Evaluates expressions against an environment, with the comprehension variables in scope.
+// NOLINTBEGIN(misc-no-recursion): an expression is a tree and evaluating it descends it; the node bound limits the depth.
 class Evaluator {
 public:
     /// @brief Evaluates against @p env.
     /// @param env What the expression reads.
-    explicit Evaluator(Environment const& env) : _env{env} {}
+    explicit Evaluator(Environment const& env) : _env{&env} {}
 
     /// @brief Evaluates one node.
     /// @param expr The node.
@@ -1231,27 +1243,27 @@ public:
             case ExprKind::Literal:
                 return expr.literal;
             case ExprKind::Ref:
-                for (auto local = _locals.rbegin(); local != _locals.rend(); ++local) {
-                    if (local->first == expr.name) {
-                        return walk(local->second, expr.fieldPath);
+                for (auto const& [name, value] : std::views::reverse(_locals)) {
+                    if (name == expr.name) {
+                        return walk(value, expr.fieldPath);
                     }
                 }
-                return _env.ref(expr.name, expr.fieldPath);
+                return _env->ref(expr.name, expr.fieldPath);
             case ExprKind::Row:
-                return _env.row(expr.fieldPath);
+                return _env->row(expr.fieldPath);
             case ExprKind::Query:
             case ExprKind::Pending:
             case ExprKind::Error:
             case ExprKind::Result:
             case ExprKind::ErrorKind:
             case ExprKind::Can:
-                return _env.control(expr.kind, expr.name);
+                return _env->control(expr.kind, expr.name);
             case ExprKind::Pref:
-                return _env.pref(expr.name, expr.fieldPath);
+                return _env->pref(expr.name, expr.fieldPath);
             case ExprKind::Env:
             case ExprKind::Session:
             case ExprKind::Host:
-                return _env.client(expr.kind, expr.name);
+                return _env->client(expr.kind, expr.name);
             case ExprKind::If:
                 return choice(expr);
             case ExprKind::Object: {
@@ -1280,7 +1292,7 @@ public:
 
 private:
     Value mismatch(Expr const& expr, std::string_view reason) {
-        _env.report(expr.path, reason);
+        _env->report(expr.path, reason);
         return Value{};
     }
 
@@ -1337,7 +1349,7 @@ private:
                 continue;
             }
             if (!value.isNull()) {
-                _env.report(arg->path, "a logical operand is not a bool");
+                _env->report(arg->path, "a logical operand is not a bool");
             }
             sawNull = true;
         }
@@ -1347,13 +1359,14 @@ private:
         return !dominant;
     }
 
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the four operators over plain numbers and quantities, one rule each.
     Value arithmetic(Expr const& expr, Value const& lhsValue, Value const& rhsValue) {
         auto const lhs = numeric(lhsValue);
         auto const rhs = numeric(rhsValue);
         if (!lhs || !rhs) {
             return mismatch(expr, "an arithmetic operand is not a number");
         }
-        UnitTable const& units = _env.formatting().units;
+        UnitTable const& units = _env->formatting().units;
         FunctionId const function = expr.function;
         math::Rational right = rhs->value;
         std::string const* unit = nullptr;
@@ -1404,7 +1417,7 @@ private:
             }
             math::Rational right = rhsNumber->value;
             if (lhsNumber->unit != nullptr) {
-                auto converted = convertUnit(right, *rhsNumber->unit, *lhsNumber->unit, _env.formatting().units);
+                auto converted = convertUnit(right, *rhsNumber->unit, *lhsNumber->unit, _env->formatting().units);
                 if (!converted) {
                     return std::nullopt;
                 }
@@ -1436,42 +1449,30 @@ private:
             return false;
         }
         if (ValueList const* const lhsItems = lhs.asList()) {
-            ValueList const& rhsItems = *rhs.asList();
-            if (lhsItems->size() != rhsItems.size()) {
-                return false;
-            }
-            for (std::size_t index = 0; index < lhsItems->size(); ++index) {
-                Value const& left = lhsItems->at(index);
-                Value const& right = rhsItems.at(index);
-                if (left.isNull() || right.isNull() ? !(left.isNull() && right.isNull()) : !equal(left, right)) {
-                    return false;
-                }
-            }
-            return true;
+            return std::ranges::equal(*lhsItems, *rhs.asList(), [this](Value const& left, Value const& right) {
+                return sameElement(left, right);
+            });
         }
         if (ValueRecord const* const lhsFields = lhs.asRecord()) {
-            ValueRecord const& rhsFields = *rhs.asRecord();
-            if (lhsFields->size() != rhsFields.size()) {
-                return false;
-            }
-            for (auto const& [name, left] : *lhsFields) {
-                auto const found = rhsFields.find(name);
-                if (found == rhsFields.end()) {
-                    return false;
-                }
-                Value const& right = found->second;
-                if (left.isNull() || right.isNull() ? !(left.isNull() && right.isNull()) : !equal(left, right)) {
-                    return false;
-                }
-            }
-            return true;
+            // Records are ordered by field name, so equal records have equal sequences of fields.
+            return std::ranges::equal(*lhsFields, *rhs.asRecord(), [this](auto const& left, auto const& right) {
+                return left.first == right.first && sameElement(left.second, right.second);
+            });
         }
         return lhs == rhs;
     }
 
+    /// Equality of two elements of a list or record, where `null` equals only `null`.
+    bool sameElement(Value const& left, Value const& right) {
+        if (left.isNull() || right.isNull()) {
+            return left.isNull() && right.isNull();
+        }
+        return equal(left, right);
+    }
+
     /// The display text of a value, as `format` shows an argument.
     std::optional<std::string> display(Value const& value) {
-        FormatContext const& context = _env.formatting();
+        FormatContext const& context = _env->formatting();
         if (std::string const* const text = value.asString()) {
             return *text;
         }
@@ -1479,7 +1480,8 @@ private:
             return std::string{*flag ? "true" : "false"};
         }
         if (Quantity const* const quantity = value.asQuantity()) {
-            return *formatNumber(value, context.numeric) + " " + unitDisplay(quantity->unit, context.units);
+            return formatNumber(value, context.numeric).value_or(std::string{}) + " " +
+                   unitDisplay(quantity->unit, context.units);
         }
         if (auto number = formatNumber(value, context.numeric)) {
             return number;
@@ -1494,7 +1496,7 @@ private:
         if (style != "short" && style != "medium" && style != "long") {
             return std::nullopt;
         }
-        FormatContext const& context = _env.formatting();
+        FormatContext const& context = _env->formatting();
         time::DateTime const local = instant + std::chrono::minutes{context.utcOffsetMinutes};
         if (context.dates) {
             return context.dates(local, style, withTime);
@@ -1551,7 +1553,7 @@ private:
     }
 
     Value translate(Expr const& expr, std::vector<Value> const& args) {
-        FormatContext const& context = _env.formatting();
+        FormatContext const& context = _env->formatting();
         std::string const& key = *args.at(0).asString();
         std::string const& fallback = *args.at(1).asString();
         ValueRecord const empty;
@@ -1569,15 +1571,15 @@ private:
                 if (parsed) {
                     message = std::move(*parsed);
                 } else {
-                    _env.report(expr.path,
-                                "the catalogue's message `" + key + "` is outside the ui/1 subset: " + parsed.error());
+                    _env->report(expr.path, "the catalogue's message `" + key +
+                                                "` is outside the ui/1 subset: " + parsed.error());
                 }
             }
         }
         if (!message) {
             auto parsed = parseMessage(fallback);
             if (!parsed) {
-                _env.report(expr.path, "the fallback is outside the ui/1 subset: " + parsed.error());
+                _env->report(expr.path, "the fallback is outside the ui/1 subset: " + parsed.error());
                 return fallback;
             }
             message = std::move(*parsed);
@@ -1585,7 +1587,7 @@ private:
         FormattedMessage formatted =
             formatMessage(*message, *named, MessageLocale{.locale = context.locale, .numeric = context.numeric});
         for (std::string const& error : formatted.errors) {
-            _env.report(expr.path, error);
+            _env->report(expr.path, error);
         }
         return std::move(formatted.text);
     }
@@ -1671,7 +1673,7 @@ private:
             }
             math::Rational value = number->value;
             if (unit != nullptr) {
-                auto converted = convertUnit(value, *number->unit, *unit, _env.formatting().units);
+                auto converted = convertUnit(value, *number->unit, *unit, _env->formatting().units);
                 if (!converted) {
                     return mismatch(expr, "the elements' units do not convert");
                 }
@@ -1725,8 +1727,9 @@ private:
     }
 
     /// The functions whose every argument is required: any `null` argument has already made the result `null`.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per function of the library.
     Value strict(Expr const& expr, std::vector<Value> const& args) {
-        FormatContext const& context = _env.formatting();
+        FormatContext const& context = _env->formatting();
         switch (expr.function) {
             case FunctionId::Not: {
                 bool const* const flag = args.front().asBool();
@@ -1778,7 +1781,7 @@ private:
                 auto const number = numeric(args.at(0));
                 std::int64_t const* const places = args.at(1).asInt();
                 if (!number || places == nullptr || *places < 0 ||
-                    *places > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+                    std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
                     return mismatch(expr, "`round` takes a number and places from 0 to 18");
                 }
                 if (number->integer) {
@@ -1850,7 +1853,7 @@ private:
                 if (text == nullptr || part == nullptr) {
                     return mismatch(expr, "`contains` takes two strings");
                 }
-                return text->find(*part) != std::string::npos;
+                return text->contains(*part);
             }
             case FunctionId::Count:
             case FunctionId::Sum:
@@ -1891,7 +1894,7 @@ private:
                 auto const number = numeric(args.at(0));
                 std::int64_t const* const places = args.at(1).asInt();
                 if (!number || places == nullptr || *places < 0 ||
-                    *places > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+                    std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
                     return mismatch(expr, "`decimal` takes a number and places from 0 to 18");
                 }
                 return render::formatCanonicalNumber(decimalText(number->value, static_cast<std::uint32_t>(*places)),
@@ -1913,7 +1916,8 @@ private:
                     }
                     shown = Quantity{.value = *converted, .unit = *unit};
                 }
-                return *formatNumber(shown, context.numeric) + " " + unitDisplay(shown.unit, context.units);
+                return formatNumber(shown, context.numeric).value_or(std::string{}) + " " +
+                       unitDisplay(shown.unit, context.units);
             }
             case FunctionId::Money: {
                 auto const number = numeric(args.at(0));
@@ -1958,8 +1962,9 @@ private:
         }
     }
 
-    Environment const& _env;
+    Environment const* _env;
     std::vector<std::pair<std::string, Value>> _locals;
+    // NOLINTEND(misc-no-recursion)
 };
 
 }  // namespace detail

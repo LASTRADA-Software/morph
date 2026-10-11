@@ -69,15 +69,15 @@ TEST_CASE("ui value: every kind round-trips through its JSON form", "[ui][value]
 
 // Mutation: accept doubles as integers -> the fraction case fails.
 TEST_CASE("ui value: inexact and malformed numbers are refused", "[ui][value]") {
-    CHECK(reasonOf("1.5").find("not exact") != std::string::npos);
-    CHECK(reasonOf("[1, 2.5]").find("not exact") != std::string::npos);
-    CHECK(reasonOf(R"({"a": 2.5})").find("not exact") != std::string::npos);
-    CHECK(reasonOf("18446744073709551615").find("int64") != std::string::npos);
-    CHECK(reasonOf(R"({"num":1,"den":0,"dp":2})").find("den") != std::string::npos);
-    CHECK(reasonOf(R"({"num":"1","den":2,"dp":2})").find("integers") != std::string::npos);
-    CHECK(reasonOf(R"({"num":1,"den":2,"dp":19})").find("between") != std::string::npos);
-    CHECK(reasonOf(R"({"num":1,"den":2,"dp":-1})").find("between") != std::string::npos);
-    CHECK(reasonOf(R"({"num":1,"den":2,"dp":1,"unit":3})").find("unit") != std::string::npos);
+    CHECK(reasonOf("1.5").contains("not exact"));
+    CHECK(reasonOf("[1, 2.5]").contains("not exact"));
+    CHECK(reasonOf(R"({"a": 2.5})").contains("not exact"));
+    CHECK(reasonOf("18446744073709551615").contains("int64"));
+    CHECK(reasonOf(R"({"num":1,"den":0,"dp":2})").contains("den"));
+    CHECK(reasonOf(R"({"num":"1","den":2,"dp":2})").contains("integers"));
+    CHECK(reasonOf(R"({"num":1,"den":2,"dp":19})").contains("between"));
+    CHECK(reasonOf(R"({"num":1,"den":2,"dp":-1})").contains("between"));
+    CHECK(reasonOf(R"({"num":1,"den":2,"dp":1,"unit":3})").contains("unit"));
     CHECK(fromText("-9223372036854775808") == Value{std::int64_t{-9223372036854775807} - 1});
     CHECK_FALSE(parseJson("{").has_value());
 }
@@ -192,9 +192,9 @@ TEST_CASE("ui value: each part of an exact value takes part in equality and deco
     CHECK_FALSE(Type::of(TypeKind::List) == Type::listOf(Type::of(TypeKind::Int)));
     CHECK(parseType("a~").error() == "unknown type `a`");
 
-    CHECK(reasonOf(R"({"num":18446744073709551615,"den":1,"dp":0})").find("integers") != std::string::npos);
-    CHECK(reasonOf(R"({"num":1,"den":"2","dp":1})").find("integers") != std::string::npos);
-    CHECK(reasonOf(R"({"num":1,"den":2,"dp":"1"})").find("integers") != std::string::npos);
+    CHECK(reasonOf(R"({"num":18446744073709551615,"den":1,"dp":0})").contains("integers"));
+    CHECK(reasonOf(R"({"num":1,"den":"2","dp":1})").contains("integers"));
+    CHECK(reasonOf(R"({"num":1,"den":2,"dp":"1"})").contains("integers"));
     CHECK(fromText(R"({"den":1,"dp":1,"unit":"g"})").kind() == ValueKind::Record);
     CHECK(fromText(R"({"num":1,"dp":1,"unit":"g"})").kind() == ValueKind::Record);
     CHECK(fromText(R"({"num":1,"den":1,"unit":"g"})").kind() == ValueKind::Record);

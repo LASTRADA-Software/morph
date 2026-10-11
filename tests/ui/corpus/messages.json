@@ -5,7 +5,7 @@
     { "locale": "de", "cases": [[1, "one"], [0, "other"]] },
     { "locale": "nl", "cases": [[1, "one"], [2, "other"]] },
     { "locale": "sv", "cases": [[1, "one"], [2, "other"]] },
-    { "locale": "it", "cases": [[1, "one"], [2, "other"], [1000000, "many"], [{"num": 1000000, "den": 1, "dp": 1}, "other"]] },
+    { "locale": "it", "cases": [[1, "one"], [0, "other"], [{"num": 1, "den": 1, "dp": 1}, "other"], [2, "other"], [1000000, "many"], [{"num": 1000000, "den": 1, "dp": 1}, "other"]] },
     { "locale": "es", "cases": [[1, "one"], [{"num": 1, "den": 1, "dp": 2}, "one"], [2, "other"], [1000000, "many"], [{"num": 3, "den": 2, "dp": 1}, "other"]] },
     { "locale": "fr", "cases": [[0, "one"], [1, "one"], [{"num": 3, "den": 2, "dp": 1}, "one"], [2, "other"], [1000000, "many"]] },
     { "locale": "pt_BR", "cases": [[0, "one"], [1, "one"], [2, "other"], [2000000, "many"]] },

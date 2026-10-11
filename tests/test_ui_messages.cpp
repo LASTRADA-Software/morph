@@ -63,7 +63,7 @@ TEST_CASE("ui messages: the MessageFormat 2 corpus", "[ui][messages]") {
         if (Json const* const refused = optionalMember(entry, "refused")) {
             REQUIRE_FALSE(parsed.has_value());
             CAPTURE(parsed.error());
-            CHECK(parsed.error().find(std::get<std::string>(refused->data)) != std::string::npos);
+            CHECK(parsed.error().contains(std::get<std::string>(refused->data)));
             continue;
         }
         if (!parsed.has_value()) {
