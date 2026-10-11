@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QMetaObject>
+#include <QObject>
+#include <QPointer>
 #include <QVariantList>
 #include <QVariantMap>
 #include <algorithm>
@@ -118,6 +121,23 @@ TableRowImpl::TableRowImpl(Context& context, ui::ContainerWidget* parent, TableI
             owner->activated(*this);
         }
     });
+}
+
+void TableRowImpl::adopted(ItemBase& child) {
+    QQuickItem* const cell = child.item();
+    if (cell == nullptr || item() == nullptr) {
+        return;
+    }
+    // The row places its cells by column and sizes itself to the tallest; a cell whose content arrives later, or
+    // changes, places them again. The row's item is the connection's context, and the call goes through it, not
+    // through this widget, which may be gone while Qt still holds the item.
+    auto const place = [row = QPointer<QQuickItem>{item()}] {
+        if (row != nullptr) {
+            QMetaObject::invokeMethod(row, "place", Qt::DirectConnection);
+        }
+    };
+    QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(), place);
+    QObject::connect(cell, &QQuickItem::implicitHeightChanged, item(), place);
 }
 
 void TableRowImpl::setGap(int gap) { static_cast<void>(gap); }

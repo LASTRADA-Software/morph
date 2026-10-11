@@ -35,7 +35,7 @@ public:
     /// Registers the answer to @p question, replacing any earlier one; an empty one answers false.
     void answer(QString const& question, Question handler);
 
-    /// From now on, `fire` calls nothing and `ask` answers false.
+    /// Releases every handler; from now on, `fire` calls nothing and `ask` answers false.
     void kill() noexcept;
 
     /// Whether `kill` has run.

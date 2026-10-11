@@ -39,7 +39,13 @@ MorphWidget {
     Drawer {
         id: drawer
         edge: root.side === 0 ? Qt.LeftEdge : Qt.RightEdge
-        interactive: false
+        // Interactive, so Escape and a press outside close it; no drag margin, so the user cannot open it by
+        // swiping from the edge, which only the document may do.
+        interactive: true
+        dragMargin: 0
+        // Opening and closing are immediate: what the document says is what the window shows, at once.
+        enter: Transition {}
+        exit: Transition {}
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside

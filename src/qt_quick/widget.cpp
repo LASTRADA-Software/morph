@@ -33,9 +33,29 @@ ContainerCore* containerOf(ui::ContainerWidget* widget) noexcept { return dynami
 ItemBase::ItemBase(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial)
     : ItemBase{context, context.make(type, std::move(initial)), parent} {}
 
+namespace {
+
+// Every live widget, in creation order, for tests and tools that find a widget by its test id.
+std::vector<ItemBase*>& registry() {
+    static std::vector<ItemBase*> widgets;
+    return widgets;
+}
+
+}  // namespace
+
+std::vector<ItemBase*> const& liveWidgets() noexcept { return registry(); }
+
+ItemBase* findWidget(QString const& testId) noexcept {
+    auto const found = std::ranges::find_if(registry(), [&testId](ItemBase const* widget) {
+        return widget->item() != nullptr && widget->item()->objectName() == testId;
+    });
+    return found != registry().end() ? *found : nullptr;
+}
+
 ItemBase::ItemBase(Context& context, Context::Made made, ui::ContainerWidget* parent)
     : _context{&context}, _relay{made.relay} {
     _item = made.item;
+    registry().push_back(this);
     ContainerCore* const container = parent != nullptr ? containerOf(parent) : &context.roots();
     if (container != nullptr) {
         _container = container;
@@ -45,6 +65,7 @@ ItemBase::ItemBase(Context& context, Context::Made made, ui::ContainerWidget* pa
 
 ItemBase::~ItemBase() {
     _relay->kill();
+    std::erase(registry(), this);
     if (_container != nullptr) {
         _container->release(*this);
     }

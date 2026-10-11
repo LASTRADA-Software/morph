@@ -151,6 +151,12 @@ private:
     std::size_t _restacks = 0;
 };
 
+/// Every live widget of every backend in the process, in creation order.
+[[nodiscard]] std::vector<ItemBase*> const& liveWidgets() noexcept;
+
+/// The first live widget, in creation order, whose test id is @p testId; null when there is none.
+[[nodiscard]] ItemBase* findWidget(QString const& testId) noexcept;
+
 /// The `ItemBase` behind a widget of this backend, or null.
 [[nodiscard]] ItemBase* baseOf(ui::Widget const& widget) noexcept;
 

@@ -53,15 +53,17 @@ struct NamedKey {
     Qt::Key key;
 };
 
-constexpr std::array<NamedKey, 9> kNamedKeys = {{{"Enter", Qt::Key_Return},
-                                                 {"Esc", Qt::Key_Escape},
-                                                 {"Tab", Qt::Key_Tab},
-                                                 {"Up", Qt::Key_Up},
-                                                 {"Down", Qt::Key_Down},
-                                                 {"Left", Qt::Key_Left},
-                                                 {"Right", Qt::Key_Right},
-                                                 {"Space", Qt::Key_Space},
-                                                 {"Delete", Qt::Key_Delete}}};
+// `Escape` is accepted beside the grammar's `Esc`: the interpreter binds a dialog's `cancel` under that name.
+constexpr std::array<NamedKey, 10> kNamedKeys = {{{"Enter", Qt::Key_Return},
+                                                  {"Esc", Qt::Key_Escape},
+                                                  {"Escape", Qt::Key_Escape},
+                                                  {"Tab", Qt::Key_Tab},
+                                                  {"Up", Qt::Key_Up},
+                                                  {"Down", Qt::Key_Down},
+                                                  {"Left", Qt::Key_Left},
+                                                  {"Right", Qt::Key_Right},
+                                                  {"Space", Qt::Key_Space},
+                                                  {"Delete", Qt::Key_Delete}}};
 
 std::optional<Qt::KeyboardModifier> modifierNamed(std::string_view name) {
     if (name == "Ctrl") {

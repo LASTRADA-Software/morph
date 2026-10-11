@@ -4,7 +4,8 @@ import QtQuick
 import QtQuick.Layouts
 
 // One row of a table: its cells placed by column, so a hidden cell keeps its column and the cells after it stay
-// under their own headers. A click selects it, Ctrl+click toggles it, a double click or Enter activates it.
+// under their own headers. A click selects it, Ctrl+click toggles it, a double click or Enter activates it. C++
+// calls `place` again whenever a cell's implicit size changes.
 MorphWidget {
     id: root
 
@@ -52,20 +53,6 @@ MorphWidget {
         id: cells
         anchors.fill: parent
         onChildrenChanged: root.place()
-    }
-
-    // Placing the cells again when one of them changes its size.
-    Timer {
-        id: relayout
-        interval: 0
-        onTriggered: root.place()
-    }
-
-    Connections {
-        target: cells
-        function onChildrenRectChanged() {
-            relayout.restart()
-        }
     }
 
     TapHandler {

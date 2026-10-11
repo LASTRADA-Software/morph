@@ -376,6 +376,9 @@ public:
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);
 
+protected:
+    void adopted(ItemBase& child) override;
+
 private:
     std::optional<ui::Key> _key;
 };

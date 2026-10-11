@@ -30,7 +30,14 @@ void Relay::answer(QString const& question, Question handler) {
     }
 }
 
-void Relay::kill() noexcept { _dead = true; }
+void Relay::kill() noexcept {
+    _dead = true;
+    // The handlers go now, not when Qt deletes the item later: they hold what the mount gave them, which must not
+    // outlive the widget. A handler that is running holds its own copy.
+    _handlers.clear();
+    _questions.clear();
+    _any = nullptr;
+}
 
 void Relay::fire(QString const& event, QVariant const& payload) {
     if (_dead) {

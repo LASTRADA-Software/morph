@@ -12,6 +12,10 @@ add_executable(morph_qt_quick_tests
     test_qt_quick_main.cpp
     test_qt_quick_widgets.cpp
     test_qt_quick_conformance.cpp
+    test_qt_quick_containers.cpp
+    test_qt_quick_overlays.cpp
+    test_qt_quick_table.cpp
+    test_qt_quick_interpreter.cpp
 )
 target_link_libraries(morph_qt_quick_tests
     PRIVATE
