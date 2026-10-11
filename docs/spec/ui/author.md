@@ -170,10 +170,12 @@ exception's text.
 The first failure is returned and nothing is kept. `enroll(screen)` does the same and keeps the
 refusal in `refusals()`; `MORPH_REGISTER_SCREEN(screen)` enrols into the process's
 `screenRegistry()` at static initialisation, where nothing could report a refusal, so a server's
-test asserts that `refusals()` is empty. Its argument is an expression — a call of a function that
-returns the screen keeps a global with a throwing constructor out of the translation unit. The
-registry is filled during static initialisation and read afterwards; it is not synchronised. `catalog()` answers `ui::Catalog` from every registered
-screen's facts, for a local-mode client.
+test asserts that `refusals()` is empty and `lost()` is zero. An exception at static
+initialisation cannot be caught, so `enroll` never throws: the macro's argument is an expression
+that `enroll` evaluates inside its own `try`, through a lambda, so making the screen is covered
+too, and anything thrown outside the builder (an allocation failure) is counted by `lost()`. The
+registry is filled during static initialisation and read afterwards; it is not synchronised.
+`catalog()` answers `ui::Catalog` from every registered screen's facts, for a local-mode client.
 
 ## The catalog
 

@@ -175,7 +175,6 @@ using author_test::ResultView;
 using author_test::SampleModel;
 using author_test::SessionModel;
 using author_test::SignIn;
-using author_test::Token;
 using author_test::UploadFile;
 using morph::ui::Json;
 using morph::ui::Refusal;
@@ -1045,6 +1044,7 @@ TEST_CASE("MORPH_REGISTER_SCREEN enrols at static initialisation and keeps refus
     ui::ScreenRegistry const& registry = ui::screenRegistry();
     CHECK(registry.find("author.registered") != nullptr);
     CHECK(registry.find("author.refused") == nullptr);
+    CHECK(registry.lost() == 0);
     REQUIRE(registry.refusals().size() == 1);
     CHECK(registry.refusals().front().document == "author.refused");
     CHECK(registry.refusals().front().path == "/view");
@@ -1093,10 +1093,10 @@ TEST_CASE("a scope that declares one kind of thing writes it", "[ui][author]") {
                                                 ui::dialog(ui::element("d"), {.title = "D"}, withCheck)});
                          }).emit();
     REQUIRE(emitted.has_value());
-    CHECK(emitted->text.find(R"("scope":{"let":{"doubled")") != std::string::npos);
-    CHECK(emitted->text.find(R"("scope":{"queries":{"inner")") != std::string::npos);
-    CHECK(emitted->text.find(R"("scope":{"mutations":{"innerLoad")") != std::string::npos);
-    CHECK(emitted->text.find(R"("scope":{"checks":[{"id":"always")") != std::string::npos);
+    CHECK(emitted->text.contains(R"("scope":{"let":{"doubled")"));
+    CHECK(emitted->text.contains(R"("scope":{"queries":{"inner")"));
+    CHECK(emitted->text.contains(R"("scope":{"mutations":{"innerLoad")"));
+    CHECK(emitted->text.contains(R"("scope":{"checks":[{"id":"always")"));
 }
 
 TEST_CASE("a component without a fallback is refused when the screen loads", "[ui][author][registration]") {

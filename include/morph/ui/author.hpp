@@ -1915,12 +1915,12 @@ public:
     }
 
     /// @brief A cascade: commands that run when a value changes (spec 5 §6).
-    /// @param on       The value watched.
+    /// @param watched  The value watched.
     /// @param commands The commands.
     /// @param source   Which changes run it.
-    void watch(AnyHandle const& on, Commands const& commands, Source source = Source::Any) {
+    void watch(AnyHandle const& watched, Commands const& commands, Source source = Source::Any) {
         Json decl = Json::object_t{};
-        detail::put(decl, "on", on.json());
+        detail::put(decl, "on", watched.json());
         if (source == Source::User) {
             detail::put(decl, "source", std::string{"user"});
         }
@@ -3095,13 +3095,14 @@ private:
 };
 
 /// @brief A `switch` node: shows the first case whose `when` equals its value.
-/// @param on       The value.
+/// @param value    The value the cases are compared with.
 /// @param cases    The cases.
 /// @param fallback The nodes shown when no case matches.
 /// @return The node.
-[[nodiscard]] inline Node switchOn(AnyHandle const& on, std::vector<Case> const& cases, Nodes const& fallback = {}) {
+[[nodiscard]] inline Node switchOn(AnyHandle const& value, std::vector<Case> const& cases,
+                                   Nodes const& fallback = {}) {
     detail::NodeWriter node{"switch"};
-    node.put("on", on);
+    node.put("on", value);
     Json::array_t parts;
     parts.reserve(cases.size());
     for (Case const& item : cases) {
@@ -3698,8 +3699,8 @@ public:
     /// @param member   The member.
     /// @param settings The overlay.
     template <typename Member>
-    FieldOverlay(Member Action::* member, FieldSettings const& settings)
-        : _name{detail::memberName(member)}, _settings{settings} {}
+    FieldOverlay(Member Action::* member, FieldSettings settings)
+        : _name{detail::memberName(member)}, _settings{std::move(settings)} {}
 
     /// @brief The overlay's JSON.
     /// @return The field name and its settings.
@@ -4095,16 +4096,35 @@ public:
     }
 
     /// @brief Registers a screen and keeps its refusal rather than returning it, for registration at static
-    ///        initialisation, where nothing could report it; a server's test asserts `refusals()` is empty.
-    /// @param screen The screen.
+    ///        initialisation, where nothing could report it; a server's test asserts `refusals()` is empty and
+    ///        `lost()` is zero.
     ///
-    /// `noexcept` because its caller is a static initialiser, where an exception terminates the program anyway:
-    /// a builder's own exceptions are already refusals, and what remains is an allocation failure.
-    void enroll(Screen const& screen) noexcept {
-        if (auto added = add(screen); !added) {
-            _refusals.push_back(std::move(added.error()));
+    /// Never throws, because its caller is a static initialiser, where an exception cannot be caught. A builder's
+    /// own exceptions are already refusals; anything thrown while making the screen or keeping its refusal, such
+    /// as an allocation failure, is counted by `lost()`.
+    /// @tparam Make A callable that returns the `Screen`.
+    /// @param make Makes the screen; it is called inside the registration, so its exceptions are caught too.
+    template <std::invocable Make>
+    void enroll(Make const& make) noexcept {
+        try {
+            Screen const screen = make();
+            if (auto added = add(screen); !added) {
+                _refusals.push_back(std::move(added.error()));
+            }
+        } catch (...) {
+            ++_lost;
         }
     }
+
+    /// @brief Registers a screen and keeps its refusal rather than returning it.
+    /// @param screen The screen.
+    void enroll(Screen const& screen) noexcept {
+        enroll([&screen] { return screen; });
+    }
+
+    /// @brief How many enrolments failed without a refusal to keep, because something threw outside the builder.
+    /// @return The count.
+    [[nodiscard]] std::size_t lost() const noexcept { return _lost; }
 
     /// @brief A registered screen by id.
     /// @param screenId The id.
@@ -4133,14 +4153,25 @@ public:
 private:
     std::vector<std::unique_ptr<RegisteredScreen>> _screens;
     std::vector<Refusal> _refusals;
+    std::size_t _lost = 0;
     CatalogFacts _facts;
 };
 
 /// @brief The process's screen registry, which `MORPH_REGISTER_SCREEN` enrols into.
 /// @return The registry.
-[[nodiscard]] inline ScreenRegistry& screenRegistry() {
+[[nodiscard]] inline ScreenRegistry& screenRegistry() noexcept {
     static ScreenRegistry registry;
     return registry;
+}
+
+/// @brief Enrols a screen into the process's registry; what `MORPH_REGISTER_SCREEN` runs.
+/// @tparam Make A callable that returns the `Screen`.
+/// @param make Makes the screen, inside the registration.
+/// @return `true`, for the static initialiser that runs it.
+template <std::invocable Make>
+bool enrollScreen(Make const& make) noexcept {
+    screenRegistry().enroll(make);
+    return true;
 }
 
 // NOLINTEND(bugprone-easily-swappable-parameters)
@@ -4157,9 +4188,11 @@ private:
 ///        `screenRegistry().refusals()`, which a server's test asserts is empty.
 /// @param SCREEN The screen: an expression, such as a call of a function that returns it, or an object defined
 ///               before the macro in the same translation unit.
-#define MORPH_REGISTER_SCREEN(SCREEN)                                              \
-    namespace {                                                                    \
-    [[maybe_unused]] bool const MORPH_UI_AUTHOR_CAT(morphUiScreen_, __COUNTER__) = \
-        (::morph::ui::author::screenRegistry().enroll(SCREEN), true);              \
+#define MORPH_REGISTER_SCREEN(SCREEN)                                                                     \
+    namespace {                                                                                           \
+    [[maybe_unused]] bool const MORPH_UI_AUTHOR_CAT(morphUiScreen_,                                       \
+                                                    __COUNTER__) = ::morph::ui::author::enrollScreen([] { \
+        return (SCREEN);                                                                                  \
+    });                                                                                                   \
     }
 // NOLINTEND(cppcoreguidelines-macro-usage)
