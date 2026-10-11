@@ -713,22 +713,22 @@ namespace detail {
     std::size_t depth = 0;
     bool inString = false;
     bool escaped = false;
-    for (char const c : text) {
+    for (char const character : text) {
         if (inString) {
             if (escaped) {
                 escaped = false;
-            } else if (c == '\\') {
+            } else if (character == '\\') {
                 escaped = true;
-            } else if (c == '"') {
+            } else if (character == '"') {
                 inString = false;
             }
-        } else if (c == '"') {
+        } else if (character == '"') {
             inString = true;
-        } else if (c == '{' || c == '[') {
+        } else if (character == '{' || character == '[') {
             if (++depth > kMaxJsonDepth) {
                 return true;
             }
-        } else if ((c == '}' || c == ']') && depth > 0) {
+        } else if ((character == '}' || character == ']') && depth > 0) {
             --depth;
         }
     }

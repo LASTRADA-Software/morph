@@ -219,7 +219,7 @@ TEST_CASE("ui value: JSON nested deeper than the bound is refused before it is p
     CHECK(parseJson(nested(kMaxJsonDepth)).has_value());
     auto refused = parseJson(nested(kMaxJsonDepth + 1));
     REQUIRE_FALSE(refused.has_value());
-    CHECK(refused.error().find("nests deeper than") != std::string::npos);
+    CHECK(refused.error().contains("nests deeper than"));
     CHECK_FALSE(parseJson(nested(600)).has_value());
 
     // Brackets inside a string, escaped quotes included, are text rather than nesting.
@@ -231,5 +231,5 @@ TEST_CASE("ui value: JSON nested deeper than the bound is refused before it is p
     // A stray closing bracket is the parser's error to report, not a nesting one.
     auto stray = parseJson("]");
     REQUIRE_FALSE(stray.has_value());
-    CHECK(stray.error().find("nests deeper than") == std::string::npos);
+    CHECK_FALSE(stray.error().contains("nests deeper than"));
 }
